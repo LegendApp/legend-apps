@@ -7,7 +7,7 @@ export const shellDir = path.join(rootDir, "shell");
 export const appsDir = path.join(rootDir, "apps");
 export const packagesDir = path.join(rootDir, "packages");
 
-export const appIds = ["music", "markdown"] as const;
+export const appIds = ["music", "markdown", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
 
 export function isPlatform(value: string): value is Platform {

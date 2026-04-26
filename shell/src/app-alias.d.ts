@@ -1,3 +1,6 @@
 declare module "@legend-desktop/app" {
-  export { App, default } from "../../apps/music/src";
+  import type { ComponentType } from "react";
+
+  export const App: ComponentType;
+  export default App;
 }

@@ -1,0 +1,10 @@
+{
+  "name": "@legend-desktop/app-test-kitchen-sink",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/appkit-split-view": "0.0.0",
+    "@legend-desktop/music-test": "0.0.0"
+  }
+}

@@ -5,6 +5,11 @@ import type { AppManifest, NativePackage, Platform } from "./types";
 
 export const nativePackages: NativePackage[] = [
   {
+    name: "@legend-desktop/appkit-split-view",
+    root: path.join(packagesDir, "appkit-split-view"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/music-test",
     root: path.join(packagesDir, "music-test"),
     platforms: ["macos", "ios", "android"],

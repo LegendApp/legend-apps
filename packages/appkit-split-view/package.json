@@ -1,0 +1,27 @@
+{
+  "name": "@legend-desktop/appkit-split-view",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNAppKitSplitViewSpec",
+    "type": "all",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.appkitsplitview"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeAppKitSplitView": "RNAppKitSplitView"
+      },
+      "componentProvider": {
+        "AppKitSplitView": "RNAppKitSplitViewComponent"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}
