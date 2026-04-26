@@ -1,0 +1,29 @@
+{
+  "name": "legend-desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shell",
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "music": "bun scripts/run-app.ts music",
+    "markdown": "bun scripts/run-app.ts markdown",
+    "build": "bun scripts/build-app.ts",
+    "prebuild": "bun scripts/prebuild-app.ts",
+    "verify": "bun scripts/verify-app.ts",
+    "dev:all": "bun scripts/run-app.ts --all --dev-check",
+    "build:all": "bun scripts/build-app.ts --all",
+    "verify:all": "bun scripts/verify-app.ts --all",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "~19.1.0",
+    "react": "19.1.4",
+    "react-native": "0.81.6",
+    "typescript": "~5.9.2"
+  }
+}

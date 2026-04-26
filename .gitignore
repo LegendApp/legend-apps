@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+.DS_Store
+
+shell/.legend/
+shell/ios/
+shell/android/
+shell/macos/Pods/
+shell/macos/build/
+shell/macos/Podfile.lock
+shell/macos/.xcode.env.local
+
+*.log

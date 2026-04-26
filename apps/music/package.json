@@ -1,0 +1,9 @@
+{
+  "name": "@legend-desktop/app-music",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/music-test": "0.0.0"
+  }
+}
