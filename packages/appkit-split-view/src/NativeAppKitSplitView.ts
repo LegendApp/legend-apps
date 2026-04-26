@@ -15,6 +15,8 @@ export type NativeMenuTest = {
 export interface Spec extends TurboModule {
   configureKitchenSinkMenus(packagesJson: string, testsJson: string): void;
   clearKitchenSinkMenus(): void;
+  addListener(eventName: string): void;
+  removeListeners(count: number): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>("NativeAppKitSplitView");

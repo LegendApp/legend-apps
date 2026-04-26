@@ -1,13 +1,13 @@
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaView, StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { App } from "@legend-desktop/app";
 
 export default function ShellApp() {
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <App />
       <StatusBar style="auto" />
-    </SafeAreaView>
+    </View>
   );
 }
 
