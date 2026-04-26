@@ -6,8 +6,15 @@
 
 using namespace facebook::react;
 
+#if TARGET_OS_OSX
+static NSToolbarItemIdentifier const RNAppKitSplitViewTrackingSeparatorIdentifier =
+  @"RNAppKitSplitViewTrackingSeparator";
+@interface RNAppKitSplitViewComponent () <RCTAppKitSplitViewViewProtocol, NSToolbarDelegate>
+@end
+#else
 @interface RNAppKitSplitViewComponent () <RCTAppKitSplitViewViewProtocol>
 @end
+#endif
 
 @implementation RNAppKitSplitViewComponent {
 #if TARGET_OS_OSX
@@ -80,6 +87,14 @@ using namespace facebook::react;
   _sidebarSplitViewItem.maximumThickness = 320;
   _sidebarSplitViewItem.preferredThicknessFraction = 0.22;
 
+  if (@available(macOS 11.0, *)) {
+    _sidebarSplitViewItem.allowsFullHeightLayout = usesLiquidGlass;
+    _sidebarSplitViewItem.titlebarSeparatorStyle = usesLiquidGlass
+      ? NSTitlebarSeparatorStyleNone
+      : NSTitlebarSeparatorStyleAutomatic;
+    _mainSplitViewItem.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
+  }
+
   if (@available(macOS 26.0, *)) {
     _mainSplitViewItem.automaticallyAdjustsSafeAreaInsets = usesLiquidGlass;
   }
@@ -89,6 +104,7 @@ using namespace facebook::react;
   [_splitViewController addSplitViewItem:_sidebarSplitViewItem];
   [_splitViewController addSplitViewItem:_mainSplitViewItem];
 
+  [self updateWindowToolbarForLiquidGlassSidebar];
   [self setNeedsLayout:YES];
 }
 
@@ -117,6 +133,96 @@ using namespace facebook::react;
   label.textColor = NSColor.labelColor;
   label.font = [NSFont systemFontOfSize:18 weight:NSFontWeightSemibold];
   return label;
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  [self updateWindowToolbarForLiquidGlassSidebar];
+}
+
+- (void)updateWindowToolbarForLiquidGlassSidebar
+{
+  NSWindow *window = self.window;
+  if (!window) {
+    return;
+  }
+
+  NSToolbar *toolbar = window.toolbar ?: [[NSToolbar alloc] initWithIdentifier:@"LegendAppShellToolbar"];
+  toolbar.delegate = self;
+  toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+  toolbar.allowsUserCustomization = NO;
+  toolbar.autosavesConfiguration = NO;
+  toolbar.showsBaselineSeparator = NO;
+  window.toolbar = toolbar;
+
+  if (!_usesLiquidGlass) {
+    [self removeTrackingSeparatorFromToolbar:toolbar];
+    return;
+  }
+
+  window.styleMask = window.styleMask | NSWindowStyleMaskFullSizeContentView;
+  window.titlebarAppearsTransparent = YES;
+  window.titleVisibility = NSWindowTitleVisible;
+
+  if (@available(macOS 11.0, *)) {
+    window.toolbarStyle = NSWindowToolbarStyleUnified;
+    [self insertTrackingSeparatorIntoToolbarIfNeeded:toolbar];
+  }
+}
+
+- (void)insertTrackingSeparatorIntoToolbarIfNeeded:(NSToolbar *)toolbar
+{
+  for (NSToolbarItem *item in toolbar.items) {
+    if ([item.itemIdentifier isEqualToString:RNAppKitSplitViewTrackingSeparatorIdentifier]) {
+      return;
+    }
+  }
+
+  [toolbar insertItemWithItemIdentifier:RNAppKitSplitViewTrackingSeparatorIdentifier atIndex:0];
+}
+
+- (void)removeTrackingSeparatorFromToolbar:(NSToolbar *)toolbar
+{
+  NSInteger itemIndex = 0;
+  for (NSToolbarItem *item in toolbar.items) {
+    if ([item.itemIdentifier isEqualToString:RNAppKitSplitViewTrackingSeparatorIdentifier]) {
+      [toolbar removeItemAtIndex:itemIndex];
+      return;
+    }
+    itemIndex += 1;
+  }
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
+{
+  return @[RNAppKitSplitViewTrackingSeparatorIdentifier, NSToolbarFlexibleSpaceItemIdentifier];
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
+{
+  return @[RNAppKitSplitViewTrackingSeparatorIdentifier, NSToolbarFlexibleSpaceItemIdentifier];
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
+{
+  return @[];
+}
+
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
+     itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier
+ willBeInsertedIntoToolbar:(BOOL)flag
+{
+  if ([itemIdentifier isEqualToString:RNAppKitSplitViewTrackingSeparatorIdentifier]) {
+    if (@available(macOS 11.0, *)) {
+      return [NSTrackingSeparatorToolbarItem
+        trackingSeparatorToolbarItemWithIdentifier:itemIdentifier
+                                       splitView:_splitViewController.splitView
+                                    dividerIndex:0];
+    }
+  }
+
+  return nil;
 }
 #endif
 
