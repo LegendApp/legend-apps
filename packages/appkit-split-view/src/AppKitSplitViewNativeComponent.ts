@@ -5,6 +5,7 @@ export interface NativeProps extends ViewProps {
   sidebarTitle?: string;
   sidebarItemsJson?: string;
   selectedSidebarItemId?: string;
+  titlebarItemsJson?: string;
   mainTitle?: string;
   usesLiquidGlass?: boolean;
 }

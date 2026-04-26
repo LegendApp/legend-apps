@@ -33,6 +33,51 @@ const splitViewSidebarItems = [
   },
 ];
 const splitViewSidebarItemsJson = JSON.stringify(splitViewSidebarItems);
+const splitViewTitlebarItems = [
+  {
+    id: "back",
+    placement: "leading",
+    symbolName: "chevron.left",
+    title: "Back",
+  },
+  {
+    id: "forward",
+    placement: "leading",
+    symbolName: "chevron.right",
+    title: "Forward",
+  },
+  {
+    id: "view",
+    placement: "trailing",
+    symbolName: "square.grid.2x2",
+    title: "View",
+  },
+  {
+    id: "share",
+    placement: "trailing",
+    symbolName: "square.and.arrow.up",
+    title: "Share",
+  },
+  {
+    id: "tags",
+    placement: "trailing",
+    symbolName: "tag",
+    title: "Tags",
+  },
+  {
+    id: "more",
+    placement: "trailing",
+    symbolName: "ellipsis",
+    title: "More",
+  },
+  {
+    id: "search",
+    placement: "trailing",
+    symbolName: "magnifyingglass",
+    title: "Search",
+  },
+];
+const splitViewTitlebarItemsJson = JSON.stringify(splitViewTitlebarItems);
 
 export function App() {
   const [selectedPackageId, setSelectedPackageId] = useState(defaultPackageId);
@@ -74,6 +119,7 @@ export function App() {
         sidebarItemsJson={splitViewSidebarItemsJson}
         sidebarTitle={selectedTestId === "split-view-liquid-glass" ? "Liquid Glass Sidebar" : "Sidebar"}
         style={styles.root}
+        titlebarItemsJson={selectedTestId === "split-view-liquid-glass" ? splitViewTitlebarItemsJson : ""}
         usesLiquidGlass={selectedTestId === "split-view-liquid-glass"}
       />
     );

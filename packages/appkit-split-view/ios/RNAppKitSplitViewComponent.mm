@@ -9,6 +9,8 @@ using namespace facebook::react;
 #if TARGET_OS_OSX
 static NSToolbarItemIdentifier const RNAppKitSplitViewTrackingSeparatorIdentifier =
   @"RNAppKitSplitViewTrackingSeparator";
+static NSString *const RNAppKitSplitViewTitlebarItemPrefix =
+  @"RNAppKitSplitViewTitlebarItem.";
 static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarColumnIdentifier =
   @"RNAppKitSplitViewSidebarColumn";
 static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifier =
@@ -39,6 +41,7 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
   NSScrollView *_sidebarScrollView;
   NSTableView *_sidebarTableView;
   NSArray<NSDictionary<NSString *, NSString *> *> *_sidebarItems;
+  NSArray<NSDictionary<NSString *, NSString *> *> *_titlebarItems;
   NSString *_selectedSidebarItemId;
   BOOL _usesLiquidGlass;
 #else
@@ -61,6 +64,7 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
     _sidebarLabel = [self makeLabel:@"Sidebar"];
     _mainLabel = [self makeLabel:@"Main Content"];
     _sidebarItems = @[];
+    _titlebarItems = @[];
     _selectedSidebarItemId = @"";
 
     [self addSubview:_splitViewController.view];
@@ -226,6 +230,46 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
   return items;
 }
 
+- (NSArray<NSDictionary<NSString *, NSString *> *> *)titlebarItemsFromJson:(std::string const &)json
+{
+  NSString *jsonString = [NSString stringWithUTF8String:json.c_str()];
+  if (jsonString.length == 0) {
+    return @[];
+  }
+
+  NSData *data = [jsonString dataUsingEncoding:NSUTF8StringEncoding];
+  NSError *error = nil;
+  id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+  if (![parsed isKindOfClass:NSArray.class]) {
+    return @[];
+  }
+
+  NSMutableArray<NSDictionary<NSString *, NSString *> *> *items = [NSMutableArray new];
+  for (id rawItem in (NSArray *)parsed) {
+    if (![rawItem isKindOfClass:NSDictionary.class]) {
+      continue;
+    }
+
+    NSDictionary *rawDictionary = (NSDictionary *)rawItem;
+    NSString *itemId = [rawDictionary[@"id"] isKindOfClass:NSString.class] ? rawDictionary[@"id"] : nil;
+    NSString *title = [rawDictionary[@"title"] isKindOfClass:NSString.class] ? rawDictionary[@"title"] : nil;
+    NSString *symbolName = [rawDictionary[@"symbolName"] isKindOfClass:NSString.class] ? rawDictionary[@"symbolName"] : @"";
+    NSString *placement = [rawDictionary[@"placement"] isKindOfClass:NSString.class] ? rawDictionary[@"placement"] : @"leading";
+    if (itemId.length == 0 || title.length == 0) {
+      continue;
+    }
+
+    [items addObject:@{
+      @"id": itemId,
+      @"title": title,
+      @"symbolName": symbolName,
+      @"placement": [placement isEqualToString:@"trailing"] ? @"trailing" : @"leading",
+    }];
+  }
+
+  return items;
+}
+
 - (void)reloadSidebarItems
 {
   if (!_sidebarTableView) {
@@ -330,52 +374,88 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
   toolbar.showsBaselineSeparator = NO;
   window.toolbar = toolbar;
 
-  if (!_usesLiquidGlass) {
-    [self removeTrackingSeparatorFromToolbar:toolbar];
-    return;
-  }
+  BOOL hidesTitle = _usesLiquidGlass || _titlebarItems.count > 0;
+  window.titleVisibility = hidesTitle ? NSWindowTitleHidden : NSWindowTitleVisible;
 
-  window.styleMask = window.styleMask | NSWindowStyleMaskFullSizeContentView;
-  window.titlebarAppearsTransparent = YES;
-  window.titleVisibility = NSWindowTitleVisible;
+  if (_usesLiquidGlass) {
+    window.styleMask = window.styleMask | NSWindowStyleMaskFullSizeContentView;
+    window.titlebarAppearsTransparent = YES;
+  }
 
   if (@available(macOS 11.0, *)) {
     window.toolbarStyle = NSWindowToolbarStyleUnified;
-    [self insertTrackingSeparatorIntoToolbarIfNeeded:toolbar];
   }
+
+  [self reloadWindowToolbarItems:toolbar];
 }
 
-- (void)insertTrackingSeparatorIntoToolbarIfNeeded:(NSToolbar *)toolbar
+- (NSString *)toolbarIdentifierForTitlebarItem:(NSDictionary<NSString *, NSString *> *)item
 {
-  for (NSToolbarItem *item in toolbar.items) {
-    if ([item.itemIdentifier isEqualToString:RNAppKitSplitViewTrackingSeparatorIdentifier]) {
-      return;
+  return [RNAppKitSplitViewTitlebarItemPrefix stringByAppendingString:item[@"id"] ?: @""];
+}
+
+- (NSDictionary<NSString *, NSString *> *)titlebarItemForToolbarIdentifier:(NSToolbarItemIdentifier)itemIdentifier
+{
+  for (NSDictionary<NSString *, NSString *> *item in _titlebarItems) {
+    if ([[self toolbarIdentifierForTitlebarItem:item] isEqualToString:itemIdentifier]) {
+      return item;
     }
   }
 
-  [toolbar insertItemWithItemIdentifier:RNAppKitSplitViewTrackingSeparatorIdentifier atIndex:0];
+  return nil;
 }
 
-- (void)removeTrackingSeparatorFromToolbar:(NSToolbar *)toolbar
+- (NSArray<NSToolbarItemIdentifier> *)toolbarItemIdentifiers
 {
-  NSInteger itemIndex = 0;
-  for (NSToolbarItem *item in toolbar.items) {
-    if ([item.itemIdentifier isEqualToString:RNAppKitSplitViewTrackingSeparatorIdentifier]) {
-      [toolbar removeItemAtIndex:itemIndex];
-      return;
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [NSMutableArray new];
+
+  if (_usesLiquidGlass) {
+    [identifiers addObject:RNAppKitSplitViewTrackingSeparatorIdentifier];
+  }
+
+  for (NSDictionary<NSString *, NSString *> *item in _titlebarItems) {
+    if (![item[@"placement"] isEqualToString:@"trailing"]) {
+      [identifiers addObject:[self toolbarIdentifierForTitlebarItem:item]];
     }
-    itemIndex += 1;
+  }
+
+  if (_titlebarItems.count > 0) {
+    [identifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
+  }
+
+  for (NSDictionary<NSString *, NSString *> *item in _titlebarItems) {
+    if ([item[@"placement"] isEqualToString:@"trailing"]) {
+      [identifiers addObject:[self toolbarIdentifierForTitlebarItem:item]];
+    }
+  }
+
+  return identifiers;
+}
+
+- (void)reloadWindowToolbarItems:(NSToolbar *)toolbar
+{
+  while (toolbar.items.count > 0) {
+    [toolbar removeItemAtIndex:toolbar.items.count - 1];
+  }
+
+  NSArray<NSToolbarItemIdentifier> *identifiers = [self toolbarItemIdentifiers];
+  for (NSUInteger index = 0; index < identifiers.count; index += 1) {
+    [toolbar insertItemWithItemIdentifier:identifiers[index] atIndex:index];
   }
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
 {
-  return @[RNAppKitSplitViewTrackingSeparatorIdentifier, NSToolbarFlexibleSpaceItemIdentifier];
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [[self toolbarItemIdentifiers] mutableCopy];
+  if (![identifiers containsObject:NSToolbarFlexibleSpaceItemIdentifier]) {
+    [identifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
+  }
+  return identifiers;
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
-  return @[RNAppKitSplitViewTrackingSeparatorIdentifier, NSToolbarFlexibleSpaceItemIdentifier];
+  return [self toolbarItemIdentifiers];
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
@@ -396,7 +476,32 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
     }
   }
 
+  NSDictionary<NSString *, NSString *> *titlebarItem = [self titlebarItemForToolbarIdentifier:itemIdentifier];
+  if (titlebarItem) {
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.label = titlebarItem[@"title"] ?: @"";
+    toolbarItem.paletteLabel = titlebarItem[@"title"] ?: @"";
+    toolbarItem.toolTip = titlebarItem[@"title"] ?: @"";
+    toolbarItem.target = self;
+    toolbarItem.action = @selector(titlebarItemPressed:);
+
+    NSString *symbolName = titlebarItem[@"symbolName"] ?: @"";
+    if (symbolName.length > 0) {
+      toolbarItem.image = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:titlebarItem[@"title"]];
+    }
+
+    if (@available(macOS 11.0, *)) {
+      toolbarItem.bordered = YES;
+    }
+
+    return toolbarItem;
+  }
+
   return nil;
+}
+
+- (void)titlebarItemPressed:(NSToolbarItem *)sender
+{
 }
 #endif
 
@@ -410,10 +515,12 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
   }
 
   _sidebarItems = [self sidebarItemsFromJson:newProps.sidebarItemsJson];
+  _titlebarItems = [self titlebarItemsFromJson:newProps.titlebarItemsJson];
   _selectedSidebarItemId = [NSString stringWithUTF8String:newProps.selectedSidebarItemId.c_str()];
   _sidebarLabel.stringValue = [NSString stringWithUTF8String:newProps.sidebarTitle.c_str()];
   _mainLabel.stringValue = [NSString stringWithUTF8String:newProps.mainTitle.c_str()];
   [self reloadSidebarItems];
+  [self updateWindowToolbarForLiquidGlassSidebar];
 #else
   _sidebarLabel.text = [NSString stringWithUTF8String:newProps.sidebarTitle.c_str()];
   _mainLabel.text = [NSString stringWithUTF8String:newProps.mainTitle.c_str()];
