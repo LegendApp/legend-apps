@@ -38,5 +38,13 @@ target 'legendapp-shell-macos' do
 
   post_install do |installer|
     react_native_post_install(installer, rn_macos_path)
+
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+      end
+    end
   end
 end

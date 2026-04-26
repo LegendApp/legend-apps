@@ -4,6 +4,10 @@
 #import <React/RCTUtils.h>
 #import <TargetConditionals.h>
 
+@interface RNAppKitSplitView ()
+- (void)sendMenuAction:(NSDictionary *)payload;
+@end
+
 @interface RNAppKitSplitViewMenuTarget : NSObject
 @property (nonatomic, weak) RNAppKitSplitView *module;
 @end

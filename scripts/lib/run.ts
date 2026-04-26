@@ -42,8 +42,8 @@ export function runPlatformCommand(appId: string, platform: Platform, mode: "dev
     runCommand(
       "bun",
       mode === "release"
-        ? ["x", "react-native", "build-macos", "--mode", "Release"]
-        : ["x", "react-native", "run-macos"],
+        ? ["x", "react-native", "build-macos", "--mode", "Release", "--scheme", "legendapp-shell-macos"]
+        : ["x", "react-native", "run-macos", "--scheme", "legendapp-shell-macos"],
       { cwd: shellDir, env },
     );
   }

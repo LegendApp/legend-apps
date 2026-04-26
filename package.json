@@ -26,5 +26,8 @@
     "react": "19.1.4",
     "react-native": "0.81.6",
     "typescript": "~5.9.2"
+  },
+  "patchedDependencies": {
+    "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch"
   }
 }
