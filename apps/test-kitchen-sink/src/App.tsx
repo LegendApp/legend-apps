@@ -10,6 +10,29 @@ import { packages, testsForPackage } from "./packageTests";
 
 const defaultPackageId = "appkit-split-view";
 const defaultTestId = "split-view-liquid-glass";
+const splitViewSidebarItems = [
+  {
+    id: "overview",
+    symbolName: "square.grid.2x2",
+    title: "Overview",
+  },
+  {
+    id: "split-view",
+    symbolName: "sidebar.left",
+    title: "Split View",
+  },
+  {
+    id: "sidebar",
+    symbolName: "list.bullet",
+    title: "Sidebar",
+  },
+  {
+    id: "liquid-glass",
+    symbolName: "sparkles",
+    title: "Liquid Glass",
+  },
+];
+const splitViewSidebarItemsJson = JSON.stringify(splitViewSidebarItems);
 
 export function App() {
   const [selectedPackageId, setSelectedPackageId] = useState(defaultPackageId);
@@ -47,6 +70,8 @@ export function App() {
     return (
       <AppKitSplitView
         mainTitle={selectedTestId === "split-view-liquid-glass" ? "Liquid Glass Main Content" : "Main Content"}
+        selectedSidebarItemId={selectedTestId === "split-view-liquid-glass" ? "liquid-glass" : "split-view"}
+        sidebarItemsJson={splitViewSidebarItemsJson}
         sidebarTitle={selectedTestId === "split-view-liquid-glass" ? "Liquid Glass Sidebar" : "Sidebar"}
         style={styles.root}
         usesLiquidGlass={selectedTestId === "split-view-liquid-glass"}

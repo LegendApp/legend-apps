@@ -3,6 +3,8 @@ import { codegenNativeComponent } from "react-native";
 
 export interface NativeProps extends ViewProps {
   sidebarTitle?: string;
+  sidebarItemsJson?: string;
+  selectedSidebarItemId?: string;
   mainTitle?: string;
   usesLiquidGlass?: boolean;
 }
