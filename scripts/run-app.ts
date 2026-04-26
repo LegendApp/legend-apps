@@ -26,12 +26,6 @@ async function ensurePrebuild(appId: string, platform: Platform) {
   }
 }
 
-async function runOne(appId: string, platform: Platform) {
-  await prepare(appId, platform);
-  await ensurePrebuild(appId, platform);
-  runPlatformCommand(appId, platform, "dev");
-}
-
 async function main() {
   const command = parseAppCommand(process.argv.slice(2));
 
@@ -45,27 +39,36 @@ async function main() {
   }
 
   if (command.mode === "build") {
-    runCommand("bun", ["scripts/build-app.ts", command.appId, command.platform], {
+    runCommand("bun", ["scripts/build-app.ts", command.appId, command.platform, ...command.extraArgs], {
       cwd: rootDir,
     });
     return;
   }
 
   if (command.mode === "prebuild") {
-    runCommand("bun", ["scripts/prebuild-app.ts", command.appId, command.platform], {
+    runCommand("bun", ["scripts/prebuild-app.ts", command.appId, command.platform, ...command.extraArgs], {
       cwd: rootDir,
     });
     return;
   }
 
   if (command.mode === "verify") {
-    runCommand("bun", ["scripts/verify-app.ts", command.appId, command.platform], {
+    runCommand("bun", ["scripts/verify-app.ts", command.appId, command.platform, ...command.extraArgs], {
       cwd: rootDir,
     });
     return;
   }
 
-  await runOne(command.appId, command.platform);
+  if (command.mode === "start") {
+    runCommand("bun", ["scripts/start-app.ts", command.appId, command.platform, ...command.extraArgs], {
+      cwd: rootDir,
+    });
+    return;
+  }
+
+  await prepare(command.appId, command.platform);
+  await ensurePrebuild(command.appId, command.platform);
+  runPlatformCommand(command.appId, command.platform, "dev", command.extraArgs);
 }
 
 main().catch((error) => {

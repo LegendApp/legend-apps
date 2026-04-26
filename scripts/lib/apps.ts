@@ -9,6 +9,9 @@ export const packagesDir = path.join(rootDir, "packages");
 
 export const appIds = ["music", "markdown", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
+const commandModes = ["run", "dev", "start", "build", "prebuild", "verify"] as const;
+
+type CommandMode = (typeof commandModes)[number] | "dev-check";
 
 export function isPlatform(value: string): value is Platform {
   return platforms.includes(value as Platform);
@@ -41,18 +44,17 @@ export function parseAppCommand(argv: string[]) {
 
   if (appOrFlag === "--all") {
     const mode = rest.includes("--dev-check") ? "dev-check" : "run";
-    return { all: true as const, mode, appId: null, platform: null };
+    return { all: true as const, mode: mode as CommandMode, appId: null, platform: null, extraArgs: [] };
   }
 
-  let mode = "run";
+  let mode: CommandMode = "run";
   let platformArg = rest[0];
+  let consumedArgs = 1;
 
-  if (platformArg === "dev" || platformArg === "run") {
-    mode = "run";
+  if (commandModes.includes(platformArg as (typeof commandModes)[number])) {
+    mode = platformArg === "dev" ? "run" : platformArg as CommandMode;
     platformArg = rest[1];
-  } else if (platformArg === "build" || platformArg === "prebuild" || platformArg === "verify") {
-    mode = platformArg;
-    platformArg = rest[1];
+    consumedArgs = 2;
   }
 
   if (!platformArg || !isPlatform(platformArg)) {
@@ -64,5 +66,6 @@ export function parseAppCommand(argv: string[]) {
     appId: appOrFlag,
     mode,
     platform: platformArg,
+    extraArgs: rest.slice(consumedArgs),
   };
 }

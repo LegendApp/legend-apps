@@ -28,4 +28,6 @@ config.resolver.extraNodeModules = {
 config.resolver.useWatchman = false;
 config.cacheVersion = `legend-desktop-${appId}-${process.env.LEGEND_PLATFORM || "native"}`;
 
+delete config.watcher?.unstable_workerThreads;
+
 module.exports = config;

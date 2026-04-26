@@ -20,7 +20,12 @@ export function runCommand(command: string, args: string[], options: {
   }
 }
 
-export function runPlatformCommand(appId: string, platform: Platform, mode: "dev" | "release") {
+export function runPlatformCommand(
+  appId: string,
+  platform: Platform,
+  mode: "dev" | "release",
+  extraArgs: string[] = [],
+) {
   const env = {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
@@ -29,13 +34,17 @@ export function runPlatformCommand(appId: string, platform: Platform, mode: "dev
   if (platform === "ios") {
     runCommand(
       "bun",
-      mode === "release" ? ["x", "expo", "run:ios", "--configuration", "Release"] : ["x", "expo", "run:ios"],
+      mode === "release"
+        ? ["x", "expo", "run:ios", "--configuration", "Release"]
+        : ["x", "expo", "run:ios", ...extraArgs],
       { cwd: shellDir, env },
     );
   } else if (platform === "android") {
     runCommand(
       "bun",
-      mode === "release" ? ["x", "expo", "run:android", "--variant", "release"] : ["x", "expo", "run:android"],
+      mode === "release"
+        ? ["x", "expo", "run:android", "--variant", "release"]
+        : ["x", "expo", "run:android", ...extraArgs],
       { cwd: shellDir, env },
     );
   } else {
@@ -43,7 +52,7 @@ export function runPlatformCommand(appId: string, platform: Platform, mode: "dev
       "bun",
       mode === "release"
         ? ["x", "react-native", "build-macos", "--mode", "Release", "--scheme", "legendapp-shell-macos"]
-        : ["x", "react-native", "run-macos", "--scheme", "legendapp-shell-macos"],
+        : ["x", "react-native", "run-macos", "--scheme", "legendapp-shell-macos", ...extraArgs],
       { cwd: shellDir, env },
     );
   }

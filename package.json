@@ -12,6 +12,8 @@
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "test-kitchen-sink": "bun scripts/run-app.ts test-kitchen-sink",
+    "start": "bun scripts/start-app.ts",
+    "metro": "bun scripts/start-app.ts",
     "build": "bun scripts/build-app.ts",
     "prebuild": "bun scripts/prebuild-app.ts",
     "verify": "bun scripts/verify-app.ts",

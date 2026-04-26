@@ -23,6 +23,7 @@
     "@react-native-community/cli": "^20.1.1",
     "@react-native-community/cli-platform-android": "^20.1.1",
     "@react-native-community/cli-platform-ios": "^20.1.1",
+    "@expo/metro-config": "~54.0.14",
     "@react-native/metro-config": "~0.81.0",
     "@rnx-kit/metro-config": "^2.2.4",
     "@types/react": "~19.1.0",
