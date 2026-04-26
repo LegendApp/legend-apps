@@ -12,7 +12,7 @@ ENV['RCT_NEW_ARCH_ENABLED'] = "1";
 
 prepare_react_native_project!
 
-target 'exponative-macOS' do
+target 'legendapp-shell-macos' do
   platform :osx, '14.0'
   use_expo_modules!
 
