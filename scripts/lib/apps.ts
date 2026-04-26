@@ -9,7 +9,7 @@ export const packagesDir = path.join(rootDir, "packages");
 
 export const appIds = ["music", "markdown", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
-const commandModes = ["run", "dev", "start", "build", "prebuild", "verify"] as const;
+const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify"] as const;
 
 type CommandMode = (typeof commandModes)[number] | "dev-check";
 
@@ -35,6 +35,29 @@ export function assertSupportedPlatform(manifest: AppManifest, platform: Platfor
   }
 }
 
+export function formatAppUsage(appId = "<app>") {
+  return [
+    `Usage: bun run ${appId} <action> [platform] [options]`,
+    "",
+    "Actions:",
+    "  start      Start Metro/dev server",
+    "  open       Open the already built macOS app",
+    "  run        Build and run the app",
+    "  build      Build a release app",
+    "  prebuild   Generate iOS/Android native projects",
+    "  verify     Verify generated config and package linking",
+    "",
+    "Platforms:",
+    `  ${platforms.join(", ")} (defaults to macos when omitted)`,
+    "",
+    "Examples:",
+    `  bun run ${appId} start`,
+    `  bun run ${appId} open`,
+    `  bun run ${appId} run`,
+    `  bun run ${appId} build macos`,
+  ].join("\n");
+}
+
 export function parseAppCommand(argv: string[]) {
   const [appOrFlag, ...rest] = argv;
 
@@ -49,23 +72,31 @@ export function parseAppCommand(argv: string[]) {
 
   let mode: CommandMode = "run";
   let platformArg = rest[0];
-  let consumedArgs = 1;
+  let platformIndex = 0;
+  let consumedArgs = 0;
+  let platform: Platform;
 
   if (commandModes.includes(platformArg as (typeof commandModes)[number])) {
     mode = platformArg === "dev" ? "run" : platformArg as CommandMode;
     platformArg = rest[1];
-    consumedArgs = 2;
+    platformIndex = 1;
   }
 
-  if (!platformArg || !isPlatform(platformArg)) {
-    throw new Error(`Missing or invalid platform. Expected one of: ${platforms.join(", ")}`);
+  if (!platformArg || platformArg.startsWith("-")) {
+    platform = "macos";
+    consumedArgs = platformIndex;
+  } else if (isPlatform(platformArg)) {
+    platform = platformArg;
+    consumedArgs = platformIndex + 1;
+  } else {
+    throw new Error(`Invalid platform "${platformArg}". Expected one of: ${platforms.join(", ")}`);
   }
 
   return {
     all: false as const,
     appId: appOrFlag,
     mode,
-    platform: platformArg,
+    platform,
     extraArgs: rest.slice(consumedArgs),
   };
 }

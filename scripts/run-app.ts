@@ -1,7 +1,15 @@
 #!/usr/bin/env bun
 import fs from "node:fs";
 import path from "node:path";
-import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, rootDir, shellDir } from "./lib/apps";
+import {
+  appIds,
+  assertSupportedPlatform,
+  formatAppUsage,
+  loadAppManifest,
+  parseAppCommand,
+  rootDir,
+  shellDir,
+} from "./lib/apps";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -27,7 +35,14 @@ async function ensurePrebuild(appId: string, platform: Platform) {
 }
 
 async function main() {
-  const command = parseAppCommand(process.argv.slice(2));
+  const args = process.argv.slice(2);
+
+  if (args.length === 1 && args[0] !== "--all") {
+    console.log(formatAppUsage(args[0]));
+    return;
+  }
+
+  const command = parseAppCommand(args);
 
   if (command.all) {
     for (const appId of appIds) {
@@ -61,6 +76,13 @@ async function main() {
 
   if (command.mode === "start") {
     runCommand("bun", ["scripts/start-app.ts", command.appId, command.platform, ...command.extraArgs], {
+      cwd: rootDir,
+    });
+    return;
+  }
+
+  if (command.mode === "open") {
+    runCommand("bun", ["scripts/open-app.ts", command.appId, command.platform, ...command.extraArgs], {
       cwd: rootDir,
     });
     return;
