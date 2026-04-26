@@ -9,7 +9,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { packages, testsForPackage } from "./packageTests";
 
 const defaultPackageId = "appkit-split-view";
-const defaultTestId = "split-view-basic";
+const defaultTestId = "split-view-liquid-glass";
 
 export function App() {
   const [selectedPackageId, setSelectedPackageId] = useState(defaultPackageId);

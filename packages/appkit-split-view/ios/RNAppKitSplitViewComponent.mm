@@ -11,9 +11,11 @@ using namespace facebook::react;
 
 @implementation RNAppKitSplitViewComponent {
 #if TARGET_OS_OSX
-  NSSplitView *_splitView;
-  NSView *_sidebarPanelView;
-  NSView *_mainPanelView;
+  NSSplitViewController *_splitViewController;
+  NSViewController *_sidebarViewController;
+  NSViewController *_mainViewController;
+  NSSplitViewItem *_sidebarSplitViewItem;
+  NSSplitViewItem *_mainSplitViewItem;
   NSView *_sidebarContentView;
   NSView *_mainContentView;
   NSTextField *_sidebarLabel;
@@ -31,16 +33,15 @@ using namespace facebook::react;
     _props = std::make_shared<const AppKitSplitViewProps>();
 
 #if TARGET_OS_OSX
-    _splitView = [NSSplitView new];
-    _splitView.dividerStyle = NSSplitViewDividerStyleThin;
-    _splitView.vertical = YES;
-    _splitView.translatesAutoresizingMaskIntoConstraints = NO;
-    _splitView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _splitViewController = [NSSplitViewController new];
+    _splitViewController.splitView.dividerStyle = NSSplitViewDividerStyleThin;
+    _splitViewController.splitView.vertical = YES;
+    _splitViewController.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 
     _sidebarLabel = [self makeLabel:@"Sidebar"];
     _mainLabel = [self makeLabel:@"Main Content"];
 
-    [self addSubview:_splitView];
+    [self addSubview:_splitViewController.view];
     [self rebuildPanelsWithLiquidGlass:NO];
 #else
     _sidebarLabel = [UILabel new];
@@ -59,55 +60,52 @@ using namespace facebook::react;
 {
   [_sidebarLabel removeFromSuperview];
   [_mainLabel removeFromSuperview];
-
-  if (_sidebarPanelView) {
-    [_splitView removeArrangedSubview:_sidebarPanelView];
-    [_sidebarPanelView removeFromSuperview];
-  }
-  if (_mainPanelView) {
-    [_splitView removeArrangedSubview:_mainPanelView];
-    [_mainPanelView removeFromSuperview];
-  }
+  _splitViewController.splitViewItems = @[];
 
   _usesLiquidGlass = usesLiquidGlass;
-  NSView *sidebarContentView = nil;
-  NSView *mainContentView = nil;
-  _sidebarPanelView = [self makePanelViewWithSidebar:YES usesLiquidGlass:usesLiquidGlass contentView:&sidebarContentView];
-  _mainPanelView = [self makePanelViewWithSidebar:NO usesLiquidGlass:usesLiquidGlass contentView:&mainContentView];
-  _sidebarContentView = sidebarContentView;
-  _mainContentView = mainContentView;
+
+  _sidebarContentView = [self makeContentViewWithSidebar:YES usesLiquidGlass:usesLiquidGlass];
+  _mainContentView = [self makeContentViewWithSidebar:NO usesLiquidGlass:usesLiquidGlass];
+  _sidebarViewController = [NSViewController new];
+  _mainViewController = [NSViewController new];
+  _sidebarViewController.view = _sidebarContentView;
+  _mainViewController.view = _mainContentView;
+
+  _sidebarSplitViewItem = usesLiquidGlass
+    ? [NSSplitViewItem sidebarWithViewController:_sidebarViewController]
+    : [NSSplitViewItem splitViewItemWithViewController:_sidebarViewController];
+  _mainSplitViewItem = [NSSplitViewItem splitViewItemWithViewController:_mainViewController];
+
+  _sidebarSplitViewItem.minimumThickness = 180;
+  _sidebarSplitViewItem.maximumThickness = 320;
+  _sidebarSplitViewItem.preferredThicknessFraction = 0.22;
+
+  if (@available(macOS 26.0, *)) {
+    _mainSplitViewItem.automaticallyAdjustsSafeAreaInsets = usesLiquidGlass;
+  }
 
   [_sidebarContentView addSubview:_sidebarLabel];
   [_mainContentView addSubview:_mainLabel];
-  [_splitView addArrangedSubview:_sidebarPanelView];
-  [_splitView addArrangedSubview:_mainPanelView];
+  [_splitViewController addSplitViewItem:_sidebarSplitViewItem];
+  [_splitViewController addSplitViewItem:_mainSplitViewItem];
 
   [self setNeedsLayout:YES];
 }
 
-- (NSView *)makePanelViewWithSidebar:(BOOL)isSidebar
-                     usesLiquidGlass:(BOOL)usesLiquidGlass
-                          contentView:(NSView **)contentView
+- (NSView *)makeContentViewWithSidebar:(BOOL)isSidebar usesLiquidGlass:(BOOL)usesLiquidGlass
 {
-  if (usesLiquidGlass) {
-    if (@available(macOS 26.0, *)) {
-      NSGlassEffectView *glassView = [NSGlassEffectView new];
-      NSView *glassContentView = [NSView new];
-      glassContentView.wantsLayer = YES;
-      glassView.contentView = glassContentView;
-      glassView.cornerRadius = 0;
-      glassView.style = isSidebar ? NSGlassEffectViewStyleRegular : NSGlassEffectViewStyleClear;
-      *contentView = glassContentView;
-      return glassView;
-    }
+  if (!usesLiquidGlass && isSidebar) {
+    NSVisualEffectView *view = [NSVisualEffectView new];
+    view.material = NSVisualEffectMaterialSidebar;
+    view.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+    view.state = NSVisualEffectStateActive;
+    view.wantsLayer = YES;
+    return view;
   }
 
-  NSVisualEffectView *view = [NSVisualEffectView new];
-  view.material = isSidebar ? NSVisualEffectMaterialSidebar : NSVisualEffectMaterialContentBackground;
-  view.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-  view.state = NSVisualEffectStateActive;
+  NSView *view = [NSView new];
   view.wantsLayer = YES;
-  *contentView = view;
+  view.layer.backgroundColor = isSidebar ? NSColor.clearColor.CGColor : NSColor.windowBackgroundColor.CGColor;
   return view;
 }
 
@@ -152,10 +150,10 @@ using namespace facebook::react;
 {
   [super layoutSubviews];
 #if TARGET_OS_OSX
-  _splitView.frame = self.bounds;
+  _splitViewController.view.frame = self.bounds;
   CGFloat sidebarWidth = MIN(280, MAX(180, self.bounds.size.width * 0.28));
-  [_splitView setPosition:sidebarWidth ofDividerAtIndex:0];
-  [_splitView layoutSubtreeIfNeeded];
+  [_splitViewController.splitView setPosition:sidebarWidth ofDividerAtIndex:0];
+  [_splitViewController.splitView layoutSubtreeIfNeeded];
   _sidebarLabel.frame = NSInsetRect(_sidebarContentView.bounds, 16, 16);
   _mainLabel.frame = NSInsetRect(_mainContentView.bounds, 16, 16);
 #else

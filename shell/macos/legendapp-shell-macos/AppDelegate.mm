@@ -13,7 +13,15 @@
   self.initialProps = @{};
   self.dependencyProvider = [RCTAppDependencyProvider new];
   
-  return [super applicationDidFinishLaunching:notification];
+  [super applicationDidFinishLaunching:notification];
+  [self configureWindowForLiquidGlassSidebars];
+}
+
+- (void)configureWindowForLiquidGlassSidebars
+{
+  self.window.styleMask = self.window.styleMask | NSWindowStyleMaskFullSizeContentView;
+  self.window.titlebarAppearsTransparent = YES;
+  self.window.titleVisibility = NSWindowTitleHidden;
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
