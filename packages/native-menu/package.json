@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/native-menu",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNNativeMenuSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.nativemenu"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeMenu": "RNNativeMenu"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

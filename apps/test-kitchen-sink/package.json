@@ -4,7 +4,12 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@legend-desktop/app-exit": "0.0.0",
     "@legend-desktop/appkit-split-view": "0.0.0",
+    "@legend-desktop/auto-updater": "0.0.0",
+    "@legend-desktop/context-menu": "0.0.0",
+    "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/native-menu": "0.0.0",
     "@legend-desktop/music-test": "0.0.0"
   }
 }

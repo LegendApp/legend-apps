@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/auto-updater",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNAutoUpdaterSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.autoupdater"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeAutoUpdater": "RNAutoUpdater"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

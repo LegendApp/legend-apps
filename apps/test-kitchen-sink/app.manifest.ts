@@ -10,9 +10,33 @@ const manifest = {
   },
   androidPackage: "app.legend.testkitchensink",
   nativeModules: {
-    macos: ["@legend-desktop/appkit-split-view", "@legend-desktop/music-test"],
-    ios: ["@legend-desktop/appkit-split-view", "@legend-desktop/music-test"],
-    android: ["@legend-desktop/appkit-split-view", "@legend-desktop/music-test"],
+    macos: [
+      "@legend-desktop/app-exit",
+      "@legend-desktop/auto-updater",
+      "@legend-desktop/appkit-split-view",
+      "@legend-desktop/native-menu",
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/context-menu",
+      "@legend-desktop/music-test",
+    ],
+    ios: [
+      "@legend-desktop/app-exit",
+      "@legend-desktop/auto-updater",
+      "@legend-desktop/appkit-split-view",
+      "@legend-desktop/native-menu",
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/context-menu",
+      "@legend-desktop/music-test",
+    ],
+    android: [
+      "@legend-desktop/app-exit",
+      "@legend-desktop/auto-updater",
+      "@legend-desktop/appkit-split-view",
+      "@legend-desktop/native-menu",
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/context-menu",
+      "@legend-desktop/music-test",
+    ],
   },
 } satisfies AppManifest;
 

@@ -27,8 +27,21 @@
       "name": "@legend-desktop/app-test-kitchen-sink",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-desktop/auto-updater": "0.0.0",
+        "@legend-desktop/context-menu": "0.0.0",
+        "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/music-test": "0.0.0",
+        "@legend-desktop/native-menu": "0.0.0",
+      },
+    },
+    "packages/app-exit": {
+      "name": "@legend-desktop/app-exit",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
       },
     },
     "packages/appkit-split-view": {
@@ -39,8 +52,40 @@
         "react-native": "*",
       },
     },
+    "packages/auto-updater": {
+      "name": "@legend-desktop/auto-updater",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/context-menu": {
+      "name": "@legend-desktop/context-menu",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/file-dialog": {
+      "name": "@legend-desktop/file-dialog",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/music-test": {
       "name": "@legend-desktop/music-test",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/native-menu": {
+      "name": "@legend-desktop/native-menu",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -349,6 +394,8 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
+    "@legend-desktop/app-exit": ["@legend-desktop/app-exit@workspace:packages/app-exit"],
+
     "@legend-desktop/app-markdown": ["@legend-desktop/app-markdown@workspace:apps/markdown"],
 
     "@legend-desktop/app-music": ["@legend-desktop/app-music@workspace:apps/music"],
@@ -357,7 +404,15 @@
 
     "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
 
+    "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
+
+    "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
+
+    "@legend-desktop/file-dialog": ["@legend-desktop/file-dialog@workspace:packages/file-dialog"],
+
     "@legend-desktop/music-test": ["@legend-desktop/music-test@workspace:packages/music-test"],
+
+    "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
 
     "@nodable/entities": ["@nodable/entities@2.1.0", "", {}, "sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA=="],
 

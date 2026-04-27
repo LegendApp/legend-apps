@@ -5,8 +5,33 @@ import type { AppManifest, NativePackage, Platform } from "./types";
 
 export const nativePackages: NativePackage[] = [
   {
+    name: "@legend-desktop/app-exit",
+    root: path.join(packagesDir, "app-exit"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/auto-updater",
+    root: path.join(packagesDir, "auto-updater"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/appkit-split-view",
     root: path.join(packagesDir, "appkit-split-view"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/native-menu",
+    root: path.join(packagesDir, "native-menu"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/file-dialog",
+    root: path.join(packagesDir, "file-dialog"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/context-menu",
+    root: path.join(packagesDir, "context-menu"),
     platforms: ["macos", "ios", "android"],
   },
   {
