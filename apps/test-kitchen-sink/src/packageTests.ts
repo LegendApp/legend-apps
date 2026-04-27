@@ -30,6 +30,10 @@ export const packages: KitchenSinkPackage[] = [
     title: "Window Controls",
   },
   {
+    id: "window-manager",
+    title: "Window Manager",
+  },
+  {
     id: "global-hotkey",
     title: "Global Hotkey",
   },
@@ -91,6 +95,11 @@ export const tests: KitchenSinkTest[] = [
     id: "window-controls-visibility",
     packageId: "window-controls",
     title: "Visibility",
+  },
+  {
+    id: "window-manager-open-configure",
+    packageId: "window-manager",
+    title: "Open and Configure",
   },
   {
     id: "global-hotkey-register",

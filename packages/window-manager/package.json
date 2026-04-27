@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/window-manager",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNWindowManagerSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.windowmanager"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeWindowManager": "RNWindowManager"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

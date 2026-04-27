@@ -39,6 +39,7 @@
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
+        "@legend-desktop/window-manager": "0.0.0",
       },
     },
     "packages/app-exit": {
@@ -131,6 +132,14 @@
     },
     "packages/window-controls": {
       "name": "@legend-desktop/window-controls",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/window-manager": {
+      "name": "@legend-desktop/window-manager",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -468,6 +477,8 @@
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
 
     "@legend-desktop/window-controls": ["@legend-desktop/window-controls@workspace:packages/window-controls"],
+
+    "@legend-desktop/window-manager": ["@legend-desktop/window-manager@workspace:packages/window-manager"],
 
     "@nodable/entities": ["@nodable/entities@2.1.0", "", {}, "sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA=="],
 

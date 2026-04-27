@@ -40,6 +40,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/window-manager",
+    root: path.join(packagesDir, "window-manager"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/global-hotkey",
     root: path.join(packagesDir, "global-hotkey"),
     platforms: ["macos", "ios", "android"],
