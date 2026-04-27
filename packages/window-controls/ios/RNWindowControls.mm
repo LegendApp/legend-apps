@@ -9,7 +9,6 @@
 
 @implementation RNWindowControls {
   BOOL _hasListeners;
-  __weak id _mainWindow;
 }
 
 RCT_EXPORT_MODULE(NativeWindowControls)
@@ -28,7 +27,6 @@ RCT_EXPORT_MODULE(NativeWindowControls)
 {
   _hasListeners = YES;
 #if TARGET_OS_OSX
-  [self refreshMainWindowReference];
   [self emitFullscreenStatus];
   NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
   [center addObserver:self selector:@selector(windowDidResize:) name:NSWindowDidResizeNotification object:nil];
@@ -55,7 +53,7 @@ RCT_EXPORT_MODULE(NativeWindowControls)
 {
 #if TARGET_OS_OSX
   dispatch_async(dispatch_get_main_queue(), ^{
-    NSWindow *window = [self mainWindow];
+    NSWindow *window = [self targetWindow];
     [window standardWindowButton:NSWindowCloseButton].hidden = YES;
     [window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;
     [window standardWindowButton:NSWindowZoomButton].hidden = YES;
@@ -67,7 +65,7 @@ RCT_EXPORT_MODULE(NativeWindowControls)
 {
 #if TARGET_OS_OSX
   dispatch_async(dispatch_get_main_queue(), ^{
-    NSWindow *window = [self mainWindow];
+    NSWindow *window = [self targetWindow];
     [window standardWindowButton:NSWindowCloseButton].hidden = NO;
     [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
     [window standardWindowButton:NSWindowZoomButton].hidden = NO;
@@ -79,7 +77,7 @@ RCT_EXPORT_MODULE(NativeWindowControls)
 {
 #if TARGET_OS_OSX
   dispatch_async(dispatch_get_main_queue(), ^{
-    resolve(@([[self mainWindow] styleMask] & NSWindowStyleMaskFullScreen ? YES : NO));
+    resolve(@([[self targetWindow] styleMask] & NSWindowStyleMaskFullScreen ? YES : NO));
   });
 #else
   resolve(@NO);
@@ -89,21 +87,21 @@ RCT_EXPORT_MODULE(NativeWindowControls)
 #if TARGET_OS_OSX
 - (void)windowDidResize:(NSNotification *)notification
 {
-  if ([self isNotificationForMainWindow:notification]) {
+  if ([self isNotificationForTargetWindow:notification]) {
     [self emitFullscreenStatus];
   }
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification *)notification
 {
-  if (_hasListeners && [self isNotificationForMainWindow:notification]) {
+  if (_hasListeners && [self isNotificationForTargetWindow:notification]) {
     [self sendEventWithName:@"fullscreenChange" body:@{@"isFullscreen": @YES}];
   }
 }
 
 - (void)windowWillExitFullScreen:(NSNotification *)notification
 {
-  if (_hasListeners && [self isNotificationForMainWindow:notification]) {
+  if (_hasListeners && [self isNotificationForTargetWindow:notification]) {
     [self sendEventWithName:@"fullscreenChange" body:@{@"isFullscreen": @NO}];
   }
 }
@@ -115,68 +113,47 @@ RCT_EXPORT_MODULE(NativeWindowControls)
   }
   dispatch_async(dispatch_get_main_queue(), ^{
     [self sendEventWithName:@"fullscreenChange"
-                       body:@{@"isFullscreen": @([[self mainWindow] styleMask] & NSWindowStyleMaskFullScreen ? YES : NO)}];
+                       body:@{@"isFullscreen": @([[self targetWindow] styleMask] & NSWindowStyleMaskFullScreen ? YES : NO)}];
   });
 }
 
-- (NSWindow *)mainWindow
+- (NSWindow *)targetWindow
 {
-  NSWindow *cached = (NSWindow *)_mainWindow;
-  if (cached) {
-    return cached;
-  }
-  [self refreshMainWindowReference];
-  return (NSWindow *)_mainWindow;
-}
-
-- (void)refreshMainWindowReference
-{
-  if (!NSThread.isMainThread) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [self refreshMainWindowReference];
-    });
-    return;
-  }
-
-  for (NSWindow *window in NSApplication.sharedApplication.windows) {
-    if ([self windowMatchesMainWindowHeuristics:window]) {
-      _mainWindow = window;
-      return;
-    }
+  NSWindow *keyWindow = NSApplication.sharedApplication.keyWindow;
+  if ([self windowMatchesTargetHeuristics:keyWindow]) {
+    return keyWindow;
   }
 
   NSWindow *mainWindow = NSApplication.sharedApplication.mainWindow;
-  if ([self windowMatchesMainWindowHeuristics:mainWindow]) {
-    _mainWindow = mainWindow;
-    return;
+  if ([self windowMatchesTargetHeuristics:mainWindow]) {
+    return mainWindow;
   }
 
-  NSWindow *keyWindow = NSApplication.sharedApplication.keyWindow;
-  if ([self windowMatchesMainWindowHeuristics:keyWindow]) {
-    _mainWindow = keyWindow;
+  for (NSWindow *window in NSApplication.sharedApplication.windows) {
+    if ([self windowMatchesTargetHeuristics:window]) {
+      return window;
+    }
   }
+
+  return nil;
 }
 
-- (BOOL)isNotificationForMainWindow:(NSNotification *)notification
+- (BOOL)isNotificationForTargetWindow:(NSNotification *)notification
 {
   NSWindow *window = [notification.object isKindOfClass:NSWindow.class] ? notification.object : nil;
   if (!window) {
     return NO;
   }
 
-  NSWindow *mainWindow = [self mainWindow];
-  if (mainWindow) {
-    return window == mainWindow;
+  NSWindow *targetWindow = [self targetWindow];
+  if (targetWindow) {
+    return window == targetWindow;
   }
 
-  if ([self windowMatchesMainWindowHeuristics:window]) {
-    _mainWindow = window;
-    return YES;
-  }
-  return NO;
+  return [self windowMatchesTargetHeuristics:window];
 }
 
-- (BOOL)windowMatchesMainWindowHeuristics:(NSWindow *)window
+- (BOOL)windowMatchesTargetHeuristics:(NSWindow *)window
 {
   if (!window || window.sheet || [window isKindOfClass:NSPanel.class]) {
     return NO;

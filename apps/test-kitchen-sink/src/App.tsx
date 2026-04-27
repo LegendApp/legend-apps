@@ -44,12 +44,10 @@ import {
   type WindowFrame,
   type WindowResult,
 } from "@legend-desktop/window-manager";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { AppRegistry, type GestureResponderEvent, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { packages, testsForPackage } from "./packageTests";
+import { packages, tests, testsForPackage, type KitchenSinkTestConfig } from "./packageTests";
 
-const defaultPackageId = "appkit-split-view";
-const defaultTestId = "split-view-liquid-glass";
 const windowManagerChildModuleName = "KitchenSinkWindowManagerWindow";
 const windowManagerChildIdentifier = "kitchen-sink-window-manager-child";
 const splitViewSidebarItems = [
@@ -124,36 +122,123 @@ const splitViewTitlebarItemsJson = JSON.stringify(splitViewTitlebarItems);
 AppRegistry.registerComponent(windowManagerChildModuleName, () => WindowManagerChildWindow);
 
 export function App() {
-  const [selectedPackageId, setSelectedPackageId] = useState(defaultPackageId);
-  const availableTests = useMemo(() => testsForPackage(selectedPackageId), [selectedPackageId]);
-  const [selectedTestId, setSelectedTestId] = useState(defaultTestId);
+  return <KitchenSinkLauncher />;
+}
+
+export default App;
+
+function KitchenSinkLauncher() {
+  const [status, setStatus] = useState("Ready");
 
   useEffect(() => {
-    if (!availableTests.some((test) => test.id === selectedTestId)) {
-      setSelectedTestId(availableTests[0]?.id ?? "");
-    }
-  }, [availableTests, selectedTestId]);
-
-  useEffect(() => {
-    configureKitchenSinkMenus(packages, availableTests);
-  }, [availableTests]);
+    configureKitchenSinkMenus(packages, tests);
+  }, []);
 
   useEffect(() => {
     const subscription = addKitchenSinkMenuListener((action) => {
       if (action.type === "package") {
-        setSelectedPackageId(action.id);
+        const firstTest = testsForPackage(action.id)[0];
+        if (firstTest) {
+          void openKitchenSinkTest(firstTest).then((result) => {
+            setStatus(result.success ? `Opened ${firstTest.title}` : (result.message ?? "Open failed"));
+          });
+        }
       } else if (action.type === "test") {
-        setSelectedPackageId(action.packageId);
-        setSelectedTestId(action.id);
+        const test = tests.find((candidate) => candidate.id === action.id && candidate.packageId === action.packageId);
+        if (test) {
+          void openKitchenSinkTest(test).then((result) => {
+            setStatus(result.success ? `Opened ${test.title}` : (result.message ?? "Open failed"));
+          });
+        }
       }
     });
 
     return () => subscription.remove();
   }, []);
 
+  return (
+    <ScrollView contentContainerStyle={styles.launcherContent} style={styles.launcher}>
+      <View style={styles.launcherHeader}>
+        <Text style={styles.launcherTitle}>Package Tests</Text>
+        <Text style={styles.bodyText}>{status}</Text>
+      </View>
+      <View style={styles.packageList}>
+        {packages.map((pkg) => (
+          <View key={pkg.id} style={styles.packageSection}>
+            <Text style={styles.packageTitle}>{pkg.title}</Text>
+            {testsForPackage(pkg.id).map((test) => (
+              <Pressable
+                key={test.id}
+                onPress={() => {
+                  void openKitchenSinkTest(test).then((result) => {
+                    setStatus(result.success ? `Opened ${test.title}` : (result.message ?? "Open failed"));
+                  });
+                }}
+                style={({ pressed }) => [styles.testRow, pressed && styles.testRowPressed]}
+              >
+                <Text style={styles.testTitle}>{test.title}</Text>
+                <Text style={styles.testId}>{test.id}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function testWindowIdentifier(test: KitchenSinkTestConfig) {
+  return `kitchen-sink-test-${test.id}`;
+}
+
+function testWindowTitle(test: KitchenSinkTestConfig) {
+  const pkg = packages.find((candidate) => candidate.id === test.packageId);
+  return `${pkg?.title ?? test.packageId} / ${test.title}`;
+}
+
+function kitchenSinkTestWindowOptions(test: KitchenSinkTestConfig) {
+  const { initialProperties, windowStyle, ...windowOptions } = test.windowOptions ?? {};
+
+  const options = {
+    ...windowOptions,
+    identifier: testWindowIdentifier(test),
+    moduleName: windowManagerChildModuleName,
+    title: testWindowTitle(test),
+    initialProperties: {
+      ...(initialProperties ?? {}),
+      packageId: test.packageId,
+      testId: test.id,
+    },
+    windowStyle: {
+      height: 640,
+      minHeight: 360,
+      minWidth: 520,
+      width: 900,
+      ...(windowStyle ?? {}),
+    },
+  };
+
+  return options;
+}
+
+function openKitchenSinkTest(test: KitchenSinkTestConfig) {
+  return openWindow(kitchenSinkTestWindowOptions(test));
+}
+
+function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string) {
   const selectedPackage = packages.find((pkg) => pkg.id === selectedPackageId);
-  const selectedTest = availableTests.find((test) => test.id === selectedTestId);
+  const selectedTest = tests.find((test) => test.id === selectedTestId && test.packageId === selectedPackageId);
   const title = `${selectedPackage?.title ?? selectedPackageId} / ${selectedTest?.title ?? selectedTestId}`;
+
+  if (!selectedPackage || !selectedTest) {
+    return (
+      <View style={styles.examplePanel}>
+        <Text style={styles.panelTitle}>Missing Test</Text>
+        <Text style={styles.bodyText}>Package: {selectedPackageId || "none"}</Text>
+        <Text style={styles.bodyText}>Test: {selectedTestId || "none"}</Text>
+      </View>
+    );
+  }
 
   if (selectedPackageId === "appkit-split-view") {
     return (
@@ -220,8 +305,6 @@ export function App() {
     </View>
   );
 }
-
-export default App;
 
 function ExamplePanel({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -595,7 +678,21 @@ function WindowManagerExample() {
   );
 }
 
-function WindowManagerChildWindow({ detail, title }: { detail?: string; title?: string }) {
+function WindowManagerChildWindow({
+  detail,
+  packageId,
+  testId,
+  title,
+}: {
+  detail?: string;
+  packageId?: string;
+  testId?: string;
+  title?: string;
+}) {
+  if (packageId || testId) {
+    return renderKitchenSinkTest(packageId ?? "", testId ?? "");
+  }
+
   return (
     <View style={styles.childWindow}>
       <Text style={styles.panelTitle}>{title ?? "Window Manager Child"}</Text>
@@ -777,6 +874,24 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     width: 320,
   },
+  launcher: {
+    backgroundColor: "#f8fafc",
+    flex: 1,
+  },
+  launcherContent: {
+    alignItems: "center",
+    padding: 28,
+  },
+  launcherHeader: {
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 24,
+  },
+  launcherTitle: {
+    color: "#111827",
+    fontSize: 24,
+    fontWeight: "700",
+  },
   musicNativeView: {
     height: 56,
     width: 280,
@@ -792,6 +907,25 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 18,
     fontWeight: "700",
+  },
+  packageList: {
+    gap: 16,
+    maxWidth: 720,
+    width: "100%",
+  },
+  packageSection: {
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  packageTitle: {
+    backgroundColor: "#e2e8f0",
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "700",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   root: {
     backgroundColor: "#f8fafc",
@@ -810,6 +944,26 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 112,
     width: 160,
+  },
+  testId: {
+    color: "#64748b",
+    fontSize: 12,
+  },
+  testRow: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+    borderTopWidth: 1,
+    gap: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  testRowPressed: {
+    backgroundColor: "#f1f5f9",
+  },
+  testTitle: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "600",
   },
   visualPanel: {
     alignItems: "center",

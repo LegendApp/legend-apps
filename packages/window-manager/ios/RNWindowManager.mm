@@ -1,8 +1,10 @@
 #import "RNWindowManager.h"
 
+#import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTBridge.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTRootView.h>
+#import <React/RCTUIKit.h>
 #import <React/RCTUtils.h>
 #import <TargetConditionals.h>
 
@@ -11,6 +13,10 @@
 #import <CoreImage/CoreImage.h>
 #import <QuartzCore/QuartzCore.h>
 #endif
+
+@protocol RNWindowManagerRootViewFactoryProvider <NSObject>
+- (RCTRootViewFactory *)rootViewFactory;
+@end
 
 #if TARGET_OS_OSX
 static inline NSAppearance *LegendDarkAppearance()
@@ -82,9 +88,10 @@ static void LegendApplyTitlebarSeparatorStyle(NSWindow *window, NSString *value)
 <NSWindowDelegate>
 #endif
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *windows;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, RCTRootView *> *rootViews;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleNames;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
+@property (nonatomic, assign) BOOL hasListeners;
 @property (nonatomic, assign) BOOL mainWindowObserversInstalled;
 @end
 
@@ -115,6 +122,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 
 - (void)startObserving
 {
+  self.hasListeners = YES;
 #if TARGET_OS_OSX
   [self setupMainWindowObservers];
   [NSNotificationCenter.defaultCenter addObserver:self
@@ -126,6 +134,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 
 - (void)stopObserving
 {
+  self.hasListeners = NO;
 #if TARGET_OS_OSX
   [NSNotificationCenter.defaultCenter removeObserver:self];
   self.mainWindowObserversInstalled = NO;
@@ -197,6 +206,29 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   return @"{}";
 #endif
 }
+
+#if TARGET_OS_OSX
+- (RCTUIView *)createReactRootViewWithModuleName:(NSString *)moduleName initialProperties:(NSDictionary *)initialProps
+{
+  id appDelegate = NSApplication.sharedApplication.delegate;
+  RCTRootViewFactory *rootViewFactory = nil;
+
+  if ([appDelegate respondsToSelector:@selector(rootViewFactory)]) {
+    rootViewFactory = [(id<RNWindowManagerRootViewFactoryProvider>)appDelegate rootViewFactory];
+  }
+
+  if (rootViewFactory) {
+    return (RCTUIView *)[rootViewFactory viewWithModuleName:moduleName initialProperties:initialProps];
+  }
+
+  RCTBridge *bridge = self.bridge;
+  if (!bridge) {
+    return nil;
+  }
+
+  return [[RCTRootView alloc] initWithBridge:bridge moduleName:moduleName initialProperties:initialProps];
+}
+#endif
 
 - (void)openWindow:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
@@ -274,7 +306,17 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
 
     if (existingWindow) {
-      RCTRootView *existingRootView = self.rootViews[identifier];
+      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
+      NSString *nextModuleName = moduleName ?: @"";
+      if (![existingModuleName isEqualToString:nextModuleName]) {
+        [existingWindow orderOut:nil];
+        [self handleWindowClosedForIdentifier:identifier];
+        existingWindow = nil;
+      }
+    }
+
+    if (existingWindow) {
+      RCTUIView *existingRootView = self.rootViews[identifier];
       NSRect frame = existingWindow.frame;
       CGFloat newWidth = widthNumber ? width : frame.size.width;
       CGFloat newHeight = heightNumber ? height : frame.size.height;
@@ -354,8 +396,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
 
       NSDictionary *initialProps = [self initialPropsFromOptions:options];
-      if (existingRootView && initialProps) {
-        existingRootView.appProperties = initialProps;
+      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
+        [existingRootView setValue:initialProps forKey:@"appProperties"];
       }
       self.moduleNames[identifier] = moduleName ?: @"";
       [existingWindow makeKeyAndOrderFront:nil];
@@ -425,16 +467,12 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                     hasMinHeight ? minHeight : currentMinSize.height)];
     }
 
-    RCTBridge *bridge = self.bridge;
-    if (!bridge) {
-      reject(@"no_bridge", @"RCTBridge not available", nil);
+    NSDictionary *initialProps = [self initialPropsFromOptions:options];
+    RCTUIView *rootView = [self createReactRootViewWithModuleName:moduleName initialProperties:initialProps];
+    if (!rootView) {
+      reject(@"no_root_view", @"React root view could not be created", nil);
       return;
     }
-
-    NSDictionary *initialProps = [self initialPropsFromOptions:options];
-    RCTRootView *rootView = [[RCTRootView alloc] initWithBridge:bridge
-                                                     moduleName:moduleName
-                                              initialProperties:initialProps];
 
     window.contentView = rootView;
     if (transparentBackground) {
@@ -594,7 +632,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       return;
     }
 
-    RCTRootView *rootView = self.rootViews[targetIdentifier];
+    RCTUIView *rootView = self.rootViews[targetIdentifier];
     NSView *contentView = window.contentView ?: rootView;
     if (!contentView) {
       reject(@"no_content_view", @"Window does not have a content view to blur", nil);
@@ -702,18 +740,18 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 - (void)mainWindowDidMove:(NSNotification *)notification
 {
   NSWindow *window = notification.object;
-  [self sendEventWithName:@"onMainWindowMoved" body:[self frameDictionary:window.frame]];
+  [self sendWindowEventWithName:@"onMainWindowMoved" body:[self frameDictionary:window.frame]];
 }
 
 - (void)mainWindowDidResize:(NSNotification *)notification
 {
   NSWindow *window = notification.object;
-  [self sendEventWithName:@"onMainWindowResized" body:[self frameDictionary:window.frame]];
+  [self sendWindowEventWithName:@"onMainWindowResized" body:[self frameDictionary:window.frame]];
 }
 
 - (void)mainWindowDidBecomeKey:(NSNotification *)notification
 {
-  [self sendEventWithName:@"onWindowFocused" body:@{@"identifier": @"main", @"moduleName": @"main"}];
+  [self sendWindowEventWithName:@"onWindowFocused" body:@{@"identifier": @"main", @"moduleName": @"main"}];
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -722,8 +760,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   if (!identifier) {
     return;
   }
-  [self sendEventWithName:@"onWindowFocused"
-                     body:@{@"identifier": identifier, @"moduleName": self.moduleNames[identifier] ?: @""}];
+  [self sendWindowEventWithName:@"onWindowFocused"
+                           body:@{@"identifier": identifier, @"moduleName": self.moduleNames[identifier] ?: @""}];
 }
 
 - (void)windowWillClose:(NSNotification *)notification
@@ -732,6 +770,14 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   if (identifier) {
     [self handleWindowClosedForIdentifier:identifier];
   }
+}
+
+- (void)sendWindowEventWithName:(NSString *)eventName body:(id)body
+{
+  if (!self.hasListeners) {
+    return;
+  }
+  [self sendEventWithName:eventName body:body];
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)window
@@ -768,7 +814,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   CIFilter *blurFilter = self.windowBlurFilters[identifier];
   if (blurFilter) {
     NSWindow *window = (NSWindow *)self.windows[identifier];
-    RCTRootView *rootView = self.rootViews[identifier];
+    RCTUIView *rootView = self.rootViews[identifier];
     NSView *contentView = window.contentView ?: rootView;
     if (contentView.layer) {
       [contentView.layer removeAnimationForKey:@"legendOverlayBlurAnimation"];
@@ -786,7 +832,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   [self.windows removeObjectForKey:identifier];
   [self.rootViews removeObjectForKey:identifier];
   [self.moduleNames removeObjectForKey:identifier];
-  [self sendEventWithName:@"onWindowClosed" body:@{@"identifier": identifier ?: @"", @"moduleName": moduleName ?: @""}];
+  [self sendWindowEventWithName:@"onWindowClosed" body:@{@"identifier": identifier ?: @"", @"moduleName": moduleName ?: @""}];
 }
 
 - (NSDictionary *)initialPropsFromOptions:(NSDictionary *)options

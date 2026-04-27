@@ -14,25 +14,6 @@
   self.dependencyProvider = [RCTAppDependencyProvider new];
   
   [super applicationDidFinishLaunching:notification];
-  [self configureWindowForLiquidGlassSidebars];
-}
-
-- (void)configureWindowForLiquidGlassSidebars
-{
-  self.window.styleMask = self.window.styleMask | NSWindowStyleMaskFullSizeContentView;
-  self.window.titlebarAppearsTransparent = YES;
-  self.window.titleVisibility = NSWindowTitleVisible;
-
-  if (@available(macOS 11.0, *)) {
-    self.window.toolbarStyle = NSWindowToolbarStyleUnified;
-  }
-
-  NSToolbar *toolbar = self.window.toolbar ?: [[NSToolbar alloc] initWithIdentifier:@"LegendAppShellToolbar"];
-  toolbar.displayMode = NSToolbarDisplayModeIconOnly;
-  toolbar.allowsUserCustomization = NO;
-  toolbar.autosavesConfiguration = NO;
-  toolbar.showsBaselineSeparator = NO;
-  self.window.toolbar = toolbar;
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
