@@ -11,36 +11,20 @@ export const packages: KitchenSinkPackage[] = [
     title: "App Exit",
   },
   {
-    id: "auto-updater",
-    title: "Auto Updater",
-  },
-  {
     id: "appkit-split-view",
     title: "AppKit SplitView",
   },
   {
-    id: "native-menu",
-    title: "Native Menu",
-  },
-  {
-    id: "file-dialog",
-    title: "File Dialog",
+    id: "auto-updater",
+    title: "Auto Updater",
   },
   {
     id: "context-menu",
     title: "Context Menu",
   },
   {
-    id: "window-controls",
-    title: "Window Controls",
-  },
-  {
-    id: "window-manager",
-    title: "Window Manager",
-  },
-  {
-    id: "global-hotkey",
-    title: "Global Hotkey",
+    id: "file-dialog",
+    title: "File Dialog",
   },
   {
     id: "file-system-watcher",
@@ -51,12 +35,28 @@ export const packages: KitchenSinkPackage[] = [
     title: "Glass Effect View",
   },
   {
-    id: "sf-symbol",
-    title: "SF Symbol",
+    id: "global-hotkey",
+    title: "Global Hotkey",
   },
   {
     id: "music-test",
     title: "Music Test",
+  },
+  {
+    id: "native-menu",
+    title: "Native Menu",
+  },
+  {
+    id: "sf-symbol",
+    title: "SF Symbol",
+  },
+  {
+    id: "window-controls",
+    title: "Window Controls",
+  },
+  {
+    id: "window-manager",
+    title: "Window Manager",
   },
 ];
 
@@ -65,11 +65,6 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "app-exit-events",
     packageId: "app-exit",
     title: "Exit Events",
-  },
-  {
-    id: "auto-updater-status",
-    packageId: "auto-updater",
-    title: "Updater Status",
   },
   {
     id: "split-view-basic",
@@ -98,14 +93,9 @@ export const tests: KitchenSinkTestConfig[] = [
     },
   },
   {
-    id: "native-menu-configure",
-    packageId: "native-menu",
-    title: "Configure Menu",
-  },
-  {
-    id: "file-dialog-open-save",
-    packageId: "file-dialog",
-    title: "Open and Save",
+    id: "auto-updater-status",
+    packageId: "auto-updater",
+    title: "Updater Status",
   },
   {
     id: "context-menu-show",
@@ -113,19 +103,9 @@ export const tests: KitchenSinkTestConfig[] = [
     title: "Show Menu",
   },
   {
-    id: "window-controls-visibility",
-    packageId: "window-controls",
-    title: "Visibility",
-  },
-  {
-    id: "window-manager-open-configure",
-    packageId: "window-manager",
-    title: "Open and Configure",
-  },
-  {
-    id: "global-hotkey-register",
-    packageId: "global-hotkey",
-    title: "Register Hotkey",
+    id: "file-dialog-open-save",
+    packageId: "file-dialog",
+    title: "Open and Save",
   },
   {
     id: "file-system-watcher-events",
@@ -138,14 +118,34 @@ export const tests: KitchenSinkTestConfig[] = [
     title: "Basic Glass",
   },
   {
-    id: "sf-symbol-basic",
-    packageId: "sf-symbol",
-    title: "Basic Symbol",
+    id: "global-hotkey-register",
+    packageId: "global-hotkey",
+    title: "Register Hotkey",
   },
   {
     id: "music-native-view",
     packageId: "music-test",
     title: "Native View",
+  },
+  {
+    id: "native-menu-configure",
+    packageId: "native-menu",
+    title: "Configure Menu",
+  },
+  {
+    id: "sf-symbol-basic",
+    packageId: "sf-symbol",
+    title: "Basic Symbol",
+  },
+  {
+    id: "window-controls-visibility",
+    packageId: "window-controls",
+    title: "Visibility",
+  },
+  {
+    id: "window-manager-open-configure",
+    packageId: "window-manager",
+    title: "Open and Configure",
   },
 ];
 
