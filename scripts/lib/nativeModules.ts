@@ -25,6 +25,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/sidebar",
+    root: path.join(packagesDir, "sidebar"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/file-dialog",
     root: path.join(packagesDir, "file-dialog"),
     platforms: ["macos", "ios", "android"],

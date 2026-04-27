@@ -43,6 +43,10 @@ export const packages: KitchenSinkPackage[] = [
     title: "Native Menu",
   },
   {
+    id: "sidebar",
+    title: "Sidebar",
+  },
+  {
     id: "sf-symbol",
     title: "SF Symbol",
   },
@@ -122,6 +126,21 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "native-menu-configure",
     packageId: "native-menu",
     title: "Configure Menu",
+  },
+  {
+    id: "sidebar-data-items",
+    packageId: "sidebar",
+    title: "Data Items",
+  },
+  {
+    id: "sidebar-dynamic-heights",
+    packageId: "sidebar",
+    title: "Dynamic Heights",
+  },
+  {
+    id: "sidebar-react-rows",
+    packageId: "sidebar",
+    title: "React Rows",
   },
   {
     id: "sf-symbol-basic",

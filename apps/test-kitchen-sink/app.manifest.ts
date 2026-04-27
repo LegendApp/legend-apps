@@ -22,6 +22,7 @@ const manifest = {
       "@legend-desktop/global-hotkey",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
+      "@legend-desktop/sidebar",
       "@legend-desktop/sf-symbol",
     ],
     ios: [
@@ -36,6 +37,7 @@ const manifest = {
       "@legend-desktop/global-hotkey",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
+      "@legend-desktop/sidebar",
       "@legend-desktop/sf-symbol",
     ],
     android: [
@@ -50,6 +52,7 @@ const manifest = {
       "@legend-desktop/global-hotkey",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
+      "@legend-desktop/sidebar",
       "@legend-desktop/sf-symbol",
     ],
   },

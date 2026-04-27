@@ -1,0 +1,25 @@
+{
+  "name": "@legend-desktop/sidebar",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNSidebarSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.sidebar"
+    },
+    "ios": {
+      "componentProvider": {
+        "Sidebar": "RNSidebar",
+        "SidebarItem": "RNSidebarItem"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

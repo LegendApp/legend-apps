@@ -34,6 +34,7 @@
         "@legend-desktop/global-hotkey": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
+        "@legend-desktop/sidebar": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
       },
@@ -112,6 +113,14 @@
     },
     "packages/sf-symbol": {
       "name": "@legend-desktop/sf-symbol",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/sidebar": {
+      "name": "@legend-desktop/sidebar",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -460,6 +469,8 @@
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
 
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
+
+    "@legend-desktop/sidebar": ["@legend-desktop/sidebar@workspace:packages/sidebar"],
 
     "@legend-desktop/window-controls": ["@legend-desktop/window-controls@workspace:packages/window-controls"],
 
