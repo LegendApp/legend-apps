@@ -32,8 +32,13 @@
         "@legend-desktop/auto-updater": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/file-system-watcher": "0.0.0",
+        "@legend-desktop/glass-effect-view": "0.0.0",
+        "@legend-desktop/global-hotkey": "0.0.0",
         "@legend-desktop/music-test": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/sf-symbol": "0.0.0",
+        "@legend-desktop/window-controls": "0.0.0",
       },
     },
     "packages/app-exit": {
@@ -76,6 +81,30 @@
         "react-native": "*",
       },
     },
+    "packages/file-system-watcher": {
+      "name": "@legend-desktop/file-system-watcher",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/glass-effect-view": {
+      "name": "@legend-desktop/glass-effect-view",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/global-hotkey": {
+      "name": "@legend-desktop/global-hotkey",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/music-test": {
       "name": "@legend-desktop/music-test",
       "version": "0.0.0",
@@ -86,6 +115,22 @@
     },
     "packages/native-menu": {
       "name": "@legend-desktop/native-menu",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/sf-symbol": {
+      "name": "@legend-desktop/sf-symbol",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/window-controls": {
+      "name": "@legend-desktop/window-controls",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -410,9 +455,19 @@
 
     "@legend-desktop/file-dialog": ["@legend-desktop/file-dialog@workspace:packages/file-dialog"],
 
+    "@legend-desktop/file-system-watcher": ["@legend-desktop/file-system-watcher@workspace:packages/file-system-watcher"],
+
+    "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
+
+    "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+
     "@legend-desktop/music-test": ["@legend-desktop/music-test@workspace:packages/music-test"],
 
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
+
+    "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
+
+    "@legend-desktop/window-controls": ["@legend-desktop/window-controls@workspace:packages/window-controls"],
 
     "@nodable/entities": ["@nodable/entities@2.1.0", "", {}, "sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA=="],
 

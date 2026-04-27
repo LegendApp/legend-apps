@@ -1,0 +1,17 @@
+plugins {
+  id "com.android.library"
+  id "com.facebook.react"
+}
+
+android {
+  namespace "com.legenddesktop.windowcontrols"
+  compileSdkVersion 35
+
+  defaultConfig {
+    minSdkVersion 24
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+}

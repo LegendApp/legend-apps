@@ -2,7 +2,14 @@ import { addAppExitListener, isAppExitSupported } from "@legend-desktop/app-exit
 import { MusicTestView } from "@legend-desktop/music-test";
 import { AutoUpdater } from "@legend-desktop/auto-updater";
 import { showContextMenu } from "@legend-desktop/context-menu";
+import {
+  addDirectoryChangeListener,
+  isWatchingDirectory,
+  setWatchedDirectories,
+} from "@legend-desktop/file-system-watcher";
 import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
+import { GlassEffectView } from "@legend-desktop/glass-effect-view";
+import { addGlobalHotkeyListener, registerGlobalHotkey, unregisterGlobalHotkey } from "@legend-desktop/global-hotkey";
 import {
   addKitchenSinkMenuListener,
   AppKitSplitView,
@@ -14,6 +21,13 @@ import {
   configureMenus,
   updateMenuItems,
 } from "@legend-desktop/native-menu";
+import { SFSymbol } from "@legend-desktop/sf-symbol";
+import {
+  addFullscreenChangeListener,
+  hideWindowControls,
+  isWindowFullScreen,
+  showWindowControls,
+} from "@legend-desktop/window-controls";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { type GestureResponderEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import { packages, testsForPackage } from "./packageTests";
@@ -153,6 +167,26 @@ export function App() {
 
   if (selectedPackageId === "context-menu") {
     return <ContextMenuExample />;
+  }
+
+  if (selectedPackageId === "window-controls") {
+    return <WindowControlsExample />;
+  }
+
+  if (selectedPackageId === "global-hotkey") {
+    return <GlobalHotkeyExample />;
+  }
+
+  if (selectedPackageId === "file-system-watcher") {
+    return <FileSystemWatcherExample />;
+  }
+
+  if (selectedPackageId === "glass-effect-view") {
+    return <GlassEffectViewExample />;
+  }
+
+  if (selectedPackageId === "sf-symbol") {
+    return <SFSymbolExample />;
   }
 
   return (
@@ -335,6 +369,154 @@ function ContextMenuExample() {
   );
 }
 
+function WindowControlsExample() {
+  const [status, setStatus] = useState("Fullscreen status unknown.");
+
+  useEffect(() => {
+    const subscription = addFullscreenChangeListener((event) => {
+      setStatus(`Fullscreen: ${event.isFullscreen ? "Yes" : "No"}`);
+    });
+    void isWindowFullScreen().then((value) => {
+      setStatus(`Fullscreen: ${value ? "Yes" : "No"}`);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <ExamplePanel title="Window Controls">
+      <Text style={styles.bodyText}>{status}</Text>
+      <ExampleButton onPress={hideWindowControls}>Hide Controls</ExampleButton>
+      <ExampleButton onPress={showWindowControls}>Show Controls</ExampleButton>
+      <ExampleButton
+        onPress={() => {
+          void isWindowFullScreen().then((value) => setStatus(`Fullscreen: ${value ? "Yes" : "No"}`));
+        }}
+      >
+        Check Fullscreen
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
+const commandModifier = 1 << 20;
+const shiftModifier = 1 << 17;
+
+function GlobalHotkeyExample() {
+  const [status, setStatus] = useState("Register Command+Shift+Space to test.");
+
+  useEffect(() => {
+    const subscription = addGlobalHotkeyListener(() => {
+      setStatus(`Hotkey pressed at ${new Date().toLocaleTimeString()}`);
+    });
+    return () => {
+      subscription.remove();
+      void unregisterGlobalHotkey();
+    };
+  }, []);
+
+  return (
+    <ExamplePanel title="Global Hotkey">
+      <Text style={styles.bodyText}>{status}</Text>
+      <ExampleButton
+        onPress={() => {
+          void registerGlobalHotkey(49, commandModifier | shiftModifier).then((result) => {
+            setStatus(result.success ? "Registered Command+Shift+Space." : (result.message ?? "Registration failed."));
+          });
+        }}
+      >
+        Register Hotkey
+      </ExampleButton>
+      <ExampleButton
+        onPress={() => {
+          void unregisterGlobalHotkey().then((result) => {
+            setStatus(result.success ? "Unregistered hotkey." : (result.message ?? "Unregister failed."));
+          });
+        }}
+      >
+        Unregister Hotkey
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
+function FileSystemWatcherExample() {
+  const directory = "/tmp";
+  const [status, setStatus] = useState(`Not watching ${directory}.`);
+
+  useEffect(() => {
+    const subscription = addDirectoryChangeListener((event) => {
+      setStatus(`${event.type}: ${event.filePath}`);
+    });
+    return () => {
+      subscription.remove();
+      setWatchedDirectories([]);
+    };
+  }, []);
+
+  return (
+    <ExamplePanel title="File System Watcher">
+      <Text style={styles.bodyText}>{status}</Text>
+      <ExampleButton
+        onPress={() => {
+          setWatchedDirectories([directory]);
+          setStatus(`Watching ${directory}.`);
+        }}
+      >
+        Watch /tmp
+      </ExampleButton>
+      <ExampleButton
+        onPress={() => {
+          void isWatchingDirectory(directory).then((value) => {
+            setStatus(`${directory} watched: ${value ? "Yes" : "No"}`);
+          });
+        }}
+      >
+        Check Watch
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
+function GlassEffectViewExample() {
+  return (
+    <View style={styles.visualPanel}>
+      <GlassEffectView glassStyle="regular" style={styles.glassPreview}>
+        <Text style={styles.panelTitle}>Glass Effect View</Text>
+        <Text style={styles.bodyText}>Native visual effect container</Text>
+      </GlassEffectView>
+    </View>
+  );
+}
+
+const sfSymbolExamples = [
+  { color: "#2563eb", name: "music.note.list", scale: "large", size: 72 },
+  { color: "#16a34a", name: "play.circle.fill", scale: "large", size: 64 },
+  { color: "#dc2626", name: "heart.fill", scale: "medium", size: 56 },
+  { color: "#9333ea", name: "sparkles", scale: "medium", size: 56 },
+  { color: "#ea580c", name: "speaker.wave.2.fill", scale: "small", size: 48 },
+  { color: "#0f766e", name: "waveform", scale: "small", size: 48 },
+] as const;
+
+function SFSymbolExample() {
+  return (
+    <ExamplePanel title="SF Symbol">
+      <View style={styles.symbolGrid}>
+        {sfSymbolExamples.map((symbol) => (
+          <View key={symbol.name} style={styles.symbolTile}>
+            <SFSymbol
+              color={symbol.color}
+              name={symbol.name}
+              scale={symbol.scale}
+              size={symbol.size}
+            />
+            <Text style={styles.bodyText}>{symbol.name}</Text>
+          </View>
+        ))}
+      </View>
+    </ExamplePanel>
+  );
+}
+
 const styles = StyleSheet.create({
   bodyText: {
     color: "#334155",
@@ -371,6 +553,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
   },
+  glassPreview: {
+    alignItems: "center",
+    borderRadius: 10,
+    gap: 10,
+    height: 180,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 320,
+  },
   musicNativeView: {
     height: 56,
     width: 280,
@@ -390,5 +581,25 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: "#f8fafc",
     flex: 1,
+  },
+  symbolGrid: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 20,
+    justifyContent: "center",
+    maxWidth: 560,
+  },
+  symbolTile: {
+    alignItems: "center",
+    gap: 10,
+    minHeight: 112,
+    width: 160,
+  },
+  visualPanel: {
+    alignItems: "center",
+    backgroundColor: "#dbeafe",
+    flex: 1,
+    justifyContent: "center",
   },
 });

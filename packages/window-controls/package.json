@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/window-controls",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNWindowControlsSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.windowcontrols"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeWindowControls": "RNWindowControls"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

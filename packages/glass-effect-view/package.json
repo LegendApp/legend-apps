@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/glass-effect-view",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNGlassEffectViewSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.glasseffectview"
+    },
+    "ios": {
+      "componentProvider": {
+        "GlassEffectView": "RNGlassEffectView"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

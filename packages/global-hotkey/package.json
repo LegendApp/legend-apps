@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/global-hotkey",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNGlobalHotkeySpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.globalhotkey"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeGlobalHotkey": "RNGlobalHotkey"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

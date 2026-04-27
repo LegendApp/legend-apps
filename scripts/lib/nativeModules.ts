@@ -35,6 +35,31 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/window-controls",
+    root: path.join(packagesDir, "window-controls"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/global-hotkey",
+    root: path.join(packagesDir, "global-hotkey"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/file-system-watcher",
+    root: path.join(packagesDir, "file-system-watcher"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/glass-effect-view",
+    root: path.join(packagesDir, "glass-effect-view"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/sf-symbol",
+    root: path.join(packagesDir, "sf-symbol"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/music-test",
     root: path.join(packagesDir, "music-test"),
     platforms: ["macos", "ios", "android"],

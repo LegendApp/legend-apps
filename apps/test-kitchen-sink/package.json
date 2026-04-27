@@ -9,7 +9,12 @@
     "@legend-desktop/auto-updater": "0.0.0",
     "@legend-desktop/context-menu": "0.0.0",
     "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/file-system-watcher": "0.0.0",
+    "@legend-desktop/glass-effect-view": "0.0.0",
+    "@legend-desktop/global-hotkey": "0.0.0",
+    "@legend-desktop/music-test": "0.0.0",
     "@legend-desktop/native-menu": "0.0.0",
-    "@legend-desktop/music-test": "0.0.0"
+    "@legend-desktop/sf-symbol": "0.0.0",
+    "@legend-desktop/window-controls": "0.0.0"
   }
 }

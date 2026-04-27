@@ -26,6 +26,26 @@ export const packages: KitchenSinkPackage[] = [
     title: "Context Menu",
   },
   {
+    id: "window-controls",
+    title: "Window Controls",
+  },
+  {
+    id: "global-hotkey",
+    title: "Global Hotkey",
+  },
+  {
+    id: "file-system-watcher",
+    title: "File System Watcher",
+  },
+  {
+    id: "glass-effect-view",
+    title: "Glass Effect View",
+  },
+  {
+    id: "sf-symbol",
+    title: "SF Symbol",
+  },
+  {
     id: "music-test",
     title: "Music Test",
   },
@@ -66,6 +86,31 @@ export const tests: KitchenSinkTest[] = [
     id: "context-menu-show",
     packageId: "context-menu",
     title: "Show Menu",
+  },
+  {
+    id: "window-controls-visibility",
+    packageId: "window-controls",
+    title: "Visibility",
+  },
+  {
+    id: "global-hotkey-register",
+    packageId: "global-hotkey",
+    title: "Register Hotkey",
+  },
+  {
+    id: "file-system-watcher-events",
+    packageId: "file-system-watcher",
+    title: "Watch Directory",
+  },
+  {
+    id: "glass-effect-view-basic",
+    packageId: "glass-effect-view",
+    title: "Basic Glass",
+  },
+  {
+    id: "sf-symbol-basic",
+    packageId: "sf-symbol",
+    title: "Basic Symbol",
   },
   {
     id: "music-native-view",
