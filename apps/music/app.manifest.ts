@@ -10,9 +10,9 @@ const manifest = {
   },
   androidPackage: "app.legend.music",
   nativeModules: {
-    macos: ["@legend-desktop/music-test"],
-    ios: ["@legend-desktop/music-test"],
-    android: ["@legend-desktop/music-test"],
+    macos: [],
+    ios: [],
+    android: [],
   },
 } satisfies AppManifest;
 

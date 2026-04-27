@@ -19,9 +19,6 @@
     "apps/music": {
       "name": "@legend-desktop/app-music",
       "version": "0.0.0",
-      "dependencies": {
-        "@legend-desktop/music-test": "0.0.0",
-      },
     },
     "apps/test-kitchen-sink": {
       "name": "@legend-desktop/app-test-kitchen-sink",
@@ -35,7 +32,6 @@
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/glass-effect-view": "0.0.0",
         "@legend-desktop/global-hotkey": "0.0.0",
-        "@legend-desktop/music-test": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
@@ -106,14 +102,6 @@
         "react-native": "*",
       },
     },
-    "packages/music-test": {
-      "name": "@legend-desktop/music-test",
-      "version": "0.0.0",
-      "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
-      },
-    },
     "packages/native-menu": {
       "name": "@legend-desktop/native-menu",
       "version": "0.0.0",
@@ -151,7 +139,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/music-test": "0.0.0",
         "expo": "~54.0.33",
         "expo-status-bar": "~3.0.9",
         "react": "19.1.4",
@@ -469,8 +456,6 @@
     "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
-
-    "@legend-desktop/music-test": ["@legend-desktop/music-test@workspace:packages/music-test"],
 
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
 

@@ -64,11 +64,6 @@ export const nativePackages: NativePackage[] = [
     root: path.join(packagesDir, "sf-symbol"),
     platforms: ["macos", "ios", "android"],
   },
-  {
-    name: "@legend-desktop/music-test",
-    root: path.join(packagesDir, "music-test"),
-    platforms: ["macos", "ios", "android"],
-  },
 ];
 
 export function getActiveNativePackages(manifest: AppManifest, platform: Platform) {

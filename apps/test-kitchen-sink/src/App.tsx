@@ -1,5 +1,4 @@
 import { addAppExitListener, isAppExitSupported } from "@legend-desktop/app-exit";
-import { MusicTestView } from "@legend-desktop/music-test";
 import { AutoUpdater } from "@legend-desktop/auto-updater";
 import { showContextMenu } from "@legend-desktop/context-menu";
 import {
@@ -299,9 +298,9 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
   }
 
   return (
-    <View style={styles.musicPanel}>
-      <Text style={styles.panelTitle}>{title}</Text>
-      <MusicTestView style={styles.musicNativeView} />
+    <View style={styles.examplePanel}>
+      <Text style={styles.panelTitle}>Unhandled Test</Text>
+      <Text style={styles.bodyText}>{title}</Text>
     </View>
   );
 }
@@ -891,17 +890,6 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 24,
     fontWeight: "700",
-  },
-  musicNativeView: {
-    height: 56,
-    width: 280,
-  },
-  musicPanel: {
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    flex: 1,
-    gap: 16,
-    justifyContent: "center",
   },
   panelTitle: {
     color: "#111827",

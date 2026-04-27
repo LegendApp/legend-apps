@@ -39,10 +39,6 @@ export const packages: KitchenSinkPackage[] = [
     title: "Global Hotkey",
   },
   {
-    id: "music-test",
-    title: "Music Test",
-  },
-  {
     id: "native-menu",
     title: "Native Menu",
   },
@@ -121,11 +117,6 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "global-hotkey-register",
     packageId: "global-hotkey",
     title: "Register Hotkey",
-  },
-  {
-    id: "music-native-view",
-    packageId: "music-test",
-    title: "Native View",
   },
   {
     id: "native-menu-configure",

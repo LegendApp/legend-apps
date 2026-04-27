@@ -23,7 +23,6 @@ const manifest = {
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
       "@legend-desktop/sf-symbol",
-      "@legend-desktop/music-test",
     ],
     ios: [
       "@legend-desktop/app-exit",
@@ -38,7 +37,6 @@ const manifest = {
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
       "@legend-desktop/sf-symbol",
-      "@legend-desktop/music-test",
     ],
     android: [
       "@legend-desktop/app-exit",
@@ -53,7 +51,6 @@ const manifest = {
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
       "@legend-desktop/sf-symbol",
-      "@legend-desktop/music-test",
     ],
   },
 } satisfies AppManifest;

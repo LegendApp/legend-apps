@@ -52,9 +52,7 @@ async function verifyOne(appId: string, platform: Platform) {
   }
 
   const appSource = fs.readFileSync(path.join(rootDir, "apps", appId, "src", "App.tsx"), "utf8");
-  if (appId === "markdown") {
-    assertNotContains(appSource, "@legend-desktop/music-test", "markdown app source imports music-test");
-  }
+  assertNotContains(appSource, "@legend-desktop/music-test", `${appId} app source imports removed music-test package`);
 
   const rnConfig = runCapture("bun", ["x", "react-native", "config"], {
     LEGEND_APP: appId,
