@@ -95,6 +95,23 @@ using namespace facebook::react;
   [super updateProps:props oldProps:oldProps];
 }
 
+- (void)prepareForRecycle
+{
+  [super prepareForRecycle];
+
+  _symbolName = @"";
+  _size = 24;
+  _yOffset = 0;
+  _imageView.image = nil;
+#if TARGET_OS_OSX
+  _imageView.symbolConfiguration = nil;
+  _imageView.contentTintColor = NSColor.labelColor;
+#else
+  _imageView.tintColor = UIColor.labelColor;
+#endif
+  [self setNeedsLayout:YES];
+}
+
 - (void)layoutSubviews
 {
   [super layoutSubviews];

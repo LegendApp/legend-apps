@@ -50,6 +50,20 @@ using namespace facebook::react;
   [super updateProps:props oldProps:oldProps];
 }
 
+- (void)prepareForRecycle
+{
+  [super prepareForRecycle];
+
+#if TARGET_OS_OSX
+  _effectView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+  _effectView.material = NSVisualEffectMaterialSidebar;
+  _effectView.state = NSVisualEffectStateActive;
+#else
+  _effectView.backgroundColor = [UIColor colorWithWhite:1 alpha:0.7];
+#endif
+  [self setNeedsLayout:YES];
+}
+
 - (void)layoutSubviews
 {
   [super layoutSubviews];

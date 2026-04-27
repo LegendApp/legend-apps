@@ -357,6 +357,8 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
 {
   [super viewDidMoveToWindow];
   [self updateWindowToolbarForLiquidGlassSidebar];
+  [self setNeedsLayout:YES];
+  [self layoutSubtreeIfNeeded];
 }
 
 - (void)updateWindowToolbarForLiquidGlassSidebar
@@ -527,6 +529,27 @@ static NSUserInterfaceItemIdentifier const RNAppKitSplitViewSidebarCellIdentifie
 #endif
 
   [super updateProps:props oldProps:oldProps];
+}
+
+- (void)prepareForRecycle
+{
+  [super prepareForRecycle];
+
+#if TARGET_OS_OSX
+  if (self.window.toolbar.delegate == self) {
+    self.window.toolbar.delegate = nil;
+  }
+
+  _sidebarItems = @[];
+  _titlebarItems = @[];
+  _selectedSidebarItemId = @"";
+  _sidebarLabel.stringValue = @"Sidebar";
+  _mainLabel.stringValue = @"Main Content";
+  [self rebuildPanelsWithLiquidGlass:NO];
+#else
+  _sidebarLabel.text = @"Sidebar";
+  _mainLabel.text = @"Main Content";
+#endif
 }
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics

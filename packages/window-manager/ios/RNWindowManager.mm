@@ -81,6 +81,18 @@ static void LegendApplyTitlebarSeparatorStyle(NSWindow *window, NSString *value)
     }
   }
 }
+
+static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
+{
+  if (!rootView || !window) {
+    return;
+  }
+
+  NSView *contentView = window.contentView;
+  rootView.frame = contentView ? contentView.bounds : NSMakeRect(0, 0, window.frame.size.width, window.frame.size.height);
+  rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [rootView setNeedsLayout:YES];
+}
 #endif
 
 @interface RNWindowManager ()
@@ -399,6 +411,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
         [existingRootView setValue:initialProps forKey:@"appProperties"];
       }
+      LegendSizeRootViewToWindow(existingRootView, existingWindow);
       self.moduleNames[identifier] = moduleName ?: @"";
       [existingWindow makeKeyAndOrderFront:nil];
       resolve([self successJson]);
@@ -475,6 +488,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
 
     window.contentView = rootView;
+    LegendSizeRootViewToWindow(rootView, window);
     if (transparentBackground) {
       rootView.backgroundColor = NSColor.clearColor;
       window.contentView.wantsLayer = YES;
