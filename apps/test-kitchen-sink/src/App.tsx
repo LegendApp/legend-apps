@@ -53,10 +53,12 @@ import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/reac
 import { type ReactNode, useEffect, useState } from "react";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import { AppRegistry, type GestureResponderEvent, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import shellPackage from "../../../shell/package.json";
 import { packages, tests, testsForPackage, type KitchenSinkTestConfig } from "./packageTests";
 
 const windowManagerChildModuleName = "KitchenSinkWindowManagerWindow";
 const windowManagerChildIdentifier = "kitchen-sink-window-manager-child";
+const reactNativeVersionLabel = `RN ${shellPackage.dependencies["react-native"]} / macOS ${shellPackage.dependencies["react-native-macos"]}`;
 const splitViewSidebarItems = [
   {
     id: "overview",
@@ -164,33 +166,38 @@ function KitchenSinkLauncher() {
   }, []);
 
   return (
-    <ScrollView contentContainerStyle={styles.launcherContent} style={styles.launcher}>
-      <View style={styles.launcherHeader}>
-        <Text style={styles.launcherTitle}>Package Tests</Text>
-        <Text style={styles.bodyText}>{status}</Text>
+    <View style={styles.launcherRoot}>
+      <ScrollView contentContainerStyle={styles.launcherContent} style={styles.launcher}>
+        <View style={styles.launcherHeader}>
+          <Text style={styles.launcherTitle}>Package Tests</Text>
+          <Text style={styles.bodyText}>{status}</Text>
+        </View>
+        <View style={styles.packageList}>
+          {packages.map((pkg) => (
+            <View key={pkg.id} style={styles.packageSection}>
+              <Text style={styles.packageTitle}>{pkg.title}</Text>
+              {testsForPackage(pkg.id).map((test) => (
+                <Pressable
+                  key={test.id}
+                  onPress={() => {
+                    void openKitchenSinkTest(test).then((result) => {
+                      setStatus(result.success ? `Opened ${test.title}` : (result.message ?? "Open failed"));
+                    });
+                  }}
+                  style={({ pressed }) => [styles.testRow, pressed && styles.testRowPressed]}
+                >
+                  <Text style={styles.testTitle}>{test.title}</Text>
+                  <Text style={styles.testId}>{test.id}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+      <View pointerEvents="none" style={styles.versionBadge}>
+        <Text style={styles.versionBadgeText}>{reactNativeVersionLabel}</Text>
       </View>
-      <View style={styles.packageList}>
-        {packages.map((pkg) => (
-          <View key={pkg.id} style={styles.packageSection}>
-            <Text style={styles.packageTitle}>{pkg.title}</Text>
-            {testsForPackage(pkg.id).map((test) => (
-              <Pressable
-                key={test.id}
-                onPress={() => {
-                  void openKitchenSinkTest(test).then((result) => {
-                    setStatus(result.success ? `Opened ${test.title}` : (result.message ?? "Open failed"));
-                  });
-                }}
-                style={({ pressed }) => [styles.testRow, pressed && styles.testRowPressed]}
-              >
-                <Text style={styles.testTitle}>{test.title}</Text>
-                <Text style={styles.testId}>{test.id}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ))}
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -1431,11 +1438,16 @@ const styles = StyleSheet.create({
   launcherContent: {
     alignItems: "center",
     padding: 28,
+    paddingBottom: 64,
   },
   launcherHeader: {
     alignItems: "center",
     gap: 8,
     marginBottom: 24,
+  },
+  launcherRoot: {
+    backgroundColor: "#f8fafc",
+    flex: 1,
   },
   launcherTitle: {
     color: "#111827",
@@ -1604,6 +1616,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#dbeafe",
     flex: 1,
     justifyContent: "center",
+  },
+  versionBadge: {
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    borderRadius: 6,
+    bottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    position: "absolute",
+    right: 12,
+  },
+  versionBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
   },
   windowManagerControls: {
     alignItems: "center",
