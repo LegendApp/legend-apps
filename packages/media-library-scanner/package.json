@@ -1,0 +1,28 @@
+{
+  "name": "@legend-desktop/media-library-scanner",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/file-scanner": "0.0.0",
+    "@legend-desktop/media-tags": "0.0.0"
+  },
+  "codegenConfig": {
+    "name": "RNMediaLibraryScannerSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.medialibraryscanner"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeMediaLibraryScanner": "RNMediaLibraryScanner"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

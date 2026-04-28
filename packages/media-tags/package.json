@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/media-tags",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNMediaTagsSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.mediatags"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeMediaTags": "RNMediaTags"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

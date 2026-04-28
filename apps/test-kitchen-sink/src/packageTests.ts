@@ -23,8 +23,16 @@ export const packages: KitchenSinkPackage[] = [
     title: "Context Menu",
   },
   {
+    id: "document-scanner",
+    title: "Document Scanner",
+  },
+  {
     id: "file-dialog",
     title: "File Dialog",
+  },
+  {
+    id: "file-scanner",
+    title: "File Scanner",
   },
   {
     id: "file-system-watcher",
@@ -37,6 +45,14 @@ export const packages: KitchenSinkPackage[] = [
   {
     id: "global-hotkey",
     title: "Global Hotkey",
+  },
+  {
+    id: "media-library-scanner",
+    title: "Media Library Scanner",
+  },
+  {
+    id: "media-tags",
+    title: "Media Tags",
   },
   {
     id: "native-menu",
@@ -103,9 +119,19 @@ export const tests: KitchenSinkTestConfig[] = [
     title: "Show Menu",
   },
   {
+    id: "document-scanner-markdown",
+    packageId: "document-scanner",
+    title: "Scan Markdown",
+  },
+  {
     id: "file-dialog-open-save",
     packageId: "file-dialog",
     title: "Open and Save",
+  },
+  {
+    id: "file-scanner-tmp",
+    packageId: "file-scanner",
+    title: "Scan Files",
   },
   {
     id: "file-system-watcher-events",
@@ -121,6 +147,16 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "global-hotkey-register",
     packageId: "global-hotkey",
     title: "Register Hotkey",
+  },
+  {
+    id: "media-library-scanner-folder",
+    packageId: "media-library-scanner",
+    title: "Scan Folder",
+  },
+  {
+    id: "media-tags-read",
+    packageId: "media-tags",
+    title: "Read Tags",
   },
   {
     id: "native-menu-configure",

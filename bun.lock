@@ -28,10 +28,14 @@
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
+        "@legend-desktop/document-scanner": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/file-scanner": "0.0.0",
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/glass-effect-view": "0.0.0",
         "@legend-desktop/global-hotkey": "0.0.0",
+        "@legend-desktop/media-library-scanner": "0.0.0",
+        "@legend-desktop/media-tags": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/sidebar": "0.0.0",
@@ -71,8 +75,27 @@
         "react-native": "*",
       },
     },
+    "packages/document-scanner": {
+      "name": "@legend-desktop/document-scanner",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/file-scanner": "0.0.0",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/file-dialog": {
       "name": "@legend-desktop/file-dialog",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/file-scanner": {
+      "name": "@legend-desktop/file-scanner",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -97,6 +120,26 @@
     },
     "packages/global-hotkey": {
       "name": "@legend-desktop/global-hotkey",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/media-library-scanner": {
+      "name": "@legend-desktop/media-library-scanner",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/file-scanner": "0.0.0",
+        "@legend-desktop/media-tags": "0.0.0",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/media-tags": {
+      "name": "@legend-desktop/media-tags",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -458,13 +501,21 @@
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
 
+    "@legend-desktop/document-scanner": ["@legend-desktop/document-scanner@workspace:packages/document-scanner"],
+
     "@legend-desktop/file-dialog": ["@legend-desktop/file-dialog@workspace:packages/file-dialog"],
+
+    "@legend-desktop/file-scanner": ["@legend-desktop/file-scanner@workspace:packages/file-scanner"],
 
     "@legend-desktop/file-system-watcher": ["@legend-desktop/file-system-watcher@workspace:packages/file-system-watcher"],
 
     "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+
+    "@legend-desktop/media-library-scanner": ["@legend-desktop/media-library-scanner@workspace:packages/media-library-scanner"],
+
+    "@legend-desktop/media-tags": ["@legend-desktop/media-tags@workspace:packages/media-tags"],
 
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
 

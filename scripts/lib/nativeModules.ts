@@ -40,6 +40,16 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/document-scanner",
+    root: path.join(packagesDir, "document-scanner"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/file-scanner",
+    root: path.join(packagesDir, "file-scanner"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/window-controls",
     root: path.join(packagesDir, "window-controls"),
     platforms: ["macos", "ios", "android"],
@@ -62,6 +72,16 @@ export const nativePackages: NativePackage[] = [
   {
     name: "@legend-desktop/glass-effect-view",
     root: path.join(packagesDir, "glass-effect-view"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/media-library-scanner",
+    root: path.join(packagesDir, "media-library-scanner"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/media-tags",
+    root: path.join(packagesDir, "media-tags"),
     platforms: ["macos", "ios", "android"],
   },
   {

@@ -1,0 +1,27 @@
+{
+  "name": "@legend-desktop/document-scanner",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/file-scanner": "0.0.0"
+  },
+  "codegenConfig": {
+    "name": "RNDocumentScannerSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.documentscanner"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeDocumentScanner": "RNDocumentScanner"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

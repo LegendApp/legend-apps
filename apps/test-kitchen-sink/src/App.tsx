@@ -1,12 +1,14 @@
 import { addAppExitListener, isAppExitSupported } from "@legend-desktop/app-exit";
 import { AutoUpdater } from "@legend-desktop/auto-updater";
 import { showContextMenu } from "@legend-desktop/context-menu";
+import { addDocumentScannerListener, scanDocuments } from "@legend-desktop/document-scanner";
 import {
   addDirectoryChangeListener,
   isWatchingDirectory,
   setWatchedDirectories,
 } from "@legend-desktop/file-system-watcher";
 import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
+import { addFileScannerListener, scanFiles } from "@legend-desktop/file-scanner";
 import { GlassEffectView } from "@legend-desktop/glass-effect-view";
 import { addGlobalHotkeyListener, registerGlobalHotkey, unregisterGlobalHotkey } from "@legend-desktop/global-hotkey";
 import {
@@ -20,6 +22,8 @@ import {
   configureMenus,
   updateMenuItems,
 } from "@legend-desktop/native-menu";
+import { addMediaLibraryScannerListener, scanMediaLibrary } from "@legend-desktop/media-library-scanner";
+import { readMediaTags } from "@legend-desktop/media-tags";
 import { Sidebar, SidebarItem } from "@legend-desktop/sidebar";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import {
@@ -270,6 +274,14 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
     return <FileDialogExample />;
   }
 
+  if (selectedPackageId === "file-scanner") {
+    return <FileScannerExample />;
+  }
+
+  if (selectedPackageId === "document-scanner") {
+    return <DocumentScannerExample />;
+  }
+
   if (selectedPackageId === "context-menu") {
     return <ContextMenuExample />;
   }
@@ -284,6 +296,14 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
 
   if (selectedPackageId === "global-hotkey") {
     return <GlobalHotkeyExample />;
+  }
+
+  if (selectedPackageId === "media-tags") {
+    return <MediaTagsExample />;
+  }
+
+  if (selectedPackageId === "media-library-scanner") {
+    return <MediaLibraryScannerExample />;
   }
 
   if (selectedPackageId === "file-system-watcher") {
@@ -445,6 +465,113 @@ function FileDialogExample() {
         }}
       >
         Save File
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
+function formatFirstPaths(paths: readonly { fileName?: string; relativePath?: string }[]) {
+  if (!paths.length) {
+    return "No files in the latest batch.";
+  }
+  return paths
+    .slice(0, 5)
+    .map((item) => item.relativePath ?? item.fileName ?? "Unknown")
+    .join("\n");
+}
+
+function FileScannerExample() {
+  const [status, setStatus] = useState("Scan /tmp for text-like files.");
+  const [latestBatch, setLatestBatch] = useState("No batch received.");
+
+  useEffect(() => {
+    const batch = addFileScannerListener("onFileScanBatch", (event) => {
+      setLatestBatch(formatFirstPaths(event.files));
+      setStatus(`Batch: ${event.files.length} files from root ${event.rootIndex + 1}/${event.totalRoots}`);
+    });
+    const progress = addFileScannerListener("onFileScanProgress", (event) => {
+      setStatus(`Progress: ${event.completedRoots}/${event.totalRoots} roots complete`);
+    });
+    const complete = addFileScannerListener("onFileScanComplete", (event) => {
+      setStatus(`Complete: ${event.totalFiles} files across ${event.totalRoots} roots`);
+    });
+    return () => {
+      batch.remove();
+      progress.remove();
+      complete.remove();
+    };
+  }, []);
+
+  return (
+    <ExamplePanel title="File Scanner">
+      <Text style={styles.bodyText}>{status}</Text>
+      <Text style={styles.resultText}>{latestBatch}</Text>
+      <ExampleButton
+        onPress={() => {
+          setStatus("Scanning /tmp...");
+          void scanFiles(["/tmp"], {
+            allowedExtensions: ["txt", "log", "json"],
+            batchSize: 12,
+            includeStats: true,
+          }).then((result) => {
+            setStatus(`Result: ${result.totalFiles} files, ${result.errors?.length ?? 0} errors`);
+          });
+        }}
+      >
+        Scan /tmp
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
+function DocumentScannerExample() {
+  const [status, setStatus] = useState("Choose a folder to scan for markdown documents.");
+  const [latestBatch, setLatestBatch] = useState("No batch received.");
+
+  useEffect(() => {
+    const batch = addDocumentScannerListener("onDocumentScanBatch", (event) => {
+      setLatestBatch(formatFirstPaths(event.documents));
+      setStatus(`Batch: ${event.documents.length} documents from root ${event.rootIndex + 1}/${event.totalRoots}`);
+    });
+    const progress = addDocumentScannerListener("onDocumentScanProgress", (event) => {
+      setStatus(`Progress: ${event.completedRoots}/${event.totalRoots} roots complete`);
+    });
+    const complete = addDocumentScannerListener("onDocumentScanComplete", (event) => {
+      setStatus(`Complete: ${event.totalDocuments} documents across ${event.totalRoots} roots`);
+    });
+    return () => {
+      batch.remove();
+      progress.remove();
+      complete.remove();
+    };
+  }, []);
+
+  return (
+    <ExamplePanel title="Document Scanner">
+      <Text style={styles.bodyText}>{status}</Text>
+      <Text style={styles.resultText}>{latestBatch}</Text>
+      <ExampleButton
+        onPress={() => {
+          void openFileDialog({
+            canChooseDirectories: true,
+            canChooseFiles: false,
+          }).then((paths) => {
+            if (!paths?.length) {
+              setStatus("Directory selection canceled.");
+              return;
+            }
+            setStatus(`Scanning ${paths[0]}...`);
+            void scanDocuments(paths, {
+              allowedExtensions: ["md", "mdx"],
+              batchSize: 12,
+              includeStats: true,
+            }).then((result) => {
+              setStatus(`Result: ${result.totalDocuments} documents, ${result.errors?.length ?? 0} errors`);
+            });
+          });
+        }}
+      >
+        Choose Folder
       </ExampleButton>
     </ExamplePanel>
   );
@@ -747,6 +874,98 @@ function GlobalHotkeyExample() {
   );
 }
 
+function MediaTagsExample() {
+  const [status, setStatus] = useState("Choose an audio file to read metadata.");
+  const [tags, setTags] = useState("No tags read yet.");
+
+  return (
+    <ExamplePanel title="Media Tags">
+      <Text style={styles.bodyText}>{status}</Text>
+      <Text style={styles.resultText}>{tags}</Text>
+      <ExampleButton
+        onPress={() => {
+          void openFileDialog({
+            allowedFileTypes: ["mp3", "m4a", "aac", "wav", "flac", "aif", "aiff", "caf"],
+            allowsMultipleSelection: false,
+          }).then((paths) => {
+            const path = paths?.[0];
+            if (!path) {
+              setStatus("File selection canceled.");
+              return;
+            }
+            setStatus(`Reading ${path}...`);
+            void readMediaTags(path, {
+              cacheDir: "/tmp/legend-desktop-media-tags",
+              includeArtwork: true,
+            }).then((result) => {
+              setStatus(`Read tags for ${path.split("/").pop() ?? path}`);
+              setTags(JSON.stringify(result, null, 2));
+            });
+          });
+        }}
+      >
+        Choose Audio File
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
+function MediaLibraryScannerExample() {
+  const [status, setStatus] = useState("Choose a folder to scan for media files.");
+  const [latestBatch, setLatestBatch] = useState("No batch received.");
+
+  useEffect(() => {
+    const batch = addMediaLibraryScannerListener("onMediaScanBatch", (event) => {
+      setLatestBatch(formatFirstPaths(event.tracks));
+      setStatus(`Batch: ${event.tracks.length} tracks from root ${event.rootIndex + 1}/${event.totalRoots}`);
+    });
+    const progress = addMediaLibraryScannerListener("onMediaScanProgress", (event) => {
+      setStatus(`Progress: ${event.completedRoots}/${event.totalRoots} roots complete`);
+    });
+    const complete = addMediaLibraryScannerListener("onMediaScanComplete", (event) => {
+      setStatus(
+        `Complete: ${event.totalTracks} tracks, ${event.playlists?.length ?? 0} playlists, ${event.errors?.length ?? 0} errors`,
+      );
+    });
+    return () => {
+      batch.remove();
+      progress.remove();
+      complete.remove();
+    };
+  }, []);
+
+  return (
+    <ExamplePanel title="Media Library Scanner">
+      <Text style={styles.bodyText}>{status}</Text>
+      <Text style={styles.resultText}>{latestBatch}</Text>
+      <ExampleButton
+        onPress={() => {
+          void openFileDialog({
+            canChooseDirectories: true,
+            canChooseFiles: false,
+          }).then((paths) => {
+            if (!paths?.length) {
+              setStatus("Directory selection canceled.");
+              return;
+            }
+            setStatus(`Scanning ${paths[0]}...`);
+            void scanMediaLibrary(paths, "/tmp/legend-desktop-media-tags", {
+              batchSize: 8,
+              includeArtwork: false,
+            }).then((result) => {
+              setStatus(
+                `Result: ${result.totalTracks} tracks, ${result.playlists?.length ?? 0} playlists, ${result.errors?.length ?? 0} errors`,
+              );
+            });
+          });
+        }}
+      >
+        Choose Folder
+      </ExampleButton>
+    </ExamplePanel>
+  );
+}
+
 function FileSystemWatcherExample() {
   const directory = "/tmp";
   const [status, setStatus] = useState(`Not watching ${directory}.`);
@@ -1040,6 +1259,13 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: "#f8fafc",
     flex: 1,
+  },
+  resultText: {
+    color: "#334155",
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: 560,
+    textAlign: "left",
   },
   sidebarDynamicRow: {
     flex: 1,
