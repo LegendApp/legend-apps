@@ -85,8 +85,18 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/markdown-parser",
+    root: path.join(packagesDir, "markdown-parser"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/sf-symbol",
     root: path.join(packagesDir, "sf-symbol"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "react-native-enriched-markdown",
+    root: path.join(rootDir, "apps", "test-kitchen-sink", "node_modules", "react-native-enriched-markdown"),
     platforms: ["macos", "ios", "android"],
   },
 ];

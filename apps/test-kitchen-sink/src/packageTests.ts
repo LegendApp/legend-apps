@@ -47,6 +47,10 @@ export const packages: KitchenSinkPackage[] = [
     title: "Global Hotkey",
   },
   {
+    id: "markdown-parser",
+    title: "Markdown Parser",
+  },
+  {
     id: "media-library-scanner",
     title: "Media Library Scanner",
   },
@@ -147,6 +151,11 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "global-hotkey-register",
     packageId: "global-hotkey",
     title: "Register Hotkey",
+  },
+  {
+    id: "markdown-parser-blocks",
+    packageId: "markdown-parser",
+    title: "Document Viewer",
   },
   {
     id: "media-library-scanner-folder",

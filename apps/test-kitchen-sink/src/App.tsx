@@ -22,6 +22,7 @@ import {
   configureMenus,
   updateMenuItems,
 } from "@legend-desktop/native-menu";
+import { parseMarkdown, parseMarkdownFile, type MarkdownBlock } from "@legend-desktop/markdown-parser";
 import { addMediaLibraryScannerListener, scanMediaLibrary } from "@legend-desktop/media-library-scanner";
 import { readMediaTags } from "@legend-desktop/media-tags";
 import { Sidebar, SidebarItem } from "@legend-desktop/sidebar";
@@ -48,8 +49,10 @@ import {
   type WindowFrame,
   type WindowResult,
 } from "@legend-desktop/window-manager";
+import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { type ReactNode, useEffect, useState } from "react";
-import { AppRegistry, type GestureResponderEvent, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
+import { AppRegistry, type GestureResponderEvent, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { packages, tests, testsForPackage, type KitchenSinkTestConfig } from "./packageTests";
 
 const windowManagerChildModuleName = "KitchenSinkWindowManagerWindow";
@@ -296,6 +299,10 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
 
   if (selectedPackageId === "global-hotkey") {
     return <GlobalHotkeyExample />;
+  }
+
+  if (selectedPackageId === "markdown-parser") {
+    return <MarkdownParserExample />;
   }
 
   if (selectedPackageId === "media-tags") {
@@ -874,6 +881,209 @@ function GlobalHotkeyExample() {
   );
 }
 
+const markdownParserSample = `# Markdown Parser
+
+This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.com).
+
+- [x] Parse block structure
+- [ ] Render spans in React
+
+> Native parsing supplies virtualized block rows. React still owns markdown rendering.
+
+| Block | Renderer |
+| --- | --- |
+| Native | md4c |
+| React | EnrichedMarkdownText |
+
+\`\`\`tsx
+<Text>Rendered by React Native</Text>
+\`\`\`
+`;
+
+type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
+
+const markdownViewerStyle: MarkdownStyle = {
+  blockquote: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#2563eb",
+    borderWidth: 3,
+    color: "#1e3a8a",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  code: {
+    backgroundColor: "#e2e8f0",
+    color: "#0f172a",
+    fontFamily: "Menlo",
+    fontSize: 13,
+  },
+  codeBlock: {
+    backgroundColor: "#0f172a",
+    borderColor: "#1e293b",
+    borderRadius: 6,
+    borderWidth: 1,
+    color: "#e2e8f0",
+    fontFamily: "Menlo",
+    fontSize: 12,
+    lineHeight: 18,
+    padding: 12,
+  },
+  h1: {
+    color: "#0f172a",
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 30,
+    marginBottom: 4,
+  },
+  h2: {
+    color: "#0f172a",
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 26,
+    marginBottom: 4,
+  },
+  link: {
+    color: "#2563eb",
+    underline: true,
+  },
+  list: {
+    color: "#334155",
+    fontSize: 14,
+    gapWidth: 8,
+    lineHeight: 21,
+    markerColor: "#475569",
+  },
+  paragraph: {
+    color: "#334155",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  table: {
+    borderColor: "#cbd5e1",
+    borderRadius: 6,
+    borderWidth: 1,
+    cellPaddingHorizontal: 8,
+    cellPaddingVertical: 6,
+    color: "#334155",
+    fontSize: 13,
+    headerBackgroundColor: "#e2e8f0",
+    headerTextColor: "#0f172a",
+    rowEvenBackgroundColor: "#ffffff",
+    rowOddBackgroundColor: "#f8fafc",
+  },
+  taskList: {
+    borderColor: "#64748b",
+    checkedColor: "#2563eb",
+    checkedTextColor: "#64748b",
+  },
+};
+
+function markdownViewerBlocks(blocks: readonly MarkdownBlock[]): MarkdownViewerBlock[] {
+  return blocks.filter((block): block is MarkdownViewerBlock => !!block.markdown && block.type !== "document");
+}
+
+function formatLoadTime(startMs: number) {
+  const durationMs = Date.now() - startMs;
+  return durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`;
+}
+
+function MarkdownBlockRow({ item }: LegendListRenderItemProps<MarkdownViewerBlock>) {
+  return (
+    <View style={styles.markdownBlockRow}>
+      <View style={styles.markdownBlockMeta}>
+        <Text style={styles.markdownBlockType}>{item.type}</Text>
+        <Text style={styles.markdownBlockStats}>
+          {item.text.length} chars
+          {item.runs.length ? ` / ${item.runs.length} runs` : ""}
+        </Text>
+      </View>
+      <EnrichedMarkdownText
+        allowTrailingMargin={false}
+        containerStyle={styles.markdownRenderedText}
+        flavor="github"
+        markdown={item.markdown}
+        markdownStyle={markdownViewerStyle}
+        onLinkPress={(event) => {
+          void Linking.openURL(event.url);
+        }}
+        selectable
+      />
+    </View>
+  );
+}
+
+function MarkdownParserExample() {
+  const [blocks, setBlocks] = useState<MarkdownViewerBlock[]>([]);
+  const [status, setStatus] = useState("Loading sample markdown...");
+
+  useEffect(() => {
+    void parseMarkdown(markdownParserSample, { dialect: "github" }).then((parsed) => {
+      const viewerBlocks = markdownViewerBlocks(parsed.blocks);
+      setBlocks(viewerBlocks);
+      setStatus(`Sample loaded: ${viewerBlocks.length} render blocks.`);
+    });
+  }, []);
+
+  return (
+    <View style={styles.markdownViewerPanel}>
+      <View style={styles.markdownViewerHeader}>
+        <Text style={styles.panelTitle}>Markdown Parser</Text>
+        <Text style={styles.bodyText}>{status}</Text>
+        <View style={styles.markdownViewerActions}>
+          <ExampleButton
+            onPress={() => {
+              setStatus("Parsing sample markdown...");
+              void parseMarkdown(markdownParserSample, { dialect: "github" }).then((parsed) => {
+                const viewerBlocks = markdownViewerBlocks(parsed.blocks);
+                setBlocks(viewerBlocks);
+                setStatus(`Sample loaded: ${viewerBlocks.length} render blocks.`);
+              });
+            }}
+          >
+            Load Sample
+          </ExampleButton>
+          <ExampleButton
+            onPress={() => {
+              void openFileDialog({
+                allowedFileTypes: ["md", "mdown", "markdown"],
+                allowsMultipleSelection: false,
+              }).then((paths) => {
+                const path = paths?.[0];
+                if (!path) {
+                  setStatus("File selection canceled.");
+                  return;
+                }
+                setStatus(`Parsing ${path}...`);
+                const startedAt = Date.now();
+                void parseMarkdownFile(path, { dialect: "github" }).then((parsed) => {
+                  const viewerBlocks = markdownViewerBlocks(parsed.blocks);
+                  setBlocks(viewerBlocks);
+                  setStatus(
+                    `Loaded ${viewerBlocks.length} render blocks from ${path.split("/").pop() ?? path} in ${formatLoadTime(
+                      startedAt,
+                    )}.`,
+                  );
+                });
+              });
+            }}
+          >
+            Choose Markdown File
+          </ExampleButton>
+        </View>
+      </View>
+      <LegendList
+        contentContainerStyle={styles.markdownListContent}
+        data={blocks}
+        estimatedItemSize={120}
+        keyExtractor={(item) => item.id}
+        recycleItems
+        renderItem={MarkdownBlockRow}
+        style={styles.markdownList}
+      />
+    </View>
+  );
+}
+
 function MediaTagsExample() {
   const [status, setStatus] = useState("Choose an audio file to read metadata.");
   const [tags, setTags] = useState("No tags read yet.");
@@ -1231,6 +1441,61 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 24,
     fontWeight: "700",
+  },
+  markdownBlockMeta: {
+    alignItems: "center",
+    borderBottomColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  markdownBlockRow: {
+    backgroundColor: "#ffffff",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  markdownBlockStats: {
+    color: "#64748b",
+    fontSize: 12,
+  },
+  markdownBlockType: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  markdownList: {
+    alignSelf: "stretch",
+    flex: 1,
+    width: "100%",
+  },
+  markdownListContent: {
+    gap: 12,
+    padding: 16,
+  },
+  markdownRenderedText: {
+    padding: 12,
+  },
+  markdownViewerActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "center",
+  },
+  markdownViewerHeader: {
+    alignItems: "center",
+    borderBottomColor: "#cbd5e1",
+    borderBottomWidth: 1,
+    gap: 10,
+    padding: 16,
+  },
+  markdownViewerPanel: {
+    backgroundColor: "#f8fafc",
+    flex: 1,
   },
   panelTitle: {
     color: "#111827",

@@ -1,0 +1,68 @@
+diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
+index 9227b789cfcfd1c68ae253ae1a7cb6c65ed26092..4f0fa778dbc633af788eed63451b49d0ec9cf876 100644
+--- a/ios/EnrichedMarkdown.mm
++++ b/ios/EnrichedMarkdown.mm
+@@ -740,7 +740,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
+             if (eventEmitter) {
+               eventEmitter->onTaskListItemPress({
+                   .index = (int)index,
+-                  .checked = checked,
++                  .checked = static_cast<bool>(checked),
+                   .text = std::string([itemText UTF8String] ?: ""),
+               });
+             }
+diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
+index 239e435add583462dea7659b6ee88defbee508ad..442fff5a94d37a01b57c9867122760739859ac3d 100644
+--- a/ios/EnrichedMarkdownText.mm
++++ b/ios/EnrichedMarkdownText.mm
+@@ -524,7 +524,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
+             if (eventEmitter) {
+               eventEmitter->onTaskListItemPress({
+                   .index = (int)index,
+-                  .checked = checked,
++                  .checked = static_cast<bool>(checked),
+                   .text = std::string([itemText UTF8String] ?: ""),
+               });
+             }
+diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
+index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..2f9a4aed5336b033d94614f2f95ab34e9d187f5a 100644
+--- a/ios/input/EnrichedMarkdownTextInput.mm
++++ b/ios/input/EnrichedMarkdownTextInput.mm
+@@ -914,12 +914,12 @@ - (void)emitOnChangeState
+   _prevState.initialized = YES;
+
+   emitter->onChangeState({
+-      .bold = {.isActive = boldActive},
+-      .italic = {.isActive = italicActive},
+-      .underline = {.isActive = underlineActive},
+-      .strikethrough = {.isActive = strikethroughActive},
+-      .spoiler = {.isActive = spoilerActive},
+-      .link = {.isActive = linkActive},
++      .bold = {.isActive = static_cast<bool>(boldActive)},
++      .italic = {.isActive = static_cast<bool>(italicActive)},
++      .underline = {.isActive = static_cast<bool>(underlineActive)},
++      .strikethrough = {.isActive = static_cast<bool>(strikethroughActive)},
++      .spoiler = {.isActive = static_cast<bool>(spoilerActive)},
++      .link = {.isActive = static_cast<bool>(linkActive)},
+   });
+ }
+
+@@ -988,12 +988,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
+       .selectionEnd = static_cast<int>(NSMaxRange(selectedRange)),
+       .styleState =
+           {
+-              .bold = {.isActive = boldActive},
+-              .italic = {.isActive = italicActive},
+-              .underline = {.isActive = underlineActive},
+-              .strikethrough = {.isActive = strikethroughActive},
+-              .spoiler = {.isActive = spoilerActive},
+-              .link = {.isActive = linkActive},
++              .bold = {.isActive = static_cast<bool>(boldActive)},
++              .italic = {.isActive = static_cast<bool>(italicActive)},
++              .underline = {.isActive = static_cast<bool>(underlineActive)},
++              .strikethrough = {.isActive = static_cast<bool>(strikethroughActive)},
++              .spoiler = {.isActive = static_cast<bool>(spoilerActive)},
++              .link = {.isActive = static_cast<bool>(linkActive)},
+           },
+   });
+ }
