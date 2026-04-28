@@ -31,6 +31,7 @@
     "typescript": "~5.9.2"
   },
   "patchedDependencies": {
-    "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch"
+    "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
+    "react-native-macos@0.81.2": "patches/react-native-macos@0.81.2.patch"
   }
 }
