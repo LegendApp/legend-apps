@@ -9,7 +9,7 @@ export const packagesDir = path.join(rootDir, "packages");
 
 export const appIds = ["music", "markdown", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
-const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify"] as const;
+const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify", "pods"] as const;
 
 type CommandMode = (typeof commandModes)[number] | "dev-check";
 
@@ -46,6 +46,7 @@ export function formatAppUsage(appId = "<app>") {
     "  build      Build a release app",
     "  prebuild   Generate iOS/Android native projects",
     "  verify     Verify generated config and package linking",
+    "  pods       Install CocoaPods for the app/platform",
     "",
     "Platforms:",
     `  ${platforms.join(", ")} (defaults to macos when omitted)`,
@@ -54,6 +55,7 @@ export function formatAppUsage(appId = "<app>") {
     `  bun run ${appId} start`,
     `  bun run ${appId} open`,
     `  bun run ${appId} run`,
+    `  bun run ${appId} pods`,
     `  bun run ${appId} build macos`,
   ].join("\n");
 }

@@ -34,6 +34,22 @@ async function ensurePrebuild(appId: string, platform: Platform) {
   }
 }
 
+async function installPods(appId: string, platform: Platform) {
+  if (platform === "android") {
+    throw new Error("CocoaPods install only supports macos and ios.");
+  }
+
+  await prepare(appId, platform);
+
+  runCommand("pod", ["install"], {
+    cwd: path.join(shellDir, platform),
+    env: {
+      LEGEND_APP: appId,
+      LEGEND_PLATFORM: platform,
+    },
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -71,6 +87,11 @@ async function main() {
     runCommand("bun", ["scripts/verify-app.ts", command.appId, command.platform, ...command.extraArgs], {
       cwd: rootDir,
     });
+    return;
+  }
+
+  if (command.mode === "pods") {
+    await installPods(command.appId, command.platform);
     return;
   }
 
