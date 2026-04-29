@@ -997,13 +997,6 @@ function formatLoadTime(startMs: number) {
 function MarkdownBlockRow({ item }: LegendListRenderItemProps<MarkdownViewerBlock>) {
   return (
     <View style={styles.markdownBlockRow}>
-      <View style={styles.markdownBlockMeta}>
-        <Text style={styles.markdownBlockType}>{item.type}</Text>
-        <Text style={styles.markdownBlockStats}>
-          {item.text.length} chars
-          {item.runs.length ? ` / ${item.runs.length} runs` : ""}
-        </Text>
-      </View>
       <EnrichedMarkdownText
         allowTrailingMargin={false}
         containerStyle={styles.markdownRenderedText}
@@ -1454,43 +1447,26 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
   },
-  markdownBlockMeta: {
-    alignItems: "center",
-    borderBottomColor: "#e2e8f0",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
   markdownBlockRow: {
-    backgroundColor: "#ffffff",
-    borderColor: "#cbd5e1",
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  markdownBlockStats: {
-    color: "#64748b",
-    fontSize: 12,
-  },
-  markdownBlockType: {
-    color: "#0f172a",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
+    alignSelf: "stretch",
   },
   markdownList: {
-    alignSelf: "stretch",
+    backgroundColor: "#e2e8f0",
     flex: 1,
     width: "100%",
   },
   markdownListContent: {
-    gap: 12,
-    padding: 16,
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    gap: 4,
+    maxWidth: 820,
+    minHeight: "100%",
+    paddingHorizontal: 56,
+    paddingVertical: 48,
+    width: "100%",
   },
   markdownRenderedText: {
-    padding: 12,
+    paddingVertical: 2,
   },
   markdownViewerActions: {
     flexDirection: "row",
