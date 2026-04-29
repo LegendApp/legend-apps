@@ -15,9 +15,13 @@
 
 // Forward declaration of `MarkdownBlockSnapshot` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBlockSnapshot; }
+// Forward declaration of `MarkdownDocumentTiming` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownDocumentTiming; }
 
 #include "MarkdownBlockSnapshot.hpp"
 #include <vector>
+#include <string>
+#include "MarkdownDocumentTiming.hpp"
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -47,10 +51,14 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     public:
       // Properties
       virtual double getBlockCount() = 0;
+      virtual double getSourceSize() = 0;
 
     public:
       // Methods
-      virtual std::vector<MarkdownBlockSnapshot> getBlocks(double start, double count) = 0;
+      virtual MarkdownBlockSnapshot getBlock(double index, bool includeText) = 0;
+      virtual std::vector<MarkdownBlockSnapshot> getBlocks(double start, double count, bool includeText) = 0;
+      virtual std::string getBlockMarkdown(double index) = 0;
+      virtual MarkdownDocumentTiming getTiming() = 0;
 
     protected:
       // Hybrid Setup

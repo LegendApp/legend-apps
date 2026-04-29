@@ -1,17 +1,37 @@
 #include "HybridMarkdownDocument.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
-HybridMarkdownDocument::HybridMarkdownDocument(std::vector<MarkdownBlockSnapshot> blocks)
-    : HybridObject(TAG), blocks_(std::move(blocks)) {}
+HybridMarkdownDocument::HybridMarkdownDocument(
+    std::string source,
+    std::vector<MarkdownBlockRange> blocks,
+    MarkdownDocumentTiming timing)
+    : HybridObject(TAG), source_(std::move(source)), blocks_(std::move(blocks)), timing_(timing) {}
+
+void HybridMarkdownDocument::setDocumentDurationMs(double durationMs) {
+  timing_.documentMs = durationMs;
+}
 
 double HybridMarkdownDocument::getBlockCount() {
   return static_cast<double>(blocks_.size());
 }
 
-std::vector<MarkdownBlockSnapshot> HybridMarkdownDocument::getBlocks(double start, double count) {
+double HybridMarkdownDocument::getSourceSize() {
+  return static_cast<double>(source_.size());
+}
+
+MarkdownBlockSnapshot HybridMarkdownDocument::getBlock(double index, bool includeText) {
+  const auto safeIndex = static_cast<size_t>(std::max(0.0, index));
+  if (safeIndex >= blocks_.size()) {
+    throw std::out_of_range("Markdown block index out of range");
+  }
+  return snapshotForBlock(blocks_[safeIndex], includeText);
+}
+
+std::vector<MarkdownBlockSnapshot> HybridMarkdownDocument::getBlocks(double start, double count, bool includeText) {
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));
   if (safeStart >= blocks_.size() || safeCount == 0) {
@@ -19,18 +39,52 @@ std::vector<MarkdownBlockSnapshot> HybridMarkdownDocument::getBlocks(double star
   }
 
   const auto end = std::min(blocks_.size(), safeStart + safeCount);
-  return std::vector<MarkdownBlockSnapshot>(blocks_.begin() + safeStart, blocks_.begin() + end);
+  std::vector<MarkdownBlockSnapshot> snapshots;
+  snapshots.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    snapshots.push_back(snapshotForBlock(blocks_[index], includeText));
+  }
+  return snapshots;
+}
+
+std::string HybridMarkdownDocument::getBlockMarkdown(double index) {
+  const auto safeIndex = static_cast<size_t>(std::max(0.0, index));
+  if (safeIndex >= blocks_.size()) {
+    return "";
+  }
+  const auto& block = blocks_[safeIndex];
+  return sourceString(block.markdownStart, block.markdownEnd);
+}
+
+MarkdownDocumentTiming HybridMarkdownDocument::getTiming() {
+  return timing_;
 }
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
-  size_t size = blocks_.capacity() * sizeof(MarkdownBlockSnapshot);
+  size_t size = source_.capacity() + blocks_.capacity() * sizeof(MarkdownBlockRange);
   for (const auto& block : blocks_) {
-    size += block.id.capacity();
     size += block.type.capacity();
-    size += block.text.capacity();
-    size += block.markdown.capacity();
   }
   return size;
+}
+
+MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(const MarkdownBlockRange& block, bool includeText) const {
+  const std::string markdown = sourceString(block.markdownStart, block.markdownEnd);
+  return MarkdownBlockSnapshot(
+      std::to_string(block.index),
+      static_cast<double>(block.index),
+      block.type,
+      static_cast<double>(block.depth),
+      includeText ? markdown : "",
+      markdown);
+}
+
+std::string HybridMarkdownDocument::sourceString(size_t start, size_t end) const {
+  if (start >= end || start >= source_.size()) {
+    return "";
+  }
+  end = std::min(end, source_.size());
+  return std::string(source_.data() + start, end - start);
 }
 
 } // namespace margelo::nitro::legenddesktop::markdownparser

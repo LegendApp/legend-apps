@@ -7,6 +7,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -24,9 +25,9 @@ struct BlockBuilder {
   size_t depth = 0;
   size_t sourceStart = std::string::npos;
   size_t sourceEnd = 0;
+  size_t markdownStart = 0;
+  size_t markdownEnd = 0;
   char fenceChar = 0;
-  std::string text;
-  std::string markdown;
 };
 
 struct StackEntry {
@@ -41,6 +42,19 @@ struct ParserState {
   std::vector<BlockBuilder> blocks;
   std::vector<StackEntry> stack;
 };
+
+struct ParseResult {
+  std::string source;
+  std::vector<MarkdownBlockRange> blocks;
+  double readMs = 0;
+  double parseMs = 0;
+};
+
+using Clock = std::chrono::steady_clock;
+
+double elapsedMs(Clock::time_point start, Clock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
 
 bool isLineBreak(char value) {
   return value == '\n' || value == '\r';
@@ -180,14 +194,6 @@ size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char 
   return blockEndForText(bytes, length, offset);
 }
 
-std::string sourceString(const char* bytes, size_t length, size_t start, size_t end) {
-  if (bytes == nullptr || start >= end || start >= length) {
-    return "";
-  }
-  end = std::min(end, length);
-  return std::string(bytes + start, end - start);
-}
-
 std::string blockType(MD_BLOCKTYPE type) {
   switch (type) {
     case MD_BLOCK_DOC:
@@ -225,19 +231,6 @@ std::string blockType(MD_BLOCKTYPE type) {
   }
 }
 
-std::string normalizeText(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size) {
-  if (type == MD_TEXT_BR || type == MD_TEXT_SOFTBR) {
-    return "\n";
-  }
-  if (type == MD_TEXT_NULLCHAR) {
-    return "\xEF\xBF\xBD";
-  }
-  if (text == nullptr || size == 0) {
-    return "";
-  }
-  return std::string(text, size);
-}
-
 void recordSourceText(ParserState& state, const MD_CHAR* text, MD_SIZE size) {
   if (state.stack.size() <= 1 || state.source == nullptr || text == nullptr || size == 0) {
     return;
@@ -263,7 +256,7 @@ void recordSourceText(ParserState& state, const MD_CHAR* text, MD_SIZE size) {
   block.sourceEnd = std::max(block.sourceEnd, end);
 }
 
-void attachSourceMarkdown(ParserState& state, BlockBuilder& block) {
+void attachSourceRange(ParserState& state, BlockBuilder& block) {
   if (block.sourceStart == std::string::npos || state.source == nullptr) {
     return;
   }
@@ -277,7 +270,8 @@ void attachSourceMarkdown(ParserState& state, BlockBuilder& block) {
     start = blockStartForText(state.source, state.sourceLength, start);
     end = blockEndForText(state.source, state.sourceLength, end);
   }
-  block.markdown = sourceString(state.source, state.sourceLength, start, end);
+  block.markdownStart = start;
+  block.markdownEnd = std::min(end, state.sourceLength);
 }
 
 int enterBlock(MD_BLOCKTYPE type, void* detail, void* userdata) {
@@ -308,7 +302,7 @@ int leaveBlock(MD_BLOCKTYPE, void*, void* userdata) {
   if (!state.stack.empty()) {
     const StackEntry entry = state.stack.back();
     if (entry.depth == 1 && entry.topLevelIndex != std::string::npos && entry.topLevelIndex < state.blocks.size()) {
-      attachSourceMarkdown(state, state.blocks[entry.topLevelIndex]);
+      attachSourceRange(state, state.blocks[entry.topLevelIndex]);
     }
     state.stack.pop_back();
   }
@@ -326,16 +320,10 @@ int leaveSpan(MD_SPANTYPE, void*, void*) {
 int textCallback(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userdata) {
   auto& state = *static_cast<ParserState*>(userdata);
   recordSourceText(state, text, size);
-  if (state.stack.size() > 1) {
-    const size_t topLevelIndex = state.stack[1].topLevelIndex;
-    if (topLevelIndex != std::string::npos && topLevelIndex < state.blocks.size()) {
-      state.blocks[topLevelIndex].text += normalizeText(type, text, size);
-    }
-  }
   return 0;
 }
 
-std::vector<MarkdownBlockSnapshot> parseBlocks(const std::string& markdown, double flags) {
+ParseResult parseMarkdownSource(std::string markdown, double flags, double readMs) {
   ParserState state;
   state.source = markdown.data();
   state.sourceLength = markdown.size();
@@ -349,25 +337,32 @@ std::vector<MarkdownBlockSnapshot> parseBlocks(const std::string& markdown, doub
   parser.leave_span = leaveSpan;
   parser.text = textCallback;
 
+  const auto parseStartedAt = Clock::now();
   const int result = md_parse(markdown.data(), static_cast<MD_SIZE>(markdown.size()), &parser, &state);
+  const auto parseFinishedAt = Clock::now();
   if (result != 0) {
     throw std::runtime_error("Markdown parse failed with code " + std::to_string(result));
   }
 
-  std::vector<MarkdownBlockSnapshot> blocks;
+  std::vector<MarkdownBlockRange> blocks;
   blocks.reserve(state.blocks.size());
   for (const auto& block : state.blocks) {
-    if (!block.markdown.empty()) {
-      blocks.emplace_back(
-          std::to_string(block.index),
-          static_cast<double>(block.index),
+    if (block.markdownEnd > block.markdownStart) {
+      blocks.push_back(MarkdownBlockRange{
+          block.index,
+          block.depth,
+          block.markdownStart,
+          block.markdownEnd,
           block.type,
-          static_cast<double>(block.depth),
-          block.text,
-          block.markdown);
+      });
     }
   }
-  return blocks;
+  return ParseResult{
+      std::move(markdown),
+      std::move(blocks),
+      readMs,
+      elapsedMs(parseStartedAt, parseFinishedAt),
+  };
 }
 
 std::string normalizeFilePath(const std::string& filePath) {
@@ -388,6 +383,19 @@ std::string readFile(const std::string& filePath) {
   return buffer.str();
 }
 
+std::shared_ptr<HybridMarkdownDocumentSpec> createDocument(ParseResult result) {
+  const auto documentStartedAt = Clock::now();
+  auto timing = MarkdownDocumentTiming(
+      static_cast<double>(result.source.size()),
+      result.readMs,
+      result.parseMs,
+      0);
+  auto document = std::make_shared<HybridMarkdownDocument>(std::move(result.source), std::move(result.blocks), timing);
+  const auto documentFinishedAt = Clock::now();
+  document->setDocumentDurationMs(elapsedMs(documentStartedAt, documentFinishedAt));
+  return document;
+}
+
 } // namespace
 
 HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
@@ -395,14 +403,17 @@ HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
 std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::parseMarkdown(
     const std::string& markdown,
     double flags) {
-  return std::make_shared<HybridMarkdownDocument>(parseBlocks(markdown, flags));
+  return createDocument(parseMarkdownSource(markdown, flags, 0));
 }
 
 std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMarkdownParser::parseMarkdownFile(
     const std::string& filePath,
     double flags) {
   return Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>::async([filePath, flags]() -> std::shared_ptr<HybridMarkdownDocumentSpec> {
-    return std::make_shared<HybridMarkdownDocument>(parseBlocks(readFile(filePath), flags));
+    const auto readStartedAt = Clock::now();
+    std::string source = readFile(filePath);
+    const auto readFinishedAt = Clock::now();
+    return createDocument(parseMarkdownSource(std::move(source), flags, elapsedMs(readStartedAt, readFinishedAt)));
   });
 }
 

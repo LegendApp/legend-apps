@@ -7,6 +7,7 @@ import {
   type MarkdownBlock,
   type MarkdownBlockSnapshot,
   type MarkdownDocument,
+  type MarkdownDocumentTiming,
 } from "@legend-desktop/markdown-parser";
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
@@ -135,16 +136,47 @@ function markdownViewerBlocks(blocks: readonly MarkdownBlock[]): MarkdownViewerB
 }
 
 function markdownSnapshotBlocks(blocks: readonly MarkdownBlockSnapshot[]): MarkdownViewerBlock[] {
-  return blocks
-    .filter((block) => !!block.markdown && block.type !== "document")
-    .map((block) => ({
-      ...block,
-      runs: [],
-    }));
+  return blocks.filter((block) => !!block.markdown && block.type !== "document").map(markdownSnapshotBlock);
 }
 
-function markdownDocumentBlocks(document: MarkdownDocument): MarkdownViewerBlock[] {
-  return markdownSnapshotBlocks(document.getBlocks(0, document.blockCount));
+function markdownSnapshotBlock(block: MarkdownBlockSnapshot): MarkdownViewerBlock {
+  return {
+    ...block,
+    runs: [],
+  };
+}
+
+function markdownDocumentBlocks(document: MarkdownDocument, includeText = false): MarkdownViewerBlock[] {
+  return markdownSnapshotBlocks(document.getBlocks(0, document.blockCount, includeText));
+}
+
+function markdownDocumentWindow(document: MarkdownDocument, count: number, includeText = false): MarkdownViewerBlock[] {
+  return markdownSnapshotBlocks(document.getBlocks(0, Math.min(document.blockCount, count), includeText));
+}
+
+function markdownDocumentIndices(document: MarkdownDocument) {
+  return Array.from({ length: document.blockCount }, (_, index) => index);
+}
+
+function getCachedMarkdownBlock(
+  document: MarkdownDocument,
+  index: number,
+  cache: Map<number, MarkdownViewerBlock>,
+  overrides: Map<number, MarkdownViewerBlock>,
+) {
+  const override = overrides.get(index);
+  if (override) {
+    return override;
+  }
+
+  const cached = cache.get(index);
+  if (cached) {
+    return cached;
+  }
+
+  const block = markdownSnapshotBlock(document.getBlock(index, false));
+  cache.set(index, block);
+  return block;
 }
 
 function formatDuration(durationMs: number) {
@@ -163,6 +195,15 @@ function createGeneratedMarkdown(sectionCount: number) {
 
 function markdownSizeLabel(markdown: string) {
   return `${(markdown.length / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function timingPayload(timing: MarkdownDocumentTiming) {
+  return {
+    documentMs: Math.round(timing.documentMs * 100) / 100,
+    nativeParseMs: Math.round(timing.parseMs * 100) / 100,
+    readMs: Math.round(timing.readMs * 100) / 100,
+    sourceBytes: timing.sourceBytes,
+  };
 }
 
 function estimateMarkdownSelection(markdown: string, event: GestureResponderEvent, width: number) {
@@ -268,21 +309,32 @@ function MarkdownBlockEditor({
 }
 
 function MarkdownBlockRow({
+  blockCache,
+  blockOverrides,
+  document,
   editingId,
   editingSelection,
   item,
   onCommitMarkdown,
   onFinishEditing,
   onStartEditing,
-}: LegendListRenderItemProps<MarkdownViewerBlock> & {
-  editingId?: string;
+}: LegendListRenderItemProps<number> & {
+  blockCache: Map<number, MarkdownViewerBlock>;
+  blockOverrides: Map<number, MarkdownViewerBlock>;
+  document?: MarkdownDocument;
+  editingId?: number;
   editingSelection: number;
-  onCommitMarkdown: (id: string, markdown: string) => void;
-  onFinishEditing: (id: string) => void;
-  onStartEditing: (id: string, selection: number) => void;
+  onCommitMarkdown: (index: number, markdown: string) => void;
+  onFinishEditing: (index: number) => void;
+  onStartEditing: (index: number, selection: number) => void;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
-  const isEditing = item.id === editingId;
+  const block = document ? getCachedMarkdownBlock(document, item, blockCache, blockOverrides) : undefined;
+  const isEditing = item === editingId;
+
+  if (!block) {
+    return null;
+  }
 
   return (
     <Pressable
@@ -291,7 +343,7 @@ function MarkdownBlockRow({
       }}
       onPress={(event) => {
         if (!isEditing) {
-          onStartEditing(item.id, estimateMarkdownSelection(item.markdown, event, rowWidth));
+          onStartEditing(item, estimateMarkdownSelection(block.markdown, event, rowWidth));
         }
       }}
       style={styles.markdownBlockRow}
@@ -299,9 +351,9 @@ function MarkdownBlockRow({
       {isEditing ? (
         <MarkdownBlockEditor
           initialSelection={editingSelection}
-          item={item}
-          onCommitMarkdown={onCommitMarkdown}
-          onFinishEditing={onFinishEditing}
+          item={block}
+          onCommitMarkdown={(_, markdown) => onCommitMarkdown(item, markdown)}
+          onFinishEditing={() => onFinishEditing(item)}
           width={rowWidth}
         />
       ) : (
@@ -309,7 +361,7 @@ function MarkdownBlockRow({
           allowTrailingMargin={false}
           containerStyle={styles.markdownRenderedText}
           flavor="github"
-          markdown={item.markdown}
+          markdown={block.markdown}
           markdownStyle={markdownViewerStyle}
           onLinkPress={(event) => {
             void Linking.openURL(event.url);
@@ -322,21 +374,43 @@ function MarkdownBlockRow({
 }
 
 export function MarkdownParserExample() {
-  const [blocks, setBlocks] = useState<MarkdownViewerBlock[]>([]);
-  const [editingBlockId, setEditingBlockId] = useState<string | undefined>();
+  const blockCacheRef = useRef(new Map<number, MarkdownViewerBlock>());
+  const [blockIndices, setBlockIndices] = useState<number[]>([]);
+  const [blockOverrides, setBlockOverrides] = useState(() => new Map<number, MarkdownViewerBlock>());
+  const [document, setDocument] = useState<MarkdownDocument | undefined>();
+  const [editingBlockId, setEditingBlockId] = useState<number | undefined>();
   const [editingSelection, setEditingSelection] = useState(0);
   const [status, setStatus] = useState("Loading sample markdown...");
 
-  const replaceBlocks = (nextBlocks: MarkdownViewerBlock[]) => {
+  const replaceDocument = (nextDocument: MarkdownDocument) => {
+    blockCacheRef.current.clear();
     setEditingBlockId(undefined);
     setEditingSelection(0);
-    setBlocks(nextBlocks);
+    setBlockOverrides(new Map());
+    setDocument(nextDocument);
+    setBlockIndices(markdownDocumentIndices(nextDocument));
   };
 
-  const commitBlockMarkdown = (id: string, markdown: string) => {
-    setBlocks((currentBlocks) =>
-      currentBlocks.map((block) => (block.id === id ? { ...block, markdown, runs: [], text: markdown } : block)),
-    );
+  const commitBlockMarkdown = (index: number, markdown: string) => {
+    const currentBlock = document ? getCachedMarkdownBlock(document, index, blockCacheRef.current, blockOverrides) : undefined;
+    const nextBlock = {
+      ...(currentBlock ?? {
+        depth: 1,
+        id: String(index),
+        index,
+        runs: [],
+        text: "",
+        type: "paragraph",
+      }),
+      markdown,
+      text: markdown,
+    };
+    blockCacheRef.current.set(index, nextBlock);
+    setBlockOverrides((currentOverrides) => {
+      const nextOverrides = new Map(currentOverrides);
+      nextOverrides.set(index, nextBlock);
+      return nextOverrides;
+    });
   };
 
   useEffect(() => {
@@ -349,26 +423,28 @@ export function MarkdownParserExample() {
     }).catch(() => {});
     const document = parseMarkdownDocument(debugMarkdown, { dialect: "github" });
     const parsedAt = Date.now();
-    const viewerBlocks = markdownDocumentBlocks(document);
+    const viewerBlocks = markdownDocumentWindow(document, 64);
     const finishedAt = Date.now();
+    const timing = document.getTiming();
     void fetch("http://127.0.0.1:37531/ll-debug", {
       body: JSON.stringify({
         event: "app:nitro-parse-done",
-        extractMs: finishedAt - parsedAt,
+        firstWindowExtractMs: finishedAt - parsedAt,
         now: finishedAt,
         parseMs: parsedAt - startedAt,
-        renderBlocks: viewerBlocks.length,
+        renderBlocks: document.blockCount,
         source: "MarkdownParserExample",
+        timing: timingPayload(timing),
         totalMs: finishedAt - startedAt,
       }),
       headers: { "content-type": "application/json" },
       method: "POST",
     }).catch(() => {});
-    replaceBlocks(viewerBlocks);
+    replaceDocument(document);
     setStatus(
-      `Generated sample loaded with Nitro: ${viewerBlocks.length} render blocks in ${formatDuration(
+      `Generated sample loaded with Nitro: ${document.blockCount} render blocks in ${formatDuration(
         finishedAt - startedAt,
-      )}.`,
+      )}; first ${viewerBlocks.length} blocks extracted in ${formatDuration(finishedAt - parsedAt)}.`,
     );
   }, []);
 
@@ -377,13 +453,13 @@ export function MarkdownParserExample() {
     const startedAt = Date.now();
     const document = parseMarkdownDocument(markdownParserSample, { dialect: "github" });
     const parsedAt = Date.now();
-    const viewerBlocks = markdownDocumentBlocks(document);
+    const viewerBlocks = markdownDocumentWindow(document, 64);
     const finishedAt = Date.now();
-    replaceBlocks(viewerBlocks);
+    replaceDocument(document);
     setStatus(
-      `Nitro sample loaded: ${viewerBlocks.length} render blocks in ${formatDuration(
+      `Nitro sample loaded: ${document.blockCount} render blocks in ${formatDuration(
         finishedAt - startedAt,
-      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} first-window extract).`,
     );
   };
 
@@ -398,11 +474,15 @@ export function MarkdownParserExample() {
       const nitroStartedAt = Date.now();
       const document = parseMarkdownDocument(debugMarkdown, { dialect: "github" });
       const nitroParsedAt = Date.now();
+      const nitroWindowBlocks = markdownDocumentWindow(document, 64);
+      const nitroWindowFinishedAt = Date.now();
       const nitroBlocks = markdownDocumentBlocks(document);
-      const nitroFinishedAt = Date.now();
+      const nitroFullFinishedAt = Date.now();
       const legacyTotal = legacyFinishedAt - legacyStartedAt;
-      const nitroTotal = nitroFinishedAt - nitroStartedAt;
-      const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroTotal) / legacyTotal) * 100) : 0;
+      const nitroWindowTotal = nitroWindowFinishedAt - nitroStartedAt;
+      const nitroFullTotal = nitroFullFinishedAt - nitroStartedAt;
+      const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroWindowTotal) / legacyTotal) * 100) : 0;
+      const timing = document.getTiming();
       const benchmarkPayload = {
         event: "app:markdown-benchmark",
         legacyBlocks: legacyBlocks.length,
@@ -410,9 +490,13 @@ export function MarkdownParserExample() {
         legacyParseMs: legacyParsedAt - legacyStartedAt,
         legacyTotalMs: legacyTotal,
         nitroBlocks: nitroBlocks.length,
-        nitroExtractMs: nitroFinishedAt - nitroParsedAt,
+        nitroFullExtractMs: nitroFullFinishedAt - nitroWindowFinishedAt,
+        nitroFullTotalMs: nitroFullTotal,
         nitroParseMs: nitroParsedAt - nitroStartedAt,
-        nitroTotalMs: nitroTotal,
+        nitroTiming: timingPayload(timing),
+        nitroWindowBlocks: nitroWindowBlocks.length,
+        nitroWindowExtractMs: nitroWindowFinishedAt - nitroParsedAt,
+        nitroWindowTotalMs: nitroWindowTotal,
         sizeBytes: debugMarkdown.length,
       };
 
@@ -422,13 +506,15 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceBlocks(nitroBlocks);
+      replaceDocument(document);
       setStatus(
         `Benchmark ${markdownSizeLabel(debugMarkdown)}: Turbo JSON ${formatDuration(
           legacyTotal,
-        )}, Nitro document ${formatDuration(nitroTotal)} (${improvement}% faster). Nitro split: ${formatDuration(
+        )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster), full extract ${formatDuration(
+          nitroFullTotal,
+        )}. Nitro native: ${formatDuration(timing.readMs + timing.parseMs + timing.documentMs)} (${formatDuration(
           nitroParsedAt - nitroStartedAt,
-        )} parse, ${formatDuration(nitroFinishedAt - nitroParsedAt)} extract.`,
+        )} JS boundary).`,
       );
     });
   };
@@ -438,26 +524,28 @@ export function MarkdownParserExample() {
     const startedAt = Date.now();
     void parseMarkdownFileDocument(path, { dialect: "github" }).then((document) => {
       const parsedAt = Date.now();
-      const viewerBlocks = markdownDocumentBlocks(document);
+      const viewerBlocks = markdownDocumentWindow(document, 64);
       const finishedAt = Date.now();
+      const timing = document.getTiming();
       void fetch("http://127.0.0.1:37531/ll-debug", {
         body: JSON.stringify({
           event: "app:nitro-file-parse-done",
-          extractMs: finishedAt - parsedAt,
+          firstWindowExtractMs: finishedAt - parsedAt,
           now: finishedAt,
           parseMs: parsedAt - startedAt,
-          renderBlocks: viewerBlocks.length,
+          renderBlocks: document.blockCount,
           source: path,
+          timing: timingPayload(timing),
           totalMs: finishedAt - startedAt,
         }),
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceBlocks(viewerBlocks);
+      replaceDocument(document);
       setStatus(
-        `Nitro loaded ${viewerBlocks.length} render blocks from ${path.split("/").pop() ?? path} in ${formatDuration(
+        `Nitro loaded ${document.blockCount} render blocks from ${path.split("/").pop() ?? path} in ${formatDuration(
           finishedAt - startedAt,
-        )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+        )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} first-window extract).`,
       );
     });
   };
@@ -472,11 +560,15 @@ export function MarkdownParserExample() {
       const nitroStartedAt = Date.now();
       void parseMarkdownFileDocument(path, { dialect: "github" }).then((document) => {
         const nitroParsedAt = Date.now();
+        const nitroWindowBlocks = markdownDocumentWindow(document, 64);
+        const nitroWindowFinishedAt = Date.now();
         const nitroBlocks = markdownDocumentBlocks(document);
-        const nitroFinishedAt = Date.now();
+        const nitroFullFinishedAt = Date.now();
         const legacyTotal = legacyFinishedAt - legacyStartedAt;
-        const nitroTotal = nitroFinishedAt - nitroStartedAt;
-        const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroTotal) / legacyTotal) * 100) : 0;
+        const nitroWindowTotal = nitroWindowFinishedAt - nitroStartedAt;
+        const nitroFullTotal = nitroFullFinishedAt - nitroStartedAt;
+        const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroWindowTotal) / legacyTotal) * 100) : 0;
+        const timing = document.getTiming();
         const benchmarkPayload = {
           event: "app:markdown-file-benchmark",
           legacyBlocks: legacyBlocks.length,
@@ -484,9 +576,13 @@ export function MarkdownParserExample() {
           legacyParseMs: legacyParsedAt - legacyStartedAt,
           legacyTotalMs: legacyTotal,
           nitroBlocks: nitroBlocks.length,
-          nitroExtractMs: nitroFinishedAt - nitroParsedAt,
+          nitroFullExtractMs: nitroFullFinishedAt - nitroWindowFinishedAt,
+          nitroFullTotalMs: nitroFullTotal,
           nitroParseMs: nitroParsedAt - nitroStartedAt,
-          nitroTotalMs: nitroTotal,
+          nitroTiming: timingPayload(timing),
+          nitroWindowBlocks: nitroWindowBlocks.length,
+          nitroWindowExtractMs: nitroWindowFinishedAt - nitroParsedAt,
+          nitroWindowTotalMs: nitroWindowTotal,
           source: path,
         };
 
@@ -496,19 +592,21 @@ export function MarkdownParserExample() {
           headers: { "content-type": "application/json" },
           method: "POST",
         }).catch(() => {});
-        replaceBlocks(nitroBlocks);
+        replaceDocument(document);
         setStatus(
           `File benchmark ${path.split("/").pop() ?? path}: Turbo JSON ${formatDuration(
             legacyTotal,
-          )}, Nitro document ${formatDuration(nitroTotal)} (${improvement}% faster). Nitro split: ${formatDuration(
+          )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster), full extract ${formatDuration(
+            nitroFullTotal,
+          )}. Nitro native: ${formatDuration(timing.readMs + timing.parseMs + timing.documentMs)} (${formatDuration(
             nitroParsedAt - nitroStartedAt,
-          )} parse, ${formatDuration(nitroFinishedAt - nitroParsedAt)} extract.`,
+          )} JS boundary).`,
         );
       });
     });
   };
 
-  console.log("blocks", blocks.length);
+  console.log("blocks", blockIndices.length);
 
   return (
     <View style={styles.markdownViewerPanel}>
@@ -556,14 +654,17 @@ export function MarkdownParserExample() {
       </View>
       <LegendList
         contentContainerStyle={styles.markdownListContent}
-        data={blocks}
+        data={blockIndices}
         estimatedItemSize={120}
         extraData={`${editingBlockId ?? ""}:${editingSelection}`}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item)}
         recycleItems
         renderItem={(props) => (
           <MarkdownBlockRow
             {...props}
+            blockCache={blockCacheRef.current}
+            blockOverrides={blockOverrides}
+            document={document}
             editingId={editingBlockId}
             editingSelection={editingSelection}
             onCommitMarkdown={commitBlockMarkdown}

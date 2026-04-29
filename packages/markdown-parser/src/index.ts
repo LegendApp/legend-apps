@@ -145,4 +145,4 @@ export function parseMarkdownFileDocument(filePath: string, options: MarkdownPar
 }
 
 export { NativeMarkdownParser };
-export type { MarkdownBlockSnapshot, MarkdownDocument, MarkdownParser } from "./MarkdownParser.nitro";
+export type { MarkdownBlockSnapshot, MarkdownDocument, MarkdownDocumentTiming, MarkdownParser } from "./MarkdownParser.nitro";

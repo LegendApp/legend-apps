@@ -9,12 +9,23 @@ export interface MarkdownBlockSnapshot {
   markdown: string;
 }
 
+export interface MarkdownDocumentTiming {
+  sourceBytes: number;
+  readMs: number;
+  parseMs: number;
+  documentMs: number;
+}
+
 export interface MarkdownDocument
   extends HybridObject<{
     ios: "c++";
   }> {
   readonly blockCount: number;
-  getBlocks(start: number, count: number): MarkdownBlockSnapshot[];
+  readonly sourceSize: number;
+  getBlock(index: number, includeText: boolean): MarkdownBlockSnapshot;
+  getBlocks(start: number, count: number, includeText: boolean): MarkdownBlockSnapshot[];
+  getBlockMarkdown(index: number): string;
+  getTiming(): MarkdownDocumentTiming;
 }
 
 export interface MarkdownParser
