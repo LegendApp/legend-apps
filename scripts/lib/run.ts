@@ -25,10 +25,12 @@ export function runPlatformCommand(
   platform: Platform,
   mode: "dev" | "release",
   extraArgs: string[] = [],
+  extraEnv: Record<string, string | undefined> = {},
 ) {
   const env = {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
+    ...extraEnv,
   };
 
   if (platform === "ios") {

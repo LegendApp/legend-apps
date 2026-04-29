@@ -1,14 +1,46 @@
 #!/usr/bin/env bun
-import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand } from "./lib/apps";
+import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, shellDir } from "./lib/apps";
+import {
+  ensureMacOSReleaseWorkspace,
+  getMacOSEnv,
+  installMacOSPods,
+} from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
-import { runPlatformCommand } from "./lib/run";
+import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
 async function buildOne(appId: string, platform: Platform) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  writeGeneratedConfig(manifest, platform);
-  runPlatformCommand(appId, platform, "release");
+  const generated = writeGeneratedConfig(manifest, platform, "release");
+
+  if (platform === "macos") {
+    const workspaceDir = ensureMacOSReleaseWorkspace(manifest);
+    installMacOSPods(workspaceDir, generated.configPath, appId);
+    runCommand(
+      "xcodebuild",
+      [
+        "-workspace",
+        `${workspaceDir}/legendapp-shell-macos.xcworkspace`,
+        "-scheme",
+        "legendapp-shell-macos",
+        "-configuration",
+        "Release",
+        "-derivedDataPath",
+        `${workspaceDir}/build/xcodebuild-release`,
+      ],
+      {
+        cwd: shellDir,
+        env: getMacOSEnv(appId, generated.configPath),
+      },
+    );
+    return;
+  }
+
+  runPlatformCommand(appId, platform, "release", [], {
+    LEGEND_APP_CONFIG: generated.configPath,
+    LEGEND_NATIVE_CONFIG: generated.configPath,
+  });
 }
 
 async function main() {

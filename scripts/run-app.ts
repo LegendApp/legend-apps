@@ -10,6 +10,10 @@ import {
   rootDir,
   shellDir,
 } from "./lib/apps";
+import {
+  getMacOSDevWorkspaceDir,
+  installMacOSPods,
+} from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -17,8 +21,8 @@ import type { Platform } from "./lib/types";
 async function prepare(appId: string, platform: Platform) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  writeGeneratedConfig(manifest, platform);
-  return manifest;
+  const generated = writeGeneratedConfig(manifest, platform, "dev");
+  return { generated, manifest };
 }
 
 async function ensurePrebuild(appId: string, platform: Platform) {
@@ -39,13 +43,20 @@ async function installPods(appId: string, platform: Platform) {
     throw new Error("CocoaPods install only supports macos and ios.");
   }
 
-  await prepare(appId, platform);
+  const { generated } = await prepare(appId, platform);
+
+  if (platform === "macos") {
+    installMacOSPods(getMacOSDevWorkspaceDir(), generated.configPath, appId);
+    return;
+  }
 
   runCommand("pod", ["install"], {
     cwd: path.join(shellDir, platform),
     env: {
       LEGEND_APP: appId,
       LEGEND_PLATFORM: platform,
+      LEGEND_APP_CONFIG: generated.configPath,
+      LEGEND_NATIVE_CONFIG: generated.configPath,
     },
   });
 }
@@ -109,9 +120,13 @@ async function main() {
     return;
   }
 
-  await prepare(command.appId, command.platform);
+  const { generated } = await prepare(command.appId, command.platform);
   await ensurePrebuild(command.appId, command.platform);
-  runPlatformCommand(command.appId, command.platform, "dev", command.extraArgs);
+  runPlatformCommand(command.appId, command.platform, "dev", command.extraArgs, {
+    LEGEND_APP_CONFIG: generated.configPath,
+    LEGEND_NATIVE_CONFIG: generated.configPath,
+    LEGEND_SHELL_ROOT: shellDir,
+  });
 }
 
 main().catch((error) => {

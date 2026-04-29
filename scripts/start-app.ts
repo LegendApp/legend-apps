@@ -7,11 +7,13 @@ import type { Platform } from "./lib/types";
 async function startOne(appId: string, platform: Platform, extraArgs: string[]) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  writeGeneratedConfig(manifest, platform);
+  const generated = writeGeneratedConfig(manifest, platform, "dev");
 
   const env = {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
+    LEGEND_APP_CONFIG: generated.configPath,
+    LEGEND_NATIVE_CONFIG: generated.configPath,
   };
 
   if (platform === "macos") {

@@ -3,6 +3,8 @@ import path from "node:path";
 import { packagesDir, rootDir, shellDir } from "./apps";
 import type { AppManifest, NativePackage, Platform } from "./types";
 
+export type NativeGraphMode = "dev" | "release";
+
 export const nativePackages: NativePackage[] = [
   {
     name: "@legend-desktop/app-exit",
@@ -103,28 +105,45 @@ export const nativePackages: NativePackage[] = [
 
 export function getActiveNativePackages(manifest: AppManifest, platform: Platform) {
   const selected = new Set(manifest.nativeModules[platform] ?? []);
-  return nativePackages.filter((pkg) => selected.has(pkg.name));
+  return nativePackages.filter((pkg) => pkg.platforms.includes(platform) && selected.has(pkg.name));
 }
 
 export function getExcludedNativePackages(manifest: AppManifest, platform: Platform) {
   const selected = new Set(manifest.nativeModules[platform] ?? []);
-  return nativePackages.filter((pkg) => !selected.has(pkg.name));
+  return nativePackages.filter((pkg) => pkg.platforms.includes(platform) && !selected.has(pkg.name));
 }
 
-export function generatedDir(appId: string, platform: Platform) {
-  return path.join(shellDir, ".legend", "generated", appId, platform);
+export function getAllNativePackages(platform: Platform) {
+  return nativePackages.filter((pkg) => pkg.platforms.includes(platform));
 }
 
-export function writeGeneratedConfig(manifest: AppManifest, platform: Platform) {
-  const dir = generatedDir(manifest.id, platform);
+export function generatedDir(appId: string, platform: Platform, mode: NativeGraphMode = "release") {
+  return path.join(shellDir, ".legend", "config", mode, appId, platform);
+}
+
+export function writeGeneratedConfig(
+  manifest: AppManifest,
+  platform: Platform,
+  mode: NativeGraphMode = "release",
+) {
+  const dir = generatedDir(manifest.id, platform, mode);
   fs.mkdirSync(dir, { recursive: true });
 
-  const activeNativePackages = getActiveNativePackages(manifest, platform).map((pkg) => ({
+  const activePackages =
+    mode === "dev"
+      ? getAllNativePackages(platform)
+      : getActiveNativePackages(manifest, platform);
+  const excludedPackages =
+    mode === "dev"
+      ? []
+      : getExcludedNativePackages(manifest, platform);
+
+  const activeNativePackages = activePackages.map((pkg) => ({
     ...pkg,
     root: path.relative(rootDir, pkg.root),
   }));
 
-  const excludedNativePackages = getExcludedNativePackages(manifest, platform).map((pkg) => ({
+  const excludedNativePackages = excludedPackages.map((pkg) => ({
     ...pkg,
     root: path.relative(rootDir, pkg.root),
   }));
@@ -133,6 +152,7 @@ export function writeGeneratedConfig(manifest: AppManifest, platform: Platform) 
     ...manifest,
     activeNativePackages,
     excludedNativePackages,
+    nativeGraphMode: mode,
     platform,
   };
 
@@ -142,5 +162,9 @@ export function writeGeneratedConfig(manifest: AppManifest, platform: Platform) 
     `${JSON.stringify(activeNativePackages, null, 2)}\n`,
   );
 
-  return appConfig;
+  return {
+    config: appConfig,
+    configPath: path.join(dir, "app-config.json"),
+    dir,
+  };
 }

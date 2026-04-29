@@ -11,7 +11,7 @@ async function prebuildOne(appId: string, platform: Platform, clean: boolean) {
 
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  writeGeneratedConfig(manifest, platform);
+  const generated = writeGeneratedConfig(manifest, platform, "release");
 
   runCommand(
     "bun",
@@ -21,6 +21,8 @@ async function prebuildOne(appId: string, platform: Platform, clean: boolean) {
       env: {
         LEGEND_APP: appId,
         LEGEND_PLATFORM: platform,
+        LEGEND_APP_CONFIG: generated.configPath,
+        LEGEND_NATIVE_CONFIG: generated.configPath,
       },
     },
   );

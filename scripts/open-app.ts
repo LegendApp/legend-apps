@@ -4,12 +4,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { assertSupportedPlatform, loadAppManifest, shellDir } from "./lib/apps";
 import { parseAppCommand } from "./lib/apps";
+import { getMacOSDevWorkspaceDir, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
 const macosScheme = "legendapp-shell-macos";
-const macosWorkspace = path.join(shellDir, "macos", "legendapp-shell-macos.xcworkspace");
 
 function readMode(args: string[]) {
   if (args.includes("--release")) {
@@ -36,7 +36,8 @@ function parseBuildSettings(output: string) {
   }>;
 }
 
-function getBuiltMacAppPath(mode: string) {
+function getBuiltMacAppPath(workspaceDir: string, mode: string) {
+  const macosWorkspace = path.join(workspaceDir, "legendapp-shell-macos.xcworkspace");
   const result = spawnSync(
     "xcodebuild",
     [
@@ -81,9 +82,12 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
 
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  writeGeneratedConfig(manifest, platform);
 
-  const appPath = getBuiltMacAppPath(readMode(args));
+  const mode = readMode(args);
+  const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : getMacOSDevWorkspaceDir();
+  writeGeneratedConfig(manifest, platform, mode === "Release" ? "release" : "dev");
+
+  const appPath = getBuiltMacAppPath(workspaceDir, mode);
 
   if (!fs.existsSync(appPath)) {
     throw new Error(`No built macOS app found at ${appPath}. Run bun run ${appId} macos first.`);

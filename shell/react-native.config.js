@@ -2,14 +2,23 @@ const fs = require("fs");
 const path = require("path");
 
 function readGeneratedConfig() {
+  const explicitConfigPath = process.env.LEGEND_NATIVE_CONFIG;
   const appId = process.env.LEGEND_APP;
   const platform = process.env.LEGEND_PLATFORM || "ios";
+
+  if (explicitConfigPath) {
+    if (!fs.existsSync(explicitConfigPath)) {
+      throw new Error(`Missing generated native config at ${explicitConfigPath}`);
+    }
+
+    return JSON.parse(fs.readFileSync(explicitConfigPath, "utf8"));
+  }
 
   if (!appId) {
     return null;
   }
 
-  const configPath = path.join(__dirname, ".legend", "generated", appId, platform, "app-config.json");
+  const configPath = path.join(__dirname, ".legend", "config", "release", appId, platform, "app-config.json");
   if (!fs.existsSync(configPath)) {
     return null;
   }

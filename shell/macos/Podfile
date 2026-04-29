@@ -1,12 +1,10 @@
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require 'pathname'
 
-ws_dir = Pathname.new(__dir__)
-ws_dir = ws_dir.parent until
-  File.exist?("#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb") ||
-  ws_dir.expand_path.to_s == '/'
-require "#{ws_dir}/node_modules/react-native-macos/scripts/react_native_pods.rb"
-rn_macos_path = "../node_modules/react-native-macos"
+shell_dir = Pathname.new(ENV['LEGEND_SHELL_ROOT'] || File.expand_path("..", __dir__))
+rn_macos_absolute_path = shell_dir.join("node_modules", "react-native-macos")
+rn_macos_path = rn_macos_absolute_path.relative_path_from(Pathname.new(__dir__)).to_s
+require "#{rn_macos_absolute_path}/scripts/react_native_pods.rb"
 
 ENV['RCT_NEW_ARCH_ENABLED'] = "1";
 
@@ -33,7 +31,7 @@ target 'legendapp-shell-macos' do
     :path => rn_macos_path,
     :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
     # An absolute path to your application root.
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => shell_dir.to_s
   )
 
   post_install do |installer|

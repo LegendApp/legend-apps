@@ -13,8 +13,17 @@ type GeneratedAppConfig = {
 };
 
 function readGeneratedConfig(): GeneratedAppConfig {
+  const explicitConfigPath = process.env.LEGEND_APP_CONFIG ?? process.env.LEGEND_NATIVE_CONFIG;
   const appId = process.env.LEGEND_APP;
   const platform = process.env.LEGEND_PLATFORM ?? "ios";
+
+  if (explicitConfigPath) {
+    if (!fs.existsSync(explicitConfigPath)) {
+      throw new Error(`Missing generated app config at ${explicitConfigPath}`);
+    }
+
+    return JSON.parse(fs.readFileSync(explicitConfigPath, "utf8")) as GeneratedAppConfig;
+  }
 
   if (!appId) {
     throw new Error("LEGEND_APP is required. Run apps through the root scripts, for example: bun run music ios");
@@ -23,7 +32,8 @@ function readGeneratedConfig(): GeneratedAppConfig {
   const configPath = path.join(
     process.cwd(),
     ".legend",
-    "generated",
+    "config",
+    "release",
     appId,
     platform,
     "app-config.json",

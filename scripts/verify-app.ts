@@ -37,11 +37,11 @@ function assertNotContains(output: string, needle: string, message: string) {
 async function verifyOne(appId: string, platform: Platform) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  const generated = writeGeneratedConfig(manifest, platform);
+  const generated = writeGeneratedConfig(manifest, platform, "release");
 
   const active = getActiveNativePackages(manifest, platform).map((pkg) => pkg.name);
   const excluded = getExcludedNativePackages(manifest, platform).map((pkg) => pkg.name);
-  const generatedText = JSON.stringify(generated);
+  const generatedText = JSON.stringify(generated.config);
 
   for (const pkg of active) {
     assertContains(generatedText, pkg, `${appId}/${platform} generated config does not include ${pkg}`);
@@ -57,6 +57,8 @@ async function verifyOne(appId: string, platform: Platform) {
   const rnConfig = runCapture("bun", ["x", "react-native", "config"], {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
+    LEGEND_APP_CONFIG: generated.configPath,
+    LEGEND_NATIVE_CONFIG: generated.configPath,
   });
 
   if (rnConfig.ok) {
