@@ -32,77 +32,169 @@ static NSString *RNMarkdownParserAttributeString(MD_ATTRIBUTE attribute)
   return RNMarkdownParserString(attribute.text, attribute.size);
 }
 
-static NSString *RNMarkdownParserTrimTrailingNewlines(NSString *value)
+static BOOL RNMarkdownParserByteIsLineBreak(char value)
 {
-  NSMutableString *trimmed = [value mutableCopy] ?: [NSMutableString string];
-  while (trimmed.length > 0 && ([trimmed hasSuffix:@"\n"] || [trimmed hasSuffix:@"\r"])) {
-    [trimmed deleteCharactersInRange:NSMakeRange(trimmed.length - 1, 1)];
+  return value == '\n' || value == '\r';
+}
+
+static BOOL RNMarkdownParserByteIsWhitespace(char value)
+{
+  return value == ' ' || value == '\t' || value == '\n' || value == '\r';
+}
+
+static NSUInteger RNMarkdownParserLineStart(const char *bytes, NSUInteger offset)
+{
+  while (offset > 0 && bytes[offset - 1] != '\n' && bytes[offset - 1] != '\r') {
+    offset -= 1;
   }
-  return trimmed;
+  return offset;
 }
 
-static BOOL RNMarkdownParserLineStartsFence(NSString *line)
+static NSUInteger RNMarkdownParserLineEnd(const char *bytes, NSUInteger length, NSUInteger offset)
 {
-  NSString *trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
-  return [trimmed hasPrefix:@"```"] || [trimmed hasPrefix:@"~~~"];
+  while (offset < length && !RNMarkdownParserByteIsLineBreak(bytes[offset])) {
+    offset += 1;
+  }
+  return offset;
 }
 
-static BOOL RNMarkdownParserLineStartsHeading(NSString *line)
+static BOOL RNMarkdownParserLineIsBlank(const char *bytes, NSUInteger start, NSUInteger end)
 {
-  NSString *trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
-  if (![trimmed hasPrefix:@"#"]) {
+  for (NSUInteger index = start; index < end; index += 1) {
+    if (!RNMarkdownParserByteIsWhitespace(bytes[index])) {
+      return NO;
+    }
+  }
+  return YES;
+}
+
+static NSUInteger RNMarkdownParserTrimLinePrefix(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  while (start < end && (bytes[start] == ' ' || bytes[start] == '\t')) {
+    start += 1;
+  }
+  return start;
+}
+
+static BOOL RNMarkdownParserLineStartsHeading(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  if (start >= end || bytes[start] != '#') {
     return NO;
   }
 
   NSUInteger hashCount = 0;
-  while (hashCount < trimmed.length && [trimmed characterAtIndex:hashCount] == '#') {
+  while (start + hashCount < end && bytes[start + hashCount] == '#') {
     hashCount += 1;
   }
 
-  return hashCount > 0 && hashCount <= 6 && hashCount < trimmed.length &&
-      [[NSCharacterSet whitespaceCharacterSet] characterIsMember:[trimmed characterAtIndex:hashCount]];
+  return hashCount > 0 && hashCount <= 6 && start + hashCount < end &&
+      RNMarkdownParserByteIsWhitespace(bytes[start + hashCount]);
 }
 
-static NSArray<NSString *> *RNMarkdownParserSourceBlocks(NSString *markdown)
+static BOOL RNMarkdownParserLineStartsFence(const char *bytes, NSUInteger start, NSUInteger end, char fenceChar)
 {
-  NSMutableArray<NSString *> *blocks = [NSMutableArray array];
-  NSMutableString *current = [NSMutableString string];
-  NSArray<NSString *> *lines = [(markdown ?: @"") componentsSeparatedByString:@"\n"];
-  BOOL inFence = NO;
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  NSUInteger fenceCount = 0;
+  while (start + fenceCount < end && bytes[start + fenceCount] == fenceChar) {
+    fenceCount += 1;
+  }
+  return fenceCount >= 3;
+}
 
-  void (^flushCurrent)(void) = ^{
-    NSString *block = RNMarkdownParserTrimTrailingNewlines(current);
-    if (block.length > 0) {
-      [blocks addObject:block];
-    }
-    [current setString:@""];
-  };
-
-  for (NSUInteger index = 0; index < lines.count; index += 1) {
-    NSString *line = [lines[index] stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet];
-    NSString *trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-
-    if (!inFence && trimmed.length == 0) {
-      flushCurrent();
-      continue;
-    }
-
-    [current appendString:line];
-    if (index + 1 < lines.count) {
-      [current appendString:@"\n"];
-    }
-
-    if (RNMarkdownParserLineStartsFence(line)) {
-      inFence = !inFence;
-    }
-
-    if (!inFence && RNMarkdownParserLineStartsHeading(line)) {
-      flushCurrent();
-    }
+static NSUInteger RNMarkdownParserBlockStartForText(const char *bytes, NSUInteger length, NSUInteger offset)
+{
+  NSUInteger start = RNMarkdownParserLineStart(bytes, MIN(offset, length));
+  NSUInteger end = RNMarkdownParserLineEnd(bytes, length, start);
+  if (RNMarkdownParserLineStartsHeading(bytes, start, end)) {
+    return start;
   }
 
-  flushCurrent();
-  return blocks;
+  while (start > 0) {
+    NSUInteger previousEnd = start;
+    while (previousEnd > 0 && RNMarkdownParserByteIsLineBreak(bytes[previousEnd - 1])) {
+      previousEnd -= 1;
+    }
+    NSUInteger previousStart = RNMarkdownParserLineStart(bytes, previousEnd);
+    if (RNMarkdownParserLineIsBlank(bytes, previousStart, previousEnd) ||
+        RNMarkdownParserLineStartsHeading(bytes, previousStart, previousEnd)) {
+      break;
+    }
+    start = previousStart;
+  }
+
+  return start;
+}
+
+static NSUInteger RNMarkdownParserBlockEndForText(const char *bytes, NSUInteger length, NSUInteger offset)
+{
+  NSUInteger lineStart = RNMarkdownParserLineStart(bytes, MIN(offset, length));
+  NSUInteger end = RNMarkdownParserLineEnd(bytes, length, lineStart);
+  if (RNMarkdownParserLineStartsHeading(bytes, lineStart, end)) {
+    return end;
+  }
+
+  while (end < length) {
+    NSUInteger nextStart = end;
+    while (nextStart < length && RNMarkdownParserByteIsLineBreak(bytes[nextStart])) {
+      nextStart += 1;
+    }
+    NSUInteger nextEnd = RNMarkdownParserLineEnd(bytes, length, nextStart);
+    if (nextStart >= length || RNMarkdownParserLineIsBlank(bytes, nextStart, nextEnd) ||
+        RNMarkdownParserLineStartsHeading(bytes, nextStart, nextEnd)) {
+      break;
+    }
+    end = nextEnd;
+  }
+
+  while (end > 0 && RNMarkdownParserByteIsLineBreak(bytes[end - 1])) {
+    end -= 1;
+  }
+  return end;
+}
+
+static NSUInteger RNMarkdownParserFencedCodeBlockStart(const char *bytes, NSUInteger length, NSUInteger offset, char fenceChar)
+{
+  NSUInteger start = RNMarkdownParserLineStart(bytes, MIN(offset, length));
+  while (start > 0) {
+    NSUInteger lineStart = start;
+    NSUInteger lineEnd = RNMarkdownParserLineEnd(bytes, length, lineStart);
+    if (RNMarkdownParserLineStartsFence(bytes, lineStart, lineEnd, fenceChar)) {
+      return lineStart;
+    }
+
+    NSUInteger previousEnd = lineStart;
+    while (previousEnd > 0 && RNMarkdownParserByteIsLineBreak(bytes[previousEnd - 1])) {
+      previousEnd -= 1;
+    }
+    start = RNMarkdownParserLineStart(bytes, previousEnd);
+  }
+  return RNMarkdownParserBlockStartForText(bytes, length, offset);
+}
+
+static NSUInteger RNMarkdownParserFencedCodeBlockEnd(const char *bytes, NSUInteger length, NSUInteger offset, char fenceChar)
+{
+  NSUInteger lineStart = RNMarkdownParserLineEnd(bytes, length, MIN(offset, length));
+  while (lineStart < length) {
+    while (lineStart < length && RNMarkdownParserByteIsLineBreak(bytes[lineStart])) {
+      lineStart += 1;
+    }
+    NSUInteger lineEnd = RNMarkdownParserLineEnd(bytes, length, lineStart);
+    if (RNMarkdownParserLineStartsFence(bytes, lineStart, lineEnd, fenceChar)) {
+      return lineEnd;
+    }
+    lineStart = lineEnd;
+  }
+  return RNMarkdownParserBlockEndForText(bytes, length, offset);
+}
+
+static NSString *RNMarkdownParserSourceString(const char *bytes, NSUInteger length, NSUInteger start, NSUInteger end)
+{
+  if (!bytes || start >= end || start >= length) {
+    return @"";
+  }
+  end = MIN(end, length);
+  return [[NSString alloc] initWithBytes:bytes + start length:end - start encoding:NSUTF8StringEncoding] ?: @"";
 }
 
 static NSString *RNMarkdownBlockType(MD_BLOCKTYPE type)
@@ -210,6 +302,8 @@ static NSString *RNMarkdownAlignName(MD_ALIGN align)
 @property (nonatomic, strong) NSMutableArray<NSMutableDictionary *> *blockStack;
 @property (nonatomic, strong) NSMutableArray<NSMutableDictionary *> *spanStack;
 @property (nonatomic, strong) NSMutableArray<NSString *> *errors;
+@property (nonatomic, assign) const char *sourceBytes;
+@property (nonatomic, assign) NSUInteger sourceLength;
 @end
 
 @implementation RNMarkdownParserState
@@ -274,6 +368,69 @@ static NSString *RNMarkdownAlignName(MD_ALIGN align)
     }
   }
   return attributes;
+}
+
+- (NSMutableDictionary *)currentTopLevelBlock
+{
+  return self.blockStack.count > 1 ? self.blockStack[1] : nil;
+}
+
+- (void)recordSourceText:(const MD_CHAR *)text size:(MD_SIZE)size
+{
+  NSMutableDictionary *block = [self currentTopLevelBlock];
+  if (!block || !self.sourceBytes || !text || size == 0) {
+    return;
+  }
+
+  const char *sourceStart = self.sourceBytes;
+  const char *sourceEnd = self.sourceBytes + self.sourceLength;
+  const char *textStart = text;
+  const char *textEnd = text + size;
+  if (textStart < sourceStart || textEnd > sourceEnd) {
+    return;
+  }
+
+  NSUInteger start = (NSUInteger)(textStart - sourceStart);
+  NSUInteger end = (NSUInteger)(textEnd - sourceStart);
+  NSNumber *currentStart = block[@"sourceStart"];
+  NSNumber *currentEnd = block[@"sourceEnd"];
+  if (!currentStart || start < currentStart.unsignedIntegerValue) {
+    block[@"sourceStart"] = @(start);
+  }
+  if (!currentEnd || end > currentEnd.unsignedIntegerValue) {
+    block[@"sourceEnd"] = @(end);
+  }
+}
+
+- (void)attachSourceMarkdownToTopLevelBlock:(NSMutableDictionary *)block
+{
+  NSNumber *sourceStart = block[@"sourceStart"];
+  NSNumber *sourceEnd = block[@"sourceEnd"];
+  [block removeObjectForKey:@"sourceStart"];
+  [block removeObjectForKey:@"sourceEnd"];
+  if (!sourceStart || !sourceEnd || !self.sourceBytes) {
+    return;
+  }
+
+  NSUInteger start = sourceStart.unsignedIntegerValue;
+  NSUInteger end = sourceEnd.unsignedIntegerValue;
+  NSDictionary *attrs = block[@"attrs"];
+  NSString *type = block[@"type"];
+  NSString *fence = [attrs[@"fence"] isKindOfClass:NSString.class] ? attrs[@"fence"] : nil;
+
+  if ([type isEqualToString:@"codeBlock"] && fence.length > 0) {
+    char fenceChar = [fence characterAtIndex:0] == '~' ? '~' : '`';
+    start = RNMarkdownParserFencedCodeBlockStart(self.sourceBytes, self.sourceLength, start, fenceChar);
+    end = RNMarkdownParserFencedCodeBlockEnd(self.sourceBytes, self.sourceLength, end, fenceChar);
+  } else {
+    start = RNMarkdownParserBlockStartForText(self.sourceBytes, self.sourceLength, start);
+    end = RNMarkdownParserBlockEndForText(self.sourceBytes, self.sourceLength, end);
+  }
+
+  NSString *markdown = RNMarkdownParserSourceString(self.sourceBytes, self.sourceLength, start, end);
+  if (markdown.length > 0) {
+    block[@"markdown"] = markdown;
+  }
 }
 
 - (void)appendText:(NSString *)text type:(NSString *)type
@@ -463,6 +620,12 @@ static int RNMarkdownLeaveBlock(MD_BLOCKTYPE type, void *detail, void *userdata)
 {
   RNMarkdownParserState *state = (__bridge RNMarkdownParserState *)userdata;
   if (state.blockStack.count > 0) {
+    NSMutableDictionary *block = state.blockStack.lastObject;
+    NSNumber *depth = block[@"depth"];
+    NSString *typeName = block[@"type"];
+    if (depth.unsignedIntegerValue == 1 && ![typeName isEqualToString:@"document"]) {
+      [state attachSourceMarkdownToTopLevelBlock:block];
+    }
     [state.blockStack removeLastObject];
   }
   return 0;
@@ -487,6 +650,7 @@ static int RNMarkdownLeaveSpan(MD_SPANTYPE type, void *detail, void *userdata)
 static int RNMarkdownText(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, void *userdata)
 {
   RNMarkdownParserState *state = (__bridge RNMarkdownParserState *)userdata;
+  [state recordSourceText:text size:size];
   [state appendText:RNMarkdownParserString(text, size) type:RNMarkdownTextType(type)];
   return 0;
 }
@@ -541,25 +705,6 @@ static unsigned RNMarkdownParserFlags(NSDictionary *options)
   return flags;
 }
 
-static void RNMarkdownParserAttachSourceBlocks(NSMutableArray<NSMutableDictionary *> *blocks, NSString *markdown)
-{
-  NSArray<NSString *> *sourceBlocks = RNMarkdownParserSourceBlocks(markdown);
-  NSUInteger sourceIndex = 0;
-
-  for (NSMutableDictionary *block in blocks) {
-    if (sourceIndex >= sourceBlocks.count) {
-      return;
-    }
-
-    NSNumber *depth = block[@"depth"];
-    NSString *type = block[@"type"];
-    if (depth.unsignedIntegerValue == 1 && ![type isEqualToString:@"document"]) {
-      block[@"markdown"] = sourceBlocks[sourceIndex];
-      sourceIndex += 1;
-    }
-  }
-}
-
 @implementation RNMarkdownParser
 
 RCT_EXPORT_MODULE(NativeMarkdownParser)
@@ -586,8 +731,9 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
   parser.debug_log = RNMarkdownDebugLog;
 
   NSData *data = [(markdown ?: @"") dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
+  state.sourceBytes = (const char *)data.bytes;
+  state.sourceLength = data.length;
   int result = md_parse((const MD_CHAR *)data.bytes, (MD_SIZE)data.length, &parser, (__bridge void *)state);
-  RNMarkdownParserAttachSourceBlocks(state.blocks, markdown ?: @"");
   NSMutableDictionary *payload = [@{@"blocks": state.blocks} mutableCopy];
   if (result != 0) {
     payload[@"error"] = [NSString stringWithFormat:@"Markdown parse failed with code %d", result];
