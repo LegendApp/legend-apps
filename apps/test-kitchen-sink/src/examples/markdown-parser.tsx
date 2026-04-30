@@ -167,6 +167,7 @@ function markdownSnapshotBlock(block: MarkdownBlockSnapshot): MarkdownViewerBloc
 function markdownRenderBlocks(blocks: readonly MarkdownRenderBlock[]): MarkdownViewerBlock[] {
   return blocks.map((block) => ({
     ...block,
+    id: String(block.index),
     runs: [],
     text: block.markdown,
   }));

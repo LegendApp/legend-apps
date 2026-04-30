@@ -142,7 +142,6 @@ MarkdownRenderBlock HybridMarkdownDocument::renderBlockForBlock(
     size_t storageIndex,
     const MarkdownBlockRange& block) const {
   return MarkdownRenderBlock(
-      std::to_string(block.index),
       static_cast<double>(block.index),
       markdownBlockTypeName(block.type),
       static_cast<double>(block.depth),

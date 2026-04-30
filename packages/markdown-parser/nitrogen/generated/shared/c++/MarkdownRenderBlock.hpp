@@ -39,7 +39,6 @@ namespace margelo::nitro::legenddesktop::markdownparser {
    */
   struct MarkdownRenderBlock final {
   public:
-    std::string id     SWIFT_PRIVATE;
     double index     SWIFT_PRIVATE;
     std::string type     SWIFT_PRIVATE;
     double depth     SWIFT_PRIVATE;
@@ -47,7 +46,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
 
   public:
     MarkdownRenderBlock() = default;
-    explicit MarkdownRenderBlock(std::string id, double index, std::string type, double depth, std::string markdown): id(id), index(index), type(type), depth(depth), markdown(markdown) {}
+    explicit MarkdownRenderBlock(double index, std::string type, double depth, std::string markdown): index(index), type(type), depth(depth), markdown(markdown) {}
 
   public:
     friend bool operator==(const MarkdownRenderBlock& lhs, const MarkdownRenderBlock& rhs) = default;
@@ -63,7 +62,6 @@ namespace margelo::nitro {
     static inline margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
       return margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock(
-        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "id"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "type"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "depth"))),
@@ -72,7 +70,6 @@ namespace margelo::nitro {
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "id"), JSIConverter<std::string>::toJSI(runtime, arg.id));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "type"), JSIConverter<std::string>::toJSI(runtime, arg.type));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "depth"), JSIConverter<double>::toJSI(runtime, arg.depth));
@@ -87,7 +84,6 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "id")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "type")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "depth")))) return false;

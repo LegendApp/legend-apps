@@ -24,7 +24,6 @@ export interface MarkdownFileWindowResult {
 }
 
 export interface MarkdownRenderBlock {
-  id: string;
   index: number;
   type: string;
   depth: number;
