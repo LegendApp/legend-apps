@@ -639,6 +639,10 @@ static NSString *RNMarkdownAlignName(MD_ALIGN align)
 
 @end
 
+@interface RNMarkdownParser ()
+- (NSString *)scanMarkdownSync:(NSString *)markdown optionsJson:(NSString *)optionsJson;
+@end
+
 static NSMutableDictionary *RNMarkdownParserBlock(MD_BLOCKTYPE type, void *detail, RNMarkdownParserState *state)
 {
   NSString *typeName = RNMarkdownBlockType(type);
@@ -890,6 +894,10 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
 {
   id rawOptions = RNMarkdownParserJSONObjectFromString(optionsJson);
   NSDictionary *options = [rawOptions isKindOfClass:NSDictionary.class] ? rawOptions : @{};
+  if ([options[@"scanner"] boolValue]) {
+    return [self scanMarkdownSync:markdown optionsJson:optionsJson];
+  }
+
   RNMarkdownParserState *state = [RNMarkdownParserState new];
   MD_PARSER parser = {};
   parser.abi_version = 0;
@@ -961,17 +969,6 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
   });
 }
 
-- (void)scanMarkdown:(NSString *)markdown
-         optionsJson:(NSString *)optionsJson
-             resolve:(RCTPromiseResolveBlock)resolve
-              reject:(RCTPromiseRejectBlock)reject
-{
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-    NSString *json = [self scanMarkdownSync:markdown optionsJson:optionsJson];
-    resolve(json);
-  });
-}
-
 - (void)parseMarkdownFile:(NSString *)filePath
               optionsJson:(NSString *)optionsJson
                   resolve:(RCTPromiseResolveBlock)resolve
@@ -989,29 +986,10 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
       reject(@"READ_FAILED", error.localizedDescription ?: @"Failed to read markdown file", error);
       return;
     }
-    NSString *json = [self parseMarkdownSync:markdown optionsJson:optionsJson];
-    resolve(json);
-  });
-}
-
-- (void)scanMarkdownFile:(NSString *)filePath
-             optionsJson:(NSString *)optionsJson
-                 resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject
-{
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-    NSString *path = filePath ?: @"";
-    if ([path hasPrefix:@"file://"]) {
-      NSURL *url = [NSURL URLWithString:path];
-      path = url.path ?: @"";
-    }
-    NSError *error = nil;
-    NSString *markdown = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
-    if (!markdown) {
-      reject(@"READ_FAILED", error.localizedDescription ?: @"Failed to read markdown file", error);
-      return;
-    }
-    NSString *json = [self scanMarkdownSync:markdown optionsJson:optionsJson];
+    id rawOptions = RNMarkdownParserJSONObjectFromString(optionsJson);
+    NSDictionary *options = [rawOptions isKindOfClass:NSDictionary.class] ? rawOptions : @{};
+    NSString *json = [options[@"scanner"] boolValue] ? [self scanMarkdownSync:markdown optionsJson:optionsJson]
+                                                     : [self parseMarkdownSync:markdown optionsJson:optionsJson];
     resolve(json);
   });
 }

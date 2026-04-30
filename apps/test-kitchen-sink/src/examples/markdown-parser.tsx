@@ -503,33 +503,37 @@ export function MarkdownParserExample() {
         mode === "turbo-scan-json"
           ? scanMarkdown(debugMarkdown, { dialect: "github" })
           : parseMarkdown(debugMarkdown, { dialect: "github" });
-      void parsePromise.then((parsed) => {
-        const parsedAt = Date.now();
-        const blocks = markdownViewerBlocks(parsed.blocks);
-        const finishedAt = Date.now();
-        const totalMs = finishedAt - startedAt;
-        const benchmarkPayload = {
-          event: "app:markdown-json-benchmark",
-          blocks: blocks.length,
-          extractMs: finishedAt - parsedAt,
-          mode,
-          parseMs: parsedAt - startedAt,
-          sizeBytes: debugMarkdown.length,
-          totalMs,
-        };
-
-        console.log("markdown json benchmark", benchmarkPayload);
-        void fetch("http://127.0.0.1:37531/ll-debug", {
-          body: JSON.stringify(benchmarkPayload),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        }).catch(() => {});
-        setStatus(
-          `${benchmarkModeLabel(mode)} benchmark ${sizeLabel}: ${blocks.length} blocks in ${formatDuration(
+      void parsePromise
+        .then((parsed) => {
+          const parsedAt = Date.now();
+          const blocks = markdownViewerBlocks(parsed.blocks);
+          const finishedAt = Date.now();
+          const totalMs = finishedAt - startedAt;
+          const benchmarkPayload = {
+            event: "app:markdown-json-benchmark",
+            blocks: blocks.length,
+            extractMs: finishedAt - parsedAt,
+            mode,
+            parseMs: parsedAt - startedAt,
+            sizeBytes: debugMarkdown.length,
             totalMs,
-          )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
-        );
-      });
+          };
+
+          console.log("markdown json benchmark", benchmarkPayload);
+          void fetch("http://127.0.0.1:37531/ll-debug", {
+            body: JSON.stringify(benchmarkPayload),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          }).catch(() => {});
+          setStatus(
+            `${benchmarkModeLabel(mode)} benchmark ${sizeLabel}: ${blocks.length} blocks in ${formatDuration(
+              totalMs,
+            )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+          );
+        })
+        .catch((error: unknown) => {
+          setStatus(`${benchmarkModeLabel(mode)} benchmark failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
       return;
     }
 
@@ -584,35 +588,41 @@ export function MarkdownParserExample() {
         mode === "turbo-scan-json"
           ? scanMarkdownFile(path, { dialect: "github" })
           : parseMarkdownFile(path, { dialect: "github" });
-      void parsePromise.then((parsed) => {
-        const parsedAt = Date.now();
-        const blocks = markdownViewerBlocks(parsed.blocks);
-        const finishedAt = Date.now();
-        const totalMs = finishedAt - startedAt;
-        const benchmarkPayload = {
-          event: "app:markdown-file-json-benchmark",
-          blocks: blocks.length,
-          extractMs: finishedAt - parsedAt,
-          mode,
-          parseMs: parsedAt - startedAt,
-          source: path,
-          totalMs,
-        };
+      void parsePromise
+        .then((parsed) => {
+          const parsedAt = Date.now();
+          const blocks = markdownViewerBlocks(parsed.blocks);
+          const finishedAt = Date.now();
+          const totalMs = finishedAt - startedAt;
+          const benchmarkPayload = {
+            event: "app:markdown-file-json-benchmark",
+            blocks: blocks.length,
+            extractMs: finishedAt - parsedAt,
+            mode,
+            parseMs: parsedAt - startedAt,
+            source: path,
+            totalMs,
+          };
 
-        console.log("markdown file json benchmark", benchmarkPayload);
-        void fetch("http://127.0.0.1:37531/ll-debug", {
-          body: JSON.stringify(benchmarkPayload),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        }).catch(() => {});
-        setStatus(
-          `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
-            blocks.length
-          } blocks in ${formatDuration(totalMs)} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(
-            finishedAt - parsedAt,
-          )} extract).`,
-        );
-      });
+          console.log("markdown file json benchmark", benchmarkPayload);
+          void fetch("http://127.0.0.1:37531/ll-debug", {
+            body: JSON.stringify(benchmarkPayload),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          }).catch(() => {});
+          setStatus(
+            `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
+              blocks.length
+            } blocks in ${formatDuration(totalMs)} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(
+              finishedAt - parsedAt,
+            )} extract).`,
+          );
+        })
+        .catch((error: unknown) => {
+          setStatus(
+            `File ${benchmarkModeLabel(mode)} benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
       return;
     }
 
