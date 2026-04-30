@@ -643,6 +643,9 @@ ParseResult scanMarkdownSource(std::shared_ptr<const MarkdownSource> source, dou
   const char* bytes = source->data();
   const size_t length = source->size();
   std::vector<MarkdownBlockRange> blocks;
+  if (length > 0) {
+    blocks.reserve(std::max<size_t>(16, length / 128));
+  }
   size_t start = 0;
 
   while (start < length) {
