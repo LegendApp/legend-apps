@@ -4,10 +4,13 @@ import {
   scanMediaLibrary,
   type MediaScanOptions,
   type MediaScanResult,
+  type NativeScannedPlaylist,
   type NativeScannedTrack,
 } from "@legend-desktop/media-library-scanner";
+import type { MusicLibrary, MusicPlaylist } from "../domain/musicModel";
 import { getMusicLibrarySnapshot, saveMusicLibrary, setMusicLibrarySnapshot } from "./libraryStore";
-import { buildLibraryFromScan } from "./librarySnapshot";
+import { buildLibraryFromScan, joinRootRelativePath } from "./librarySnapshot";
+import { readM3UTrackPaths } from "./m3u";
 import { supportedAudioExtensions } from "./supportedAudio";
 
 type ScanLibraryResult = Readonly<{
@@ -37,6 +40,46 @@ function uniquePaths(paths: readonly string[]) {
     }
   }
   return unique;
+}
+
+async function hydrateScannedPlaylists(rootPaths: readonly string[], playlists: readonly NativeScannedPlaylist[] = []) {
+  return Promise.all(playlists.map(async (playlist) => {
+    const rootPath = rootPaths[playlist.rootIndex];
+    const sourcePath = playlist.absolutePath ?? (rootPath ? joinRootRelativePath(rootPath, playlist.relativePath) : undefined);
+
+    if (!sourcePath) {
+      return playlist;
+    }
+
+    try {
+      return {
+        ...playlist,
+        trackPaths: await readM3UTrackPaths(sourcePath),
+      };
+    } catch {
+      return playlist;
+    }
+  }));
+}
+
+function mergeManualPlaylists(previousLibrary: MusicLibrary, nextLibrary: MusicLibrary): MusicLibrary {
+  const playlistsById: Record<string, MusicPlaylist> = { ...nextLibrary.playlistsById };
+  for (const playlist of Object.values(previousLibrary.playlistsById)) {
+    if (playlist.source !== "manual") {
+      continue;
+    }
+
+    playlistsById[playlist.id] = {
+      ...playlist,
+      trackIds: playlist.trackIds.filter((trackId) => Boolean(nextLibrary.tracksById[trackId])),
+      updatedAt: Date.now(),
+    };
+  }
+
+  return {
+    ...nextLibrary,
+    playlistsById,
+  };
 }
 
 export async function scanLibrary(paths: readonly string[], options: MediaScanOptions = {}): Promise<ScanLibraryResult> {
@@ -95,11 +138,13 @@ export async function scanLibrary(paths: readonly string[], options: MediaScanOp
   });
 
   try {
+    const previousLibrary = getMusicLibrarySnapshot();
     const result = await scanMediaLibrary(roots, "", {
       ...defaultScanOptions,
       ...options,
     });
-    const library = buildLibraryFromScan(roots, tracks, result.playlists, Date.now());
+    const scannedPlaylists = await hydrateScannedPlaylists(roots, result.playlists);
+    const library = mergeManualPlaylists(previousLibrary, buildLibraryFromScan(roots, tracks, scannedPlaylists, Date.now()));
     await saveMusicLibrary({
       ...library,
       scan: {

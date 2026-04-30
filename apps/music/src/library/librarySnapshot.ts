@@ -12,6 +12,9 @@ import {
 import { createEmptyLibrary, MUSIC_LIBRARY_VERSION, type MusicId, type MusicLibrary, type MusicPlaylist, type MusicTrack } from "../domain/musicModel";
 
 type RawLibrary = Partial<MusicLibrary>;
+type ScannedPlaylist = NativeScannedPlaylist & Readonly<{
+  trackPaths?: readonly string[];
+}>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -163,7 +166,7 @@ export function sanitizeLibrarySnapshot(input: RawLibrary): MusicLibrary {
 export function buildLibraryFromScan(
   rootPaths: readonly string[],
   scannedTracks: readonly NativeScannedTrack[],
-  scannedPlaylists: readonly NativeScannedPlaylist[] = [],
+  scannedPlaylists: readonly ScannedPlaylist[] = [],
   now = Date.now(),
 ): MusicLibrary {
   const roots = rootPaths.map((path) => {
@@ -179,6 +182,7 @@ export function buildLibraryFromScan(
   const rootsById = Object.fromEntries(roots.map((root) => [root.id, root])) as MusicLibrary["rootsById"];
   const tracksById: Record<MusicId, MusicTrack> = {};
   const playlistsById: Record<MusicId, MusicPlaylist> = {};
+  const trackIdsByPath = new Map<string, MusicId>();
 
   for (const scanned of scannedTracks) {
     const root = roots[scanned.rootIndex];
@@ -210,6 +214,7 @@ export function buildLibraryFromScan(
       },
       updatedAt: now,
     };
+    trackIdsByPath.set(normalizePath(tracksById[id].source.filePath).toLowerCase(), id);
   }
 
   for (const playlist of scannedPlaylists) {
@@ -226,7 +231,9 @@ export function buildLibraryFromScan(
       name: playlist.fileName || fileNameFromPath(sourcePath),
       source: "m3u",
       sourcePath,
-      trackIds: [],
+      trackIds: uniqueTrackIds((playlist.trackPaths ?? [])
+        .map((trackPath) => trackIdsByPath.get(normalizePath(trackPath).toLowerCase()))
+        .filter((trackId): trackId is MusicId => Boolean(trackId))),
       updatedAt: now,
     };
   }
@@ -253,4 +260,16 @@ export function buildLibraryFromScan(
     updatedAt: now,
     version: MUSIC_LIBRARY_VERSION,
   };
+}
+
+function uniqueTrackIds(trackIds: readonly MusicId[]) {
+  const seen = new Set<MusicId>();
+  const unique: MusicId[] = [];
+  for (const trackId of trackIds) {
+    if (!seen.has(trackId)) {
+      seen.add(trackId);
+      unique.push(trackId);
+    }
+  }
+  return unique;
 }

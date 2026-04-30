@@ -6,6 +6,7 @@ import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
 import { useMusicDesktopIntegrations } from "./native";
 import {
   enqueueTrack,
+  clearPlaybackQueue,
   pausePlayback,
   playTrackNext,
   playTrackNow,
@@ -116,6 +117,7 @@ export function App() {
   };
 
   const clearLibrary = async () => {
+    await clearPlaybackQueue();
     await clearMusicLibrary();
     await updateMusicSettings({ library: { rootPaths: [] } });
     setMessage("Library cleared.");

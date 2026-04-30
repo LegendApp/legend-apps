@@ -492,6 +492,18 @@ export function toggleShuffle() {
   }, true);
 }
 
+export async function clearPlaybackQueue() {
+  loadToken++;
+  await stop();
+  clearNowPlayingInfo();
+  return setPlaybackState({
+    ...createEmptyPlaybackState(),
+    repeatMode: state.repeatMode,
+    shuffleEnabled: state.shuffleEnabled,
+    volume: state.volume,
+  }, true);
+}
+
 export function removeQueueItem(itemId: MusicId) {
   const removingCurrent = state.currentItemId === itemId;
   const queue = state.queue.filter((item) => item.id !== itemId);
