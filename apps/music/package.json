@@ -4,11 +4,16 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@legend-desktop/app-exit": "0.0.0",
     "@legend-desktop/app-storage": "0.0.0",
+    "@legend-desktop/auto-updater": "0.0.0",
     "@legend-desktop/audio-player": "0.0.0",
     "@legend-desktop/file-dialog": "0.0.0",
     "@legend-desktop/file-system-watcher": "0.0.0",
+    "@legend-desktop/global-hotkey": "0.0.0",
     "@legend-desktop/media-library-scanner": "0.0.0",
-    "@legend-desktop/media-tags": "0.0.0"
+    "@legend-desktop/media-tags": "0.0.0",
+    "@legend-desktop/native-menu": "0.0.0",
+    "@legend-desktop/window-manager": "0.0.0"
   }
 }

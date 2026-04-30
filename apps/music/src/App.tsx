@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MusicId, MusicLibrary, MusicPlaylist, MusicTrack, RepeatMode } from "./domain";
 import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
+import { useMusicDesktopIntegrations } from "./native";
 import {
   enqueueTrack,
   pausePlayback,
@@ -140,6 +141,21 @@ export function App() {
     setQueueVisible(visible);
     void updateMusicSettings({ general: { showQueueOnLaunch: visible } });
   };
+
+  useMusicDesktopIntegrations({
+    canClearLibrary: tracks.length > 0,
+    canRescanLibrary: configuredRootPaths.length > 0,
+    isPlaying,
+    onAddLibrary: () => void chooseLibraryFolders(),
+    onClearLibrary: () => void clearLibrary(),
+    onRescanLibrary: () => void rescanLibrary(),
+    onStatus: setMessage,
+    onToggleQueue: () => setQueuePreference(!queueVisible),
+    queueVisible,
+    repeatMode: playback.repeatMode,
+    settings,
+    shuffleEnabled: playback.shuffleEnabled,
+  });
 
   const playTrack = (trackId: MusicId) => {
     void playTrackNow(trackId, filteredTracks.map((track) => track.id));
