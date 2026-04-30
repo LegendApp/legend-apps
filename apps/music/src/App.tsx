@@ -1,16 +1,44 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import type { MusicId, MusicTrack, RepeatMode } from "./domain";
 import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
+import {
+  enqueueTrack,
+  pausePlayback,
+  playTrackNext,
+  playTrackNow,
+  removeQueueItem,
+  resumePlayback,
+  seekPlayback,
+  setPlaybackVolume,
+  setRepeatMode,
+  skipNext,
+  skipPrevious,
+  toggleShuffle,
+  usePlayback,
+} from "./playback";
+
+const repeatModes: RepeatMode[] = ["off", "all", "one"];
 
 export function App() {
   const library = useMusicLibrary();
+  const playback = usePlayback();
   const [message, setMessage] = useState("Choose one or more music folders to build your library.");
-  const tracks = useMemo(() => library.trackIds.map((id) => library.tracksById[id]).filter(Boolean), [library]);
+  const [query, setQuery] = useState("");
+  const [queueVisible, setQueueVisible] = useState(true);
+  const tracks = useMemo(
+    () => library.trackIds.map((id) => library.tracksById[id]).filter((track): track is MusicTrack => Boolean(track)),
+    [library],
+  );
   const roots = Object.values(library.rootsById);
   const albums = Object.values(library.albumsById);
   const artists = Object.values(library.artistsById);
+  const filteredTracks = useMemo(() => filterTracks(tracks, query), [tracks, query]);
+  const currentItem = playback.queue.find((item) => item.id === playback.currentItemId);
+  const currentTrack = currentItem ? library.tracksById[currentItem.trackId] : undefined;
   const isScanning = library.scan.status === "scanning";
+  const isPlaying = playback.status === "playing";
 
   const chooseLibraryFolders = async () => {
     const paths = await openFileDialog({
@@ -39,68 +67,248 @@ export function App() {
     setMessage("Library cleared.");
   };
 
+  const playTrack = (trackId: MusicId) => {
+    void playTrackNow(trackId, filteredTracks.map((track) => track.id));
+  };
+
+  const cycleRepeatMode = () => {
+    const index = repeatModes.indexOf(playback.repeatMode);
+    setRepeatMode(repeatModes[(index + 1) % repeatModes.length]);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
         <Text style={styles.appTitle}>Legend Music</Text>
-        <Text style={styles.sidebarText}>{tracks.length} tracks</Text>
-        <Text style={styles.sidebarText}>{albums.length} albums</Text>
-        <Text style={styles.sidebarText}>{artists.length} artists</Text>
+        <View style={styles.stats}>
+          <Text style={styles.sidebarText}>{tracks.length} tracks</Text>
+          <Text style={styles.sidebarText}>{albums.length} albums</Text>
+          <Text style={styles.sidebarText}>{artists.length} artists</Text>
+          <Text style={styles.sidebarText}>{playback.queue.length} queued</Text>
+        </View>
         <View style={styles.buttonGroup}>
-          <Pressable disabled={isScanning} onPress={() => void chooseLibraryFolders()} style={styles.button}>
+          <Pressable disabled={isScanning} onPress={() => void chooseLibraryFolders()} style={[styles.button, isScanning && styles.disabledButton]}>
             <Text style={styles.buttonText}>{isScanning ? "Scanning..." : "Add Library"}</Text>
           </Pressable>
-          <Pressable disabled={isScanning || tracks.length === 0} onPress={() => void clearLibrary()} style={styles.secondaryButton}>
+          <Pressable disabled={isScanning || tracks.length === 0} onPress={() => void clearLibrary()} style={[styles.secondaryButton, (isScanning || tracks.length === 0) && styles.disabledSecondaryButton]}>
             <Text style={styles.secondaryButtonText}>Clear</Text>
           </Pressable>
         </View>
         <Text style={styles.statusText}>{message}</Text>
-        {roots.map((root) => (
-          <Text key={root.id} numberOfLines={2} style={styles.rootText}>
-            {root.path}
-          </Text>
-        ))}
+        {playback.error ? <Text style={styles.errorText}>{playback.error}</Text> : null}
+        <View style={styles.sidebarSection}>
+          <Text style={styles.sectionTitle}>Roots</Text>
+          {roots.length === 0 ? (
+            <Text style={styles.rootText}>No folders added.</Text>
+          ) : (
+            roots.map((root) => (
+              <Text key={root.id} numberOfLines={2} style={styles.rootText}>
+                {root.path}
+              </Text>
+            ))
+          )}
+        </View>
       </View>
       <View style={styles.main}>
         <View style={styles.header}>
-          <Text style={styles.title}>Library</Text>
-          <Text style={styles.subtitle}>
-            {library.scan.status === "scanning"
-              ? `${library.scan.tracksScanned} scanned, ${library.scan.completedRoots}/${library.scan.totalRoots} folders`
-              : library.scan.status}
-          </Text>
+          <View>
+            <Text style={styles.title}>Library</Text>
+            <Text style={styles.subtitle}>
+              {library.scan.status === "scanning"
+                ? `${library.scan.tracksScanned} scanned, ${library.scan.completedRoots}/${library.scan.totalRoots} folders`
+                : `${library.scan.status} / ${filteredTracks.length} shown`}
+            </Text>
+          </View>
+          <TextInput
+            onChangeText={setQuery}
+            placeholder="Search songs, artists, albums"
+            placeholderTextColor="#8f8f88"
+            style={styles.searchInput}
+            value={query}
+          />
         </View>
-        <ScrollView contentContainerStyle={styles.trackList}>
-          {tracks.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No music indexed</Text>
-              <Text style={styles.emptyText}>Add a folder to scan audio metadata and persist the library.</Text>
+        <View style={styles.content}>
+          <ScrollView contentContainerStyle={styles.trackList}>
+            {filteredTracks.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>{tracks.length === 0 ? "No music indexed" : "No matching tracks"}</Text>
+                <Text style={styles.emptyText}>
+                  {tracks.length === 0 ? "Add a folder to scan audio metadata and persist the library." : "Adjust the search query."}
+                </Text>
+              </View>
+            ) : (
+              filteredTracks.slice(0, 500).map((track) => (
+                <TrackRow
+                  isCurrent={currentItem?.trackId === track.id}
+                  key={track.id}
+                  onEnqueue={() => enqueueTrack(track.id)}
+                  onPlay={() => playTrack(track.id)}
+                  onPlayNext={() => playTrackNext(track.id)}
+                  track={track}
+                />
+              ))
+            )}
+          </ScrollView>
+          {queueVisible ? (
+            <View style={styles.queuePanel}>
+              <View style={styles.queueHeader}>
+                <Text style={styles.queueTitle}>Queue</Text>
+                <Pressable onPress={() => setQueueVisible(false)} style={styles.smallButton}>
+                  <Text style={styles.smallButtonText}>Hide</Text>
+                </Pressable>
+              </View>
+              <ScrollView contentContainerStyle={styles.queueList}>
+                {playback.queue.length === 0 ? (
+                  <Text style={styles.queueEmpty}>Queue is empty.</Text>
+                ) : (
+                  playback.queue.map((item, index) => {
+                    const track = library.tracksById[item.trackId];
+                    return (
+                      <View key={item.id} style={[styles.queueRow, item.id === playback.currentItemId && styles.currentQueueRow]}>
+                        <Text style={styles.queueIndex}>{index + 1}</Text>
+                        <View style={styles.queueInfo}>
+                          <Text numberOfLines={1} style={styles.queueTrackTitle}>
+                            {track?.metadata.title ?? "Missing track"}
+                          </Text>
+                          <Text numberOfLines={1} style={styles.trackMeta}>
+                            {track?.metadata.artist || "Unknown Artist"}
+                          </Text>
+                        </View>
+                        <Pressable onPress={() => removeQueueItem(item.id)} style={styles.iconButton}>
+                          <Text style={styles.iconButtonText}>x</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
             </View>
           ) : (
-            tracks.slice(0, 250).map((track) => (
-              <View key={track.id} style={styles.trackRow}>
-                <View style={styles.trackArtwork}>
-                  <Text style={styles.trackArtworkText}>{track.metadata.title.slice(0, 1).toUpperCase()}</Text>
-                </View>
-                <View style={styles.trackInfo}>
-                  <Text numberOfLines={1} style={styles.trackTitle}>
-                    {track.metadata.title}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.trackMeta}>
-                    {track.metadata.artist || "Unknown Artist"} {track.metadata.album ? `- ${track.metadata.album}` : ""}
-                  </Text>
-                </View>
-                <Text style={styles.duration}>{formatDuration(track.metadata.durationSeconds)}</Text>
-              </View>
-            ))
+            <Pressable onPress={() => setQueueVisible(true)} style={styles.queueTab}>
+              <Text style={styles.queueTabText}>Queue {playback.queue.length}</Text>
+            </Pressable>
           )}
-        </ScrollView>
+        </View>
+        <View style={styles.player}>
+          <View style={styles.nowPlaying}>
+            <View style={styles.nowPlayingArtwork}>
+              <Text style={styles.trackArtworkText}>{(currentTrack?.metadata.title ?? "L").slice(0, 1).toUpperCase()}</Text>
+            </View>
+            <View style={styles.nowPlayingText}>
+              <Text numberOfLines={1} style={styles.nowPlayingTitle}>
+                {currentTrack?.metadata.title ?? "Nothing playing"}
+              </Text>
+              <Text numberOfLines={1} style={styles.trackMeta}>
+                {currentTrack?.metadata.artist || "Choose a track"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.transport}>
+            <View style={styles.transportButtons}>
+              <Pressable onPress={() => void skipPrevious()} style={styles.controlButton}>
+                <Text style={styles.controlButtonText}>Prev</Text>
+              </Pressable>
+              <Pressable onPress={() => void (isPlaying ? pausePlayback() : resumePlayback())} style={styles.primaryControlButton}>
+                <Text style={styles.primaryControlButtonText}>{isPlaying ? "Pause" : "Play"}</Text>
+              </Pressable>
+              <Pressable onPress={() => void skipNext()} style={styles.controlButton}>
+                <Text style={styles.controlButtonText}>Next</Text>
+              </Pressable>
+              <Pressable onPress={() => toggleShuffle()} style={[styles.controlButton, playback.shuffleEnabled && styles.activeControlButton]}>
+                <Text style={styles.controlButtonText}>Shuffle</Text>
+              </Pressable>
+              <Pressable onPress={cycleRepeatMode} style={[styles.controlButton, playback.repeatMode !== "off" && styles.activeControlButton]}>
+                <Text style={styles.controlButtonText}>Repeat {playback.repeatMode}</Text>
+              </Pressable>
+            </View>
+            <View style={styles.progressRow}>
+              <Text style={styles.timeText}>{formatDuration(playback.positionSeconds)}</Text>
+              <Pressable
+                disabled={playback.durationSeconds <= 0}
+                onPress={() => void seekPlayback(Math.max(0, playback.positionSeconds - 15))}
+                style={styles.smallButton}
+              >
+                <Text style={styles.smallButtonText}>-15</Text>
+              </Pressable>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPercent(playback.positionSeconds, playback.durationSeconds)}%` }]} />
+              </View>
+              <Pressable
+                disabled={playback.durationSeconds <= 0}
+                onPress={() => void seekPlayback(Math.min(playback.durationSeconds, playback.positionSeconds + 15))}
+                style={styles.smallButton}
+              >
+                <Text style={styles.smallButtonText}>+15</Text>
+              </Pressable>
+              <Text style={styles.timeText}>{formatDuration(playback.durationSeconds)}</Text>
+            </View>
+          </View>
+          <View style={styles.volumeControls}>
+            <Text style={styles.timeText}>Vol {Math.round(playback.volume * 100)}</Text>
+            <Pressable onPress={() => void setPlaybackVolume(playback.volume - 0.1)} style={styles.smallButton}>
+              <Text style={styles.smallButtonText}>-</Text>
+            </Pressable>
+            <Pressable onPress={() => void setPlaybackVolume(playback.volume + 0.1)} style={styles.smallButton}>
+              <Text style={styles.smallButtonText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
 export default App;
+
+function TrackRow(props: {
+  isCurrent: boolean;
+  onEnqueue: () => void;
+  onPlay: () => void;
+  onPlayNext: () => void;
+  track: MusicTrack;
+}) {
+  const { isCurrent, onEnqueue, onPlay, onPlayNext, track } = props;
+
+  return (
+    <View style={[styles.trackRow, isCurrent && styles.currentTrackRow]}>
+      <Pressable onPress={onPlay} style={styles.trackArtwork}>
+        <Text style={styles.trackArtworkText}>{track.metadata.title.slice(0, 1).toUpperCase()}</Text>
+      </Pressable>
+      <Pressable onPress={onPlay} style={styles.trackInfo}>
+        <Text numberOfLines={1} style={styles.trackTitle}>
+          {track.metadata.title}
+        </Text>
+        <Text numberOfLines={1} style={styles.trackMeta}>
+          {track.metadata.artist || "Unknown Artist"} {track.metadata.album ? `- ${track.metadata.album}` : ""}
+        </Text>
+      </Pressable>
+      <Text style={styles.duration}>{formatDuration(track.metadata.durationSeconds)}</Text>
+      <Pressable onPress={onPlayNext} style={styles.rowAction}>
+        <Text style={styles.rowActionText}>Next</Text>
+      </Pressable>
+      <Pressable onPress={onEnqueue} style={styles.rowAction}>
+        <Text style={styles.rowActionText}>Queue</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function filterTracks(tracks: readonly MusicTrack[], query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return tracks;
+  }
+
+  return tracks.filter((track) => {
+    const haystack = [
+      track.metadata.title,
+      track.metadata.artist,
+      track.metadata.album,
+      track.source.fileName,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(normalized);
+  });
+}
 
 function formatDuration(durationSeconds?: number) {
   if (!durationSeconds) {
@@ -112,10 +320,304 @@ function formatDuration(durationSeconds?: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function progressPercent(positionSeconds: number, durationSeconds: number) {
+  if (!durationSeconds || durationSeconds <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, (positionSeconds / durationSeconds) * 100));
+}
+
 const styles = StyleSheet.create({
+  activeControlButton: {
+    backgroundColor: "#dbe9d7",
+    borderColor: "#8bae82",
+  },
+  appTitle: {
+    color: "#171717",
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  button: {
+    alignItems: "center",
+    backgroundColor: "#111111",
+    borderRadius: 6,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 14,
+  },
+  buttonGroup: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  buttonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   container: {
     flex: 1,
     flexDirection: "row",
+  },
+  content: {
+    flex: 1,
+    flexDirection: "row",
+    minHeight: 0,
+  },
+  controlButton: {
+    alignItems: "center",
+    borderColor: "#c8c8c2",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 12,
+  },
+  controlButtonText: {
+    color: "#252522",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  currentQueueRow: {
+    backgroundColor: "#eef5eb",
+  },
+  currentTrackRow: {
+    backgroundColor: "#f0f6ed",
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  disabledSecondaryButton: {
+    opacity: 0.45,
+  },
+  duration: {
+    color: "#77776f",
+    fontSize: 12,
+    width: 52,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 360,
+  },
+  emptyText: {
+    color: "#6f6f68",
+    fontSize: 14,
+    marginTop: 8,
+  },
+  emptyTitle: {
+    color: "#222222",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#a13a2b",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  header: {
+    alignItems: "center",
+    borderBottomColor: "#e2e2de",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 20,
+    justifyContent: "space-between",
+    paddingHorizontal: 28,
+    paddingVertical: 18,
+  },
+  iconButton: {
+    alignItems: "center",
+    borderColor: "#d4d4ce",
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 24,
+    justifyContent: "center",
+    width: 24,
+  },
+  iconButtonText: {
+    color: "#5f5f59",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  main: {
+    backgroundColor: "#fbfbfa",
+    flex: 1,
+  },
+  nowPlaying: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    minWidth: 180,
+  },
+  nowPlayingArtwork: {
+    alignItems: "center",
+    backgroundColor: "#dfe7dc",
+    borderRadius: 4,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  nowPlayingText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  nowPlayingTitle: {
+    color: "#222222",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  player: {
+    alignItems: "center",
+    borderTopColor: "#deded8",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 18,
+    minHeight: 92,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  primaryControlButton: {
+    alignItems: "center",
+    backgroundColor: "#111111",
+    borderRadius: 6,
+    justifyContent: "center",
+    minHeight: 34,
+    minWidth: 68,
+    paddingHorizontal: 14,
+  },
+  primaryControlButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  progressFill: {
+    backgroundColor: "#2f4f31",
+    borderRadius: 999,
+    height: 6,
+  },
+  progressRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  progressTrack: {
+    backgroundColor: "#d7d7d0",
+    borderRadius: 999,
+    height: 6,
+    overflow: "hidden",
+    width: 260,
+  },
+  queueEmpty: {
+    color: "#77776f",
+    fontSize: 13,
+    padding: 12,
+  },
+  queueHeader: {
+    alignItems: "center",
+    borderBottomColor: "#e2e2de",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 12,
+  },
+  queueIndex: {
+    color: "#77776f",
+    fontSize: 12,
+    width: 24,
+  },
+  queueInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  queueList: {
+    paddingVertical: 4,
+  },
+  queuePanel: {
+    borderLeftColor: "#e2e2de",
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    width: 300,
+  },
+  queueRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  queueTab: {
+    alignItems: "center",
+    borderLeftColor: "#e2e2de",
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    width: 40,
+  },
+  queueTabText: {
+    color: "#55554f",
+    fontSize: 12,
+    fontWeight: "700",
+    transform: [{ rotate: "90deg" }],
+    width: 86,
+  },
+  queueTitle: {
+    color: "#222222",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  queueTrackTitle: {
+    color: "#222222",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  rootText: {
+    color: "#77776f",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  rowAction: {
+    alignItems: "center",
+    borderColor: "#d2d2cb",
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 28,
+    paddingHorizontal: 9,
+  },
+  rowActionText: {
+    color: "#44443f",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  searchInput: {
+    backgroundColor: "#ffffff",
+    borderColor: "#d7d7d0",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: "#20201d",
+    fontSize: 14,
+    height: 36,
+    paddingHorizontal: 12,
+    width: 320,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    borderColor: "#c8c8c2",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 14,
+  },
+  secondaryButtonText: {
+    color: "#2d2d2a",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  sectionTitle: {
+    color: "#41413c",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   sidebar: {
     backgroundColor: "#f5f5f3",
@@ -125,71 +627,36 @@ const styles = StyleSheet.create({
     padding: 24,
     width: 280,
   },
-  appTitle: {
-    color: "#171717",
-    fontSize: 24,
-    fontWeight: "700",
+  sidebarSection: {
+    gap: 8,
+    marginTop: 8,
   },
   sidebarText: {
     color: "#40403c",
     fontSize: 14,
   },
-  buttonGroup: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-  button: {
+  smallButton: {
     alignItems: "center",
-    backgroundColor: "#111111",
-    borderRadius: 6,
-    minHeight: 36,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    borderColor: "#c8c8c2",
-    borderRadius: 6,
+    borderColor: "#d0d0ca",
+    borderRadius: 5,
     borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 36,
     justifyContent: "center",
-    paddingHorizontal: 14,
+    minHeight: 26,
+    minWidth: 34,
+    paddingHorizontal: 8,
   },
-  secondaryButtonText: {
-    color: "#2d2d2a",
-    fontSize: 13,
+  smallButtonText: {
+    color: "#44443f",
+    fontSize: 12,
     fontWeight: "700",
+  },
+  stats: {
+    gap: 6,
   },
   statusText: {
     color: "#5f5f59",
     fontSize: 13,
     lineHeight: 18,
-  },
-  rootText: {
-    color: "#77776f",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  main: {
-    backgroundColor: "#fbfbfa",
-    flex: 1,
-  },
-  header: {
-    borderBottomColor: "#e2e2de",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 28,
-    paddingVertical: 22,
-  },
-  title: {
-    color: "#171717",
-    fontSize: 22,
-    fontWeight: "700",
   },
   subtitle: {
     color: "#72726c",
@@ -197,32 +664,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: "capitalize",
   },
-  trackList: {
-    padding: 16,
+  timeText: {
+    color: "#686862",
+    fontSize: 12,
+    minWidth: 44,
   },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 360,
-  },
-  emptyTitle: {
-    color: "#222222",
-    fontSize: 18,
+  title: {
+    color: "#171717",
+    fontSize: 22,
     fontWeight: "700",
-  },
-  emptyText: {
-    color: "#6f6f68",
-    fontSize: 14,
-    marginTop: 8,
-  },
-  trackRow: {
-    alignItems: "center",
-    borderBottomColor: "#e7e7e1",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 56,
-    paddingHorizontal: 12,
   },
   trackArtwork: {
     alignItems: "center",
@@ -241,19 +691,43 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  trackTitle: {
-    color: "#222222",
-    fontSize: 14,
-    fontWeight: "600",
+  trackList: {
+    padding: 16,
   },
   trackMeta: {
     color: "#77776f",
     fontSize: 12,
     marginTop: 3,
   },
-  duration: {
-    color: "#77776f",
-    fontSize: 12,
-    width: 52,
+  trackRow: {
+    alignItems: "center",
+    borderBottomColor: "#e7e7e1",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 56,
+    paddingHorizontal: 12,
+  },
+  trackTitle: {
+    color: "#222222",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  transport: {
+    alignItems: "center",
+    flex: 2,
+    gap: 10,
+  },
+  transportButtons: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  volumeControls: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+    minWidth: 140,
   },
 });
