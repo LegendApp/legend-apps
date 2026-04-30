@@ -8,21 +8,21 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 1: Menu And Open Plumbing
 
-- [ ] Inspect the existing native-menu package and kitchen-sink example.
-- [ ] Inspect file-dialog usage and supported file type filters.
-- [ ] Verify how `apps/markdown` can register File -> Open, Save, Undo, Redo, Bold, Italic, and Link menu commands.
-- [ ] Check whether `process.argv` exposes markdown launch file paths in the app runtime.
-- [ ] Implement startup open behavior:
-  - [ ] open first `.md`-family launch argument when present
-  - [ ] open file dialog immediately when no launch file is present
-  - [ ] keep app process open with no document window if startup dialog is canceled, best effort
-  - [ ] on startup load failure, show error and reopen file dialog
-- [ ] Implement File -> Open command.
-- [ ] Implement basic command enabled/disabled state if supported by the menu API.
-- [ ] Keep fallback behavior limited to dialog fallback for missing argv; do not ship header buttons because menu wiring should be fixed if broken.
-- [ ] Validate `bun run typecheck`.
-- [ ] Validate `bun run markdown run macos` reaches the expected open-file flow.
-- [ ] Commit with a `type: subject` message.
+- [x] Inspect the existing native-menu package and kitchen-sink example.
+- [x] Inspect file-dialog usage and supported file type filters.
+- [x] Verify how `apps/markdown` can register File -> Open, Save, Undo, Redo, Bold, Italic, and Link menu commands.
+- [x] Check whether `process.argv` exposes markdown launch file paths in the app runtime.
+- [x] Implement startup open behavior:
+  - [x] open first `.md`-family launch argument when present
+  - [x] open file dialog immediately when no launch file is present
+  - [x] keep app process open with no document window if startup dialog is canceled, best effort
+  - [x] on startup load failure, show error and reopen file dialog
+- [x] Implement File -> Open command.
+- [x] Implement basic command enabled/disabled state if supported by the menu API.
+- [x] Keep fallback behavior limited to dialog fallback for missing argv; do not ship header buttons because menu wiring should be fixed if broken.
+- [x] Validate `bun run typecheck`.
+- [x] Validate `bun run markdown run macos` reaches the expected open-file flow.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 2: Parser Snapshot Upgrade
 

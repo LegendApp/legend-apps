@@ -15,6 +15,11 @@
     "apps/markdown": {
       "name": "@legend-desktop/app-markdown",
       "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/window-manager": "0.0.0",
+      },
     },
     "apps/music": {
       "name": "@legend-desktop/app-music",

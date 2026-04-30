@@ -10,7 +10,11 @@ const manifest = {
   },
   androidPackage: "app.legend.markdown",
   nativeModules: {
-    macos: [],
+    macos: [
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/native-menu",
+      "@legend-desktop/window-manager",
+    ],
     ios: [],
     android: [],
   },
