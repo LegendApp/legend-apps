@@ -1,4 +1,4 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
+import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MusicId, MusicLibrary, MusicPlaylist, MusicTrack, RepeatMode } from "./domain";
@@ -24,7 +24,10 @@ import {
   addTracksToPlaylist,
   createPlaylist,
   deletePlaylist,
+  exportPlaylistToM3U,
+  importPlaylistFromM3U,
   removeTrackFromPlaylist,
+  renamePlaylist,
 } from "./playlists";
 import { updateMusicSettings, useMusicSettings } from "./settings";
 
@@ -42,6 +45,7 @@ export function App() {
   const [message, setMessage] = useState("Choose one or more music folders to build your library.");
   const [query, setQuery] = useState("");
   const [playlistName, setPlaylistName] = useState("");
+  const [playlistRenameName, setPlaylistRenameName] = useState("");
   const [queueVisible, setQueueVisible] = useState(true);
   const [selectedView, setSelectedView] = useState<LibraryView>({ type: "songs" });
   const autoScanStarted = useRef(false);
@@ -92,6 +96,10 @@ export function App() {
         setMessage(error instanceof Error ? error.message : String(error));
       });
   }, [settings.loaded, settings.library.autoScanOnStart, settings.library.rootPaths]);
+
+  useEffect(() => {
+    setPlaylistRenameName(selectedPlaylist?.name ?? "");
+  }, [selectedPlaylist?.id, selectedPlaylist?.name]);
 
   const chooseLibraryFolders = async () => {
     const paths = await openFileDialog({
@@ -185,6 +193,63 @@ export function App() {
     setMessage(`Deleted playlist "${selectedPlaylist.name}".`);
   };
 
+  const renameSelectedPlaylist = async () => {
+    if (!selectedPlaylist || selectedPlaylist.source !== "manual") {
+      return;
+    }
+
+    const playlist = await renamePlaylist(selectedPlaylist.id, playlistRenameName);
+    setMessage(`Renamed playlist "${playlist?.name ?? selectedPlaylist.name}".`);
+  };
+
+  const importM3UPlaylist = async () => {
+    const paths = await openFileDialog({
+      allowedFileTypes: ["m3u", "m3u8"],
+      allowsMultipleSelection: true,
+      canChooseDirectories: false,
+      canChooseFiles: true,
+    });
+
+    if (!paths?.length) {
+      setMessage("Playlist import canceled.");
+      return;
+    }
+
+    let lastPlaylistId: MusicId | undefined;
+    let matched = 0;
+    let total = 0;
+    for (const path of paths) {
+      const result = await importPlaylistFromM3U(path);
+      lastPlaylistId = result.playlist.id;
+      matched += result.matchedTracks;
+      total += result.totalTracks;
+    }
+
+    if (lastPlaylistId) {
+      setSelectedView({ type: "playlist", id: lastPlaylistId });
+    }
+    setMessage(`Imported ${paths.length} playlist${paths.length === 1 ? "" : "s"} with ${matched}/${total} matching tracks.`);
+  };
+
+  const exportSelectedPlaylist = async () => {
+    if (!selectedPlaylist) {
+      return;
+    }
+
+    const destination = await saveFileDialog({
+      allowedFileTypes: ["m3u"],
+      defaultName: `${selectedPlaylist.name}.m3u`,
+    });
+
+    if (!destination) {
+      setMessage("Playlist export canceled.");
+      return;
+    }
+
+    const exported = await exportPlaylistToM3U(selectedPlaylist.id, destination);
+    setMessage(exported ? `Exported playlist "${selectedPlaylist.name}".` : "Playlist export failed.");
+  };
+
   const toggleTrackInSelectedPlaylist = async (trackId: MusicId) => {
     if (!selectedPlaylist || selectedPlaylist.source !== "manual") {
       return;
@@ -273,10 +338,32 @@ export function App() {
             ))
           )}
           {selectedPlaylist?.source === "manual" ? (
-            <Pressable onPress={() => void deleteSelectedPlaylist()} style={styles.dangerButton}>
-              <Text style={styles.dangerButtonText}>Delete Selected Playlist</Text>
-            </Pressable>
+            <>
+              <View style={styles.playlistCreateRow}>
+                <TextInput
+                  onChangeText={setPlaylistRenameName}
+                  placeholder="Playlist name"
+                  placeholderTextColor="#8f8f88"
+                  style={styles.playlistInput}
+                  value={playlistRenameName}
+                />
+                <Pressable onPress={() => void renameSelectedPlaylist()} style={styles.smallButton}>
+                  <Text style={styles.smallButtonText}>Rename</Text>
+                </Pressable>
+              </View>
+              <Pressable onPress={() => void deleteSelectedPlaylist()} style={styles.dangerButton}>
+                <Text style={styles.dangerButtonText}>Delete Selected Playlist</Text>
+              </Pressable>
+            </>
           ) : null}
+          <View style={styles.buttonGroup}>
+            <Pressable onPress={() => void importM3UPlaylist()} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Import</Text>
+            </Pressable>
+            <Pressable disabled={!selectedPlaylist} onPress={() => void exportSelectedPlaylist()} style={[styles.secondaryButton, !selectedPlaylist && styles.disabledSecondaryButton]}>
+              <Text style={styles.secondaryButtonText}>Export</Text>
+            </Pressable>
+          </View>
         </View>
         <View style={styles.sidebarSection}>
           <Text style={styles.sectionTitle}>Roots</Text>

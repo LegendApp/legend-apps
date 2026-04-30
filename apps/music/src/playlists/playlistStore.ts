@@ -1,6 +1,9 @@
+import { File } from "expo-file-system/next";
 import { createPlaylistId } from "../domain/musicIds";
+import { fileNameFromPath, titleFromFileName, normalizePath } from "../domain/musicIds";
 import type { MusicId, MusicLibrary, MusicPlaylist } from "../domain/musicModel";
 import { getMusicLibrarySnapshot, saveMusicLibrary } from "../library/libraryStore";
+import { readM3UTrackPaths, writeM3UTrackPaths } from "../library/m3u";
 
 function getPlaylist(library: MusicLibrary, playlistId: MusicId) {
   return library.playlistsById[playlistId];
@@ -49,6 +52,45 @@ export async function createPlaylist(name: string, trackIds: readonly MusicId[] 
 
   await saveMusicLibrary(withPlaylist(getMusicLibrarySnapshot(), playlist));
   return playlist;
+}
+
+function trackIdsFromPaths(library: MusicLibrary, paths: readonly string[]) {
+  const trackIdsByPath = new Map<string, MusicId>();
+  for (const track of Object.values(library.tracksById)) {
+    trackIdsByPath.set(normalizePath(track.source.filePath).toLowerCase(), track.id);
+  }
+
+  return uniqueTrackIds(paths
+    .map((path) => trackIdsByPath.get(normalizePath(path).toLowerCase()))
+    .filter((trackId): trackId is MusicId => Boolean(trackId)));
+}
+
+export async function importPlaylistFromM3U(sourcePath: string) {
+  const library = getMusicLibrarySnapshot();
+  const paths = await readM3UTrackPaths(sourcePath);
+  const name = titleFromFileName(fileNameFromPath(sourcePath));
+  const playlist = await createPlaylist(name, trackIdsFromPaths(library, paths));
+  return {
+    matchedTracks: playlist.trackIds.length,
+    playlist,
+    totalTracks: paths.length,
+  };
+}
+
+export async function exportPlaylistToM3U(playlistId: MusicId, destinationPath: string) {
+  const library = getMusicLibrarySnapshot();
+  const playlist = getPlaylist(library, playlistId);
+  if (!playlist) {
+    return false;
+  }
+
+  const trackPaths = playlist.trackIds
+    .map((trackId) => library.tracksById[trackId]?.source.filePath)
+    .filter((path): path is string => Boolean(path));
+
+  const file = new File(destinationPath);
+  file.write(writeM3UTrackPaths(trackPaths));
+  return true;
 }
 
 export async function renamePlaylist(playlistId: MusicId, name: string) {
