@@ -66,6 +66,7 @@ struct LineInfo {
   size_t contentStart = 0;
   char first = 0;
   bool blank = false;
+  bool hasPipe = false;
 };
 
 using Clock = std::chrono::steady_clock;
@@ -172,12 +173,20 @@ size_t trimLinePrefix(const char* bytes, size_t start, size_t end) {
 LineInfo lineInfo(const char* bytes, size_t start, size_t end) {
   const size_t contentStart = trimLinePrefix(bytes, start, end);
   const bool blank = contentStart >= end;
+  bool hasPipe = false;
+  for (size_t index = contentStart; index < end; index += 1) {
+    if (bytes[index] == '|') {
+      hasPipe = true;
+      break;
+    }
+  }
   return LineInfo{
       start,
       end,
       contentStart,
       blank ? '\0' : bytes[contentStart],
       blank,
+      hasPipe,
   };
 }
 
@@ -299,22 +308,6 @@ bool lineLooksLikeTableDelimiter(const char* bytes, const LineInfo& line) {
   return hasDash && hasPipe;
 }
 
-bool lineContainsPipe(const char* bytes, const LineInfo& line) {
-  for (size_t index = line.contentStart; index < line.end; index += 1) {
-    if (bytes[index] == '|') {
-      return true;
-    }
-  }
-  return false;
-}
-
-size_t nextLineStart(const char* bytes, size_t length, size_t end) {
-  while (end < length && isLineBreak(bytes[end])) {
-    end += 1;
-  }
-  return end;
-}
-
 size_t nextPhysicalLineStart(const char* bytes, size_t length, size_t end) {
   if (end < length && bytes[end] == '\r') {
     end += 1;
@@ -323,6 +316,21 @@ size_t nextPhysicalLineStart(const char* bytes, size_t length, size_t end) {
     end += 1;
   }
   return end;
+}
+
+std::vector<LineInfo> buildLineTable(const char* bytes, size_t length) {
+  std::vector<LineInfo> lines;
+  if (length > 0) {
+    lines.reserve(std::max<size_t>(16, length / 80));
+  }
+
+  size_t start = 0;
+  while (start < length) {
+    const LineInfo line = lineInfoAt(bytes, length, start);
+    lines.push_back(line);
+    start = nextPhysicalLineStart(bytes, length, line.end);
+  }
+  return lines;
 }
 
 bool lineStartsBoundaryBlock(const char* bytes, const LineInfo& line) {
@@ -337,7 +345,8 @@ bool lineInterruptsParagraph(const char* bytes, const LineInfo& line) {
       lineStartsOrderedListAtOne(bytes, line);
 }
 
-MarkdownBlockType scannedBlockType(const char* bytes, size_t length, const LineInfo& line) {
+MarkdownBlockType scannedBlockType(const char* bytes, const std::vector<LineInfo>& lines, size_t lineIndex) {
+  const LineInfo& line = lines[lineIndex];
   switch (line.first) {
     case '#':
       if (lineStartsHeading(bytes, line)) {
@@ -381,9 +390,7 @@ MarkdownBlockType scannedBlockType(const char* bytes, size_t length, const LineI
       break;
   }
 
-  const size_t nextStart = nextPhysicalLineStart(bytes, length, line.end);
-  if (lineContainsPipe(bytes, line) && nextStart < length &&
-      lineLooksLikeTableDelimiter(bytes, lineInfoAt(bytes, length, nextStart))) {
+  if (line.hasPipe && lineIndex + 1 < lines.size() && lineLooksLikeTableDelimiter(bytes, lines[lineIndex + 1])) {
     return MarkdownBlockType::Table;
   }
 
@@ -392,7 +399,13 @@ MarkdownBlockType scannedBlockType(const char* bytes, size_t length, const LineI
 
 size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char fenceChar);
 
-size_t scannedBlockEnd(const char* bytes, size_t length, const LineInfo& line, MarkdownBlockType type) {
+size_t scannedBlockEnd(
+    const char* bytes,
+    size_t length,
+    const std::vector<LineInfo>& lines,
+    size_t lineIndex,
+    MarkdownBlockType type) {
+  const LineInfo& line = lines[lineIndex];
   size_t end = line.end;
   if (type == MarkdownBlockType::Heading || type == MarkdownBlockType::ThematicBreak) {
     return end;
@@ -402,9 +415,8 @@ size_t scannedBlockEnd(const char* bytes, size_t length, const LineInfo& line, M
     return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, line));
   }
 
-  size_t nextStart = nextPhysicalLineStart(bytes, length, end);
-  while (nextStart < length) {
-    const LineInfo nextLine = lineInfoAt(bytes, length, nextStart);
+  for (size_t nextIndex = lineIndex + 1; nextIndex < lines.size(); nextIndex += 1) {
+    const LineInfo& nextLine = lines[nextIndex];
     if (nextLine.blank) {
       break;
     }
@@ -412,7 +424,6 @@ size_t scannedBlockEnd(const char* bytes, size_t length, const LineInfo& line, M
       break;
     }
     end = nextLine.end;
-    nextStart = nextPhysicalLineStart(bytes, length, end);
   }
   return end;
 }
@@ -676,29 +687,33 @@ ParseResult scanMarkdownSource(std::shared_ptr<const MarkdownSource> source, dou
   const auto scanStartedAt = Clock::now();
   const char* bytes = source->data();
   const size_t length = source->size();
+  const std::vector<LineInfo> lines = buildLineTable(bytes, length);
   std::vector<MarkdownBlockRange> blocks;
   if (length > 0) {
     blocks.reserve(std::max<size_t>(16, length / 128));
   }
-  size_t start = 0;
+  size_t lineIndex = 0;
 
-  while (start < length) {
-    const LineInfo line = lineInfoAt(bytes, length, start);
+  while (lineIndex < lines.size()) {
+    const LineInfo& line = lines[lineIndex];
     if (line.blank) {
-      start = nextLineStart(bytes, length, line.end);
+      lineIndex += 1;
       continue;
     }
 
-    const MarkdownBlockType type = scannedBlockType(bytes, length, line);
-    const size_t end = scannedBlockEnd(bytes, length, line, type);
+    const MarkdownBlockType type = scannedBlockType(bytes, lines, lineIndex);
+    const size_t end = scannedBlockEnd(bytes, length, lines, lineIndex, type);
     blocks.push_back(MarkdownBlockRange{
         blocks.size(),
         1,
-        start,
+        line.start,
         std::min(end, length),
         type,
     });
-    start = nextLineStart(bytes, length, end);
+    lineIndex += 1;
+    while (lineIndex < lines.size() && lines[lineIndex].start <= end) {
+      lineIndex += 1;
+    }
   }
 
   const double blockRangeMs = elapsedMs(scanStartedAt, Clock::now());
