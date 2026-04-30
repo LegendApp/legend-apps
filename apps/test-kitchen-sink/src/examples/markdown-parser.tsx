@@ -470,53 +470,154 @@ export function MarkdownParserExample() {
     );
   };
 
-  const benchmarkGeneratedMarkdown = () => {
+  const benchmarkGeneratedMarkdown = (mode: "nitro-parse" | "nitro-window" | "nitro-full" | "json") => {
     const debugMarkdown = createGeneratedMarkdown(8000);
-    setStatus(`Benchmarking ${markdownSizeLabel(debugMarkdown)} generated markdown...`);
-    const legacyStartedAt = Date.now();
-    void parseMarkdown(debugMarkdown, { dialect: "github" }).then((parsed) => {
-      const legacyParsedAt = Date.now();
-      const legacyBlocks = markdownViewerBlocks(parsed.blocks);
-      const legacyFinishedAt = Date.now();
-      const nitroStartedAt = Date.now();
-      const document = parseMarkdownDocument(debugMarkdown, { dialect: "github" });
-      const nitroParsedAt = Date.now();
-      const nitroWindowBlocks = markdownDocumentWindow(document, 64);
-      const nitroWindowFinishedAt = Date.now();
-      const legacyTotal = legacyFinishedAt - legacyStartedAt;
-      const nitroWindowTotal = nitroWindowFinishedAt - nitroStartedAt;
-      const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroWindowTotal) / legacyTotal) * 100) : 0;
+    const sizeLabel = markdownSizeLabel(debugMarkdown);
+
+    if (mode === "json") {
+      setStatus(`Benchmarking ${sizeLabel} generated markdown with JSON...`);
+      const startedAt = Date.now();
+      void parseMarkdown(debugMarkdown, { dialect: "github" }).then((parsed) => {
+        const parsedAt = Date.now();
+        const blocks = markdownViewerBlocks(parsed.blocks);
+        const finishedAt = Date.now();
+        const totalMs = finishedAt - startedAt;
+        const benchmarkPayload = {
+          event: "app:markdown-json-benchmark",
+          blocks: blocks.length,
+          extractMs: finishedAt - parsedAt,
+          parseMs: parsedAt - startedAt,
+          sizeBytes: debugMarkdown.length,
+          totalMs,
+        };
+
+        console.log("markdown json benchmark", benchmarkPayload);
+        void fetch("http://127.0.0.1:37531/ll-debug", {
+          body: JSON.stringify(benchmarkPayload),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }).catch(() => {});
+        setStatus(
+          `JSON benchmark ${sizeLabel}: ${blocks.length} blocks in ${formatDuration(totalMs)} (${formatDuration(
+            parsedAt - startedAt,
+          )} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+        );
+      });
+      return;
+    }
+
+    setStatus(`Benchmarking ${sizeLabel} generated markdown with Nitro ${mode.replace("nitro-", "")}...`);
+    const startedAt = Date.now();
+    const document = parseMarkdownDocument(debugMarkdown, { dialect: "github" });
+    const parsedAt = Date.now();
+    const extractedBlocks =
+      mode === "nitro-window"
+        ? markdownDocumentWindow(document, 64)
+        : mode === "nitro-full"
+          ? markdownDocumentBlocks(document)
+          : [];
+    const finishedAt = Date.now();
+    const timing = document.getTiming();
+    const benchmarkPayload = {
+      event: "app:markdown-nitro-benchmark",
+      extractedBlocks: extractedBlocks.length,
+      mode,
+      nitroBlocks: document.blockCount,
+      nitroExtractMs: finishedAt - parsedAt,
+      nitroParseMs: parsedAt - startedAt,
+      nitroTiming: timingPayload(timing),
+      nitroTotalMs: finishedAt - startedAt,
+      sizeBytes: debugMarkdown.length,
+    };
+
+    console.log("markdown nitro benchmark", benchmarkPayload);
+    void fetch("http://127.0.0.1:37531/ll-debug", {
+      body: JSON.stringify(benchmarkPayload),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }).catch(() => {});
+    replaceDocument(document, `generated-${mode}`, extractedBlocks);
+    setStatus(
+      `Nitro ${mode.replace("nitro-", "")} benchmark ${sizeLabel}: ${document.blockCount} blocks in ${formatDuration(
+        finishedAt - startedAt,
+      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
+        timing.readMs + timing.parseMs + timing.documentMs,
+      )}.`,
+    );
+  };
+
+  const benchmarkMarkdownFile = (path: string, mode: "nitro-parse" | "nitro-window" | "nitro-full" | "json") => {
+    if (mode === "json") {
+      setStatus(`Benchmarking ${path} with JSON...`);
+      const startedAt = Date.now();
+      void parseMarkdownFile(path, { dialect: "github" }).then((parsed) => {
+        const parsedAt = Date.now();
+        const blocks = markdownViewerBlocks(parsed.blocks);
+        const finishedAt = Date.now();
+        const totalMs = finishedAt - startedAt;
+        const benchmarkPayload = {
+          event: "app:markdown-file-json-benchmark",
+          blocks: blocks.length,
+          extractMs: finishedAt - parsedAt,
+          parseMs: parsedAt - startedAt,
+          source: path,
+          totalMs,
+        };
+
+        console.log("markdown file json benchmark", benchmarkPayload);
+        void fetch("http://127.0.0.1:37531/ll-debug", {
+          body: JSON.stringify(benchmarkPayload),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }).catch(() => {});
+        setStatus(
+          `File JSON benchmark ${path.split("/").pop() ?? path}: ${blocks.length} blocks in ${formatDuration(
+            totalMs,
+          )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+        );
+      });
+      return;
+    }
+
+    setStatus(`Benchmarking ${path} with Nitro ${mode.replace("nitro-", "")}...`);
+    const startedAt = Date.now();
+    void parseMarkdownFileDocument(path, { dialect: "github" }).then((document) => {
+      const parsedAt = Date.now();
+      const extractedBlocks =
+        mode === "nitro-window"
+          ? markdownDocumentWindow(document, 64)
+          : mode === "nitro-full"
+            ? markdownDocumentBlocks(document)
+            : [];
+      const finishedAt = Date.now();
       const timing = document.getTiming();
       const benchmarkPayload = {
-        event: "app:markdown-benchmark",
-        legacyBlocks: legacyBlocks.length,
-        legacyExtractMs: legacyFinishedAt - legacyParsedAt,
-        legacyParseMs: legacyParsedAt - legacyStartedAt,
-        legacyTotalMs: legacyTotal,
+        event: "app:markdown-file-nitro-benchmark",
+        extractedBlocks: extractedBlocks.length,
+        mode,
         nitroBlocks: document.blockCount,
-        nitroParseMs: nitroParsedAt - nitroStartedAt,
+        nitroExtractMs: finishedAt - parsedAt,
+        nitroParseMs: parsedAt - startedAt,
         nitroTiming: timingPayload(timing),
-        nitroWindowBlocks: nitroWindowBlocks.length,
-        nitroWindowExtractMs: nitroWindowFinishedAt - nitroParsedAt,
-        nitroWindowTotalMs: nitroWindowTotal,
-        sizeBytes: debugMarkdown.length,
+        nitroTotalMs: finishedAt - startedAt,
+        source: path,
       };
 
-      console.log("markdown benchmark", benchmarkPayload);
+      console.log("markdown file nitro benchmark", benchmarkPayload);
       void fetch("http://127.0.0.1:37531/ll-debug", {
         body: JSON.stringify(benchmarkPayload),
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceDocument(document, "generated-benchmark", nitroWindowBlocks);
+      replaceDocument(document, path, extractedBlocks);
       setStatus(
-        `Benchmark ${markdownSizeLabel(debugMarkdown)}: Turbo JSON ${formatDuration(
-          legacyTotal,
-        )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster). Nitro native: ${formatDuration(
+        `File Nitro ${mode.replace("nitro-", "")} benchmark ${path.split("/").pop() ?? path}: ${
+          document.blockCount
+        } blocks in ${formatDuration(finishedAt - startedAt)} (${formatDuration(
+          parsedAt - startedAt,
+        )} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
           timing.readMs + timing.parseMs + timing.documentMs,
-        )} (${formatDuration(
-          nitroParsedAt - nitroStartedAt,
-        )} JS boundary).`,
+        )}.`,
       );
     });
   };
@@ -552,54 +653,17 @@ export function MarkdownParserExample() {
     });
   };
 
-  const benchmarkMarkdownFile = (path: string) => {
-    setStatus(`Benchmarking ${path}...`);
-    const legacyStartedAt = Date.now();
-    void parseMarkdownFile(path, { dialect: "github" }).then((parsed) => {
-      const legacyParsedAt = Date.now();
-      const legacyBlocks = markdownViewerBlocks(parsed.blocks);
-      const legacyFinishedAt = Date.now();
-      const nitroStartedAt = Date.now();
-      void parseMarkdownFileDocument(path, { dialect: "github" }).then((document) => {
-        const nitroParsedAt = Date.now();
-        const nitroWindowBlocks = markdownDocumentWindow(document, 64);
-        const nitroWindowFinishedAt = Date.now();
-        const legacyTotal = legacyFinishedAt - legacyStartedAt;
-        const nitroWindowTotal = nitroWindowFinishedAt - nitroStartedAt;
-        const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroWindowTotal) / legacyTotal) * 100) : 0;
-        const timing = document.getTiming();
-        const benchmarkPayload = {
-          event: "app:markdown-file-benchmark",
-          legacyBlocks: legacyBlocks.length,
-          legacyExtractMs: legacyFinishedAt - legacyParsedAt,
-          legacyParseMs: legacyParsedAt - legacyStartedAt,
-          legacyTotalMs: legacyTotal,
-          nitroBlocks: document.blockCount,
-          nitroParseMs: nitroParsedAt - nitroStartedAt,
-          nitroTiming: timingPayload(timing),
-          nitroWindowBlocks: nitroWindowBlocks.length,
-          nitroWindowExtractMs: nitroWindowFinishedAt - nitroParsedAt,
-          nitroWindowTotalMs: nitroWindowTotal,
-          source: path,
-        };
-
-        console.log("markdown file benchmark", benchmarkPayload);
-        void fetch("http://127.0.0.1:37531/ll-debug", {
-          body: JSON.stringify(benchmarkPayload),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        }).catch(() => {});
-        replaceDocument(document, path, nitroWindowBlocks);
-        setStatus(
-          `File benchmark ${path.split("/").pop() ?? path}: Turbo JSON ${formatDuration(
-            legacyTotal,
-          )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster). Nitro native: ${formatDuration(
-            timing.readMs + timing.parseMs + timing.documentMs,
-          )} (${formatDuration(
-            nitroParsedAt - nitroStartedAt,
-          )} JS boundary).`,
-        );
-      });
+  const chooseMarkdownFileForBenchmark = (mode: "nitro-parse" | "nitro-window" | "nitro-full" | "json") => {
+    void openFileDialog({
+      allowedFileTypes: ["md", "mdown", "markdown"],
+      allowsMultipleSelection: false,
+    }).then((paths) => {
+      const path = paths?.[0];
+      if (!path) {
+        setStatus("File selection canceled.");
+        return;
+      }
+      benchmarkMarkdownFile(path, mode);
     });
   };
 
@@ -612,7 +676,10 @@ export function MarkdownParserExample() {
         <Text style={styles.bodyText}>{status}</Text>
         <View style={styles.markdownViewerActions}>
           <ExampleButton onPress={loadSampleWithNitro}>Load Sample</ExampleButton>
-          <ExampleButton onPress={benchmarkGeneratedMarkdown}>Benchmark Generated</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("nitro-parse")}>Nitro Parse</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("nitro-window")}>Nitro Window</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("nitro-full")}>Nitro Full</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("json")}>JSON Compare</ExampleButton>
           <ExampleButton
             onPress={() => {
               void openFileDialog({
@@ -641,12 +708,15 @@ export function MarkdownParserExample() {
                   setStatus("File selection canceled.");
                   return;
                 }
-                benchmarkMarkdownFile(path);
+                benchmarkMarkdownFile(path, "nitro-window");
               });
             }}
           >
-            Benchmark File
+            File Window
           </ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("nitro-parse")}>File Parse</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("nitro-full")}>File Full</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("json")}>File JSON</ExampleButton>
         </View>
       </View>
       <LegendList
