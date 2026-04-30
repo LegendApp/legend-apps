@@ -10,9 +10,27 @@ const manifest = {
   },
   androidPackage: "app.legend.music",
   nativeModules: {
-    macos: [],
-    ios: [],
-    android: [],
+    macos: [
+      "@legend-desktop/audio-player",
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/file-system-watcher",
+      "@legend-desktop/media-library-scanner",
+      "@legend-desktop/media-tags",
+    ],
+    ios: [
+      "@legend-desktop/audio-player",
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/file-system-watcher",
+      "@legend-desktop/media-library-scanner",
+      "@legend-desktop/media-tags",
+    ],
+    android: [
+      "@legend-desktop/audio-player",
+      "@legend-desktop/file-dialog",
+      "@legend-desktop/file-system-watcher",
+      "@legend-desktop/media-library-scanner",
+      "@legend-desktop/media-tags",
+    ],
   },
 } satisfies AppManifest;
 

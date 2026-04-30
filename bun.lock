@@ -33,6 +33,13 @@
     "apps/music": {
       "name": "@legend-desktop/app-music",
       "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/audio-player": "0.0.0",
+        "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/file-system-watcher": "0.0.0",
+        "@legend-desktop/media-library-scanner": "0.0.0",
+        "@legend-desktop/media-tags": "0.0.0",
+      },
     },
     "apps/test-kitchen-sink": {
       "name": "@legend-desktop/app-test-kitchen-sink",
@@ -40,6 +47,7 @@
       "dependencies": {
         "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/document-scanner": "0.0.0",
@@ -71,6 +79,14 @@
     },
     "packages/appkit-split-view": {
       "name": "@legend-desktop/appkit-split-view",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/audio-player": {
+      "name": "@legend-desktop/audio-player",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -574,6 +590,8 @@
     "@legend-desktop/app-test-kitchen-sink": ["@legend-desktop/app-test-kitchen-sink@workspace:apps/test-kitchen-sink"],
 
     "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
+
+    "@legend-desktop/audio-player": ["@legend-desktop/audio-player@workspace:packages/audio-player"],
 
     "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
 

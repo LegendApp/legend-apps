@@ -8,6 +8,7 @@ import { AppRegistry, Pressable, ScrollView, Text, View } from "react-native";
 import shellPackage from "../../../shell/package.json";
 import { AppExitExample } from "./examples/app-exit";
 import { AppKitSplitViewExample } from "./examples/appkit-split-view";
+import { AudioPlayerExample } from "./examples/audio-player";
 import { AutoUpdaterExample } from "./examples/auto-updater";
 import { ContextMenuExample } from "./examples/context-menu";
 import { DocumentScannerExample } from "./examples/document-scanner";
@@ -17,7 +18,7 @@ import { FileSystemWatcherExample } from "./examples/file-system-watcher";
 import { GlassEffectViewExample } from "./examples/glass-effect-view";
 import { GlobalHotkeyExample } from "./examples/global-hotkey";
 import { MarkdownParserExample } from "./examples/markdown-parser";
-import { MediaLibraryScannerExample } from "./examples/media-library-scanner";
+import { MediaLibraryScannerExample, MusicLibrarySmokeExample } from "./examples/media-library-scanner";
 import { MediaTagsExample } from "./examples/media-tags";
 import { NativeMenuExample } from "./examples/native-menu";
 import { SFSymbolExample } from "./examples/sf-symbol";
@@ -161,6 +162,10 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
     return <AppKitSplitViewExample testId={selectedTestId} />;
   }
 
+  if (selectedPackageId === "audio-player") {
+    return <AudioPlayerExample />;
+  }
+
   if (selectedPackageId === "app-exit") {
     return <AppExitExample />;
   }
@@ -215,6 +220,9 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
   }
 
   if (selectedPackageId === "media-library-scanner") {
+    if (selectedTestId === "media-library-smoke") {
+      return <MusicLibrarySmokeExample />;
+    }
     return <MediaLibraryScannerExample />;
   }
 

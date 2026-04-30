@@ -15,6 +15,10 @@ export const packages: KitchenSinkPackage[] = [
     title: "AppKit SplitView",
   },
   {
+    id: "audio-player",
+    title: "Audio Player",
+  },
+  {
     id: "auto-updater",
     title: "Auto Updater",
   },
@@ -113,6 +117,11 @@ export const tests: KitchenSinkTestConfig[] = [
     },
   },
   {
+    id: "audio-player-basic",
+    packageId: "audio-player",
+    title: "Basic Playback",
+  },
+  {
     id: "auto-updater-status",
     packageId: "auto-updater",
     title: "Updater Status",
@@ -161,6 +170,11 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "media-library-scanner-folder",
     packageId: "media-library-scanner",
     title: "Scan Folder",
+  },
+  {
+    id: "media-library-smoke",
+    packageId: "media-library-scanner",
+    title: "Library Smoke Test",
   },
   {
     id: "media-tags-read",

@@ -2,5 +2,12 @@
   "name": "@legend-desktop/app-music",
   "version": "0.0.0",
   "private": true,
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/audio-player": "0.0.0",
+    "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/file-system-watcher": "0.0.0",
+    "@legend-desktop/media-library-scanner": "0.0.0",
+    "@legend-desktop/media-tags": "0.0.0"
+  }
 }

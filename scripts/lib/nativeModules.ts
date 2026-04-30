@@ -23,6 +23,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/audio-player",
+    root: path.join(packagesDir, "audio-player"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/native-menu",
     root: path.join(packagesDir, "native-menu"),
     platforms: ["macos", "ios", "android"],
