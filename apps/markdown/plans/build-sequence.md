@@ -153,14 +153,14 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 8: Save, Autosave, Undo, And Commands
 
-- [ ] Add `savePolicy` prop.
-- [ ] Autosave default enabled.
-- [ ] Autosave debounce is configurable and no more than 2000ms by default.
-- [ ] Save/autosave failures keep document dirty.
-- [ ] Autosave failure pauses retries until next edit or explicit Save.
-- [ ] Manual Save flushes pending editor state before writing.
-- [ ] Track saved document revision.
-- [ ] Dirty becomes false when current revision equals saved revision.
+- [x] Add `savePolicy` prop.
+- [x] Autosave default enabled.
+- [x] Autosave debounce is configurable and no more than 2000ms by default.
+- [x] Save/autosave failures keep document dirty.
+- [x] Autosave failure pauses retries until next edit or explicit Save.
+- [x] Manual Save flushes pending editor state before writing.
+- [x] Track saved document revision.
+- [x] Dirty becomes false when current revision equals saved revision.
 - [ ] Preserve undo history across saves.
 - [ ] Implement JS undo/redo stack.
 - [ ] Group continuous typing in the same block.
@@ -176,7 +176,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [ ] If prompt-save fails, show error and stay on current document.
 - [ ] Prompt Save / Discard / Cancel when closing a dirty document window.
 - [ ] If close-save fails, show error and keep window open.
-- [ ] Validate `bun run typecheck`.
+- [x] Validate `bun run typecheck`.
 - [ ] Validate manual save, autosave, undo, redo, and dirty-state transitions.
 - [ ] Commit with a `type: subject` message.
 

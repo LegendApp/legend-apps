@@ -149,6 +149,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onError,
       onLoaded,
       onSaveStateChange,
+      savePolicy,
       style,
       theme,
     },
@@ -158,9 +159,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const hydrateFrameRef = useRef<number | undefined>(undefined);
     const activeInputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
     const editTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const saveRef = useRef<(() => void) | undefined>(undefined);
     const activeBlockIdRef = useRef<string | null>(null);
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
+    const currentRevisionRef = useRef(0);
+    const savedRevisionRef = useRef(0);
+    const autosavePausedRef = useRef(false);
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -174,6 +180,34 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         editTimerRef.current = undefined;
       }
     }, []);
+
+    const clearAutosaveTimer = useCallback(() => {
+      if (autosaveTimerRef.current !== undefined) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = undefined;
+      }
+    }, []);
+
+    const autosaveEnabled = savePolicy?.autosave ?? true;
+    const autosaveDebounceMs = Math.min(Math.max(savePolicy?.debounceMs ?? 2000, 0), 2000);
+
+    const scheduleAutosave = useCallback(() => {
+      clearAutosaveTimer();
+      if (!autosaveEnabled || autosavePausedRef.current) {
+        return;
+      }
+
+      autosaveTimerRef.current = setTimeout(() => {
+        autosaveTimerRef.current = undefined;
+        saveRef.current?.();
+      }, autosaveDebounceMs);
+    }, [autosaveDebounceMs, autosaveEnabled, clearAutosaveTimer]);
+
+    const markDirty = useCallback(() => {
+      autosavePausedRef.current = false;
+      onDirtyChange?.(true);
+      scheduleAutosave();
+    }, [onDirtyChange, scheduleAutosave]);
 
     const setNextSaveState = useCallback(
       (nextSaveState: MarkdownSaveState) => {
@@ -217,6 +251,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, []);
 
     const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
+      currentRevisionRef.current = result.revision;
       setBlocksById((previousBlocksById) => {
         const nextBlocksById = new Map(previousBlocksById);
         for (const retiredBlockId of result.retiredBlockIds) {
@@ -322,13 +357,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           committedMarkdownRef.current = afterMarkdown;
           setDraftMarkdown(afterMarkdown);
           setActiveBlockId(nextActiveBlockId);
-          onDirtyChange?.(true);
+          markDirty();
         } catch (error) {
           const nextError = error instanceof Error ? error : new Error(String(error));
           onError?.(nextError);
         }
       },
-      [adapter, applyTransactionResult, clearEditTimer, documentState, onDirtyChange, onError],
+      [adapter, applyTransactionResult, clearEditTimer, documentState, markDirty, onError],
     );
 
     const handleChangeMarkdown = useCallback(
@@ -343,13 +378,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         draftMarkdownRef.current = markdown;
         setDraftMarkdown(markdown);
-        onDirtyChange?.(true);
+        markDirty();
         clearEditTimer();
         editTimerRef.current = setTimeout(() => {
           void commitActiveBlock();
         }, editDebounceMs);
       },
-      [clearEditTimer, commitActiveBlock, onDirtyChange, splitActiveBlock],
+      [clearEditTimer, commitActiveBlock, markDirty, splitActiveBlock],
     );
 
     const hydrateRemainingBlocks = useCallback(
@@ -403,9 +438,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       cancelHydration();
       clearEditTimer();
+      clearAutosaveTimer();
       activeBlockIdRef.current = null;
       draftMarkdownRef.current = "";
       committedMarkdownRef.current = "";
+      currentRevisionRef.current = 0;
+      savedRevisionRef.current = 0;
+      autosavePausedRef.current = false;
       setDocumentState({ status: "loading" });
       setBlockIds([]);
       setBlocksById(new Map());
@@ -451,8 +490,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         isCanceled = true;
         cancelHydration();
         clearEditTimer();
+        clearAutosaveTimer();
       };
-    }, [adapter, cancelHydration, clearEditTimer, filename, onDirtyChange, onError, onLoaded, setNextSaveState]);
+    }, [
+      adapter,
+      cancelHydration,
+      clearAutosaveTimer,
+      clearEditTimer,
+      filename,
+      onDirtyChange,
+      onError,
+      onLoaded,
+      setNextSaveState,
+    ]);
 
     useEffect(() => {
       if (documentState.status !== "loaded") {
@@ -470,20 +520,42 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
 
+      clearAutosaveTimer();
+      autosavePausedRef.current = false;
       setNextSaveState("saving");
       void (async () => {
         try {
           await commitActiveBlock();
           await adapter.save(documentState.snapshot.documentId);
+          savedRevisionRef.current = currentRevisionRef.current;
           setNextSaveState("idle");
-          onDirtyChange?.(false);
+          onDirtyChange?.(currentRevisionRef.current !== savedRevisionRef.current);
         } catch (error: unknown) {
           const nextError = error instanceof Error ? error : new Error(String(error));
+          autosavePausedRef.current = true;
           setNextSaveState("error");
           onError?.(nextError);
         }
       })();
-    }, [adapter, commitActiveBlock, documentState, onDirtyChange, onError, saveState, setNextSaveState]);
+    }, [
+      adapter,
+      clearAutosaveTimer,
+      commitActiveBlock,
+      documentState,
+      onDirtyChange,
+      onError,
+      saveState,
+      setNextSaveState,
+    ]);
+
+    useEffect(() => {
+      saveRef.current = save;
+      return () => {
+        if (saveRef.current === save) {
+          saveRef.current = undefined;
+        }
+      };
+    }, [save]);
 
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
