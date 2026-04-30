@@ -5,6 +5,47 @@
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
+namespace {
+
+std::string markdownBlockTypeName(MarkdownBlockType type) {
+  switch (type) {
+    case MarkdownBlockType::Document:
+      return "document";
+    case MarkdownBlockType::Quote:
+      return "quote";
+    case MarkdownBlockType::UnorderedList:
+      return "unorderedList";
+    case MarkdownBlockType::OrderedList:
+      return "orderedList";
+    case MarkdownBlockType::ListItem:
+      return "listItem";
+    case MarkdownBlockType::ThematicBreak:
+      return "thematicBreak";
+    case MarkdownBlockType::Heading:
+      return "heading";
+    case MarkdownBlockType::CodeBlock:
+      return "codeBlock";
+    case MarkdownBlockType::HtmlBlock:
+      return "htmlBlock";
+    case MarkdownBlockType::Paragraph:
+      return "paragraph";
+    case MarkdownBlockType::Table:
+      return "table";
+    case MarkdownBlockType::TableHead:
+      return "tableHead";
+    case MarkdownBlockType::TableBody:
+      return "tableBody";
+    case MarkdownBlockType::TableRow:
+      return "tableRow";
+    case MarkdownBlockType::TableHeaderCell:
+      return "tableHeaderCell";
+    case MarkdownBlockType::TableCell:
+      return "tableCell";
+  }
+}
+
+} // namespace
+
 HybridMarkdownDocument::HybridMarkdownDocument(
     std::shared_ptr<const MarkdownSource> source,
     std::vector<MarkdownBlockRange> blocks,
@@ -80,11 +121,7 @@ MarkdownDocumentTiming HybridMarkdownDocument::getTiming() {
 }
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
-  size_t size = source_->externalMemorySize() + blocks_.capacity() * sizeof(MarkdownBlockRange);
-  for (const auto& block : blocks_) {
-    size += block.type.capacity();
-  }
-  return size;
+  return source_->externalMemorySize() + blocks_.capacity() * sizeof(MarkdownBlockRange);
 }
 
 MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(
@@ -95,7 +132,7 @@ MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(
   return MarkdownBlockSnapshot(
       std::to_string(block.index),
       static_cast<double>(block.index),
-      block.type,
+      markdownBlockTypeName(block.type),
       static_cast<double>(block.depth),
       includeText ? markdown : "",
       markdown);
@@ -107,7 +144,7 @@ MarkdownRenderBlock HybridMarkdownDocument::renderBlockForBlock(
   return MarkdownRenderBlock(
       std::to_string(block.index),
       static_cast<double>(block.index),
-      block.type,
+      markdownBlockTypeName(block.type),
       static_cast<double>(block.depth),
       markdownForBlock(storageIndex, block));
 }

@@ -28,7 +28,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
 namespace {
 
 struct BlockBuilder {
-  std::string type;
+  MarkdownBlockType type = MarkdownBlockType::Paragraph;
   size_t index = 0;
   size_t depth = 0;
   size_t sourceStart = std::string::npos;
@@ -39,7 +39,7 @@ struct BlockBuilder {
 };
 
 struct StackEntry {
-  std::string type;
+  MarkdownBlockType type = MarkdownBlockType::Document;
   size_t depth = 0;
   size_t topLevelIndex = std::string::npos;
 };
@@ -286,43 +286,43 @@ bool lineInterruptsParagraph(const char* bytes, size_t start, size_t end) {
       lineStartsOrderedListAtOne(bytes, start, end);
 }
 
-std::string scannedBlockType(const char* bytes, size_t length, size_t start, size_t end) {
+MarkdownBlockType scannedBlockType(const char* bytes, size_t length, size_t start, size_t end) {
   if (lineStartsHeading(bytes, start, end)) {
-    return "heading";
+    return MarkdownBlockType::Heading;
   }
   if (lineFenceChar(bytes, start, end) != 0) {
-    return "codeBlock";
+    return MarkdownBlockType::CodeBlock;
   }
   if (lineStartsThematicBreak(bytes, start, end)) {
-    return "thematicBreak";
+    return MarkdownBlockType::ThematicBreak;
   }
   if (lineStartsBlockquote(bytes, start, end)) {
-    return "quote";
+    return MarkdownBlockType::Quote;
   }
   if (lineStartsUnorderedList(bytes, start, end)) {
-    return "unorderedList";
+    return MarkdownBlockType::UnorderedList;
   }
   if (lineStartsOrderedList(bytes, start, end)) {
-    return "orderedList";
+    return MarkdownBlockType::OrderedList;
   }
 
   const size_t nextStart = nextPhysicalLineStart(bytes, length, end);
   if (nextStart < length && lineLooksLikeTableDelimiter(bytes, nextStart, lineEnd(bytes, length, nextStart))) {
-    return "table";
+    return MarkdownBlockType::Table;
   }
 
-  return "paragraph";
+  return MarkdownBlockType::Paragraph;
 }
 
 size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char fenceChar);
 
-size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, const std::string& type) {
+size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, MarkdownBlockType type) {
   size_t end = lineEnd(bytes, length, start);
-  if (type == "heading" || type == "thematicBreak") {
+  if (type == MarkdownBlockType::Heading || type == MarkdownBlockType::ThematicBreak) {
     return end;
   }
 
-  if (type == "codeBlock") {
+  if (type == MarkdownBlockType::CodeBlock) {
     return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, start, end));
   }
 
@@ -332,7 +332,7 @@ size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, const std
     if (lineIsBlank(bytes, nextStart, nextEnd)) {
       break;
     }
-    if (type == "paragraph" && lineInterruptsParagraph(bytes, nextStart, nextEnd)) {
+    if (type == MarkdownBlockType::Paragraph && lineInterruptsParagraph(bytes, nextStart, nextEnd)) {
       break;
     }
     end = nextEnd;
@@ -419,40 +419,40 @@ size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char 
   return blockEndForText(bytes, length, offset);
 }
 
-std::string blockType(MD_BLOCKTYPE type) {
+MarkdownBlockType blockType(MD_BLOCKTYPE type) {
   switch (type) {
     case MD_BLOCK_DOC:
-      return "document";
+      return MarkdownBlockType::Document;
     case MD_BLOCK_QUOTE:
-      return "quote";
+      return MarkdownBlockType::Quote;
     case MD_BLOCK_UL:
-      return "unorderedList";
+      return MarkdownBlockType::UnorderedList;
     case MD_BLOCK_OL:
-      return "orderedList";
+      return MarkdownBlockType::OrderedList;
     case MD_BLOCK_LI:
-      return "listItem";
+      return MarkdownBlockType::ListItem;
     case MD_BLOCK_HR:
-      return "thematicBreak";
+      return MarkdownBlockType::ThematicBreak;
     case MD_BLOCK_H:
-      return "heading";
+      return MarkdownBlockType::Heading;
     case MD_BLOCK_CODE:
-      return "codeBlock";
+      return MarkdownBlockType::CodeBlock;
     case MD_BLOCK_HTML:
-      return "htmlBlock";
+      return MarkdownBlockType::HtmlBlock;
     case MD_BLOCK_P:
-      return "paragraph";
+      return MarkdownBlockType::Paragraph;
     case MD_BLOCK_TABLE:
-      return "table";
+      return MarkdownBlockType::Table;
     case MD_BLOCK_THEAD:
-      return "tableHead";
+      return MarkdownBlockType::TableHead;
     case MD_BLOCK_TBODY:
-      return "tableBody";
+      return MarkdownBlockType::TableBody;
     case MD_BLOCK_TR:
-      return "tableRow";
+      return MarkdownBlockType::TableRow;
     case MD_BLOCK_TH:
-      return "tableHeaderCell";
+      return MarkdownBlockType::TableHeaderCell;
     case MD_BLOCK_TD:
-      return "tableCell";
+      return MarkdownBlockType::TableCell;
   }
 }
 
@@ -488,7 +488,7 @@ void attachSourceRange(ParserState& state, BlockBuilder& block) {
 
   size_t start = block.sourceStart;
   size_t end = block.sourceEnd;
-  if (block.type == "codeBlock" && block.fenceChar != 0) {
+  if (block.type == MarkdownBlockType::CodeBlock && block.fenceChar != 0) {
     start = fencedCodeBlockStart(state.source, state.sourceLength, start, block.fenceChar);
     end = fencedCodeBlockEnd(state.source, state.sourceLength, end, block.fenceChar);
   } else {
@@ -502,10 +502,10 @@ void attachSourceRange(ParserState& state, BlockBuilder& block) {
 int enterBlock(MD_BLOCKTYPE type, void* detail, void* userdata) {
   auto& state = *static_cast<ParserState*>(userdata);
   const size_t depth = state.stack.size();
-  const std::string typeName = blockType(type);
+  const MarkdownBlockType typeName = blockType(type);
   size_t topLevelIndex = state.stack.empty() ? std::string::npos : state.stack.back().topLevelIndex;
 
-  if (depth == 1 && typeName != "document") {
+  if (depth == 1 && typeName != MarkdownBlockType::Document) {
     topLevelIndex = state.blocks.size();
     BlockBuilder block;
     block.index = topLevelIndex;
@@ -610,7 +610,7 @@ ParseResult scanMarkdownSource(std::shared_ptr<const MarkdownSource> source, dou
       continue;
     }
 
-    const std::string type = scannedBlockType(bytes, length, start, end);
+    const MarkdownBlockType type = scannedBlockType(bytes, length, start, end);
     end = scannedBlockEnd(bytes, length, start, type);
     blocks.push_back(MarkdownBlockRange{
         blocks.size(),

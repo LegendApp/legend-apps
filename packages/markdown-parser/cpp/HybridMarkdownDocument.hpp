@@ -18,12 +18,31 @@ public:
   virtual size_t externalMemorySize() const noexcept = 0;
 };
 
+enum class MarkdownBlockType {
+  Document,
+  Quote,
+  UnorderedList,
+  OrderedList,
+  ListItem,
+  ThematicBreak,
+  Heading,
+  CodeBlock,
+  HtmlBlock,
+  Paragraph,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeaderCell,
+  TableCell,
+};
+
 struct MarkdownBlockRange {
   size_t index = 0;
   size_t depth = 0;
   size_t markdownStart = 0;
   size_t markdownEnd = 0;
-  std::string type;
+  MarkdownBlockType type = MarkdownBlockType::Paragraph;
 };
 
 class HybridMarkdownDocument final : public HybridMarkdownDocumentSpec {
