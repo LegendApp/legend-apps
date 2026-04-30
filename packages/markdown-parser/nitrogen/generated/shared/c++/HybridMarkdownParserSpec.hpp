@@ -13,23 +13,12 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
-// Forward declaration of `HybridMarkdownDocumentSpec` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { class HybridMarkdownDocumentSpec; }
-// Forward declaration of `MarkdownFileWindowResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileWindowResult; }
-// Forward declaration of `MarkdownFileRenderWindowResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileRenderWindowResult; }
-// Forward declaration of `MarkdownBenchmarkSuiteResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBenchmarkSuiteResult; }
+// Forward declaration of `MarkdownFileLoadResult` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileLoadResult; }
 
-#include <memory>
-#include "HybridMarkdownDocumentSpec.hpp"
-#include <string>
+#include "MarkdownFileLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
-#include "MarkdownFileWindowResult.hpp"
-#include "MarkdownFileRenderWindowResult.hpp"
-#include "MarkdownBenchmarkSuiteResult.hpp"
-#include <vector>
+#include <string>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -62,17 +51,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
 
     public:
       // Methods
-      virtual std::shared_ptr<HybridMarkdownDocumentSpec> scanMarkdown(const std::string& markdown) = 0;
-      virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> scanMarkdownFile(const std::string& filePath) = 0;
-      virtual std::shared_ptr<Promise<MarkdownFileWindowResult>> scanMarkdownFileWindow(const std::string& filePath, double count) = 0;
-      virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileRenderWindow(const std::string& filePath, double count) = 0;
-      virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileLegacyRenderWindow(const std::string& filePath, double count) = 0;
-      virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> streamMarkdownFile(const std::string& filePath) = 0;
-      virtual std::shared_ptr<Promise<MarkdownFileWindowResult>> streamMarkdownFileWindow(const std::string& filePath, double count) = 0;
-      virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> streamMarkdownFileRenderWindow(const std::string& filePath, double count) = 0;
-      virtual std::shared_ptr<Promise<MarkdownBenchmarkSuiteResult>> benchmarkMarkdownFile(const std::string& filePath, const std::vector<std::string>& modes, double iterations, double warmups, double windowSize, double flags) = 0;
-      virtual std::shared_ptr<HybridMarkdownDocumentSpec> parseMarkdown(const std::string& markdown, double flags) = 0;
-      virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> parseMarkdownFile(const std::string& filePath, double flags) = 0;
+      virtual std::shared_ptr<Promise<MarkdownFileLoadResult>> loadMarkdownFile(const std::string& filePath, double initialBlockCount) = 0;
 
     protected:
       // Hybrid Setup

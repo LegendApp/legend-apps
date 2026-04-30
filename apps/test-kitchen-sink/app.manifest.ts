@@ -66,7 +66,6 @@ const manifest = {
       "@legend-desktop/global-hotkey",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
-      "@legend-desktop/markdown-parser",
       "@legend-desktop/media-tags",
       "@legend-desktop/media-library-scanner",
       "@legend-desktop/sidebar",

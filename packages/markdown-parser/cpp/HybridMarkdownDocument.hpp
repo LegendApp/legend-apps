@@ -56,17 +56,13 @@ public:
 
   double getBlockCount() override;
   double getSourceSize() override;
-  MarkdownBlockSnapshot getBlock(double index, bool includeText) override;
-  std::vector<MarkdownBlockSnapshot> getBlocks(double start, double count, bool includeText) override;
-  std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count);
-  std::string getBlockMarkdown(double index) override;
+  std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) override;
   MarkdownDocumentTiming getTiming() override;
 
 protected:
   size_t getExternalMemorySize() noexcept override;
 
 private:
-  MarkdownBlockSnapshot snapshotForBlock(size_t storageIndex, const MarkdownBlockRange& block, bool includeText) const;
   MarkdownRenderBlock renderBlockForBlock(size_t storageIndex, const MarkdownBlockRange& block) const;
   const std::string& markdownForBlock(size_t storageIndex, const MarkdownBlockRange& block) const;
   std::string sourceString(size_t start, size_t end) const;

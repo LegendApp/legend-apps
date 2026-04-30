@@ -89,7 +89,7 @@ export const nativePackages: NativePackage[] = [
   {
     name: "@legend-desktop/markdown-parser",
     root: path.join(packagesDir, "markdown-parser"),
-    platforms: ["macos", "ios", "android"],
+    platforms: ["macos", "ios"],
   },
   {
     name: "@legend-desktop/sf-symbol",

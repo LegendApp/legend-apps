@@ -4,19 +4,6 @@
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
-  "codegenConfig": {
-    "name": "RNMarkdownParserSpec",
-    "type": "modules",
-    "jsSrcsDir": "src",
-    "android": {
-      "javaPackageName": "com.legenddesktop.markdownparser"
-    },
-    "ios": {
-      "modulesProvider": {
-        "NativeMarkdownParser": "RNMarkdownParser"
-      }
-    }
-  },
   "peerDependencies": {
     "react": "*",
     "react-native": "*"

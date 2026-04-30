@@ -47,18 +47,6 @@ function KitchenSinkLauncher() {
   }, []);
 
   useEffect(() => {
-    const test = tests.find((candidate) => candidate.id === "markdown-parser-blocks");
-    const timeout = setTimeout(() => {
-      if (test) {
-        void openKitchenSinkTest(test).then((result) => {
-          setStatus(result.success ? `Opened ${test.title}` : (result.message ?? "Open failed"));
-        });
-      }
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
     const subscription = addKitchenSinkMenuListener((action) => {
       if (action.type === "package") {
         const firstTest = testsForPackage(action.id)[0];
