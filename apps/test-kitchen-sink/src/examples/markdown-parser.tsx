@@ -146,6 +146,18 @@ function markdownSnapshotBlock(block: MarkdownBlockSnapshot): MarkdownViewerBloc
   };
 }
 
+function markdownViewerBlockFromMarkdown(index: number, markdown: string): MarkdownViewerBlock {
+  return {
+    depth: 1,
+    id: String(index),
+    index,
+    markdown,
+    runs: [],
+    text: "",
+    type: "paragraph",
+  };
+}
+
 function markdownDocumentBlocks(document: MarkdownDocument, includeText = false): MarkdownViewerBlock[] {
   return markdownSnapshotBlocks(document.getBlocks(0, document.blockCount, includeText));
 }
@@ -174,7 +186,7 @@ function getCachedMarkdownBlock(
     return cached;
   }
 
-  const block = markdownSnapshotBlock(document.getBlock(index, false));
+  const block = markdownViewerBlockFromMarkdown(index, document.getBlockMarkdown(index));
   cache.set(index, block);
   return block;
 }
@@ -401,14 +413,7 @@ export function MarkdownParserExample() {
   const commitBlockMarkdown = (index: number, markdown: string) => {
     const currentBlock = document ? getCachedMarkdownBlock(document, index, blockCacheRef.current, blockOverrides) : undefined;
     const nextBlock = {
-      ...(currentBlock ?? {
-        depth: 1,
-        id: String(index),
-        index,
-        runs: [],
-        text: "",
-        type: "paragraph",
-      }),
+      ...(currentBlock ?? markdownViewerBlockFromMarkdown(index, "")),
       markdown,
       text: markdown,
     };
