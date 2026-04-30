@@ -14,6 +14,8 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     HybridObject::loadHybridMethods();
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
+      prototype.registerHybridMethod("scanMarkdown", &HybridMarkdownParserSpec::scanMarkdown);
+      prototype.registerHybridMethod("scanMarkdownFile", &HybridMarkdownParserSpec::scanMarkdownFile);
       prototype.registerHybridMethod("parseMarkdown", &HybridMarkdownParserSpec::parseMarkdown);
       prototype.registerHybridMethod("parseMarkdownFile", &HybridMarkdownParserSpec::parseMarkdownFile);
     });

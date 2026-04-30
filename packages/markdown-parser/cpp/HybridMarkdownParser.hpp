@@ -8,6 +8,9 @@ class HybridMarkdownParser final : public HybridMarkdownParserSpec {
 public:
   HybridMarkdownParser();
 
+  std::shared_ptr<HybridMarkdownDocumentSpec> scanMarkdown(const std::string& markdown) override;
+  std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> scanMarkdownFile(
+      const std::string& filePath) override;
   std::shared_ptr<HybridMarkdownDocumentSpec> parseMarkdown(const std::string& markdown, double flags) override;
   std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> parseMarkdownFile(
       const std::string& filePath,

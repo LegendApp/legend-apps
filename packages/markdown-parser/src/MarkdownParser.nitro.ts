@@ -34,6 +34,8 @@ export interface MarkdownParser
   extends HybridObject<{
     ios: "c++";
   }> {
+  scanMarkdown(markdown: string): MarkdownDocument;
+  scanMarkdownFile(filePath: string): Promise<MarkdownDocument>;
   parseMarkdown(markdown: string, flags: number): MarkdownDocument;
   parseMarkdownFile(filePath: string, flags: number): Promise<MarkdownDocument>;
 }

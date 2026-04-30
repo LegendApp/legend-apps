@@ -137,10 +137,18 @@ export function getMarkdownParserDocumentApi() {
 }
 
 export function parseMarkdownDocument(markdown: string, options: MarkdownParserOptions = {}): MarkdownDocument {
-  return getMarkdownParserDocumentApi().parseMarkdown(markdown, markdownParserFlags(options));
+  return getMarkdownParserDocumentApi().scanMarkdown(markdown);
 }
 
 export function parseMarkdownFileDocument(filePath: string, options: MarkdownParserOptions = {}) {
+  return getMarkdownParserDocumentApi().scanMarkdownFile(filePath);
+}
+
+export function parseMarkdownDocumentWithMd4c(markdown: string, options: MarkdownParserOptions = {}): MarkdownDocument {
+  return getMarkdownParserDocumentApi().parseMarkdown(markdown, markdownParserFlags(options));
+}
+
+export function parseMarkdownFileDocumentWithMd4c(filePath: string, options: MarkdownParserOptions = {}) {
   return getMarkdownParserDocumentApi().parseMarkdownFile(filePath, markdownParserFlags(options));
 }
 

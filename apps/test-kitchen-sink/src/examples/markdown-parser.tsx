@@ -2,8 +2,10 @@ import { openFileDialog } from "@legend-desktop/file-dialog";
 import {
   parseMarkdown,
   parseMarkdownDocument,
+  parseMarkdownDocumentWithMd4c,
   parseMarkdownFile,
   parseMarkdownFileDocument,
+  parseMarkdownFileDocumentWithMd4c,
   type MarkdownBlock,
   type MarkdownBlockSnapshot,
   type MarkdownDocument,
@@ -41,6 +43,7 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 `;
 
 type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
+type MarkdownBenchmarkMode = "scan-parse" | "scan-window" | "scan-full" | "md4c-window" | "json";
 
 const markdownViewerStyle: MarkdownStyle = {
   blockquote: {
@@ -207,6 +210,10 @@ function createGeneratedMarkdown(sectionCount: number) {
 
 function markdownSizeLabel(markdown: string) {
   return `${(markdown.length / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
+  return mode === "md4c-window" ? "md4c window" : mode.replace("scan-", "scan ");
 }
 
 function timingPayload(timing: MarkdownDocumentTiming) {
@@ -477,7 +484,7 @@ export function MarkdownParserExample() {
     );
   };
 
-  const benchmarkGeneratedMarkdown = (mode: "nitro-parse" | "nitro-window" | "nitro-full" | "json") => {
+  const benchmarkGeneratedMarkdown = (mode: MarkdownBenchmarkMode) => {
     const debugMarkdown = createGeneratedMarkdown(8000);
     const sizeLabel = markdownSizeLabel(debugMarkdown);
 
@@ -513,14 +520,17 @@ export function MarkdownParserExample() {
       return;
     }
 
-    setStatus(`Benchmarking ${sizeLabel} generated markdown with Nitro ${mode.replace("nitro-", "")}...`);
+    setStatus(`Benchmarking ${sizeLabel} generated markdown with ${benchmarkModeLabel(mode)}...`);
     const startedAt = Date.now();
-    const document = parseMarkdownDocument(debugMarkdown, { dialect: "github" });
+    const document =
+      mode === "md4c-window"
+        ? parseMarkdownDocumentWithMd4c(debugMarkdown, { dialect: "github" })
+        : parseMarkdownDocument(debugMarkdown, { dialect: "github" });
     const parsedAt = Date.now();
     const extractedBlocks =
-      mode === "nitro-window"
+      mode === "scan-window" || mode === "md4c-window"
         ? markdownDocumentWindow(document, 64)
-        : mode === "nitro-full"
+        : mode === "scan-full"
           ? markdownDocumentBlocks(document)
           : [];
     const finishedAt = Date.now();
@@ -545,7 +555,7 @@ export function MarkdownParserExample() {
     }).catch(() => {});
     replaceDocument(document, `generated-${mode}`, extractedBlocks);
     setStatus(
-      `Nitro ${mode.replace("nitro-", "")} benchmark ${sizeLabel}: ${document.blockCount} blocks in ${formatDuration(
+      `${benchmarkModeLabel(mode)} benchmark ${sizeLabel}: ${document.blockCount} blocks in ${formatDuration(
         finishedAt - startedAt,
       )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
         timing.readMs + timing.parseMs + timing.documentMs,
@@ -553,7 +563,7 @@ export function MarkdownParserExample() {
     );
   };
 
-  const benchmarkMarkdownFile = (path: string, mode: "nitro-parse" | "nitro-window" | "nitro-full" | "json") => {
+  const benchmarkMarkdownFile = (path: string, mode: MarkdownBenchmarkMode) => {
     if (mode === "json") {
       setStatus(`Benchmarking ${path} with JSON...`);
       const startedAt = Date.now();
@@ -586,14 +596,18 @@ export function MarkdownParserExample() {
       return;
     }
 
-    setStatus(`Benchmarking ${path} with Nitro ${mode.replace("nitro-", "")}...`);
+    setStatus(`Benchmarking ${path} with ${benchmarkModeLabel(mode)}...`);
     const startedAt = Date.now();
-    void parseMarkdownFileDocument(path, { dialect: "github" }).then((document) => {
+    const documentPromise =
+      mode === "md4c-window"
+        ? parseMarkdownFileDocumentWithMd4c(path, { dialect: "github" })
+        : parseMarkdownFileDocument(path, { dialect: "github" });
+    void documentPromise.then((document) => {
       const parsedAt = Date.now();
       const extractedBlocks =
-        mode === "nitro-window"
+        mode === "scan-window" || mode === "md4c-window"
           ? markdownDocumentWindow(document, 64)
-          : mode === "nitro-full"
+          : mode === "scan-full"
             ? markdownDocumentBlocks(document)
             : [];
       const finishedAt = Date.now();
@@ -618,7 +632,7 @@ export function MarkdownParserExample() {
       }).catch(() => {});
       replaceDocument(document, path, extractedBlocks);
       setStatus(
-        `File Nitro ${mode.replace("nitro-", "")} benchmark ${path.split("/").pop() ?? path}: ${
+        `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
           document.blockCount
         } blocks in ${formatDuration(finishedAt - startedAt)} (${formatDuration(
           parsedAt - startedAt,
@@ -660,7 +674,7 @@ export function MarkdownParserExample() {
     });
   };
 
-  const chooseMarkdownFileForBenchmark = (mode: "nitro-parse" | "nitro-window" | "nitro-full" | "json") => {
+  const chooseMarkdownFileForBenchmark = (mode: MarkdownBenchmarkMode) => {
     void openFileDialog({
       allowedFileTypes: ["md", "mdown", "markdown"],
       allowsMultipleSelection: false,
@@ -683,9 +697,10 @@ export function MarkdownParserExample() {
         <Text style={styles.bodyText}>{status}</Text>
         <View style={styles.markdownViewerActions}>
           <ExampleButton onPress={loadSampleWithNitro}>Load Sample</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("nitro-parse")}>Nitro Parse</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("nitro-window")}>Nitro Window</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("nitro-full")}>Nitro Full</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-parse")}>Scan Parse</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-window")}>Scan Window</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-full")}>Scan Full</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-window")}>MD4C Window</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("json")}>JSON Compare</ExampleButton>
           <ExampleButton
             onPress={() => {
@@ -715,14 +730,15 @@ export function MarkdownParserExample() {
                   setStatus("File selection canceled.");
                   return;
                 }
-                benchmarkMarkdownFile(path, "nitro-window");
+                benchmarkMarkdownFile(path, "scan-window");
               });
             }}
           >
             File Window
           </ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("nitro-parse")}>File Parse</ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("nitro-full")}>File Full</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-parse")}>File Parse</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("json")}>File JSON</ExampleButton>
         </View>
       </View>

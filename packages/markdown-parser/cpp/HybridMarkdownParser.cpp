@@ -118,6 +118,136 @@ bool lineStartsFence(const char* bytes, size_t start, size_t end, char fenceChar
   return fenceCount >= 3;
 }
 
+char lineFenceChar(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  if (start >= end || (bytes[start] != '`' && bytes[start] != '~')) {
+    return 0;
+  }
+  return lineStartsFence(bytes, start, end, bytes[start]) ? bytes[start] : 0;
+}
+
+bool lineStartsBlockquote(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  return start < end && bytes[start] == '>';
+}
+
+bool lineStartsUnorderedList(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  return start + 1 < end && (bytes[start] == '-' || bytes[start] == '*' || bytes[start] == '+') && isWhitespace(bytes[start + 1]);
+}
+
+bool lineStartsOrderedList(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  size_t index = start;
+  while (index < end && bytes[index] >= '0' && bytes[index] <= '9') {
+    index += 1;
+  }
+  return index > start && index + 1 < end && (bytes[index] == '.' || bytes[index] == ')') && isWhitespace(bytes[index + 1]);
+}
+
+bool lineStartsThematicBreak(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  if (start >= end || (bytes[start] != '-' && bytes[start] != '*' && bytes[start] != '_')) {
+    return false;
+  }
+
+  const char marker = bytes[start];
+  size_t count = 0;
+  for (size_t index = start; index < end; index += 1) {
+    if (bytes[index] == marker) {
+      count += 1;
+    } else if (!isWhitespace(bytes[index])) {
+      return false;
+    }
+  }
+  return count >= 3;
+}
+
+bool lineLooksLikeTableDelimiter(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  bool hasDash = false;
+  bool hasPipe = false;
+  for (size_t index = start; index < end; index += 1) {
+    const char value = bytes[index];
+    if (value == '-') {
+      hasDash = true;
+    } else if (value == '|') {
+      hasPipe = true;
+    } else if (value != ':' && !isWhitespace(value)) {
+      return false;
+    }
+  }
+  return hasDash && hasPipe;
+}
+
+size_t nextLineStart(const char* bytes, size_t length, size_t end) {
+  while (end < length && isLineBreak(bytes[end])) {
+    end += 1;
+  }
+  return end;
+}
+
+bool lineStartsBoundaryBlock(const char* bytes, size_t start, size_t end) {
+  return lineStartsHeading(bytes, start, end) ||
+      lineFenceChar(bytes, start, end) != 0 ||
+      lineStartsThematicBreak(bytes, start, end);
+}
+
+std::string scannedBlockType(const char* bytes, size_t length, size_t start, size_t end) {
+  if (lineStartsHeading(bytes, start, end)) {
+    return "heading";
+  }
+  if (lineFenceChar(bytes, start, end) != 0) {
+    return "codeBlock";
+  }
+  if (lineStartsThematicBreak(bytes, start, end)) {
+    return "thematicBreak";
+  }
+  if (lineStartsBlockquote(bytes, start, end)) {
+    return "quote";
+  }
+  if (lineStartsUnorderedList(bytes, start, end)) {
+    return "unorderedList";
+  }
+  if (lineStartsOrderedList(bytes, start, end)) {
+    return "orderedList";
+  }
+
+  const size_t nextStart = nextLineStart(bytes, length, end);
+  if (nextStart < length && lineLooksLikeTableDelimiter(bytes, nextStart, lineEnd(bytes, length, nextStart))) {
+    return "table";
+  }
+
+  return "paragraph";
+}
+
+size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char fenceChar);
+
+size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, const std::string& type) {
+  size_t end = lineEnd(bytes, length, start);
+  if (type == "heading" || type == "thematicBreak") {
+    return end;
+  }
+
+  if (type == "codeBlock") {
+    return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, start, end));
+  }
+
+  size_t nextStart = nextLineStart(bytes, length, end);
+  while (nextStart < length) {
+    const size_t nextEnd = lineEnd(bytes, length, nextStart);
+    if (lineIsBlank(bytes, nextStart, nextEnd)) {
+      break;
+    }
+    if (type == "paragraph" && lineStartsBoundaryBlock(bytes, nextStart, nextEnd)) {
+      break;
+    }
+    end = nextEnd;
+    nextStart = nextLineStart(bytes, length, end);
+  }
+  return end;
+}
+
 size_t blockStartForText(const char* bytes, size_t length, size_t offset) {
   size_t start = lineStart(bytes, std::min(offset, length));
   const size_t end = lineEnd(bytes, length, start);
@@ -373,6 +503,43 @@ ParseResult parseMarkdownSource(std::string markdown, double flags, double readM
   };
 }
 
+ParseResult scanMarkdownSource(std::string markdown, double readMs) {
+  const auto scanStartedAt = Clock::now();
+  const char* bytes = markdown.data();
+  const size_t length = markdown.size();
+  std::vector<MarkdownBlockRange> blocks;
+  size_t start = 0;
+
+  while (start < length) {
+    size_t end = lineEnd(bytes, length, start);
+    if (lineIsBlank(bytes, start, end)) {
+      start = nextLineStart(bytes, length, end);
+      continue;
+    }
+
+    const std::string type = scannedBlockType(bytes, length, start, end);
+    end = scannedBlockEnd(bytes, length, start, type);
+    blocks.push_back(MarkdownBlockRange{
+        blocks.size(),
+        1,
+        start,
+        std::min(end, length),
+        type,
+    });
+    start = nextLineStart(bytes, length, end);
+  }
+
+  const double blockRangeMs = elapsedMs(scanStartedAt, Clock::now());
+  return ParseResult{
+      std::move(markdown),
+      std::move(blocks),
+      readMs,
+      0,
+      blockRangeMs,
+      blockRangeMs,
+  };
+}
+
 std::string normalizeFilePath(const std::string& filePath) {
   constexpr auto prefix = std::string_view("file://");
   if (filePath.starts_with(prefix)) {
@@ -409,6 +576,20 @@ std::shared_ptr<HybridMarkdownDocumentSpec> createDocument(ParseResult result) {
 } // namespace
 
 HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
+
+std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::scanMarkdown(const std::string& markdown) {
+  return createDocument(scanMarkdownSource(markdown, 0));
+}
+
+std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMarkdownParser::scanMarkdownFile(
+    const std::string& filePath) {
+  return Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>::async([filePath]() -> std::shared_ptr<HybridMarkdownDocumentSpec> {
+    const auto readStartedAt = Clock::now();
+    std::string source = readFile(filePath);
+    const auto readFinishedAt = Clock::now();
+    return createDocument(scanMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+  });
+}
 
 std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::parseMarkdown(
     const std::string& markdown,
