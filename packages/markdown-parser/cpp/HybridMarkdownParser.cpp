@@ -329,23 +329,47 @@ bool lineInterruptsParagraph(const char* bytes, const LineInfo& line) {
 }
 
 MarkdownBlockType scannedBlockType(const char* bytes, size_t length, const LineInfo& line) {
-  if (lineStartsHeading(bytes, line)) {
-    return MarkdownBlockType::Heading;
-  }
-  if (lineFenceChar(bytes, line) != 0) {
-    return MarkdownBlockType::CodeBlock;
-  }
-  if (lineStartsThematicBreak(bytes, line)) {
-    return MarkdownBlockType::ThematicBreak;
-  }
-  if (lineStartsBlockquote(line)) {
-    return MarkdownBlockType::Quote;
-  }
-  if (lineStartsUnorderedList(bytes, line)) {
-    return MarkdownBlockType::UnorderedList;
-  }
-  if (lineStartsOrderedList(bytes, line)) {
-    return MarkdownBlockType::OrderedList;
+  switch (line.first) {
+    case '#':
+      if (lineStartsHeading(bytes, line)) {
+        return MarkdownBlockType::Heading;
+      }
+      break;
+    case '`':
+    case '~':
+      if (lineFenceChar(bytes, line) != 0) {
+        return MarkdownBlockType::CodeBlock;
+      }
+      break;
+    case '-':
+    case '*':
+      if (lineStartsThematicBreak(bytes, line)) {
+        return MarkdownBlockType::ThematicBreak;
+      }
+      if (lineStartsUnorderedList(bytes, line)) {
+        return MarkdownBlockType::UnorderedList;
+      }
+      break;
+    case '_':
+      if (lineStartsThematicBreak(bytes, line)) {
+        return MarkdownBlockType::ThematicBreak;
+      }
+      break;
+    case '>':
+      if (lineStartsBlockquote(line)) {
+        return MarkdownBlockType::Quote;
+      }
+      break;
+    case '+':
+      if (lineStartsUnorderedList(bytes, line)) {
+        return MarkdownBlockType::UnorderedList;
+      }
+      break;
+    default:
+      if (line.first >= '0' && line.first <= '9' && lineStartsOrderedList(bytes, line)) {
+        return MarkdownBlockType::OrderedList;
+      }
+      break;
   }
 
   const size_t nextStart = nextPhysicalLineStart(bytes, length, line.end);
