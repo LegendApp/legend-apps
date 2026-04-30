@@ -11,6 +11,7 @@ import {
   scanMarkdown,
   scanMarkdownFile,
   type MarkdownBlock,
+  type MarkdownBenchmarkStats,
   type MarkdownBlockSnapshot,
   type MarkdownDocument,
   type MarkdownDocumentTiming,
@@ -222,6 +223,14 @@ function formatDuration(durationMs: number) {
   return durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`;
 }
 
+function formatPreciseDuration(durationMs: number) {
+  return durationMs < 1000 ? `${durationMs.toFixed(2)}ms` : `${(durationMs / 1000).toFixed(3)}s`;
+}
+
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
 function createGeneratedMarkdown(sectionCount: number) {
   return Array.from(
     { length: sectionCount },
@@ -236,7 +245,10 @@ function markdownSizeLabel(markdown: string) {
   return `${(markdown.length / 1024 / 1024).toFixed(2)} MB`;
 }
 
-function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
+function benchmarkModeLabel(mode: string) {
+  if (mode === "json") {
+    return "JSON";
+  }
   if (mode === "md4c-window") {
     return "md4c window";
   }
@@ -254,6 +266,65 @@ function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
   }
   return mode.replace("scan-", "scan ");
 }
+
+function benchmarkStatsLabel(stats: MarkdownBenchmarkStats) {
+  return `${benchmarkModeLabel(stats.mode)} median ${formatPreciseDuration(stats.medianMs)} p95 ${formatPreciseDuration(
+    stats.p95Ms,
+  )} min ${formatPreciseDuration(stats.minMs)} sd ${formatPreciseDuration(stats.standardDeviationMs)}`;
+}
+
+function percentileValue(sortedSamples: readonly number[], percentile: number) {
+  if (sortedSamples.length === 0) {
+    return 0;
+  }
+  const rawIndex = percentile * (sortedSamples.length - 1);
+  const lowerIndex = Math.floor(rawIndex);
+  const upperIndex = Math.min(sortedSamples.length - 1, lowerIndex + 1);
+  const fraction = rawIndex - lowerIndex;
+  return sortedSamples[lowerIndex] + (sortedSamples[upperIndex] - sortedSamples[lowerIndex]) * fraction;
+}
+
+function benchmarkStatsFromSamples(
+  mode: MarkdownBenchmarkMode,
+  samplesMs: readonly number[],
+  blockCount: number,
+  extractedBlockCount: number,
+  warmups: number,
+  windowSize: number,
+  sourceBytes: number,
+): MarkdownBenchmarkStats {
+  const sortedSamples = [...samplesMs].sort((a, b) => a - b);
+  const meanMs = samplesMs.reduce((total, sample) => total + sample, 0) / Math.max(1, samplesMs.length);
+  const variance =
+    samplesMs.reduce((total, sample) => {
+      const delta = sample - meanMs;
+      return total + delta * delta;
+    }, 0) / Math.max(1, samplesMs.length);
+
+  return {
+    blockCount,
+    extractedBlockCount,
+    iterations: samplesMs.length,
+    maxMs: sortedSamples.at(-1) ?? 0,
+    meanMs,
+    medianMs: percentileValue(sortedSamples, 0.5),
+    minMs: sortedSamples[0] ?? 0,
+    mode,
+    p90Ms: percentileValue(sortedSamples, 0.9),
+    p95Ms: percentileValue(sortedSamples, 0.95),
+    samplesMs: [...samplesMs],
+    sourceBytes,
+    standardDeviationMs: Math.sqrt(variance),
+    warmups,
+    windowSize,
+  };
+}
+
+type MarkdownFileBenchmarkSample = {
+  blockCount: number;
+  extractedBlockCount: number;
+  sourceBytes: number;
+};
 
 function timingPayload(timing: MarkdownDocumentTiming) {
   return {
@@ -798,6 +869,143 @@ export function MarkdownParserExample() {
     });
   };
 
+  const runMarkdownFileBenchmarkMode = async (
+    path: string,
+    mode: MarkdownBenchmarkMode,
+    windowSize: number,
+  ): Promise<MarkdownFileBenchmarkSample> => {
+    if (mode === "json" || mode === "turbo-scan-json") {
+      const parsed =
+        mode === "turbo-scan-json"
+          ? await scanMarkdownFile(path, { dialect: "github" })
+          : await parseMarkdownFile(path, { dialect: "github" });
+      const blocks = markdownViewerBlocks(parsed.blocks);
+      return {
+        blockCount: parsed.blocks.length,
+        extractedBlockCount: blocks.length,
+        sourceBytes: 0,
+      };
+    }
+
+    if (mode === "scan-window-combined") {
+      const result = await parseMarkdownFileDocumentWindow(path, windowSize);
+      const blocks = markdownSnapshotBlocks(result.blocks);
+      return {
+        blockCount: result.document.blockCount,
+        extractedBlockCount: blocks.length,
+        sourceBytes: result.document.sourceSize,
+      };
+    }
+
+    if (mode === "scan-render-shape") {
+      const result = await parseMarkdownFileDocumentRenderWindow(path, windowSize);
+      const blocks = markdownRenderBlocks(result.blocks);
+      return {
+        blockCount: result.document.blockCount,
+        extractedBlockCount: blocks.length,
+        sourceBytes: result.document.sourceSize,
+      };
+    }
+
+    const document =
+      mode === "md4c-window" || mode === "md4c-full"
+        ? await parseMarkdownFileDocumentWithMd4c(path, { dialect: "github" })
+        : await parseMarkdownFileDocument(path, { dialect: "github" });
+    const blocks =
+      mode === "scan-window" || mode === "md4c-window"
+        ? markdownDocumentWindow(document, windowSize)
+        : markdownDocumentBlocks(document);
+    return {
+      blockCount: document.blockCount,
+      extractedBlockCount: blocks.length,
+      sourceBytes: document.sourceSize,
+    };
+  };
+
+  const benchmarkMarkdownFileBatch = (path: string) => {
+    const modes: MarkdownBenchmarkMode[] = [
+      "scan-window",
+      "scan-window-combined",
+      "scan-render-shape",
+      "scan-full",
+      "md4c-window",
+      "md4c-full",
+      "json",
+      "turbo-scan-json",
+    ];
+    const iterations = 50;
+    const warmups = 5;
+    const windowSize = 64;
+    setStatus(`Running file batch benchmark for ${path}...`);
+    void (async () => {
+      try {
+        const samplesByMode = modes.map(() => ({
+          blockCount: 0,
+          extractedBlockCount: 0,
+          sourceBytes: 0,
+          samplesMs: [] as number[],
+        }));
+
+        for (let index = 0; index < warmups; index += 1) {
+          for (const mode of modes) {
+            await runMarkdownFileBenchmarkMode(path, mode, windowSize);
+          }
+        }
+
+        for (let index = 0; index < iterations; index += 1) {
+          for (let modeIndex = 0; modeIndex < modes.length; modeIndex += 1) {
+            const mode = modes[modeIndex];
+            const startedAt = nowMs();
+            const sample = await runMarkdownFileBenchmarkMode(path, mode, windowSize);
+            const samples = samplesByMode[modeIndex];
+            samples.samplesMs.push(nowMs() - startedAt);
+            samples.blockCount = sample.blockCount;
+            samples.extractedBlockCount = sample.extractedBlockCount;
+            samples.sourceBytes = sample.sourceBytes;
+          }
+        }
+
+        const sourceBytes = samplesByMode.find((samples) => samples.sourceBytes > 0)?.sourceBytes ?? 0;
+        const results = modes.map((mode, index) => {
+          const samples = samplesByMode[index];
+          return benchmarkStatsFromSamples(
+            mode,
+            samples.samplesMs,
+            samples.blockCount,
+            samples.extractedBlockCount,
+            warmups,
+            windowSize,
+            samples.sourceBytes || sourceBytes,
+          );
+        });
+        const result = {
+          sourceBytes,
+          results,
+        };
+        const benchmarkPayload = {
+          event: "app:markdown-file-batch-benchmark",
+          iterations,
+          result,
+          source: path,
+          warmups,
+          windowSize,
+        };
+
+        console.log("markdown file batch benchmark", benchmarkPayload);
+        void fetch("http://127.0.0.1:37531/ll-debug", {
+          body: JSON.stringify(benchmarkPayload),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        }).catch(() => {});
+        setStatus(
+          `File batch ${path.split("/").pop() ?? path}:\n${result.results.map(benchmarkStatsLabel).join("\n")}`,
+        );
+      } catch (error) {
+        setStatus(`File batch benchmark failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    })();
+  };
+
   const loadMarkdownFileWithNitro = (path: string) => {
     setStatus(`Parsing ${path} with Nitro...`);
     const startedAt = Date.now();
@@ -840,6 +1048,20 @@ export function MarkdownParserExample() {
         return;
       }
       benchmarkMarkdownFile(path, mode);
+    });
+  };
+
+  const chooseMarkdownFileForBatch = () => {
+    void openFileDialog({
+      allowedFileTypes: ["md", "mdown", "markdown"],
+      allowsMultipleSelection: false,
+    }).then((paths) => {
+      const path = paths?.[0];
+      if (!path) {
+        setStatus("File selection canceled.");
+        return;
+      }
+      benchmarkMarkdownFileBatch(path);
     });
   };
 
@@ -903,6 +1125,7 @@ export function MarkdownParserExample() {
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("turbo-scan-json")}>
             File Turbo Scanner JSON
           </ExampleButton>
+          <ExampleButton onPress={chooseMarkdownFileForBatch}>File Batch</ExampleButton>
         </View>
       </View>
       <LegendList

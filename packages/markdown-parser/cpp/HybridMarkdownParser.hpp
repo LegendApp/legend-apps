@@ -15,6 +15,13 @@ public:
   std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileRenderWindow(
       const std::string& filePath,
       double count) override;
+  std::shared_ptr<Promise<MarkdownBenchmarkSuiteResult>> benchmarkMarkdownFile(
+      const std::string& filePath,
+      const std::vector<std::string>& modes,
+      double iterations,
+      double warmups,
+      double windowSize,
+      double flags) override;
   std::shared_ptr<HybridMarkdownDocumentSpec> parseMarkdown(const std::string& markdown, double flags) override;
   std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> parseMarkdownFile(
       const std::string& filePath,

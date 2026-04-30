@@ -19,6 +19,8 @@ namespace margelo::nitro::legenddesktop::markdownparser { class HybridMarkdownDo
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileWindowResult; }
 // Forward declaration of `MarkdownFileRenderWindowResult` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileRenderWindowResult; }
+// Forward declaration of `MarkdownBenchmarkSuiteResult` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBenchmarkSuiteResult; }
 
 #include <memory>
 #include "HybridMarkdownDocumentSpec.hpp"
@@ -26,6 +28,8 @@ namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileRen
 #include <NitroModules/Promise.hpp>
 #include "MarkdownFileWindowResult.hpp"
 #include "MarkdownFileRenderWindowResult.hpp"
+#include "MarkdownBenchmarkSuiteResult.hpp"
+#include <vector>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -62,6 +66,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> scanMarkdownFile(const std::string& filePath) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileWindowResult>> scanMarkdownFileWindow(const std::string& filePath, double count) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileRenderWindow(const std::string& filePath, double count) = 0;
+      virtual std::shared_ptr<Promise<MarkdownBenchmarkSuiteResult>> benchmarkMarkdownFile(const std::string& filePath, const std::vector<std::string>& modes, double iterations, double warmups, double windowSize, double flags) = 0;
       virtual std::shared_ptr<HybridMarkdownDocumentSpec> parseMarkdown(const std::string& markdown, double flags) = 0;
       virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> parseMarkdownFile(const std::string& filePath, double flags) = 0;
 

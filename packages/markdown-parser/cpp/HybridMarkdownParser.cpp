@@ -8,6 +8,7 @@ extern "C" {
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -58,6 +59,12 @@ struct ParseResult {
   double mdParseMs = 0;
   double blockRangeMs = 0;
   double parseMs = 0;
+};
+
+struct BenchmarkSample {
+  double elapsedMs = 0;
+  double blockCount = 0;
+  double extractedBlockCount = 0;
 };
 
 struct LineInfo {
@@ -799,6 +806,111 @@ std::shared_ptr<HybridMarkdownDocument> createDocument(ParseResult result) {
   return document;
 }
 
+double percentileValue(const std::vector<double>& sortedSamples, double percentile) {
+  if (sortedSamples.empty()) {
+    return 0;
+  }
+  const double rawIndex = percentile * static_cast<double>(sortedSamples.size() - 1);
+  const size_t lowerIndex = static_cast<size_t>(std::floor(rawIndex));
+  const size_t upperIndex = std::min(sortedSamples.size() - 1, lowerIndex + 1);
+  const double fraction = rawIndex - static_cast<double>(lowerIndex);
+  return sortedSamples[lowerIndex] + (sortedSamples[upperIndex] - sortedSamples[lowerIndex]) * fraction;
+}
+
+MarkdownBenchmarkStats benchmarkStats(
+    const std::string& mode,
+    const std::vector<BenchmarkSample>& samples,
+    size_t warmups,
+    size_t windowSize,
+    size_t sourceBytes) {
+  std::vector<double> sampleTimes;
+  sampleTimes.reserve(samples.size());
+  double totalMs = 0;
+  double blockCount = 0;
+  double extractedBlockCount = 0;
+
+  for (const auto& sample : samples) {
+    sampleTimes.push_back(sample.elapsedMs);
+    totalMs += sample.elapsedMs;
+    blockCount = sample.blockCount;
+    extractedBlockCount = sample.extractedBlockCount;
+  }
+
+  std::vector<double> sortedTimes = sampleTimes;
+  std::sort(sortedTimes.begin(), sortedTimes.end());
+  const double meanMs = sampleTimes.empty() ? 0 : totalMs / static_cast<double>(sampleTimes.size());
+  double variance = 0;
+  for (const double sampleMs : sampleTimes) {
+    const double delta = sampleMs - meanMs;
+    variance += delta * delta;
+  }
+  if (!sampleTimes.empty()) {
+    variance /= static_cast<double>(sampleTimes.size());
+  }
+
+  return MarkdownBenchmarkStats(
+      mode,
+      blockCount,
+      extractedBlockCount,
+      static_cast<double>(samples.size()),
+      static_cast<double>(warmups),
+      static_cast<double>(windowSize),
+      static_cast<double>(sourceBytes),
+      sortedTimes.empty() ? 0 : sortedTimes.front(),
+      percentileValue(sortedTimes, 0.5),
+      meanMs,
+      percentileValue(sortedTimes, 0.9),
+      percentileValue(sortedTimes, 0.95),
+      sortedTimes.empty() ? 0 : sortedTimes.back(),
+      std::sqrt(variance),
+      std::move(sampleTimes));
+}
+
+BenchmarkSample runBenchmarkMode(
+    const std::shared_ptr<const MarkdownSource>& source,
+    const std::string& mode,
+    size_t windowSize,
+    double flags) {
+  const auto startedAt = Clock::now();
+  double blockCount = 0;
+  double extractedBlockCount = 0;
+
+  if (mode == "scan-window" || mode == "scan-window-combined") {
+    auto document = createDocument(scanMarkdownSource(source, 0));
+    auto blocks = document->getBlocks(0, static_cast<double>(windowSize), false);
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "scan-render-shape") {
+    auto document = createDocument(scanMarkdownSource(source, 0));
+    auto blocks = document->getRenderBlocks(0, static_cast<double>(windowSize));
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "scan-full") {
+    auto document = createDocument(scanMarkdownSource(source, 0));
+    auto blocks = document->getBlocks(0, document->getBlockCount(), false);
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "md4c-window") {
+    auto document = createDocument(parseMarkdownSource(source, flags, 0));
+    auto blocks = document->getBlocks(0, static_cast<double>(windowSize), false);
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "md4c-full") {
+    auto document = createDocument(parseMarkdownSource(source, flags, 0));
+    auto blocks = document->getBlocks(0, document->getBlockCount(), false);
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else {
+    throw std::invalid_argument("Unknown markdown benchmark mode: " + mode);
+  }
+
+  return BenchmarkSample{
+      elapsedMs(startedAt, Clock::now()),
+      blockCount,
+      extractedBlockCount,
+  };
+}
+
 } // namespace
 
 HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
@@ -845,6 +957,51 @@ std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> HybridMarkdownParser::s
     result.blocks = document->getRenderBlocks(0, count);
     return result;
   });
+}
+
+std::shared_ptr<Promise<MarkdownBenchmarkSuiteResult>> HybridMarkdownParser::benchmarkMarkdownFile(
+    const std::string& filePath,
+    const std::vector<std::string>& modes,
+    double iterations,
+    double warmups,
+    double windowSize,
+    double flags) {
+  return Promise<MarkdownBenchmarkSuiteResult>::async(
+      [filePath, modes, iterations, warmups, windowSize, flags]() -> MarkdownBenchmarkSuiteResult {
+        auto source = readFileSource(filePath);
+        const size_t safeIterations = static_cast<size_t>(std::max(1.0, iterations));
+        const size_t safeWarmups = static_cast<size_t>(std::max(0.0, warmups));
+        const size_t safeWindowSize = static_cast<size_t>(std::max(0.0, windowSize));
+        const std::vector<std::string> safeModes = modes.empty()
+            ? std::vector<std::string>{"scan-render-shape"}
+            : modes;
+
+        for (size_t index = 0; index < safeWarmups; index += 1) {
+          for (const auto& mode : safeModes) {
+            runBenchmarkMode(source, mode, safeWindowSize, flags);
+          }
+        }
+
+        std::vector<std::vector<BenchmarkSample>> samplesByMode(safeModes.size());
+        for (size_t index = 0; index < safeIterations; index += 1) {
+          for (size_t modeIndex = 0; modeIndex < safeModes.size(); modeIndex += 1) {
+            samplesByMode[modeIndex].push_back(runBenchmarkMode(source, safeModes[modeIndex], safeWindowSize, flags));
+          }
+        }
+
+        std::vector<MarkdownBenchmarkStats> results;
+        results.reserve(safeModes.size());
+        for (size_t modeIndex = 0; modeIndex < safeModes.size(); modeIndex += 1) {
+          results.push_back(benchmarkStats(
+              safeModes[modeIndex],
+              samplesByMode[modeIndex],
+              safeWarmups,
+              safeWindowSize,
+              source->size()));
+        }
+
+        return MarkdownBenchmarkSuiteResult(static_cast<double>(source->size()), std::move(results));
+      });
 }
 
 std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::parseMarkdown(

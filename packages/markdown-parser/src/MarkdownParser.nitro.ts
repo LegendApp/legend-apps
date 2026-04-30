@@ -35,6 +35,29 @@ export interface MarkdownFileRenderWindowResult {
   blocks: MarkdownRenderBlock[];
 }
 
+export interface MarkdownBenchmarkStats {
+  mode: string;
+  blockCount: number;
+  extractedBlockCount: number;
+  iterations: number;
+  warmups: number;
+  windowSize: number;
+  sourceBytes: number;
+  minMs: number;
+  medianMs: number;
+  meanMs: number;
+  p90Ms: number;
+  p95Ms: number;
+  maxMs: number;
+  standardDeviationMs: number;
+  samplesMs: number[];
+}
+
+export interface MarkdownBenchmarkSuiteResult {
+  sourceBytes: number;
+  results: MarkdownBenchmarkStats[];
+}
+
 export interface MarkdownDocument
   extends HybridObject<{
     ios: "c++";
@@ -55,6 +78,14 @@ export interface MarkdownParser
   scanMarkdownFile(filePath: string): Promise<MarkdownDocument>;
   scanMarkdownFileWindow(filePath: string, count: number): Promise<MarkdownFileWindowResult>;
   scanMarkdownFileRenderWindow(filePath: string, count: number): Promise<MarkdownFileRenderWindowResult>;
+  benchmarkMarkdownFile(
+    filePath: string,
+    modes: string[],
+    iterations: number,
+    warmups: number,
+    windowSize: number,
+    flags: number,
+  ): Promise<MarkdownBenchmarkSuiteResult>;
   parseMarkdown(markdown: string, flags: number): MarkdownDocument;
   parseMarkdownFile(filePath: string, flags: number): Promise<MarkdownDocument>;
 }
