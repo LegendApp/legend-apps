@@ -11,6 +11,7 @@ const manifest = {
   androidPackage: "app.legend.music",
   nativeModules: {
     macos: [
+      "@legend-desktop/appkit-split-view",
       "@legend-desktop/audio-player",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
@@ -18,6 +19,7 @@ const manifest = {
       "@legend-desktop/media-tags",
     ],
     ios: [
+      "@legend-desktop/appkit-split-view",
       "@legend-desktop/audio-player",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
@@ -25,6 +27,7 @@ const manifest = {
       "@legend-desktop/media-tags",
     ],
     android: [
+      "@legend-desktop/appkit-split-view",
       "@legend-desktop/audio-player",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
