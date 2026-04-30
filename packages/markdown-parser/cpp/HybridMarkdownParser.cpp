@@ -1075,7 +1075,7 @@ std::shared_ptr<Promise<MarkdownFileWindowResult>> HybridMarkdownParser::scanMar
     const auto readStartedAt = Clock::now();
     auto source = readFileSource(filePath);
     const auto readFinishedAt = Clock::now();
-    auto document = createDocument(scanMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+    auto document = createDocument(streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
     MarkdownFileWindowResult result;
     result.document = document;
     result.blocks = document->getBlocks(0, count, false);
@@ -1090,7 +1090,7 @@ std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> HybridMarkdownParser::s
     const auto readStartedAt = Clock::now();
     auto source = readFileSource(filePath);
     const auto readFinishedAt = Clock::now();
-    auto document = createDocument(scanMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+    auto document = createDocument(streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
     MarkdownFileRenderWindowResult result;
     result.document = document;
     result.blocks = document->getRenderBlocks(0, count);
