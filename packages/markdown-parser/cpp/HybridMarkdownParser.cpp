@@ -299,6 +299,15 @@ bool lineLooksLikeTableDelimiter(const char* bytes, const LineInfo& line) {
   return hasDash && hasPipe;
 }
 
+bool lineContainsPipe(const char* bytes, const LineInfo& line) {
+  for (size_t index = line.contentStart; index < line.end; index += 1) {
+    if (bytes[index] == '|') {
+      return true;
+    }
+  }
+  return false;
+}
+
 size_t nextLineStart(const char* bytes, size_t length, size_t end) {
   while (end < length && isLineBreak(bytes[end])) {
     end += 1;
@@ -373,7 +382,8 @@ MarkdownBlockType scannedBlockType(const char* bytes, size_t length, const LineI
   }
 
   const size_t nextStart = nextPhysicalLineStart(bytes, length, line.end);
-  if (nextStart < length && lineLooksLikeTableDelimiter(bytes, lineInfoAt(bytes, length, nextStart))) {
+  if (lineContainsPipe(bytes, line) && nextStart < length &&
+      lineLooksLikeTableDelimiter(bytes, lineInfoAt(bytes, length, nextStart))) {
     return MarkdownBlockType::Table;
   }
 
