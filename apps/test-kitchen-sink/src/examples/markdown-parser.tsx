@@ -1179,6 +1179,20 @@ export function MarkdownParserExample() {
     });
   };
 
+  const chooseMarkdownFileForLoad = () => {
+    void openFileDialog({
+      allowedFileTypes: ["md", "mdown", "markdown"],
+      allowsMultipleSelection: false,
+    }).then((paths) => {
+      const path = paths?.[0];
+      if (!path) {
+        setStatus("File selection canceled.");
+        return;
+      }
+      loadMarkdownFileWithNitro(path);
+    });
+  };
+
   console.log("blocks", blockIndices.length);
 
   return (
@@ -1188,58 +1202,8 @@ export function MarkdownParserExample() {
         <Text style={styles.bodyText}>{status}</Text>
         <View style={styles.markdownViewerActions}>
           <ExampleButton onPress={loadSampleWithNitro}>Load Sample</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-window")}>Scan Window</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-full")}>Scan Full</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-window")}>MD4C Window</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-full")}>MD4C Full</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("json")}>JSON Compare</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("turbo-scan-json")}>Turbo Scanner JSON</ExampleButton>
-          <ExampleButton
-            onPress={() => {
-              void openFileDialog({
-                allowedFileTypes: ["md", "mdown", "markdown"],
-                allowsMultipleSelection: false,
-              }).then((paths) => {
-                const path = paths?.[0];
-                if (!path) {
-                  setStatus("File selection canceled.");
-                  return;
-                }
-                loadMarkdownFileWithNitro(path);
-              });
-            }}
-          >
-            Choose Markdown File
-          </ExampleButton>
-          <ExampleButton
-            onPress={() => {
-              void openFileDialog({
-                allowedFileTypes: ["md", "mdown", "markdown"],
-                allowsMultipleSelection: false,
-              }).then((paths) => {
-                const path = paths?.[0];
-                if (!path) {
-                  setStatus("File selection canceled.");
-                  return;
-                }
-                benchmarkMarkdownFile(path, "scan-window");
-              });
-            }}
-          >
-            File Window
-          </ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-window-combined")}>
-            File Window Combined
-          </ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-render-shape")}>Render Shape</ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-full")}>File MD4C Full</ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("json")}>File JSON</ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("turbo-scan-json")}>
-            File Turbo Scanner JSON
-          </ExampleButton>
-          <ExampleButton onPress={chooseMarkdownFileForBatch}>File Batch</ExampleButton>
+          <ExampleButton onPress={chooseMarkdownFileForLoad}>Load File</ExampleButton>
+          <ExampleButton onPress={chooseMarkdownFileForBatch}>Benchmark</ExampleButton>
         </View>
       </View>
       <LegendList
