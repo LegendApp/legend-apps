@@ -580,11 +580,15 @@ export function MarkdownParserExample() {
       headers: { "content-type": "application/json" },
       method: "POST",
     }).catch(() => {});
-    replaceDocument(document, `generated-${mode}`, extractedBlocks);
+    if (mode !== "scan-parse") {
+      replaceDocument(document, `generated-${mode}`, extractedBlocks);
+    }
     setStatus(
       `${benchmarkModeLabel(mode)} benchmark ${sizeLabel}: ${document.blockCount} blocks in ${formatDuration(
         finishedAt - startedAt,
-      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
+      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract${
+        mode === "scan-parse" ? ", not rendered" : ""
+      }). Native: ${formatDuration(
         timing.readMs + timing.parseMs + timing.documentMs,
       )}.`,
     );
@@ -670,13 +674,15 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceDocument(document, path, extractedBlocks);
+      if (mode !== "scan-parse") {
+        replaceDocument(document, path, extractedBlocks);
+      }
       setStatus(
         `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
           document.blockCount
         } blocks in ${formatDuration(finishedAt - startedAt)} (${formatDuration(
           parsedAt - startedAt,
-        )} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
+        )} parse, ${formatDuration(finishedAt - parsedAt)} extract${mode === "scan-parse" ? ", not rendered" : ""}). Native: ${formatDuration(
           timing.readMs + timing.parseMs + timing.documentMs,
         )}.`,
       );
