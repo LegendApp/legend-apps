@@ -78,6 +78,7 @@ export interface MarkdownParser
   scanMarkdownFile(filePath: string): Promise<MarkdownDocument>;
   scanMarkdownFileWindow(filePath: string, count: number): Promise<MarkdownFileWindowResult>;
   scanMarkdownFileRenderWindow(filePath: string, count: number): Promise<MarkdownFileRenderWindowResult>;
+  scanMarkdownFileLegacyRenderWindow(filePath: string, count: number): Promise<MarkdownFileRenderWindowResult>;
   streamMarkdownFile(filePath: string): Promise<MarkdownDocument>;
   streamMarkdownFileWindow(filePath: string, count: number): Promise<MarkdownFileWindowResult>;
   streamMarkdownFileRenderWindow(filePath: string, count: number): Promise<MarkdownFileRenderWindowResult>;

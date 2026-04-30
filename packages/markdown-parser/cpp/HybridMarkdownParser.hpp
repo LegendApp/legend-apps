@@ -15,6 +15,9 @@ public:
   std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileRenderWindow(
       const std::string& filePath,
       double count) override;
+  std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileLegacyRenderWindow(
+      const std::string& filePath,
+      double count) override;
   std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> streamMarkdownFile(
       const std::string& filePath) override;
   std::shared_ptr<Promise<MarkdownFileWindowResult>> streamMarkdownFileWindow(const std::string& filePath, double count) override;

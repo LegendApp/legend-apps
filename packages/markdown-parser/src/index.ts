@@ -175,6 +175,10 @@ export function parseMarkdownFileDocumentRenderWindow(filePath: string, count: n
   return getMarkdownParserDocumentApi().scanMarkdownFileRenderWindow(filePath, count);
 }
 
+export function parseMarkdownFileDocumentLegacyRenderWindow(filePath: string, count: number) {
+  return getMarkdownParserDocumentApi().scanMarkdownFileLegacyRenderWindow(filePath, count);
+}
+
 export function parseMarkdownFileDocumentWithStreaming(filePath: string) {
   return getMarkdownParserDocumentApi().streamMarkdownFile(filePath);
 }

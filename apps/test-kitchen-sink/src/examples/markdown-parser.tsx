@@ -5,6 +5,7 @@ import {
   parseMarkdownDocumentWithMd4c,
   parseMarkdownFile,
   parseMarkdownFileDocument,
+  parseMarkdownFileDocumentLegacyRenderWindow,
   parseMarkdownFileDocumentRenderWindow,
   parseMarkdownFileDocumentStreamingRenderWindow,
   parseMarkdownFileDocumentStreamingWindow,
@@ -55,6 +56,7 @@ type MarkdownViewerBlock = MarkdownBlockSnapshot & { runs: MarkdownBlock["runs"]
 type MarkdownBenchmarkMode =
   | "scan-window"
   | "scan-window-combined"
+  | "scan-render-shape-legacy"
   | "scan-render-shape"
   | "scan-full"
   | "stream-window"
@@ -264,6 +266,9 @@ function benchmarkModeLabel(mode: string) {
   }
   if (mode === "scan-window-combined") {
     return "scan window combined";
+  }
+  if (mode === "scan-render-shape-legacy") {
+    return "legacy Render Shape";
   }
   if (mode === "scan-render-shape") {
     return "Render Shape";
@@ -926,6 +931,16 @@ export function MarkdownParserExample() {
       };
     }
 
+    if (mode === "scan-render-shape-legacy") {
+      const result = await parseMarkdownFileDocumentLegacyRenderWindow(path, windowSize);
+      const blocks = markdownRenderBlocks(result.blocks);
+      return {
+        blockCount: result.document.blockCount,
+        extractedBlockCount: blocks.length,
+        sourceBytes: result.document.sourceSize,
+      };
+    }
+
     if (mode === "stream-window-combined") {
       const result = await parseMarkdownFileDocumentStreamingWindow(path, windowSize);
       const blocks = markdownSnapshotBlocks(result.blocks);
@@ -967,6 +982,7 @@ export function MarkdownParserExample() {
     const modes: MarkdownBenchmarkMode[] = [
       "scan-window",
       "scan-window-combined",
+      "scan-render-shape-legacy",
       "scan-render-shape",
       "scan-full",
       "stream-window",

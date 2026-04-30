@@ -66,6 +66,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> scanMarkdownFile(const std::string& filePath) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileWindowResult>> scanMarkdownFileWindow(const std::string& filePath, double count) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileRenderWindow(const std::string& filePath, double count) = 0;
+      virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileLegacyRenderWindow(const std::string& filePath, double count) = 0;
       virtual std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> streamMarkdownFile(const std::string& filePath) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileWindowResult>> streamMarkdownFileWindow(const std::string& filePath, double count) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> streamMarkdownFileRenderWindow(const std::string& filePath, double count) = 0;
