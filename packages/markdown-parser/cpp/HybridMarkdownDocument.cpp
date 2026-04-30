@@ -51,6 +51,22 @@ std::vector<MarkdownBlockSnapshot> HybridMarkdownDocument::getBlocks(double star
   return snapshots;
 }
 
+std::vector<MarkdownRenderBlock> HybridMarkdownDocument::getRenderBlocks(double start, double count) {
+  const auto safeStart = static_cast<size_t>(std::max(0.0, start));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, count));
+  if (safeStart >= blocks_.size() || safeCount == 0) {
+    return {};
+  }
+
+  const auto end = std::min(blocks_.size(), safeStart + safeCount);
+  std::vector<MarkdownRenderBlock> renderBlocks;
+  renderBlocks.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    renderBlocks.push_back(renderBlockForBlock(index, blocks_[index]));
+  }
+  return renderBlocks;
+}
+
 std::string HybridMarkdownDocument::getBlockMarkdown(double index) {
   const auto safeIndex = static_cast<size_t>(std::max(0.0, index));
   if (safeIndex >= blocks_.size()) {
@@ -83,6 +99,17 @@ MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(
       static_cast<double>(block.depth),
       includeText ? markdown : "",
       markdown);
+}
+
+MarkdownRenderBlock HybridMarkdownDocument::renderBlockForBlock(
+    size_t storageIndex,
+    const MarkdownBlockRange& block) const {
+  return MarkdownRenderBlock(
+      std::to_string(block.index),
+      static_cast<double>(block.index),
+      block.type,
+      static_cast<double>(block.depth),
+      markdownForBlock(storageIndex, block));
 }
 
 const std::string& HybridMarkdownDocument::markdownForBlock(size_t storageIndex, const MarkdownBlockRange& block) const {

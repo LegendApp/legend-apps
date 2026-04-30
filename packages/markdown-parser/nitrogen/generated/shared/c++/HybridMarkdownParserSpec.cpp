@@ -17,6 +17,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       prototype.registerHybridMethod("scanMarkdown", &HybridMarkdownParserSpec::scanMarkdown);
       prototype.registerHybridMethod("scanMarkdownFile", &HybridMarkdownParserSpec::scanMarkdownFile);
       prototype.registerHybridMethod("scanMarkdownFileWindow", &HybridMarkdownParserSpec::scanMarkdownFileWindow);
+      prototype.registerHybridMethod("scanMarkdownFileRenderWindow", &HybridMarkdownParserSpec::scanMarkdownFileRenderWindow);
       prototype.registerHybridMethod("parseMarkdown", &HybridMarkdownParserSpec::parseMarkdown);
       prototype.registerHybridMethod("parseMarkdownFile", &HybridMarkdownParserSpec::parseMarkdownFile);
     });

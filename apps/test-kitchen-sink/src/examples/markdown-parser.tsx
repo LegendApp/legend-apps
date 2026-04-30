@@ -5,6 +5,7 @@ import {
   parseMarkdownDocumentWithMd4c,
   parseMarkdownFile,
   parseMarkdownFileDocument,
+  parseMarkdownFileDocumentRenderWindow,
   parseMarkdownFileDocumentWindow,
   parseMarkdownFileDocumentWithMd4c,
   scanMarkdown,
@@ -13,6 +14,7 @@ import {
   type MarkdownBlockSnapshot,
   type MarkdownDocument,
   type MarkdownDocumentTiming,
+  type MarkdownRenderBlock,
 } from "@legend-desktop/markdown-parser";
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
@@ -45,10 +47,21 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 \`\`\`
 `;
 
-type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
+type MarkdownViewerBlock = Readonly<{
+  id: string;
+  index: number;
+  type: string;
+  depth: number;
+  markdown: string;
+  text?: string;
+  runs?: MarkdownBlock["runs"];
+  attrs?: MarkdownBlock["attrs"];
+  parentIndex?: number;
+}>;
 type MarkdownBenchmarkMode =
   | "scan-window"
   | "scan-window-combined"
+  | "scan-render-shape"
   | "scan-full"
   | "md4c-window"
   | "md4c-full"
@@ -145,7 +158,9 @@ const markdownEditorStyle: MarkdownTextInputStyle = {
 };
 
 function markdownViewerBlocks(blocks: readonly MarkdownBlock[]): MarkdownViewerBlock[] {
-  return blocks.filter((block): block is MarkdownViewerBlock => !!block.markdown && block.type !== "document");
+  return blocks
+    .filter((block) => !!block.markdown && block.type !== "document")
+    .map((block) => ({ ...block, markdown: block.markdown ?? "" }));
 }
 
 function markdownSnapshotBlocks(blocks: readonly MarkdownBlockSnapshot[]): MarkdownViewerBlock[] {
@@ -157,6 +172,10 @@ function markdownSnapshotBlock(block: MarkdownBlockSnapshot): MarkdownViewerBloc
     ...block,
     runs: [],
   };
+}
+
+function markdownRenderBlocks(blocks: readonly MarkdownRenderBlock[]): readonly MarkdownViewerBlock[] {
+  return blocks;
 }
 
 function markdownViewerBlockFromMarkdown(index: number, markdown: string): MarkdownViewerBlock {
@@ -231,6 +250,9 @@ function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
   }
   if (mode === "scan-window-combined") {
     return "scan window combined";
+  }
+  if (mode === "scan-render-shape") {
+    return "Render Shape";
   }
   if (mode === "turbo-scan-json") {
     return "Turbo Scanner JSON";
@@ -689,6 +711,53 @@ export function MarkdownParserExample() {
       return;
     }
 
+    if (mode === "scan-render-shape") {
+      void parseMarkdownFileDocumentRenderWindow(path, 64)
+        .then((result) => {
+          const parsedAt = Date.now();
+          const extractedBlocks = markdownRenderBlocks(result.blocks);
+          const finishedAt = Date.now();
+          const document = result.document;
+          const timing = document.getTiming();
+          const benchmarkPayload = {
+            event: "app:markdown-file-nitro-benchmark",
+            extractedBlocks: extractedBlocks.length,
+            mode,
+            nitroBlocks: document.blockCount,
+            nitroExtractMs: finishedAt - parsedAt,
+            nitroParseMs: parsedAt - startedAt,
+            nitroTiming: timingPayload(timing),
+            nitroTotalMs: finishedAt - startedAt,
+            source: path,
+          };
+
+          console.log("markdown file nitro benchmark", benchmarkPayload);
+          void fetch("http://127.0.0.1:37531/ll-debug", {
+            body: JSON.stringify(benchmarkPayload),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          }).catch(() => {});
+          replaceDocument(document, path, extractedBlocks);
+          setStatus(
+            `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
+              document.blockCount
+            } blocks in ${formatDuration(finishedAt - startedAt)} (${formatDuration(
+              parsedAt - startedAt,
+            )} parse+render-shape, ${formatDuration(finishedAt - parsedAt)} JS handoff). Native: ${formatDuration(
+              timing.readMs + timing.parseMs + timing.documentMs,
+            )}.`,
+          );
+        })
+        .catch((error: unknown) => {
+          setStatus(
+            `File ${benchmarkModeLabel(mode)} benchmark failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        });
+      return;
+    }
+
     const documentPromise =
       mode === "md4c-window" || mode === "md4c-full"
         ? parseMarkdownFileDocumentWithMd4c(path, { dialect: "github" })
@@ -831,6 +900,7 @@ export function MarkdownParserExample() {
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-window-combined")}>
             File Window Combined
           </ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-render-shape")}>Render Shape</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-full")}>File MD4C Full</ExampleButton>

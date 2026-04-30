@@ -23,6 +23,19 @@ export interface MarkdownFileWindowResult {
   blocks: MarkdownBlockSnapshot[];
 }
 
+export interface MarkdownRenderBlock {
+  id: string;
+  index: number;
+  type: string;
+  depth: number;
+  markdown: string;
+}
+
+export interface MarkdownFileRenderWindowResult {
+  document: MarkdownDocument;
+  blocks: MarkdownRenderBlock[];
+}
+
 export interface MarkdownDocument
   extends HybridObject<{
     ios: "c++";
@@ -42,6 +55,7 @@ export interface MarkdownParser
   scanMarkdown(markdown: string): MarkdownDocument;
   scanMarkdownFile(filePath: string): Promise<MarkdownDocument>;
   scanMarkdownFileWindow(filePath: string, count: number): Promise<MarkdownFileWindowResult>;
+  scanMarkdownFileRenderWindow(filePath: string, count: number): Promise<MarkdownFileRenderWindowResult>;
   parseMarkdown(markdown: string, flags: number): MarkdownDocument;
   parseMarkdownFile(filePath: string, flags: number): Promise<MarkdownDocument>;
 }

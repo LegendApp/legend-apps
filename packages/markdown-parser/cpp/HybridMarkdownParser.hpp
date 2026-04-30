@@ -12,6 +12,9 @@ public:
   std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> scanMarkdownFile(
       const std::string& filePath) override;
   std::shared_ptr<Promise<MarkdownFileWindowResult>> scanMarkdownFileWindow(const std::string& filePath, double count) override;
+  std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> scanMarkdownFileRenderWindow(
+      const std::string& filePath,
+      double count) override;
   std::shared_ptr<HybridMarkdownDocumentSpec> parseMarkdown(const std::string& markdown, double flags) override;
   std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> parseMarkdownFile(
       const std::string& filePath,
