@@ -2,8 +2,15 @@ import {
   loadMarkdownFile,
   type MarkdownDocument as NativeMarkdownDocument,
   type MarkdownRenderBlock,
+  type MarkdownTransactionResult as NativeMarkdownTransactionResult,
 } from "@legend-desktop/markdown-parser";
-import type { MarkdownBlockSnapshot, MarkdownDocumentAdapter, MarkdownDocumentSnapshot } from "../types";
+import type {
+  MarkdownBlockSnapshot,
+  MarkdownDocumentAdapter,
+  MarkdownDocumentSnapshot,
+  MarkdownTransaction,
+  MarkdownTransactionResult,
+} from "../types";
 
 const initialBlockCount = 64;
 
@@ -43,6 +50,20 @@ function cacheBlocks(session: NativeDocumentSession, blocks: MarkdownBlockSnapsh
     session.blocksById.set(block.id, block);
     session.blockIdToIndex.set(block.id, block.index);
   }
+}
+
+function toTransactionResult(result: NativeMarkdownTransactionResult): MarkdownTransactionResult {
+  return {
+    revision: result.revision,
+    sourceLength: result.sourceLength,
+    changedRange: {
+      startBlockIndex: result.changedRange.startBlockIndex,
+      deleteCount: result.changedRange.deleteCount,
+      blockIds: result.changedRange.blockIds,
+    },
+    changedBlocks: result.changedBlocks.map(toBlockSnapshot),
+    retiredBlockIds: result.retiredBlockIds,
+  };
 }
 
 function getSession(documentId: string) {
@@ -112,10 +133,21 @@ export const nativeMarkdownDocumentAdapter: MarkdownDocumentAdapter = {
   },
 
   async save(documentId: string): Promise<void> {
-    getSession(documentId);
+    getSession(documentId).nativeDocument.save();
   },
 
   async close(documentId: string): Promise<void> {
     sessions.delete(documentId);
+  },
+
+  async applyTransaction(documentId: string, transaction: MarkdownTransaction): Promise<MarkdownTransactionResult> {
+    const session = getSession(documentId);
+    const result = toTransactionResult(session.nativeDocument.applyTransaction(transaction));
+    cacheBlocks(session, result.changedBlocks);
+    for (const retiredBlockId of result.retiredBlockIds) {
+      session.blocksById.delete(retiredBlockId);
+      session.blockIdToIndex.delete(retiredBlockId);
+    }
+    return result;
   },
 };

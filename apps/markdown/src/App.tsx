@@ -31,17 +31,21 @@ const shiftModifier = 1 << 17;
 type OpenReason = "startup" | "menu";
 type OpenSource = "startup" | "dialog" | "recent";
 
+type MarkdownAppProps = {
+  launchArguments?: string[];
+};
+
 function isMarkdownPath(path: string) {
   const extension = path.split(".").pop()?.toLowerCase();
   return extension !== undefined && markdownFileTypes.includes(extension);
 }
 
-function getLaunchMarkdownFile() {
+function getLaunchMarkdownFile(launchArguments: string[] | undefined) {
   const argv = typeof process !== "undefined" && Array.isArray(process.argv) ? process.argv : [];
-  return argv.find(isMarkdownPath) ?? null;
+  return launchArguments?.find(isMarkdownPath) ?? argv.find(isMarkdownPath) ?? null;
 }
 
-export function App() {
+export function App({ launchArguments }: MarkdownAppProps) {
   const [filename, setFilename] = useState<string | null>(null);
   const [status, setStatus] = useState("Opening markdown file...");
   const [lastError, setLastError] = useState<string | null>(null);
@@ -86,9 +90,7 @@ export function App() {
       setStatus("Choose a markdown file.");
 
       try {
-        const paths = await openFileDialog({
-          allowedFileTypes: markdownFileTypes,
-        });
+        const paths = await openFileDialog();
         const path = paths?.find(isMarkdownPath) ?? null;
 
         if (path) {
@@ -121,13 +123,13 @@ export function App() {
     }
     startupHandledRef.current = true;
 
-    const launchFile = getLaunchMarkdownFile();
+    const launchFile = getLaunchMarkdownFile(launchArguments);
     if (launchFile) {
       openSelectedFile(launchFile, "startup");
     } else {
       void openMarkdownDialog("startup");
     }
-  }, [openMarkdownDialog, openSelectedFile]);
+  }, [launchArguments, openMarkdownDialog, openSelectedFile]);
 
   useEffect(() => {
     const recentItems = recentFiles.flatMap((file, index) => {

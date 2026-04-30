@@ -17,10 +17,16 @@
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownRenderBlock; }
 // Forward declaration of `MarkdownDocumentTiming` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownDocumentTiming; }
+// Forward declaration of `MarkdownTransactionResult` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransactionResult; }
+// Forward declaration of `MarkdownTransaction` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransaction; }
 
 #include "MarkdownRenderBlock.hpp"
 #include <vector>
 #include "MarkdownDocumentTiming.hpp"
+#include "MarkdownTransactionResult.hpp"
+#include "MarkdownTransaction.hpp"
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -56,6 +62,8 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       // Methods
       virtual std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) = 0;
       virtual MarkdownDocumentTiming getTiming() = 0;
+      virtual MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) = 0;
+      virtual void save() = 0;
 
     protected:
       // Hybrid Setup

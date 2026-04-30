@@ -448,12 +448,14 @@ ParseResult streamMarkdownSource(std::shared_ptr<const MarkdownSource> source, d
     const MarkdownBlockType type = scannedStreamingBlockType(bytes, length, line);
     const size_t end = scannedStreamingBlockEnd(bytes, length, line, type);
     blocks.push_back(MarkdownBlockRange{
+        "",
         blocks.size(),
         1,
         line.start,
         std::min(end, length),
         line.contentStart,
         std::min(end, length),
+        0,
         type,
     });
     lineStartOffset = nextPhysicalLineStart(bytes, length, end);
@@ -527,7 +529,7 @@ std::shared_ptr<const MarkdownSource> readFileSource(const std::string& filePath
 #endif
 }
 
-std::shared_ptr<HybridMarkdownDocument> createDocument(ParseResult result) {
+std::shared_ptr<HybridMarkdownDocument> createDocument(std::string filePath, ParseResult result) {
   const auto documentStartedAt = Clock::now();
   auto timing = MarkdownDocumentTiming(
       static_cast<double>(result.source->size()),
@@ -536,7 +538,11 @@ std::shared_ptr<HybridMarkdownDocument> createDocument(ParseResult result) {
       result.blockRangeMs,
       result.parseMs,
       0);
-  auto document = std::make_shared<HybridMarkdownDocument>(std::move(result.source), std::move(result.blocks), timing);
+  auto document = std::make_shared<HybridMarkdownDocument>(
+      std::move(filePath),
+      std::move(result.source),
+      std::move(result.blocks),
+      timing);
   const auto documentFinishedAt = Clock::now();
   document->setDocumentDurationMs(elapsedMs(documentStartedAt, documentFinishedAt));
   return document;
@@ -553,7 +559,9 @@ std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::loadMarkd
     const auto readStartedAt = Clock::now();
     auto source = readFileSource(filePath);
     const auto readFinishedAt = Clock::now();
-    auto document = createDocument(streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+    auto document = createDocument(
+        normalizeFilePath(filePath),
+        streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
     MarkdownFileLoadResult result;
     result.document = document;
     result.initialBlocks = document->getRenderBlocks(0, initialBlockCount);

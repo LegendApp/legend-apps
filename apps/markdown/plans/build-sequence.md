@@ -90,29 +90,29 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 6: Native Editing Transactions
 
-- [ ] Extend parser/native document with current source storage as a simple native string/buffer.
-- [ ] Add `applyTransaction` to the native spec.
-- [ ] Implement `updateBlockMarkdown`.
-- [ ] Preserve block ID for block-local edits.
-- [ ] Return range patches:
-  - [ ] revision
-  - [ ] source length
-  - [ ] start block index
-  - [ ] delete count
-  - [ ] inserted block IDs
-  - [ ] changed block snapshots
-  - [ ] retired block IDs
+- [x] Extend parser/native document with current source storage as a simple native string/buffer.
+- [x] Add `applyTransaction` to the native spec.
+- [x] Implement `updateBlockMarkdown`.
+- [x] Preserve block ID for block-local edits.
+- [x] Return range patches:
+  - [x] revision
+  - [x] source length
+  - [x] start block index
+  - [x] delete count
+  - [x] inserted block IDs
+  - [x] changed block snapshots
+  - [x] retired block IDs
 - [ ] Add dirty-region parse fallback when a block markdown update changes structure unexpectedly.
-- [ ] Keep full-document reparse out of the normal edit path.
-- [ ] Add native save method.
-- [ ] Save UTF-8.
-- [ ] Preserve dominant line endings when practical.
-- [ ] Save with atomic replace.
-- [ ] Run Nitro/codegen workflow and include generated files.
-- [ ] Keep kitchen-sink markdown-parser example working.
-- [ ] Validate `bun run typecheck`.
-- [ ] Validate app still opens/renders after parser changes.
-- [ ] Commit with a `type: subject` message.
+- [x] Keep full-document reparse out of the normal edit path.
+- [x] Add native save method.
+- [x] Save UTF-8.
+- [x] Preserve dominant line endings when practical.
+- [x] Save with atomic replace.
+- [x] Run Nitro/codegen workflow and include generated files.
+- [x] Keep kitchen-sink markdown-parser example working at compile/typecheck level.
+- [x] Validate `bun run typecheck`.
+- [x] Validate app still opens/renders after parser changes.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 7: Active Block Editing
 

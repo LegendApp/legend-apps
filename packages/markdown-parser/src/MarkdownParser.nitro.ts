@@ -22,6 +22,28 @@ export interface MarkdownRenderBlock {
   textRevision: number;
 }
 
+export interface MarkdownTransaction {
+  type: string;
+  blockId: string;
+  markdown?: string;
+  beforeMarkdown?: string;
+  afterMarkdown?: string;
+}
+
+export interface MarkdownChangedRange {
+  startBlockIndex: number;
+  deleteCount: number;
+  blockIds: string[];
+}
+
+export interface MarkdownTransactionResult {
+  revision: number;
+  sourceLength: number;
+  changedRange: MarkdownChangedRange;
+  changedBlocks: MarkdownRenderBlock[];
+  retiredBlockIds: string[];
+}
+
 export interface MarkdownFileLoadResult {
   document: MarkdownDocument;
   initialBlocks: MarkdownRenderBlock[];
@@ -35,6 +57,8 @@ export interface MarkdownDocument
   readonly sourceSize: number;
   getRenderBlocks(start: number, count: number): MarkdownRenderBlock[];
   getTiming(): MarkdownDocumentTiming;
+  applyTransaction(transaction: MarkdownTransaction): MarkdownTransactionResult;
+  save(): void;
 }
 
 export interface MarkdownParser

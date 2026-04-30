@@ -8,9 +8,9 @@
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
   self.moduleName = @"main";
-  // You can add your custom initial props in the dictionary below.
-  // They will be passed down to the ViewController used by React Native.
-  self.initialProps = @{};
+  self.initialProps = @{
+    @"launchArguments": [[NSProcessInfo processInfo] arguments] ?: @[],
+  };
   self.dependencyProvider = [RCTAppDependencyProvider new];
   
   [super applicationDidFinishLaunching:notification];

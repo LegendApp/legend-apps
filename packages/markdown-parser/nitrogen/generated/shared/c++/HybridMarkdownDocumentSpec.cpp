@@ -18,6 +18,8 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       prototype.registerHybridGetter("sourceSize", &HybridMarkdownDocumentSpec::getSourceSize);
       prototype.registerHybridMethod("getRenderBlocks", &HybridMarkdownDocumentSpec::getRenderBlocks);
       prototype.registerHybridMethod("getTiming", &HybridMarkdownDocumentSpec::getTiming);
+      prototype.registerHybridMethod("applyTransaction", &HybridMarkdownDocumentSpec::applyTransaction);
+      prototype.registerHybridMethod("save", &HybridMarkdownDocumentSpec::save);
     });
   }
 

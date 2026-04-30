@@ -21,6 +21,9 @@ export function loadMarkdownFile(filePath: string, options: MarkdownFileLoadOpti
 export type {
   MarkdownDocument,
   MarkdownDocumentTiming,
+  MarkdownChangedRange,
   MarkdownFileLoadResult,
   MarkdownRenderBlock,
+  MarkdownTransaction,
+  MarkdownTransactionResult,
 } from "./MarkdownParser.nitro";
