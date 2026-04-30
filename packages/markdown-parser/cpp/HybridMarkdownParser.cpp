@@ -73,7 +73,6 @@ struct LineInfo {
   size_t contentStart = 0;
   char first = 0;
   bool blank = false;
-  bool hasPipe = false;
 };
 
 using Clock = std::chrono::steady_clock;
@@ -180,20 +179,12 @@ size_t trimLinePrefix(const char* bytes, size_t start, size_t end) {
 LineInfo lineInfo(const char* bytes, size_t start, size_t end) {
   const size_t contentStart = trimLinePrefix(bytes, start, end);
   const bool blank = contentStart >= end;
-  bool hasPipe = false;
-  for (size_t index = contentStart; index < end; index += 1) {
-    if (bytes[index] == '|') {
-      hasPipe = true;
-      break;
-    }
-  }
   return LineInfo{
       start,
       end,
       contentStart,
       blank ? '\0' : bytes[contentStart],
       blank,
-      hasPipe,
   };
 }
 
@@ -315,6 +306,15 @@ bool lineLooksLikeTableDelimiter(const char* bytes, const LineInfo& line) {
   return hasDash && hasPipe;
 }
 
+bool lineHasPipe(const char* bytes, const LineInfo& line) {
+  for (size_t index = line.contentStart; index < line.end; index += 1) {
+    if (bytes[index] == '|') {
+      return true;
+    }
+  }
+  return false;
+}
+
 size_t nextPhysicalLineStart(const char* bytes, size_t length, size_t end) {
   if (end < length && bytes[end] == '\r') {
     end += 1;
@@ -397,7 +397,7 @@ MarkdownBlockType scannedBlockType(const char* bytes, const std::vector<LineInfo
       break;
   }
 
-  if (line.hasPipe && lineIndex + 1 < lines.size() && lineLooksLikeTableDelimiter(bytes, lines[lineIndex + 1])) {
+  if (lineIndex + 1 < lines.size() && lineHasPipe(bytes, line) && lineLooksLikeTableDelimiter(bytes, lines[lineIndex + 1])) {
     return MarkdownBlockType::Table;
   }
 
@@ -480,7 +480,7 @@ MarkdownBlockType scannedStreamingBlockType(const char* bytes, size_t length, co
   }
 
   const size_t nextStart = nextPhysicalLineStart(bytes, length, line.end);
-  if (line.hasPipe && nextStart < length) {
+  if (nextStart < length && lineHasPipe(bytes, line)) {
     const LineInfo nextLine = lineInfoAt(bytes, length, nextStart);
     if (lineLooksLikeTableDelimiter(bytes, nextLine)) {
       return MarkdownBlockType::Table;
