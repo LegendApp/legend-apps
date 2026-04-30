@@ -45,6 +45,14 @@ export function createAlbumId(title: string, artistName?: string): MusicId {
   return createStableId(["album", artistName || "Unknown Artist", title || "Unknown Album"]);
 }
 
+export function createPlaylistId(name: string, createdAt: number): MusicId {
+  return createStableId(["playlist", name || "New Playlist", String(createdAt)]);
+}
+
+export function createScannedPlaylistId(sourcePath: string): MusicId {
+  return createStableId(["playlist", sourcePath]);
+}
+
 export function createQueueItemId(trackId: MusicId, queuedAt: number): MusicId {
   return createStableId(["queue", trackId, String(queuedAt)]);
 }

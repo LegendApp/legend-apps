@@ -1,7 +1,7 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import type { MusicId, MusicTrack, RepeatMode } from "./domain";
+import type { MusicId, MusicLibrary, MusicPlaylist, MusicTrack, RepeatMode } from "./domain";
 import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
 import {
   enqueueTrack,
@@ -18,25 +18,41 @@ import {
   toggleShuffle,
   usePlayback,
 } from "./playback";
+import {
+  addTracksToPlaylist,
+  createPlaylist,
+  deletePlaylist,
+  removeTrackFromPlaylist,
+} from "./playlists";
 
 const repeatModes: RepeatMode[] = ["off", "all", "one"];
+type LibraryView =
+  | Readonly<{ type: "songs" }>
+  | Readonly<{ type: "album"; id: MusicId }>
+  | Readonly<{ type: "artist"; id: MusicId }>
+  | Readonly<{ type: "playlist"; id: MusicId }>;
 
 export function App() {
   const library = useMusicLibrary();
   const playback = usePlayback();
   const [message, setMessage] = useState("Choose one or more music folders to build your library.");
   const [query, setQuery] = useState("");
+  const [playlistName, setPlaylistName] = useState("");
   const [queueVisible, setQueueVisible] = useState(true);
+  const [selectedView, setSelectedView] = useState<LibraryView>({ type: "songs" });
   const tracks = useMemo(
     () => library.trackIds.map((id) => library.tracksById[id]).filter((track): track is MusicTrack => Boolean(track)),
     [library],
   );
   const roots = Object.values(library.rootsById);
-  const albums = Object.values(library.albumsById);
-  const artists = Object.values(library.artistsById);
-  const filteredTracks = useMemo(() => filterTracks(tracks, query), [tracks, query]);
+  const albums = Object.values(library.albumsById).sort((a, b) => a.title.localeCompare(b.title));
+  const artists = Object.values(library.artistsById).sort((a, b) => a.name.localeCompare(b.name));
+  const playlists = Object.values(library.playlistsById).sort((a, b) => a.name.localeCompare(b.name));
+  const selectedTracks = useMemo(() => selectViewTracks(library, tracks, selectedView), [library, selectedView, tracks]);
+  const filteredTracks = useMemo(() => filterTracks(selectedTracks, query), [selectedTracks, query]);
   const currentItem = playback.queue.find((item) => item.id === playback.currentItemId);
   const currentTrack = currentItem ? library.tracksById[currentItem.trackId] : undefined;
+  const selectedPlaylist = selectedView.type === "playlist" ? library.playlistsById[selectedView.id] : undefined;
   const isScanning = library.scan.status === "scanning";
   const isPlaying = playback.status === "playing";
 
@@ -76,6 +92,37 @@ export function App() {
     setRepeatMode(repeatModes[(index + 1) % repeatModes.length]);
   };
 
+  const createManualPlaylist = async () => {
+    const playlist = await createPlaylist(playlistName, []);
+    setPlaylistName("");
+    setSelectedView({ type: "playlist", id: playlist.id });
+    setMessage(`Created playlist "${playlist.name}".`);
+  };
+
+  const deleteSelectedPlaylist = async () => {
+    if (!selectedPlaylist || selectedPlaylist.source !== "manual") {
+      return;
+    }
+
+    await deletePlaylist(selectedPlaylist.id);
+    setSelectedView({ type: "songs" });
+    setMessage(`Deleted playlist "${selectedPlaylist.name}".`);
+  };
+
+  const toggleTrackInSelectedPlaylist = async (trackId: MusicId) => {
+    if (!selectedPlaylist || selectedPlaylist.source !== "manual") {
+      return;
+    }
+
+    if (selectedPlaylist.trackIds.includes(trackId)) {
+      await removeTrackFromPlaylist(selectedPlaylist.id, trackId);
+      setMessage("Removed track from playlist.");
+    } else {
+      await addTracksToPlaylist(selectedPlaylist.id, [trackId]);
+      setMessage("Added track to playlist.");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.sidebar}>
@@ -84,6 +131,7 @@ export function App() {
           <Text style={styles.sidebarText}>{tracks.length} tracks</Text>
           <Text style={styles.sidebarText}>{albums.length} albums</Text>
           <Text style={styles.sidebarText}>{artists.length} artists</Text>
+          <Text style={styles.sidebarText}>{playlists.length} playlists</Text>
           <Text style={styles.sidebarText}>{playback.queue.length} queued</Text>
         </View>
         <View style={styles.buttonGroup}>
@@ -96,6 +144,61 @@ export function App() {
         </View>
         <Text style={styles.statusText}>{message}</Text>
         {playback.error ? <Text style={styles.errorText}>{playback.error}</Text> : null}
+        <View style={styles.sidebarSection}>
+          <Text style={styles.sectionTitle}>Library</Text>
+          <SidebarNavButton active={selectedView.type === "songs"} label="Songs" onPress={() => setSelectedView({ type: "songs" })} />
+          {artists.slice(0, 8).map((artist) => (
+            <SidebarNavButton
+              active={selectedView.type === "artist" && selectedView.id === artist.id}
+              key={artist.id}
+              label={artist.name}
+              onPress={() => setSelectedView({ type: "artist", id: artist.id })}
+              value={`${artist.trackIds.length}`}
+            />
+          ))}
+          {albums.slice(0, 8).map((album) => (
+            <SidebarNavButton
+              active={selectedView.type === "album" && selectedView.id === album.id}
+              key={album.id}
+              label={album.title}
+              onPress={() => setSelectedView({ type: "album", id: album.id })}
+              value={`${album.trackIds.length}`}
+            />
+          ))}
+        </View>
+        <View style={styles.sidebarSection}>
+          <Text style={styles.sectionTitle}>Playlists</Text>
+          <View style={styles.playlistCreateRow}>
+            <TextInput
+              onChangeText={setPlaylistName}
+              placeholder="New playlist"
+              placeholderTextColor="#8f8f88"
+              style={styles.playlistInput}
+              value={playlistName}
+            />
+            <Pressable onPress={() => void createManualPlaylist()} style={styles.smallButton}>
+              <Text style={styles.smallButtonText}>Add</Text>
+            </Pressable>
+          </View>
+          {playlists.length === 0 ? (
+            <Text style={styles.rootText}>No playlists yet.</Text>
+          ) : (
+            playlists.map((playlist) => (
+              <SidebarNavButton
+                active={selectedView.type === "playlist" && selectedView.id === playlist.id}
+                key={playlist.id}
+                label={playlist.name}
+                onPress={() => setSelectedView({ type: "playlist", id: playlist.id })}
+                value={playlist.source === "manual" ? `${playlist.trackIds.length}` : playlist.source.toUpperCase()}
+              />
+            ))
+          )}
+          {selectedPlaylist?.source === "manual" ? (
+            <Pressable onPress={() => void deleteSelectedPlaylist()} style={styles.dangerButton}>
+              <Text style={styles.dangerButtonText}>Delete Selected Playlist</Text>
+            </Pressable>
+          ) : null}
+        </View>
         <View style={styles.sidebarSection}>
           <Text style={styles.sectionTitle}>Roots</Text>
           {roots.length === 0 ? (
@@ -116,7 +219,7 @@ export function App() {
             <Text style={styles.subtitle}>
               {library.scan.status === "scanning"
                 ? `${library.scan.tracksScanned} scanned, ${library.scan.completedRoots}/${library.scan.totalRoots} folders`
-                : `${library.scan.status} / ${filteredTracks.length} shown`}
+                : `${getViewTitle(library, selectedView)} / ${filteredTracks.length} shown`}
             </Text>
           </View>
           <TextInput
@@ -142,8 +245,14 @@ export function App() {
                   isCurrent={currentItem?.trackId === track.id}
                   key={track.id}
                   onEnqueue={() => enqueueTrack(track.id)}
+                  onPlaylistAction={selectedPlaylist?.source === "manual" ? () => void toggleTrackInSelectedPlaylist(track.id) : undefined}
                   onPlay={() => playTrack(track.id)}
                   onPlayNext={() => playTrackNext(track.id)}
+                  playlistActionLabel={
+                    selectedPlaylist?.source === "manual"
+                      ? selectedPlaylist.trackIds.includes(track.id) ? "Remove" : "Add"
+                      : undefined
+                  }
                   track={track}
                 />
               ))
@@ -263,11 +372,13 @@ export default App;
 function TrackRow(props: {
   isCurrent: boolean;
   onEnqueue: () => void;
+  onPlaylistAction?: () => void;
   onPlay: () => void;
   onPlayNext: () => void;
+  playlistActionLabel?: string;
   track: MusicTrack;
 }) {
-  const { isCurrent, onEnqueue, onPlay, onPlayNext, track } = props;
+  const { isCurrent, onEnqueue, onPlay, onPlayNext, onPlaylistAction, playlistActionLabel, track } = props;
 
   return (
     <View style={[styles.trackRow, isCurrent && styles.currentTrackRow]}>
@@ -289,7 +400,29 @@ function TrackRow(props: {
       <Pressable onPress={onEnqueue} style={styles.rowAction}>
         <Text style={styles.rowActionText}>Queue</Text>
       </Pressable>
+      {onPlaylistAction && playlistActionLabel ? (
+        <Pressable onPress={onPlaylistAction} style={styles.rowAction}>
+          <Text style={styles.rowActionText}>{playlistActionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
+  );
+}
+
+function SidebarNavButton(props: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+  value?: string;
+}) {
+  const { active, label, onPress, value } = props;
+  return (
+    <Pressable onPress={onPress} style={[styles.sidebarNavButton, active && styles.activeSidebarNavButton]}>
+      <Text numberOfLines={1} style={[styles.sidebarNavText, active && styles.activeSidebarNavText]}>
+        {label}
+      </Text>
+      {value ? <Text style={styles.sidebarNavValue}>{value}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -308,6 +441,38 @@ function filterTracks(tracks: readonly MusicTrack[], query: string) {
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(normalized);
   });
+}
+
+function selectViewTracks(library: MusicLibrary, tracks: readonly MusicTrack[], selectedView: LibraryView): MusicTrack[] {
+  if (selectedView.type === "songs") {
+    return [...tracks];
+  }
+
+  if (selectedView.type === "artist") {
+    const artist = library.artistsById[selectedView.id];
+    return artist?.trackIds.map((trackId) => library.tracksById[trackId]).filter((track): track is MusicTrack => Boolean(track)) ?? [];
+  }
+
+  if (selectedView.type === "album") {
+    const album = library.albumsById[selectedView.id];
+    return album?.trackIds.map((trackId) => library.tracksById[trackId]).filter((track): track is MusicTrack => Boolean(track)) ?? [];
+  }
+
+  const playlist = library.playlistsById[selectedView.id];
+  return playlist?.trackIds.map((trackId) => library.tracksById[trackId]).filter((track): track is MusicTrack => Boolean(track)) ?? [];
+}
+
+function getViewTitle(library: MusicLibrary, selectedView: LibraryView) {
+  if (selectedView.type === "songs") {
+    return "Songs";
+  }
+  if (selectedView.type === "artist") {
+    return library.artistsById[selectedView.id]?.name ?? "Artist";
+  }
+  if (selectedView.type === "album") {
+    return library.albumsById[selectedView.id]?.title ?? "Album";
+  }
+  return library.playlistsById[selectedView.id]?.name ?? "Playlist";
 }
 
 function formatDuration(durationSeconds?: number) {
@@ -331,6 +496,13 @@ const styles = StyleSheet.create({
   activeControlButton: {
     backgroundColor: "#dbe9d7",
     borderColor: "#8bae82",
+  },
+  activeSidebarNavButton: {
+    backgroundColor: "#e4ede0",
+  },
+  activeSidebarNavText: {
+    color: "#1e341f",
+    fontWeight: "700",
   },
   appTitle: {
     color: "#171717",
@@ -389,6 +561,20 @@ const styles = StyleSheet.create({
   },
   disabledSecondaryButton: {
     opacity: 0.45,
+  },
+  dangerButton: {
+    alignItems: "center",
+    borderColor: "#d3b3ad",
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: 8,
+  },
+  dangerButtonText: {
+    color: "#8c3a2d",
+    fontSize: 12,
+    fontWeight: "700",
   },
   duration: {
     color: "#77776f",
@@ -476,6 +662,22 @@ const styles = StyleSheet.create({
     minHeight: 92,
     paddingHorizontal: 18,
     paddingVertical: 12,
+  },
+  playlistCreateRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  playlistInput: {
+    backgroundColor: "#ffffff",
+    borderColor: "#d7d7d0",
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: "#20201d",
+    flex: 1,
+    fontSize: 13,
+    height: 30,
+    paddingHorizontal: 8,
   },
   primaryControlButton: {
     alignItems: "center",
@@ -630,6 +832,24 @@ const styles = StyleSheet.create({
   sidebarSection: {
     gap: 8,
     marginTop: 8,
+  },
+  sidebarNavButton: {
+    alignItems: "center",
+    borderRadius: 5,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    minHeight: 28,
+    paddingHorizontal: 8,
+  },
+  sidebarNavText: {
+    color: "#454540",
+    flex: 1,
+    fontSize: 13,
+  },
+  sidebarNavValue: {
+    color: "#77776f",
+    fontSize: 11,
   },
   sidebarText: {
     color: "#40403c",

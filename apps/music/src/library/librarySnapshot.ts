@@ -1,7 +1,7 @@
 import type { NativeScannedPlaylist, NativeScannedTrack } from "@legend-desktop/media-library-scanner";
 import { buildLibraryIndexes, sortTrackIds } from "../domain/libraryIndex";
 import {
-  createAlbumId,
+  createScannedPlaylistId,
   createRootId,
   createTrackId,
   displayNameFromPath,
@@ -219,7 +219,7 @@ export function buildLibraryFromScan(
       continue;
     }
 
-    const id = createAlbumId(sourcePath, "playlist");
+    const id = createScannedPlaylistId(sourcePath);
     playlistsById[id] = {
       createdAt: now,
       id,
