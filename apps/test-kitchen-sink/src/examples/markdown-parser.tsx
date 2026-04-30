@@ -6,7 +6,10 @@ import {
   parseMarkdownFile,
   parseMarkdownFileDocument,
   parseMarkdownFileDocumentRenderWindow,
+  parseMarkdownFileDocumentStreamingRenderWindow,
+  parseMarkdownFileDocumentStreamingWindow,
   parseMarkdownFileDocumentWindow,
+  parseMarkdownFileDocumentWithStreaming,
   parseMarkdownFileDocumentWithMd4c,
   scanMarkdown,
   scanMarkdownFile,
@@ -54,6 +57,10 @@ type MarkdownBenchmarkMode =
   | "scan-window-combined"
   | "scan-render-shape"
   | "scan-full"
+  | "stream-window"
+  | "stream-window-combined"
+  | "stream-render-shape"
+  | "stream-full"
   | "md4c-window"
   | "md4c-full"
   | "json"
@@ -260,6 +267,18 @@ function benchmarkModeLabel(mode: string) {
   }
   if (mode === "scan-render-shape") {
     return "Render Shape";
+  }
+  if (mode === "stream-window") {
+    return "stream window";
+  }
+  if (mode === "stream-window-combined") {
+    return "stream window combined";
+  }
+  if (mode === "stream-render-shape") {
+    return "stream Render Shape";
+  }
+  if (mode === "stream-full") {
+    return "stream full";
   }
   if (mode === "turbo-scan-json") {
     return "Turbo Scanner JSON";
@@ -907,12 +926,34 @@ export function MarkdownParserExample() {
       };
     }
 
+    if (mode === "stream-window-combined") {
+      const result = await parseMarkdownFileDocumentStreamingWindow(path, windowSize);
+      const blocks = markdownSnapshotBlocks(result.blocks);
+      return {
+        blockCount: result.document.blockCount,
+        extractedBlockCount: blocks.length,
+        sourceBytes: result.document.sourceSize,
+      };
+    }
+
+    if (mode === "stream-render-shape") {
+      const result = await parseMarkdownFileDocumentStreamingRenderWindow(path, windowSize);
+      const blocks = markdownRenderBlocks(result.blocks);
+      return {
+        blockCount: result.document.blockCount,
+        extractedBlockCount: blocks.length,
+        sourceBytes: result.document.sourceSize,
+      };
+    }
+
     const document =
       mode === "md4c-window" || mode === "md4c-full"
         ? await parseMarkdownFileDocumentWithMd4c(path, { dialect: "github" })
+        : mode === "stream-window" || mode === "stream-full"
+          ? await parseMarkdownFileDocumentWithStreaming(path)
         : await parseMarkdownFileDocument(path, { dialect: "github" });
     const blocks =
-      mode === "scan-window" || mode === "md4c-window"
+      mode === "scan-window" || mode === "stream-window" || mode === "md4c-window"
         ? markdownDocumentWindow(document, windowSize)
         : markdownDocumentBlocks(document);
     return {
@@ -928,6 +969,10 @@ export function MarkdownParserExample() {
       "scan-window-combined",
       "scan-render-shape",
       "scan-full",
+      "stream-window",
+      "stream-window-combined",
+      "stream-render-shape",
+      "stream-full",
       "md4c-window",
       "md4c-full",
       "json",

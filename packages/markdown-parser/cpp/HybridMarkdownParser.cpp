@@ -435,6 +435,90 @@ size_t scannedBlockEnd(
   return end;
 }
 
+MarkdownBlockType scannedStreamingBlockType(const char* bytes, size_t length, const LineInfo& line) {
+  switch (line.first) {
+    case '#':
+      if (lineStartsHeading(bytes, line)) {
+        return MarkdownBlockType::Heading;
+      }
+      break;
+    case '`':
+    case '~':
+      if (lineFenceChar(bytes, line) != 0) {
+        return MarkdownBlockType::CodeBlock;
+      }
+      break;
+    case '-':
+    case '*':
+      if (lineStartsThematicBreak(bytes, line)) {
+        return MarkdownBlockType::ThematicBreak;
+      }
+      if (lineStartsUnorderedList(bytes, line)) {
+        return MarkdownBlockType::UnorderedList;
+      }
+      break;
+    case '_':
+      if (lineStartsThematicBreak(bytes, line)) {
+        return MarkdownBlockType::ThematicBreak;
+      }
+      break;
+    case '>':
+      if (lineStartsBlockquote(line)) {
+        return MarkdownBlockType::Quote;
+      }
+      break;
+    case '+':
+      if (lineStartsUnorderedList(bytes, line)) {
+        return MarkdownBlockType::UnorderedList;
+      }
+      break;
+    default:
+      if (line.first >= '0' && line.first <= '9' && lineStartsOrderedList(bytes, line)) {
+        return MarkdownBlockType::OrderedList;
+      }
+      break;
+  }
+
+  const size_t nextStart = nextPhysicalLineStart(bytes, length, line.end);
+  if (line.hasPipe && nextStart < length) {
+    const LineInfo nextLine = lineInfoAt(bytes, length, nextStart);
+    if (lineLooksLikeTableDelimiter(bytes, nextLine)) {
+      return MarkdownBlockType::Table;
+    }
+  }
+
+  return MarkdownBlockType::Paragraph;
+}
+
+size_t scannedStreamingBlockEnd(
+    const char* bytes,
+    size_t length,
+    const LineInfo& line,
+    MarkdownBlockType type) {
+  size_t end = line.end;
+  if (type == MarkdownBlockType::Heading || type == MarkdownBlockType::ThematicBreak) {
+    return end;
+  }
+
+  if (type == MarkdownBlockType::CodeBlock) {
+    return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, line));
+  }
+
+  size_t nextStart = nextPhysicalLineStart(bytes, length, end);
+  while (nextStart < length) {
+    const LineInfo nextLine = lineInfoAt(bytes, length, nextStart);
+    if (nextLine.blank) {
+      break;
+    }
+    if (type == MarkdownBlockType::Paragraph && lineInterruptsParagraph(bytes, nextLine)) {
+      break;
+    }
+    end = nextLine.end;
+    nextStart = nextPhysicalLineStart(bytes, length, end);
+  }
+  return end;
+}
+
 size_t blockStartForText(const char* bytes, size_t length, size_t offset) {
   size_t start = lineStart(bytes, std::min(offset, length));
   const size_t end = lineEnd(bytes, length, start);
@@ -734,6 +818,46 @@ ParseResult scanMarkdownSource(std::shared_ptr<const MarkdownSource> source, dou
   };
 }
 
+ParseResult streamMarkdownSource(std::shared_ptr<const MarkdownSource> source, double readMs) {
+  const auto scanStartedAt = Clock::now();
+  const char* bytes = source->data();
+  const size_t length = source->size();
+  std::vector<MarkdownBlockRange> blocks;
+  if (length > 0) {
+    blocks.reserve(std::max<size_t>(16, length / 128));
+  }
+
+  size_t lineStartOffset = 0;
+  while (lineStartOffset < length) {
+    const LineInfo line = lineInfoAt(bytes, length, lineStartOffset);
+    if (line.blank) {
+      lineStartOffset = nextPhysicalLineStart(bytes, length, line.end);
+      continue;
+    }
+
+    const MarkdownBlockType type = scannedStreamingBlockType(bytes, length, line);
+    const size_t end = scannedStreamingBlockEnd(bytes, length, line, type);
+    blocks.push_back(MarkdownBlockRange{
+        blocks.size(),
+        1,
+        line.start,
+        std::min(end, length),
+        type,
+    });
+    lineStartOffset = nextPhysicalLineStart(bytes, length, end);
+  }
+
+  const double blockRangeMs = elapsedMs(scanStartedAt, Clock::now());
+  return ParseResult{
+      std::move(source),
+      std::move(blocks),
+      readMs,
+      0,
+      blockRangeMs,
+      blockRangeMs,
+  };
+}
+
 std::string normalizeFilePath(const std::string& filePath) {
   constexpr auto prefix = std::string_view("file://");
   if (filePath.starts_with(prefix)) {
@@ -890,6 +1014,21 @@ BenchmarkSample runBenchmarkMode(
     auto blocks = document->getBlocks(0, document->getBlockCount(), false);
     blockCount = document->getBlockCount();
     extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "stream-window" || mode == "stream-window-combined") {
+    auto document = createDocument(streamMarkdownSource(source, 0));
+    auto blocks = document->getBlocks(0, static_cast<double>(windowSize), false);
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "stream-render-shape") {
+    auto document = createDocument(streamMarkdownSource(source, 0));
+    auto blocks = document->getRenderBlocks(0, static_cast<double>(windowSize));
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
+  } else if (mode == "stream-full") {
+    auto document = createDocument(streamMarkdownSource(source, 0));
+    auto blocks = document->getBlocks(0, document->getBlockCount(), false);
+    blockCount = document->getBlockCount();
+    extractedBlockCount = static_cast<double>(blocks.size());
   } else if (mode == "md4c-window") {
     auto document = createDocument(parseMarkdownSource(source, flags, 0));
     auto blocks = document->getBlocks(0, static_cast<double>(windowSize), false);
@@ -952,6 +1091,46 @@ std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> HybridMarkdownParser::s
     auto source = readFileSource(filePath);
     const auto readFinishedAt = Clock::now();
     auto document = createDocument(scanMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+    MarkdownFileRenderWindowResult result;
+    result.document = document;
+    result.blocks = document->getRenderBlocks(0, count);
+    return result;
+  });
+}
+
+std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMarkdownParser::streamMarkdownFile(
+    const std::string& filePath) {
+  return Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>::async([filePath]() -> std::shared_ptr<HybridMarkdownDocumentSpec> {
+    const auto readStartedAt = Clock::now();
+    auto source = readFileSource(filePath);
+    const auto readFinishedAt = Clock::now();
+    return createDocument(streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+  });
+}
+
+std::shared_ptr<Promise<MarkdownFileWindowResult>> HybridMarkdownParser::streamMarkdownFileWindow(
+    const std::string& filePath,
+    double count) {
+  return Promise<MarkdownFileWindowResult>::async([filePath, count]() -> MarkdownFileWindowResult {
+    const auto readStartedAt = Clock::now();
+    auto source = readFileSource(filePath);
+    const auto readFinishedAt = Clock::now();
+    auto document = createDocument(streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+    MarkdownFileWindowResult result;
+    result.document = document;
+    result.blocks = document->getBlocks(0, count, false);
+    return result;
+  });
+}
+
+std::shared_ptr<Promise<MarkdownFileRenderWindowResult>> HybridMarkdownParser::streamMarkdownFileRenderWindow(
+    const std::string& filePath,
+    double count) {
+  return Promise<MarkdownFileRenderWindowResult>::async([filePath, count]() -> MarkdownFileRenderWindowResult {
+    const auto readStartedAt = Clock::now();
+    auto source = readFileSource(filePath);
+    const auto readFinishedAt = Clock::now();
+    auto document = createDocument(streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
     MarkdownFileRenderWindowResult result;
     result.document = document;
     result.blocks = document->getRenderBlocks(0, count);
