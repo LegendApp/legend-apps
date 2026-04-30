@@ -211,7 +211,9 @@ function markdownSizeLabel(markdown: string) {
 
 function timingPayload(timing: MarkdownDocumentTiming) {
   return {
+    blockRangeMs: Math.round(timing.blockRangeMs * 100) / 100,
     documentMs: Math.round(timing.documentMs * 100) / 100,
+    mdParseMs: Math.round(timing.mdParseMs * 100) / 100,
     nativeParseMs: Math.round(timing.parseMs * 100) / 100,
     readMs: Math.round(timing.readMs * 100) / 100,
     sourceBytes: timing.sourceBytes,

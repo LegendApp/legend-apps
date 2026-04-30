@@ -47,6 +47,8 @@ struct ParseResult {
   std::string source;
   std::vector<MarkdownBlockRange> blocks;
   double readMs = 0;
+  double mdParseMs = 0;
+  double blockRangeMs = 0;
   double parseMs = 0;
 };
 
@@ -344,6 +346,7 @@ ParseResult parseMarkdownSource(std::string markdown, double flags, double readM
     throw std::runtime_error("Markdown parse failed with code " + std::to_string(result));
   }
 
+  const auto blockRangeStartedAt = Clock::now();
   std::vector<MarkdownBlockRange> blocks;
   blocks.reserve(state.blocks.size());
   for (const auto& block : state.blocks) {
@@ -357,11 +360,16 @@ ParseResult parseMarkdownSource(std::string markdown, double flags, double readM
       });
     }
   }
+  const auto blockRangeFinishedAt = Clock::now();
+  const double mdParseMs = elapsedMs(parseStartedAt, parseFinishedAt);
+  const double blockRangeMs = elapsedMs(blockRangeStartedAt, blockRangeFinishedAt);
   return ParseResult{
       std::move(markdown),
       std::move(blocks),
       readMs,
-      elapsedMs(parseStartedAt, parseFinishedAt),
+      mdParseMs,
+      blockRangeMs,
+      mdParseMs + blockRangeMs,
   };
 }
 
@@ -388,6 +396,8 @@ std::shared_ptr<HybridMarkdownDocumentSpec> createDocument(ParseResult result) {
   auto timing = MarkdownDocumentTiming(
       static_cast<double>(result.source.size()),
       result.readMs,
+      result.mdParseMs,
+      result.blockRangeMs,
       result.parseMs,
       0);
   auto document = std::make_shared<HybridMarkdownDocument>(std::move(result.source), std::move(result.blocks), timing);

@@ -12,6 +12,8 @@ export interface MarkdownBlockSnapshot {
 export interface MarkdownDocumentTiming {
   sourceBytes: number;
   readMs: number;
+  mdParseMs: number;
+  blockRangeMs: number;
   parseMs: number;
   documentMs: number;
 }

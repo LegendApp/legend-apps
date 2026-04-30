@@ -41,12 +41,14 @@ namespace margelo::nitro::legenddesktop::markdownparser {
   public:
     double sourceBytes     SWIFT_PRIVATE;
     double readMs     SWIFT_PRIVATE;
+    double mdParseMs     SWIFT_PRIVATE;
+    double blockRangeMs     SWIFT_PRIVATE;
     double parseMs     SWIFT_PRIVATE;
     double documentMs     SWIFT_PRIVATE;
 
   public:
     MarkdownDocumentTiming() = default;
-    explicit MarkdownDocumentTiming(double sourceBytes, double readMs, double parseMs, double documentMs): sourceBytes(sourceBytes), readMs(readMs), parseMs(parseMs), documentMs(documentMs) {}
+    explicit MarkdownDocumentTiming(double sourceBytes, double readMs, double mdParseMs, double blockRangeMs, double parseMs, double documentMs): sourceBytes(sourceBytes), readMs(readMs), mdParseMs(mdParseMs), blockRangeMs(blockRangeMs), parseMs(parseMs), documentMs(documentMs) {}
 
   public:
     friend bool operator==(const MarkdownDocumentTiming& lhs, const MarkdownDocumentTiming& rhs) = default;
@@ -64,6 +66,8 @@ namespace margelo::nitro {
       return margelo::nitro::legenddesktop::markdownparser::MarkdownDocumentTiming(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceBytes"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "readMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mdParseMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockRangeMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "parseMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "documentMs")))
       );
@@ -72,6 +76,8 @@ namespace margelo::nitro {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceBytes"), JSIConverter<double>::toJSI(runtime, arg.sourceBytes));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "readMs"), JSIConverter<double>::toJSI(runtime, arg.readMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "mdParseMs"), JSIConverter<double>::toJSI(runtime, arg.mdParseMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "blockRangeMs"), JSIConverter<double>::toJSI(runtime, arg.blockRangeMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "parseMs"), JSIConverter<double>::toJSI(runtime, arg.parseMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "documentMs"), JSIConverter<double>::toJSI(runtime, arg.documentMs));
       return obj;
@@ -86,6 +92,8 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceBytes")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "readMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mdParseMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockRangeMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "parseMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "documentMs")))) return false;
       return true;
