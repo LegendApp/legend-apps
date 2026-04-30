@@ -1,7 +1,12 @@
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { EnrichedMarkdownText } from "react-native-enriched-markdown";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  EnrichedMarkdownText,
+  EnrichedMarkdownTextInput,
+  type EnrichedMarkdownTextInputInstance,
+  type MarkdownTextInputStyle,
+} from "react-native-enriched-markdown";
+import { Linking, Pressable, StyleSheet, Text, View, type TextStyle } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { defaultMarkdownStyle } from "./styles";
 import type {
@@ -10,6 +15,7 @@ import type {
   MarkdownDocumentProps,
   MarkdownDocumentSnapshot,
   MarkdownSaveState,
+  MarkdownTransactionResult,
 } from "./types";
 
 type DocumentState =
@@ -31,20 +37,92 @@ type DocumentState =
 
 const estimatedItemSize = 120;
 const hydrateChunkSize = 512;
+const editDebounceMs = 300;
+
+function inputStyleFromMarkdownStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
+  return {
+    link: markdownStyle.link
+      ? {
+          color: markdownStyle.link.color,
+          underline: markdownStyle.link.underline,
+        }
+      : undefined,
+  } satisfies MarkdownTextInputStyle;
+}
+
+function editableTextStyleForBlock(
+  block: MarkdownBlockSnapshot,
+  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
+) {
+  const headingLevel = block.markdown.match(/^(#{1,6})\s/)?.[1]?.length;
+  const markdownTextStyle =
+    headingLevel === 1
+      ? markdownStyle.h1
+      : headingLevel === 2
+        ? markdownStyle.h2
+        : headingLevel === 3
+          ? markdownStyle.h3
+          : block.type === "codeBlock"
+            ? markdownStyle.codeBlock
+            : markdownStyle.paragraph;
+
+  return [styles.editorInput, markdownTextStyle as TextStyle | undefined];
+}
+
+function splitMarkdownAtFirstLineBreak(markdown: string) {
+  const lineBreakIndex = markdown.indexOf("\n");
+  if (lineBreakIndex < 0) {
+    return null;
+  }
+
+  const beforeMarkdown = markdown.slice(0, lineBreakIndex);
+  const afterMarkdown = markdown.slice(lineBreakIndex + 1);
+  return { beforeMarkdown, afterMarkdown };
+}
 
 function MarkdownBlockRow({
+  activeInputRef,
+  draftMarkdown,
+  isActive,
+  onActivate,
+  onBlur,
+  onChangeMarkdown,
   block,
   markdownStyle,
 }: LegendListRenderItemProps<string> & {
+  activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   block?: MarkdownBlockSnapshot;
+  draftMarkdown: string;
+  isActive: boolean;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
+  onActivate: (block: MarkdownBlockSnapshot) => void;
+  onBlur: () => void;
+  onChangeMarkdown: (block: MarkdownBlockSnapshot, markdown: string) => void;
 }) {
   if (!block) {
     return null;
   }
 
+  if (isActive) {
+    return (
+      <View style={styles.blockRow}>
+        <EnrichedMarkdownTextInput
+          ref={activeInputRef}
+          autoFocus
+          defaultValue={draftMarkdown}
+          markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
+          multiline
+          onBlur={onBlur}
+          onChangeMarkdown={(markdown) => onChangeMarkdown(block, markdown)}
+          scrollEnabled={false}
+          style={StyleSheet.flatten(editableTextStyleForBlock(block, markdownStyle))}
+        />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.blockRow}>
+    <Pressable onPress={() => onActivate(block)} style={styles.blockRow}>
       <EnrichedMarkdownText
         allowTrailingMargin={false}
         containerStyle={styles.renderedText}
@@ -54,9 +132,8 @@ function MarkdownBlockRow({
         onLinkPress={(event) => {
           void Linking.openURL(event.url);
         }}
-        selectable
       />
-    </View>
+    </Pressable>
   );
 }
 
@@ -79,10 +156,24 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
   ) => {
     const loadVersionRef = useRef(0);
     const hydrateFrameRef = useRef<number | undefined>(undefined);
+    const activeInputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
+    const editTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const activeBlockIdRef = useRef<string | null>(null);
+    const draftMarkdownRef = useRef("");
+    const committedMarkdownRef = useRef("");
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
+    const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+    const [draftMarkdown, setDraftMarkdown] = useState("");
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
+
+    const clearEditTimer = useCallback(() => {
+      if (editTimerRef.current !== undefined) {
+        clearTimeout(editTimerRef.current);
+        editTimerRef.current = undefined;
+      }
+    }, []);
 
     const setNextSaveState = useCallback(
       (nextSaveState: MarkdownSaveState) => {
@@ -124,6 +215,142 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return nextBlockIds;
       });
     }, []);
+
+    const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
+      setBlocksById((previousBlocksById) => {
+        const nextBlocksById = new Map(previousBlocksById);
+        for (const retiredBlockId of result.retiredBlockIds) {
+          nextBlocksById.delete(retiredBlockId);
+        }
+        for (const block of result.changedBlocks) {
+          nextBlocksById.set(block.id, block);
+        }
+        return nextBlocksById;
+      });
+
+      setBlockIds((previousBlockIds) => {
+        const nextBlockIds = [...previousBlockIds];
+        nextBlockIds.splice(
+          result.changedRange.startBlockIndex,
+          result.changedRange.deleteCount,
+          ...result.changedRange.blockIds,
+        );
+        return nextBlockIds;
+      });
+
+      setDocumentState((previousDocumentState) => {
+        if (previousDocumentState.status !== "loaded") {
+          return previousDocumentState;
+        }
+
+        return {
+          status: "loaded",
+          snapshot: {
+            ...previousDocumentState.snapshot,
+            blockCount:
+              previousDocumentState.snapshot.blockCount -
+              result.changedRange.deleteCount +
+              result.changedRange.blockIds.length,
+            sourceSize: result.sourceLength,
+          },
+        };
+      });
+    }, []);
+
+    const commitActiveBlock = useCallback(async () => {
+      clearEditTimer();
+
+      const activeBlockIdValue = activeBlockIdRef.current;
+      const markdown = draftMarkdownRef.current;
+      if (
+        documentState.status !== "loaded" ||
+        !adapter.applyTransaction ||
+        !activeBlockIdValue ||
+        markdown === committedMarkdownRef.current
+      ) {
+        return;
+      }
+
+      try {
+        const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+          type: "updateBlockMarkdown",
+          blockId: activeBlockIdValue,
+          markdown,
+        });
+        if (activeBlockIdRef.current === activeBlockIdValue) {
+          committedMarkdownRef.current = markdown;
+        }
+        applyTransactionResult(result);
+      } catch (error) {
+        const nextError = error instanceof Error ? error : new Error(String(error));
+        onError?.(nextError);
+      }
+    }, [adapter, applyTransactionResult, clearEditTimer, documentState, onError]);
+
+    const activateBlock = useCallback(
+      (block: MarkdownBlockSnapshot) => {
+        void commitActiveBlock();
+        activeBlockIdRef.current = block.id;
+        draftMarkdownRef.current = block.markdown;
+        committedMarkdownRef.current = block.markdown;
+        setDraftMarkdown(block.markdown);
+        setActiveBlockId(block.id);
+      },
+      [commitActiveBlock],
+    );
+
+    const splitActiveBlock = useCallback(
+      async (block: MarkdownBlockSnapshot, beforeMarkdown: string, afterMarkdown: string) => {
+        clearEditTimer();
+
+        if (documentState.status !== "loaded" || !adapter.applyTransaction) {
+          return;
+        }
+
+        try {
+          const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+            type: "splitBlock",
+            blockId: block.id,
+            beforeMarkdown,
+            afterMarkdown,
+          });
+          applyTransactionResult(result);
+
+          const nextActiveBlockId = result.changedRange.blockIds[1] ?? result.changedRange.blockIds[0] ?? block.id;
+          activeBlockIdRef.current = nextActiveBlockId;
+          draftMarkdownRef.current = afterMarkdown;
+          committedMarkdownRef.current = afterMarkdown;
+          setDraftMarkdown(afterMarkdown);
+          setActiveBlockId(nextActiveBlockId);
+          onDirtyChange?.(true);
+        } catch (error) {
+          const nextError = error instanceof Error ? error : new Error(String(error));
+          onError?.(nextError);
+        }
+      },
+      [adapter, applyTransactionResult, clearEditTimer, documentState, onDirtyChange, onError],
+    );
+
+    const handleChangeMarkdown = useCallback(
+      (block: MarkdownBlockSnapshot, markdown: string) => {
+        if (block.type !== "codeBlock") {
+          const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
+          if (splitMarkdown) {
+            void splitActiveBlock(block, splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
+            return;
+          }
+        }
+
+        draftMarkdownRef.current = markdown;
+        setDraftMarkdown(markdown);
+        onDirtyChange?.(true);
+        clearEditTimer();
+        editTimerRef.current = setTimeout(() => {
+          void commitActiveBlock();
+        }, editDebounceMs);
+      },
+      [clearEditTimer, commitActiveBlock, onDirtyChange, splitActiveBlock],
+    );
 
     const hydrateRemainingBlocks = useCallback(
       (snapshot: MarkdownDocumentSnapshot, loadVersion: number) => {
@@ -175,9 +402,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       let isCanceled = false;
 
       cancelHydration();
+      clearEditTimer();
+      activeBlockIdRef.current = null;
+      draftMarkdownRef.current = "";
+      committedMarkdownRef.current = "";
       setDocumentState({ status: "loading" });
       setBlockIds([]);
       setBlocksById(new Map());
+      setActiveBlockId(null);
+      setDraftMarkdown("");
       setNextSaveState("idle");
       onDirtyChange?.(false);
 
@@ -217,8 +450,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return () => {
         isCanceled = true;
         cancelHydration();
+        clearEditTimer();
       };
-    }, [adapter, cancelHydration, filename, onDirtyChange, onError, onLoaded, setNextSaveState]);
+    }, [adapter, cancelHydration, clearEditTimer, filename, onDirtyChange, onError, onLoaded, setNextSaveState]);
 
     useEffect(() => {
       if (documentState.status !== "loaded") {
@@ -237,27 +471,36 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       setNextSaveState("saving");
-      void adapter
-        .save(documentState.snapshot.documentId)
-        .then(() => {
+      void (async () => {
+        try {
+          await commitActiveBlock();
+          await adapter.save(documentState.snapshot.documentId);
           setNextSaveState("idle");
           onDirtyChange?.(false);
-        })
-        .catch((error: unknown) => {
+        } catch (error: unknown) {
           const nextError = error instanceof Error ? error : new Error(String(error));
           setNextSaveState("error");
           onError?.(nextError);
-        });
-    }, [adapter, documentState, onDirtyChange, onError, saveState, setNextSaveState]);
+        }
+      })();
+    }, [adapter, commitActiveBlock, documentState, onDirtyChange, onError, saveState, setNextSaveState]);
 
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
-        focus() {},
-        insertLink() {},
+        focus() {
+          activeInputRef.current?.focus();
+        },
+        insertLink() {
+          activeInputRef.current?.insertLink("link", "https://");
+        },
         redo() {},
         save,
-        toggleBold() {},
-        toggleItalic() {},
+        toggleBold() {
+          activeInputRef.current?.toggleBold();
+        },
+        toggleItalic() {
+          activeInputRef.current?.toggleItalic();
+        },
         undo() {},
       }),
       [save],
@@ -307,8 +550,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           renderItem={(props) => (
             <MarkdownBlockRow
               {...props}
+              activeInputRef={activeInputRef}
               block={blocksById.get(props.item)}
+              draftMarkdown={activeBlockId === props.item ? draftMarkdown : ""}
+              isActive={activeBlockId === props.item}
               markdownStyle={resolvedMarkdownStyle}
+              onActivate={activateBlock}
+              onBlur={() => {
+                void commitActiveBlock();
+                activeBlockIdRef.current = null;
+                setActiveBlockId(null);
+              }}
+              onChangeMarkdown={handleChangeMarkdown}
             />
           )}
           style={styles.list}
@@ -345,6 +598,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     padding: 32,
     textAlign: "center",
+  },
+  editorInput: {
+    backgroundColor: "transparent",
+    color: "#374151",
+    fontSize: 16,
+    lineHeight: 25,
+    minHeight: 32,
+    padding: 0,
+    width: "100%",
   },
   list: {
     flex: 1,

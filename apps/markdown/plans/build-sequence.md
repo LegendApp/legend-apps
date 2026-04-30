@@ -116,40 +116,40 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 7: Active Block Editing
 
-- [ ] Click/tap rendered block to activate editor.
-- [ ] Use `EnrichedMarkdownTextInput` for active block editing.
+- [x] Click/tap rendered block to activate editor.
+- [x] Use `EnrichedMarkdownTextInput` for active block editing.
 - [ ] Use current enriched APIs first:
-  - [ ] `onChangeMarkdown`
+  - [x] `onChangeMarkdown`
   - [ ] `onChangeSelection`
   - [ ] `onChangeState`
-  - [ ] focus/blur
-  - [ ] inline formatting commands
-  - [ ] link commands
+  - [x] focus/blur
+  - [x] inline formatting commands
+  - [x] link commands
   - [ ] `getMarkdown`
   - [ ] caret rect APIs
 - [ ] Best effort: place cursor near click position; fall back to end.
-- [ ] Commit active block edits with 300ms debounce.
-- [ ] Mark dirty immediately on editor change.
-- [ ] Flush pending edit on block switch.
-- [ ] Flush pending edit on blur.
+- [x] Commit active block edits with 300ms debounce.
+- [x] Mark dirty immediately on editor change.
+- [x] Flush pending edit on block switch.
+- [x] Flush pending edit on blur.
 - [ ] Flush pending edit on Escape.
-- [ ] Flush pending edit on Save.
-- [ ] Blur returns block to rendered mode.
+- [x] Flush pending edit on Save.
+- [x] Blur returns block to rendered mode.
 - [ ] Escape commits and blurs.
 - [ ] Keep empty active block as empty paragraph.
-- [ ] Implement Enter split:
-  - [ ] left/original block keeps original ID
-  - [ ] new/right block gets new ID
-  - [ ] focus moves to new/right block
-  - [ ] use newline-detection workaround if Enter interception is unavailable
+- [x] Implement Enter split:
+  - [x] left/original block keeps original ID
+  - [x] new/right block gets new ID
+  - [x] focus moves to new/right block
+  - [x] use newline-detection workaround if Enter interception is unavailable
   - [ ] list continuation is best effort
-- [ ] Leave Backspace-at-start on enriched input default first.
-- [ ] Leave paste on enriched input default first.
-- [ ] Validate `bun run typecheck`.
+- [x] Leave Backspace-at-start on enriched input default first.
+- [x] Leave paste on enriched input default first.
+- [x] Validate `bun run typecheck`.
 - [ ] Validate editing a paragraph updates rendered markdown after blur.
 - [ ] Validate Enter splits a block.
 - [ ] Validate Save flushes pending edit.
-- [ ] Commit with a `type: subject` message.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 8: Save, Autosave, Undo, And Commands
 
