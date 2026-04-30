@@ -7,6 +7,7 @@ import {
   type NativeScannedPlaylist,
   type NativeScannedTrack,
 } from "@legend-desktop/media-library-scanner";
+import { Directory, Paths } from "expo-file-system/next";
 import type { MusicLibrary, MusicPlaylist } from "../domain/musicModel";
 import { getMusicLibrarySnapshot, saveMusicLibrary, setMusicLibrarySnapshot } from "./libraryStore";
 import { buildLibraryFromScan, joinRootRelativePath } from "./librarySnapshot";
@@ -25,8 +26,16 @@ let watcherTimer: ReturnType<typeof setTimeout> | undefined;
 const defaultScanOptions: MediaScanOptions = {
   allowedExtensions: supportedAudioExtensions,
   batchSize: 64,
-  includeArtwork: false,
+  includeArtwork: true,
 };
+
+function artworkCacheDirectory() {
+  const directory = new Directory(Paths.cache, "legend-music-artwork");
+  if (!directory.exists) {
+    directory.create({ idempotent: true, intermediates: true });
+  }
+  return directory.uri;
+}
 
 function uniquePaths(paths: readonly string[]) {
   const seen = new Set<string>();
@@ -139,7 +148,7 @@ export async function scanLibrary(paths: readonly string[], options: MediaScanOp
 
   try {
     const previousLibrary = getMusicLibrarySnapshot();
-    const result = await scanMediaLibrary(roots, "", {
+    const result = await scanMediaLibrary(roots, artworkCacheDirectory(), {
       ...defaultScanOptions,
       ...options,
     });

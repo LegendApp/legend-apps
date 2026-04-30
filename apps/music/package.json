@@ -8,6 +8,7 @@
     "@legend-desktop/app-storage": "0.0.0",
     "@legend-desktop/auto-updater": "0.0.0",
     "@legend-desktop/audio-player": "0.0.0",
+    "@legend-desktop/context-menu": "0.0.0",
     "@legend-desktop/file-dialog": "0.0.0",
     "@legend-desktop/file-system-watcher": "0.0.0",
     "@legend-desktop/global-hotkey": "0.0.0",

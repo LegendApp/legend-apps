@@ -1,6 +1,7 @@
-import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
+import { showContextMenu } from "@legend-desktop/context-menu";
+import { openFileDialog, revealInFinder, saveFileDialog } from "@legend-desktop/file-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { type GestureResponderEvent, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MusicId, MusicLibrary, MusicPlaylist, MusicTrack, RepeatMode } from "./domain";
 import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
 import { useMusicDesktopIntegrations } from "./native";
@@ -169,6 +170,39 @@ export function App() {
 
   const playTrack = (trackId: MusicId) => {
     void playTrackNow(trackId, filteredTracks.map((track) => track.id));
+  };
+
+  const showTrackMenu = async (track: MusicTrack, event: GestureResponderEvent) => {
+    const nativeEvent = event.nativeEvent as { pageX?: number; pageY?: number; locationX?: number; locationY?: number };
+    const selection = await showContextMenu(
+      [
+        { id: "play", title: "Play Now" },
+        { id: "next", title: "Play Next" },
+        { id: "queue", title: "Add to Queue" },
+        {
+          enabled: selectedPlaylist?.source === "manual",
+          id: "playlist",
+          title: selectedPlaylist?.trackIds.includes(track.id) ? "Remove from Playlist" : "Add to Playlist",
+        },
+        { id: "reveal", title: "Reveal in Finder" },
+      ],
+      {
+        x: nativeEvent.pageX ?? nativeEvent.locationX ?? 0,
+        y: nativeEvent.pageY ?? nativeEvent.locationY ?? 0,
+      },
+    );
+
+    if (selection === "play") {
+      playTrack(track.id);
+    } else if (selection === "next") {
+      playTrackNext(track.id);
+    } else if (selection === "queue") {
+      enqueueTrack(track.id);
+    } else if (selection === "playlist") {
+      await toggleTrackInSelectedPlaylist(track.id);
+    } else if (selection === "reveal") {
+      await revealInFinder(track.source.filePath);
+    }
   };
 
   const cycleRepeatMode = () => {
@@ -437,6 +471,7 @@ export function App() {
                   onPlaylistAction={selectedPlaylist?.source === "manual" ? () => void toggleTrackInSelectedPlaylist(track.id) : undefined}
                   onPlay={() => playTrack(track.id)}
                   onPlayNext={() => playTrackNext(track.id)}
+                  onShowMenu={(event) => void showTrackMenu(track, event)}
                   playlistActionLabel={
                     selectedPlaylist?.source === "manual"
                       ? selectedPlaylist.trackIds.includes(track.id) ? "Remove" : "Add"
@@ -490,7 +525,7 @@ export function App() {
         <View style={styles.player}>
           <View style={styles.nowPlaying}>
             <View style={styles.nowPlayingArtwork}>
-              <Text style={styles.trackArtworkText}>{(currentTrack?.metadata.title ?? "L").slice(0, 1).toUpperCase()}</Text>
+              <TrackArtwork track={currentTrack} variant="large" />
             </View>
             <View style={styles.nowPlayingText}>
               <Text numberOfLines={1} style={styles.nowPlayingTitle}>
@@ -561,18 +596,19 @@ export default App;
 function TrackRow(props: {
   isCurrent: boolean;
   onEnqueue: () => void;
+  onShowMenu: (event: GestureResponderEvent) => void;
   onPlaylistAction?: () => void;
   onPlay: () => void;
   onPlayNext: () => void;
   playlistActionLabel?: string;
   track: MusicTrack;
 }) {
-  const { isCurrent, onEnqueue, onPlay, onPlayNext, onPlaylistAction, playlistActionLabel, track } = props;
+  const { isCurrent, onEnqueue, onPlay, onPlayNext, onPlaylistAction, onShowMenu, playlistActionLabel, track } = props;
 
   return (
     <View style={[styles.trackRow, isCurrent && styles.currentTrackRow]}>
       <Pressable onPress={onPlay} style={styles.trackArtwork}>
-        <Text style={styles.trackArtworkText}>{track.metadata.title.slice(0, 1).toUpperCase()}</Text>
+        <TrackArtwork track={track} />
       </Pressable>
       <Pressable onPress={onPlay} style={styles.trackInfo}>
         <Text numberOfLines={1} style={styles.trackTitle}>
@@ -594,8 +630,25 @@ function TrackRow(props: {
           <Text style={styles.rowActionText}>{playlistActionLabel}</Text>
         </Pressable>
       ) : null}
+      <Pressable onPress={onShowMenu} style={styles.rowAction}>
+        <Text style={styles.rowActionText}>More</Text>
+      </Pressable>
     </View>
   );
+}
+
+function TrackArtwork(props: {
+  track?: MusicTrack;
+  variant?: "normal" | "large";
+}) {
+  const { track, variant = "normal" } = props;
+  const style = variant === "large" ? styles.artworkImageLarge : styles.artworkImage;
+
+  if (track?.metadata.artworkUri) {
+    return <Image source={{ uri: track.metadata.artworkUri }} style={style} />;
+  }
+
+  return <Text style={styles.trackArtworkText}>{(track?.metadata.title ?? "L").slice(0, 1).toUpperCase()}</Text>;
 }
 
 function SidebarNavButton(props: {
@@ -709,6 +762,16 @@ const styles = StyleSheet.create({
   activeSidebarNavText: {
     color: "#1e341f",
     fontWeight: "700",
+  },
+  artworkImage: {
+    borderRadius: 4,
+    height: 36,
+    width: 36,
+  },
+  artworkImageLarge: {
+    borderRadius: 4,
+    height: 44,
+    width: 44,
   },
   appTitle: {
     color: "#171717",
