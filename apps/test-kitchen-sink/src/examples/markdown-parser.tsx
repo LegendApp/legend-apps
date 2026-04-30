@@ -384,9 +384,12 @@ export function MarkdownParserExample() {
   const [editingSelection, setEditingSelection] = useState(0);
   const [status, setStatus] = useState("Loading sample markdown...");
 
-  const replaceDocument = (nextDocument: MarkdownDocument, source: string) => {
+  const replaceDocument = (nextDocument: MarkdownDocument, source: string, initialBlocks: readonly MarkdownViewerBlock[] = []) => {
     documentVersionRef.current += 1;
     blockCacheRef.current.clear();
+    for (const block of initialBlocks) {
+      blockCacheRef.current.set(block.index, block);
+    }
     setEditingBlockId(undefined);
     setEditingSelection(0);
     setBlockOverrides(new Map());
@@ -444,7 +447,7 @@ export function MarkdownParserExample() {
       headers: { "content-type": "application/json" },
       method: "POST",
     }).catch(() => {});
-    replaceDocument(document, "generated-initial");
+    replaceDocument(document, "generated-initial", viewerBlocks);
     setStatus(
       `Generated sample loaded with Nitro: ${document.blockCount} render blocks in ${formatDuration(
         finishedAt - startedAt,
@@ -459,7 +462,7 @@ export function MarkdownParserExample() {
     const parsedAt = Date.now();
     const viewerBlocks = markdownDocumentWindow(document, 64);
     const finishedAt = Date.now();
-    replaceDocument(document, "sample");
+    replaceDocument(document, "sample", viewerBlocks);
     setStatus(
       `Nitro sample loaded: ${document.blockCount} render blocks in ${formatDuration(
         finishedAt - startedAt,
@@ -510,7 +513,7 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceDocument(document, "generated-benchmark");
+      replaceDocument(document, "generated-benchmark", nitroWindowBlocks);
       setStatus(
         `Benchmark ${markdownSizeLabel(debugMarkdown)}: Turbo JSON ${formatDuration(
           legacyTotal,
@@ -545,7 +548,7 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceDocument(document, path);
+      replaceDocument(document, path, viewerBlocks);
       setStatus(
         `Nitro loaded ${document.blockCount} render blocks from ${path.split("/").pop() ?? path} in ${formatDuration(
           finishedAt - startedAt,
@@ -596,7 +599,7 @@ export function MarkdownParserExample() {
           headers: { "content-type": "application/json" },
           method: "POST",
         }).catch(() => {});
-        replaceDocument(document, path);
+        replaceDocument(document, path, nitroWindowBlocks);
         setStatus(
           `File benchmark ${path.split("/").pop() ?? path}: Turbo JSON ${formatDuration(
             legacyTotal,
