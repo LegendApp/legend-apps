@@ -210,6 +210,18 @@ bool lineStartsOrderedList(const char* bytes, size_t start, size_t end) {
   return index > start && index + 1 < end && (bytes[index] == '.' || bytes[index] == ')') && isWhitespace(bytes[index + 1]);
 }
 
+bool lineStartsOrderedListAtOne(const char* bytes, size_t start, size_t end) {
+  start = trimLinePrefix(bytes, start, end);
+  size_t index = start;
+  size_t value = 0;
+  while (index < end && bytes[index] >= '0' && bytes[index] <= '9') {
+    value = value * 10 + static_cast<size_t>(bytes[index] - '0');
+    index += 1;
+  }
+  return value == 1 && index > start && index + 1 < end && (bytes[index] == '.' || bytes[index] == ')') &&
+      isWhitespace(bytes[index + 1]);
+}
+
 bool lineStartsThematicBreak(const char* bytes, size_t start, size_t end) {
   start = trimLinePrefix(bytes, start, end);
   if (start >= end || (bytes[start] != '-' && bytes[start] != '*' && bytes[start] != '_')) {
@@ -268,6 +280,12 @@ bool lineStartsBoundaryBlock(const char* bytes, size_t start, size_t end) {
       lineStartsThematicBreak(bytes, start, end);
 }
 
+bool lineInterruptsParagraph(const char* bytes, size_t start, size_t end) {
+  return lineStartsBoundaryBlock(bytes, start, end) ||
+      lineStartsUnorderedList(bytes, start, end) ||
+      lineStartsOrderedListAtOne(bytes, start, end);
+}
+
 std::string scannedBlockType(const char* bytes, size_t length, size_t start, size_t end) {
   if (lineStartsHeading(bytes, start, end)) {
     return "heading";
@@ -314,7 +332,7 @@ size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, const std
     if (lineIsBlank(bytes, nextStart, nextEnd)) {
       break;
     }
-    if (type == "paragraph" && lineStartsBoundaryBlock(bytes, nextStart, nextEnd)) {
+    if (type == "paragraph" && lineInterruptsParagraph(bytes, nextStart, nextEnd)) {
       break;
     }
     end = nextEnd;
