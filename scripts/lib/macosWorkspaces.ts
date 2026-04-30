@@ -169,6 +169,12 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
       for (const podspec of fs.readdirSync(pkgRoot).filter((file) => file.endsWith(".podspec")).sort()) {
         addFile(hash, path.join(pkgRoot, podspec));
       }
+
+      addDirectoryFileList(hash, path.join(pkgRoot, "cpp"));
+      addDirectoryFileList(hash, path.join(pkgRoot, "ios"));
+      addDirectoryFileList(hash, path.join(pkgRoot, "macos"));
+      addDirectoryFileList(hash, path.join(pkgRoot, "nitrogen", "generated"));
+      addDirectoryFileList(hash, path.join(pkgRoot, "vendor"));
     }
   }
 
@@ -181,6 +187,34 @@ function addFile(hash: Hash, filePath: string) {
   if (fs.existsSync(filePath)) {
     hash.update(fs.readFileSync(filePath));
   }
+}
+
+function addDirectoryFileList(hash: Hash, dirPath: string) {
+  hash.update(path.relative(rootDir, dirPath));
+
+  if (!fs.existsSync(dirPath)) {
+    return;
+  }
+
+  for (const filePath of getDirectoryFiles(dirPath)) {
+    hash.update(path.relative(rootDir, filePath));
+  }
+}
+
+function getDirectoryFiles(dirPath: string): string[] {
+  const files: string[] = [];
+
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+    const entryPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...getDirectoryFiles(entryPath));
+    } else if (entry.isFile() || entry.isSymbolicLink()) {
+      files.push(entryPath);
+    }
+  }
+
+  return files.sort();
 }
 
 function quotePBX(value: string) {
