@@ -47,17 +47,7 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 \`\`\`
 `;
 
-type MarkdownViewerBlock = Readonly<{
-  id: string;
-  index: number;
-  type: string;
-  depth: number;
-  markdown: string;
-  text?: string;
-  runs?: MarkdownBlock["runs"];
-  attrs?: MarkdownBlock["attrs"];
-  parentIndex?: number;
-}>;
+type MarkdownViewerBlock = MarkdownBlockSnapshot & { runs: MarkdownBlock["runs"] };
 type MarkdownBenchmarkMode =
   | "scan-window"
   | "scan-window-combined"
@@ -174,8 +164,12 @@ function markdownSnapshotBlock(block: MarkdownBlockSnapshot): MarkdownViewerBloc
   };
 }
 
-function markdownRenderBlocks(blocks: readonly MarkdownRenderBlock[]): readonly MarkdownViewerBlock[] {
-  return blocks;
+function markdownRenderBlocks(blocks: readonly MarkdownRenderBlock[]): MarkdownViewerBlock[] {
+  return blocks.map((block) => ({
+    ...block,
+    runs: [],
+    text: block.markdown,
+  }));
 }
 
 function markdownViewerBlockFromMarkdown(index: number, markdown: string): MarkdownViewerBlock {
