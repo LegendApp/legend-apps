@@ -2,10 +2,19 @@
 
 #include "../nitrogen/generated/shared/c++/HybridMarkdownDocumentSpec.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
+
+class MarkdownSource {
+public:
+  virtual ~MarkdownSource() = default;
+  virtual const char* data() const noexcept = 0;
+  virtual size_t size() const noexcept = 0;
+  virtual size_t externalMemorySize() const noexcept = 0;
+};
 
 struct MarkdownBlockRange {
   size_t index = 0;
@@ -17,7 +26,10 @@ struct MarkdownBlockRange {
 
 class HybridMarkdownDocument final : public HybridMarkdownDocumentSpec {
 public:
-  HybridMarkdownDocument(std::string source, std::vector<MarkdownBlockRange> blocks, MarkdownDocumentTiming timing);
+  HybridMarkdownDocument(
+      std::shared_ptr<const MarkdownSource> source,
+      std::vector<MarkdownBlockRange> blocks,
+      MarkdownDocumentTiming timing);
 
   void setDocumentDurationMs(double durationMs);
 
@@ -35,7 +47,7 @@ private:
   MarkdownBlockSnapshot snapshotForBlock(const MarkdownBlockRange& block, bool includeText) const;
   std::string sourceString(size_t start, size_t end) const;
 
-  std::string source_;
+  std::shared_ptr<const MarkdownSource> source_;
   std::vector<MarkdownBlockRange> blocks_;
   MarkdownDocumentTiming timing_;
 };

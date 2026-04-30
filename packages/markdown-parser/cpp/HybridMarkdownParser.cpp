@@ -9,11 +9,19 @@ extern "C" {
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -44,7 +52,7 @@ struct ParserState {
 };
 
 struct ParseResult {
-  std::string source;
+  std::shared_ptr<const MarkdownSource> source;
   std::vector<MarkdownBlockRange> blocks;
   double readMs = 0;
   double mdParseMs = 0;
@@ -56,6 +64,63 @@ using Clock = std::chrono::steady_clock;
 
 double elapsedMs(Clock::time_point start, Clock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+class StringMarkdownSource final : public MarkdownSource {
+public:
+  explicit StringMarkdownSource(std::string source) : source_(std::move(source)) {}
+
+  const char* data() const noexcept override {
+    return source_.data();
+  }
+
+  size_t size() const noexcept override {
+    return source_.size();
+  }
+
+  size_t externalMemorySize() const noexcept override {
+    return source_.capacity();
+  }
+
+private:
+  std::string source_;
+};
+
+#if defined(__unix__) || defined(__APPLE__)
+class MappedMarkdownSource final : public MarkdownSource {
+public:
+  MappedMarkdownSource(int fd, const char* data, size_t size) : fd_(fd), data_(data), size_(size) {}
+
+  ~MappedMarkdownSource() override {
+    if (data_ != nullptr && size_ > 0) {
+      munmap(const_cast<char*>(data_), size_);
+    }
+    if (fd_ >= 0) {
+      close(fd_);
+    }
+  }
+
+  const char* data() const noexcept override {
+    return data_;
+  }
+
+  size_t size() const noexcept override {
+    return size_;
+  }
+
+  size_t externalMemorySize() const noexcept override {
+    return size_;
+  }
+
+private:
+  int fd_ = -1;
+  const char* data_ = nullptr;
+  size_t size_ = 0;
+};
+#endif
+
+std::shared_ptr<const MarkdownSource> makeStringSource(std::string source) {
+  return std::make_shared<StringMarkdownSource>(std::move(source));
 }
 
 bool isLineBreak(char value) {
@@ -455,10 +520,10 @@ int textCallback(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* user
   return 0;
 }
 
-ParseResult parseMarkdownSource(std::string markdown, double flags, double readMs) {
+ParseResult parseMarkdownSource(std::shared_ptr<const MarkdownSource> source, double flags, double readMs) {
   ParserState state;
-  state.source = markdown.data();
-  state.sourceLength = markdown.size();
+  state.source = source->data();
+  state.sourceLength = source->size();
 
   MD_PARSER parser = {};
   parser.abi_version = 0;
@@ -470,7 +535,7 @@ ParseResult parseMarkdownSource(std::string markdown, double flags, double readM
   parser.text = textCallback;
 
   const auto parseStartedAt = Clock::now();
-  const int result = md_parse(markdown.data(), static_cast<MD_SIZE>(markdown.size()), &parser, &state);
+  const int result = md_parse(source->data(), static_cast<MD_SIZE>(source->size()), &parser, &state);
   const auto parseFinishedAt = Clock::now();
   if (result != 0) {
     throw std::runtime_error("Markdown parse failed with code " + std::to_string(result));
@@ -494,7 +559,7 @@ ParseResult parseMarkdownSource(std::string markdown, double flags, double readM
   const double mdParseMs = elapsedMs(parseStartedAt, parseFinishedAt);
   const double blockRangeMs = elapsedMs(blockRangeStartedAt, blockRangeFinishedAt);
   return ParseResult{
-      std::move(markdown),
+      std::move(source),
       std::move(blocks),
       readMs,
       mdParseMs,
@@ -503,10 +568,10 @@ ParseResult parseMarkdownSource(std::string markdown, double flags, double readM
   };
 }
 
-ParseResult scanMarkdownSource(std::string markdown, double readMs) {
+ParseResult scanMarkdownSource(std::shared_ptr<const MarkdownSource> source, double readMs) {
   const auto scanStartedAt = Clock::now();
-  const char* bytes = markdown.data();
-  const size_t length = markdown.size();
+  const char* bytes = source->data();
+  const size_t length = source->size();
   std::vector<MarkdownBlockRange> blocks;
   size_t start = 0;
 
@@ -531,7 +596,7 @@ ParseResult scanMarkdownSource(std::string markdown, double readMs) {
 
   const double blockRangeMs = elapsedMs(scanStartedAt, Clock::now());
   return ParseResult{
-      std::move(markdown),
+      std::move(source),
       std::move(blocks),
       readMs,
       0,
@@ -548,6 +613,7 @@ std::string normalizeFilePath(const std::string& filePath) {
   return filePath;
 }
 
+#if !defined(__unix__) && !defined(__APPLE__)
 std::string readFile(const std::string& filePath) {
   std::ifstream input(normalizeFilePath(filePath), std::ios::binary);
   if (!input) {
@@ -557,11 +623,49 @@ std::string readFile(const std::string& filePath) {
   buffer << input.rdbuf();
   return buffer.str();
 }
+#endif
+
+#if defined(__unix__) || defined(__APPLE__)
+std::shared_ptr<const MarkdownSource> mapFileSource(const std::string& filePath) {
+  const std::string normalizedPath = normalizeFilePath(filePath);
+  const int fd = open(normalizedPath.c_str(), O_RDONLY);
+  if (fd < 0) {
+    throw std::runtime_error("Failed to read markdown file: " + filePath);
+  }
+
+  struct stat fileStat {};
+  if (fstat(fd, &fileStat) != 0) {
+    close(fd);
+    throw std::runtime_error("Failed to stat markdown file: " + filePath);
+  }
+
+  if (fileStat.st_size <= 0) {
+    close(fd);
+    return makeStringSource("");
+  }
+
+  void* data = mmap(nullptr, static_cast<size_t>(fileStat.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
+  if (data == MAP_FAILED) {
+    close(fd);
+    throw std::runtime_error("Failed to map markdown file: " + filePath);
+  }
+
+  return std::make_shared<MappedMarkdownSource>(fd, static_cast<const char*>(data), static_cast<size_t>(fileStat.st_size));
+}
+#endif
+
+std::shared_ptr<const MarkdownSource> readFileSource(const std::string& filePath) {
+#if defined(__unix__) || defined(__APPLE__)
+  return mapFileSource(filePath);
+#else
+  return makeStringSource(readFile(filePath));
+#endif
+}
 
 std::shared_ptr<HybridMarkdownDocumentSpec> createDocument(ParseResult result) {
   const auto documentStartedAt = Clock::now();
   auto timing = MarkdownDocumentTiming(
-      static_cast<double>(result.source.size()),
+      static_cast<double>(result.source->size()),
       result.readMs,
       result.mdParseMs,
       result.blockRangeMs,
@@ -578,14 +682,14 @@ std::shared_ptr<HybridMarkdownDocumentSpec> createDocument(ParseResult result) {
 HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
 
 std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::scanMarkdown(const std::string& markdown) {
-  return createDocument(scanMarkdownSource(markdown, 0));
+  return createDocument(scanMarkdownSource(makeStringSource(markdown), 0));
 }
 
 std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMarkdownParser::scanMarkdownFile(
     const std::string& filePath) {
   return Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>::async([filePath]() -> std::shared_ptr<HybridMarkdownDocumentSpec> {
     const auto readStartedAt = Clock::now();
-    std::string source = readFile(filePath);
+    auto source = readFileSource(filePath);
     const auto readFinishedAt = Clock::now();
     return createDocument(scanMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
   });
@@ -594,7 +698,7 @@ std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMark
 std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::parseMarkdown(
     const std::string& markdown,
     double flags) {
-  return createDocument(parseMarkdownSource(markdown, flags, 0));
+  return createDocument(parseMarkdownSource(makeStringSource(markdown), flags, 0));
 }
 
 std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMarkdownParser::parseMarkdownFile(
@@ -602,7 +706,7 @@ std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMark
     double flags) {
   return Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>::async([filePath, flags]() -> std::shared_ptr<HybridMarkdownDocumentSpec> {
     const auto readStartedAt = Clock::now();
-    std::string source = readFile(filePath);
+    auto source = readFileSource(filePath);
     const auto readFinishedAt = Clock::now();
     return createDocument(parseMarkdownSource(std::move(source), flags, elapsedMs(readStartedAt, readFinishedAt)));
   });

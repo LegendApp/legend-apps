@@ -6,7 +6,7 @@
 namespace margelo::nitro::legenddesktop::markdownparser {
 
 HybridMarkdownDocument::HybridMarkdownDocument(
-    std::string source,
+    std::shared_ptr<const MarkdownSource> source,
     std::vector<MarkdownBlockRange> blocks,
     MarkdownDocumentTiming timing)
     : HybridObject(TAG), source_(std::move(source)), blocks_(std::move(blocks)), timing_(timing) {}
@@ -20,7 +20,7 @@ double HybridMarkdownDocument::getBlockCount() {
 }
 
 double HybridMarkdownDocument::getSourceSize() {
-  return static_cast<double>(source_.size());
+  return static_cast<double>(source_->size());
 }
 
 MarkdownBlockSnapshot HybridMarkdownDocument::getBlock(double index, bool includeText) {
@@ -61,7 +61,7 @@ MarkdownDocumentTiming HybridMarkdownDocument::getTiming() {
 }
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
-  size_t size = source_.capacity() + blocks_.capacity() * sizeof(MarkdownBlockRange);
+  size_t size = source_->externalMemorySize() + blocks_.capacity() * sizeof(MarkdownBlockRange);
   for (const auto& block : blocks_) {
     size += block.type.capacity();
   }
@@ -80,11 +80,12 @@ MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(const MarkdownBlo
 }
 
 std::string HybridMarkdownDocument::sourceString(size_t start, size_t end) const {
-  if (start >= end || start >= source_.size()) {
+  const size_t sourceSize = source_->size();
+  if (start >= end || start >= sourceSize) {
     return "";
   }
-  end = std::min(end, source_.size());
-  return std::string(source_.data() + start, end - start);
+  end = std::min(end, sourceSize);
+  return std::string(source_->data() + start, end - start);
 }
 
 } // namespace margelo::nitro::legenddesktop::markdownparser
