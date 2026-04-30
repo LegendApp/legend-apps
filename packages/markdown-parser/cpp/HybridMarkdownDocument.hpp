@@ -42,6 +42,8 @@ struct MarkdownBlockRange {
   size_t depth = 0;
   size_t markdownStart = 0;
   size_t markdownEnd = 0;
+  size_t contentStart = 0;
+  size_t contentEnd = 0;
   MarkdownBlockType type = MarkdownBlockType::Paragraph;
 };
 
@@ -71,6 +73,7 @@ private:
   std::vector<MarkdownBlockRange> blocks_;
   mutable std::vector<std::optional<std::string>> markdownCache_;
   MarkdownDocumentTiming timing_;
+  std::string documentId_;
 };
 
 } // namespace margelo::nitro::legenddesktop::markdownparser

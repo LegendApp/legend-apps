@@ -26,19 +26,19 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 2: Parser Snapshot Upgrade
 
-- [ ] Extend `@legend-desktop/markdown-parser` TypeScript spec with richer document/block snapshots.
-- [ ] Add native document session ID.
-- [ ] Add opaque native block IDs.
-- [ ] Add source UTF-8 byte ranges.
-- [ ] Add content UTF-8 byte ranges when available.
-- [ ] Add text revision metadata.
-- [ ] Preserve existing `getRenderBlocks(start, count)` compatibility or update all current callsites.
-- [ ] Update C++ implementation.
-- [ ] Run Nitro/codegen workflow and include generated files.
-- [ ] Keep the test-kitchen-sink markdown-parser example working.
-- [ ] Validate `bun run typecheck`.
+- [x] Extend `@legend-desktop/markdown-parser` TypeScript spec with richer document/block snapshots.
+- [x] Add native document session ID.
+- [x] Add opaque native block IDs.
+- [x] Add source UTF-8 byte ranges.
+- [x] Add content UTF-8 byte ranges when available.
+- [x] Add text revision metadata.
+- [x] Preserve existing `getRenderBlocks(start, count)` compatibility or update all current callsites.
+- [x] Update C++ implementation.
+- [x] Run Nitro/codegen workflow and include generated files.
+- [x] Keep the test-kitchen-sink markdown-parser example working.
+- [x] Validate `bun run typecheck`.
 - [ ] Validate kitchen-sink markdown parser still loads/renders a file if practical.
-- [ ] Commit with a `type: subject` message.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 3: MarkdownDocument Package
 

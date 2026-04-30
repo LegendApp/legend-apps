@@ -452,6 +452,8 @@ ParseResult streamMarkdownSource(std::shared_ptr<const MarkdownSource> source, d
         1,
         line.start,
         std::min(end, length),
+        line.contentStart,
+        std::min(end, length),
         type,
     });
     lineStartOffset = nextPhysicalLineStart(bytes, length, end);

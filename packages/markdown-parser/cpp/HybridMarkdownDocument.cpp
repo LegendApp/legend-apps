@@ -1,7 +1,9 @@
 #include "HybridMarkdownDocument.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
+#include <string>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -46,6 +48,11 @@ std::string markdownBlockTypeName(MarkdownBlockType type) {
 
 } // namespace
 
+std::string nextDocumentId() {
+  static std::atomic<size_t> nextId = 1;
+  return "d" + std::to_string(nextId.fetch_add(1, std::memory_order_relaxed));
+}
+
 HybridMarkdownDocument::HybridMarkdownDocument(
     std::shared_ptr<const MarkdownSource> source,
     std::vector<MarkdownBlockRange> blocks,
@@ -54,7 +61,8 @@ HybridMarkdownDocument::HybridMarkdownDocument(
       source_(std::move(source)),
       blocks_(std::move(blocks)),
       markdownCache_(blocks_.size()),
-      timing_(timing) {}
+      timing_(timing),
+      documentId_(nextDocumentId()) {}
 
 void HybridMarkdownDocument::setDocumentDurationMs(double durationMs) {
   timing_.documentMs = durationMs;
@@ -96,10 +104,16 @@ MarkdownRenderBlock HybridMarkdownDocument::renderBlockForBlock(
     size_t storageIndex,
     const MarkdownBlockRange& block) const {
   return MarkdownRenderBlock(
+      documentId_ + ":b" + std::to_string(block.index),
       static_cast<double>(block.index),
       markdownBlockTypeName(block.type),
       static_cast<double>(block.depth),
-      markdownForBlock(storageIndex, block));
+      markdownForBlock(storageIndex, block),
+      static_cast<double>(block.markdownStart),
+      static_cast<double>(block.markdownEnd),
+      static_cast<double>(block.contentStart),
+      static_cast<double>(block.contentEnd),
+      0);
 }
 
 const std::string& HybridMarkdownDocument::markdownForBlock(size_t storageIndex, const MarkdownBlockRange& block) const {

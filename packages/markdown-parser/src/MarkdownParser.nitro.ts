@@ -10,10 +10,16 @@ export interface MarkdownDocumentTiming {
 }
 
 export interface MarkdownRenderBlock {
+  id: string;
   index: number;
   type: string;
   depth: number;
   markdown: string;
+  sourceStartByte: number;
+  sourceEndByte: number;
+  contentStartByte: number;
+  contentEndByte: number;
+  textRevision: number;
 }
 
 export interface MarkdownFileLoadResult {
