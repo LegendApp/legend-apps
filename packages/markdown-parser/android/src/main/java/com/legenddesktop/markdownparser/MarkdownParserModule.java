@@ -36,6 +36,16 @@ public class MarkdownParserModule extends NativeMarkdownParserSpec {
     promise.resolve("{\"blocks\":[]}");
   }
 
+  @Override
+  public void scanMarkdown(String markdown, String optionsJson, Promise promise) {
+    parseMarkdown(markdown, optionsJson, promise);
+  }
+
+  @Override
+  public void scanMarkdownFile(String filePath, String optionsJson, Promise promise) {
+    parseMarkdownFile(filePath, optionsJson, promise);
+  }
+
   private static String escapeJson(String value) {
     StringBuilder builder = new StringBuilder(value.length() + 16);
     for (int i = 0; i < value.length(); i++) {

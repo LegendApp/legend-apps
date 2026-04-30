@@ -6,6 +6,8 @@ import {
   parseMarkdownFile,
   parseMarkdownFileDocument,
   parseMarkdownFileDocumentWithMd4c,
+  scanMarkdown,
+  scanMarkdownFile,
   type MarkdownBlock,
   type MarkdownBlockSnapshot,
   type MarkdownDocument,
@@ -43,7 +45,7 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 `;
 
 type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
-type MarkdownBenchmarkMode = "scan-parse" | "scan-window" | "scan-full" | "md4c-window" | "json";
+type MarkdownBenchmarkMode = "scan-parse" | "scan-window" | "scan-full" | "md4c-window" | "json" | "turbo-scan-json";
 
 const markdownViewerStyle: MarkdownStyle = {
   blockquote: {
@@ -213,7 +215,13 @@ function markdownSizeLabel(markdown: string) {
 }
 
 function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
-  return mode === "md4c-window" ? "md4c window" : mode.replace("scan-", "scan ");
+  if (mode === "md4c-window") {
+    return "md4c window";
+  }
+  if (mode === "turbo-scan-json") {
+    return "Turbo Scanner JSON";
+  }
+  return mode.replace("scan-", "scan ");
 }
 
 function timingPayload(timing: MarkdownDocumentTiming) {
@@ -488,10 +496,14 @@ export function MarkdownParserExample() {
     const debugMarkdown = createGeneratedMarkdown(8000);
     const sizeLabel = markdownSizeLabel(debugMarkdown);
 
-    if (mode === "json") {
-      setStatus(`Benchmarking ${sizeLabel} generated markdown with JSON...`);
+    if (mode === "json" || mode === "turbo-scan-json") {
+      setStatus(`Benchmarking ${sizeLabel} generated markdown with ${benchmarkModeLabel(mode)}...`);
       const startedAt = Date.now();
-      void parseMarkdown(debugMarkdown, { dialect: "github" }).then((parsed) => {
+      const parsePromise =
+        mode === "turbo-scan-json"
+          ? scanMarkdown(debugMarkdown, { dialect: "github" })
+          : parseMarkdown(debugMarkdown, { dialect: "github" });
+      void parsePromise.then((parsed) => {
         const parsedAt = Date.now();
         const blocks = markdownViewerBlocks(parsed.blocks);
         const finishedAt = Date.now();
@@ -500,6 +512,7 @@ export function MarkdownParserExample() {
           event: "app:markdown-json-benchmark",
           blocks: blocks.length,
           extractMs: finishedAt - parsedAt,
+          mode,
           parseMs: parsedAt - startedAt,
           sizeBytes: debugMarkdown.length,
           totalMs,
@@ -512,9 +525,9 @@ export function MarkdownParserExample() {
           method: "POST",
         }).catch(() => {});
         setStatus(
-          `JSON benchmark ${sizeLabel}: ${blocks.length} blocks in ${formatDuration(totalMs)} (${formatDuration(
-            parsedAt - startedAt,
-          )} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+          `${benchmarkModeLabel(mode)} benchmark ${sizeLabel}: ${blocks.length} blocks in ${formatDuration(
+            totalMs,
+          )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
         );
       });
       return;
@@ -564,10 +577,14 @@ export function MarkdownParserExample() {
   };
 
   const benchmarkMarkdownFile = (path: string, mode: MarkdownBenchmarkMode) => {
-    if (mode === "json") {
-      setStatus(`Benchmarking ${path} with JSON...`);
+    if (mode === "json" || mode === "turbo-scan-json") {
+      setStatus(`Benchmarking ${path} with ${benchmarkModeLabel(mode)}...`);
       const startedAt = Date.now();
-      void parseMarkdownFile(path, { dialect: "github" }).then((parsed) => {
+      const parsePromise =
+        mode === "turbo-scan-json"
+          ? scanMarkdownFile(path, { dialect: "github" })
+          : parseMarkdownFile(path, { dialect: "github" });
+      void parsePromise.then((parsed) => {
         const parsedAt = Date.now();
         const blocks = markdownViewerBlocks(parsed.blocks);
         const finishedAt = Date.now();
@@ -576,6 +593,7 @@ export function MarkdownParserExample() {
           event: "app:markdown-file-json-benchmark",
           blocks: blocks.length,
           extractMs: finishedAt - parsedAt,
+          mode,
           parseMs: parsedAt - startedAt,
           source: path,
           totalMs,
@@ -588,9 +606,11 @@ export function MarkdownParserExample() {
           method: "POST",
         }).catch(() => {});
         setStatus(
-          `File JSON benchmark ${path.split("/").pop() ?? path}: ${blocks.length} blocks in ${formatDuration(
-            totalMs,
-          )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract).`,
+          `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
+            blocks.length
+          } blocks in ${formatDuration(totalMs)} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(
+            finishedAt - parsedAt,
+          )} extract).`,
         );
       });
       return;
@@ -702,6 +722,7 @@ export function MarkdownParserExample() {
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-full")}>Scan Full</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-window")}>MD4C Window</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("json")}>JSON Compare</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("turbo-scan-json")}>Turbo Scanner JSON</ExampleButton>
           <ExampleButton
             onPress={() => {
               void openFileDialog({
@@ -740,6 +761,9 @@ export function MarkdownParserExample() {
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("json")}>File JSON</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("turbo-scan-json")}>
+            File Turbo Scanner JSON
+          </ExampleButton>
         </View>
       </View>
       <LegendList

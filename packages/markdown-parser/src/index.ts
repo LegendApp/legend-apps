@@ -129,6 +129,18 @@ export function parseMarkdownFile(filePath: string, options: MarkdownParserOptio
   );
 }
 
+export function scanMarkdown(markdown: string, options: MarkdownParserOptions = {}) {
+  return NativeMarkdownParser.scanMarkdown(markdown, JSON.stringify(options)).then((json) =>
+    parseJson<MarkdownParseResult>(json, { blocks: [] }),
+  );
+}
+
+export function scanMarkdownFile(filePath: string, options: MarkdownParserOptions = {}) {
+  return NativeMarkdownParser.scanMarkdownFile(filePath, JSON.stringify(options)).then((json) =>
+    parseJson<MarkdownParseResult>(json, { blocks: [] }),
+  );
+}
+
 let nitroMarkdownParser: MarkdownParser | undefined;
 
 export function getMarkdownParserDocumentApi() {

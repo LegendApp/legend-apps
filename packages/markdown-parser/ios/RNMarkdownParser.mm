@@ -102,6 +102,121 @@ static BOOL RNMarkdownParserLineStartsFence(const char *bytes, NSUInteger start,
   return fenceCount >= 3;
 }
 
+static char RNMarkdownParserLineFenceChar(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  if (start >= end || (bytes[start] != '`' && bytes[start] != '~')) {
+    return 0;
+  }
+  return RNMarkdownParserLineStartsFence(bytes, start, end, bytes[start]) ? bytes[start] : 0;
+}
+
+static BOOL RNMarkdownParserLineStartsBlockquote(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  return start < end && bytes[start] == '>';
+}
+
+static BOOL RNMarkdownParserLineStartsUnorderedList(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  return start + 1 < end && (bytes[start] == '-' || bytes[start] == '*' || bytes[start] == '+') &&
+      RNMarkdownParserByteIsWhitespace(bytes[start + 1]);
+}
+
+static BOOL RNMarkdownParserLineStartsOrderedList(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  NSUInteger index = start;
+  while (index < end && bytes[index] >= '0' && bytes[index] <= '9') {
+    index += 1;
+  }
+  return index > start && index + 1 < end && (bytes[index] == '.' || bytes[index] == ')') &&
+      RNMarkdownParserByteIsWhitespace(bytes[index + 1]);
+}
+
+static BOOL RNMarkdownParserLineStartsOrderedListAtOne(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  NSUInteger index = start;
+  NSUInteger value = 0;
+  while (index < end && bytes[index] >= '0' && bytes[index] <= '9') {
+    value = value * 10 + (NSUInteger)(bytes[index] - '0');
+    index += 1;
+  }
+  return value == 1 && index > start && index + 1 < end && (bytes[index] == '.' || bytes[index] == ')') &&
+      RNMarkdownParserByteIsWhitespace(bytes[index + 1]);
+}
+
+static BOOL RNMarkdownParserLineStartsThematicBreak(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  if (start >= end || (bytes[start] != '-' && bytes[start] != '*' && bytes[start] != '_')) {
+    return NO;
+  }
+
+  const char marker = bytes[start];
+  NSUInteger count = 0;
+  for (NSUInteger index = start; index < end; index += 1) {
+    if (bytes[index] == marker) {
+      count += 1;
+    } else if (!RNMarkdownParserByteIsWhitespace(bytes[index])) {
+      return NO;
+    }
+  }
+  return count >= 3;
+}
+
+static BOOL RNMarkdownParserLineLooksLikeTableDelimiter(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  start = RNMarkdownParserTrimLinePrefix(bytes, start, end);
+  BOOL hasDash = NO;
+  BOOL hasPipe = NO;
+  for (NSUInteger index = start; index < end; index += 1) {
+    const char value = bytes[index];
+    if (value == '-') {
+      hasDash = YES;
+    } else if (value == '|') {
+      hasPipe = YES;
+    } else if (value != ':' && !RNMarkdownParserByteIsWhitespace(value)) {
+      return NO;
+    }
+  }
+  return hasDash && hasPipe;
+}
+
+static NSUInteger RNMarkdownParserNextLineStart(const char *bytes, NSUInteger length, NSUInteger end)
+{
+  while (end < length && RNMarkdownParserByteIsLineBreak(bytes[end])) {
+    end += 1;
+  }
+  return end;
+}
+
+static NSUInteger RNMarkdownParserNextPhysicalLineStart(const char *bytes, NSUInteger length, NSUInteger end)
+{
+  if (end < length && bytes[end] == '\r') {
+    end += 1;
+  }
+  if (end < length && bytes[end] == '\n') {
+    end += 1;
+  }
+  return end;
+}
+
+static BOOL RNMarkdownParserLineStartsBoundaryBlock(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  return RNMarkdownParserLineStartsHeading(bytes, start, end) || RNMarkdownParserLineFenceChar(bytes, start, end) != 0 ||
+      RNMarkdownParserLineStartsThematicBreak(bytes, start, end);
+}
+
+static BOOL RNMarkdownParserLineInterruptsParagraph(const char *bytes, NSUInteger start, NSUInteger end)
+{
+  return RNMarkdownParserLineStartsBoundaryBlock(bytes, start, end) ||
+      RNMarkdownParserLineStartsUnorderedList(bytes, start, end) ||
+      RNMarkdownParserLineStartsOrderedListAtOne(bytes, start, end);
+}
+
 static NSUInteger RNMarkdownParserBlockStartForText(const char *bytes, NSUInteger length, NSUInteger offset)
 {
   NSUInteger start = RNMarkdownParserLineStart(bytes, MIN(offset, length));
@@ -186,6 +301,62 @@ static NSUInteger RNMarkdownParserFencedCodeBlockEnd(const char *bytes, NSUInteg
     lineStart = lineEnd;
   }
   return RNMarkdownParserBlockEndForText(bytes, length, offset);
+}
+
+static NSString *RNMarkdownParserScannedBlockType(const char *bytes, NSUInteger length, NSUInteger start, NSUInteger end)
+{
+  if (RNMarkdownParserLineStartsHeading(bytes, start, end)) {
+    return @"heading";
+  }
+  if (RNMarkdownParserLineFenceChar(bytes, start, end) != 0) {
+    return @"codeBlock";
+  }
+  if (RNMarkdownParserLineStartsThematicBreak(bytes, start, end)) {
+    return @"thematicBreak";
+  }
+  if (RNMarkdownParserLineStartsBlockquote(bytes, start, end)) {
+    return @"quote";
+  }
+  if (RNMarkdownParserLineStartsUnorderedList(bytes, start, end)) {
+    return @"unorderedList";
+  }
+  if (RNMarkdownParserLineStartsOrderedList(bytes, start, end)) {
+    return @"orderedList";
+  }
+
+  const NSUInteger nextStart = RNMarkdownParserNextPhysicalLineStart(bytes, length, end);
+  if (nextStart < length &&
+      RNMarkdownParserLineLooksLikeTableDelimiter(bytes, nextStart, RNMarkdownParserLineEnd(bytes, length, nextStart))) {
+    return @"table";
+  }
+
+  return @"paragraph";
+}
+
+static NSUInteger RNMarkdownParserScannedBlockEnd(const char *bytes, NSUInteger length, NSUInteger start, NSString *type)
+{
+  NSUInteger end = RNMarkdownParserLineEnd(bytes, length, start);
+  if ([type isEqualToString:@"heading"] || [type isEqualToString:@"thematicBreak"]) {
+    return end;
+  }
+
+  if ([type isEqualToString:@"codeBlock"]) {
+    return RNMarkdownParserFencedCodeBlockEnd(bytes, length, end, RNMarkdownParserLineFenceChar(bytes, start, end));
+  }
+
+  NSUInteger nextStart = RNMarkdownParserNextPhysicalLineStart(bytes, length, end);
+  while (nextStart < length) {
+    const NSUInteger nextEnd = RNMarkdownParserLineEnd(bytes, length, nextStart);
+    if (RNMarkdownParserLineIsBlank(bytes, nextStart, nextEnd)) {
+      break;
+    }
+    if ([type isEqualToString:@"paragraph"] && RNMarkdownParserLineInterruptsParagraph(bytes, nextStart, nextEnd)) {
+      break;
+    }
+    end = nextEnd;
+    nextStart = RNMarkdownParserNextPhysicalLineStart(bytes, length, end);
+  }
+  return end;
 }
 
 static NSString *RNMarkdownParserSourceString(const char *bytes, NSUInteger length, NSUInteger start, NSUInteger end)
@@ -744,6 +915,41 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
   return RNMarkdownParserJSONString(payload);
 }
 
+- (NSString *)scanMarkdownSync:(NSString *)markdown optionsJson:(NSString *)optionsJson
+{
+  (void)optionsJson;
+  NSData *data = [(markdown ?: @"") dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
+  const char *bytes = (const char *)data.bytes;
+  const NSUInteger length = data.length;
+  NSMutableArray<NSDictionary *> *blocks = [NSMutableArray array];
+  NSUInteger start = 0;
+
+  while (start < length) {
+    NSUInteger end = RNMarkdownParserLineEnd(bytes, length, start);
+    if (RNMarkdownParserLineIsBlank(bytes, start, end)) {
+      start = RNMarkdownParserNextLineStart(bytes, length, end);
+      continue;
+    }
+
+    NSString *type = RNMarkdownParserScannedBlockType(bytes, length, start, end);
+    end = RNMarkdownParserScannedBlockEnd(bytes, length, start, type);
+    NSString *source = RNMarkdownParserSourceString(bytes, length, start, MIN(end, length));
+    NSUInteger index = blocks.count;
+    [blocks addObject:@{
+      @"id": [NSString stringWithFormat:@"%lu", (unsigned long)index],
+      @"type": type,
+      @"index": @(index),
+      @"depth": @1,
+      @"text": @"",
+      @"markdown": source,
+      @"runs": @[],
+    }];
+    start = RNMarkdownParserNextLineStart(bytes, length, end);
+  }
+
+  return RNMarkdownParserJSONString(@{@"blocks": blocks});
+}
+
 - (void)parseMarkdown:(NSString *)markdown
           optionsJson:(NSString *)optionsJson
               resolve:(RCTPromiseResolveBlock)resolve
@@ -751,6 +957,17 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
 {
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     NSString *json = [self parseMarkdownSync:markdown optionsJson:optionsJson];
+    resolve(json);
+  });
+}
+
+- (void)scanMarkdown:(NSString *)markdown
+         optionsJson:(NSString *)optionsJson
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject
+{
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    NSString *json = [self scanMarkdownSync:markdown optionsJson:optionsJson];
     resolve(json);
   });
 }
@@ -773,6 +990,28 @@ RCT_EXPORT_MODULE(NativeMarkdownParser)
       return;
     }
     NSString *json = [self parseMarkdownSync:markdown optionsJson:optionsJson];
+    resolve(json);
+  });
+}
+
+- (void)scanMarkdownFile:(NSString *)filePath
+             optionsJson:(NSString *)optionsJson
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    NSString *path = filePath ?: @"";
+    if ([path hasPrefix:@"file://"]) {
+      NSURL *url = [NSURL URLWithString:path];
+      path = url.path ?: @"";
+    }
+    NSError *error = nil;
+    NSString *markdown = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
+    if (!markdown) {
+      reject(@"READ_FAILED", error.localizedDescription ?: @"Failed to read markdown file", error);
+      return;
+    }
+    NSString *json = [self scanMarkdownSync:markdown optionsJson:optionsJson];
     resolve(json);
   });
 }
