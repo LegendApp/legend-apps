@@ -18,6 +18,11 @@ export interface MarkdownDocumentTiming {
   documentMs: number;
 }
 
+export interface MarkdownFileWindowResult {
+  document: MarkdownDocument;
+  blocks: MarkdownBlockSnapshot[];
+}
+
 export interface MarkdownDocument
   extends HybridObject<{
     ios: "c++";
@@ -36,6 +41,7 @@ export interface MarkdownParser
   }> {
   scanMarkdown(markdown: string): MarkdownDocument;
   scanMarkdownFile(filePath: string): Promise<MarkdownDocument>;
+  scanMarkdownFileWindow(filePath: string, count: number): Promise<MarkdownFileWindowResult>;
   parseMarkdown(markdown: string, flags: number): MarkdownDocument;
   parseMarkdownFile(filePath: string, flags: number): Promise<MarkdownDocument>;
 }

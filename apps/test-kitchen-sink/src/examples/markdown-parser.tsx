@@ -5,6 +5,7 @@ import {
   parseMarkdownDocumentWithMd4c,
   parseMarkdownFile,
   parseMarkdownFileDocument,
+  parseMarkdownFileDocumentWindow,
   parseMarkdownFileDocumentWithMd4c,
   scanMarkdown,
   scanMarkdownFile,
@@ -47,6 +48,7 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
 type MarkdownBenchmarkMode =
   | "scan-window"
+  | "scan-window-combined"
   | "scan-full"
   | "md4c-window"
   | "md4c-full"
@@ -226,6 +228,9 @@ function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
   }
   if (mode === "md4c-full") {
     return "md4c full";
+  }
+  if (mode === "scan-window-combined") {
+    return "scan window combined";
   }
   if (mode === "turbo-scan-json") {
     return "Turbo Scanner JSON";
@@ -637,6 +642,53 @@ export function MarkdownParserExample() {
 
     setStatus(`Benchmarking ${path} with ${benchmarkModeLabel(mode)}...`);
     const startedAt = Date.now();
+    if (mode === "scan-window-combined") {
+      void parseMarkdownFileDocumentWindow(path, 64)
+        .then((result) => {
+          const parsedAt = Date.now();
+          const extractedBlocks = markdownSnapshotBlocks(result.blocks);
+          const finishedAt = Date.now();
+          const document = result.document;
+          const timing = document.getTiming();
+          const benchmarkPayload = {
+            event: "app:markdown-file-nitro-benchmark",
+            extractedBlocks: extractedBlocks.length,
+            mode,
+            nitroBlocks: document.blockCount,
+            nitroExtractMs: finishedAt - parsedAt,
+            nitroParseMs: parsedAt - startedAt,
+            nitroTiming: timingPayload(timing),
+            nitroTotalMs: finishedAt - startedAt,
+            source: path,
+          };
+
+          console.log("markdown file nitro benchmark", benchmarkPayload);
+          void fetch("http://127.0.0.1:37531/ll-debug", {
+            body: JSON.stringify(benchmarkPayload),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          }).catch(() => {});
+          replaceDocument(document, path, extractedBlocks);
+          setStatus(
+            `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
+              document.blockCount
+            } blocks in ${formatDuration(finishedAt - startedAt)} (${formatDuration(
+              parsedAt - startedAt,
+            )} parse+window, ${formatDuration(finishedAt - parsedAt)} JS convert). Native: ${formatDuration(
+              timing.readMs + timing.parseMs + timing.documentMs,
+            )}.`,
+          );
+        })
+        .catch((error: unknown) => {
+          setStatus(
+            `File ${benchmarkModeLabel(mode)} benchmark failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        });
+      return;
+    }
+
     const documentPromise =
       mode === "md4c-window" || mode === "md4c-full"
         ? parseMarkdownFileDocumentWithMd4c(path, { dialect: "github" })
@@ -775,6 +827,9 @@ export function MarkdownParserExample() {
             }}
           >
             File Window
+          </ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-window-combined")}>
+            File Window Combined
           </ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>

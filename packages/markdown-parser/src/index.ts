@@ -1,6 +1,6 @@
 import NativeMarkdownParser from "./NativeMarkdownParser";
 import { NitroModules } from "react-native-nitro-modules";
-import type { MarkdownDocument, MarkdownParser } from "./MarkdownParser.nitro";
+import type { MarkdownDocument, MarkdownFileWindowResult, MarkdownParser } from "./MarkdownParser.nitro";
 
 export type MarkdownDialect = "commonmark" | "github";
 
@@ -160,6 +160,10 @@ export function parseMarkdownFileDocument(filePath: string, options: MarkdownPar
   return getMarkdownParserDocumentApi().scanMarkdownFile(filePath);
 }
 
+export function parseMarkdownFileDocumentWindow(filePath: string, count: number) {
+  return getMarkdownParserDocumentApi().scanMarkdownFileWindow(filePath, count);
+}
+
 export function parseMarkdownDocumentWithMd4c(markdown: string, options: MarkdownParserOptions = {}): MarkdownDocument {
   return getMarkdownParserDocumentApi().parseMarkdown(markdown, markdownParserFlags(options));
 }
@@ -169,4 +173,10 @@ export function parseMarkdownFileDocumentWithMd4c(filePath: string, options: Mar
 }
 
 export { NativeMarkdownParser };
-export type { MarkdownBlockSnapshot, MarkdownDocument, MarkdownDocumentTiming, MarkdownParser } from "./MarkdownParser.nitro";
+export type {
+  MarkdownBlockSnapshot,
+  MarkdownDocument,
+  MarkdownDocumentTiming,
+  MarkdownFileWindowResult,
+  MarkdownParser,
+} from "./MarkdownParser.nitro";

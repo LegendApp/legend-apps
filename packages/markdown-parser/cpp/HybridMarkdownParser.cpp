@@ -723,6 +723,21 @@ std::shared_ptr<Promise<std::shared_ptr<HybridMarkdownDocumentSpec>>> HybridMark
   });
 }
 
+std::shared_ptr<Promise<MarkdownFileWindowResult>> HybridMarkdownParser::scanMarkdownFileWindow(
+    const std::string& filePath,
+    double count) {
+  return Promise<MarkdownFileWindowResult>::async([filePath, count]() -> MarkdownFileWindowResult {
+    const auto readStartedAt = Clock::now();
+    auto source = readFileSource(filePath);
+    const auto readFinishedAt = Clock::now();
+    auto document = createDocument(scanMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
+    MarkdownFileWindowResult result;
+    result.document = document;
+    result.blocks = document->getBlocks(0, count, false);
+    return result;
+  });
+}
+
 std::shared_ptr<HybridMarkdownDocumentSpec> HybridMarkdownParser::parseMarkdown(
     const std::string& markdown,
     double flags) {
