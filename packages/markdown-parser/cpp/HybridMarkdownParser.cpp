@@ -60,6 +60,14 @@ struct ParseResult {
   double parseMs = 0;
 };
 
+struct LineInfo {
+  size_t start = 0;
+  size_t end = 0;
+  size_t contentStart = 0;
+  char first = 0;
+  bool blank = false;
+};
+
 using Clock = std::chrono::steady_clock;
 
 double elapsedMs(Clock::time_point start, Clock::time_point end) {
@@ -161,9 +169,26 @@ size_t trimLinePrefix(const char* bytes, size_t start, size_t end) {
   return start;
 }
 
-bool lineStartsHeading(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
-  if (start >= end || bytes[start] != '#') {
+LineInfo lineInfo(const char* bytes, size_t start, size_t end) {
+  const size_t contentStart = trimLinePrefix(bytes, start, end);
+  const bool blank = contentStart >= end;
+  return LineInfo{
+      start,
+      end,
+      contentStart,
+      blank ? '\0' : bytes[contentStart],
+      blank,
+  };
+}
+
+LineInfo lineInfoAt(const char* bytes, size_t length, size_t start) {
+  return lineInfo(bytes, start, lineEnd(bytes, length, start));
+}
+
+bool lineStartsHeading(const char* bytes, const LineInfo& line) {
+  size_t start = line.contentStart;
+  const size_t end = line.end;
+  if (line.first != '#') {
     return false;
   }
 
@@ -174,8 +199,13 @@ bool lineStartsHeading(const char* bytes, size_t start, size_t end) {
   return hashCount > 0 && hashCount <= 6 && start + hashCount < end && isWhitespace(bytes[start + hashCount]);
 }
 
-bool lineStartsFence(const char* bytes, size_t start, size_t end, char fenceChar) {
-  start = trimLinePrefix(bytes, start, end);
+bool lineStartsHeading(const char* bytes, size_t start, size_t end) {
+  return lineStartsHeading(bytes, lineInfo(bytes, start, end));
+}
+
+bool lineStartsFence(const char* bytes, const LineInfo& line, char fenceChar) {
+  size_t start = line.contentStart;
+  const size_t end = line.end;
   size_t fenceCount = 0;
   while (start + fenceCount < end && bytes[start + fenceCount] == fenceChar) {
     fenceCount += 1;
@@ -183,36 +213,47 @@ bool lineStartsFence(const char* bytes, size_t start, size_t end, char fenceChar
   return fenceCount >= 3;
 }
 
-char lineFenceChar(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
-  if (start >= end || (bytes[start] != '`' && bytes[start] != '~')) {
+bool lineStartsFence(const char* bytes, size_t start, size_t end, char fenceChar) {
+  return lineStartsFence(bytes, lineInfo(bytes, start, end), fenceChar);
+}
+
+char lineFenceChar(const char* bytes, const LineInfo& line) {
+  if (line.first != '`' && line.first != '~') {
     return 0;
   }
-  return lineStartsFence(bytes, start, end, bytes[start]) ? bytes[start] : 0;
+  return lineStartsFence(bytes, line, line.first) ? line.first : 0;
 }
 
-bool lineStartsBlockquote(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
-  return start < end && bytes[start] == '>';
+bool lineStartsBlockquote(const LineInfo& line) {
+  return line.first == '>';
 }
 
-bool lineStartsUnorderedList(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
+bool lineStartsUnorderedList(const char* bytes, const LineInfo& line) {
+  const size_t start = line.contentStart;
+  const size_t end = line.end;
   return start + 1 < end && (bytes[start] == '-' || bytes[start] == '*' || bytes[start] == '+') && isWhitespace(bytes[start + 1]);
 }
 
-bool lineStartsOrderedList(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
-  size_t index = start;
+bool lineStartsOrderedList(const char* bytes, const LineInfo& line) {
+  size_t index = line.contentStart;
+  const size_t start = index;
+  const size_t end = line.end;
+  if (line.first < '0' || line.first > '9') {
+    return false;
+  }
   while (index < end && bytes[index] >= '0' && bytes[index] <= '9') {
     index += 1;
   }
   return index > start && index + 1 < end && (bytes[index] == '.' || bytes[index] == ')') && isWhitespace(bytes[index + 1]);
 }
 
-bool lineStartsOrderedListAtOne(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
-  size_t index = start;
+bool lineStartsOrderedListAtOne(const char* bytes, const LineInfo& line) {
+  size_t index = line.contentStart;
+  const size_t start = index;
+  const size_t end = line.end;
+  if (line.first < '0' || line.first > '9') {
+    return false;
+  }
   size_t value = 0;
   while (index < end && bytes[index] >= '0' && bytes[index] <= '9') {
     value = value * 10 + static_cast<size_t>(bytes[index] - '0');
@@ -222,15 +263,17 @@ bool lineStartsOrderedListAtOne(const char* bytes, size_t start, size_t end) {
       isWhitespace(bytes[index + 1]);
 }
 
-bool lineStartsThematicBreak(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
-  if (start >= end || (bytes[start] != '-' && bytes[start] != '*' && bytes[start] != '_')) {
+bool lineStartsThematicBreak(const char* bytes, const LineInfo& line) {
+  const size_t start = line.contentStart;
+  const size_t end = line.end;
+  if (line.first != '-' && line.first != '*' && line.first != '_') {
     return false;
   }
 
-  const char marker = bytes[start];
+  const char marker = line.first;
   size_t count = 0;
-  for (size_t index = start; index < end; index += 1) {
+  size_t index = start;
+  for (; index < end; index += 1) {
     if (bytes[index] == marker) {
       count += 1;
     } else if (!isWhitespace(bytes[index])) {
@@ -240,11 +283,10 @@ bool lineStartsThematicBreak(const char* bytes, size_t start, size_t end) {
   return count >= 3;
 }
 
-bool lineLooksLikeTableDelimiter(const char* bytes, size_t start, size_t end) {
-  start = trimLinePrefix(bytes, start, end);
+bool lineLooksLikeTableDelimiter(const char* bytes, const LineInfo& line) {
   bool hasDash = false;
   bool hasPipe = false;
-  for (size_t index = start; index < end; index += 1) {
+  for (size_t index = line.contentStart; index < line.end; index += 1) {
     const char value = bytes[index];
     if (value == '-') {
       hasDash = true;
@@ -274,40 +316,40 @@ size_t nextPhysicalLineStart(const char* bytes, size_t length, size_t end) {
   return end;
 }
 
-bool lineStartsBoundaryBlock(const char* bytes, size_t start, size_t end) {
-  return lineStartsHeading(bytes, start, end) ||
-      lineFenceChar(bytes, start, end) != 0 ||
-      lineStartsThematicBreak(bytes, start, end);
+bool lineStartsBoundaryBlock(const char* bytes, const LineInfo& line) {
+  return lineStartsHeading(bytes, line) ||
+      lineFenceChar(bytes, line) != 0 ||
+      lineStartsThematicBreak(bytes, line);
 }
 
-bool lineInterruptsParagraph(const char* bytes, size_t start, size_t end) {
-  return lineStartsBoundaryBlock(bytes, start, end) ||
-      lineStartsUnorderedList(bytes, start, end) ||
-      lineStartsOrderedListAtOne(bytes, start, end);
+bool lineInterruptsParagraph(const char* bytes, const LineInfo& line) {
+  return lineStartsBoundaryBlock(bytes, line) ||
+      lineStartsUnorderedList(bytes, line) ||
+      lineStartsOrderedListAtOne(bytes, line);
 }
 
-MarkdownBlockType scannedBlockType(const char* bytes, size_t length, size_t start, size_t end) {
-  if (lineStartsHeading(bytes, start, end)) {
+MarkdownBlockType scannedBlockType(const char* bytes, size_t length, const LineInfo& line) {
+  if (lineStartsHeading(bytes, line)) {
     return MarkdownBlockType::Heading;
   }
-  if (lineFenceChar(bytes, start, end) != 0) {
+  if (lineFenceChar(bytes, line) != 0) {
     return MarkdownBlockType::CodeBlock;
   }
-  if (lineStartsThematicBreak(bytes, start, end)) {
+  if (lineStartsThematicBreak(bytes, line)) {
     return MarkdownBlockType::ThematicBreak;
   }
-  if (lineStartsBlockquote(bytes, start, end)) {
+  if (lineStartsBlockquote(line)) {
     return MarkdownBlockType::Quote;
   }
-  if (lineStartsUnorderedList(bytes, start, end)) {
+  if (lineStartsUnorderedList(bytes, line)) {
     return MarkdownBlockType::UnorderedList;
   }
-  if (lineStartsOrderedList(bytes, start, end)) {
+  if (lineStartsOrderedList(bytes, line)) {
     return MarkdownBlockType::OrderedList;
   }
 
-  const size_t nextStart = nextPhysicalLineStart(bytes, length, end);
-  if (nextStart < length && lineLooksLikeTableDelimiter(bytes, nextStart, lineEnd(bytes, length, nextStart))) {
+  const size_t nextStart = nextPhysicalLineStart(bytes, length, line.end);
+  if (nextStart < length && lineLooksLikeTableDelimiter(bytes, lineInfoAt(bytes, length, nextStart))) {
     return MarkdownBlockType::Table;
   }
 
@@ -316,26 +358,26 @@ MarkdownBlockType scannedBlockType(const char* bytes, size_t length, size_t star
 
 size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char fenceChar);
 
-size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, MarkdownBlockType type) {
-  size_t end = lineEnd(bytes, length, start);
+size_t scannedBlockEnd(const char* bytes, size_t length, const LineInfo& line, MarkdownBlockType type) {
+  size_t end = line.end;
   if (type == MarkdownBlockType::Heading || type == MarkdownBlockType::ThematicBreak) {
     return end;
   }
 
   if (type == MarkdownBlockType::CodeBlock) {
-    return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, start, end));
+    return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, line));
   }
 
   size_t nextStart = nextPhysicalLineStart(bytes, length, end);
   while (nextStart < length) {
-    const size_t nextEnd = lineEnd(bytes, length, nextStart);
-    if (lineIsBlank(bytes, nextStart, nextEnd)) {
+    const LineInfo nextLine = lineInfoAt(bytes, length, nextStart);
+    if (nextLine.blank) {
       break;
     }
-    if (type == MarkdownBlockType::Paragraph && lineInterruptsParagraph(bytes, nextStart, nextEnd)) {
+    if (type == MarkdownBlockType::Paragraph && lineInterruptsParagraph(bytes, nextLine)) {
       break;
     }
-    end = nextEnd;
+    end = nextLine.end;
     nextStart = nextPhysicalLineStart(bytes, length, end);
   }
   return end;
@@ -604,14 +646,14 @@ ParseResult scanMarkdownSource(std::shared_ptr<const MarkdownSource> source, dou
   size_t start = 0;
 
   while (start < length) {
-    size_t end = lineEnd(bytes, length, start);
-    if (lineIsBlank(bytes, start, end)) {
-      start = nextLineStart(bytes, length, end);
+    const LineInfo line = lineInfoAt(bytes, length, start);
+    if (line.blank) {
+      start = nextLineStart(bytes, length, line.end);
       continue;
     }
 
-    const MarkdownBlockType type = scannedBlockType(bytes, length, start, end);
-    end = scannedBlockEnd(bytes, length, start, type);
+    const MarkdownBlockType type = scannedBlockType(bytes, length, line);
+    const size_t end = scannedBlockEnd(bytes, length, line, type);
     blocks.push_back(MarkdownBlockRange{
         blocks.size(),
         1,
