@@ -45,7 +45,14 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 `;
 
 type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
-type MarkdownBenchmarkMode = "scan-parse" | "scan-window" | "scan-full" | "md4c-window" | "json" | "turbo-scan-json";
+type MarkdownBenchmarkMode =
+  | "scan-parse"
+  | "scan-window"
+  | "scan-full"
+  | "md4c-window"
+  | "md4c-full"
+  | "json"
+  | "turbo-scan-json";
 
 const markdownViewerStyle: MarkdownStyle = {
   blockquote: {
@@ -217,6 +224,9 @@ function markdownSizeLabel(markdown: string) {
 function benchmarkModeLabel(mode: MarkdownBenchmarkMode) {
   if (mode === "md4c-window") {
     return "md4c window";
+  }
+  if (mode === "md4c-full") {
+    return "md4c full";
   }
   if (mode === "turbo-scan-json") {
     return "Turbo Scanner JSON";
@@ -540,14 +550,14 @@ export function MarkdownParserExample() {
     setStatus(`Benchmarking ${sizeLabel} generated markdown with ${benchmarkModeLabel(mode)}...`);
     const startedAt = Date.now();
     const document =
-      mode === "md4c-window"
+      mode === "md4c-window" || mode === "md4c-full"
         ? parseMarkdownDocumentWithMd4c(debugMarkdown, { dialect: "github" })
         : parseMarkdownDocument(debugMarkdown, { dialect: "github" });
     const parsedAt = Date.now();
     const extractedBlocks =
       mode === "scan-window" || mode === "md4c-window"
         ? markdownDocumentWindow(document, 64)
-        : mode === "scan-full"
+        : mode === "scan-full" || mode === "md4c-full"
           ? markdownDocumentBlocks(document)
           : [];
     const finishedAt = Date.now();
@@ -629,7 +639,7 @@ export function MarkdownParserExample() {
     setStatus(`Benchmarking ${path} with ${benchmarkModeLabel(mode)}...`);
     const startedAt = Date.now();
     const documentPromise =
-      mode === "md4c-window"
+      mode === "md4c-window" || mode === "md4c-full"
         ? parseMarkdownFileDocumentWithMd4c(path, { dialect: "github" })
         : parseMarkdownFileDocument(path, { dialect: "github" });
     void documentPromise.then((document) => {
@@ -637,7 +647,7 @@ export function MarkdownParserExample() {
       const extractedBlocks =
         mode === "scan-window" || mode === "md4c-window"
           ? markdownDocumentWindow(document, 64)
-          : mode === "scan-full"
+          : mode === "scan-full" || mode === "md4c-full"
             ? markdownDocumentBlocks(document)
             : [];
       const finishedAt = Date.now();
@@ -731,6 +741,7 @@ export function MarkdownParserExample() {
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-window")}>Scan Window</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-full")}>Scan Full</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-window")}>MD4C Window</ExampleButton>
+          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-full")}>MD4C Full</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("json")}>JSON Compare</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("turbo-scan-json")}>Turbo Scanner JSON</ExampleButton>
           <ExampleButton
@@ -770,6 +781,7 @@ export function MarkdownParserExample() {
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-parse")}>File Parse</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>
+          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-full")}>File MD4C Full</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("json")}>File JSON</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("turbo-scan-json")}>
             File Turbo Scanner JSON
