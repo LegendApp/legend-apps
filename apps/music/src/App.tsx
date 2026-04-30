@@ -1,5 +1,5 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MusicId, MusicLibrary, MusicPlaylist, MusicTrack, RepeatMode } from "./domain";
 import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
@@ -24,6 +24,7 @@ import {
   deletePlaylist,
   removeTrackFromPlaylist,
 } from "./playlists";
+import { updateMusicSettings, useMusicSettings } from "./settings";
 
 const repeatModes: RepeatMode[] = ["off", "all", "one"];
 type LibraryView =
@@ -35,11 +36,14 @@ type LibraryView =
 export function App() {
   const library = useMusicLibrary();
   const playback = usePlayback();
+  const settings = useMusicSettings();
   const [message, setMessage] = useState("Choose one or more music folders to build your library.");
   const [query, setQuery] = useState("");
   const [playlistName, setPlaylistName] = useState("");
   const [queueVisible, setQueueVisible] = useState(true);
   const [selectedView, setSelectedView] = useState<LibraryView>({ type: "songs" });
+  const autoScanStarted = useRef(false);
+  const queuePreferenceApplied = useRef(false);
   const tracks = useMemo(
     () => library.trackIds.map((id) => library.tracksById[id]).filter((track): track is MusicTrack => Boolean(track)),
     [library],
@@ -55,6 +59,37 @@ export function App() {
   const selectedPlaylist = selectedView.type === "playlist" ? library.playlistsById[selectedView.id] : undefined;
   const isScanning = library.scan.status === "scanning";
   const isPlaying = playback.status === "playing";
+  const configuredRootPaths = settings.library.rootPaths.length > 0 ? settings.library.rootPaths : roots.map((root) => root.path);
+
+  useEffect(() => {
+    if (!settings.loaded || queuePreferenceApplied.current) {
+      return;
+    }
+
+    queuePreferenceApplied.current = true;
+    setQueueVisible(settings.general.showQueueOnLaunch);
+  }, [settings.general.showQueueOnLaunch, settings.loaded]);
+
+  useEffect(() => {
+    if (
+      !settings.loaded ||
+      autoScanStarted.current ||
+      !settings.library.autoScanOnStart ||
+      settings.library.rootPaths.length === 0
+    ) {
+      return;
+    }
+
+    autoScanStarted.current = true;
+    setMessage(`Scanning ${settings.library.rootPaths.length} saved folder${settings.library.rootPaths.length === 1 ? "" : "s"}...`);
+    scanLibrary(settings.library.rootPaths)
+      .then((result) => {
+        setMessage(`Indexed ${result.tracksIndexed} tracks from ${result.result.totalRoots} saved folder(s).`);
+      })
+      .catch((error) => {
+        setMessage(error instanceof Error ? error.message : String(error));
+      });
+  }, [settings.loaded, settings.library.autoScanOnStart, settings.library.rootPaths]);
 
   const chooseLibraryFolders = async () => {
     const paths = await openFileDialog({
@@ -71,6 +106,7 @@ export function App() {
     setMessage(`Scanning ${paths.length} folder${paths.length === 1 ? "" : "s"}...`);
 
     try {
+      await updateMusicSettings({ library: { rootPaths: paths } });
       const result = await scanLibrary(paths);
       setMessage(`Indexed ${result.tracksIndexed} tracks from ${result.result.totalRoots} folder(s).`);
     } catch (error) {
@@ -80,7 +116,29 @@ export function App() {
 
   const clearLibrary = async () => {
     await clearMusicLibrary();
+    await updateMusicSettings({ library: { rootPaths: [] } });
     setMessage("Library cleared.");
+  };
+
+  const rescanLibrary = async () => {
+    if (configuredRootPaths.length === 0) {
+      setMessage("Add a library folder before rescanning.");
+      return;
+    }
+
+    setMessage(`Rescanning ${configuredRootPaths.length} folder${configuredRootPaths.length === 1 ? "" : "s"}...`);
+
+    try {
+      const result = await scanLibrary(configuredRootPaths);
+      setMessage(`Indexed ${result.tracksIndexed} tracks from ${result.result.totalRoots} folder(s).`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const setQueuePreference = (visible: boolean) => {
+    setQueueVisible(visible);
+    void updateMusicSettings({ general: { showQueueOnLaunch: visible } });
   };
 
   const playTrack = (trackId: MusicId) => {
@@ -142,6 +200,9 @@ export function App() {
             <Text style={styles.secondaryButtonText}>Clear</Text>
           </Pressable>
         </View>
+        <Pressable disabled={isScanning || configuredRootPaths.length === 0} onPress={() => void rescanLibrary()} style={[styles.secondaryButton, (isScanning || configuredRootPaths.length === 0) && styles.disabledSecondaryButton]}>
+          <Text style={styles.secondaryButtonText}>Rescan Library</Text>
+        </Pressable>
         <Text style={styles.statusText}>{message}</Text>
         {playback.error ? <Text style={styles.errorText}>{playback.error}</Text> : null}
         <View style={styles.sidebarSection}>
@@ -201,15 +262,38 @@ export function App() {
         </View>
         <View style={styles.sidebarSection}>
           <Text style={styles.sectionTitle}>Roots</Text>
-          {roots.length === 0 ? (
+          {configuredRootPaths.length === 0 ? (
             <Text style={styles.rootText}>No folders added.</Text>
           ) : (
-            roots.map((root) => (
-              <Text key={root.id} numberOfLines={2} style={styles.rootText}>
-                {root.path}
+            configuredRootPaths.map((path) => (
+              <Text key={path} numberOfLines={2} style={styles.rootText}>
+                {path}
               </Text>
             ))
           )}
+        </View>
+        <View style={styles.sidebarSection}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          <SettingsToggle
+            label="Auto scan on start"
+            onPress={() => void updateMusicSettings({ library: { autoScanOnStart: !settings.library.autoScanOnStart } })}
+            value={settings.library.autoScanOnStart}
+          />
+          <SettingsToggle
+            label="Show queue on launch"
+            onPress={() => setQueuePreference(!settings.general.showQueueOnLaunch)}
+            value={settings.general.showQueueOnLaunch}
+          />
+          <SettingsToggle
+            label="Global hotkey"
+            onPress={() => void updateMusicSettings({ general: { globalHotkeyEnabled: !settings.general.globalHotkeyEnabled } })}
+            value={settings.general.globalHotkeyEnabled}
+          />
+          <SettingsToggle
+            label="Auto update checks"
+            onPress={() => void updateMusicSettings({ general: { autoCheckForUpdates: !settings.general.autoCheckForUpdates } })}
+            value={settings.general.autoCheckForUpdates}
+          />
         </View>
       </View>
       <View style={styles.main}>
@@ -262,7 +346,7 @@ export function App() {
             <View style={styles.queuePanel}>
               <View style={styles.queueHeader}>
                 <Text style={styles.queueTitle}>Queue</Text>
-                <Pressable onPress={() => setQueueVisible(false)} style={styles.smallButton}>
+                <Pressable onPress={() => setQueuePreference(false)} style={styles.smallButton}>
                   <Text style={styles.smallButtonText}>Hide</Text>
                 </Pressable>
               </View>
@@ -293,7 +377,7 @@ export function App() {
               </ScrollView>
             </View>
           ) : (
-            <Pressable onPress={() => setQueueVisible(true)} style={styles.queueTab}>
+            <Pressable onPress={() => setQueuePreference(true)} style={styles.queueTab}>
               <Text style={styles.queueTabText}>Queue {playback.queue.length}</Text>
             </Pressable>
           )}
@@ -422,6 +506,23 @@ function SidebarNavButton(props: {
         {label}
       </Text>
       {value ? <Text style={styles.sidebarNavValue}>{value}</Text> : null}
+    </Pressable>
+  );
+}
+
+function SettingsToggle(props: {
+  label: string;
+  onPress: () => void;
+  value: boolean;
+}) {
+  const { label, onPress, value } = props;
+
+  return (
+    <Pressable onPress={onPress} style={styles.settingsToggle}>
+      <Text style={styles.settingsToggleLabel}>{label}</Text>
+      <View style={[styles.toggleTrack, value && styles.toggleTrackEnabled]}>
+        <View style={[styles.toggleThumb, value && styles.toggleThumbEnabled]} />
+      </View>
     </Pressable>
   );
 }
@@ -855,6 +956,18 @@ const styles = StyleSheet.create({
     color: "#40403c",
     fontSize: 14,
   },
+  settingsToggle: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    minHeight: 28,
+  },
+  settingsToggleLabel: {
+    color: "#454540",
+    flex: 1,
+    fontSize: 13,
+  },
   smallButton: {
     alignItems: "center",
     borderColor: "#d0d0ca",
@@ -893,6 +1006,25 @@ const styles = StyleSheet.create({
     color: "#171717",
     fontSize: 22,
     fontWeight: "700",
+  },
+  toggleThumb: {
+    backgroundColor: "#ffffff",
+    borderRadius: 999,
+    height: 14,
+    width: 14,
+  },
+  toggleThumbEnabled: {
+    transform: [{ translateX: 16 }],
+  },
+  toggleTrack: {
+    backgroundColor: "#b9b9b1",
+    borderRadius: 999,
+    justifyContent: "center",
+    padding: 2,
+    width: 34,
+  },
+  toggleTrackEnabled: {
+    backgroundColor: "#2f4f31",
   },
   trackArtwork: {
     alignItems: "center",
