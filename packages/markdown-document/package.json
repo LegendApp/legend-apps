@@ -1,0 +1,16 @@
+{
+  "name": "@legend-desktop/markdown-document",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/markdown-parser": "0.0.0",
+    "@legendapp/list": "3.0.0-beta.48",
+    "react-native-enriched-markdown": "0.5.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

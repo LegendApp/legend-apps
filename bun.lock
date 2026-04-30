@@ -134,6 +134,19 @@
         "react-native": "*",
       },
     },
+    "packages/markdown-document": {
+      "name": "@legend-desktop/markdown-document",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/markdown-parser": "0.0.0",
+        "@legendapp/list": "3.0.0-beta.48",
+        "react-native-enriched-markdown": "0.5.0",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/markdown-parser": {
       "name": "@legend-desktop/markdown-parser",
       "version": "0.0.0",
@@ -535,6 +548,8 @@
     "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+
+    "@legend-desktop/markdown-document": ["@legend-desktop/markdown-document@workspace:packages/markdown-document"],
 
     "@legend-desktop/markdown-parser": ["@legend-desktop/markdown-parser@workspace:packages/markdown-parser"],
 

@@ -42,20 +42,20 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 3: MarkdownDocument Package
 
-- [ ] Create `packages/markdown-document`.
-- [ ] Add `package.json` following workspace conventions.
-- [ ] Add `src/index.ts`.
-- [ ] Add public types.
-- [ ] Add native adapter wrapping `@legend-desktop/markdown-parser`.
-- [ ] Add `MarkdownDocument.tsx`.
-- [ ] Add default native-document-app styling.
-- [ ] Export `defaultMarkdownStyle`.
-- [ ] Expose style/content/markdown style props without hardcoding chrome.
-- [ ] Expose command/state API shape needed by app menus and future custom toolbars.
-- [ ] Add short README with basic usage and API notes.
-- [ ] Ensure package has no `@legendapp/state` dependency.
-- [ ] Validate `bun run typecheck`.
-- [ ] Commit with a `type: subject` message.
+- [x] Create `packages/markdown-document`.
+- [x] Add `package.json` following workspace conventions.
+- [x] Add `src/index.ts`.
+- [x] Add public types.
+- [x] Add native adapter wrapping `@legend-desktop/markdown-parser`.
+- [x] Add `MarkdownDocument.tsx`.
+- [x] Add default native-document-app styling.
+- [x] Export `defaultMarkdownStyle`.
+- [x] Expose style/content/markdown style props without hardcoding chrome.
+- [x] Expose command/state API shape needed by app menus and future custom toolbars.
+- [x] Add short README with basic usage and API notes.
+- [x] Ensure package has no `@legendapp/state` dependency.
+- [x] Validate `bun run typecheck`.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 4: Read-Only Markdown App Shell
 

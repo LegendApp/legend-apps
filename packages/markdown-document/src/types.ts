@@ -1,0 +1,112 @@
+import type { Ref } from "react";
+import type { StyleProp, ViewStyle } from "react-native";
+import type { MarkdownStyle } from "react-native-enriched-markdown";
+
+export type MarkdownBlockSnapshot = {
+  id: string;
+  index: number;
+  type: string;
+  depth: number;
+  markdown: string;
+  sourceStartByte: number;
+  sourceEndByte: number;
+  contentStartByte?: number;
+  contentEndByte?: number;
+  textRevision: number;
+};
+
+export type MarkdownDocumentSnapshot = {
+  documentId: string;
+  filename: string;
+  sourceSize: number;
+  blockCount: number;
+  initialBlocks: MarkdownBlockSnapshot[];
+  timing: {
+    readMs: number;
+    parseMs: number;
+    documentMs: number;
+  };
+};
+
+export type MarkdownTransaction =
+  | {
+      type: "updateBlockMarkdown";
+      blockId: string;
+      markdown: string;
+    }
+  | {
+      type: "splitBlock";
+      blockId: string;
+      beforeMarkdown: string;
+      afterMarkdown: string;
+    };
+
+export type MarkdownTransactionResult = {
+  revision: number;
+  sourceLength: number;
+  changedRange: {
+    startBlockIndex: number;
+    deleteCount: number;
+    blockIds: string[];
+  };
+  changedBlocks: MarkdownBlockSnapshot[];
+  retiredBlockIds: string[];
+};
+
+export type MarkdownDocumentAdapter = {
+  load(filename: string): Promise<MarkdownDocumentSnapshot>;
+  getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot>;
+  getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]>;
+  save(documentId: string): Promise<void>;
+  close(documentId: string): Promise<void>;
+  applyTransaction?: (
+    documentId: string,
+    transaction: MarkdownTransaction,
+  ) => Promise<MarkdownTransactionResult>;
+};
+
+export type MarkdownDocumentCommands = {
+  save(): void;
+  undo(): void;
+  redo(): void;
+  focus(): void;
+  toggleBold(): void;
+  toggleItalic(): void;
+  insertLink(): void;
+};
+
+export type MarkdownSavePolicy = {
+  autosave?: boolean;
+  debounceMs?: number;
+};
+
+export type MarkdownSaveState = "idle" | "saving" | "error";
+
+export type MarkdownDocumentLoadedInfo = {
+  documentId: string;
+  filename: string;
+  blockCount: number;
+  sourceSize: number;
+};
+
+export type MarkdownDocumentTheme = {
+  backgroundColor?: string;
+  foregroundColor?: string;
+  mutedForegroundColor?: string;
+  errorColor?: string;
+};
+
+export type MarkdownDocumentProps = {
+  filename: string;
+  adapter?: MarkdownDocumentAdapter;
+  savePolicy?: MarkdownSavePolicy;
+  style?: StyleProp<ViewStyle>;
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  markdownStyle?: MarkdownStyle;
+  theme?: MarkdownDocumentTheme;
+  commandsRef?: Ref<MarkdownDocumentCommands>;
+  onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+  onSaveStateChange?: (state: MarkdownSaveState) => void;
+  onError?: (error: Error) => void;
+};
