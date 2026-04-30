@@ -33,6 +33,9 @@ import {
 import { type GestureResponderEvent, Linking, Pressable, Text, View } from "react-native";
 import { ExampleButton, styles } from "./shared";
 
+const MARKDOWN_INITIAL_BLOCK_COUNT = 64;
+const MARKDOWN_CACHE_HYDRATE_CHUNK_SIZE = 512;
+
 const markdownParserSample = `# Markdown Parser
 
 This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.com).
@@ -201,6 +204,17 @@ function markdownDocumentBlocks(document: MarkdownDocument, includeText = false)
 
 function markdownDocumentWindow(document: MarkdownDocument, count: number, includeText = false): MarkdownViewerBlock[] {
   return markdownSnapshotBlocks(document.getBlocks(0, Math.min(document.blockCount, count), includeText));
+}
+
+function cacheMarkdownDocumentBlocks(
+  document: MarkdownDocument,
+  cache: Map<number, MarkdownViewerBlock>,
+  start: number,
+  count: number,
+) {
+  for (const block of markdownSnapshotBlocks(document.getBlocks(start, count, false))) {
+    cache.set(block.index, block);
+  }
 }
 
 function markdownDocumentIndices(document: MarkdownDocument) {
@@ -531,6 +545,7 @@ function MarkdownBlockRow({
 export function MarkdownParserExample() {
   const blockCacheRef = useRef(new Map<number, MarkdownViewerBlock>());
   const documentVersionRef = useRef(0);
+  const hydrateFrameRef = useRef<number | undefined>(undefined);
   const [blockIndices, setBlockIndices] = useState<number[]>([]);
   const [blockOverrides, setBlockOverrides] = useState(() => new Map<number, MarkdownViewerBlock>());
   const [document, setDocument] = useState<MarkdownDocument | undefined>();
@@ -539,7 +554,39 @@ export function MarkdownParserExample() {
   const [editingSelection, setEditingSelection] = useState(0);
   const [status, setStatus] = useState("Loading sample markdown...");
 
+  const cancelBlockCacheHydration = () => {
+    if (hydrateFrameRef.current !== undefined) {
+      cancelAnimationFrame(hydrateFrameRef.current);
+      hydrateFrameRef.current = undefined;
+    }
+  };
+
+  const hydrateRemainingBlocks = (nextDocument: MarkdownDocument, version: number) => {
+    cancelBlockCacheHydration();
+
+    let start = Math.min(MARKDOWN_INITIAL_BLOCK_COUNT, nextDocument.blockCount);
+    const hydrateChunk = () => {
+      hydrateFrameRef.current = undefined;
+      if (version !== documentVersionRef.current || start >= nextDocument.blockCount) {
+        return;
+      }
+
+      const count = Math.min(MARKDOWN_CACHE_HYDRATE_CHUNK_SIZE, nextDocument.blockCount - start);
+      cacheMarkdownDocumentBlocks(nextDocument, blockCacheRef.current, start, count);
+      start += count;
+
+      if (version === documentVersionRef.current && start < nextDocument.blockCount) {
+        hydrateFrameRef.current = requestAnimationFrame(hydrateChunk);
+      }
+    };
+
+    if (start < nextDocument.blockCount) {
+      hydrateFrameRef.current = requestAnimationFrame(hydrateChunk);
+    }
+  };
+
   const replaceDocument = (nextDocument: MarkdownDocument, source: string, initialBlocks: readonly MarkdownViewerBlock[] = []) => {
+    cancelBlockCacheHydration();
     documentVersionRef.current += 1;
     blockCacheRef.current.clear();
     for (const block of initialBlocks) {
@@ -569,6 +616,12 @@ export function MarkdownParserExample() {
   };
 
   useEffect(() => {
+    return () => {
+      cancelBlockCacheHydration();
+    };
+  }, []);
+
+  useEffect(() => {
     const debugMarkdown = createGeneratedMarkdown(2500);
     const startedAt = Date.now();
     void fetch("http://127.0.0.1:37531/ll-debug", {
@@ -578,7 +631,7 @@ export function MarkdownParserExample() {
     }).catch(() => {});
     const document = parseMarkdownDocument(debugMarkdown, { dialect: "github" });
     const parsedAt = Date.now();
-    const viewerBlocks = markdownDocumentWindow(document, 64);
+    const viewerBlocks = markdownDocumentWindow(document, MARKDOWN_INITIAL_BLOCK_COUNT);
     const finishedAt = Date.now();
     const timing = document.getTiming();
     void fetch("http://127.0.0.1:37531/ll-debug", {
@@ -608,7 +661,7 @@ export function MarkdownParserExample() {
     const startedAt = Date.now();
     const document = parseMarkdownDocument(markdownParserSample, { dialect: "github" });
     const parsedAt = Date.now();
-    const viewerBlocks = markdownDocumentWindow(document, 64);
+    const viewerBlocks = markdownDocumentWindow(document, MARKDOWN_INITIAL_BLOCK_COUNT);
     const finishedAt = Date.now();
     replaceDocument(document, "sample", viewerBlocks);
     setStatus(
@@ -672,7 +725,7 @@ export function MarkdownParserExample() {
     const parsedAt = Date.now();
     const extractedBlocks =
       mode === "scan-window" || mode === "md4c-window"
-        ? markdownDocumentWindow(document, 64)
+        ? markdownDocumentWindow(document, MARKDOWN_INITIAL_BLOCK_COUNT)
         : mode === "scan-full" || mode === "md4c-full"
           ? markdownDocumentBlocks(document)
           : [];
@@ -856,7 +909,7 @@ export function MarkdownParserExample() {
       const parsedAt = Date.now();
       const extractedBlocks =
         mode === "scan-window" || mode === "md4c-window"
-          ? markdownDocumentWindow(document, 64)
+          ? markdownDocumentWindow(document, MARKDOWN_INITIAL_BLOCK_COUNT)
           : mode === "scan-full" || mode === "md4c-full"
             ? markdownDocumentBlocks(document)
             : [];
@@ -1072,7 +1125,7 @@ export function MarkdownParserExample() {
     const startedAt = Date.now();
     void parseMarkdownFileDocument(path, { dialect: "github" }).then((document) => {
       const parsedAt = Date.now();
-      const viewerBlocks = markdownDocumentWindow(document, 64);
+      const viewerBlocks = markdownDocumentWindow(document, MARKDOWN_INITIAL_BLOCK_COUNT);
       const finishedAt = Date.now();
       const timing = document.getTiming();
       void fetch("http://127.0.0.1:37531/ll-debug", {
@@ -1194,7 +1247,13 @@ export function MarkdownParserExample() {
         data={blockIndices}
         estimatedItemSize={120}
         extraData={`${documentKey}:${editingBlockId ?? ""}:${editingSelection}:${blockOverrides.size}`}
+        key={documentKey}
         keyExtractor={(item) => String(item)}
+        onLoad={() => {
+          if (document) {
+            hydrateRemainingBlocks(document, documentVersionRef.current);
+          }
+        }}
         recycleItems
         renderItem={(props) => (
           <MarkdownBlockRow
