@@ -483,11 +483,8 @@ export function MarkdownParserExample() {
       const nitroParsedAt = Date.now();
       const nitroWindowBlocks = markdownDocumentWindow(document, 64);
       const nitroWindowFinishedAt = Date.now();
-      const nitroBlocks = markdownDocumentBlocks(document);
-      const nitroFullFinishedAt = Date.now();
       const legacyTotal = legacyFinishedAt - legacyStartedAt;
       const nitroWindowTotal = nitroWindowFinishedAt - nitroStartedAt;
-      const nitroFullTotal = nitroFullFinishedAt - nitroStartedAt;
       const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroWindowTotal) / legacyTotal) * 100) : 0;
       const timing = document.getTiming();
       const benchmarkPayload = {
@@ -496,9 +493,7 @@ export function MarkdownParserExample() {
         legacyExtractMs: legacyFinishedAt - legacyParsedAt,
         legacyParseMs: legacyParsedAt - legacyStartedAt,
         legacyTotalMs: legacyTotal,
-        nitroBlocks: nitroBlocks.length,
-        nitroFullExtractMs: nitroFullFinishedAt - nitroWindowFinishedAt,
-        nitroFullTotalMs: nitroFullTotal,
+        nitroBlocks: document.blockCount,
         nitroParseMs: nitroParsedAt - nitroStartedAt,
         nitroTiming: timingPayload(timing),
         nitroWindowBlocks: nitroWindowBlocks.length,
@@ -517,9 +512,9 @@ export function MarkdownParserExample() {
       setStatus(
         `Benchmark ${markdownSizeLabel(debugMarkdown)}: Turbo JSON ${formatDuration(
           legacyTotal,
-        )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster), full extract ${formatDuration(
-          nitroFullTotal,
-        )}. Nitro native: ${formatDuration(timing.readMs + timing.parseMs + timing.documentMs)} (${formatDuration(
+        )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster). Nitro native: ${formatDuration(
+          timing.readMs + timing.parseMs + timing.documentMs,
+        )} (${formatDuration(
           nitroParsedAt - nitroStartedAt,
         )} JS boundary).`,
       );
@@ -569,11 +564,8 @@ export function MarkdownParserExample() {
         const nitroParsedAt = Date.now();
         const nitroWindowBlocks = markdownDocumentWindow(document, 64);
         const nitroWindowFinishedAt = Date.now();
-        const nitroBlocks = markdownDocumentBlocks(document);
-        const nitroFullFinishedAt = Date.now();
         const legacyTotal = legacyFinishedAt - legacyStartedAt;
         const nitroWindowTotal = nitroWindowFinishedAt - nitroStartedAt;
-        const nitroFullTotal = nitroFullFinishedAt - nitroStartedAt;
         const improvement = legacyTotal > 0 ? Math.round(((legacyTotal - nitroWindowTotal) / legacyTotal) * 100) : 0;
         const timing = document.getTiming();
         const benchmarkPayload = {
@@ -582,9 +574,7 @@ export function MarkdownParserExample() {
           legacyExtractMs: legacyFinishedAt - legacyParsedAt,
           legacyParseMs: legacyParsedAt - legacyStartedAt,
           legacyTotalMs: legacyTotal,
-          nitroBlocks: nitroBlocks.length,
-          nitroFullExtractMs: nitroFullFinishedAt - nitroWindowFinishedAt,
-          nitroFullTotalMs: nitroFullTotal,
+          nitroBlocks: document.blockCount,
           nitroParseMs: nitroParsedAt - nitroStartedAt,
           nitroTiming: timingPayload(timing),
           nitroWindowBlocks: nitroWindowBlocks.length,
@@ -603,9 +593,9 @@ export function MarkdownParserExample() {
         setStatus(
           `File benchmark ${path.split("/").pop() ?? path}: Turbo JSON ${formatDuration(
             legacyTotal,
-          )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster), full extract ${formatDuration(
-            nitroFullTotal,
-          )}. Nitro native: ${formatDuration(timing.readMs + timing.parseMs + timing.documentMs)} (${formatDuration(
+          )}, Nitro first window ${formatDuration(nitroWindowTotal)} (${improvement}% faster). Nitro native: ${formatDuration(
+            timing.readMs + timing.parseMs + timing.documentMs,
+          )} (${formatDuration(
             nitroParsedAt - nitroStartedAt,
           )} JS boundary).`,
         );
