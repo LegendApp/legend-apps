@@ -375,19 +375,23 @@ function MarkdownBlockRow({
 
 export function MarkdownParserExample() {
   const blockCacheRef = useRef(new Map<number, MarkdownViewerBlock>());
+  const documentVersionRef = useRef(0);
   const [blockIndices, setBlockIndices] = useState<number[]>([]);
   const [blockOverrides, setBlockOverrides] = useState(() => new Map<number, MarkdownViewerBlock>());
   const [document, setDocument] = useState<MarkdownDocument | undefined>();
+  const [documentKey, setDocumentKey] = useState("initial");
   const [editingBlockId, setEditingBlockId] = useState<number | undefined>();
   const [editingSelection, setEditingSelection] = useState(0);
   const [status, setStatus] = useState("Loading sample markdown...");
 
-  const replaceDocument = (nextDocument: MarkdownDocument) => {
+  const replaceDocument = (nextDocument: MarkdownDocument, source: string) => {
+    documentVersionRef.current += 1;
     blockCacheRef.current.clear();
     setEditingBlockId(undefined);
     setEditingSelection(0);
     setBlockOverrides(new Map());
     setDocument(nextDocument);
+    setDocumentKey(`${source}:${nextDocument.sourceSize}:${nextDocument.blockCount}:${documentVersionRef.current}`);
     setBlockIndices(markdownDocumentIndices(nextDocument));
   };
 
@@ -440,7 +444,7 @@ export function MarkdownParserExample() {
       headers: { "content-type": "application/json" },
       method: "POST",
     }).catch(() => {});
-    replaceDocument(document);
+    replaceDocument(document, "generated-initial");
     setStatus(
       `Generated sample loaded with Nitro: ${document.blockCount} render blocks in ${formatDuration(
         finishedAt - startedAt,
@@ -455,7 +459,7 @@ export function MarkdownParserExample() {
     const parsedAt = Date.now();
     const viewerBlocks = markdownDocumentWindow(document, 64);
     const finishedAt = Date.now();
-    replaceDocument(document);
+    replaceDocument(document, "sample");
     setStatus(
       `Nitro sample loaded: ${document.blockCount} render blocks in ${formatDuration(
         finishedAt - startedAt,
@@ -506,7 +510,7 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceDocument(document);
+      replaceDocument(document, "generated-benchmark");
       setStatus(
         `Benchmark ${markdownSizeLabel(debugMarkdown)}: Turbo JSON ${formatDuration(
           legacyTotal,
@@ -541,7 +545,7 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      replaceDocument(document);
+      replaceDocument(document, path);
       setStatus(
         `Nitro loaded ${document.blockCount} render blocks from ${path.split("/").pop() ?? path} in ${formatDuration(
           finishedAt - startedAt,
@@ -592,7 +596,7 @@ export function MarkdownParserExample() {
           headers: { "content-type": "application/json" },
           method: "POST",
         }).catch(() => {});
-        replaceDocument(document);
+        replaceDocument(document, path);
         setStatus(
           `File benchmark ${path.split("/").pop() ?? path}: Turbo JSON ${formatDuration(
             legacyTotal,
@@ -656,7 +660,7 @@ export function MarkdownParserExample() {
         contentContainerStyle={styles.markdownListContent}
         data={blockIndices}
         estimatedItemSize={120}
-        extraData={`${editingBlockId ?? ""}:${editingSelection}`}
+        extraData={`${documentKey}:${editingBlockId ?? ""}:${editingSelection}:${blockOverrides.size}`}
         keyExtractor={(item) => String(item)}
         recycleItems
         renderItem={(props) => (
