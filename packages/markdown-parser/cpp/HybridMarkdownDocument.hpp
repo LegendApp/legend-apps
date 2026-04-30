@@ -3,6 +3,7 @@
 #include "../nitrogen/generated/shared/c++/HybridMarkdownDocumentSpec.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,11 +45,13 @@ protected:
   size_t getExternalMemorySize() noexcept override;
 
 private:
-  MarkdownBlockSnapshot snapshotForBlock(const MarkdownBlockRange& block, bool includeText) const;
+  MarkdownBlockSnapshot snapshotForBlock(size_t storageIndex, const MarkdownBlockRange& block, bool includeText) const;
+  const std::string& markdownForBlock(size_t storageIndex, const MarkdownBlockRange& block) const;
   std::string sourceString(size_t start, size_t end) const;
 
   std::shared_ptr<const MarkdownSource> source_;
   std::vector<MarkdownBlockRange> blocks_;
+  mutable std::vector<std::optional<std::string>> markdownCache_;
   MarkdownDocumentTiming timing_;
 };
 

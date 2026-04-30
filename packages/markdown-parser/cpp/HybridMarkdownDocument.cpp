@@ -9,7 +9,11 @@ HybridMarkdownDocument::HybridMarkdownDocument(
     std::shared_ptr<const MarkdownSource> source,
     std::vector<MarkdownBlockRange> blocks,
     MarkdownDocumentTiming timing)
-    : HybridObject(TAG), source_(std::move(source)), blocks_(std::move(blocks)), timing_(timing) {}
+    : HybridObject(TAG),
+      source_(std::move(source)),
+      blocks_(std::move(blocks)),
+      markdownCache_(blocks_.size()),
+      timing_(timing) {}
 
 void HybridMarkdownDocument::setDocumentDurationMs(double durationMs) {
   timing_.documentMs = durationMs;
@@ -28,7 +32,7 @@ MarkdownBlockSnapshot HybridMarkdownDocument::getBlock(double index, bool includ
   if (safeIndex >= blocks_.size()) {
     throw std::out_of_range("Markdown block index out of range");
   }
-  return snapshotForBlock(blocks_[safeIndex], includeText);
+  return snapshotForBlock(safeIndex, blocks_[safeIndex], includeText);
 }
 
 std::vector<MarkdownBlockSnapshot> HybridMarkdownDocument::getBlocks(double start, double count, bool includeText) {
@@ -42,7 +46,7 @@ std::vector<MarkdownBlockSnapshot> HybridMarkdownDocument::getBlocks(double star
   std::vector<MarkdownBlockSnapshot> snapshots;
   snapshots.reserve(end - safeStart);
   for (size_t index = safeStart; index < end; index += 1) {
-    snapshots.push_back(snapshotForBlock(blocks_[index], includeText));
+    snapshots.push_back(snapshotForBlock(index, blocks_[index], includeText));
   }
   return snapshots;
 }
@@ -52,8 +56,7 @@ std::string HybridMarkdownDocument::getBlockMarkdown(double index) {
   if (safeIndex >= blocks_.size()) {
     return "";
   }
-  const auto& block = blocks_[safeIndex];
-  return sourceString(block.markdownStart, block.markdownEnd);
+  return markdownForBlock(safeIndex, blocks_[safeIndex]);
 }
 
 MarkdownDocumentTiming HybridMarkdownDocument::getTiming() {
@@ -68,8 +71,11 @@ size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
   return size;
 }
 
-MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(const MarkdownBlockRange& block, bool includeText) const {
-  const std::string markdown = sourceString(block.markdownStart, block.markdownEnd);
+MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(
+    size_t storageIndex,
+    const MarkdownBlockRange& block,
+    bool includeText) const {
+  const std::string& markdown = markdownForBlock(storageIndex, block);
   return MarkdownBlockSnapshot(
       std::to_string(block.index),
       static_cast<double>(block.index),
@@ -77,6 +83,19 @@ MarkdownBlockSnapshot HybridMarkdownDocument::snapshotForBlock(const MarkdownBlo
       static_cast<double>(block.depth),
       includeText ? markdown : "",
       markdown);
+}
+
+const std::string& HybridMarkdownDocument::markdownForBlock(size_t storageIndex, const MarkdownBlockRange& block) const {
+  if (storageIndex >= markdownCache_.size()) {
+    static const std::string empty;
+    return empty;
+  }
+
+  auto& cached = markdownCache_[storageIndex];
+  if (!cached.has_value()) {
+    cached = sourceString(block.markdownStart, block.markdownEnd);
+  }
+  return *cached;
 }
 
 std::string HybridMarkdownDocument::sourceString(size_t start, size_t end) const {
