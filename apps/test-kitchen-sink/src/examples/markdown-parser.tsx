@@ -46,7 +46,6 @@ This paragraph has **strong text**, _emphasis_, and [a link](https://legendapp.c
 
 type MarkdownViewerBlock = MarkdownBlock & { markdown: string };
 type MarkdownBenchmarkMode =
-  | "scan-parse"
   | "scan-window"
   | "scan-full"
   | "md4c-window"
@@ -580,15 +579,11 @@ export function MarkdownParserExample() {
       headers: { "content-type": "application/json" },
       method: "POST",
     }).catch(() => {});
-    if (mode !== "scan-parse") {
-      replaceDocument(document, `generated-${mode}`, extractedBlocks);
-    }
+    replaceDocument(document, `generated-${mode}`, extractedBlocks);
     setStatus(
       `${benchmarkModeLabel(mode)} benchmark ${sizeLabel}: ${document.blockCount} blocks in ${formatDuration(
         finishedAt - startedAt,
-      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract${
-        mode === "scan-parse" ? ", not rendered" : ""
-      }). Native: ${formatDuration(
+      )} (${formatDuration(parsedAt - startedAt)} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
         timing.readMs + timing.parseMs + timing.documentMs,
       )}.`,
     );
@@ -674,15 +669,13 @@ export function MarkdownParserExample() {
         headers: { "content-type": "application/json" },
         method: "POST",
       }).catch(() => {});
-      if (mode !== "scan-parse") {
-        replaceDocument(document, path, extractedBlocks);
-      }
+      replaceDocument(document, path, extractedBlocks);
       setStatus(
         `File ${benchmarkModeLabel(mode)} benchmark ${path.split("/").pop() ?? path}: ${
           document.blockCount
         } blocks in ${formatDuration(finishedAt - startedAt)} (${formatDuration(
           parsedAt - startedAt,
-        )} parse, ${formatDuration(finishedAt - parsedAt)} extract${mode === "scan-parse" ? ", not rendered" : ""}). Native: ${formatDuration(
+        )} parse, ${formatDuration(finishedAt - parsedAt)} extract). Native: ${formatDuration(
           timing.readMs + timing.parseMs + timing.documentMs,
         )}.`,
       );
@@ -743,7 +736,6 @@ export function MarkdownParserExample() {
         <Text style={styles.bodyText}>{status}</Text>
         <View style={styles.markdownViewerActions}>
           <ExampleButton onPress={loadSampleWithNitro}>Load Sample</ExampleButton>
-          <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-parse")}>Scan Parse</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-window")}>Scan Window</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("scan-full")}>Scan Full</ExampleButton>
           <ExampleButton onPress={() => benchmarkGeneratedMarkdown("md4c-window")}>MD4C Window</ExampleButton>
@@ -784,7 +776,6 @@ export function MarkdownParserExample() {
           >
             File Window
           </ExampleButton>
-          <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-parse")}>File Parse</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("scan-full")}>File Full</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-window")}>File MD4C</ExampleButton>
           <ExampleButton onPress={() => chooseMarkdownFileForBenchmark("md4c-full")}>File MD4C Full</ExampleButton>
