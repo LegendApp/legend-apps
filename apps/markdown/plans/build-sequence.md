@@ -76,17 +76,17 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 5: Hydration And Performance
 
-- [ ] Request 64 initial blocks for first paint.
-- [ ] Render list rows keyed by opaque block ID.
-- [ ] Keep `MarkdownDocument` as owner of `blockIds` and `blocksById`.
-- [ ] Hydrate all remaining blocks after first paint / `LegendList` loaded signal.
-- [ ] Hydrate in chunks of 512.
-- [ ] Cancel hydration on document replacement/unmount.
+- [x] Request 64 initial blocks for first paint.
+- [x] Render list rows keyed by opaque block ID.
+- [x] Keep `MarkdownDocument` as owner of `blockIds` and `blocksById`.
+- [x] Hydrate all remaining blocks after first paint / `LegendList` loaded signal.
+- [x] Hydrate in chunks of 512.
+- [x] Cancel hydration on document replacement/unmount.
 - [ ] Keep DEV-only timing/block/hydration diagnostics available.
-- [ ] Do not show benchmark-style diagnostics in normal app UI.
-- [ ] Validate `bun run typecheck`.
+- [x] Do not show benchmark-style diagnostics in normal app UI.
+- [x] Validate `bun run typecheck`.
 - [ ] Validate 10k-20k block markdown file renders and scrolls without hydration gaps.
-- [ ] Commit with a `type: subject` message.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 6: Native Editing Transactions
 

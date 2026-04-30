@@ -30,6 +30,7 @@ type DocumentState =
     };
 
 const estimatedItemSize = 120;
+const hydrateChunkSize = 512;
 
 function MarkdownBlockRow({
   block,
@@ -77,6 +78,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     ref,
   ) => {
     const loadVersionRef = useRef(0);
+    const hydrateFrameRef = useRef<number | undefined>(undefined);
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
@@ -90,11 +92,89 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [onSaveStateChange],
     );
 
+    const cancelHydration = useCallback(() => {
+      if (hydrateFrameRef.current !== undefined) {
+        cancelAnimationFrame(hydrateFrameRef.current);
+        hydrateFrameRef.current = undefined;
+      }
+    }, []);
+
+    const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[]) => {
+      if (blocks.length === 0) {
+        return;
+      }
+
+      setBlocksById((previousBlocksById) => {
+        const nextBlocksById = new Map(previousBlocksById);
+        for (const block of blocks) {
+          nextBlocksById.set(block.id, block);
+        }
+        return nextBlocksById;
+      });
+
+      setBlockIds((previousBlockIds) => {
+        const seen = new Set(previousBlockIds);
+        const nextBlockIds = [...previousBlockIds];
+        for (const block of blocks) {
+          if (!seen.has(block.id)) {
+            seen.add(block.id);
+            nextBlockIds.push(block.id);
+          }
+        }
+        return nextBlockIds;
+      });
+    }, []);
+
+    const hydrateRemainingBlocks = useCallback(
+      (snapshot: MarkdownDocumentSnapshot, loadVersion: number) => {
+        cancelHydration();
+
+        let startIndex = snapshot.initialBlocks.length;
+        const hydrateNextChunk = () => {
+          hydrateFrameRef.current = undefined;
+          if (loadVersion !== loadVersionRef.current || startIndex >= snapshot.blockCount) {
+            return;
+          }
+
+          const count = Math.min(hydrateChunkSize, snapshot.blockCount - startIndex);
+          void adapter
+            .getBlocks(snapshot.documentId, startIndex, count)
+            .then((blocks) => {
+              if (loadVersion !== loadVersionRef.current) {
+                return;
+              }
+
+              mergeBlocks(blocks);
+              startIndex += blocks.length;
+
+              if (blocks.length > 0 && startIndex < snapshot.blockCount) {
+                hydrateFrameRef.current = requestAnimationFrame(hydrateNextChunk);
+              }
+            })
+            .catch((error: unknown) => {
+              if (loadVersion !== loadVersionRef.current) {
+                return;
+              }
+
+              const nextError = error instanceof Error ? error : new Error(String(error));
+              setDocumentState({ status: "error", error: nextError });
+              onError?.(nextError);
+            });
+        };
+
+        if (startIndex < snapshot.blockCount) {
+          hydrateFrameRef.current = requestAnimationFrame(hydrateNextChunk);
+        }
+      },
+      [adapter, cancelHydration, mergeBlocks, onError],
+    );
+
     useEffect(() => {
       loadVersionRef.current += 1;
       const loadVersion = loadVersionRef.current;
       let isCanceled = false;
 
+      cancelHydration();
       setDocumentState({ status: "loading" });
       setBlockIds([]);
       setBlocksById(new Map());
@@ -136,8 +216,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       return () => {
         isCanceled = true;
+        cancelHydration();
       };
-    }, [adapter, filename, onDirtyChange, onError, onLoaded, setNextSaveState]);
+    }, [adapter, cancelHydration, filename, onDirtyChange, onError, onLoaded, setNextSaveState]);
 
     useEffect(() => {
       if (documentState.status !== "loaded") {
@@ -219,6 +300,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           estimatedItemSize={estimatedItemSize}
           extraData={blocksById}
           keyExtractor={(item) => item}
+          onLoad={() => {
+            hydrateRemainingBlocks(documentState.snapshot, loadVersionRef.current);
+          }}
           recycleItems
           renderItem={(props) => (
             <MarkdownBlockRow
