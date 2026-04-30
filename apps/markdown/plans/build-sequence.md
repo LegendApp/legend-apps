@@ -161,17 +161,17 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Manual Save flushes pending editor state before writing.
 - [x] Track saved document revision.
 - [x] Dirty becomes false when current revision equals saved revision.
-- [ ] Preserve undo history across saves.
-- [ ] Implement JS undo/redo stack.
+- [x] Preserve undo history across saves.
+- [x] Implement JS undo/redo stack.
 - [ ] Group continuous typing in the same block.
 - [ ] Split typing groups after 1000ms pause.
 - [ ] Split groups on blur, selection jump, formatting command, or structural command.
-- [ ] Implement Undo command.
-- [ ] Implement Redo command.
-- [ ] Wire Cmd+O, Cmd+S, Cmd+Z, Shift+Cmd+Z, Cmd+B, Cmd+I, Cmd+K.
-- [ ] Disable Save when clean or no document is open.
+- [x] Implement Undo command.
+- [x] Implement Redo command.
+- [x] Wire Cmd+O, Cmd+S, Cmd+Z, Shift+Cmd+Z, Cmd+B, Cmd+I, Cmd+K.
+- [x] Disable Save when clean or no document is open.
 - [ ] Disable Undo/Redo when unavailable.
-- [ ] Route formatting commands to active enriched editor when available.
+- [x] Route formatting commands to active enriched editor when available.
 - [ ] Prompt Save / Discard / Cancel when opening another file while dirty.
 - [ ] If prompt-save fails, show error and stay on current document.
 - [ ] Prompt Save / Discard / Cancel when closing a dirty document window.

@@ -218,6 +218,16 @@ export function App({ launchArguments }: MarkdownAppProps) {
         void openMarkdownDialog("menu");
       } else if (action.itemId === "save") {
         documentCommandsRef.current?.save();
+      } else if (action.itemId === "undo") {
+        documentCommandsRef.current?.undo();
+      } else if (action.itemId === "redo") {
+        documentCommandsRef.current?.redo();
+      } else if (action.itemId === "bold") {
+        documentCommandsRef.current?.toggleBold();
+      } else if (action.itemId === "italic") {
+        documentCommandsRef.current?.toggleItalic();
+      } else if (action.itemId === "link") {
+        documentCommandsRef.current?.insertLink();
       } else if (action.itemId.startsWith("recent-")) {
         const path = typeof action.payload?.path === "string" ? action.payload.path : null;
         if (path) {
@@ -235,11 +245,11 @@ export function App({ launchArguments }: MarkdownAppProps) {
   useEffect(() => {
     updateMenuItems(menuOwnerId, [
       { id: "save", enabled: hasDocument && isDirty && saveState !== "saving" },
-      { id: "undo", enabled: false },
-      { id: "redo", enabled: false },
-      { id: "bold", enabled: false },
-      { id: "italic", enabled: false },
-      { id: "link", enabled: false },
+      { id: "undo", enabled: hasDocument },
+      { id: "redo", enabled: hasDocument },
+      { id: "bold", enabled: hasDocument },
+      { id: "italic", enabled: hasDocument },
+      { id: "link", enabled: hasDocument },
     ]);
   }, [hasDocument, isDirty, saveState]);
 

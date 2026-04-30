@@ -35,6 +35,13 @@ type DocumentState =
       error: Error;
     };
 
+type HistoryEntry = {
+  type: "updateBlockMarkdown";
+  blockId: string;
+  beforeMarkdown: string;
+  afterMarkdown: string;
+};
+
 const estimatedItemSize = 120;
 const hydrateChunkSize = 512;
 const editDebounceMs = 300;
@@ -167,6 +174,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const currentRevisionRef = useRef(0);
     const savedRevisionRef = useRef(0);
     const autosavePausedRef = useRef(false);
+    const undoStackRef = useRef<HistoryEntry[]>([]);
+    const redoStackRef = useRef<HistoryEntry[]>([]);
+    const suppressHistoryRef = useRef(false);
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -307,11 +317,21 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       try {
+        const beforeMarkdown = committedMarkdownRef.current;
         const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
           type: "updateBlockMarkdown",
           blockId: activeBlockIdValue,
           markdown,
         });
+        if (!suppressHistoryRef.current) {
+          undoStackRef.current.push({
+            type: "updateBlockMarkdown",
+            blockId: activeBlockIdValue,
+            beforeMarkdown,
+            afterMarkdown: markdown,
+          });
+          redoStackRef.current = [];
+        }
         if (activeBlockIdRef.current === activeBlockIdValue) {
           committedMarkdownRef.current = markdown;
         }
@@ -445,6 +465,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       currentRevisionRef.current = 0;
       savedRevisionRef.current = 0;
       autosavePausedRef.current = false;
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      suppressHistoryRef.current = false;
       setDocumentState({ status: "loading" });
       setBlockIds([]);
       setBlocksById(new Map());
@@ -557,6 +580,71 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       };
     }, [save]);
 
+    const applyHistoryEntry = useCallback(
+      async (entry: HistoryEntry, markdown: string) => {
+        if (documentState.status !== "loaded" || !adapter.applyTransaction) {
+          return false;
+        }
+
+        suppressHistoryRef.current = true;
+        try {
+          const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+            type: "updateBlockMarkdown",
+            blockId: entry.blockId,
+            markdown,
+          });
+          applyTransactionResult(result);
+          if (activeBlockIdRef.current === entry.blockId) {
+            draftMarkdownRef.current = markdown;
+            committedMarkdownRef.current = markdown;
+            setDraftMarkdown(markdown);
+            activeInputRef.current?.setValue(markdown);
+          }
+          markDirty();
+          return true;
+        } catch (error) {
+          const nextError = error instanceof Error ? error : new Error(String(error));
+          onError?.(nextError);
+          return false;
+        } finally {
+          suppressHistoryRef.current = false;
+        }
+      },
+      [adapter, applyTransactionResult, documentState, markDirty, onError],
+    );
+
+    const undo = useCallback(() => {
+      void (async () => {
+        await commitActiveBlock();
+        const entry = undoStackRef.current.pop();
+        if (!entry) {
+          return;
+        }
+
+        if (await applyHistoryEntry(entry, entry.beforeMarkdown)) {
+          redoStackRef.current.push(entry);
+        } else {
+          undoStackRef.current.push(entry);
+        }
+      })();
+    }, [applyHistoryEntry, commitActiveBlock]);
+
+    const redo = useCallback(() => {
+      void (async () => {
+        await commitActiveBlock();
+        const entry = redoStackRef.current.pop();
+        if (!entry) {
+          return;
+        }
+
+        if (await applyHistoryEntry(entry, entry.afterMarkdown)) {
+          undoStackRef.current.push(entry);
+        } else {
+          redoStackRef.current.push(entry);
+        }
+      })();
+    }, [applyHistoryEntry, commitActiveBlock]);
+
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
         focus() {
@@ -565,7 +653,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         insertLink() {
           activeInputRef.current?.insertLink("link", "https://");
         },
-        redo() {},
+        redo,
         save,
         toggleBold() {
           activeInputRef.current?.toggleBold();
@@ -573,9 +661,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         toggleItalic() {
           activeInputRef.current?.toggleItalic();
         },
-        undo() {},
+        undo,
       }),
-      [save],
+      [redo, save, undo],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);
