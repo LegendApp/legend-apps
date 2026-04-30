@@ -252,6 +252,16 @@ size_t nextLineStart(const char* bytes, size_t length, size_t end) {
   return end;
 }
 
+size_t nextPhysicalLineStart(const char* bytes, size_t length, size_t end) {
+  if (end < length && bytes[end] == '\r') {
+    end += 1;
+  }
+  if (end < length && bytes[end] == '\n') {
+    end += 1;
+  }
+  return end;
+}
+
 bool lineStartsBoundaryBlock(const char* bytes, size_t start, size_t end) {
   return lineStartsHeading(bytes, start, end) ||
       lineFenceChar(bytes, start, end) != 0 ||
@@ -278,7 +288,7 @@ std::string scannedBlockType(const char* bytes, size_t length, size_t start, siz
     return "orderedList";
   }
 
-  const size_t nextStart = nextLineStart(bytes, length, end);
+  const size_t nextStart = nextPhysicalLineStart(bytes, length, end);
   if (nextStart < length && lineLooksLikeTableDelimiter(bytes, nextStart, lineEnd(bytes, length, nextStart))) {
     return "table";
   }
@@ -298,7 +308,7 @@ size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, const std
     return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, start, end));
   }
 
-  size_t nextStart = nextLineStart(bytes, length, end);
+  size_t nextStart = nextPhysicalLineStart(bytes, length, end);
   while (nextStart < length) {
     const size_t nextEnd = lineEnd(bytes, length, nextStart);
     if (lineIsBlank(bytes, nextStart, nextEnd)) {
@@ -308,7 +318,7 @@ size_t scannedBlockEnd(const char* bytes, size_t length, size_t start, const std
       break;
     }
     end = nextEnd;
-    nextStart = nextLineStart(bytes, length, end);
+    nextStart = nextPhysicalLineStart(bytes, length, end);
   }
   return end;
 }
