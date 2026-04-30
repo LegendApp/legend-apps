@@ -12,6 +12,7 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-desktop/appkit-split-view",
+      "@legend-desktop/app-storage",
       "@legend-desktop/audio-player",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
@@ -20,6 +21,7 @@ const manifest = {
     ],
     ios: [
       "@legend-desktop/appkit-split-view",
+      "@legend-desktop/app-storage",
       "@legend-desktop/audio-player",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
@@ -28,6 +30,7 @@ const manifest = {
     ],
     android: [
       "@legend-desktop/appkit-split-view",
+      "@legend-desktop/app-storage",
       "@legend-desktop/audio-player",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
