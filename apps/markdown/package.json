@@ -5,7 +5,9 @@
   "main": "src/index.ts",
   "dependencies": {
     "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/markdown-document": "workspace:*",
     "@legend-desktop/native-menu": "0.0.0",
-    "@legend-desktop/window-manager": "0.0.0"
+    "@legend-desktop/window-manager": "0.0.0",
+    "@legendapp/state": "^3.0.0-beta.42"
   }
 }

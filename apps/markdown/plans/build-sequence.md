@@ -59,20 +59,20 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 4: Read-Only Markdown App Shell
 
-- [ ] Add `@legend-desktop/markdown-document` to `apps/markdown`.
-- [ ] Replace placeholder app UI with `MarkdownDocument`.
-- [ ] Wire selected/open filename into the component.
-- [ ] Keep app shell chrome outside `MarkdownDocument`.
-- [ ] Add subtle status surface for filename, loading, saving, dirty, and errors.
-- [ ] Persist app metadata with `@legendapp/state`.
-- [ ] Persist recent files in a JSON-backed store.
-- [ ] Keep at most 20 recent files.
-- [ ] Remove missing recent files after showing an error.
-- [ ] Expose recent files in native menu if dynamic menu support is straightforward.
-- [ ] Do not build an empty-state recent-files list.
-- [ ] Validate `bun run typecheck`.
-- [ ] Validate `bun run markdown run macos` opens and renders a markdown file.
-- [ ] Commit with a `type: subject` message.
+- [x] Add `@legend-desktop/markdown-document` to `apps/markdown`.
+- [x] Replace placeholder app UI with `MarkdownDocument`.
+- [x] Wire selected/open filename into the component.
+- [x] Keep app shell chrome outside `MarkdownDocument`.
+- [x] Add subtle status surface for filename, loading, saving, dirty, and errors.
+- [x] Persist app metadata with `@legendapp/state`.
+- [x] Persist recent files in a JSON-backed store.
+- [x] Keep at most 20 recent files.
+- [x] Remove missing recent files after showing an error.
+- [x] Expose recent files in native menu if dynamic menu support is straightforward.
+- [x] Do not build an empty-state recent-files list.
+- [x] Validate `bun run typecheck`.
+- [x] Validate `bun run markdown run macos` opens and renders a markdown file.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 5: Hydration And Performance
 

@@ -17,13 +17,22 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/markdown-document": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
+        "@legendapp/state": "^3.0.0-beta.42",
       },
     },
     "apps/music": {
       "name": "@legend-desktop/app-music",
       "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/audio-player": "0.0.0",
+        "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/file-system-watcher": "0.0.0",
+        "@legend-desktop/media-library-scanner": "0.0.0",
+        "@legend-desktop/media-tags": "0.0.0",
+      },
     },
     "apps/test-kitchen-sink": {
       "name": "@legend-desktop/app-test-kitchen-sink",
@@ -31,6 +40,7 @@
       "dependencies": {
         "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/document-scanner": "0.0.0",
@@ -61,6 +71,14 @@
     },
     "packages/appkit-split-view": {
       "name": "@legend-desktop/appkit-split-view",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/audio-player": {
+      "name": "@legend-desktop/audio-player",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -533,6 +551,8 @@
 
     "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
 
+    "@legend-desktop/audio-player": ["@legend-desktop/audio-player@workspace:packages/audio-player"],
+
     "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
@@ -568,6 +588,8 @@
     "@legend-desktop/window-manager": ["@legend-desktop/window-manager@workspace:packages/window-manager"],
 
     "@legendapp/list": ["@legendapp/list@3.0.0-beta.48", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*" } }, "sha512-xGH9GCMr/3FI/O5/CNceKHfdBB2YjHMHWFBEz/ew4RAHNByCX+dnPgvcbTUNaxwoaaO+cMApZTVtj005UFRyuA=="],
+
+    "@legendapp/state": ["@legendapp/state@3.0.0-beta.47", "", { "dependencies": { "use-sync-external-store": "^1.2.2" }, "peerDependencies": { "expo-sqlite": "^15.0.0" }, "optionalPeers": ["expo-sqlite"] }, "sha512-MPgPacXXSoAazAv7ulW/o0ZAtK4YHk3twvXZ241l2HqAHciHozb7tg5SMbEAc2HKUUfC3JBh+9+DXfMsYokLpQ=="],
 
     "@nodable/entities": ["@nodable/entities@2.1.0", "", {}, "sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA=="],
 
