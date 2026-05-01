@@ -17,22 +17,17 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/markdown-document": "0.0.0",
+        "@legend-desktop/markdown-document": "workspace:*",
         "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/recent-documents": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
         "@legendapp/state": "^3.0.0-beta.42",
+        "react-native-enriched-markdown": "0.5.0",
       },
     },
     "apps/music": {
       "name": "@legend-desktop/app-music",
       "version": "0.0.0",
-      "dependencies": {
-        "@legend-desktop/audio-player": "0.0.0",
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/media-library-scanner": "0.0.0",
-        "@legend-desktop/media-tags": "0.0.0",
-      },
     },
     "apps/test-kitchen-sink": {
       "name": "@legend-desktop/app-test-kitchen-sink",
@@ -40,7 +35,6 @@
       "dependencies": {
         "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/document-scanner": "0.0.0",
@@ -71,14 +65,6 @@
     },
     "packages/appkit-split-view": {
       "name": "@legend-desktop/appkit-split-view",
-      "version": "0.0.0",
-      "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
-      },
-    },
-    "packages/audio-player": {
-      "name": "@legend-desktop/audio-player",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -199,6 +185,14 @@
     },
     "packages/native-menu": {
       "name": "@legend-desktop/native-menu",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/recent-documents": {
+      "name": "@legend-desktop/recent-documents",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -551,8 +545,6 @@
 
     "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
 
-    "@legend-desktop/audio-player": ["@legend-desktop/audio-player@workspace:packages/audio-player"],
-
     "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
@@ -578,6 +570,8 @@
     "@legend-desktop/media-tags": ["@legend-desktop/media-tags@workspace:packages/media-tags"],
 
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
+
+    "@legend-desktop/recent-documents": ["@legend-desktop/recent-documents@workspace:packages/recent-documents"],
 
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
 
