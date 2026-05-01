@@ -31,6 +31,12 @@ import {
   renamePlaylist,
 } from "./playlists";
 import { updateMusicSettings, useMusicSettings } from "./settings";
+import {
+  closeNowPlayingOverlay,
+  openMusicLibraryWindow,
+  openMusicSettingsWindow,
+  openNowPlayingOverlay,
+} from "./windows/musicWindows";
 
 const repeatModes: RepeatMode[] = ["off", "all", "one"];
 type LibraryView =
@@ -50,6 +56,7 @@ export function App() {
   const [queueVisible, setQueueVisible] = useState(true);
   const [selectedView, setSelectedView] = useState<LibraryView>({ type: "songs" });
   const autoScanStarted = useRef(false);
+  const overlayVisible = useRef(false);
   const queuePreferenceApplied = useRef(false);
   const tracks = useMemo(
     () => library.trackIds.map((id) => library.tracksById[id]).filter((track): track is MusicTrack => Boolean(track)),
@@ -101,6 +108,18 @@ export function App() {
   useEffect(() => {
     setPlaylistRenameName(selectedPlaylist?.name ?? "");
   }, [selectedPlaylist?.id, selectedPlaylist?.name]);
+
+  useEffect(() => {
+    const shouldShowOverlay = settings.loaded && settings.general.nowPlayingOverlayEnabled && isPlaying && Boolean(currentTrack);
+
+    if (shouldShowOverlay && !overlayVisible.current) {
+      overlayVisible.current = true;
+      void openNowPlayingOverlay();
+    } else if (!shouldShowOverlay && overlayVisible.current) {
+      overlayVisible.current = false;
+      void closeNowPlayingOverlay();
+    }
+  }, [currentTrack, isPlaying, settings.general.nowPlayingOverlayEnabled, settings.loaded]);
 
   const chooseLibraryFolders = async () => {
     const paths = await openFileDialog({
@@ -159,6 +178,8 @@ export function App() {
     isPlaying,
     onAddLibrary: () => void chooseLibraryFolders(),
     onClearLibrary: () => void clearLibrary(),
+    onOpenLibraryWindow: () => void openMusicLibraryWindow(),
+    onOpenSettings: () => void openMusicSettingsWindow(),
     onRescanLibrary: () => void rescanLibrary(),
     onStatus: setMessage,
     onToggleQueue: () => setQueuePreference(!queueVisible),
@@ -320,6 +341,14 @@ export function App() {
         <Pressable disabled={isScanning || configuredRootPaths.length === 0} onPress={() => void rescanLibrary()} style={[styles.secondaryButton, (isScanning || configuredRootPaths.length === 0) && styles.disabledSecondaryButton]}>
           <Text style={styles.secondaryButtonText}>Rescan Library</Text>
         </Pressable>
+        <View style={styles.buttonGroup}>
+          <Pressable onPress={() => void openMusicSettingsWindow()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Settings</Text>
+          </Pressable>
+          <Pressable onPress={() => void openMusicLibraryWindow()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Library Window</Text>
+          </Pressable>
+        </View>
         <Text style={styles.statusText}>{message}</Text>
         {playback.error ? <Text style={styles.errorText}>{playback.error}</Text> : null}
         <View style={styles.sidebarSection}>
@@ -427,6 +456,11 @@ export function App() {
             label="Global hotkey"
             onPress={() => void updateMusicSettings({ general: { globalHotkeyEnabled: !settings.general.globalHotkeyEnabled } })}
             value={settings.general.globalHotkeyEnabled}
+          />
+          <SettingsToggle
+            label="Now playing overlay"
+            onPress={() => void updateMusicSettings({ general: { nowPlayingOverlayEnabled: !settings.general.nowPlayingOverlayEnabled } })}
+            value={settings.general.nowPlayingOverlayEnabled}
           />
           <SettingsToggle
             label="Auto update checks"

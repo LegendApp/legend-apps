@@ -33,6 +33,8 @@ type MusicDesktopIntegrationOptions = Readonly<{
   isPlaying: boolean;
   onAddLibrary: () => void;
   onClearLibrary: () => void;
+  onOpenLibraryWindow: () => void;
+  onOpenSettings: () => void;
   onRescanLibrary: () => void;
   onStatus: (message: string) => void;
   onToggleQueue: () => void;
@@ -60,6 +62,9 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
           { id: "rescanLibrary", title: "Rescan Library", shortcut: { key: "r", modifiers: commandModifier } },
           { id: "clearLibrary", title: "Clear Library" },
           { separator: true, id: "fileSeparator" },
+          { id: "openLibraryWindow", title: "Open Library Window" },
+          { id: "openSettings", title: "Settings..." },
+          { separator: true, id: "windowSeparator" },
           { id: "quit", title: "Quit Legend Music", shortcut: { key: "q", modifiers: commandModifier } },
         ],
       },
@@ -82,6 +87,7 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
         placement: { before: "Window" },
         items: [
           { id: "toggleQueue", title: "Hide Queue", shortcut: { key: "j", modifiers: commandModifier | shiftModifier } },
+          { id: "toggleOverlay", title: "Now Playing Overlay" },
           { id: "toggleGlobalHotkey", title: "Enable Global Hotkey" },
           { id: "toggleAutoUpdates", title: "Automatic Update Checks" },
           { separator: true, id: "librarySeparator" },
@@ -102,6 +108,10 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
         latest.onRescanLibrary();
       } else if (action.itemId === "clearLibrary") {
         latest.onClearLibrary();
+      } else if (action.itemId === "openLibraryWindow") {
+        latest.onOpenLibraryWindow();
+      } else if (action.itemId === "openSettings") {
+        latest.onOpenSettings();
       } else if (action.itemId === "quit") {
         requestAppExit();
       } else if (action.itemId === "playPause") {
@@ -116,6 +126,8 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
         cycleRepeatMode(latest.repeatMode);
       } else if (action.itemId === "toggleQueue") {
         latest.onToggleQueue();
+      } else if (action.itemId === "toggleOverlay") {
+        void updateMusicSettings({ general: { nowPlayingOverlayEnabled: !latest.settings.general.nowPlayingOverlayEnabled } });
       } else if (action.itemId === "toggleGlobalHotkey") {
         void updateMusicSettings({ general: { globalHotkeyEnabled: !latest.settings.general.globalHotkeyEnabled } });
       } else if (action.itemId === "toggleAutoUpdates") {
@@ -140,6 +152,10 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
       { id: "repeat", checked: options.repeatMode !== "off", title: `Repeat: ${formatRepeatMode(options.repeatMode)}` },
       { id: "toggleQueue", title: options.queueVisible ? "Hide Queue" : "Show Queue" },
       {
+        checked: options.settings.general.nowPlayingOverlayEnabled,
+        id: "toggleOverlay",
+      },
+      {
         checked: options.settings.general.globalHotkeyEnabled,
         id: "toggleGlobalHotkey",
         title: options.settings.general.globalHotkeyEnabled ? "Disable Global Hotkey" : "Enable Global Hotkey",
@@ -157,6 +173,7 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
     options.repeatMode,
     options.settings.general.autoCheckForUpdates,
     options.settings.general.globalHotkeyEnabled,
+    options.settings.general.nowPlayingOverlayEnabled,
     options.shuffleEnabled,
   ]);
 

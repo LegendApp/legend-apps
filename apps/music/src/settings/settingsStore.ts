@@ -7,6 +7,7 @@ export type MusicSettings = Readonly<{
   general: Readonly<{
     autoCheckForUpdates: boolean;
     globalHotkeyEnabled: boolean;
+    nowPlayingOverlayEnabled: boolean;
     showQueueOnLaunch: boolean;
   }>;
   library: Readonly<{
@@ -36,6 +37,7 @@ function createDefaultSettings(loaded: boolean, now = Date.now()): MusicSettings
     general: {
       autoCheckForUpdates: true,
       globalHotkeyEnabled: false,
+      nowPlayingOverlayEnabled: true,
       showQueueOnLaunch: true,
     },
     library: {
@@ -82,6 +84,7 @@ function parseSettings(json: string | null): MusicSettingsState {
       general: {
         autoCheckForUpdates: parsed.general?.autoCheckForUpdates !== false,
         globalHotkeyEnabled: Boolean(parsed.general?.globalHotkeyEnabled),
+        nowPlayingOverlayEnabled: parsed.general?.nowPlayingOverlayEnabled !== false,
         showQueueOnLaunch: parsed.general?.showQueueOnLaunch !== false,
       },
       library: {
@@ -154,4 +157,3 @@ export async function updateMusicSettings(patch: MusicSettingsPatch) {
     },
   });
 }
-
