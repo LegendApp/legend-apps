@@ -11,22 +11,17 @@ import {
   configureMenus,
   updateMenuItems,
 } from "@legend-desktop/native-menu";
+import { addRecentDocumentOpenListener, noteRecentDocument } from "@legend-desktop/recent-documents";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
-  addRecentMarkdownFile,
   getMarkdownFileTitle,
-  getRecentMarkdownFiles,
-  markdownAppMetadata$,
-  removeRecentMarkdownFile,
-  type RecentMarkdownFile,
 } from "./appMetadata";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
 const menuOwnerId = "legend-markdown";
 const markdownFileTypes = ["md", "markdown", "mdown", "mkd", "mdx"];
 const commandModifier = 1 << 20;
-const shiftModifier = 1 << 17;
 
 type OpenSource = "startup" | "dialog" | "recent";
 type DocumentSource = "file" | "untitled";
@@ -52,19 +47,12 @@ export function App({ launchArguments }: MarkdownAppProps) {
   const [isDirty, setIsDirty] = useState(false);
   const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
   const [documentSource, setDocumentSource] = useState<DocumentSource>("untitled");
-  const [recentFiles, setRecentFiles] = useState<RecentMarkdownFile[]>(() => getRecentMarkdownFiles());
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
   const lastOpenSourceRef = useRef<OpenSource>("startup");
   const startupHandledRef = useRef(false);
 
   const hasDocument = filename !== null;
-
-  useEffect(() => {
-    return markdownAppMetadata$.recentFiles.onChange(({ value }) => {
-      setRecentFiles(value ?? []);
-    });
-  }, []);
 
   const openSelectedFile = useCallback((path: string, source: OpenSource) => {
     lastOpenSourceRef.current = source;
@@ -74,7 +62,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
     setSaveState("idle");
     setLastError(null);
     setStatus(`Opening ${path}`);
-    addRecentMarkdownFile(path);
+    noteRecentDocument(path);
   }, []);
 
   const openUntitledDocument = useCallback(() => {
@@ -131,18 +119,17 @@ export function App({ launchArguments }: MarkdownAppProps) {
   }, [launchArguments, openSelectedFile, openUntitledDocument]);
 
   useEffect(() => {
-    const recentItems = recentFiles.flatMap((file, index) => {
-      const items = [
-        {
-          id: `recent-${index}`,
-          title: file.title,
-          enabled: true,
-          payload: { path: file.path },
-        },
-      ];
-      return items;
+    const subscription = addRecentDocumentOpenListener(({ path }) => {
+      if (isMarkdownPath(path)) {
+        openSelectedFile(path, "recent");
+      }
     });
+    return () => {
+      subscription.remove();
+    };
+  }, [openSelectedFile]);
 
+  useEffect(() => {
     configureMenus(menuOwnerId, [
       {
         id: "file",
@@ -151,22 +138,14 @@ export function App({ launchArguments }: MarkdownAppProps) {
         items: [
           {
             id: "open",
-            title: "Open...",
+            targetTitle: "Open...",
             enabled: true,
-            shortcut: { key: "o", modifiers: commandModifier },
           },
           {
             id: "save",
-            title: "Save",
+            targetTitle: "Save...",
             enabled: false,
-            shortcut: { key: "s", modifiers: commandModifier },
           },
-          ...(recentItems.length > 0
-            ? [
-                { separator: true, id: "separator-recent" },
-                ...recentItems,
-              ]
-            : []),
         ],
       },
       {
@@ -176,15 +155,13 @@ export function App({ launchArguments }: MarkdownAppProps) {
         items: [
           {
             id: "undo",
-            title: "Undo",
+            targetTitle: "Undo",
             enabled: false,
-            shortcut: { key: "z", modifiers: commandModifier },
           },
           {
             id: "redo",
-            title: "Redo",
+            targetTitle: "Redo",
             enabled: false,
-            shortcut: { key: "z", modifiers: commandModifier | shiftModifier },
           },
           { separator: true, id: "separator-formatting" },
           {
@@ -227,11 +204,6 @@ export function App({ launchArguments }: MarkdownAppProps) {
         documentCommandsRef.current?.toggleItalic();
       } else if (action.itemId === "link") {
         documentCommandsRef.current?.insertLink();
-      } else if (action.itemId.startsWith("recent-")) {
-        const path = typeof action.payload?.path === "string" ? action.payload.path : null;
-        if (path) {
-          openSelectedFile(path, "recent");
-        }
       }
     });
 
@@ -239,7 +211,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
       subscription.remove();
       clearMenus(menuOwnerId);
     };
-  }, [openMarkdownDialog, openSelectedFile, recentFiles]);
+  }, [openMarkdownDialog, openSelectedFile]);
 
   const isUntitledDocument = documentSource === "untitled";
   const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
@@ -261,11 +233,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
     (error: Error) => {
       setLastError(error.message);
       setStatus("Unable to load document.");
-      if (!isUntitledDocument && filename && lastOpenSourceRef.current === "recent") {
-        removeRecentMarkdownFile(filename);
-      }
     },
-    [filename, isUntitledDocument],
+    [],
   );
 
   if (!hasDocument || !filename) {

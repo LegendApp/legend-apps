@@ -1,0 +1,24 @@
+{
+  "name": "@legend-desktop/recent-documents",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNRecentDocumentsSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.recentdocuments"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeRecentDocuments": "RNRecentDocuments"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

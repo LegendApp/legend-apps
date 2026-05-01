@@ -9,6 +9,7 @@ export type NativeMenuShortcut = {
 export type NativeMenuItem = {
   id: string;
   title?: string;
+  targetTitle?: string;
   enabled?: boolean;
   checked?: boolean;
   separator?: boolean;

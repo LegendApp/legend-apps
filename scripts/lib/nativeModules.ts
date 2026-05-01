@@ -27,6 +27,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/recent-documents",
+    root: path.join(packagesDir, "recent-documents"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
     name: "@legend-desktop/sidebar",
     root: path.join(packagesDir, "sidebar"),
     platforms: ["macos", "ios", "android"],
