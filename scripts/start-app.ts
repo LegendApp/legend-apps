@@ -1,5 +1,12 @@
 #!/usr/bin/env bun
-import { assertSupportedPlatform, loadAppManifest, parseAppCommand, shellDir } from "./lib/apps";
+import {
+  assertSupportedPlatform,
+  loadAppManifest,
+  parseAppCommand,
+  resolveDevServerPort,
+  shellDir,
+  withDefaultPortArg,
+} from "./lib/apps";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -8,21 +15,24 @@ async function startOne(appId: string, platform: Platform, extraArgs: string[]) 
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
   const generated = writeGeneratedConfig(manifest, platform, "dev");
+  const devServerPort = resolveDevServerPort(appId, extraArgs);
+  const argsWithPort = withDefaultPortArg(extraArgs, devServerPort);
 
   const env = {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
     LEGEND_APP_CONFIG: generated.configPath,
     LEGEND_NATIVE_CONFIG: generated.configPath,
+    RCT_METRO_PORT: String(devServerPort),
   };
 
   if (platform === "macos") {
-    runCommand("bun", ["x", "react-native", "start", ...extraArgs], {
+    runCommand("bun", ["x", "react-native", "start", ...argsWithPort], {
       cwd: shellDir,
       env,
     });
   } else {
-    runCommand("bun", ["x", "expo", "start", "--dev-client", ...extraArgs], {
+    runCommand("bun", ["x", "expo", "start", "--dev-client", ...argsWithPort], {
       cwd: shellDir,
       env,
     });

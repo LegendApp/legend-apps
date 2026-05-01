@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { shellDir } from "./apps";
+import { getDefaultDevServerPort, resolveDevServerPort, shellDir, withDefaultPortArg } from "./apps";
 import type { Platform } from "./types";
 
 export function runCommand(command: string, args: string[], options: {
@@ -27,9 +27,13 @@ export function runPlatformCommand(
   extraArgs: string[] = [],
   extraEnv: Record<string, string | undefined> = {},
 ) {
+  const devServerPort = mode === "dev"
+    ? resolveDevServerPort(appId, extraArgs)
+    : undefined;
   const env = {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
+    RCT_METRO_PORT: devServerPort ? String(devServerPort) : undefined,
     ...extraEnv,
   };
 
@@ -54,7 +58,14 @@ export function runPlatformCommand(
       "bun",
       mode === "release"
         ? ["x", "react-native", "build-macos", "--mode", "Release", "--scheme", "legendapp-shell-macos"]
-        : ["x", "react-native", "run-macos", "--scheme", "legendapp-shell-macos", ...extraArgs],
+        : [
+            "x",
+            "react-native",
+            "run-macos",
+            "--scheme",
+            "legendapp-shell-macos",
+            ...withDefaultPortArg(extraArgs, devServerPort ?? getDefaultDevServerPort(appId)),
+          ],
       { cwd: shellDir, env },
     );
   }

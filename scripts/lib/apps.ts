@@ -10,6 +10,11 @@ export const packagesDir = path.join(rootDir, "packages");
 export const appIds = ["music", "markdown", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
 const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify", "pods"] as const;
+const devServerPorts: Record<(typeof appIds)[number], number> = {
+  music: 19091,
+  markdown: 19092,
+  "test-kitchen-sink": 19093,
+};
 
 type CommandMode = (typeof commandModes)[number] | "dev-check";
 
@@ -58,6 +63,46 @@ export function formatAppUsage(appId = "<app>") {
     `  bun run ${appId} pods`,
     `  bun run ${appId} build macos`,
   ].join("\n");
+}
+
+export function getDefaultDevServerPort(appId: string) {
+  if (!appIds.includes(appId as (typeof appIds)[number])) {
+    throw new Error(`Unknown app "${appId}". Expected one of: ${appIds.join(", ")}`);
+  }
+
+  return devServerPorts[appId as (typeof appIds)[number]];
+}
+
+export function readPortArg(args: string[]) {
+  const portEqualsArg = args.find((arg) => arg.startsWith("--port="));
+  if (portEqualsArg) {
+    return Number(portEqualsArg.slice("--port=".length));
+  }
+
+  const portIndex = args.findIndex((arg) => arg === "--port");
+  if (portIndex >= 0) {
+    return Number(args[portIndex + 1]);
+  }
+
+  return undefined;
+}
+
+export function resolveDevServerPort(appId: string, args: string[]) {
+  const port = readPortArg(args) ?? getDefaultDevServerPort(appId);
+
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(`Invalid --port value for ${appId}: ${String(port)}`);
+  }
+
+  return port;
+}
+
+export function withDefaultPortArg(args: string[], port: number) {
+  if (args.includes("--port") || args.some((arg) => arg.startsWith("--port="))) {
+    return args;
+  }
+
+  return [...args, "--port", String(port)];
 }
 
 export function parseAppCommand(argv: string[]) {
