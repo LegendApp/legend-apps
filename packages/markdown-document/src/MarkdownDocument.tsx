@@ -120,7 +120,7 @@ function estimateMarkdownEditorHeight(markdown: string, width: number) {
     .split("\n")
     .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
 
-  return Math.max(32, visualLines * lineHeight + 8);
+  return Math.max(lineHeight, visualLines * lineHeight);
 }
 
 function MarkdownBlockRow({
@@ -842,7 +842,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontSize: 16,
     lineHeight: 25,
-    minHeight: 32,
+    minHeight: 25,
     padding: 0,
     width: "100%",
   },
