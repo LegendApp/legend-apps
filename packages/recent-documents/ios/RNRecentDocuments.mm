@@ -1,5 +1,6 @@
 #import "RNRecentDocuments.h"
 
+#import "RNRecentDocumentEvents.h"
 #import <React/RCTBridgeModule.h>
 #import <React/RCTUtils.h>
 #import <TargetConditionals.h>
@@ -13,6 +14,7 @@ static NSString *const RNRecentDocumentOpenEvent = @"RecentDocumentOpen";
 
 @implementation RNRecentDocuments {
   BOOL _hasListeners;
+  NSMutableArray<NSURL *> *_pendingOpenDocumentURLs;
 }
 
 RCT_EXPORT_MODULE(NativeRecentDocuments)
@@ -25,7 +27,12 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
 - (instancetype)init
 {
   if (self = [super init]) {
+    _pendingOpenDocumentURLs = [NSMutableArray new];
 #if TARGET_OS_OSX
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleOpenDocumentNotification:)
+                                                 name:RNRecentDocumentOpenNotification
+                                               object:nil];
     [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
                                                       andSelector:@selector(handleOpenDocumentsEvent:withReplyEvent:)
                                                     forEventClass:kCoreEventClass
@@ -38,6 +45,9 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
 - (void)dealloc
 {
 #if TARGET_OS_OSX
+  [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                  name:RNRecentDocumentOpenNotification
+                                                object:nil];
   [[NSAppleEventManager sharedAppleEventManager] removeEventHandlerForEventClass:kCoreEventClass
                                                                       andEventID:kAEOpenDocuments];
 #endif
@@ -51,6 +61,15 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
 - (void)startObserving
 {
   _hasListeners = YES;
+
+#if TARGET_OS_OSX
+  NSArray<NSURL *> *pendingURLs = [_pendingOpenDocumentURLs copy];
+  [_pendingOpenDocumentURLs removeAllObjects];
+
+  for (NSURL *url in pendingURLs) {
+    [self emitOpenDocumentURL:url];
+  }
+#endif
 }
 
 - (void)stopObserving
@@ -91,11 +110,24 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
 
 - (void)emitOpenDocumentURL:(NSURL *)url
 {
-  if (!_hasListeners || url.path.length == 0) {
+  if (url.path.length == 0) {
+    return;
+  }
+
+  if (!_hasListeners) {
+    [_pendingOpenDocumentURLs addObject:url];
     return;
   }
 
   [self sendEventWithName:RNRecentDocumentOpenEvent body:@{@"path": url.path}];
+}
+
+- (void)handleOpenDocumentNotification:(NSNotification *)notification
+{
+  NSURL *url = notification.userInfo[RNRecentDocumentURLKey];
+  if ([url isKindOfClass:[NSURL class]]) {
+    [self emitOpenDocumentURL:url];
+  }
 }
 
 - (void)handleOpenDocumentsEvent:(NSAppleEventDescriptor *)event withReplyEvent:(__unused NSAppleEventDescriptor *)replyEvent

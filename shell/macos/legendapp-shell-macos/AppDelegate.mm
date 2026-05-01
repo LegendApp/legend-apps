@@ -5,6 +5,14 @@
 
 @implementation AppDelegate
 
+- (void)applicationWillFinishLaunching:(NSNotification *)notification
+{
+  Class documentControllerClass = NSClassFromString(@"RNRecentDocumentController");
+  if (documentControllerClass && [documentControllerClass isSubclassOfClass:[NSDocumentController class]]) {
+    (void)[[documentControllerClass alloc] init];
+  }
+}
+
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
   self.moduleName = @"main";
