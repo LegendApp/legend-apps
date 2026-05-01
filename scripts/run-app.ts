@@ -126,6 +126,7 @@ async function main() {
     LEGEND_APP_CONFIG: generated.configPath,
     LEGEND_NATIVE_CONFIG: generated.configPath,
     LEGEND_SHELL_ROOT: shellDir,
+    LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
   });
 }
 

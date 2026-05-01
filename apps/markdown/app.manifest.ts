@@ -21,6 +21,16 @@ const manifest = {
     ios: [],
     android: [],
   },
+  documentTypes: {
+    macos: [
+      {
+        name: "Markdown text file",
+        role: "Editor",
+        extensions: ["md", "markdown", "mdown", "mkd", "mdx"],
+        contentTypes: ["net.daringfireball.markdown"],
+      },
+    ],
+  },
 } satisfies AppManifest;
 
 export default manifest;

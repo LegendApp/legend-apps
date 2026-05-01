@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { packagesDir, rootDir, shellDir } from "./apps";
+import { writeMacOSInfoPlist } from "./macosInfoPlist";
 import type { AppManifest, NativePackage, Platform } from "./types";
 
 export type NativeGraphMode = "dev" | "release";
@@ -167,9 +168,12 @@ export function writeGeneratedConfig(
     `${JSON.stringify(activeNativePackages, null, 2)}\n`,
   );
 
+  const macosInfoPlistPath = platform === "macos" ? writeMacOSInfoPlist(manifest, dir) : undefined;
+
   return {
     config: appConfig,
     configPath: path.join(dir, "app-config.json"),
     dir,
+    macosInfoPlistPath,
   };
 }

@@ -31,7 +31,10 @@ async function buildOne(appId: string, platform: Platform) {
       ],
       {
         cwd: shellDir,
-        env: getMacOSEnv(appId, generated.configPath),
+        env: {
+          ...getMacOSEnv(appId, generated.configPath),
+          LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
+        },
       },
     );
     return;
