@@ -3,7 +3,7 @@ import { AppRegistry, Image, Pressable, ScrollView, StyleSheet, Text, View } fro
 import type { MusicTrack } from "../domain";
 import { useMusicLibrary } from "../library";
 import { usePlayback } from "../playback";
-import { updateMusicSettings, useMusicSettings } from "../settings";
+import { getGlobalHotkeyLabel, getNextGlobalHotkey, updateMusicSettings, useMusicSettings } from "../settings";
 
 const settingsModuleName = "LegendMusicSettingsWindow";
 const libraryModuleName = "LegendMusicLibraryWindow";
@@ -102,6 +102,20 @@ function MusicSettingsWindow() {
         onPress={() => void updateMusicSettings({ general: { globalHotkeyEnabled: !settings.general.globalHotkeyEnabled } })}
         value={settings.general.globalHotkeyEnabled}
       />
+      <View style={windowStyles.valueRow}>
+        <Text numberOfLines={1} style={windowStyles.valueLabel}>
+          {getGlobalHotkeyLabel(settings.general.globalHotkey)}
+        </Text>
+        <Pressable
+          onPress={() => {
+            const next = getNextGlobalHotkey(settings.general.globalHotkey);
+            void updateMusicSettings({ general: { globalHotkey: { keyCode: next.keyCode, modifiers: next.modifiers } } });
+          }}
+          style={windowStyles.smallButton}
+        >
+          <Text style={windowStyles.smallButtonText}>Change</Text>
+        </Pressable>
+      </View>
       <WindowToggle
         label="Now playing overlay"
         onPress={() => void updateMusicSettings({ general: { nowPlayingOverlayEnabled: !settings.general.nowPlayingOverlayEnabled } })}
@@ -282,6 +296,20 @@ const windowStyles = StyleSheet.create({
     marginTop: 8,
     textTransform: "uppercase",
   },
+  smallButton: {
+    alignItems: "center",
+    borderColor: "#d0d0ca",
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 26,
+    paddingHorizontal: 8,
+  },
+  smallButtonText: {
+    color: "#44443f",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   stat: {
     backgroundColor: "#f0f0ed",
     borderRadius: 6,
@@ -319,6 +347,17 @@ const windowStyles = StyleSheet.create({
     color: "#2f4f31",
     fontSize: 13,
     fontWeight: "700",
+  },
+  valueLabel: {
+    color: "#686862",
+    flex: 1,
+    fontSize: 13,
+  },
+  valueRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 28,
   },
   trackRow: {
     alignItems: "center",

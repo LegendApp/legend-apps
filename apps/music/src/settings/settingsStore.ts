@@ -1,4 +1,5 @@
 import { getStoredString, setStoredString } from "@legend-desktop/app-storage";
+import { defaultGlobalHotkey, normalizeGlobalHotkey, type MusicGlobalHotkey } from "./hotkeys";
 
 const SETTINGS_VERSION = 1;
 const STORAGE_KEY = "music.settings.v1";
@@ -7,6 +8,7 @@ export type MusicSettings = Readonly<{
   general: Readonly<{
     autoCheckForUpdates: boolean;
     globalHotkeyEnabled: boolean;
+    globalHotkey: MusicGlobalHotkey;
     nowPlayingOverlayEnabled: boolean;
     showQueueOnLaunch: boolean;
   }>;
@@ -37,6 +39,10 @@ function createDefaultSettings(loaded: boolean, now = Date.now()): MusicSettings
     general: {
       autoCheckForUpdates: true,
       globalHotkeyEnabled: false,
+      globalHotkey: {
+        keyCode: defaultGlobalHotkey.keyCode,
+        modifiers: defaultGlobalHotkey.modifiers,
+      },
       nowPlayingOverlayEnabled: true,
       showQueueOnLaunch: true,
     },
@@ -84,6 +90,7 @@ function parseSettings(json: string | null): MusicSettingsState {
       general: {
         autoCheckForUpdates: parsed.general?.autoCheckForUpdates !== false,
         globalHotkeyEnabled: Boolean(parsed.general?.globalHotkeyEnabled),
+        globalHotkey: normalizeGlobalHotkey(parsed.general?.globalHotkey),
         nowPlayingOverlayEnabled: parsed.general?.nowPlayingOverlayEnabled !== false,
         showQueueOnLaunch: parsed.general?.showQueueOnLaunch !== false,
       },

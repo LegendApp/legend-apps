@@ -17,14 +17,11 @@ import {
   togglePlayback,
   toggleShuffle,
 } from "../playback";
+import { commandModifier, getGlobalHotkeyLabel, optionModifier, shiftModifier } from "../settings";
 import type { MusicSettingsState } from "../settings";
 import { updateMusicSettings } from "../settings";
 
 const ownerId = "legend-music";
-const commandModifier = 1 << 20;
-const shiftModifier = 1 << 17;
-const optionModifier = 1 << 19;
-const keyL = 37;
 const repeatModes: RepeatMode[] = ["off", "all", "one"];
 
 type MusicDesktopIntegrationOptions = Readonly<{
@@ -187,9 +184,11 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
       return;
     }
 
-    void registerGlobalHotkey(keyL, commandModifier | shiftModifier).then((result) => {
+    const { keyCode, modifiers } = options.settings.general.globalHotkey;
+    void registerGlobalHotkey(keyCode, modifiers).then((result) => {
       if (!result.success) {
-        optionsRef.current.onStatus(result.message ?? "Failed to register global hotkey.");
+        const label = getGlobalHotkeyLabel(optionsRef.current.settings.general.globalHotkey);
+        optionsRef.current.onStatus(result.message ?? `Failed to register global hotkey ${label}.`);
       }
     });
 
@@ -201,7 +200,12 @@ export function useMusicDesktopIntegrations(options: MusicDesktopIntegrationOpti
       subscription.remove();
       void unregisterGlobalHotkey();
     };
-  }, [options.settings.general.globalHotkeyEnabled, options.settings.loaded]);
+  }, [
+    options.settings.general.globalHotkey.keyCode,
+    options.settings.general.globalHotkey.modifiers,
+    options.settings.general.globalHotkeyEnabled,
+    options.settings.loaded,
+  ]);
 
   useEffect(() => {
     if (!options.settings.loaded) {

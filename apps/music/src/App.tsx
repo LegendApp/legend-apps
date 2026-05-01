@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type GestureResponderEvent, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MusicId, MusicLibrary, MusicPlaylist, MusicTrack, RepeatMode } from "./domain";
 import { clearMusicLibrary, scanLibrary, useMusicLibrary } from "./library";
-import { useMusicDesktopIntegrations } from "./native";
+import { useMusicDesktopIntegrations, useMusicLibraryWatcher } from "./native";
 import {
   enqueueTrack,
   clearPlaybackQueue,
@@ -30,7 +30,7 @@ import {
   removeTrackFromPlaylist,
   renamePlaylist,
 } from "./playlists";
-import { updateMusicSettings, useMusicSettings } from "./settings";
+import { getGlobalHotkeyLabel, getNextGlobalHotkey, updateMusicSettings, useMusicSettings } from "./settings";
 import {
   closeNowPlayingOverlay,
   openMusicLibraryWindow,
@@ -171,6 +171,16 @@ export function App() {
     setQueueVisible(visible);
     void updateMusicSettings({ general: { showQueueOnLaunch: visible } });
   };
+
+  useMusicLibraryWatcher({
+    enabled: settings.loaded,
+    isScanning,
+    onRescan: async () => {
+      await rescanLibrary();
+    },
+    onStatus: setMessage,
+    rootPaths: configuredRootPaths,
+  });
 
   useMusicDesktopIntegrations({
     canClearLibrary: tracks.length > 0,
@@ -457,6 +467,20 @@ export function App() {
             onPress={() => void updateMusicSettings({ general: { globalHotkeyEnabled: !settings.general.globalHotkeyEnabled } })}
             value={settings.general.globalHotkeyEnabled}
           />
+          <View style={styles.settingsValueRow}>
+            <Text numberOfLines={1} style={styles.settingsValueLabel}>
+              {getGlobalHotkeyLabel(settings.general.globalHotkey)}
+            </Text>
+            <Pressable
+              onPress={() => {
+                const next = getNextGlobalHotkey(settings.general.globalHotkey);
+                void updateMusicSettings({ general: { globalHotkey: { keyCode: next.keyCode, modifiers: next.modifiers } } });
+              }}
+              style={styles.smallButton}
+            >
+              <Text style={styles.smallButtonText}>Change</Text>
+            </Pressable>
+          </View>
           <SettingsToggle
             label="Now playing overlay"
             onPress={() => void updateMusicSettings({ general: { nowPlayingOverlayEnabled: !settings.general.nowPlayingOverlayEnabled } })}
@@ -1169,6 +1193,17 @@ const styles = StyleSheet.create({
     color: "#454540",
     flex: 1,
     fontSize: 13,
+  },
+  settingsValueLabel: {
+    color: "#666660",
+    flex: 1,
+    fontSize: 12,
+  },
+  settingsValueRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 28,
   },
   smallButton: {
     alignItems: "center",
