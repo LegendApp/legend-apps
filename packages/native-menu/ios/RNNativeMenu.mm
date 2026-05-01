@@ -10,7 +10,11 @@
 
 @interface RNNativeMenu ()
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray *> *ownerMenus;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray *> *ownerMergedMenuItems;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *menuItemsByKey;
+#if TARGET_OS_OSX
+- (NSMenuItem *)appendItem:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId toMenu:(NSMenu *)menu;
+#endif
 @end
 
 @implementation RNNativeMenu
@@ -21,6 +25,7 @@ RCT_EXPORT_MODULE(NativeMenu)
 {
   if (self = [super init]) {
     _ownerMenus = [NSMutableDictionary new];
+    _ownerMergedMenuItems = [NSMutableDictionary new];
     _menuItemsByKey = [NSMutableDictionary new];
   }
   return self;
@@ -65,6 +70,7 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
 
     NSMutableArray<NSMenuItem *> *installedRoots = [NSMutableArray array];
+    NSMutableArray<NSMenuItem *> *installedMergedItems = [NSMutableArray array];
     NSArray *menus = [self parseArrayJSON:menusJson];
 
     for (NSDictionary *menuConfig in menus) {
@@ -78,24 +84,36 @@ RCT_EXPORT_MODULE(NativeMenu)
         continue;
       }
 
-      NSMenuItem *rootItem = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
-      NSMenu *submenu = [[NSMenu alloc] initWithTitle:title];
-      rootItem.submenu = submenu;
+      NSMenuItem *rootItem = [mainMenu itemWithTitle:title];
+      BOOL isMergedMenu = rootItem.submenu != nil;
+      NSMenu *submenu = rootItem.submenu;
+
+      if (!submenu) {
+        rootItem = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+        submenu = [[NSMenu alloc] initWithTitle:title];
+        rootItem.submenu = submenu;
+      }
 
       NSArray *items = [menuConfig[@"items"] isKindOfClass:[NSArray class]] ? menuConfig[@"items"] : @[];
       for (NSDictionary *itemConfig in items) {
         if (![itemConfig isKindOfClass:[NSDictionary class]]) {
           continue;
         }
-        [self appendItem:itemConfig ownerId:ownerId menuId:menuId toMenu:submenu];
+        NSMenuItem *installedItem = [self appendItem:itemConfig ownerId:ownerId menuId:menuId toMenu:submenu];
+        if (isMergedMenu && installedItem) {
+          [installedMergedItems addObject:installedItem];
+        }
       }
 
-      NSInteger insertIndex = [self insertionIndexForMenuConfig:menuConfig mainMenu:mainMenu];
-      [mainMenu insertItem:rootItem atIndex:insertIndex];
-      [installedRoots addObject:rootItem];
+      if (!isMergedMenu) {
+        NSInteger insertIndex = [self insertionIndexForMenuConfig:menuConfig mainMenu:mainMenu];
+        [mainMenu insertItem:rootItem atIndex:insertIndex];
+        [installedRoots addObject:rootItem];
+      }
     }
 
     self.ownerMenus[ownerId] = installedRoots;
+    self.ownerMergedMenuItems[ownerId] = installedMergedItems;
   });
 #endif
 }
@@ -124,9 +142,19 @@ RCT_EXPORT_MODULE(NativeMenu)
 {
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
-    NSArray<NSMenuItem *> *items = self.ownerMenus[ownerId] ?: @[];
-    for (NSMenuItem *item in items) {
-      [item.menu removeItem:item];
+    NSArray<NSMenuItem *> *mergedItems = self.ownerMergedMenuItems[ownerId] ?: @[];
+    for (NSMenuItem *item in mergedItems) {
+      if (item.menu) {
+        [item.menu removeItem:item];
+      }
+    }
+    [self.ownerMergedMenuItems removeObjectForKey:ownerId];
+
+    NSArray<NSMenuItem *> *rootItems = self.ownerMenus[ownerId] ?: @[];
+    for (NSMenuItem *item in rootItems) {
+      if (item.menu) {
+        [item.menu removeItem:item];
+      }
     }
     [self.ownerMenus removeObjectForKey:ownerId];
 
@@ -176,17 +204,18 @@ RCT_EXPORT_MODULE(NativeMenu)
   return windowIndex >= 0 ? windowIndex : mainMenu.numberOfItems;
 }
 
-- (void)appendItem:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId toMenu:(NSMenu *)menu
+- (NSMenuItem *)appendItem:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId toMenu:(NSMenu *)menu
 {
   if ([config[@"separator"] boolValue]) {
-    [menu addItem:[NSMenuItem separatorItem]];
-    return;
+    NSMenuItem *separator = [NSMenuItem separatorItem];
+    [menu addItem:separator];
+    return separator;
   }
 
   NSString *itemId = [config[@"id"] isKindOfClass:[NSString class]] ? config[@"id"] : nil;
   NSString *title = [config[@"title"] isKindOfClass:[NSString class]] ? config[@"title"] : itemId;
   if (itemId.length == 0 || title.length == 0) {
-    return;
+    return nil;
   }
 
   NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(handleMenuAction:) keyEquivalent:@""];
@@ -200,6 +229,7 @@ RCT_EXPORT_MODULE(NativeMenu)
   [self applyItemConfig:config toMenuItem:item];
   [menu addItem:item];
   self.menuItemsByKey[[self itemKeyForOwner:ownerId itemId:itemId]] = item;
+  return item;
 }
 
 - (void)applyItemConfig:(NSDictionary *)config toMenuItem:(NSMenuItem *)item

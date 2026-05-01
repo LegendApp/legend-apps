@@ -6,7 +6,7 @@ import {
   type EnrichedMarkdownTextInputInstance,
   type MarkdownTextInputStyle,
 } from "react-native-enriched-markdown";
-import { Linking, Pressable, StyleSheet, Text, View, type TextStyle } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { defaultMarkdownStyle } from "./styles";
 import type {
@@ -87,9 +87,46 @@ function splitMarkdownAtFirstLineBreak(markdown: string) {
   return { beforeMarkdown, afterMarkdown };
 }
 
+function estimateMarkdownSelection(markdown: string, event: GestureResponderEvent, width: number) {
+  const lineHeight = 25;
+  const averageCharacterWidth = 8;
+  const x = Math.max(0, event.nativeEvent.locationX);
+  const y = Math.max(0, event.nativeEvent.locationY);
+  const visualLine = Math.floor(y / lineHeight);
+  const characterInVisualLine = Math.floor(x / averageCharacterWidth);
+  const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));
+  const lines = markdown.split("\n");
+  let offset = 0;
+  let currentVisualLine = 0;
+
+  for (const line of lines) {
+    const wrappedLineCount = Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine));
+    if (visualLine < currentVisualLine + wrappedLineCount) {
+      const wrappedLine = visualLine - currentVisualLine;
+      return Math.min(markdown.length, offset + Math.min(line.length, wrappedLine * charactersPerLine + characterInVisualLine));
+    }
+    offset += line.length + 1;
+    currentVisualLine += wrappedLineCount;
+  }
+
+  return markdown.length;
+}
+
+function estimateMarkdownEditorHeight(markdown: string, width: number) {
+  const lineHeight = 25;
+  const averageCharacterWidth = 8;
+  const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));
+  const visualLines = markdown
+    .split("\n")
+    .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
+
+  return Math.max(32, visualLines * lineHeight + 8);
+}
+
 function MarkdownBlockRow({
   activeInputRef,
   draftMarkdown,
+  initialSelection,
   isActive,
   onActivate,
   onBlur,
@@ -100,12 +137,28 @@ function MarkdownBlockRow({
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   block?: MarkdownBlockSnapshot;
   draftMarkdown: string;
+  initialSelection: number;
   isActive: boolean;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
-  onActivate: (block: MarkdownBlockSnapshot) => void;
+  onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onBlur: () => void;
   onChangeMarkdown: (block: MarkdownBlockSnapshot, markdown: string) => void;
 }) {
+  const [rowWidth, setRowWidth] = useState(700);
+
+  useEffect(() => {
+    if (!isActive) {
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => {
+      activeInputRef.current?.focus();
+      activeInputRef.current?.setSelection(initialSelection, initialSelection);
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [activeInputRef, initialSelection, isActive]);
+
   if (!block) {
     return null;
   }
@@ -122,14 +175,25 @@ function MarkdownBlockRow({
           onBlur={onBlur}
           onChangeMarkdown={(markdown) => onChangeMarkdown(block, markdown)}
           scrollEnabled={false}
-          style={StyleSheet.flatten(editableTextStyleForBlock(block, markdownStyle))}
+          style={StyleSheet.flatten([
+            editableTextStyleForBlock(block, markdownStyle),
+            { minHeight: estimateMarkdownEditorHeight(draftMarkdown, rowWidth) },
+          ])}
         />
       </View>
     );
   }
 
   return (
-    <Pressable onPress={() => onActivate(block)} style={styles.blockRow}>
+    <Pressable
+      onLayout={(event) => {
+        setRowWidth(event.nativeEvent.layout.width);
+      }}
+      onPress={(event) => {
+        onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
+      }}
+      style={styles.blockRow}
+    >
       <EnrichedMarkdownText
         allowTrailingMargin={false}
         containerStyle={styles.renderedText}
@@ -139,6 +203,7 @@ function MarkdownBlockRow({
         onLinkPress={(event) => {
           void Linking.openURL(event.url);
         }}
+        selectable
       />
     </Pressable>
   );
@@ -180,6 +245,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+    const [activeSelection, setActiveSelection] = useState(0);
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
@@ -343,12 +409,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [adapter, applyTransactionResult, clearEditTimer, documentState, onError]);
 
     const activateBlock = useCallback(
-      (block: MarkdownBlockSnapshot) => {
+      (block: MarkdownBlockSnapshot, selection: number) => {
         void commitActiveBlock();
         activeBlockIdRef.current = block.id;
         draftMarkdownRef.current = block.markdown;
         committedMarkdownRef.current = block.markdown;
         setDraftMarkdown(block.markdown);
+        setActiveSelection(selection);
         setActiveBlockId(block.id);
       },
       [commitActiveBlock],
@@ -472,6 +539,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setBlockIds([]);
       setBlocksById(new Map());
       setActiveBlockId(null);
+      setActiveSelection(0);
       setDraftMarkdown("");
       setNextSaveState("idle");
       onDirtyChange?.(false);
@@ -713,6 +781,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               activeInputRef={activeInputRef}
               block={blocksById.get(props.item)}
               draftMarkdown={activeBlockId === props.item ? draftMarkdown : ""}
+              initialSelection={activeSelection}
               isActive={activeBlockId === props.item}
               markdownStyle={resolvedMarkdownStyle}
               onActivate={activateBlock}
@@ -720,6 +789,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 void commitActiveBlock();
                 activeBlockIdRef.current = null;
                 setActiveBlockId(null);
+                setActiveSelection(0);
               }}
               onChangeMarkdown={handleChangeMarkdown}
             />
