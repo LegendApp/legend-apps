@@ -4,11 +4,18 @@ import {
   type MarkdownDocument,
   type MarkdownDocumentTiming,
   type MarkdownRenderBlock,
+  type MarkdownTransactionResult,
 } from "@legend-desktop/markdown-parser";
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { useRef, useState } from "react";
-import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
-import { Linking, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  EnrichedMarkdownText,
+  EnrichedMarkdownTextInput,
+  type EnrichedMarkdownTextInputInstance,
+  type MarkdownStyle,
+  type MarkdownTextInputStyle,
+} from "react-native-enriched-markdown";
+import { type GestureResponderEvent, Linking, Pressable, Text, View } from "react-native";
 import { ExampleButton, styles } from "./shared";
 
 const MARKDOWN_INITIAL_BLOCK_COUNT = 64;
@@ -90,6 +97,19 @@ const markdownViewerStyle: MarkdownStyle = {
   },
 };
 
+const markdownEditorStyle: MarkdownTextInputStyle = {
+  em: {
+    color: "#334155",
+  },
+  link: {
+    color: "#2563eb",
+    underline: true,
+  },
+  strong: {
+    color: "#0f172a",
+  },
+};
+
 function formatDuration(durationMs: number) {
   return durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`;
 }
@@ -133,34 +153,171 @@ function getCachedMarkdownBlock(document: MarkdownDocument, index: number, cache
   return block;
 }
 
+function estimateMarkdownSelection(markdown: string, event: GestureResponderEvent, width: number) {
+  const lineHeight = 21;
+  const averageCharacterWidth = 7.2;
+  const x = Math.max(0, event.nativeEvent.locationX);
+  const y = Math.max(0, event.nativeEvent.locationY);
+  const visualLine = Math.floor(y / lineHeight);
+  const characterInVisualLine = Math.floor(x / averageCharacterWidth);
+  const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));
+  const lines = markdown.split("\n");
+  let offset = 0;
+  let currentVisualLine = 0;
+
+  for (const line of lines) {
+    const wrappedLineCount = Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine));
+    if (visualLine < currentVisualLine + wrappedLineCount) {
+      const wrappedLine = visualLine - currentVisualLine;
+      return Math.min(
+        markdown.length,
+        offset + Math.min(line.length, wrappedLine * charactersPerLine + characterInVisualLine),
+      );
+    }
+    offset += line.length + 1;
+    currentVisualLine += wrappedLineCount;
+  }
+
+  return markdown.length;
+}
+
+function estimateMarkdownEditorHeight(markdown: string, width: number) {
+  const lineHeight = 21;
+  const averageCharacterWidth = 7.2;
+  const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));
+  const visualLines = markdown
+    .split("\n")
+    .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
+
+  return Math.max(28, visualLines * lineHeight + 8);
+}
+
+function MarkdownBlockEditor({
+  block,
+  initialSelection,
+  onCommitMarkdown,
+  onFinishEditing,
+  width,
+}: {
+  block: MarkdownRenderBlock;
+  initialSelection: number;
+  onCommitMarkdown: (block: MarkdownRenderBlock, markdown: string) => void;
+  onFinishEditing: (block: MarkdownRenderBlock) => void;
+  width: number;
+}) {
+  const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
+  const didPlaceCursorRef = useRef(false);
+  const draftMarkdownRef = useRef(block.markdown);
+  const [draftMarkdown, setDraftMarkdown] = useState(block.markdown);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!didPlaceCursorRef.current) {
+        didPlaceCursorRef.current = true;
+        inputRef.current?.focus();
+        inputRef.current?.setSelection(initialSelection, initialSelection);
+      }
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [initialSelection]);
+
+  return (
+    <EnrichedMarkdownTextInput
+      ref={inputRef}
+      autoFocus
+      cursorColor="#2563eb"
+      defaultValue={block.markdown}
+      markdownStyle={markdownEditorStyle}
+      onBlur={() => {
+        const input = inputRef.current;
+        if (!input) {
+          onCommitMarkdown(block, draftMarkdownRef.current);
+          onFinishEditing(block);
+          return;
+        }
+
+        void input
+          .getMarkdown()
+          .then((markdown) => {
+            onCommitMarkdown(block, markdown);
+          })
+          .catch(() => {
+            onCommitMarkdown(block, draftMarkdownRef.current);
+          })
+          .finally(() => {
+            onFinishEditing(block);
+          });
+      }}
+      onChangeMarkdown={(markdown) => {
+        draftMarkdownRef.current = markdown;
+        setDraftMarkdown(markdown);
+      }}
+      selectionColor="#bfdbfe"
+      style={{ ...styles.markdownEditorInput, minHeight: estimateMarkdownEditorHeight(draftMarkdown, width) }}
+    />
+  );
+}
+
 function MarkdownBlockRow({
   blockCache,
   document,
+  editingBlockId,
+  editingSelection,
   item,
+  onCommitMarkdown,
+  onFinishEditing,
+  onStartEditing,
 }: LegendListRenderItemProps<number> & {
   blockCache: Map<number, MarkdownRenderBlock>;
   document?: MarkdownDocument;
+  editingBlockId?: string;
+  editingSelection: number;
+  onCommitMarkdown: (block: MarkdownRenderBlock, markdown: string) => void;
+  onFinishEditing: (block: MarkdownRenderBlock) => void;
+  onStartEditing: (block: MarkdownRenderBlock, selection: number) => void;
 }) {
+  const [rowWidth, setRowWidth] = useState(700);
   const block = document ? getCachedMarkdownBlock(document, item, blockCache) : undefined;
+  const isEditing = block?.id === editingBlockId;
 
   if (!block) {
     return null;
   }
 
   return (
-    <View style={styles.markdownBlockRow}>
-      <EnrichedMarkdownText
-        allowTrailingMargin={false}
-        containerStyle={styles.markdownRenderedText}
-        flavor="github"
-        markdown={block.markdown}
-        markdownStyle={markdownViewerStyle}
-        onLinkPress={(event) => {
-          void Linking.openURL(event.url);
-        }}
-        selectable
-      />
-    </View>
+    <Pressable
+      onLayout={(event) => {
+        setRowWidth(event.nativeEvent.layout.width);
+      }}
+      onPress={(event) => {
+        if (!isEditing) {
+          onStartEditing(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
+        }
+      }}
+      style={styles.markdownBlockRow}
+    >
+      {isEditing ? (
+        <MarkdownBlockEditor
+          block={block}
+          initialSelection={editingSelection}
+          onCommitMarkdown={onCommitMarkdown}
+          onFinishEditing={onFinishEditing}
+          width={rowWidth}
+        />
+      ) : (
+        <EnrichedMarkdownText
+          allowTrailingMargin={false}
+          containerStyle={styles.markdownRenderedText}
+          flavor="github"
+          markdown={block.markdown}
+          markdownStyle={markdownViewerStyle}
+          onLinkPress={(event) => {
+            void Linking.openURL(event.url);
+          }}
+          selectable
+        />
+      )}
+    </Pressable>
   );
 }
 
@@ -171,6 +328,9 @@ export function MarkdownParserExample() {
   const [blockIndices, setBlockIndices] = useState<number[]>([]);
   const [document, setDocument] = useState<MarkdownDocument | undefined>();
   const [documentKey, setDocumentKey] = useState("initial");
+  const [documentRevision, setDocumentRevision] = useState(0);
+  const [editingBlockId, setEditingBlockId] = useState<string | undefined>();
+  const [editingSelection, setEditingSelection] = useState(0);
   const [status, setStatus] = useState("Choose a markdown file to load.");
 
   const cancelBlockCacheHydration = () => {
@@ -217,7 +377,47 @@ export function MarkdownParserExample() {
     }
     setDocument(nextDocument);
     setDocumentKey(`${source}:${nextDocument.sourceSize}:${nextDocument.blockCount}:${documentVersionRef.current}`);
+    setDocumentRevision(0);
     setBlockIndices(markdownDocumentIndices(nextDocument));
+    setEditingBlockId(undefined);
+    setEditingSelection(0);
+  };
+
+  const applyDocumentTransactionResult = (result: MarkdownTransactionResult) => {
+    const startIndex = result.changedRange.startBlockIndex;
+    const deleteCount = result.changedRange.deleteCount;
+    const changedBlocks = result.changedBlocks;
+
+    for (const block of changedBlocks) {
+      blockCacheRef.current.set(block.index, block);
+    }
+
+    setBlockIndices((currentIndices) => [
+      ...currentIndices.slice(0, startIndex),
+      ...changedBlocks.map((block) => block.index),
+      ...currentIndices
+        .slice(startIndex + deleteCount)
+        .map((_, offset) => startIndex + changedBlocks.length + offset),
+    ]);
+    setDocumentRevision(result.revision);
+  };
+
+  const commitBlockMarkdown = (block: MarkdownRenderBlock, markdown: string) => {
+    if (!document || markdown === block.markdown) {
+      return;
+    }
+
+    try {
+      const result = document.applyTransaction({
+        blockId: block.id,
+        markdown,
+        type: "updateBlockMarkdown",
+      });
+      applyDocumentTransactionResult(result);
+      setStatus(`Edited block ${block.index + 1}.`);
+    } catch (error) {
+      setStatus(`Edit failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const loadMarkdownFileForDisplay = (path: string) => {
@@ -266,7 +466,7 @@ export function MarkdownParserExample() {
         contentContainerStyle={styles.markdownListContent}
         data={blockIndices}
         estimatedItemSize={120}
-        extraData={documentKey}
+        extraData={`${documentRevision}:${editingBlockId ?? ""}:${editingSelection}`}
         key={documentKey}
         keyExtractor={(item) => String(item)}
         onLoad={() => {
@@ -276,7 +476,21 @@ export function MarkdownParserExample() {
         }}
         recycleItems
         renderItem={(props) => (
-          <MarkdownBlockRow {...props} blockCache={blockCacheRef.current} document={document} />
+          <MarkdownBlockRow
+            {...props}
+            blockCache={blockCacheRef.current}
+            document={document}
+            editingBlockId={editingBlockId}
+            editingSelection={editingSelection}
+            onCommitMarkdown={commitBlockMarkdown}
+            onFinishEditing={(block) => {
+              setEditingBlockId((currentId) => (currentId === block.id ? undefined : currentId));
+            }}
+            onStartEditing={(block, selection) => {
+              setEditingBlockId(block.id);
+              setEditingSelection(selection);
+            }}
+          />
         )}
         style={styles.markdownList}
       />
