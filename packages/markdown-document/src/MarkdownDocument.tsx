@@ -738,6 +738,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useImperativeHandle(commandsRef, () => commands, [commands]);
 
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
+    const listExtraData = useMemo(
+      () => ({
+        activeBlockId,
+        activeSelection,
+        blocksById,
+      }),
+      [activeBlockId, activeSelection, blocksById],
+    );
     const contentStyle = useMemo(
       () => [styles.contentContainer, contentContainerStyle],
       [contentContainerStyle],
@@ -769,7 +777,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           contentContainerStyle={contentStyle}
           data={blockIds}
           estimatedItemSize={estimatedItemSize}
-          extraData={blocksById}
+          extraData={listExtraData}
           keyExtractor={(item) => item}
           onLoad={() => {
             hydrateRemainingBlocks(documentState.snapshot, loadVersionRef.current);
