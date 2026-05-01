@@ -823,6 +823,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         toggleItalic() {
           activeInputRef.current?.toggleItalic();
         },
+        toggleSpoiler() {
+          activeInputRef.current?.toggleSpoiler();
+        },
+        toggleStrikethrough() {
+          activeInputRef.current?.toggleStrikethrough();
+        },
+        toggleUnderline() {
+          activeInputRef.current?.toggleUnderline();
+        },
         undo,
       }),
       [redo, save, undo],

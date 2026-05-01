@@ -72,6 +72,9 @@ export type MarkdownDocumentCommands = {
   focus(): void;
   toggleBold(): void;
   toggleItalic(): void;
+  toggleUnderline(): void;
+  toggleStrikethrough(): void;
+  toggleSpoiler(): void;
   insertLink(): void;
 };
 

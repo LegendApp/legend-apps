@@ -10,6 +10,7 @@ export type NativeMenuItem = {
   id: string;
   title?: string;
   targetTitle?: string;
+  targetPath?: string[];
   enabled?: boolean;
   checked?: boolean;
   separator?: boolean;

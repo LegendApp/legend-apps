@@ -3,9 +3,30 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTUtils.h>
 #import <TargetConditionals.h>
+#import <objc/runtime.h>
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+
+@class RNNativeMenu;
+
+static BOOL RNNativeMenuHandleBoundSender(id sender);
+static void RNNativeMenuInstallCommandBridge(void);
+
+@interface NSApplication (RNNativeMenuCommandBridge)
+@end
+
+@implementation NSApplication (RNNativeMenuCommandBridge)
+
+- (BOOL)rnNativeMenu_sendAction:(SEL)action to:(id)target from:(id)sender
+{
+  if (RNNativeMenuHandleBoundSender(sender)) {
+    return YES;
+  }
+  return [self rnNativeMenu_sendAction:action to:target from:sender];
+}
+
+@end
 #endif
 
 @interface RNNativeMenu ()
@@ -14,8 +35,10 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray *> *ownerBoundMenuItems;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *menuItemsByKey;
 #if TARGET_OS_OSX
+- (void)emitBoundMenuItemAction:(NSDictionary *)payload;
 - (NSMenuItem *)appendItem:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId toMenu:(NSMenu *)menu;
 - (NSMenuItem *)targetItemForConfig:(NSDictionary *)config inMenu:(NSMenu *)menu;
+- (BOOL)configTargetsExistingItem:(NSDictionary *)config;
 - (NSDictionary *)representedObjectForConfig:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId;
 - (void)bindExistingItem:(NSMenuItem *)item
                   config:(NSDictionary *)config
@@ -30,6 +53,52 @@
 
 RCT_EXPORT_MODULE(NativeMenu)
 
+#if TARGET_OS_OSX
+static __weak RNNativeMenu *RNNativeMenuActiveModule;
+
+static NSMapTable<NSMenuItem *, NSDictionary *> *RNNativeMenuBoundMenuItems(void)
+{
+  static NSMapTable<NSMenuItem *, NSDictionary *> *boundItems;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    boundItems = [NSMapTable weakToStrongObjectsMapTable];
+  });
+  return boundItems;
+}
+
+static void RNNativeMenuInstallCommandBridge(void)
+{
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    Method originalMethod = class_getInstanceMethod(NSApplication.class, @selector(sendAction:to:from:));
+    Method bridgeMethod = class_getInstanceMethod(NSApplication.class, @selector(rnNativeMenu_sendAction:to:from:));
+    if (originalMethod && bridgeMethod) {
+      method_exchangeImplementations(originalMethod, bridgeMethod);
+    }
+  });
+}
+
+static BOOL RNNativeMenuHandleBoundSender(id sender)
+{
+  if (![sender isKindOfClass:NSMenuItem.class]) {
+    return NO;
+  }
+
+  NSDictionary *payload = [RNNativeMenuBoundMenuItems() objectForKey:(NSMenuItem *)sender];
+  if (!payload) {
+    return NO;
+  }
+
+  RNNativeMenu *module = RNNativeMenuActiveModule;
+  if (!module) {
+    return NO;
+  }
+
+  [module emitBoundMenuItemAction:payload];
+  return YES;
+}
+#endif
+
 - (instancetype)init
 {
   if (self = [super init]) {
@@ -37,6 +106,10 @@ RCT_EXPORT_MODULE(NativeMenu)
     _ownerMergedMenuItems = [NSMutableDictionary new];
     _ownerBoundMenuItems = [NSMutableDictionary new];
     _menuItemsByKey = [NSMutableDictionary new];
+#if TARGET_OS_OSX
+    RNNativeMenuActiveModule = self;
+    RNNativeMenuInstallCommandBridge();
+#endif
   }
   return self;
 }
@@ -114,6 +187,8 @@ RCT_EXPORT_MODULE(NativeMenu)
         NSMenuItem *targetItem = [self targetItemForConfig:itemConfig inMenu:submenu];
         if (targetItem) {
           [self bindExistingItem:targetItem config:itemConfig ownerId:ownerId menuId:menuId boundRecords:installedBoundItems];
+        } else if ([self configTargetsExistingItem:itemConfig]) {
+          continue;
         } else {
           NSMenuItem *installedItem = [self appendItem:itemConfig ownerId:ownerId menuId:menuId toMenu:submenu];
           if (isMergedMenu && installedItem) {
@@ -211,6 +286,38 @@ RCT_EXPORT_MODULE(NativeMenu)
 
 - (NSMenuItem *)targetItemForConfig:(NSDictionary *)config inMenu:(NSMenu *)menu
 {
+  NSArray *targetPath = [config[@"targetPath"] isKindOfClass:[NSArray class]] ? config[@"targetPath"] : nil;
+  if (targetPath.count > 0) {
+    NSMenu *currentMenu = menu;
+    NSMenuItem *targetItem = nil;
+
+    for (NSUInteger index = 0; index < targetPath.count; index++) {
+      NSString *pathTitle = [targetPath[index] isKindOfClass:[NSString class]] ? targetPath[index] : nil;
+      if (pathTitle.length == 0 || !currentMenu) {
+        return nil;
+      }
+
+      NSString *normalizedPathTitle = [self normalizedMenuTitle:pathTitle];
+      targetItem = nil;
+      for (NSMenuItem *item in currentMenu.itemArray) {
+        if ([[self normalizedMenuTitle:item.title ?: @""] isEqualToString:normalizedPathTitle]) {
+          targetItem = item;
+          break;
+        }
+      }
+
+      if (!targetItem) {
+        return nil;
+      }
+
+      if (index < targetPath.count - 1) {
+        currentMenu = targetItem.submenu;
+      }
+    }
+
+    return targetItem;
+  }
+
   NSString *targetTitle = [config[@"targetTitle"] isKindOfClass:[NSString class]] ? config[@"targetTitle"] : nil;
   if (targetTitle.length == 0) {
     return nil;
@@ -223,6 +330,13 @@ RCT_EXPORT_MODULE(NativeMenu)
     }
   }
   return nil;
+}
+
+- (BOOL)configTargetsExistingItem:(NSDictionary *)config
+{
+  NSString *targetTitle = [config[@"targetTitle"] isKindOfClass:[NSString class]] ? config[@"targetTitle"] : nil;
+  NSArray *targetPath = [config[@"targetPath"] isKindOfClass:[NSArray class]] ? config[@"targetPath"] : nil;
+  return targetTitle.length > 0 || targetPath.count > 0;
 }
 
 - (NSDictionary *)representedObjectForConfig:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId
@@ -247,6 +361,8 @@ RCT_EXPORT_MODULE(NativeMenu)
     return;
   }
 
+  BOOL shouldPreserveNativeAction = [config[@"targetPath"] isKindOfClass:[NSArray class]];
+  NSDictionary *payload = [self representedObjectForConfig:config ownerId:ownerId menuId:menuId];
   [boundRecords addObject:@{
     @"item": item,
     @"target": item.target ?: (id)kCFNull,
@@ -260,9 +376,13 @@ RCT_EXPORT_MODULE(NativeMenu)
     @"submenu": item.submenu ?: (id)kCFNull,
   }];
 
-  item.target = self;
-  item.action = @selector(handleMenuAction:);
-  item.representedObject = [self representedObjectForConfig:config ownerId:ownerId menuId:menuId];
+  if (shouldPreserveNativeAction) {
+    [RNNativeMenuBoundMenuItems() setObject:payload forKey:item];
+  } else {
+    item.target = self;
+    item.action = @selector(handleMenuAction:);
+    item.representedObject = payload;
+  }
   [self applyItemConfig:config toMenuItem:item];
   self.menuItemsByKey[[self itemKeyForOwner:ownerId itemId:itemId]] = item;
 }
@@ -273,6 +393,8 @@ RCT_EXPORT_MODULE(NativeMenu)
   if (!item) {
     return;
   }
+
+  [RNNativeMenuBoundMenuItems() removeObjectForKey:item];
 
   id target = record[@"target"];
   item.target = target == (id)kCFNull ? nil : target;
@@ -368,6 +490,11 @@ RCT_EXPORT_MODULE(NativeMenu)
 - (void)handleMenuAction:(NSMenuItem *)sender
 {
   NSDictionary *payload = [sender.representedObject isKindOfClass:[NSDictionary class]] ? sender.representedObject : @{};
+  [self sendEventWithName:@"NativeMenuAction" body:payload];
+}
+
+- (void)emitBoundMenuItemAction:(NSDictionary *)payload
+{
   [self sendEventWithName:@"NativeMenuAction" body:payload];
 }
 

@@ -163,18 +163,37 @@ export function App({ launchArguments }: MarkdownAppProps) {
             targetTitle: "Redo",
             enabled: false,
           },
-          { separator: true, id: "separator-formatting" },
+        ],
+      },
+      {
+        id: "format",
+        title: "Format",
+        items: [
           {
             id: "bold",
-            title: "Bold",
+            targetPath: ["Font", "Bold"],
             enabled: false,
-            shortcut: { key: "b", modifiers: commandModifier },
           },
           {
             id: "italic",
-            title: "Italic",
+            targetPath: ["Font", "Italic"],
             enabled: false,
-            shortcut: { key: "i", modifiers: commandModifier },
+          },
+          {
+            id: "underline",
+            targetPath: ["Font", "Underline"],
+            enabled: false,
+          },
+          { separator: true, id: "separator-markdown-formatting" },
+          {
+            id: "strikethrough",
+            title: "Strikethrough",
+            enabled: false,
+          },
+          {
+            id: "spoiler",
+            title: "Spoiler",
+            enabled: false,
           },
           {
             id: "link",
@@ -202,6 +221,12 @@ export function App({ launchArguments }: MarkdownAppProps) {
         documentCommandsRef.current?.toggleBold();
       } else if (action.itemId === "italic") {
         documentCommandsRef.current?.toggleItalic();
+      } else if (action.itemId === "underline") {
+        documentCommandsRef.current?.toggleUnderline();
+      } else if (action.itemId === "strikethrough") {
+        documentCommandsRef.current?.toggleStrikethrough();
+      } else if (action.itemId === "spoiler") {
+        documentCommandsRef.current?.toggleSpoiler();
       } else if (action.itemId === "link") {
         documentCommandsRef.current?.insertLink();
       }
@@ -223,6 +248,9 @@ export function App({ launchArguments }: MarkdownAppProps) {
       { id: "redo", enabled: hasDocument },
       { id: "bold", enabled: hasDocument },
       { id: "italic", enabled: hasDocument },
+      { id: "underline", enabled: hasDocument },
+      { id: "strikethrough", enabled: hasDocument },
+      { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
     ]);
   }, [hasDocument, isDirty, isUntitledDocument, saveState]);
