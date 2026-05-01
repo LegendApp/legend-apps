@@ -263,6 +263,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
   (
     {
       adapter = nativeMarkdownDocumentAdapter,
+      autoFocusFirstBlock,
       commandsRef,
       contentContainerStyle,
       filename,
@@ -640,6 +641,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           setBlocksById(nextBlocksById);
           setBlockIds(snapshot.initialBlocks.map((block) => block.id));
           setDocumentState({ status: "loaded", snapshot });
+          if (autoFocusFirstBlock) {
+            const firstBlock = snapshot.initialBlocks[0];
+            if (firstBlock) {
+              activeBlockIdRef.current = firstBlock.id;
+              draftMarkdownRef.current = firstBlock.markdown;
+              committedMarkdownRef.current = firstBlock.markdown;
+              setDraftMarkdown(firstBlock.markdown);
+              setActiveSelection(0);
+              setActiveBlockId(firstBlock.id);
+            }
+          }
           onLoadedRef.current?.({
             documentId: snapshot.documentId,
             filename: snapshot.filename,
@@ -668,6 +680,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       cancelHydration,
       clearAutosaveTimer,
       clearEditTimer,
+      autoFocusFirstBlock,
       filename,
       onDirtyChangeRef,
       onErrorRef,

@@ -99,6 +99,7 @@ export type MarkdownDocumentTheme = {
 export type MarkdownDocumentProps = {
   filename: string;
   adapter?: MarkdownDocumentAdapter;
+  autoFocusFirstBlock?: boolean;
   savePolicy?: MarkdownSavePolicy;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;

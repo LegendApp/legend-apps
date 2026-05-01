@@ -4,12 +4,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { assertSupportedPlatform, loadAppManifest, shellDir } from "./lib/apps";
 import { parseAppCommand } from "./lib/apps";
+import { splitLaunchArgs, type OptionSpecs } from "./lib/launchArgs";
 import { getMacOSDevWorkspaceDir, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
 const macosScheme = "legendapp-shell-macos";
+const openOptionSpecs: OptionSpecs = {
+  "--configuration": "value",
+  "--mode": "value",
+  "--print": "boolean",
+  "--release": "boolean",
+};
 
 function readMode(args: string[]) {
   if (args.includes("--release")) {
@@ -80,10 +87,11 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
     throw new Error("Opening an already built app is currently implemented for macos only.");
   }
 
+  const { launchArgs, runnerArgs } = splitLaunchArgs(args, openOptionSpecs);
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
 
-  const mode = readMode(args);
+  const mode = readMode(runnerArgs);
   const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : getMacOSDevWorkspaceDir();
   writeGeneratedConfig(manifest, platform, mode === "Release" ? "release" : "dev");
 
@@ -93,12 +101,12 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
     throw new Error(`No built macOS app found at ${appPath}. Run bun run ${appId} macos first.`);
   }
 
-  if (shouldPrintOnly(args)) {
+  if (shouldPrintOnly(runnerArgs)) {
     console.log(appPath);
     return;
   }
 
-  runCommand("open", [appPath]);
+  runCommand("open", launchArgs.length > 0 ? ["-n", appPath, "--args", ...launchArgs] : [appPath]);
 }
 
 async function main() {

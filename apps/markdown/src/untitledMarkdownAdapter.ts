@@ -1,0 +1,168 @@
+import type {
+  MarkdownBlockSnapshot,
+  MarkdownDocumentAdapter,
+  MarkdownTransaction,
+  MarkdownTransactionResult,
+} from "@legend-desktop/markdown-document";
+
+const untitledDocumentId = "untitled:document";
+const untitledFilename = "Untitled.md";
+
+type UntitledState = {
+  blocks: MarkdownBlockSnapshot[];
+  revision: number;
+};
+
+function blockTypeForMarkdown(markdown: string) {
+  if (/^```/.test(markdown)) {
+    return "codeBlock";
+  }
+  return "paragraph";
+}
+
+function createBlock(id: string, index: number, markdown: string, revision: number): MarkdownBlockSnapshot {
+  return {
+    id,
+    index,
+    type: blockTypeForMarkdown(markdown),
+    depth: 0,
+    markdown,
+    sourceStartByte: 0,
+    sourceEndByte: markdown.length,
+    contentStartByte: 0,
+    contentEndByte: markdown.length,
+    textRevision: revision,
+  };
+}
+
+function sourceLength(blocks: MarkdownBlockSnapshot[]) {
+  return blocks.reduce((total, block, index) => total + block.markdown.length + (index > 0 ? 1 : 0), 0);
+}
+
+function normalizeBlocks(blocks: MarkdownBlockSnapshot[]) {
+  let offset = 0;
+  return blocks.map((block, index) => {
+    const start = offset;
+    const end = start + block.markdown.length;
+    offset = end + 1;
+    return {
+      ...block,
+      index,
+      sourceStartByte: start,
+      sourceEndByte: end,
+      contentStartByte: start,
+      contentEndByte: end,
+    };
+  });
+}
+
+function createState(): UntitledState {
+  return {
+    blocks: [createBlock("untitled:block:1", 0, "", 0)],
+    revision: 0,
+  };
+}
+
+let state = createState();
+let nextBlockId = 2;
+
+function resultForChange(
+  changedBlocks: MarkdownBlockSnapshot[],
+  startBlockIndex: number,
+  deleteCount: number,
+  retiredBlockIds: string[] = [],
+): MarkdownTransactionResult {
+  return {
+    revision: state.revision,
+    sourceLength: sourceLength(state.blocks),
+    changedRange: {
+      startBlockIndex,
+      deleteCount,
+      blockIds: changedBlocks.map((block) => block.id),
+    },
+    changedBlocks,
+    retiredBlockIds,
+  };
+}
+
+function applyUpdateBlockMarkdown(transaction: Extract<MarkdownTransaction, { type: "updateBlockMarkdown" }>) {
+  const index = state.blocks.findIndex((block) => block.id === transaction.blockId);
+  if (index < 0) {
+    throw new Error(`Untitled markdown block not found: ${transaction.blockId}`);
+  }
+
+  state.revision += 1;
+  const updatedBlock = createBlock(transaction.blockId, index, transaction.markdown, state.revision);
+  state.blocks = normalizeBlocks([
+    ...state.blocks.slice(0, index),
+    updatedBlock,
+    ...state.blocks.slice(index + 1),
+  ]);
+  return resultForChange([state.blocks[index]], index, 1);
+}
+
+function applySplitBlock(transaction: Extract<MarkdownTransaction, { type: "splitBlock" }>) {
+  const index = state.blocks.findIndex((block) => block.id === transaction.blockId);
+  if (index < 0) {
+    throw new Error(`Untitled markdown block not found: ${transaction.blockId}`);
+  }
+
+  state.revision += 1;
+  const firstBlock = createBlock(transaction.blockId, index, transaction.beforeMarkdown, state.revision);
+  const secondBlock = createBlock(`untitled:block:${nextBlockId}`, index + 1, transaction.afterMarkdown, state.revision);
+  nextBlockId += 1;
+  state.blocks = normalizeBlocks([
+    ...state.blocks.slice(0, index),
+    firstBlock,
+    secondBlock,
+    ...state.blocks.slice(index + 1),
+  ]);
+  return resultForChange([state.blocks[index], state.blocks[index + 1]], index, 1);
+}
+
+export const untitledMarkdownAdapter: MarkdownDocumentAdapter = {
+  async load() {
+    state = createState();
+    nextBlockId = 2;
+    return {
+      documentId: untitledDocumentId,
+      filename: untitledFilename,
+      sourceSize: 0,
+      blockCount: state.blocks.length,
+      initialBlocks: state.blocks,
+      timing: {
+        readMs: 0,
+        parseMs: 0,
+        documentMs: 0,
+      },
+    };
+  },
+  async getBlock(_documentId, blockId) {
+    const block = state.blocks.find((item) => item.id === blockId);
+    if (!block) {
+      throw new Error(`Untitled markdown block not found: ${blockId}`);
+    }
+    return block;
+  },
+  async getBlocks(_documentId, startIndex, count) {
+    return count > 0 ? state.blocks.slice(startIndex, startIndex + count) : [];
+  },
+  async save() {
+    // Untitled documents are in-memory until a save-as flow exists.
+  },
+  async close() {
+    state = createState();
+    nextBlockId = 2;
+  },
+  async applyTransaction(_documentId, transaction) {
+    if (transaction.type === "updateBlockMarkdown") {
+      return applyUpdateBlockMarkdown(transaction);
+    }
+    if (transaction.type === "splitBlock") {
+      return applySplitBlock(transaction);
+    }
+    throw new Error(`Unsupported untitled markdown transaction: ${(transaction as MarkdownTransaction).type}`);
+  },
+};
+
+export { untitledFilename };

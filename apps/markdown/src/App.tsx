@@ -11,7 +11,6 @@ import {
   configureMenus,
   updateMenuItems,
 } from "@legend-desktop/native-menu";
-import { closeFrontmostWindow } from "@legend-desktop/window-manager";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -22,14 +21,15 @@ import {
   removeRecentMarkdownFile,
   type RecentMarkdownFile,
 } from "./appMetadata";
+import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
 const menuOwnerId = "legend-markdown";
 const markdownFileTypes = ["md", "markdown", "mdown", "mkd", "mdx"];
 const commandModifier = 1 << 20;
 const shiftModifier = 1 << 17;
 
-type OpenReason = "startup" | "menu";
 type OpenSource = "startup" | "dialog" | "recent";
+type DocumentSource = "file" | "untitled";
 
 type MarkdownAppProps = {
   launchArguments?: string[];
@@ -47,22 +47,18 @@ function getLaunchMarkdownFile(launchArguments: string[] | undefined) {
 
 export function App({ launchArguments }: MarkdownAppProps) {
   const [filename, setFilename] = useState<string | null>(null);
-  const [status, setStatus] = useState("Opening markdown file...");
+  const [status, setStatus] = useState("Creating untitled document...");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
+  const [documentSource, setDocumentSource] = useState<DocumentSource>("untitled");
   const [recentFiles, setRecentFiles] = useState<RecentMarkdownFile[]>(() => getRecentMarkdownFiles());
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
-  const hasDocumentRef = useRef(false);
   const lastOpenSourceRef = useRef<OpenSource>("startup");
   const startupHandledRef = useRef(false);
 
   const hasDocument = filename !== null;
-
-  useEffect(() => {
-    hasDocumentRef.current = hasDocument;
-  }, [hasDocument]);
 
   useEffect(() => {
     return markdownAppMetadata$.recentFiles.onChange(({ value }) => {
@@ -72,6 +68,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
   const openSelectedFile = useCallback((path: string, source: OpenSource) => {
     lastOpenSourceRef.current = source;
+    setDocumentSource("file");
     setFilename(path);
     setIsDirty(false);
     setSaveState("idle");
@@ -80,8 +77,18 @@ export function App({ launchArguments }: MarkdownAppProps) {
     addRecentMarkdownFile(path);
   }, []);
 
+  const openUntitledDocument = useCallback(() => {
+    lastOpenSourceRef.current = "startup";
+    setDocumentSource("untitled");
+    setFilename(untitledFilename);
+    setIsDirty(false);
+    setSaveState("idle");
+    setLastError(null);
+    setStatus("Untitled document.");
+  }, []);
+
   const openMarkdownDialog = useCallback(
-    async (reason: OpenReason) => {
+    async () => {
       if (openDialogInFlight.current) {
         return;
       }
@@ -97,19 +104,11 @@ export function App({ launchArguments }: MarkdownAppProps) {
           openSelectedFile(path, "dialog");
         } else {
           setStatus("File selection canceled.");
-          if (reason === "startup" && !hasDocumentRef.current) {
-            void closeFrontmostWindow();
-          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setLastError(message);
         setStatus("Unable to open file.");
-        if (reason === "startup") {
-          setTimeout(() => {
-            void openMarkdownDialog("startup");
-          }, 0);
-        }
       } finally {
         openDialogInFlight.current = false;
       }
@@ -127,9 +126,9 @@ export function App({ launchArguments }: MarkdownAppProps) {
     if (launchFile) {
       openSelectedFile(launchFile, "startup");
     } else {
-      void openMarkdownDialog("startup");
+      openUntitledDocument();
     }
-  }, [launchArguments, openMarkdownDialog, openSelectedFile]);
+  }, [launchArguments, openSelectedFile, openUntitledDocument]);
 
   useEffect(() => {
     const recentItems = recentFiles.flatMap((file, index) => {
@@ -215,7 +214,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
         return;
       }
       if (action.itemId === "open") {
-        void openMarkdownDialog("menu");
+        void openMarkdownDialog();
       } else if (action.itemId === "save") {
         documentCommandsRef.current?.save();
       } else if (action.itemId === "undo") {
@@ -242,16 +241,19 @@ export function App({ launchArguments }: MarkdownAppProps) {
     };
   }, [openMarkdownDialog, openSelectedFile, recentFiles]);
 
+  const isUntitledDocument = documentSource === "untitled";
+  const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
+
   useEffect(() => {
     updateMenuItems(menuOwnerId, [
-      { id: "save", enabled: hasDocument && isDirty && saveState !== "saving" },
+      { id: "save", enabled: hasDocument && !isUntitledDocument && isDirty && saveState !== "saving" },
       { id: "undo", enabled: hasDocument },
       { id: "redo", enabled: hasDocument },
       { id: "bold", enabled: hasDocument },
       { id: "italic", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
     ]);
-  }, [hasDocument, isDirty, saveState]);
+  }, [hasDocument, isDirty, isUntitledDocument, saveState]);
 
   const displayName = useMemo(() => filename?.split("/").pop() ?? "No document open", [filename]);
 
@@ -259,51 +261,50 @@ export function App({ launchArguments }: MarkdownAppProps) {
     (error: Error) => {
       setLastError(error.message);
       setStatus("Unable to load document.");
-      if (filename && lastOpenSourceRef.current === "recent") {
+      if (!isUntitledDocument && filename && lastOpenSourceRef.current === "recent") {
         removeRecentMarkdownFile(filename);
       }
     },
-    [filename],
+    [filename, isUntitledDocument],
   );
+
+  if (!hasDocument || !filename) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
-      {hasDocument && filename ? (
-        <>
-          <View style={styles.statusBar}>
-            <View style={styles.statusTitleGroup}>
-              <Text numberOfLines={1} style={styles.filename}>
-                {displayName}
-              </Text>
-              <Text numberOfLines={1} style={styles.status}>
-                {status}
-              </Text>
-            </View>
-            <Text style={styles.saveState}>{isDirty ? "Edited" : saveState === "saving" ? "Saving..." : "Saved"}</Text>
-          </View>
-          {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
-          <MarkdownDocument
-            adapter={nativeMarkdownDocumentAdapter}
-            commandsRef={documentCommandsRef}
-            filename={filename}
-            onDirtyChange={setIsDirty}
-            onError={handleDocumentError}
-            onLoaded={(info) => {
-              setLastError(null);
-              setStatus(`Loaded ${info.blockCount} blocks from ${getMarkdownFileTitle(info.filename)}.`);
-            }}
-            onSaveStateChange={setSaveState}
-            style={styles.document}
-          />
-        </>
-      ) : (
-        <View style={styles.emptyState}>
-          <Text style={styles.title}>Legend Markdown</Text>
-          <Text style={styles.filename}>{displayName}</Text>
-          <Text style={styles.status}>{status}</Text>
-          {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+      <View style={styles.statusBar}>
+        <View style={styles.statusTitleGroup}>
+          <Text numberOfLines={1} style={styles.filename}>
+            {displayName}
+          </Text>
+          <Text numberOfLines={1} style={styles.status}>
+            {status}
+          </Text>
         </View>
-      )}
+        <Text style={styles.saveState}>{isDirty ? "Edited" : saveState === "saving" ? "Saving..." : "Saved"}</Text>
+      </View>
+      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+      <MarkdownDocument
+        adapter={activeAdapter}
+        autoFocusFirstBlock={isUntitledDocument}
+        commandsRef={documentCommandsRef}
+        filename={filename}
+        onDirtyChange={setIsDirty}
+        onError={handleDocumentError}
+        onLoaded={(info) => {
+          setLastError(null);
+          setStatus(
+            isUntitledDocument
+              ? "Untitled document."
+              : `Loaded ${info.blockCount} blocks from ${getMarkdownFileTitle(info.filename)}.`,
+          );
+        }}
+        onSaveStateChange={setSaveState}
+        savePolicy={isUntitledDocument ? { autosave: false } : undefined}
+        style={styles.document}
+      />
     </View>
   );
 }
@@ -317,12 +318,6 @@ const styles = StyleSheet.create({
   },
   document: {
     flex: 1,
-  },
-  emptyState: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    padding: 32,
   },
   error: {
     color: "#b42318",
@@ -360,10 +355,5 @@ const styles = StyleSheet.create({
   statusTitleGroup: {
     flex: 1,
     minWidth: 0,
-  },
-  title: {
-    color: "#111827",
-    fontSize: 24,
-    fontWeight: "700",
   },
 });
