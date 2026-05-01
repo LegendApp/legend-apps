@@ -675,16 +675,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setNextSaveState,
     ]);
 
+    const loadedDocumentId = documentState.status === "loaded" ? documentState.snapshot.documentId : undefined;
     useEffect(() => {
-      if (documentState.status !== "loaded") {
+      if (!loadedDocumentId) {
         return undefined;
       }
 
-      const documentId = documentState.snapshot.documentId;
       return () => {
-        void adapter.close(documentId);
+        void adapter.close(loadedDocumentId);
       };
-    }, [adapter, documentState]);
+    }, [adapter, loadedDocumentId]);
 
     const save = useCallback(() => {
       if (documentState.status !== "loaded" || saveState === "saving") {
