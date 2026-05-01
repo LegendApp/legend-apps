@@ -25,6 +25,14 @@ TypeScript is strict, ESM-based, and uses React JSX (`react-jsx`). Follow the ex
 
 Custom Fabric native view components that own native subviews, controllers, delegates, cached props, or other mutable native state should implement `prepareForRecycle` and reset that state before reuse. Keep the reset local to the component that owns the native state; TurboModules and stateless native views do not need this hook.
 
+## Native Dependency Changes
+
+When adding, removing, or relinking native modules, remember to refresh the native dependency graph before expecting the running app binary to expose those modules. For macOS, run `bun run <app> pods macos` after native package or `app.manifest.ts` native module changes, then rebuild/rerun the app. A Metro reload alone is not enough for new TurboModules or pod changes.
+
+## Build Scope
+
+Do not run release builds by default while iterating. Use `bun run typecheck`, targeted `verify` commands, and debug/dev builds unless the user explicitly asks for a release build or the change specifically requires release-build validation.
+
 ## Testing Guidelines
 
 There is no dedicated test runner configured yet. Treat `bun run typecheck` and targeted app verification as the baseline before submitting changes. For native package work, run `bun run <app> verify <platform>` against an app that consumes the package, and prefer `test-kitchen-sink` for integration coverage.
