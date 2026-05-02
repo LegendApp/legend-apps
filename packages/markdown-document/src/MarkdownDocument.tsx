@@ -14,9 +14,6 @@ import {
   TextInput,
   View,
   type GestureResponderEvent,
-  type LayoutChangeEvent,
-  type MouseEvent,
-  type PointerEvent,
   type TextStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
@@ -69,16 +66,6 @@ type BlockSelectionState = {
   focusBlockId: string;
 };
 
-type EdgeSelectionIntent = {
-  blockId: string;
-  edge: "start" | "end";
-};
-
-type MarkdownSelection = {
-  start: number;
-  end: number;
-};
-
 type SelectionDragOutsideEvent = {
   direction: string;
   windowX?: number;
@@ -89,13 +76,6 @@ type NativeSelectionDragOutsideEvent = {
   nativeEvent?: SelectionDragOutsideEvent;
 } & SelectionDragOutsideEvent;
 
-type RawMouseEvent = MouseEvent & {
-  nativeEvent: MouseEvent["nativeEvent"] & {
-    movementX?: number;
-    movementY?: number;
-  };
-};
-
 type BlockLayout = {
   y: number;
   height: number;
@@ -104,15 +84,6 @@ type BlockLayout = {
 const estimatedItemSize = 120;
 const hydrateChunkSize = 512;
 const editDebounceMs = 300;
-let blockSelectionDebugSequence = 0;
-
-function logBlockSelectionDebug(event: string, data: Record<string, unknown>) {
-  blockSelectionDebugSequence += 1;
-  console.log(`${Date.now()} [block-selection-debug] ${event}`, {
-    seq: blockSelectionDebugSequence,
-    ...data,
-  });
-}
 
 function useLatestRef<T>(value: T) {
   const ref = useRef(value);
@@ -200,7 +171,6 @@ function estimateMarkdownEditorHeight(markdown: string, width: number) {
 }
 
 type ChangeMarkdownHandler = (block: MarkdownBlockSnapshot, markdown: string) => void;
-type ChangeSelectionHandler = (block: MarkdownBlockSnapshot, selection: MarkdownSelection) => void;
 type SelectionDragOutsideHandler = (block: MarkdownBlockSnapshot, event: SelectionDragOutsideEvent) => void;
 
 function normalizeSelectionDragOutsideEvent(event: NativeSelectionDragOutsideEvent) {
@@ -216,7 +186,6 @@ const MarkdownEditorInput = memo(
     markdownStyle,
     onBlurRef,
     onChangeMarkdownRef,
-    onChangeSelectionRef,
     onSelectionDragOutsideRef,
     rowWidth,
   }: {
@@ -227,7 +196,6 @@ const MarkdownEditorInput = memo(
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
-    onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
     rowWidth: number;
   }) {
@@ -249,7 +217,6 @@ const MarkdownEditorInput = memo(
         multiline
         onBlur={() => onBlurRef.current()}
         onChangeMarkdown={(markdown) => onChangeMarkdownRef.current(block, markdown)}
-        onChangeSelection={(selection) => onChangeSelectionRef.current(block, selection)}
         onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block, normalizeSelectionDragOutsideEvent(event))}
         scrollEnabled={false}
         style={StyleSheet.flatten([
@@ -267,7 +234,6 @@ const MarkdownEditorInput = memo(
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
-    previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
     previousProps.rowWidth === nextProps.rowWidth,
 );
@@ -277,19 +243,9 @@ function MarkdownBlockRow({
   draftMarkdown,
   initialSelection,
   isActive,
-  isBlockSelected,
   onActivate,
-  onBlockLayout,
-  onBlockHoverIn,
-  onBlockHoverOut,
-  onBlockMouseEnter,
-  onBlockMouseLeave,
-  onBlockMouseMove,
-  onBlockPointerDown,
-  onBlockPointerEnter,
   onBlurRef,
   onChangeMarkdownRef,
-  onChangeSelectionRef,
   onBlockWindowLayout,
   onSelectionDragOutsideRef,
   block,
@@ -300,21 +256,11 @@ function MarkdownBlockRow({
   draftMarkdown: string;
   initialSelection: number;
   isActive: boolean;
-  isBlockSelected: boolean;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
-  onBlockLayout: (blockId: string, event: LayoutChangeEvent) => void;
-  onBlockHoverIn: (block: MarkdownBlockSnapshot, event: MouseEvent) => void;
-  onBlockHoverOut: (block: MarkdownBlockSnapshot, event: MouseEvent) => void;
-  onBlockMouseEnter: (block: MarkdownBlockSnapshot, event: RawMouseEvent) => void;
-  onBlockMouseLeave: (block: MarkdownBlockSnapshot, event: RawMouseEvent) => void;
-  onBlockMouseMove: (block: MarkdownBlockSnapshot, event: RawMouseEvent) => void;
-  onBlockPointerDown: (blockId: string) => void;
-  onBlockPointerEnter: (block: MarkdownBlockSnapshot, event: PointerEvent) => void;
   onBlockWindowLayout: (blockId: string, layout: BlockLayout) => void;
   onBlurRef: RefObject<() => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
-  onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
@@ -338,17 +284,9 @@ function MarkdownBlockRow({
         ref={rowRef}
         onLayout={(event) => {
           setRowWidth(event.nativeEvent.layout.width);
-          onBlockLayout(block.id, event);
           measureWindowLayout();
         }}
-        onPointerDownCapture={() => onBlockPointerDown(block.id)}
-        onPointerEnter={(event) => onBlockPointerEnter(block, event)}
-        {...({
-          onMouseEnter: (event: RawMouseEvent) => onBlockMouseEnter(block, event),
-          onMouseLeave: (event: RawMouseEvent) => onBlockMouseLeave(block, event),
-          onMouseMove: (event: RawMouseEvent) => onBlockMouseMove(block, event),
-        } as object)}
-        style={[styles.blockRow, isBlockSelected ? styles.selectedBlockRow : null]}
+        style={styles.blockRow}
       >
         <MarkdownEditorInput
           activeInputRef={activeInputRef}
@@ -358,7 +296,6 @@ function MarkdownBlockRow({
           markdownStyle={markdownStyle}
           onBlurRef={onBlurRef}
           onChangeMarkdownRef={onChangeMarkdownRef}
-          onChangeSelectionRef={onChangeSelectionRef}
           onSelectionDragOutsideRef={onSelectionDragOutsideRef}
           rowWidth={rowWidth}
         />
@@ -373,22 +310,12 @@ function MarkdownBlockRow({
       delayHoverOut={0}
       onLayout={(event) => {
         setRowWidth(event.nativeEvent.layout.width);
-        onBlockLayout(block.id, event);
         measureWindowLayout();
       }}
-      onHoverIn={(event) => onBlockHoverIn(block, event)}
-      onHoverOut={(event) => onBlockHoverOut(block, event)}
-      {...({
-        onMouseEnter: (event: RawMouseEvent) => onBlockMouseEnter(block, event),
-        onMouseLeave: (event: RawMouseEvent) => onBlockMouseLeave(block, event),
-        onMouseMove: (event: RawMouseEvent) => onBlockMouseMove(block, event),
-      } as object)}
       onPress={(event) => {
         onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
       }}
-      onPointerDownCapture={() => onBlockPointerDown(block.id)}
-      onPointerEnter={(event) => onBlockPointerEnter(block, event)}
-      style={[styles.blockRow, isBlockSelected ? styles.selectedBlockRow : null]}
+      style={styles.blockRow}
     >
       <EnrichedMarkdownText
         allowTrailingMargin={false}
@@ -434,11 +361,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const saveRef = useRef<(() => void) | undefined>(undefined);
     const activeBlockIdRef = useRef<string | null>(null);
     const blockSelectionInputRef = useRef<TextInput | null>(null);
-    const edgeSelectionIntentRef = useRef<EdgeSelectionIntent | null>(null);
-    const previousInputSelectionRef = useRef<MarkdownSelection | null>(null);
-    const blockLayoutsRef = useRef(new Map<string, BlockLayout>());
     const blockWindowLayoutsRef = useRef(new Map<string, BlockLayout>());
-    const dragAnchorBlockIdRef = useRef<string | null>(null);
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -641,8 +564,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
         void commitActiveBlock({ updateReactState: true });
-        edgeSelectionIntentRef.current = null;
-        previousInputSelectionRef.current = null;
         blockSelectionRef.current = null;
         setBlockSelection(null);
         activeBlockIdRef.current = block.id;
@@ -665,8 +586,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           setActiveBlockId(null);
           setActiveSelection(0);
         }
-        edgeSelectionIntentRef.current = null;
-        previousInputSelectionRef.current = null;
         const nextBlockSelection = { anchorBlockId, focusBlockId };
         blockSelectionRef.current = nextBlockSelection;
         setBlockSelection(nextBlockSelection);
@@ -675,23 +594,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const stageActiveInputBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
-      edgeSelectionIntentRef.current = null;
-      previousInputSelectionRef.current = null;
       const previousSelection = blockSelectionRef.current;
       const nextSelection = previousSelection
         ? { anchorBlockId: previousSelection.anchorBlockId, focusBlockId }
         : { anchorBlockId, focusBlockId };
       blockSelectionRef.current = nextSelection;
       setBlockSelection(nextSelection);
-    }, []);
-
-    const blockIdAtDocumentY = useCallback((y: number) => {
-      for (const [blockId, layout] of blockLayoutsRef.current) {
-        if (y >= layout.y && y <= layout.y + layout.height) {
-          return blockId;
-        }
-      }
-      return undefined;
     }, []);
 
     const blockIdAtWindowY = useCallback((y: number) => {
@@ -701,11 +609,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
       }
       return undefined;
-    }, []);
-
-    const handleBlockLayout = useCallback((blockId: string, event: LayoutChangeEvent) => {
-      const { y, height } = event.nativeEvent.layout;
-      blockLayoutsRef.current.set(blockId, { y, height });
     }, []);
 
     const handleBlockWindowLayout = useCallback((blockId: string, layout: BlockLayout) => {
@@ -725,161 +628,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       });
     }, []);
 
-    const handleBlockPointerDown = useCallback((blockId: string) => {
-      logBlockSelectionDebug("js-block-pointer-down", { blockId });
-      dragAnchorBlockIdRef.current = blockId;
-    }, []);
-
-    const handleBlockHoverIn = useCallback((block: MarkdownBlockSnapshot, event: MouseEvent) => {
-      logBlockSelectionDebug("js-block-hover-in", {
-        blockId: block.id,
-        buttons: event.nativeEvent.buttons,
-        button: event.nativeEvent.button,
-        x: event.nativeEvent.x,
-        y: event.nativeEvent.y,
-        pageX: event.nativeEvent.pageX,
-        pageY: event.nativeEvent.pageY,
-        activeBlockId: activeBlockIdRef.current,
-        dragAnchorBlockId: dragAnchorBlockIdRef.current,
-        edgeSelectionIntent: edgeSelectionIntentRef.current,
-        latestInputSelection: previousInputSelectionRef.current,
-        hasBlockSelection: blockSelection !== null,
-      });
-    }, [blockSelection]);
-
-    const handleBlockHoverOut = useCallback((block: MarkdownBlockSnapshot, event: MouseEvent) => {
-      logBlockSelectionDebug("js-block-hover-out", {
-        blockId: block.id,
-        buttons: event.nativeEvent.buttons,
-        button: event.nativeEvent.button,
-        x: event.nativeEvent.x,
-        y: event.nativeEvent.y,
-        pageX: event.nativeEvent.pageX,
-        pageY: event.nativeEvent.pageY,
-        activeBlockId: activeBlockIdRef.current,
-        dragAnchorBlockId: dragAnchorBlockIdRef.current,
-        edgeSelectionIntent: edgeSelectionIntentRef.current,
-        latestInputSelection: previousInputSelectionRef.current,
-        hasBlockSelection: blockSelection !== null,
-      });
-    }, [blockSelection]);
-
-    const handleBlockMouseEnter = useCallback((block: MarkdownBlockSnapshot, event: RawMouseEvent) => {
-      logBlockSelectionDebug("js-block-mouse-enter", {
-        blockId: block.id,
-        buttons: event.nativeEvent.buttons,
-        button: event.nativeEvent.button,
-        x: event.nativeEvent.x,
-        y: event.nativeEvent.y,
-        pageX: event.nativeEvent.pageX,
-        pageY: event.nativeEvent.pageY,
-        activeBlockId: activeBlockIdRef.current,
-        dragAnchorBlockId: dragAnchorBlockIdRef.current,
-        edgeSelectionIntent: edgeSelectionIntentRef.current,
-        latestInputSelection: previousInputSelectionRef.current,
-        hasBlockSelection: blockSelection !== null,
-      });
-    }, [blockSelection]);
-
-    const handleBlockMouseLeave = useCallback((block: MarkdownBlockSnapshot, event: RawMouseEvent) => {
-      logBlockSelectionDebug("js-block-mouse-leave", {
-        blockId: block.id,
-        buttons: event.nativeEvent.buttons,
-        button: event.nativeEvent.button,
-        x: event.nativeEvent.x,
-        y: event.nativeEvent.y,
-        pageX: event.nativeEvent.pageX,
-        pageY: event.nativeEvent.pageY,
-        activeBlockId: activeBlockIdRef.current,
-        dragAnchorBlockId: dragAnchorBlockIdRef.current,
-        edgeSelectionIntent: edgeSelectionIntentRef.current,
-        latestInputSelection: previousInputSelectionRef.current,
-        hasBlockSelection: blockSelection !== null,
-      });
-    }, [blockSelection]);
-
-    const handleBlockMouseMove = useCallback((block: MarkdownBlockSnapshot, event: RawMouseEvent) => {
-      logBlockSelectionDebug("js-block-mouse-move", {
-        blockId: block.id,
-        buttons: event.nativeEvent.buttons,
-        button: event.nativeEvent.button,
-        x: event.nativeEvent.x,
-        y: event.nativeEvent.y,
-        pageX: event.nativeEvent.pageX,
-        pageY: event.nativeEvent.pageY,
-        movementX: event.nativeEvent.movementX,
-        movementY: event.nativeEvent.movementY,
-        activeBlockId: activeBlockIdRef.current,
-        dragAnchorBlockId: dragAnchorBlockIdRef.current,
-        edgeSelectionIntent: edgeSelectionIntentRef.current,
-        latestInputSelection: previousInputSelectionRef.current,
-        hasBlockSelection: blockSelection !== null,
-      });
-    }, [blockSelection]);
-
-    const handleChangeSelection = useCallback(
-      (block: MarkdownBlockSnapshot, selection: MarkdownSelection) => {
-        logBlockSelectionDebug("js-input-selection", {
-          blockId: block.id,
-          selection,
-          markdownLength: block.markdown.length,
-        });
-        const previousSelection = previousInputSelectionRef.current;
-        previousInputSelectionRef.current = selection;
-
-        if (selection.start === selection.end) {
-          edgeSelectionIntentRef.current = null;
-          return;
-        }
-
-        const blockIndex = blockIds.indexOf(block.id);
-        if (blockIndex < 0) {
-          edgeSelectionIntentRef.current = null;
-          return;
-        }
-
-        const isExpandingForward =
-          selection.end >= block.markdown.length &&
-          selection.start > 0 &&
-          (!previousSelection || selection.end >= previousSelection.end);
-        if (isExpandingForward) {
-          const nextBlockId = blockIds[blockIndex + 1];
-          if (nextBlockId) {
-            beginBlockSelection(block.id, nextBlockId);
-          } else {
-            edgeSelectionIntentRef.current = { blockId: block.id, edge: "end" };
-          }
-          return;
-        }
-
-        const isExpandingBackward =
-          selection.start <= 0 &&
-          selection.end < block.markdown.length &&
-          (!previousSelection || selection.start <= previousSelection.start);
-        if (isExpandingBackward) {
-          const previousBlockId = blockIds[blockIndex - 1];
-          if (previousBlockId) {
-            beginBlockSelection(block.id, previousBlockId);
-          } else {
-            edgeSelectionIntentRef.current = { blockId: block.id, edge: "start" };
-          }
-          return;
-        }
-
-        edgeSelectionIntentRef.current = null;
-      },
-      [beginBlockSelection, blockIds],
-    );
-    const handleChangeSelectionRef = useLatestRef(handleChangeSelection);
-
     const handleSelectionDragOutside = useCallback(
       (block: MarkdownBlockSnapshot, event: SelectionDragOutsideEvent) => {
-        logBlockSelectionDebug("js-selection-drag-outside", {
-          blockId: block.id,
-          direction: event.direction,
-          windowX: event.windowX,
-          windowY: event.windowY,
-        });
         if (event.direction === "end") {
           if (blockSelectionRef.current) {
             setBlockSelection(blockSelectionRef.current);
@@ -930,105 +680,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [beginBlockSelection, blockIdAtWindowY, blockIds, blockSelection, stageActiveInputBlockSelection],
     );
     const handleSelectionDragOutsideRef = useLatestRef(handleSelectionDragOutside);
-
-    const handleBlockPointerEnter = useCallback(
-      (block: MarkdownBlockSnapshot, event: PointerEvent) => {
-        logBlockSelectionDebug("js-block-pointer-enter", {
-          blockId: block.id,
-          buttons: event.nativeEvent.buttons,
-          x: event.nativeEvent.x,
-          y: event.nativeEvent.y,
-        });
-        if ((event.nativeEvent.buttons & 1) !== 1) {
-          return;
-        }
-
-        if (blockSelection) {
-          setBlockSelection((selection) =>
-            selection ? { anchorBlockId: selection.anchorBlockId, focusBlockId: block.id } : selection,
-          );
-          return;
-        }
-
-        const intent = edgeSelectionIntentRef.current;
-        if (!intent || intent.blockId === block.id) {
-          return;
-        }
-
-        const activeIndex = blockIds.indexOf(intent.blockId);
-        const hoveredIndex = blockIds.indexOf(block.id);
-        if (activeIndex < 0 || hoveredIndex < 0) {
-          return;
-        }
-
-        const isForwardSelection = intent.edge === "end" && hoveredIndex > activeIndex;
-        const isBackwardSelection = intent.edge === "start" && hoveredIndex < activeIndex;
-        if (isForwardSelection || isBackwardSelection) {
-          beginBlockSelection(intent.blockId, block.id);
-        }
-      },
-      [beginBlockSelection, blockIds, blockSelection],
-    );
-
-    const handleDocumentPointerMoveCapture = useCallback(
-      (event: PointerEvent) => {
-        logBlockSelectionDebug("js-document-pointer-move-capture", {
-          buttons: event.nativeEvent.buttons,
-          x: event.nativeEvent.x,
-          y: event.nativeEvent.y,
-          activeBlockId: activeBlockIdRef.current,
-          dragAnchorBlockId: dragAnchorBlockIdRef.current,
-          edgeSelectionIntent: edgeSelectionIntentRef.current,
-          hasBlockSelection: blockSelection !== null,
-        });
-        if ((event.nativeEvent.buttons & 1) !== 1) {
-          return;
-        }
-
-        const hoveredBlockId = blockIdAtDocumentY(event.nativeEvent.y);
-        if (!hoveredBlockId) {
-          return;
-        }
-
-        if (blockSelection) {
-          setBlockSelection((selection) =>
-            selection ? { anchorBlockId: selection.anchorBlockId, focusBlockId: hoveredBlockId } : selection,
-          );
-          return;
-        }
-
-        const intent = edgeSelectionIntentRef.current;
-        const dragAnchorBlockId = dragAnchorBlockIdRef.current;
-        if (dragAnchorBlockId && dragAnchorBlockId !== hoveredBlockId) {
-          beginBlockSelection(dragAnchorBlockId, hoveredBlockId);
-          return;
-        }
-
-        if (!intent || intent.blockId === hoveredBlockId) {
-          return;
-        }
-
-        const activeIndex = blockIds.indexOf(intent.blockId);
-        const hoveredIndex = blockIds.indexOf(hoveredBlockId);
-        if (activeIndex < 0 || hoveredIndex < 0) {
-          return;
-        }
-
-        const isForwardSelection = intent.edge === "end" && hoveredIndex > activeIndex;
-        const isBackwardSelection = intent.edge === "start" && hoveredIndex < activeIndex;
-        if (isForwardSelection || isBackwardSelection) {
-          beginBlockSelection(intent.blockId, hoveredBlockId);
-        }
-      },
-      [beginBlockSelection, blockIdAtDocumentY, blockIds, blockSelection],
-    );
-
-    const handleDocumentPointerUpCapture = useCallback(() => {
-      logBlockSelectionDebug("js-document-pointer-up-capture", {
-        dragAnchorBlockId: dragAnchorBlockIdRef.current,
-      });
-      dragAnchorBlockIdRef.current = null;
-    }, []);
 
     const splitActiveBlock = useCallback(
       async (block: MarkdownBlockSnapshot, beforeMarkdown: string, afterMarkdown: string) => {
@@ -1144,7 +795,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             redoStackRef.current = [];
           }
           applyTransactionResult(result);
-          edgeSelectionIntentRef.current = null;
           blockSelectionRef.current = null;
           setBlockSelection(null);
           const nextActiveBlock = result.changedBlocks[0];
@@ -1253,9 +903,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearEditTimer();
       clearAutosaveTimer();
       activeBlockIdRef.current = null;
-      previousInputSelectionRef.current = null;
-      dragAnchorBlockIdRef.current = null;
-      blockLayoutsRef.current.clear();
       blockWindowLayoutsRef.current.clear();
       draftMarkdownRef.current = "";
       committedMarkdownRef.current = "";
@@ -1264,7 +911,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       isDirtyRef.current = false;
       pendingRenderTransactionRef.current = undefined;
       autosavePausedRef.current = false;
-      edgeSelectionIntentRef.current = null;
       undoStackRef.current = [];
       redoStackRef.current = [];
       suppressHistoryRef.current = false;
@@ -1448,7 +1094,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             markdown: entry.replacementMarkdown,
           });
           applyTransactionResult(result);
-          edgeSelectionIntentRef.current = null;
           blockSelectionRef.current = null;
           setBlockSelection(null);
           const firstChangedBlockId = result.changedRange.blockIds[0];
@@ -1600,21 +1245,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           draftMarkdown={activeBlockId === props.item ? draftMarkdown : ""}
           initialSelection={activeSelection}
           isActive={activeBlockId === props.item}
-          isBlockSelected={false}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
-          onBlockHoverIn={handleBlockHoverIn}
-          onBlockHoverOut={handleBlockHoverOut}
-          onBlockLayout={handleBlockLayout}
-          onBlockMouseEnter={handleBlockMouseEnter}
-          onBlockMouseLeave={handleBlockMouseLeave}
-          onBlockMouseMove={handleBlockMouseMove}
-          onBlockPointerDown={handleBlockPointerDown}
-          onBlockPointerEnter={handleBlockPointerEnter}
           onBlockWindowLayout={handleBlockWindowLayout}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
-          onChangeSelectionRef={handleChangeSelectionRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
         />
       ),
@@ -1624,18 +1259,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeSelection,
         blocksById,
         draftMarkdown,
-        handleBlockHoverIn,
-        handleBlockHoverOut,
-        handleBlockLayout,
-        handleBlockMouseEnter,
-        handleBlockMouseLeave,
-        handleBlockMouseMove,
-        handleBlockPointerDown,
-        handleBlockPointerEnter,
         handleBlockWindowLayout,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
-        handleChangeSelectionRef,
         handleSelectionDragOutsideRef,
         resolvedMarkdownStyle,
       ],
@@ -1665,8 +1291,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       <View
         ref={containerRef}
         onLayout={measureContainerWindowLayout}
-        onPointerMoveCapture={handleDocumentPointerMoveCapture}
-        onPointerUpCapture={handleDocumentPointerUpCapture}
         style={[styles.container, theme?.backgroundColor ? { backgroundColor: theme.backgroundColor } : null, style]}
       >
         <TextInput
@@ -1763,9 +1387,6 @@ const styles = StyleSheet.create({
   },
   renderedText: {
     width: "100%",
-  },
-  selectedBlockRow: {
-    backgroundColor: "#bfdbfe",
   },
   statusText: {
     color: "#6b7280",
