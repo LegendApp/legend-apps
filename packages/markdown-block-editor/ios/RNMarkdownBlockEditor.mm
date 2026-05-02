@@ -7,6 +7,8 @@
 
 using namespace facebook::react;
 
+static const CGFloat RNMarkdownBlockEditorOverlayVerticalInset = 4.0;
+
 static SEL setValueSelector()
 {
   return NSSelectorFromString(@"setValue:");
@@ -233,7 +235,11 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (_overlayInput == nil || _overlayInput.superview == nil || view.window == nil) {
     return NSZeroRect;
   }
-  return [view convertRect:view.bounds toView:_overlayInput.superview];
+
+  NSRect frame = [view convertRect:view.bounds toView:_overlayInput.superview];
+  frame.origin.y += RNMarkdownBlockEditorOverlayVerticalInset;
+  frame.size.height = MAX(1.0, frame.size.height - RNMarkdownBlockEditorOverlayVerticalInset * 2.0);
+  return frame;
 }
 
 - (void)positionOverlayForBlockView:(RNMarkdownBlockActivationView *)view
@@ -282,10 +288,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
   if (eventEmitter) {
-    NSRect frame = NSZeroRect;
-    if (_overlayInput != nil && _overlayInput.superview != nil && view.window != nil) {
-      frame = [view convertRect:view.bounds toView:_overlayInput.superview];
-    }
+    NSRect frame = [self overlayFrameForBlockView:view];
     eventEmitter->onBeginEditing({
       .blockId = std::string([view.blockId UTF8String] ?: ""),
       .height = frame.size.height,
@@ -306,7 +309,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 
   NSView *overlaySuperview = _overlayInput.superview;
-  NSRect frame = [view convertRect:view.bounds toView:overlaySuperview];
+  NSRect frame = [self overlayFrameForBlockView:view];
   _isPositioningOverlay = YES;
   _overlayInput.frame = frame;
   _overlayInput.hidden = NO;

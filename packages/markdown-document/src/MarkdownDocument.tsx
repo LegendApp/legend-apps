@@ -16,6 +16,7 @@ import {
   TextInput,
   View,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
   type TextStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
@@ -95,6 +96,9 @@ type OverlayFrame = {
 const estimatedItemSize = 120;
 const hydrateChunkSize = 512;
 const editDebounceMs = 300;
+const contentMaxWidth = 920;
+const contentHorizontalPadding = 40;
+const blockRowVerticalPadding = 4;
 
 function useLatestRef<T>(value: T) {
   const ref = useRef(value);
@@ -256,12 +260,14 @@ const MarkdownOverlayEditorInput = memo(
     markdownStyle,
     onBlurRef,
     onChangeMarkdownRef,
+    inactiveOverlayWidth,
     onSelectionDragOutsideRef,
     overlayFrame,
   }: {
     activeBlock?: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
+    inactiveOverlayWidth: number;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
@@ -289,7 +295,12 @@ const MarkdownOverlayEditorInput = memo(
           }
         }}
         scrollEnabled={false}
-        style={StyleSheet.flatten([styles.editorInput, styles.overlayEditorInput, overlayFrame])}
+        style={StyleSheet.flatten([
+          styles.editorInput,
+          styles.overlayEditorInput,
+          { width: inactiveOverlayWidth },
+          overlayFrame,
+        ])}
       />
     );
   },
@@ -297,6 +308,7 @@ const MarkdownOverlayEditorInput = memo(
     previousProps.activeBlock?.id === nextProps.activeBlock?.id &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
+    previousProps.inactiveOverlayWidth === nextProps.inactiveOverlayWidth &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
@@ -472,6 +484,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [layoutVersion, setLayoutVersion] = useState(0);
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
+    const [inactiveOverlayWidth, setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
@@ -710,7 +723,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setLayoutVersion((version) => version + 1);
     }, []);
 
-    const measureContainerWindowLayout = useCallback(() => {
+    const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
+      if (event) {
+        const nextContentWidth = Math.max(
+          1,
+          Math.min(event.nativeEvent.layout.width, contentMaxWidth) - contentHorizontalPadding * 2,
+        );
+        setInactiveOverlayWidth(nextContentWidth);
+      }
       requestAnimationFrame(() => {
         containerRef.current?.measureInWindow((_x, y) => {
           setContainerWindowY(y);
@@ -1452,6 +1472,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           <MarkdownOverlayEditorInput
             activeBlock={activeBlock}
             activeInputRef={activeInputRef}
+            inactiveOverlayWidth={inactiveOverlayWidth}
             markdownStyle={resolvedMarkdownStyle}
             onBlurRef={handleEditorBlurRef}
             onChangeMarkdownRef={handleChangeMarkdownRef}
@@ -1479,7 +1500,7 @@ MarkdownDocument.displayName = "MarkdownDocument";
 const styles = StyleSheet.create({
   blockRow: {
     paddingHorizontal: 0,
-    paddingVertical: 4,
+    paddingVertical: blockRowVerticalPadding,
   },
   blockSelectionInput: {
     height: 1,
@@ -1503,8 +1524,8 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     alignSelf: "center",
-    maxWidth: 920,
-    paddingHorizontal: 40,
+    maxWidth: contentMaxWidth,
+    paddingHorizontal: contentHorizontalPadding,
     paddingVertical: 48,
     width: "100%",
   },
@@ -1531,7 +1552,6 @@ const styles = StyleSheet.create({
     minHeight: 25,
     position: "absolute",
     top: -10000,
-    width: 920,
   },
   renderedText: {
     width: "100%",
