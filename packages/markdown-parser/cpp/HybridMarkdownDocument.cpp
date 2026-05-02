@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -128,6 +129,9 @@ MarkdownTransactionResult HybridMarkdownDocument::applyTransaction(const Markdow
   }
   if (transaction.type == "splitBlock") {
     return splitBlock(transaction);
+  }
+  if (transaction.type == "replaceBlockRange") {
+    return replaceBlockRange(transaction);
   }
   throw std::runtime_error("Unsupported markdown transaction: " + transaction.type);
 }
@@ -266,6 +270,110 @@ MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTrans
   revision_ += 1;
   timing_.sourceBytes = static_cast<double>(sourceText_.size());
   return makeTransactionResult(blockIndex, 1, {blockIndex, blockIndex + 1});
+}
+
+MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const MarkdownTransaction& transaction) {
+  if (!transaction.beforeMarkdown.has_value()) {
+    throw std::runtime_error("replaceBlockRange requires an end block id.");
+  }
+
+  const size_t firstIndex = findBlockIndex(transaction.blockId);
+  const size_t secondIndex = findBlockIndex(*transaction.beforeMarkdown);
+  const size_t rangeStartIndex = std::min(firstIndex, secondIndex);
+  const size_t rangeEndIndex = std::max(firstIndex, secondIndex);
+  const size_t deleteCount = rangeEndIndex - rangeStartIndex + 1;
+  const bool hasReplacement = transaction.markdown.has_value();
+  const bool hasPreviousBlock = rangeStartIndex > 0;
+  const bool hasNextBlock = rangeEndIndex + 1 < blocks_.size();
+
+  size_t sourceStart = blocks_[rangeStartIndex].markdownStart;
+  size_t sourceEnd = blocks_[rangeEndIndex].markdownEnd;
+  std::string replacementSource;
+  if (hasReplacement) {
+    replacementSource = *transaction.markdown;
+    if (hasNextBlock) {
+      sourceEnd = std::min(sourceText_.size(), sourceEnd + lineEnding_.size());
+      replacementSource += lineEnding_;
+    }
+  } else if (hasNextBlock) {
+    sourceEnd = std::min(sourceText_.size(), sourceEnd + lineEnding_.size());
+  } else if (hasPreviousBlock) {
+    sourceStart = sourceStart >= lineEnding_.size() ? sourceStart - lineEnding_.size() : 0;
+  }
+
+  std::vector<std::string> retiredBlockIds;
+  retiredBlockIds.reserve(deleteCount);
+  for (size_t index = rangeStartIndex; index <= rangeEndIndex; index += 1) {
+    retiredBlockIds.push_back(blocks_[index].id);
+  }
+
+  const size_t oldRangeSize = sourceEnd - sourceStart;
+  replaceSourceRange(sourceStart, sourceEnd, replacementSource);
+
+  std::vector<MarkdownBlockRange> insertedBlocks;
+  std::vector<std::optional<std::string>> insertedMarkdownCache;
+  if (hasReplacement || (!hasPreviousBlock && !hasNextBlock)) {
+    const std::string markdown = transaction.markdown.value_or("");
+    size_t lineStart = 0;
+    while (lineStart <= markdown.size()) {
+      size_t lineEnd = markdown.find('\n', lineStart);
+      if (lineEnd == std::string::npos) {
+        lineEnd = markdown.size();
+      }
+      size_t markdownEnd = lineEnd;
+      if (markdownEnd > lineStart && markdown[markdownEnd - 1] == '\r') {
+        markdownEnd -= 1;
+      }
+
+      const std::string blockMarkdown = markdown.substr(lineStart, markdownEnd - lineStart);
+      const size_t blockSourceStart = sourceStart + lineStart;
+      MarkdownBlockRange replacementBlock;
+      replacementBlock.id = nextBlockId();
+      replacementBlock.index = rangeStartIndex + insertedBlocks.size();
+      replacementBlock.markdownStart = blockSourceStart;
+      replacementBlock.markdownEnd = blockSourceStart + blockMarkdown.size();
+      replacementBlock.contentStart = replacementBlock.markdownStart;
+      replacementBlock.contentEnd = replacementBlock.markdownEnd;
+      replacementBlock.type = MarkdownBlockType::Paragraph;
+      replacementBlock.textRevision = revision_ + 1;
+      insertedBlocks.push_back(std::move(replacementBlock));
+      insertedMarkdownCache.push_back(blockMarkdown);
+
+      if (lineEnd >= markdown.size()) {
+        break;
+      }
+      lineStart = lineEnd + 1;
+    }
+  }
+
+  const size_t insertedCount = insertedBlocks.size();
+  blocks_.erase(
+      blocks_.begin() + static_cast<long long>(rangeStartIndex),
+      blocks_.begin() + static_cast<long long>(rangeEndIndex + 1));
+  markdownCache_.erase(
+      markdownCache_.begin() + static_cast<long long>(rangeStartIndex),
+      markdownCache_.begin() + static_cast<long long>(rangeEndIndex + 1));
+  blocks_.insert(
+      blocks_.begin() + static_cast<long long>(rangeStartIndex),
+      std::make_move_iterator(insertedBlocks.begin()),
+      std::make_move_iterator(insertedBlocks.end()));
+  markdownCache_.insert(
+      markdownCache_.begin() + static_cast<long long>(rangeStartIndex),
+      std::make_move_iterator(insertedMarkdownCache.begin()),
+      std::make_move_iterator(insertedMarkdownCache.end()));
+
+  const long long delta = static_cast<long long>(replacementSource.size()) - static_cast<long long>(oldRangeSize);
+  shiftBlocksAfter(rangeStartIndex + insertedCount, delta);
+  renumberBlocks(rangeStartIndex);
+  revision_ += 1;
+  timing_.sourceBytes = static_cast<double>(sourceText_.size());
+
+  std::vector<size_t> changedBlockIndices;
+  changedBlockIndices.reserve(insertedCount);
+  for (size_t index = 0; index < insertedCount; index += 1) {
+    changedBlockIndices.push_back(rangeStartIndex + index);
+  }
+  return makeTransactionResult(rangeStartIndex, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::makeTransactionResult(

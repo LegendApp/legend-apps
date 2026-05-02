@@ -142,7 +142,16 @@ export const nativeMarkdownDocumentAdapter: MarkdownDocumentAdapter = {
 
   async applyTransaction(documentId: string, transaction: MarkdownTransaction): Promise<MarkdownTransactionResult> {
     const session = getSession(documentId);
-    const result = toTransactionResult(session.nativeDocument.applyTransaction(transaction));
+    const nativeTransaction =
+      transaction.type === "replaceBlockRange"
+        ? {
+            type: transaction.type,
+            blockId: transaction.startBlockId,
+            beforeMarkdown: transaction.endBlockId,
+            markdown: transaction.markdown,
+          }
+        : transaction;
+    const result = toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
     cacheBlocks(session, result.changedBlocks);
     for (const retiredBlockId of result.retiredBlockIds) {
       session.blocksById.delete(retiredBlockId);

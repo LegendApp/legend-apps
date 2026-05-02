@@ -39,6 +39,12 @@ export type MarkdownTransaction =
       blockId: string;
       beforeMarkdown: string;
       afterMarkdown: string;
+    }
+  | {
+      type: "replaceBlockRange";
+      startBlockId: string;
+      endBlockId: string;
+      markdown?: string;
     };
 
 export type MarkdownTransactionResult = {

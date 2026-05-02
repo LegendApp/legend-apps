@@ -1,8 +1,60 @@
+diff --git a/node_modules/react-native-enriched-markdown/.bun-tag-1f250493bd7b2dff b/.bun-tag-1f250493bd7b2dff
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
-index 9227b78..4f0fa77 100644
+index 9227b789cfcfd1c68ae253ae1a7cb6c65ed26092..4999ee673e281f3d851213cf3ddc956a754ae88d 100644
 --- a/ios/EnrichedMarkdown.mm
 +++ b/ios/EnrichedMarkdown.mm
-@@ -740,7 +740,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
+@@ -1,5 +1,6 @@
+ #import "EnrichedMarkdown.h"
+ #import "ContextMenuUtils.h"
++#import <React/RCTLog.h>
+ #import "ENRMImageAttachment.h"
+ #import "ENRMMarkdownParser.h"
+ #import "ENRMTextRenderer.h"
+@@ -485,6 +486,9 @@ - (ENRMRenderResult *)renderTextSegment:(EMTextSegment *)textSegment
+ 
+ - (EnrichedMarkdownInternalText *)createTextViewForRenderedSegment:(ENRMRenderResult *)segment
+ {
++  NSLog(@"%lld [block-selection-debug-native] rendered createTextViewForRenderedSegment loaded",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++  RCTLogWarn(@"[block-selection-debug-native] rendered createTextViewForRenderedSegment loaded");
+   EnrichedMarkdownInternalText *view = [[EnrichedMarkdownInternalText alloc] initWithConfig:_config];
+   view.spoilerOverlay = _spoilerOverlay;
+   view.allowTrailingMargin = _allowTrailingMargin;
+@@ -522,6 +526,31 @@ - (EnrichedMarkdownInternalText *)createTextViewForRenderedSegment:(ENRMRenderRe
+     return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, segmentMarkdown, strongSelf->_config,
+                                      @[ baseMenu ], customItems);
+   }];
++  [view setSelectionDragOutsideHandler:^(NSString *direction, CGFloat windowX, CGFloat windowY) {
++    NSLog(@"%lld [block-selection-debug-native] rendered block emitSelectionDragOutside direction=%@ window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), direction, windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] rendered block emitSelectionDragOutside direction=%@ window=(%.1f,%.1f)",
++               direction, windowX, windowY);
++    EnrichedMarkdown *strongSelf = weakSelf;
++    if (!strongSelf) {
++      NSLog(@"%lld [block-selection-debug-native] rendered block emitSelectionDragOutside missingSelf",
++            (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++      RCTLogWarn(@"[block-selection-debug-native] rendered block emitSelectionDragOutside missingSelf");
++      return;
++    }
++    auto eventEmitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(strongSelf->_eventEmitter);
++    if (eventEmitter) {
++      eventEmitter->onSelectionDragOutside({
++          .direction = std::string([direction UTF8String] ?: ""),
++          .windowX = windowX,
++          .windowY = windowY,
++      });
++    } else {
++      NSLog(@"%lld [block-selection-debug-native] rendered block emitSelectionDragOutside missingEmitter",
++            (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++      RCTLogWarn(@"[block-selection-debug-native] rendered block emitSelectionDragOutside missingEmitter");
++    }
++  }];
+ #endif
+ 
+   return view;
+@@ -740,7 +769,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
              if (eventEmitter) {
                eventEmitter->onTaskListItemPress({
                    .index = (int)index,
@@ -12,10 +64,50 @@ index 9227b78..4f0fa77 100644
                });
              }
 diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
-index 239e435..442fff5 100644
+index 239e435add583462dea7659b6ee88defbee508ad..62a070566d3f451dc173952f5771e93064010288 100644
 --- a/ios/EnrichedMarkdownText.mm
 +++ b/ios/EnrichedMarkdownText.mm
-@@ -524,7 +524,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
+@@ -1,6 +1,7 @@
+ #import "EnrichedMarkdownText.h"
+ #import "CodeBlockBackground.h"
+ #import "ContextMenuUtils.h"
++#import <React/RCTLog.h>
+ #import "ENRMContextMenuTextView+macOS.h"
+ #import "ENRMImageAttachment.h"
+ #import "ENRMMarkdownParser.h"
+@@ -201,6 +202,31 @@ - (void)setupTextView
+     return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, strongSelf->_cachedMarkdown,
+                                      strongSelf->_config, @[ baseMenu ], customItems);
+   };
++  ((ENRMContextMenuTextView *)_textView).selectionDragOutsideHandler = ^(NSString *direction, CGFloat windowX, CGFloat windowY) {
++    NSLog(@"%lld [block-selection-debug-native] rendered text emitSelectionDragOutside direction=%@ window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), direction, windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] rendered text emitSelectionDragOutside direction=%@ window=(%.1f,%.1f)",
++               direction, windowX, windowY);
++    EnrichedMarkdownText *strongSelf = weakSelf;
++    if (!strongSelf) {
++      NSLog(@"%lld [block-selection-debug-native] rendered text emitSelectionDragOutside missingSelf",
++            (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++      RCTLogWarn(@"[block-selection-debug-native] rendered text emitSelectionDragOutside missingSelf");
++      return;
++    }
++    auto eventEmitter = std::static_pointer_cast<EnrichedMarkdownTextEventEmitter const>(strongSelf->_eventEmitter);
++    if (eventEmitter) {
++      eventEmitter->onSelectionDragOutside({
++          .direction = std::string([direction UTF8String] ?: ""),
++          .windowX = windowX,
++          .windowY = windowY,
++      });
++    } else {
++      NSLog(@"%lld [block-selection-debug-native] rendered text emitSelectionDragOutside missingEmitter",
++            (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++      RCTLogWarn(@"[block-selection-debug-native] rendered text emitSelectionDragOutside missingEmitter");
++    }
++  };
+ #endif
+ 
+   ENRMTapRecognizer *tapRecognizer = [[ENRMTapRecognizer alloc] initWithTarget:self action:@selector(textTapped:)];
+@@ -524,7 +550,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
              if (eventEmitter) {
                eventEmitter->onTaskListItemPress({
                    .index = (int)index,
@@ -24,8 +116,133 @@ index 239e435..442fff5 100644
                    .text = std::string([itemText UTF8String] ?: ""),
                });
              }
+diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
+index ea444f1e0a1fea13834967873ec584afaeb91b57..ba9417c4d987f276b953bbf4ca007abfc93ae59f 100644
+--- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
++++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
+@@ -54,6 +54,17 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
+ }
+ 
+ 
++void EnrichedMarkdownEventEmitter::onSelectionDragOutside(OnSelectionDragOutside event) const {
++  dispatchEvent("selectionDragOutside", [event=std::move(event)](jsi::Runtime &runtime) {
++    auto payload = jsi::Object(runtime);
++    payload.setProperty(runtime, "direction", event.direction);
++    payload.setProperty(runtime, "windowX", event.windowX);
++    payload.setProperty(runtime, "windowY", event.windowY);
++    return payload;
++  });
++}
++
++
+ void EnrichedMarkdownTextInputEventEmitter::onChangeText(OnChangeText event) const {
+   dispatchEvent("changeText", [event=std::move(event)](jsi::Runtime &runtime) {
+     auto payload = jsi::Object(runtime);
+@@ -82,6 +93,17 @@ payload.setProperty(runtime, "end", event.end);
+ }
+ 
+ 
++void EnrichedMarkdownTextInputEventEmitter::onSelectionDragOutside(OnSelectionDragOutside event) const {
++  dispatchEvent("selectionDragOutside", [event=std::move(event)](jsi::Runtime &runtime) {
++    auto payload = jsi::Object(runtime);
++    payload.setProperty(runtime, "direction", event.direction);
++    payload.setProperty(runtime, "windowX", event.windowX);
++    payload.setProperty(runtime, "windowY", event.windowY);
++    return payload;
++  });
++}
++
++
+ void EnrichedMarkdownTextInputEventEmitter::onChangeState(OnChangeState event) const {
+   dispatchEvent("changeState", [event=std::move(event)](jsi::Runtime &runtime) {
+     auto payload = jsi::Object(runtime);
+@@ -271,4 +293,15 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
+   });
+ }
+ 
++
++void EnrichedMarkdownTextEventEmitter::onSelectionDragOutside(OnSelectionDragOutside event) const {
++  dispatchEvent("selectionDragOutside", [event=std::move(event)](jsi::Runtime &runtime) {
++    auto payload = jsi::Object(runtime);
++    payload.setProperty(runtime, "direction", event.direction);
++    payload.setProperty(runtime, "windowX", event.windowX);
++    payload.setProperty(runtime, "windowY", event.windowY);
++    return payload;
++  });
++}
++
+ } // namespace facebook::react
+diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h
+index 797de6a25adafb12ef6a8d407b527e740cc92351..74cfb4083ad4a5c72d72c659570a6b247844d8d4 100644
+--- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h
++++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h
+@@ -37,6 +37,12 @@ class EnrichedMarkdownEventEmitter : public ViewEventEmitter {
+     int selectionStart;
+     int selectionEnd;
+     };
++
++  struct OnSelectionDragOutside {
++      std::string direction;
++    double windowX;
++    double windowY;
++    };
+   void onLinkPress(OnLinkPress value) const;
+ 
+   void onLinkLongPress(OnLinkLongPress value) const;
+@@ -44,6 +50,8 @@ class EnrichedMarkdownEventEmitter : public ViewEventEmitter {
+   void onTaskListItemPress(OnTaskListItemPress value) const;
+ 
+   void onContextMenuItemPress(OnContextMenuItemPress value) const;
++
++  void onSelectionDragOutside(OnSelectionDragOutside value) const;
+ };
+ class EnrichedMarkdownTextInputEventEmitter : public ViewEventEmitter {
+  public:
+@@ -62,6 +70,12 @@ class EnrichedMarkdownTextInputEventEmitter : public ViewEventEmitter {
+     int end;
+     };
+ 
++  struct OnSelectionDragOutside {
++      std::string direction;
++    double windowX;
++    double windowY;
++    };
++
+   struct OnChangeStateBold {
+       bool isActive;
+     };
+@@ -176,6 +190,8 @@ class EnrichedMarkdownTextInputEventEmitter : public ViewEventEmitter {
+ 
+   void onChangeSelection(OnChangeSelection value) const;
+ 
++  void onSelectionDragOutside(OnSelectionDragOutside value) const;
++
+   void onChangeState(OnChangeState value) const;
+ 
+   void onInputFocus(OnInputFocus value) const;
+@@ -216,6 +232,12 @@ class EnrichedMarkdownTextEventEmitter : public ViewEventEmitter {
+     int selectionStart;
+     int selectionEnd;
+     };
++
++  struct OnSelectionDragOutside {
++      std::string direction;
++    double windowX;
++    double windowY;
++    };
+   void onLinkPress(OnLinkPress value) const;
+ 
+   void onLinkLongPress(OnLinkLongPress value) const;
+@@ -223,5 +245,7 @@ class EnrichedMarkdownTextEventEmitter : public ViewEventEmitter {
+   void onTaskListItemPress(OnTaskListItemPress value) const;
+ 
+   void onContextMenuItemPress(OnContextMenuItemPress value) const;
++
++  void onSelectionDragOutside(OnSelectionDragOutside value) const;
+ };
+ } // namespace facebook::react
 diff --git a/ios/input/ENRMInputFormatter.h b/ios/input/ENRMInputFormatter.h
-index dfd6c3f..eb09489 100644
+index dfd6c3f9c1fe224660deece9cdf62be9fc5b9219..eb09489d20ec176eb5d49a5ad4b6301d28464afa 100644
 --- a/ios/input/ENRMInputFormatter.h
 +++ b/ios/input/ENRMInputFormatter.h
 @@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
@@ -33,11 +250,11 @@ index dfd6c3f..eb09489 100644
  @property (nonatomic, strong) UIFont *baseFont;
  @property (nonatomic, strong) RCTUIColor *baseTextColor;
 +@property (nonatomic, assign) CGFloat baseLineHeight;
-
+ 
  /// Bold — color override (nil = inherit baseTextColor)
  @property (nonatomic, strong, nullable) RCTUIColor *boldColor;
 diff --git a/ios/input/ENRMInputFormatter.mm b/ios/input/ENRMInputFormatter.mm
-index b81743b..f211ab0 100644
+index b81743b7c47f467a70738238dd0ad967ef938f84..f211ab0067bb97029116dacbb054a82c2eefaf55 100644
 --- a/ios/input/ENRMInputFormatter.mm
 +++ b/ios/input/ENRMInputFormatter.mm
 @@ -17,6 +17,7 @@ - (instancetype)init
@@ -57,7 +274,7 @@ index b81743b..f211ab0 100644
    copy.italicColor = _italicColor;
    copy.linkColor = _linkColor;
 @@ -119,6 +121,14 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
-
+ 
    [textStorage addAttribute:NSFontAttributeName value:style.baseFont range:fullTextRange];
    [textStorage addAttribute:NSForegroundColorAttributeName value:style.baseTextColor range:fullTextRange];
 +  if (style.baseLineHeight > 0) {
@@ -71,21 +288,283 @@ index b81743b..f211ab0 100644
    [textStorage removeAttribute:NSUnderlineStyleAttributeName range:fullTextRange];
    [textStorage removeAttribute:NSStrikethroughStyleAttributeName range:fullTextRange];
    [textStorage removeAttribute:NSBackgroundColorAttributeName range:fullTextRange];
+diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
+index 187cf5b49638c1fe8e35cb70bcd64ab22cb1bab1..cc356f1bb49005bd1a3dc1408a2492af8e996667 100644
+--- a/ios/input/ENRMInputTextView.mm
++++ b/ios/input/ENRMInputTextView.mm
+@@ -1,5 +1,6 @@
+ #import "ENRMInputTextView.h"
+ #import "EnrichedMarkdownTextInput.h"
++#import <React/RCTLog.h>
+ #if TARGET_OS_OSX
+ #import "EnrichedMarkdownTextInput+Internal.h"
+ #endif
+@@ -83,6 +84,12 @@ - (void)layoutSubviews
+ 
+ #else // TARGET_OS_OSX
+ 
++@interface ENRMInputTextView ()
++@property (nonatomic, strong) NSTimer *enrmSelectionDragTimer;
++@property (nonatomic, assign) BOOL enrmSelectionDragOutsideEmitted;
++@property (nonatomic, assign) NSPoint enrmLastSelectionDragWindowPoint;
++@end
++
+ @implementation ENRMInputTextView
+ 
+ - (void)copy:(id)sender
+@@ -149,12 +156,105 @@ - (BOOL)acceptsFirstResponder
+ 
+ - (void)mouseDown:(NSEvent *)event
+ {
++  NSLog(@"%lld [block-selection-debug-native] input mouseDown selected=%@ point=(%.1f,%.1f)",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000), NSStringFromRange(self.selectedRange),
++        event.locationInWindow.x, event.locationInWindow.y);
++  RCTLogWarn(@"[block-selection-debug-native] input mouseDown selected=%@ point=(%.1f,%.1f)",
++             NSStringFromRange(self.selectedRange), event.locationInWindow.x, event.locationInWindow.y);
+   if (self.window != nil) {
+     [self.window makeFirstResponder:self];
+   }
++  [self enrmStartSelectionDragPolling];
+   [super mouseDown:event];
+ }
+ 
++- (CGFloat)enrmTopOriginWindowYForWindowPoint:(NSPoint)windowPoint
++{
++  NSView *contentView = self.window.contentView;
++  if (contentView == nil) {
++    return windowPoint.y;
++  }
++  return NSHeight(contentView.bounds) - windowPoint.y;
++}
++
++- (void)enrmStartSelectionDragPolling
++{
++  [self enrmStopSelectionDragPolling];
++  self.enrmSelectionDragOutsideEmitted = NO;
++  self.enrmLastSelectionDragWindowPoint = self.window.mouseLocationOutsideOfEventStream;
++  __weak ENRMInputTextView *weakSelf = self;
++  self.enrmSelectionDragTimer = [NSTimer timerWithTimeInterval:0.016
++                                                       repeats:YES
++                                                         block:^(__unused NSTimer *timer) {
++                                                           [weakSelf enrmPollSelectionDrag];
++                                                         }];
++  [[NSRunLoop currentRunLoop] addTimer:self.enrmSelectionDragTimer forMode:NSEventTrackingRunLoopMode];
++  [[NSRunLoop currentRunLoop] addTimer:self.enrmSelectionDragTimer forMode:NSRunLoopCommonModes];
++  RCTLogWarn(@"[block-selection-debug-native] input dragPoll start");
++}
++
++- (void)enrmStopSelectionDragPolling
++{
++  [self.enrmSelectionDragTimer invalidate];
++  self.enrmSelectionDragTimer = nil;
++}
++
++- (void)enrmPollSelectionDrag
++{
++  if ((NSEvent.pressedMouseButtons & 1) == 0 || self.window == nil) {
++    if (self.enrmSelectionDragOutsideEmitted && self.markdownTextInput != nil) {
++      CGFloat windowX = self.enrmLastSelectionDragWindowPoint.x;
++      CGFloat windowY = [self enrmTopOriginWindowYForWindowPoint:self.enrmLastSelectionDragWindowPoint];
++      RCTLogWarn(@"[block-selection-debug-native] input dragEnd window=(%.1f,%.1f)", windowX, windowY);
++      [self.markdownTextInput emitSelectionDragOutsideWithDirection:@"end" windowX:windowX windowY:windowY];
++    }
++    [self enrmStopSelectionDragPolling];
++    return;
++  }
++
++  [self enrmHandleSelectionDragAtWindowPoint:self.window.mouseLocationOutsideOfEventStream source:@"poll"];
++}
++
++- (void)mouseDragged:(NSEvent *)event
++{
++  [super mouseDragged:event];
++  [self enrmHandleSelectionDragAtWindowPoint:event.locationInWindow source:@"mouseDragged"];
++}
++
++- (void)enrmHandleSelectionDragAtWindowPoint:(NSPoint)windowPoint source:(NSString *)source
++{
++  self.enrmLastSelectionDragWindowPoint = windowPoint;
++  NSLog(@"%lld [block-selection-debug-native] input %@ selected=%@ point=(%.1f,%.1f) bounds=%@",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000), source, NSStringFromRange(self.selectedRange),
++        windowPoint.x, windowPoint.y, NSStringFromRect([self convertRect:self.bounds toView:nil]));
++  RCTLogWarn(@"[block-selection-debug-native] input %@ selected=%@ point=(%.1f,%.1f) bounds=%@", source,
++             NSStringFromRange(self.selectedRange), windowPoint.x, windowPoint.y,
++             NSStringFromRect([self convertRect:self.bounds toView:nil]));
++  if (self.markdownTextInput == nil || self.selectedRange.length == 0) {
++    return;
++  }
++
++  NSRect boundsInWindow = [self convertRect:self.bounds toView:nil];
++  CGFloat pointerY = windowPoint.y;
++  CGFloat windowX = windowPoint.x;
++  CGFloat windowY = [self enrmTopOriginWindowYForWindowPoint:windowPoint];
++  if (pointerY < NSMinY(boundsInWindow)) {
++    self.enrmSelectionDragOutsideEmitted = YES;
++    NSLog(@"%lld [block-selection-debug-native] input dragOutside direction=down window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] input dragOutside direction=down window=(%.1f,%.1f)", windowX,
++               windowY);
++    [self.markdownTextInput emitSelectionDragOutsideWithDirection:@"down" windowX:windowX windowY:windowY];
++  } else if (pointerY > NSMaxY(boundsInWindow)) {
++    self.enrmSelectionDragOutsideEmitted = YES;
++    NSLog(@"%lld [block-selection-debug-native] input dragOutside direction=up window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] input dragOutside direction=up window=(%.1f,%.1f)", windowX,
++               windowY);
++    [self.markdownTextInput emitSelectionDragOutsideWithDirection:@"up" windowX:windowX windowY:windowY];
++  }
++}
++
+ - (NSMenu *)menuForEvent:(NSEvent *)event
+ {
+   NSMenu *menu = [super menuForEvent:event];
+diff --git a/ios/input/EnrichedMarkdownTextInput+Internal.h b/ios/input/EnrichedMarkdownTextInput+Internal.h
+index f02ae612dc15fb369eaef4d3bedda31049517e21..5e048dac88b368f5f5be3fab0122b8caafa57809 100644
+--- a/ios/input/EnrichedMarkdownTextInput+Internal.h
++++ b/ios/input/EnrichedMarkdownTextInput+Internal.h
+@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
+ 
+ #if TARGET_OS_OSX
+ - (NSMenu *)enrichedMenuForEvent:(NSEvent *)event defaultMenu:(NSMenu *)menu textView:(NSTextView *)textView;
++- (void)emitSelectionDragOutsideWithDirection:(NSString *)direction windowX:(CGFloat)windowX windowY:(CGFloat)windowY;
+ #endif
+ 
+ @end
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 96969e8..b6e9458 100644
+index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..e748643ee15e16562fdc8a7ee5f3089a839e2935 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -331,7 +331,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
-
+@@ -1,5 +1,6 @@
+ #import "EnrichedMarkdownTextInput.h"
+ #import "ContextMenuUtils.h"
++#import <React/RCTLog.h>
+ #import "ENRMAutoLinkDetector.h"
+ #import "ENRMDetectorPipeline.h"
+ #import "ENRMFormattingRange.h"
+@@ -41,6 +42,12 @@ - (void)applyFormatting;
+ - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
+ - (void)resetBaseTypingAttributes;
+ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
++#if TARGET_OS_OSX
++- (void)startSelectionDragPolling;
++- (void)stopSelectionDragPolling;
++- (void)pollSelectionDrag;
++- (void)handleSelectionDragAtWindowPoint:(NSPoint)windowPoint source:(NSString *)source;
++#endif
+ @end
+ 
+ @implementation EnrichedMarkdownTextInput {
+@@ -71,6 +78,7 @@ @implementation EnrichedMarkdownTextInput {
+ 
+ #if TARGET_OS_OSX
+   NSScrollView *_scrollView;
++  NSTimer *_selectionDragTimer;
+ #endif
+ 
+   NSArray<NSString *> *_contextMenuItemTexts;
+@@ -148,6 +156,9 @@ - (void)setupTextView
+ #endif
+   inputTextView.markdownTextInput = self;
+   _textView = inputTextView;
++  NSLog(@"%lld [block-selection-debug-native] input setupTextView loaded",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++  RCTLogWarn(@"[block-selection-debug-native] input setupTextView loaded");
+   ENRMConfigureMarkdownTextInputTextView(_textView);
+ #if !TARGET_OS_OSX
+   _textView.adjustsFontForContentSizeCategory = YES;
+@@ -331,7 +342,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+ 
      [self resetBaseTypingAttributes];
-
+ 
 -    if (_formattingStore.allRanges.count > 0) {
 +    if (_textView.textStorage.length > 0) {
        [self applyFormatting];
      }
-
-@@ -514,10 +514,17 @@ - (void)pasteMarkdown:(NSString *)markdown
-
+ 
+@@ -419,9 +430,81 @@ - (BOOL)mouseDownCanMoveWindow
+ - (void)mouseDown:(NSEvent *)event
+ {
+   [self.window makeFirstResponder:_textView];
++  [self startSelectionDragPolling];
+   [_textView mouseDown:event];
+ }
+ 
++- (CGFloat)topOriginWindowYForWindowPoint:(NSPoint)windowPoint
++{
++  NSView *contentView = self.window.contentView;
++  if (contentView == nil) {
++    return windowPoint.y;
++  }
++  return NSHeight(contentView.bounds) - windowPoint.y;
++}
++
++- (void)startSelectionDragPolling
++{
++  [self stopSelectionDragPolling];
++  __weak EnrichedMarkdownTextInput *weakSelf = self;
++  _selectionDragTimer = [NSTimer timerWithTimeInterval:0.016
++                                               repeats:YES
++                                                 block:^(__unused NSTimer *timer) {
++                                                   [weakSelf pollSelectionDrag];
++                                                 }];
++  [[NSRunLoop currentRunLoop] addTimer:_selectionDragTimer forMode:NSEventTrackingRunLoopMode];
++  [[NSRunLoop currentRunLoop] addTimer:_selectionDragTimer forMode:NSRunLoopCommonModes];
++  RCTLogWarn(@"[block-selection-debug-native] input host dragPoll start");
++}
++
++- (void)stopSelectionDragPolling
++{
++  [_selectionDragTimer invalidate];
++  _selectionDragTimer = nil;
++}
++
++- (void)pollSelectionDrag
++{
++  if ((NSEvent.pressedMouseButtons & 1) == 0 || self.window == nil) {
++    [self stopSelectionDragPolling];
++    return;
++  }
++
++  [self handleSelectionDragAtWindowPoint:self.window.mouseLocationOutsideOfEventStream source:@"hostPoll"];
++}
++
++- (void)handleSelectionDragAtWindowPoint:(NSPoint)windowPoint source:(NSString *)source
++{
++  NSRange selectedRange = _textView.selectedRange;
++  NSLog(@"%lld [block-selection-debug-native] input %@ selected=%@ point=(%.1f,%.1f) bounds=%@",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000), source, NSStringFromRange(selectedRange),
++        windowPoint.x, windowPoint.y, NSStringFromRect([self convertRect:self.bounds toView:nil]));
++  RCTLogWarn(@"[block-selection-debug-native] input %@ selected=%@ point=(%.1f,%.1f) bounds=%@", source,
++             NSStringFromRange(selectedRange), windowPoint.x, windowPoint.y,
++             NSStringFromRect([self convertRect:self.bounds toView:nil]));
++  if (selectedRange.length == 0) {
++    return;
++  }
++
++  NSRect boundsInWindow = [self convertRect:self.bounds toView:nil];
++  CGFloat pointerY = windowPoint.y;
++  CGFloat windowX = windowPoint.x;
++  CGFloat windowY = [self topOriginWindowYForWindowPoint:windowPoint];
++  if (pointerY < NSMinY(boundsInWindow)) {
++    NSLog(@"%lld [block-selection-debug-native] input host dragOutside direction=down window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] input host dragOutside direction=down window=(%.1f,%.1f)", windowX,
++               windowY);
++    [self emitSelectionDragOutsideWithDirection:@"down" windowX:windowX windowY:windowY];
++  } else if (pointerY > NSMaxY(boundsInWindow)) {
++    NSLog(@"%lld [block-selection-debug-native] input host dragOutside direction=up window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] input host dragOutside direction=up window=(%.1f,%.1f)", windowX,
++               windowY);
++    [self emitSelectionDragOutsideWithDirection:@"up" windowX:windowX windowY:windowY];
++  }
++}
++
+ #endif
+ 
+ #if !TARGET_OS_OSX
+@@ -514,10 +597,17 @@ - (void)pasteMarkdown:(NSString *)markdown
+ 
  - (void)resetBaseTypingAttributes
  {
 -  ENRMSetDefaultTypingAttributes(_textView, @{
@@ -102,11 +581,40 @@ index 96969e8..b6e9458 100644
 +  }
 +  ENRMSetDefaultTypingAttributes(_textView, attrs);
  }
-
+ 
  - (void)applyFormatting
-@@ -914,12 +921,12 @@ - (void)emitOnChangeState
+@@ -884,6 +974,28 @@ - (void)emitOnChangeSelection
+   });
+ }
+ 
++#if TARGET_OS_OSX
++- (void)emitSelectionDragOutsideWithDirection:(NSString *)direction windowX:(CGFloat)windowX windowY:(CGFloat)windowY
++{
++  NSLog(@"%lld [block-selection-debug-native] input emitSelectionDragOutside direction=%@ window=(%.1f,%.1f)",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000), direction, windowX, windowY);
++  RCTLogWarn(@"[block-selection-debug-native] input emitSelectionDragOutside direction=%@ window=(%.1f,%.1f)",
++             direction, windowX, windowY);
++  auto emitter = [self getEventEmitter];
++  if (emitter == nullptr) {
++    NSLog(@"%lld [block-selection-debug-native] input emitSelectionDragOutside missingEmitter",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000));
++    RCTLogWarn(@"[block-selection-debug-native] input emitSelectionDragOutside missingEmitter");
++    return;
++  }
++  emitter->onSelectionDragOutside({
++      .direction = std::string([direction UTF8String] ?: ""),
++      .windowX = windowX,
++      .windowY = windowY,
++  });
++}
++#endif
++
+ - (void)emitOnChangeState
+ {
+   auto emitter = [self getEventEmitter];
+@@ -914,12 +1026,12 @@ - (void)emitOnChangeState
    _prevState.initialized = YES;
-
+ 
    emitter->onChangeState({
 -      .bold = {.isActive = boldActive},
 -      .italic = {.isActive = italicActive},
@@ -122,8 +630,8 @@ index 96969e8..b6e9458 100644
 +      .link = {.isActive = static_cast<bool>(linkActive)},
    });
  }
-
-@@ -988,12 +995,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
+ 
+@@ -988,12 +1100,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
        .selectionEnd = static_cast<int>(NSMaxRange(selectedRange)),
        .styleState =
            {
@@ -142,7 +650,7 @@ index 96969e8..b6e9458 100644
            },
    });
  }
-@@ -1149,6 +1156,12 @@ - (void)manageSelectionBasedChanges
+@@ -1149,6 +1261,12 @@ - (void)manageSelectionBasedChanges
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -156,13 +664,13 @@ index 96969e8..b6e9458 100644
        }
      }
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index fd76ab3..a35502d 100644
+index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..a35502d1ec3d5b0c52d8351bbfb9eae74920c77d 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
 @@ -63,6 +63,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
      changed = YES;
    }
-
+ 
 +  if (newProps.lineHeight != oldProps.lineHeight) {
 +    style.baseLineHeight = newProps.lineHeight > 0 ? newProps.lineHeight : 0;
 +    changed = YES;
@@ -171,3 +679,599 @@ index fd76ab3..a35502d 100644
    if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
      if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
        style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
+diff --git a/ios/views/ENRMContextMenuTextView+macOS.h b/ios/views/ENRMContextMenuTextView+macOS.h
+index 58d865a40ea3d93a4be5255f2fceec9628a3a50c..1a5abb608915f01daaa8f88fa4ed40776d49fa46 100644
+--- a/ios/views/ENRMContextMenuTextView+macOS.h
++++ b/ios/views/ENRMContextMenuTextView+macOS.h
+@@ -5,12 +5,14 @@
+ #import "ENRMUIKit.h"
+ 
+ typedef NSMenu *_Nullable (^ENRMContextMenuProvider)(NSMenu *baseMenu, NSTextView *textView);
++typedef void (^ENRMSelectionDragOutsideHandler)(NSString *direction, CGFloat windowX, CGFloat windowY);
+ 
+ /// macOS-only ENRMPlatformTextView subclass that manages context menus
+ /// and text deselection across sibling text views.
+ @interface ENRMContextMenuTextView : ENRMPlatformTextView <NSMenuDelegate>
+ 
+ @property (nonatomic, copy, nullable) ENRMContextMenuProvider contextMenuProvider;
++@property (nonatomic, copy, nullable) ENRMSelectionDragOutsideHandler selectionDragOutsideHandler;
+ 
+ @end
+ 
+diff --git a/ios/views/ENRMContextMenuTextView+macOS.m b/ios/views/ENRMContextMenuTextView+macOS.m
+index 3da7fe63229a552292bf616e3bddb17b0ed534ca..d800db396621e5c13778d6dd2d6c2be904f4725f 100644
+--- a/ios/views/ENRMContextMenuTextView+macOS.m
++++ b/ios/views/ENRMContextMenuTextView+macOS.m
+@@ -1,8 +1,13 @@
+ #import "ENRMContextMenuTextView+macOS.h"
++#import <React/RCTLog.h>
+ #include <TargetConditionals.h>
+ 
+ #if TARGET_OS_OSX
+ 
++@interface ENRMContextMenuTextView ()
++@property (nonatomic, strong) NSTimer *enrmSelectionDragTimer;
++@end
++
+ @implementation ENRMContextMenuTextView
+ 
+ - (NSScrollView *)enclosingScrollView
+@@ -30,7 +35,13 @@ - (void)deselectAllInContainer
+ 
+ - (void)mouseDown:(NSEvent *)event
+ {
++  NSLog(@"%lld [block-selection-debug-native] rendered mouseDown selected=%@ point=(%.1f,%.1f)",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000), NSStringFromRange(self.selectedRange),
++        event.locationInWindow.x, event.locationInWindow.y);
++  RCTLogWarn(@"[block-selection-debug-native] rendered mouseDown selected=%@ point=(%.1f,%.1f)",
++             NSStringFromRange(self.selectedRange), event.locationInWindow.x, event.locationInWindow.y);
+   [self deselectAllInContainer];
++  [self enrmStartSelectionDragPolling];
+   [super mouseDown:event];
+ 
+   if (self.selectedRange.length > 0) {
+@@ -48,6 +59,82 @@ - (void)rightMouseDown:(NSEvent *)event
+   [super rightMouseDown:event];
+ }
+ 
++- (CGFloat)enrmTopOriginWindowYForWindowPoint:(NSPoint)windowPoint
++{
++  NSView *contentView = self.window.contentView;
++  if (contentView == nil) {
++    return windowPoint.y;
++  }
++  return NSHeight(contentView.bounds) - windowPoint.y;
++}
++
++- (void)enrmStartSelectionDragPolling
++{
++  [self enrmStopSelectionDragPolling];
++  __weak ENRMContextMenuTextView *weakSelf = self;
++  self.enrmSelectionDragTimer = [NSTimer timerWithTimeInterval:0.016
++                                                       repeats:YES
++                                                         block:^(__unused NSTimer *timer) {
++                                                           [weakSelf enrmPollSelectionDrag];
++                                                         }];
++  [[NSRunLoop currentRunLoop] addTimer:self.enrmSelectionDragTimer forMode:NSEventTrackingRunLoopMode];
++  [[NSRunLoop currentRunLoop] addTimer:self.enrmSelectionDragTimer forMode:NSRunLoopCommonModes];
++  RCTLogWarn(@"[block-selection-debug-native] rendered dragPoll start");
++}
++
++- (void)enrmStopSelectionDragPolling
++{
++  [self.enrmSelectionDragTimer invalidate];
++  self.enrmSelectionDragTimer = nil;
++}
++
++- (void)enrmPollSelectionDrag
++{
++  if ((NSEvent.pressedMouseButtons & 1) == 0 || self.window == nil) {
++    [self enrmStopSelectionDragPolling];
++    return;
++  }
++
++  [self enrmHandleSelectionDragAtWindowPoint:self.window.mouseLocationOutsideOfEventStream source:@"poll"];
++}
++
++- (void)mouseDragged:(NSEvent *)event
++{
++  [super mouseDragged:event];
++  [self enrmHandleSelectionDragAtWindowPoint:event.locationInWindow source:@"mouseDragged"];
++}
++
++- (void)enrmHandleSelectionDragAtWindowPoint:(NSPoint)windowPoint source:(NSString *)source
++{
++  NSLog(@"%lld [block-selection-debug-native] rendered %@ selected=%@ point=(%.1f,%.1f) bounds=%@",
++        (long long)(NSDate.date.timeIntervalSince1970 * 1000), source, NSStringFromRange(self.selectedRange),
++        windowPoint.x, windowPoint.y, NSStringFromRect([self convertRect:self.bounds toView:nil]));
++  RCTLogWarn(@"[block-selection-debug-native] rendered %@ selected=%@ point=(%.1f,%.1f) bounds=%@", source,
++             NSStringFromRange(self.selectedRange), windowPoint.x, windowPoint.y,
++             NSStringFromRect([self convertRect:self.bounds toView:nil]));
++  if (self.selectionDragOutsideHandler == nil || self.selectedRange.length == 0) {
++    return;
++  }
++
++  NSRect boundsInWindow = [self convertRect:self.bounds toView:nil];
++  CGFloat pointerY = windowPoint.y;
++  CGFloat windowX = windowPoint.x;
++  CGFloat windowY = [self enrmTopOriginWindowYForWindowPoint:windowPoint];
++  if (pointerY < NSMinY(boundsInWindow)) {
++    NSLog(@"%lld [block-selection-debug-native] rendered dragOutside direction=down window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] rendered dragOutside direction=down window=(%.1f,%.1f)", windowX,
++               windowY);
++    self.selectionDragOutsideHandler(@"down", windowX, windowY);
++  } else if (pointerY > NSMaxY(boundsInWindow)) {
++    NSLog(@"%lld [block-selection-debug-native] rendered dragOutside direction=up window=(%.1f,%.1f)",
++          (long long)(NSDate.date.timeIntervalSince1970 * 1000), windowX, windowY);
++    RCTLogWarn(@"[block-selection-debug-native] rendered dragOutside direction=up window=(%.1f,%.1f)", windowX,
++               windowY);
++    self.selectionDragOutsideHandler(@"up", windowX, windowY);
++  }
++}
++
+ - (NSMenu *)menuForEvent:(NSEvent *)event
+ {
+   NSMenu *baseMenu = [super menuForEvent:event];
+diff --git a/ios/views/EnrichedMarkdownInternalText.h b/ios/views/EnrichedMarkdownInternalText.h
+index 2bc6e14eee98ab506369037665652073d13f4fbf..e40dffa48c5892cbbb359163969316c579a13de3 100644
+--- a/ios/views/EnrichedMarkdownInternalText.h
++++ b/ios/views/EnrichedMarkdownInternalText.h
+@@ -35,6 +35,7 @@ NS_ASSUME_NONNULL_BEGIN
+ 
+ #if TARGET_OS_OSX
+ - (void)setContextMenuProvider:(ENRMContextMenuProvider)provider;
++- (void)setSelectionDragOutsideHandler:(ENRMSelectionDragOutsideHandler)handler;
+ #endif
+ 
+ @end
+diff --git a/ios/views/EnrichedMarkdownInternalText.m b/ios/views/EnrichedMarkdownInternalText.m
+index cdb8a0b53cc4b97c3fe8e1ae8e03d426f79cf9d4..809cb30af766a8ac887c1005b792a487dc9f5890 100644
+--- a/ios/views/EnrichedMarkdownInternalText.m
++++ b/ios/views/EnrichedMarkdownInternalText.m
+@@ -155,6 +155,11 @@ - (void)setContextMenuProvider:(ENRMContextMenuProvider)provider
+ {
+   ((ENRMContextMenuTextView *)_textView).contextMenuProvider = provider;
+ }
++
++- (void)setSelectionDragOutsideHandler:(ENRMSelectionDragOutsideHandler)handler
++{
++  ((ENRMContextMenuTextView *)_textView).selectionDragOutsideHandler = handler;
++}
+ #endif
+ 
+ @end
+diff --git a/lib/module/EnrichedMarkdownNativeComponent.ts b/lib/module/EnrichedMarkdownNativeComponent.ts
+index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858bc05e75af 100644
+--- a/lib/module/EnrichedMarkdownNativeComponent.ts
++++ b/lib/module/EnrichedMarkdownNativeComponent.ts
+@@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
+   selectionEnd: CodegenTypes.Int32;
+ }
+ 
++export interface SelectionDragOutsideEvent {
++  direction: string;
++  windowX: CodegenTypes.Float;
++  windowY: CodegenTypes.Float;
++}
++
+ /**
+  * MD4C parser flags configuration.
+  * Controls how the markdown parser interprets certain syntax.
+@@ -322,6 +328,7 @@ export interface NativeProps extends ViewProps {
+    * Receives the item label, the currently selected text, and the selection range.
+    */
+   onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
++  onSelectionDragOutside?: CodegenTypes.BubblingEventHandler<SelectionDragOutsideEvent>;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
+diff --git a/lib/module/EnrichedMarkdownTextInput.js b/lib/module/EnrichedMarkdownTextInput.js
+index 4b01cfc89e57bd956eb897f3924aa00dd470e1bc..7b26538992186a7bfa5e203c242f79a67741e688 100644
+--- a/lib/module/EnrichedMarkdownTextInput.js
++++ b/lib/module/EnrichedMarkdownTextInput.js
+@@ -28,6 +28,7 @@ export const EnrichedMarkdownTextInput = ({
+   onChangeText,
+   onChangeMarkdown,
+   onChangeSelection,
++  onSelectionDragOutside,
+   onChangeState,
+   onCaretRectChange,
+   onLinkDetected,
+@@ -101,6 +102,14 @@ export const EnrichedMarkdownTextInput = ({
+       end
+     });
+   }, [onChangeSelection]);
++  const handleSelectionDragOutside = useCallback(e => {
++    const event = "nativeEvent" in e ? e.nativeEvent : e;
++    onSelectionDragOutside?.({
++      direction: event.direction,
++      windowX: event.windowX,
++      windowY: event.windowY
++    });
++  }, [onSelectionDragOutside]);
+   const handleChangeState = useCallback(e => {
+     const {
+       bold,
+@@ -242,6 +251,7 @@ export const EnrichedMarkdownTextInput = ({
+     onChangeText: handleChangeText,
+     onChangeMarkdown: handleChangeMarkdown,
+     onChangeSelection: handleChangeSelection,
++    onSelectionDragOutside: handleSelectionDragOutside,
+     onChangeState: handleChangeState,
+     onLinkDetected: handleLinkDetected,
+     onInputFocus: handleFocus,
+diff --git a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
+index d9368251ce5a49f785fd6572963d470f6fb107be..278c73148581ae5882f3ff8fb703eacfb0b3d596 100644
+--- a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
++++ b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
+@@ -42,6 +42,12 @@ export interface OnChangeSelectionEvent {
+   end: CodegenTypes.Int32;
+ }
+ 
++export interface OnSelectionDragOutsideEvent {
++  direction: string;
++  windowX: CodegenTypes.Float;
++  windowY: CodegenTypes.Float;
++}
++
+ export interface OnChangeStateEvent {
+   bold: { isActive: boolean };
+   italic: { isActive: boolean };
+@@ -186,6 +192,7 @@ export interface NativeProps extends ViewProps {
+   onChangeText?: CodegenTypes.DirectEventHandler<OnChangeTextEvent>;
+   onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
+   onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
++  onSelectionDragOutside?: CodegenTypes.DirectEventHandler<OnSelectionDragOutsideEvent>;
+   onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
+   onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+   onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+diff --git a/lib/module/EnrichedMarkdownTextNativeComponent.ts b/lib/module/EnrichedMarkdownTextNativeComponent.ts
+index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc78219326 100644
+--- a/lib/module/EnrichedMarkdownTextNativeComponent.ts
++++ b/lib/module/EnrichedMarkdownTextNativeComponent.ts
+@@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
+   selectionEnd: CodegenTypes.Int32;
+ }
+ 
++export interface SelectionDragOutsideEvent {
++  direction: string;
++  windowX: CodegenTypes.Float;
++  windowY: CodegenTypes.Float;
++}
++
+ /**
+  * MD4C parser flags configuration.
+  * Controls how the markdown parser interprets certain syntax.
+@@ -321,6 +327,7 @@ export interface NativeProps extends ViewProps {
+    * Receives the item label, the currently selected text, and the selection range.
+    */
+   onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
++  onSelectionDragOutside?: CodegenTypes.BubblingEventHandler<SelectionDragOutsideEvent>;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('EnrichedMarkdownText', {
+diff --git a/lib/module/native/EnrichedMarkdownText.js b/lib/module/native/EnrichedMarkdownText.js
+index 490b5670a6c3424123ec88dd51b088be845fee53..a5ef20db99dc36e6801851c0b712dd4bd8641f70 100644
+--- a/lib/module/native/EnrichedMarkdownText.js
++++ b/lib/module/native/EnrichedMarkdownText.js
+@@ -26,6 +26,7 @@ export const EnrichedMarkdownText = ({
+   streamingAnimation = false,
+   spoilerOverlay = 'particles',
+   contextMenuItems,
++  onSelectionDragOutside,
+   ...rest
+ }) => {
+   const normalizedStyleRef = useRef(null);
+@@ -98,6 +99,9 @@ export const EnrichedMarkdownText = ({
+       text
+     });
+   }, [onTaskListItemPress]);
++  const handleSelectionDragOutside = useCallback(e => {
++    onSelectionDragOutside?.(e.nativeEvent);
++  }, [onSelectionDragOutside]);
+   const sharedProps = {
+     markdown,
+     markdownStyle: normalizedStyle,
+@@ -115,6 +119,7 @@ export const EnrichedMarkdownText = ({
+     style: containerStyle,
+     contextMenuItems: nativeContextMenuItems,
+     onContextMenuItemPress: handleContextMenuItemPress,
++    onSelectionDragOutside: handleSelectionDragOutside,
+     ...rest
+   };
+   if (flavor === 'github') {
+diff --git a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
+index fb360242782f2b1acfc242c87fba0c332c1251ef..cc3ee8ae0cacef521956936533c16ad96c1be570 100644
+--- a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
++++ b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
+@@ -96,6 +96,11 @@ export interface EnrichedMarkdownTextInputProps {
+         start: number;
+         end: number;
+     }) => void;
++    onSelectionDragOutside?: (event: {
++        direction: string;
++        windowX: number;
++        windowY: number;
++    }) => void;
+     onChangeState?: (state: StyleState) => void;
+     onCaretRectChange?: (rect: CaretRect) => void;
+     onLinkDetected?: (event: OnLinkDetected) => void;
+@@ -104,6 +109,6 @@ export interface EnrichedMarkdownTextInputProps {
+     contextMenuItems?: ContextMenuItem[];
+     linkRegex?: RegExp | null;
+ }
+-export declare const EnrichedMarkdownTextInput: ({ ref, markdownStyle, style, defaultValue, placeholder, placeholderTextColor, editable, autoFocus, scrollEnabled, autoCapitalize, multiline, cursorColor, selectionColor, onChangeText, onChangeMarkdown, onChangeSelection, onChangeState, onCaretRectChange, onLinkDetected, onFocus, onBlur, contextMenuItems, linkRegex: _linkRegex, }: EnrichedMarkdownTextInputProps) => import("react/jsx-runtime").JSX.Element;
++export declare const EnrichedMarkdownTextInput: ({ ref, markdownStyle, style, defaultValue, placeholder, placeholderTextColor, editable, autoFocus, scrollEnabled, autoCapitalize, multiline, cursorColor, selectionColor, onChangeText, onChangeMarkdown, onChangeSelection, onSelectionDragOutside, onChangeState, onCaretRectChange, onLinkDetected, onFocus, onBlur, contextMenuItems, linkRegex: _linkRegex, }: EnrichedMarkdownTextInputProps) => import("react/jsx-runtime").JSX.Element;
+ export default EnrichedMarkdownTextInput;
+ //# sourceMappingURL=EnrichedMarkdownTextInput.d.ts.map
+diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
+index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..b87f10eca96c1275405ab93dd15e09841a6e11ea 100644
+--- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
++++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
+@@ -29,6 +29,11 @@ export interface OnChangeSelectionEvent {
+     start: CodegenTypes.Int32;
+     end: CodegenTypes.Int32;
+ }
++export interface OnSelectionDragOutsideEvent {
++    direction: string;
++    windowX: CodegenTypes.Float;
++    windowY: CodegenTypes.Float;
++}
+ export interface OnChangeStateEvent {
+     bold: {
+         isActive: boolean;
+@@ -182,6 +187,7 @@ export interface NativeProps extends ViewProps {
+     onChangeText?: CodegenTypes.DirectEventHandler<OnChangeTextEvent>;
+     onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
+     onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
++    onSelectionDragOutside?: CodegenTypes.DirectEventHandler<OnSelectionDragOutsideEvent>;
+     onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
+     onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+     onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+diff --git a/lib/typescript/src/types/MarkdownTextProps.d.ts b/lib/typescript/src/types/MarkdownTextProps.d.ts
+index b912aa6e663c5312565e4611801c820a737c68ae..cd5cfc961c4fb285ca8602803d5c4951318900ca 100644
+--- a/lib/typescript/src/types/MarkdownTextProps.d.ts
++++ b/lib/typescript/src/types/MarkdownTextProps.d.ts
+@@ -1,6 +1,6 @@
+ import type { ViewProps, ViewStyle, TextStyle } from 'react-native';
+ import type { MarkdownStyle, Md4cFlags } from './MarkdownStyle';
+-import type { LinkPressEvent, LinkLongPressEvent, TaskListItemPressEvent } from './events';
++import type { LinkPressEvent, LinkLongPressEvent, SelectionDragOutsideEvent, TaskListItemPressEvent } from './events';
+ /**
+  * Public context menu item. Each item includes a JS-side `onPress` callback
+  * that is called when the user taps the item in the selection context menu.
+@@ -66,6 +66,7 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+      * @platform ios, android, web
+      */
+     onTaskListItemPress?: (event: TaskListItemPressEvent) => void;
++    onSelectionDragOutside?: (event: SelectionDragOutsideEvent) => void;
+     /**
+      * Controls whether the system link preview is shown on long press (iOS only).
+      *
+diff --git a/lib/typescript/src/types/events.d.ts b/lib/typescript/src/types/events.d.ts
+index 0b620239dbb0835552e5db32f454e43fd30aa03e..8dc3bd262353eca16e6eaf1833d4166449df7e81 100644
+--- a/lib/typescript/src/types/events.d.ts
++++ b/lib/typescript/src/types/events.d.ts
+@@ -26,4 +26,9 @@ export interface OnContextMenuItemPressEvent {
+     selectionStart: number;
+     selectionEnd: number;
+ }
++export interface SelectionDragOutsideEvent {
++    direction: string;
++    windowX: number;
++    windowY: number;
++}
+ //# sourceMappingURL=events.d.ts.map
+diff --git a/src/EnrichedMarkdownNativeComponent.ts b/src/EnrichedMarkdownNativeComponent.ts
+index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858bc05e75af 100644
+--- a/src/EnrichedMarkdownNativeComponent.ts
++++ b/src/EnrichedMarkdownNativeComponent.ts
+@@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
+   selectionEnd: CodegenTypes.Int32;
+ }
+ 
++export interface SelectionDragOutsideEvent {
++  direction: string;
++  windowX: CodegenTypes.Float;
++  windowY: CodegenTypes.Float;
++}
++
+ /**
+  * MD4C parser flags configuration.
+  * Controls how the markdown parser interprets certain syntax.
+@@ -322,6 +328,7 @@ export interface NativeProps extends ViewProps {
+    * Receives the item label, the currently selected text, and the selection range.
+    */
+   onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
++  onSelectionDragOutside?: CodegenTypes.BubblingEventHandler<SelectionDragOutsideEvent>;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
+diff --git a/src/EnrichedMarkdownTextInput.tsx b/src/EnrichedMarkdownTextInput.tsx
+index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78b45cedb1 100644
+--- a/src/EnrichedMarkdownTextInput.tsx
++++ b/src/EnrichedMarkdownTextInput.tsx
+@@ -12,6 +12,7 @@ import EnrichedMarkdownTextInputNativeComponent, {
+   type OnChangeTextEvent,
+   type OnChangeMarkdownEvent,
+   type OnChangeSelectionEvent,
++  type OnSelectionDragOutsideEvent,
+   type OnChangeStateEvent,
+   type OnRequestMarkdownResultEvent,
+   type OnRequestCaretRectResultEvent,
+@@ -114,6 +115,11 @@ export interface EnrichedMarkdownTextInputProps {
+   onChangeText?: (text: string) => void;
+   onChangeMarkdown?: (markdown: string) => void;
+   onChangeSelection?: (selection: { start: number; end: number }) => void;
++  onSelectionDragOutside?: (event: {
++    direction: string;
++    windowX: number;
++    windowY: number;
++  }) => void;
+   onChangeState?: (state: StyleState) => void;
+   onCaretRectChange?: (rect: CaretRect) => void;
+   onLinkDetected?: (event: OnLinkDetected) => void;
+@@ -154,6 +160,7 @@ export const EnrichedMarkdownTextInput = ({
+   onChangeText,
+   onChangeMarkdown,
+   onChangeSelection,
++  onSelectionDragOutside,
+   onChangeState,
+   onCaretRectChange,
+   onLinkDetected,
+@@ -241,6 +248,18 @@ export const EnrichedMarkdownTextInput = ({
+     [onChangeSelection]
+   );
+ 
++  const handleSelectionDragOutside = useCallback(
++    (e: NativeSyntheticEvent<OnSelectionDragOutsideEvent> | OnSelectionDragOutsideEvent) => {
++      const event = "nativeEvent" in e ? e.nativeEvent : e;
++      onSelectionDragOutside?.({
++        direction: event.direction,
++        windowX: event.windowX,
++        windowY: event.windowY,
++      });
++    },
++    [onSelectionDragOutside]
++  );
++
+   const handleChangeState = useCallback(
+     (e: NativeSyntheticEvent<OnChangeStateEvent>) => {
+       const { bold, italic, underline, strikethrough, spoiler, link } =
+@@ -378,6 +397,9 @@ export const EnrichedMarkdownTextInput = ({
+       onChangeSelection={
+         handleChangeSelection as NativeProps['onChangeSelection']
+       }
++      onSelectionDragOutside={
++        handleSelectionDragOutside as NativeProps['onSelectionDragOutside']
++      }
+       onChangeState={handleChangeState as NativeProps['onChangeState']}
+       onLinkDetected={handleLinkDetected as NativeProps['onLinkDetected']}
+       onInputFocus={handleFocus as NativeProps['onInputFocus']}
+diff --git a/src/EnrichedMarkdownTextInputNativeComponent.ts b/src/EnrichedMarkdownTextInputNativeComponent.ts
+index d9368251ce5a49f785fd6572963d470f6fb107be..278c73148581ae5882f3ff8fb703eacfb0b3d596 100644
+--- a/src/EnrichedMarkdownTextInputNativeComponent.ts
++++ b/src/EnrichedMarkdownTextInputNativeComponent.ts
+@@ -42,6 +42,12 @@ export interface OnChangeSelectionEvent {
+   end: CodegenTypes.Int32;
+ }
+ 
++export interface OnSelectionDragOutsideEvent {
++  direction: string;
++  windowX: CodegenTypes.Float;
++  windowY: CodegenTypes.Float;
++}
++
+ export interface OnChangeStateEvent {
+   bold: { isActive: boolean };
+   italic: { isActive: boolean };
+@@ -186,6 +192,7 @@ export interface NativeProps extends ViewProps {
+   onChangeText?: CodegenTypes.DirectEventHandler<OnChangeTextEvent>;
+   onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
+   onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
++  onSelectionDragOutside?: CodegenTypes.DirectEventHandler<OnSelectionDragOutsideEvent>;
+   onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
+   onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+   onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+diff --git a/src/EnrichedMarkdownTextNativeComponent.ts b/src/EnrichedMarkdownTextNativeComponent.ts
+index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc78219326 100644
+--- a/src/EnrichedMarkdownTextNativeComponent.ts
++++ b/src/EnrichedMarkdownTextNativeComponent.ts
+@@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
+   selectionEnd: CodegenTypes.Int32;
+ }
+ 
++export interface SelectionDragOutsideEvent {
++  direction: string;
++  windowX: CodegenTypes.Float;
++  windowY: CodegenTypes.Float;
++}
++
+ /**
+  * MD4C parser flags configuration.
+  * Controls how the markdown parser interprets certain syntax.
+@@ -321,6 +327,7 @@ export interface NativeProps extends ViewProps {
+    * Receives the item label, the currently selected text, and the selection range.
+    */
+   onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
++  onSelectionDragOutside?: CodegenTypes.BubblingEventHandler<SelectionDragOutsideEvent>;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('EnrichedMarkdownText', {
+diff --git a/src/native/EnrichedMarkdownText.tsx b/src/native/EnrichedMarkdownText.tsx
+index 236c2b7c29fdd7ba080b70b30c4438d166ccbc40..04dcdc275d9940f237e67ff81608015d58b04550 100644
+--- a/src/native/EnrichedMarkdownText.tsx
++++ b/src/native/EnrichedMarkdownText.tsx
+@@ -14,6 +14,7 @@ import type {
+   LinkLongPressEvent,
+   TaskListItemPressEvent,
+   OnContextMenuItemPressEvent,
++  SelectionDragOutsideEvent,
+ } from '../types/events';
+ 
+ export type { MarkdownStyle, Md4cFlags };
+@@ -42,6 +43,7 @@ export const EnrichedMarkdownText = ({
+   streamingAnimation = false,
+   spoilerOverlay = 'particles',
+   contextMenuItems,
++  onSelectionDragOutside,
+   ...rest
+ }: EnrichedMarkdownTextProps) => {
+   const normalizedStyleRef = useRef<MarkdownStyleInternal | null>(null);
+@@ -120,6 +122,13 @@ export const EnrichedMarkdownText = ({
+     [onTaskListItemPress]
+   );
+ 
++  const handleSelectionDragOutside = useCallback(
++    (e: NativeSyntheticEvent<SelectionDragOutsideEvent>) => {
++      onSelectionDragOutside?.(e.nativeEvent);
++    },
++    [onSelectionDragOutside]
++  );
++
+   const sharedProps = {
+     markdown,
+     markdownStyle: normalizedStyle,
+@@ -137,6 +146,7 @@ export const EnrichedMarkdownText = ({
+     style: containerStyle,
+     contextMenuItems: nativeContextMenuItems,
+     onContextMenuItemPress: handleContextMenuItemPress,
++    onSelectionDragOutside: handleSelectionDragOutside,
+     ...rest,
+   };
+ 
+diff --git a/src/types/MarkdownTextProps.ts b/src/types/MarkdownTextProps.ts
+index d450699edd84cd75a6763463ac49e67a99c2841d..4c778f6f2f3ce8a228562f823e3598b5d8b2f77b 100644
+--- a/src/types/MarkdownTextProps.ts
++++ b/src/types/MarkdownTextProps.ts
+@@ -3,6 +3,7 @@ import type { MarkdownStyle, Md4cFlags } from './MarkdownStyle';
+ import type {
+   LinkPressEvent,
+   LinkLongPressEvent,
++  SelectionDragOutsideEvent,
+   TaskListItemPressEvent,
+ } from './events';
+ 
+@@ -69,6 +70,7 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+    * @platform ios, android, web
+    */
+   onTaskListItemPress?: (event: TaskListItemPressEvent) => void;
++  onSelectionDragOutside?: (event: SelectionDragOutsideEvent) => void;
+   /**
+    * Controls whether the system link preview is shown on long press (iOS only).
+    *
+diff --git a/src/types/events.ts b/src/types/events.ts
+index 11f876c7737baf9a472b848eda1d1dad997518da..1943ff1868f32bc27b1e3fd641e6b76212acaf01 100644
+--- a/src/types/events.ts
++++ b/src/types/events.ts
+@@ -30,3 +30,9 @@ export interface OnContextMenuItemPressEvent {
+   selectionStart: number;
+   selectionEnd: number;
+ }
++
++export interface SelectionDragOutsideEvent {
++  direction: string;
++  windowX: number;
++  windowY: number;
++}

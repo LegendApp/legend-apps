@@ -76,6 +76,7 @@ private:
   size_t findBlockIndex(const std::string& blockId) const;
   MarkdownTransactionResult updateBlockMarkdown(const MarkdownTransaction& transaction);
   MarkdownTransactionResult splitBlock(const MarkdownTransaction& transaction);
+  MarkdownTransactionResult replaceBlockRange(const MarkdownTransaction& transaction);
   MarkdownTransactionResult makeTransactionResult(
       size_t startBlockIndex,
       size_t deleteCount,

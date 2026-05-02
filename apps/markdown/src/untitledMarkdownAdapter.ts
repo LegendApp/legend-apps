@@ -56,6 +56,14 @@ function normalizeBlocks(blocks: MarkdownBlockSnapshot[]) {
   });
 }
 
+function createBlocksFromMarkdown(markdown: string, startIndex: number, revision: number) {
+  return markdown.split(/\r?\n/).map((blockMarkdown, offset) => {
+    const block = createBlock(`untitled:block:${nextBlockId}`, startIndex + offset, blockMarkdown, revision);
+    nextBlockId += 1;
+    return block;
+  });
+}
+
 function createState(): UntitledState {
   return {
     blocks: [createBlock("untitled:block:1", 0, "", 0)],
@@ -120,6 +128,40 @@ function applySplitBlock(transaction: Extract<MarkdownTransaction, { type: "spli
   return resultForChange([state.blocks[index], state.blocks[index + 1]], index, 1);
 }
 
+function applyReplaceBlockRange(transaction: Extract<MarkdownTransaction, { type: "replaceBlockRange" }>) {
+  const startIndex = state.blocks.findIndex((block) => block.id === transaction.startBlockId);
+  const endIndex = state.blocks.findIndex((block) => block.id === transaction.endBlockId);
+  if (startIndex < 0) {
+    throw new Error(`Untitled markdown block not found: ${transaction.startBlockId}`);
+  }
+  if (endIndex < 0) {
+    throw new Error(`Untitled markdown block not found: ${transaction.endBlockId}`);
+  }
+
+  const rangeStart = Math.min(startIndex, endIndex);
+  const rangeEnd = Math.max(startIndex, endIndex);
+  const deleteCount = rangeEnd - rangeStart + 1;
+  const retiredBlockIds = state.blocks.slice(rangeStart, rangeEnd + 1).map((block) => block.id);
+  const replacementBlocks =
+    transaction.markdown === undefined
+      ? []
+      : createBlocksFromMarkdown(transaction.markdown, rangeStart, state.revision + 1);
+
+  state.revision += 1;
+  state.blocks = normalizeBlocks([
+    ...state.blocks.slice(0, rangeStart),
+    ...replacementBlocks,
+    ...state.blocks.slice(rangeEnd + 1),
+  ]);
+  let insertedCount = replacementBlocks.length;
+  if (state.blocks.length === 0) {
+    state.blocks = normalizeBlocks([createBlock(`untitled:block:${nextBlockId}`, 0, "", state.revision)]);
+    nextBlockId += 1;
+    insertedCount = 1;
+  }
+  return resultForChange(state.blocks.slice(rangeStart, rangeStart + insertedCount), rangeStart, deleteCount, retiredBlockIds);
+}
+
 export const untitledMarkdownAdapter: MarkdownDocumentAdapter = {
   async load() {
     state = createState();
@@ -160,6 +202,9 @@ export const untitledMarkdownAdapter: MarkdownDocumentAdapter = {
     }
     if (transaction.type === "splitBlock") {
       return applySplitBlock(transaction);
+    }
+    if (transaction.type === "replaceBlockRange") {
+      return applyReplaceBlockRange(transaction);
     }
     throw new Error(`Unsupported untitled markdown transaction: ${(transaction as MarkdownTransaction).type}`);
   },
