@@ -151,6 +151,8 @@ static BOOL isEnrichedMarkdownInput(id view)
   NSString *_activeBlockId;
   NSString *_lastLoadedBlockId;
   BOOL _isPositioningOverlay;
+  NSScrollView *_observedScrollView;
+  id _overlayScrollWheelMonitor;
 }
 
 - (instancetype)init
@@ -158,6 +160,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (self = [super init]) {
     _props = std::make_shared<const MarkdownEditorHostProps>();
     _activationViews = [NSMapTable strongToWeakObjectsMapTable];
+    [self installOverlayScrollWheelMonitorIfNeeded];
   }
   return self;
 }
@@ -198,6 +201,11 @@ static BOOL isEnrichedMarkdownInput(id view)
                                                     name:NSViewFrameDidChangeNotification
                                                   object:_overlayInput];
   }
+  [self stopObservingScrollView];
+  if (_overlayScrollWheelMonitor != nil) {
+    [NSEvent removeMonitor:_overlayScrollWheelMonitor];
+    _overlayScrollWheelMonitor = nil;
+  }
 }
 
 - (void)registerActivationView:(RNMarkdownBlockActivationView *)view
@@ -207,6 +215,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
   [_activationViews setObject:view forKey:view.blockId];
   if (_activeBlockId != nil && [_activeBlockId isEqualToString:view.blockId]) {
+    [self observeScrollViewForBlockView:view];
     [self showOverlayForBlockView:view markdown:view.markdown event:nil loadValue:_lastLoadedBlockId == nil || ![_lastLoadedBlockId isEqualToString:view.blockId]];
   }
 }
@@ -229,6 +238,85 @@ static BOOL isEnrichedMarkdownInput(id view)
     return nil;
   }
   return [_activationViews objectForKey:_activeBlockId];
+}
+
+- (nullable NSScrollView *)scrollViewForBlockView:(RNMarkdownBlockActivationView *)view
+{
+  NSView *ancestor = view.superview;
+  while (ancestor != nil) {
+    if ([ancestor isKindOfClass:NSScrollView.class]) {
+      return (NSScrollView *)ancestor;
+    }
+    ancestor = ancestor.superview;
+  }
+  return nil;
+}
+
+- (void)stopObservingScrollView
+{
+  if (_observedScrollView == nil) {
+    return;
+  }
+  [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                  name:NSViewBoundsDidChangeNotification
+                                                object:_observedScrollView.contentView];
+  _observedScrollView = nil;
+}
+
+- (void)observeScrollViewForBlockView:(RNMarkdownBlockActivationView *)view
+{
+  NSScrollView *scrollView = [self scrollViewForBlockView:view];
+  if (_observedScrollView == scrollView) {
+    return;
+  }
+
+  [self stopObservingScrollView];
+  _observedScrollView = scrollView;
+  if (_observedScrollView == nil) {
+    return;
+  }
+
+  _observedScrollView.contentView.postsBoundsChangedNotifications = YES;
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(activeScrollViewBoundsDidChange:)
+                                               name:NSViewBoundsDidChangeNotification
+                                             object:_observedScrollView.contentView];
+}
+
+- (BOOL)eventIsInsideOverlayInput:(NSEvent *)event
+{
+  if (_overlayInput == nil || _overlayInput.hidden || _overlayInput.window == nil || event.window != _overlayInput.window) {
+    return NO;
+  }
+
+  NSPoint overlayPoint = [_overlayInput convertPoint:event.locationInWindow fromView:nil];
+  return NSPointInRect(overlayPoint, _overlayInput.bounds);
+}
+
+- (void)installOverlayScrollWheelMonitorIfNeeded
+{
+  if (_overlayScrollWheelMonitor != nil) {
+    return;
+  }
+
+  __weak RNMarkdownEditorHost *weakSelf = self;
+  _overlayScrollWheelMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
+                                                                     handler:^NSEvent *_Nullable(NSEvent *event) {
+    RNMarkdownEditorHost *strongSelf = weakSelf;
+    if (strongSelf == nil || ![strongSelf eventIsInsideOverlayInput:event]) {
+      return event;
+    }
+
+    RNMarkdownBlockActivationView *view = [strongSelf activeBlockView];
+    NSScrollView *scrollView = view == nil ? nil : [strongSelf scrollViewForBlockView:view];
+    if (scrollView == nil) {
+      return event;
+    }
+
+    [scrollView scrollWheel:event];
+    [strongSelf positionOverlayForBlockView:view];
+    return nil;
+  }];
 }
 
 - (void)setBlockView:(nullable RNMarkdownBlockActivationView *)view contentsHidden:(BOOL)contentsHidden
@@ -291,6 +379,16 @@ static BOOL isEnrichedMarkdownInput(id view)
   [self positionOverlayForBlockView:view];
 }
 
+- (void)activeScrollViewBoundsDidChange:(NSNotification *)notification
+{
+  RNMarkdownBlockActivationView *view = [self activeBlockView];
+  if (view == nil || _overlayInput == nil || _overlayInput.hidden || _overlayInput.superview == nil) {
+    return;
+  }
+
+  [self positionOverlayForBlockView:view];
+}
+
 - (void)activateBlockView:(RNMarkdownBlockActivationView *)view withEvent:(NSEvent *)event
 {
   if (view.blockId.length == 0 || _overlayInput == nil) {
@@ -303,6 +401,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   _activeBlockId = [view.blockId copy];
   [self setBlockView:view contentsHidden:YES];
+  [self observeScrollViewForBlockView:view];
   [self showOverlayForBlockView:view markdown:view.markdown event:event loadValue:YES];
 
   auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
@@ -353,6 +452,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 {
   _overlayInput.hidden = YES;
   [self showActiveBlockContents];
+  [self stopObservingScrollView];
   _lastLoadedBlockId = nil;
   _activeBlockId = nil;
 }
@@ -374,6 +474,7 @@ static BOOL isEnrichedMarkdownInput(id view)
       [self showActiveBlockContents];
       _activeBlockId = [nextActiveBlockId copy];
       [self setBlockView:view contentsHidden:YES];
+      [self observeScrollViewForBlockView:view];
       [self showOverlayForBlockView:view markdown:markdown event:nil loadValue:YES];
     }
   }
@@ -405,6 +506,7 @@ static BOOL isEnrichedMarkdownInput(id view)
     [self setBlockView:view contentsHidden:NO];
   }
   [_activationViews removeAllObjects];
+  [self stopObservingScrollView];
   _overlayInput = nil;
   _activeBlockId = nil;
   _lastLoadedBlockId = nil;

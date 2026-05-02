@@ -1344,6 +1344,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }),
       [activeBlockId, activeSelection, blocksById],
     );
+    const alwaysRenderActiveBlock = useMemo(
+      () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
+      [activeBlockId],
+    );
     const contentStyle = useMemo(
       () => [styles.contentContainer, contentContainerStyle],
       [contentContainerStyle],
@@ -1441,6 +1445,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           />
         ))}
         <LegendList
+          alwaysRender={alwaysRenderActiveBlock}
           contentContainerStyle={contentStyle}
           data={blockIds}
           estimatedItemSize={estimatedItemSize}
