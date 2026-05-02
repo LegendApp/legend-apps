@@ -218,6 +218,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
   RNMarkdownBlockActivationView *registered = [_activationViews objectForKey:view.blockId];
   if (registered == view) {
+    [self setBlockView:view contentsHidden:NO];
     [_activationViews removeObjectForKey:view.blockId];
   }
 }
@@ -228,6 +229,19 @@ static BOOL isEnrichedMarkdownInput(id view)
     return nil;
   }
   return [_activationViews objectForKey:_activeBlockId];
+}
+
+- (void)setBlockView:(nullable RNMarkdownBlockActivationView *)view contentsHidden:(BOOL)contentsHidden
+{
+  if (view == nil) {
+    return;
+  }
+  [view setContentsHidden:contentsHidden];
+}
+
+- (void)showActiveBlockContents
+{
+  [self setBlockView:[self activeBlockView] contentsHidden:NO];
 }
 
 - (NSRect)overlayFrameForBlockView:(RNMarkdownBlockActivationView *)view
@@ -283,7 +297,12 @@ static BOOL isEnrichedMarkdownInput(id view)
     return;
   }
 
+  if (_activeBlockId != nil && ![_activeBlockId isEqualToString:view.blockId]) {
+    [self showActiveBlockContents];
+  }
+
   _activeBlockId = [view.blockId copy];
+  [self setBlockView:view contentsHidden:YES];
   [self showOverlayForBlockView:view markdown:view.markdown event:event loadValue:YES];
 
   auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
@@ -310,6 +329,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   NSView *overlaySuperview = _overlayInput.superview;
   NSRect frame = [self overlayFrameForBlockView:view];
+  [self setBlockView:view contentsHidden:YES];
   _isPositioningOverlay = YES;
   _overlayInput.frame = frame;
   _overlayInput.hidden = NO;
@@ -331,9 +351,10 @@ static BOOL isEnrichedMarkdownInput(id view)
 
 - (void)hideOverlay
 {
-  _activeBlockId = nil;
-  _lastLoadedBlockId = nil;
   _overlayInput.hidden = YES;
+  [self showActiveBlockContents];
+  _lastLoadedBlockId = nil;
+  _activeBlockId = nil;
 }
 
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
@@ -350,7 +371,9 @@ static BOOL isEnrichedMarkdownInput(id view)
     RNMarkdownBlockActivationView *view = [_activationViews objectForKey:nextActiveBlockId];
     if (view != nil) {
       NSString *markdown = [NSString stringWithUTF8String:newViewProps.activeMarkdown.c_str()];
+      [self showActiveBlockContents];
       _activeBlockId = [nextActiveBlockId copy];
+      [self setBlockView:view contentsHidden:YES];
       [self showOverlayForBlockView:view markdown:markdown event:nil loadValue:YES];
     }
   }
@@ -378,6 +401,9 @@ static BOOL isEnrichedMarkdownInput(id view)
 - (void)prepareForRecycle
 {
   [super prepareForRecycle];
+  for (RNMarkdownBlockActivationView *view in _activationViews.objectEnumerator) {
+    [self setBlockView:view contentsHidden:NO];
+  }
   [_activationViews removeAllObjects];
   _overlayInput = nil;
   _activeBlockId = nil;
@@ -397,6 +423,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
 @implementation RNMarkdownBlockActivationView {
   NSString *_registeredBlockId;
+  BOOL _contentsHidden;
 }
 
 - (instancetype)init
@@ -405,8 +432,32 @@ static BOOL isEnrichedMarkdownInput(id view)
     _props = std::make_shared<const MarkdownBlockActivationViewProps>();
     _blockId = @"";
     _markdown = @"";
+    _contentsHidden = NO;
   }
   return self;
+}
+
+- (void)applyContentsHidden
+{
+  for (NSView *subview in self.subviews) {
+    subview.hidden = _contentsHidden;
+  }
+}
+
+- (void)setContentsHidden:(BOOL)contentsHidden
+{
+  if (_contentsHidden == contentsHidden) {
+    return;
+  }
+  _contentsHidden = contentsHidden;
+  [self applyContentsHidden];
+}
+
+- (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
+                          index:(NSInteger)index
+{
+  [super mountChildComponentView:childComponentView index:index];
+  childComponentView.hidden = _contentsHidden;
 }
 
 - (nullable RNMarkdownEditorHost *)editorHost
@@ -463,11 +514,13 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   NSString *nextBlockId = [NSString stringWithUTF8String:newViewProps.blockId.c_str()];
   if (![_blockId isEqualToString:nextBlockId]) {
+    [self setContentsHidden:NO];
     [self unregisterFromHost];
     _blockId = [nextBlockId copy];
     [self registerWithHostIfNeeded];
   }
   _markdown = [[NSString stringWithUTF8String:newViewProps.markdown.c_str()] copy];
+  [self setContentsHidden:newViewProps.contentsHidden];
 
   [super updateProps:props oldProps:oldProps];
 }
@@ -493,6 +546,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 {
   [self unregisterFromHost];
   [super prepareForRecycle];
+  [self setContentsHidden:NO];
   _blockId = @"";
   _markdown = @"";
 }

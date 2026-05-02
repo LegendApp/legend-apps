@@ -3,6 +3,7 @@ import { codegenNativeComponent } from "react-native";
 
 export interface NativeProps extends ViewProps {
   blockId?: string;
+  contentsHidden?: boolean;
   markdown?: string;
 }
 

@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface RNMarkdownBlockActivationView : RCTViewComponentView
 @property (nonatomic, copy) NSString *blockId;
 @property (nonatomic, copy) NSString *markdown;
+- (void)setContentsHidden:(BOOL)contentsHidden;
 @end
 
 NS_ASSUME_NONNULL_END

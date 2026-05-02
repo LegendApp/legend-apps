@@ -403,6 +403,7 @@ function MarkdownBlockRow({
       <MarkdownBlockActivationView
         ref={rowRef}
         blockId={block.id}
+        contentsHidden={isActive}
         markdown={block.markdown}
         onLayout={(event) => {
           setRowWidth(event.nativeEvent.layout.width);
@@ -850,7 +851,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
       activeBlockIdRef.current = null;
-      setOverlayFrame(undefined);
       setActiveBlockId(null);
       setActiveSelection(0);
     }, [commitActiveBlock]);
