@@ -173,6 +173,53 @@ index 797de6a25adafb12ef6a8d407b527e740cc92351..74cfb4083ad4a5c72d72c659570a6b24
 +  void onSelectionDragOutside(OnSelectionDragOutside value) const;
  };
  } // namespace facebook::react
+diff --git a/ios/input/ENRMInputFormatter.h b/ios/input/ENRMInputFormatter.h
+index dfd6c3f9c1fe224660deece9cdf62be9fc5b9219..eb09489d20ec176eb5d49a5ad4b6301d28464afa 100644
+--- a/ios/input/ENRMInputFormatter.h
++++ b/ios/input/ENRMInputFormatter.h
+@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
+ /// Base text properties
+ @property (nonatomic, strong) UIFont *baseFont;
+ @property (nonatomic, strong) RCTUIColor *baseTextColor;
++@property (nonatomic, assign) CGFloat baseLineHeight;
+
+ /// Bold — color override (nil = inherit baseTextColor)
+ @property (nonatomic, strong, nullable) RCTUIColor *boldColor;
+diff --git a/ios/input/ENRMInputFormatter.mm b/ios/input/ENRMInputFormatter.mm
+index b81743b7c47f467a70738238dd0ad967ef938f84..f211ab0067bb97029116dacbb054a82c2eefaf55 100644
+--- a/ios/input/ENRMInputFormatter.mm
++++ b/ios/input/ENRMInputFormatter.mm
+@@ -17,6 +17,7 @@ - (instancetype)init
+   if (self = [super init]) {
+     _baseFont = [UIFont systemFontOfSize:16.0];
+     _baseTextColor = [RCTUIColor labelColor];
++    _baseLineHeight = 0;
+     _fontCache = [NSMutableDictionary dictionary];
+   }
+   return self;
+@@ -27,6 +28,7 @@ - (id)copyWithZone:(NSZone *)zone
+   ENRMInputFormatterStyle *copy = [[ENRMInputFormatterStyle allocWithZone:zone] init];
+   copy.baseFont = _baseFont;
+   copy.baseTextColor = _baseTextColor;
++  copy.baseLineHeight = _baseLineHeight;
+   copy.boldColor = _boldColor;
+   copy.italicColor = _italicColor;
+   copy.linkColor = _linkColor;
+@@ -119,6 +121,14 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
+
+   [textStorage addAttribute:NSFontAttributeName value:style.baseFont range:fullTextRange];
+   [textStorage addAttribute:NSForegroundColorAttributeName value:style.baseTextColor range:fullTextRange];
++  if (style.baseLineHeight > 0) {
++    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
++    paragraphStyle.minimumLineHeight = style.baseLineHeight;
++    paragraphStyle.maximumLineHeight = style.baseLineHeight;
++    [textStorage addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:fullTextRange];
++  } else {
++    [textStorage removeAttribute:NSParagraphStyleAttributeName range:fullTextRange];
++  }
+   [textStorage removeAttribute:NSUnderlineStyleAttributeName range:fullTextRange];
+   [textStorage removeAttribute:NSStrikethroughStyleAttributeName range:fullTextRange];
+   [textStorage removeAttribute:NSBackgroundColorAttributeName range:fullTextRange];
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
 index 187cf5b49638c1fe8e35cb70bcd64ab22cb1bab1..bd9c89bb67ac07214f0bd1272591cd2a3069852b 100644
 --- a/ios/input/ENRMInputTextView.mm
@@ -291,7 +338,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
        [self applyFormatting];
      }
  
-@@ -514,10 +514,11 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -514,10 +514,17 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  - (void)resetBaseTypingAttributes
  {
@@ -301,11 +348,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
      NSForegroundColorAttributeName : _formatterStyle.baseTextColor,
 -  });
 +  } mutableCopy];
++  if (_formatterStyle.baseLineHeight > 0) {
++    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
++    paragraphStyle.minimumLineHeight = _formatterStyle.baseLineHeight;
++    paragraphStyle.maximumLineHeight = _formatterStyle.baseLineHeight;
++    attrs[NSParagraphStyleAttributeName] = paragraphStyle;
++  }
 +  ENRMSetDefaultTypingAttributes(_textView, attrs);
  }
- 
+
  - (void)applyFormatting
-@@ -884,6 +885,21 @@ - (void)emitOnChangeSelection
+@@ -884,6 +891,21 @@ - (void)emitOnChangeSelection
    });
  }
  
@@ -327,6 +380,35 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
  - (void)emitOnChangeState
  {
    auto emitter = [self getEventEmitter];
+@@ -1142,6 +1164,12 @@ - (void)manageSelectionBasedChanges
+         NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+         attrs[NSFontAttributeName] = _formatterStyle.baseFont;
+         attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
++        if (_formatterStyle.baseLineHeight > 0) {
++          NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
++          paragraphStyle.minimumLineHeight = _formatterStyle.baseLineHeight;
++          paragraphStyle.maximumLineHeight = _formatterStyle.baseLineHeight;
++          attrs[NSParagraphStyleAttributeName] = paragraphStyle;
++        }
+         _textView.typingAttributes = attrs;
+       }
+     }
+diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
+index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..a35502d1ec3d5b0c52d8351bbfb9eae74920c77d 100644
+--- a/ios/input/InputStylePropsUtils.h
++++ b/ios/input/InputStylePropsUtils.h
+@@ -63,6 +63,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+     changed = YES;
+   }
+
++  if (newProps.lineHeight != oldProps.lineHeight) {
++    style.baseLineHeight = newProps.lineHeight > 0 ? newProps.lineHeight : 0;
++    changed = YES;
++  }
++
+   if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
+     if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
+       style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
 diff --git a/ios/views/ENRMContextMenuTextView+macOS.h b/ios/views/ENRMContextMenuTextView+macOS.h
 index 58d865a40ea3d93a4be5255f2fceec9628a3a50c..1a5abb608915f01daaa8f88fa4ed40776d49fa46 100644
 --- a/ios/views/ENRMContextMenuTextView+macOS.h
