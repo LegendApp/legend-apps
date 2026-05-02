@@ -39,15 +39,100 @@ static void callFocus(id target)
   send(target, selector);
 }
 
-static void callMouseDown(id target, NSEvent *event)
+static NSTextView *findTextView(NSView *view)
 {
-  SEL selector = @selector(mouseDown:);
-  if (![target respondsToSelector:selector]) {
+  if ([view isKindOfClass:NSTextView.class]) {
+    return (NSTextView *)view;
+  }
+
+  if ([view isKindOfClass:NSScrollView.class]) {
+    NSView *documentView = ((NSScrollView *)view).documentView;
+    if (documentView != nil) {
+      NSTextView *textView = findTextView(documentView);
+      if (textView != nil) {
+        return textView;
+      }
+    }
+  }
+
+  for (NSView *subview in view.subviews) {
+    NSTextView *textView = findTextView(subview);
+    if (textView != nil) {
+      return textView;
+    }
+  }
+
+  return nil;
+}
+
+static NSUInteger characterIndexForEvent(NSTextView *textView, NSEvent *event)
+{
+  NSPoint pointInTextView = [textView convertPoint:event.locationInWindow fromView:nil];
+  pointInTextView.x -= textView.textContainerInset.width;
+  pointInTextView.y -= textView.textContainerInset.height;
+
+  NSLayoutManager *layoutManager = textView.layoutManager;
+  NSTextContainer *textContainer = textView.textContainer;
+  if (layoutManager == nil || textContainer == nil || layoutManager.numberOfGlyphs == 0) {
+    return textView.string.length;
+  }
+
+  NSUInteger glyphIndex = [layoutManager glyphIndexForPoint:pointInTextView inTextContainer:textContainer];
+  glyphIndex = MIN(glyphIndex, layoutManager.numberOfGlyphs - 1);
+  NSUInteger characterIndex = [layoutManager characterIndexForGlyphAtIndex:glyphIndex];
+  return MIN(characterIndex, textView.string.length);
+}
+
+static NSRange wordRangeAtIndex(NSString *string, NSUInteger index)
+{
+  if (string.length == 0) {
+    return NSMakeRange(0, 0);
+  }
+
+  NSCharacterSet *wordCharacters = [NSCharacterSet alphanumericCharacterSet];
+  NSUInteger clampedIndex = MIN(index, string.length - 1);
+
+  if (![wordCharacters characterIsMember:[string characterAtIndex:clampedIndex]] && clampedIndex > 0) {
+    NSUInteger previousIndex = clampedIndex - 1;
+    if ([wordCharacters characterIsMember:[string characterAtIndex:previousIndex]]) {
+      clampedIndex = previousIndex;
+    }
+  }
+
+  if (![wordCharacters characterIsMember:[string characterAtIndex:clampedIndex]]) {
+    return NSMakeRange(index, 0);
+  }
+
+  NSUInteger start = clampedIndex;
+  while (start > 0 && [wordCharacters characterIsMember:[string characterAtIndex:start - 1]]) {
+    start--;
+  }
+
+  NSUInteger end = clampedIndex + 1;
+  while (end < string.length && [wordCharacters characterIsMember:[string characterAtIndex:end]]) {
+    end++;
+  }
+
+  return NSMakeRange(start, end - start);
+}
+
+static void selectTextForEvent(NSView *view, NSEvent *event)
+{
+  NSTextView *textView = findTextView(view);
+  if (textView == nil) {
+    callFocus(view);
     return;
   }
 
-  void (*send)(id, SEL, NSEvent *) = (void (*)(id, SEL, NSEvent *))[target methodForSelector:selector];
-  send(target, selector, event);
+  [textView.window makeFirstResponder:textView];
+  NSUInteger characterIndex = characterIndexForEvent(textView, event);
+
+  if (event.clickCount >= 2) {
+    textView.selectedRange = wordRangeAtIndex(textView.string, characterIndex);
+    return;
+  }
+
+  textView.selectedRange = NSMakeRange(characterIndex, 0);
 }
 
 static BOOL isEnrichedMarkdownInput(id view)
@@ -63,6 +148,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   NSMapTable<NSString *, RNMarkdownBlockActivationView *> *_activationViews;
   NSString *_activeBlockId;
   NSString *_lastLoadedBlockId;
+  BOOL _isPositioningOverlay;
 }
 
 - (instancetype)init
@@ -82,6 +168,11 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (isEnrichedMarkdownInput(childComponentView)) {
     _overlayInput = childComponentView;
     _overlayInput.hidden = YES;
+    [_overlayInput setPostsFrameChangedNotifications:YES];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(overlayInputFrameDidChange:)
+                                                 name:NSViewFrameDidChangeNotification
+                                               object:_overlayInput];
   }
 }
 
@@ -89,10 +180,22 @@ static BOOL isEnrichedMarkdownInput(id view)
                             index:(NSInteger)index
 {
   if (childComponentView == _overlayInput) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSViewFrameDidChangeNotification
+                                                  object:_overlayInput];
     _overlayInput = nil;
   }
 
   [super unmountChildComponentView:childComponentView index:index];
+}
+
+- (void)dealloc
+{
+  if (_overlayInput != nil) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSViewFrameDidChangeNotification
+                                                  object:_overlayInput];
+  }
 }
 
 - (void)registerActivationView:(RNMarkdownBlockActivationView *)view
@@ -117,6 +220,57 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 }
 
+- (nullable RNMarkdownBlockActivationView *)activeBlockView
+{
+  if (_activeBlockId.length == 0) {
+    return nil;
+  }
+  return [_activationViews objectForKey:_activeBlockId];
+}
+
+- (NSRect)overlayFrameForBlockView:(RNMarkdownBlockActivationView *)view
+{
+  if (_overlayInput == nil || _overlayInput.superview == nil || view.window == nil) {
+    return NSZeroRect;
+  }
+  return [view convertRect:view.bounds toView:_overlayInput.superview];
+}
+
+- (void)positionOverlayForBlockView:(RNMarkdownBlockActivationView *)view
+{
+  if (_overlayInput == nil || _overlayInput.superview == nil || view.window == nil) {
+    return;
+  }
+
+  NSRect frame = [self overlayFrameForBlockView:view];
+  if (NSEqualRects(_overlayInput.frame, frame)) {
+    return;
+  }
+
+  _isPositioningOverlay = YES;
+  _overlayInput.frame = frame;
+  _isPositioningOverlay = NO;
+}
+
+- (void)overlayInputFrameDidChange:(NSNotification *)notification
+{
+  if (_isPositioningOverlay || _overlayInput == nil || _overlayInput.hidden || _activeBlockId.length == 0) {
+    return;
+  }
+
+  RNMarkdownBlockActivationView *view = [self activeBlockView];
+  if (view == nil || _overlayInput.superview == nil) {
+    return;
+  }
+
+  NSRect targetFrame = [self overlayFrameForBlockView:view];
+  if (NSEqualRects(_overlayInput.frame, targetFrame)) {
+    return;
+  }
+
+  [self positionOverlayForBlockView:view];
+}
+
 - (void)activateBlockView:(RNMarkdownBlockActivationView *)view withEvent:(NSEvent *)event
 {
   if (view.blockId.length == 0 || _overlayInput == nil) {
@@ -128,8 +282,16 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
   if (eventEmitter) {
+    NSRect frame = NSZeroRect;
+    if (_overlayInput != nil && _overlayInput.superview != nil && view.window != nil) {
+      frame = [view convertRect:view.bounds toView:_overlayInput.superview];
+    }
     eventEmitter->onBeginEditing({
       .blockId = std::string([view.blockId UTF8String] ?: ""),
+      .height = frame.size.height,
+      .width = frame.size.width,
+      .x = frame.origin.x,
+      .y = frame.origin.y,
     });
   }
 }
@@ -145,8 +307,10 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   NSView *overlaySuperview = _overlayInput.superview;
   NSRect frame = [view convertRect:view.bounds toView:overlaySuperview];
+  _isPositioningOverlay = YES;
   _overlayInput.frame = frame;
   _overlayInput.hidden = NO;
+  _isPositioningOverlay = NO;
   [_overlayInput removeFromSuperview];
   [overlaySuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:nil];
 
@@ -156,7 +320,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 
   if (event != nil) {
-    callMouseDown(_overlayInput, event);
+    selectTextForEvent(_overlayInput, event);
   } else {
     callFocus(_overlayInput);
   }
@@ -201,9 +365,9 @@ static BOOL isEnrichedMarkdownInput(id view)
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
 
   if (_activeBlockId != nil) {
-    RNMarkdownBlockActivationView *view = [_activationViews objectForKey:_activeBlockId];
+    RNMarkdownBlockActivationView *view = [self activeBlockView];
     if (view != nil && _overlayInput != nil && _overlayInput.superview != nil) {
-      _overlayInput.frame = [view convertRect:view.bounds toView:_overlayInput.superview];
+      [self positionOverlayForBlockView:view];
     }
   }
 }
@@ -215,6 +379,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   _overlayInput = nil;
   _activeBlockId = nil;
   _lastLoadedBlockId = nil;
+  _isPositioningOverlay = NO;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider

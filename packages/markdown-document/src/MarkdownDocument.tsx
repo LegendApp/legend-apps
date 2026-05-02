@@ -85,6 +85,13 @@ type BlockLayout = {
   height: number;
 };
 
+type OverlayFrame = {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+};
+
 const estimatedItemSize = 120;
 const hydrateChunkSize = 512;
 const editDebounceMs = 300;
@@ -250,6 +257,7 @@ const MarkdownOverlayEditorInput = memo(
     onBlurRef,
     onChangeMarkdownRef,
     onSelectionDragOutsideRef,
+    overlayFrame,
   }: {
     activeBlock?: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
@@ -257,6 +265,7 @@ const MarkdownOverlayEditorInput = memo(
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
+    overlayFrame?: OverlayFrame;
   }) {
     const activeBlockRef = useLatestRef(activeBlock);
 
@@ -280,7 +289,7 @@ const MarkdownOverlayEditorInput = memo(
           }
         }}
         scrollEnabled={false}
-        style={StyleSheet.flatten([styles.editorInput, styles.overlayEditorInput])}
+        style={StyleSheet.flatten([styles.editorInput, styles.overlayEditorInput, overlayFrame])}
       />
     );
   },
@@ -290,7 +299,11 @@ const MarkdownOverlayEditorInput = memo(
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
-    previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef,
+    previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
+    previousProps.overlayFrame?.height === nextProps.overlayFrame?.height &&
+    previousProps.overlayFrame?.left === nextProps.overlayFrame?.left &&
+    previousProps.overlayFrame?.top === nextProps.overlayFrame?.top &&
+    previousProps.overlayFrame?.width === nextProps.overlayFrame?.width,
 );
 
 function MarkdownBlockRow({
@@ -458,6 +471,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [containerWindowY, setContainerWindowY] = useState(0);
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [layoutVersion, setLayoutVersion] = useState(0);
+    const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
@@ -816,6 +830,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
       activeBlockIdRef.current = null;
+      setOverlayFrame(undefined);
       setActiveBlockId(null);
       setActiveSelection(0);
     }, [commitActiveBlock]);
@@ -999,6 +1014,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setBlockSelection(null);
       setBlockSelectionInputText("");
       setDraftMarkdown("");
+      setOverlayFrame(undefined);
       setNextSaveState("idle");
       onDirtyChangeRef.current?.(false);
 
@@ -1344,9 +1360,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
     const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
     const handleNativeBeginEditing = useCallback(
-      (event: { nativeEvent: { blockId: string } }) => {
-        const block = blocksById.get(event.nativeEvent.blockId);
+      (event: { nativeEvent: { blockId: string; height: number; width: number; x: number; y: number } }) => {
+        const { blockId, height, width, x, y } = event.nativeEvent;
+        const block = blocksById.get(blockId);
         if (block) {
+          setOverlayFrame({
+            height,
+            left: x,
+            top: y,
+            width,
+          });
           activateBlock(block, 0);
         }
       },
@@ -1433,6 +1456,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             onBlurRef={handleEditorBlurRef}
             onChangeMarkdownRef={handleChangeMarkdownRef}
             onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
+            overlayFrame={overlayFrame}
           />
         </MarkdownEditorHost>
       );
@@ -1503,11 +1527,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   overlayEditorInput: {
-    left: 0,
+    left: -10000,
     minHeight: 25,
     position: "absolute",
-    top: 0,
-    width: 1,
+    top: -10000,
+    width: 920,
   },
   renderedText: {
     width: "100%",
