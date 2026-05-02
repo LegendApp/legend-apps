@@ -17,6 +17,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-document": "workspace:*",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/recent-documents": "0.0.0",
@@ -43,6 +44,7 @@
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/glass-effect-view": "0.0.0",
         "@legend-desktop/global-hotkey": "0.0.0",
+        "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-parser": "0.0.0",
         "@legend-desktop/media-library-scanner": "0.0.0",
         "@legend-desktop/media-tags": "0.0.0",
@@ -138,10 +140,20 @@
         "react-native": "*",
       },
     },
+    "packages/markdown-block-editor": {
+      "name": "@legend-desktop/markdown-block-editor",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+        "react-native-enriched-markdown": "*",
+      },
+    },
     "packages/markdown-document": {
       "name": "@legend-desktop/markdown-document",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-parser": "0.0.0",
         "@legendapp/list": "3.0.0-beta.48",
         "react-native-enriched-markdown": "0.5.0",
@@ -560,6 +572,8 @@
     "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+
+    "@legend-desktop/markdown-block-editor": ["@legend-desktop/markdown-block-editor@workspace:packages/markdown-block-editor"],
 
     "@legend-desktop/markdown-document": ["@legend-desktop/markdown-document@workspace:packages/markdown-document"],
 

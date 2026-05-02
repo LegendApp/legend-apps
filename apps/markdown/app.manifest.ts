@@ -12,6 +12,7 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-desktop/file-dialog",
+      "@legend-desktop/markdown-block-editor",
       "@legend-desktop/markdown-parser",
       "@legend-desktop/native-menu",
       "@legend-desktop/recent-documents",

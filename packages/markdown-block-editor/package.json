@@ -1,0 +1,26 @@
+{
+  "name": "@legend-desktop/markdown-block-editor",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNMarkdownBlockEditorSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.markdownblockeditor"
+    },
+    "ios": {
+      "componentProvider": {
+        "MarkdownBlockActivationView": "RNMarkdownBlockActivationView",
+        "MarkdownEditorHost": "RNMarkdownEditorHost"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-enriched-markdown": "*"
+  }
+}

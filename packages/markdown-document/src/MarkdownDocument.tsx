@@ -1,4 +1,5 @@
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import { MarkdownBlockActivationView, MarkdownEditorHost } from "@legend-desktop/markdown-block-editor";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
@@ -8,6 +9,7 @@ import {
 } from "react-native-enriched-markdown";
 import {
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +28,8 @@ import type {
   MarkdownSaveState,
   MarkdownTransactionResult,
 } from "./types";
+
+const usesNativeEditorOverlay = Platform.OS === "macos";
 
 type DocumentState =
   | {
@@ -238,6 +242,57 @@ const MarkdownEditorInput = memo(
     previousProps.rowWidth === nextProps.rowWidth,
 );
 
+const MarkdownOverlayEditorInput = memo(
+  function MarkdownOverlayEditorInput({
+    activeBlock,
+    activeInputRef,
+    markdownStyle,
+    onBlurRef,
+    onChangeMarkdownRef,
+    onSelectionDragOutsideRef,
+  }: {
+    activeBlock?: MarkdownBlockSnapshot;
+    activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
+    markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
+    onBlurRef: RefObject<() => void>;
+    onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
+    onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
+  }) {
+    const activeBlockRef = useLatestRef(activeBlock);
+
+    return (
+      <EnrichedMarkdownTextInput
+        ref={activeInputRef}
+        defaultValue=""
+        markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
+        multiline
+        onBlur={() => onBlurRef.current()}
+        onChangeMarkdown={(markdown) => {
+          const block = activeBlockRef.current;
+          if (block) {
+            onChangeMarkdownRef.current(block, markdown);
+          }
+        }}
+        onSelectionDragOutside={(event) => {
+          const block = activeBlockRef.current;
+          if (block) {
+            onSelectionDragOutsideRef.current(block, normalizeSelectionDragOutsideEvent(event));
+          }
+        }}
+        scrollEnabled={false}
+        style={StyleSheet.flatten([styles.editorInput, styles.overlayEditorInput])}
+      />
+    );
+  },
+  (previousProps, nextProps) =>
+    previousProps.activeBlock?.id === nextProps.activeBlock?.id &&
+    previousProps.activeInputRef === nextProps.activeInputRef &&
+    previousProps.markdownStyle === nextProps.markdownStyle &&
+    previousProps.onBlurRef === nextProps.onBlurRef &&
+    previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
+    previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef,
+);
+
 function MarkdownBlockRow({
   activeInputRef,
   draftMarkdown,
@@ -278,7 +333,7 @@ function MarkdownBlockRow({
     });
   };
 
-  if (isActive) {
+  if (isActive && !usesNativeEditorOverlay) {
     return (
       <View
         ref={rowRef}
@@ -303,6 +358,38 @@ function MarkdownBlockRow({
     );
   }
 
+  const renderedMarkdown = (
+    <EnrichedMarkdownText
+      allowTrailingMargin={false}
+      containerStyle={styles.renderedText}
+      flavor="github"
+      markdown={block.markdown}
+      markdownStyle={markdownStyle}
+      onLinkPress={(event) => {
+        void Linking.openURL(event.url);
+      }}
+      onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block, normalizeSelectionDragOutsideEvent(event))}
+      selectable
+    />
+  );
+
+  if (usesNativeEditorOverlay) {
+    return (
+      <MarkdownBlockActivationView
+        ref={rowRef}
+        blockId={block.id}
+        markdown={block.markdown}
+        onLayout={(event) => {
+          setRowWidth(event.nativeEvent.layout.width);
+          measureWindowLayout();
+        }}
+        style={styles.blockRow}
+      >
+        {renderedMarkdown}
+      </MarkdownBlockActivationView>
+    );
+  }
+
   return (
     <Pressable
       ref={rowRef}
@@ -317,18 +404,7 @@ function MarkdownBlockRow({
       }}
       style={styles.blockRow}
     >
-      <EnrichedMarkdownText
-        allowTrailingMargin={false}
-        containerStyle={styles.renderedText}
-        flavor="github"
-        markdown={block.markdown}
-        markdownStyle={markdownStyle}
-        onLinkPress={(event) => {
-          void Linking.openURL(event.url);
-        }}
-        onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block, normalizeSelectionDragOutsideEvent(event))}
-        selectable
-      />
+      {renderedMarkdown}
     </Pressable>
   );
 }
@@ -1266,6 +1342,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         resolvedMarkdownStyle,
       ],
     );
+    const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
+    const handleNativeBeginEditing = useCallback(
+      (event: { nativeEvent: { blockId: string } }) => {
+        const block = blocksById.get(event.nativeEvent.blockId);
+        if (block) {
+          activateBlock(block, 0);
+        }
+      },
+      [activateBlock, blocksById],
+    );
 
     if (documentState.status === "error") {
       return (
@@ -1287,12 +1373,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       );
     }
 
-    return (
-      <View
-        ref={containerRef}
-        onLayout={measureContainerWindowLayout}
-        style={[styles.container, theme?.backgroundColor ? { backgroundColor: theme.backgroundColor } : null, style]}
-      >
+    const documentContent = (
+      <>
         <TextInput
           ref={blockSelectionInputRef}
           autoCorrect={false}
@@ -1328,6 +1410,41 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           renderItem={renderMarkdownBlockRow}
           style={styles.list}
         />
+      </>
+    );
+
+    const containerStyle = [styles.container, theme?.backgroundColor ? { backgroundColor: theme.backgroundColor } : null, style];
+
+    if (usesNativeEditorOverlay) {
+      return (
+        <MarkdownEditorHost
+          ref={containerRef}
+          activeBlockId={activeBlockId ?? ""}
+          activeMarkdown={activeBlockId ? draftMarkdown : ""}
+          onBeginEditing={handleNativeBeginEditing}
+          onLayout={measureContainerWindowLayout}
+          style={containerStyle}
+        >
+          {documentContent}
+          <MarkdownOverlayEditorInput
+            activeBlock={activeBlock}
+            activeInputRef={activeInputRef}
+            markdownStyle={resolvedMarkdownStyle}
+            onBlurRef={handleEditorBlurRef}
+            onChangeMarkdownRef={handleChangeMarkdownRef}
+            onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
+          />
+        </MarkdownEditorHost>
+      );
+    }
+
+    return (
+      <View
+        ref={containerRef}
+        onLayout={measureContainerWindowLayout}
+        style={containerStyle}
+      >
+        {documentContent}
       </View>
     );
   },
@@ -1384,6 +1501,13 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+  },
+  overlayEditorInput: {
+    left: 0,
+    minHeight: 25,
+    position: "absolute",
+    top: 0,
+    width: 1,
   },
   renderedText: {
     width: "100%",

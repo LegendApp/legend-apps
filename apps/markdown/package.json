@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/markdown-block-editor": "0.0.0",
     "@legend-desktop/markdown-document": "workspace:*",
     "@legend-desktop/native-menu": "0.0.0",
     "@legend-desktop/recent-documents": "0.0.0",

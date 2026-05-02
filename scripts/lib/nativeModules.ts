@@ -98,6 +98,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios"],
   },
   {
+    name: "@legend-desktop/markdown-block-editor",
+    root: path.join(packagesDir, "markdown-block-editor"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-desktop/sf-symbol",
     root: path.join(packagesDir, "sf-symbol"),
     platforms: ["macos", "ios", "android"],

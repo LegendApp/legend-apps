@@ -14,6 +14,7 @@
     "@legend-desktop/file-system-watcher": "0.0.0",
     "@legend-desktop/glass-effect-view": "0.0.0",
     "@legend-desktop/global-hotkey": "0.0.0",
+    "@legend-desktop/markdown-block-editor": "0.0.0",
     "@legend-desktop/markdown-parser": "0.0.0",
     "@legend-desktop/media-library-scanner": "0.0.0",
     "@legend-desktop/media-tags": "0.0.0",
