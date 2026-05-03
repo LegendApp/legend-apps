@@ -29,10 +29,6 @@ const colorVariables = [
   "windowBackground",
 ] as const;
 
-function cssVariableName(colorName: string) {
-  return `--legend-color-${colorName.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}`;
-}
-
 function tailwindColorName(colorName: string) {
   return `--color-${colorName.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}`;
 }
@@ -78,7 +74,7 @@ function validateThemes(themes: LegendThemeFile[]) {
 
 function renderThemeVariables(theme: LegendThemeFile) {
   const variables = colorVariables
-    .map((colorName) => `      ${cssVariableName(colorName)}: ${theme.colors[colorName]};`)
+    .map((colorName) => `      ${tailwindColorName(colorName)}: ${theme.colors[colorName]};`)
     .join("\n");
 
   return `    @variant ${theme.name} {\n${variables}\n    }`;
@@ -91,20 +87,12 @@ if (!themes.some((theme) => theme.name === "light")) {
   throw new Error("Theme files must include light.json.");
 }
 
-const themeAliases = colorVariables
-  .map((colorName) => `  ${tailwindColorName(colorName)}: var(${cssVariableName(colorName)});`)
-  .join("\n");
-
 const css = `@import 'tailwindcss';
 @import 'uniwind';
 
 @source "../../apps";
 @source "../../packages";
 @source "./";
-
-@theme {
-${themeAliases}
-}
 
 @layer theme {
   :root {
