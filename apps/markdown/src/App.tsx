@@ -118,21 +118,18 @@ export function App({ launchArguments }: MarkdownAppProps) {
       title: "Settings",
       windowStyle: {
         backgroundColor: theme.colors.windowBackground,
-        hasToolbar: true,
+        hasToolbar: false,
         height: 560,
         mask: [
           WindowStyleMask.Titled,
           WindowStyleMask.Closable,
           WindowStyleMask.Resizable,
-          WindowStyleMask.FullSizeContentView,
-          WindowStyleMask.UnifiedTitleAndToolbar,
         ],
         minHeight: 420,
         minWidth: 560,
         titlebarAppearsTransparent: false,
         titlebarSeparatorStyle: "line",
         titleVisibility: "visible",
-        toolbarStyle: "unified",
         width: 720,
       },
     });
