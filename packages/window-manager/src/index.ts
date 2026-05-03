@@ -82,6 +82,7 @@ export type WindowStyleOptions = {
   titleVisibility?: "visible" | "hidden";
   toolbarStyle?: "automatic" | "expanded" | "preference" | "unified" | "unifiedCompact";
   titlebarSeparatorStyle?: "automatic" | "none" | "line" | "shadow";
+  backgroundColor?: string;
   hasToolbar?: boolean;
 };
 

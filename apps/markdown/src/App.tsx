@@ -253,9 +253,10 @@ export function App({ launchArguments }: MarkdownAppProps) {
     }
 
     void setMainWindowOptions({
-      representedURL: isUntitledDocument ? null : filename,
-      title: isUntitledDocument ? "Untitled" : undefined,
+      representedURL: null,
+      title: isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename),
       windowStyle: {
+        backgroundColor: "#f5f6f8",
         hasToolbar: false,
         mask: [
           WindowStyleMask.Titled,
@@ -263,8 +264,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
           WindowStyleMask.Miniaturizable,
           WindowStyleMask.Resizable,
         ],
-        titlebarAppearsTransparent: false,
-        titlebarSeparatorStyle: "automatic",
+        titlebarAppearsTransparent: true,
+        titlebarSeparatorStyle: "none",
         titleVisibility: "visible",
       },
     });

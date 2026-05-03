@@ -11,6 +11,7 @@
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
 #import <CoreImage/CoreImage.h>
+#import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #endif
 
@@ -82,10 +83,146 @@ static void LegendApplyTitlebarSeparatorStyle(NSWindow *window, NSString *value)
   }
 }
 
+static NSColor *LegendColorFromHexString(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return nil;
+  }
+
+  NSString *hex = [value hasPrefix:@"#"] ? [value substringFromIndex:1] : value;
+  if (hex.length != 6 && hex.length != 8) {
+    return nil;
+  }
+
+  unsigned long long raw = 0;
+  NSScanner *scanner = [NSScanner scannerWithString:hex];
+  if (![scanner scanHexLongLong:&raw]) {
+    return nil;
+  }
+
+  CGFloat red = 0;
+  CGFloat green = 0;
+  CGFloat blue = 0;
+  CGFloat alpha = 1;
+
+  if (hex.length == 8) {
+    red = ((raw >> 24) & 0xff) / 255.0;
+    green = ((raw >> 16) & 0xff) / 255.0;
+    blue = ((raw >> 8) & 0xff) / 255.0;
+    alpha = (raw & 0xff) / 255.0;
+  } else {
+    red = ((raw >> 16) & 0xff) / 255.0;
+    green = ((raw >> 8) & 0xff) / 255.0;
+    blue = (raw & 0xff) / 255.0;
+  }
+
+  return [NSColor colorWithSRGBRed:red green:green blue:blue alpha:alpha];
+}
+
+static void LegendApplyBackgroundColorToView(NSView *view, NSColor *backgroundColor)
+{
+  view.wantsLayer = YES;
+  view.layer.backgroundColor = backgroundColor.CGColor;
+}
+
+static BOOL LegendViewIsTitlebarContainer(NSView *view)
+{
+  NSString *className = NSStringFromClass(view.class);
+  return [className isEqualToString:@"NSTitlebarContainerView"] ||
+    [className isEqualToString:@"NSTitlebarView"] ||
+    [className isEqualToString:@"NSTitlebarBackgroundView"];
+}
+
+static void LegendApplyTitlebarBackgroundColor(NSView *view, NSColor *backgroundColor)
+{
+  BOOL isTitlebarContainer = LegendViewIsTitlebarContainer(view);
+
+  if (isTitlebarContainer) {
+    LegendApplyBackgroundColorToView(view, backgroundColor);
+  }
+
+  for (NSView *subview in view.subviews) {
+    LegendApplyTitlebarBackgroundColor(subview, backgroundColor);
+  }
+}
+
+static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
+{
+  NSColor *backgroundColor = LegendColorFromHexString(value);
+  if (!backgroundColor) {
+    return;
+  }
+
+  window.backgroundColor = backgroundColor;
+  window.opaque = backgroundColor.alphaComponent >= 1;
+
+  NSView *contentView = window.contentView;
+  if (contentView) {
+    LegendApplyBackgroundColorToView(contentView, backgroundColor);
+  }
+
+  NSView *frameView = contentView.superview;
+  if (frameView) {
+    LegendApplyTitlebarBackgroundColor(frameView, backgroundColor);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSView *currentFrameView = window.contentView.superview;
+      if (currentFrameView) {
+        LegendApplyTitlebarBackgroundColor(currentFrameView, backgroundColor);
+      }
+    });
+  }
+}
+
+static char LegendManagedRootViewKey;
+
+static RCTUIView *LegendManagedRootView(NSWindow *window)
+{
+  id associatedRootView = objc_getAssociatedObject(window, &LegendManagedRootViewKey);
+  if ([associatedRootView isKindOfClass:RCTUIView.class]) {
+    return associatedRootView;
+  }
+
+  if ([window.contentView isKindOfClass:RCTUIView.class]) {
+    return (RCTUIView *)window.contentView;
+  }
+
+  return nil;
+}
+
+static void LegendEnsureRootViewContainer(NSWindow *window, RCTUIView *rootView)
+{
+  if (!window || !rootView || window.contentView != rootView) {
+    return;
+  }
+
+  NSView *containerView = [[NSView alloc] initWithFrame:rootView.frame];
+  containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  containerView.wantsLayer = YES;
+  containerView.layer.backgroundColor = window.backgroundColor.CGColor;
+
+  window.contentView = containerView;
+  [containerView addSubview:rootView];
+  objc_setAssociatedObject(window, &LegendManagedRootViewKey, rootView, OBJC_ASSOCIATION_ASSIGN);
+}
+
+static void LegendApplyContentLayoutMode(NSWindow *window, NSNumber *maskNumber, BOOL usesTitlebarBackground)
+{
+  if (usesTitlebarBackground) {
+    window.styleMask = window.styleMask | NSWindowStyleMaskFullSizeContentView;
+    return;
+  }
+
+  if (maskNumber && (maskNumber.unsignedIntegerValue & NSWindowStyleMaskFullSizeContentView) == 0) {
+    window.styleMask = window.styleMask & ~NSWindowStyleMaskFullSizeContentView;
+  }
+}
+
 static BOOL LegendDictionaryHasKey(NSDictionary *dictionary, NSString *key)
 {
   return [dictionary isKindOfClass:NSDictionary.class] && dictionary[key] != nil;
 }
+
+static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window);
 
 static NSURL *LegendURLFromString(NSString *value)
 {
@@ -152,12 +289,17 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
     ? windowStyle[@"titlebarSeparatorStyle"]
     : nil;
+  NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
+    ? windowStyle[@"backgroundColor"]
+    : nil;
   BOOL hasToolbarKey = LegendDictionaryHasKey(windowStyle, @"hasToolbar");
   BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
+  BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
 
   if (maskNumber) {
     window.styleMask = maskNumber.unsignedIntegerValue;
   }
+  LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
   if (transparentTitlebar != nil) {
     window.titlebarAppearsTransparent = transparentTitlebar.boolValue;
   }
@@ -174,6 +316,13 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   }
   LegendApplyToolbarStyle(window, toolbarStyle);
   LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+  LegendApplyWindowBackgroundColor(window, backgroundColor);
+
+  RCTUIView *rootView = LegendManagedRootView(window);
+  if (usesTitlebarBackground && rootView) {
+    LegendEnsureRootViewContainer(window, rootView);
+    LegendSizeRootViewToWindow(rootView, window);
+  }
 }
 
 static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
@@ -183,7 +332,11 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
   }
 
   NSView *contentView = window.contentView;
-  rootView.frame = contentView ? contentView.bounds : NSMakeRect(0, 0, window.frame.size.width, window.frame.size.height);
+  if (contentView && contentView != rootView && (window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0) {
+    rootView.frame = [contentView convertRect:window.contentLayoutRect fromView:nil];
+  } else {
+    rootView.frame = contentView ? contentView.bounds : NSMakeRect(0, 0, window.frame.size.width, window.frame.size.height);
+  }
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [rootView setNeedsLayout:YES];
 }
@@ -369,6 +522,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
       ? windowStyle[@"titlebarSeparatorStyle"]
       : nil;
+    NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
+      ? windowStyle[@"backgroundColor"]
+      : nil;
+    BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
     NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
     BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
     NSNumber *hasShadowNumber = [options[@"hasShadow"] isKindOfClass:NSNumber.class] ? options[@"hasShadow"] : nil;
@@ -457,6 +614,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       if (maskNumber) {
         existingWindow.styleMask = maskNumber.unsignedIntegerValue;
       }
+      LegendApplyContentLayoutMode(existingWindow, maskNumber, usesTitlebarBackground);
       if (transparentTitlebar != nil) {
         existingWindow.titlebarAppearsTransparent = transparentTitlebar.boolValue;
       }
@@ -469,6 +627,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
       LegendApplyToolbarStyle(existingWindow, toolbarStyle);
       LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
+      LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
 
       if (levelNumber) {
         existingWindow.level = levelNumber.integerValue;
@@ -507,6 +666,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
         [existingRootView setValue:initialProps forKey:@"appProperties"];
       }
+      if (usesTitlebarBackground && existingRootView) {
+        LegendEnsureRootViewContainer(existingWindow, existingRootView);
+        LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
+      }
       LegendSizeRootViewToWindow(existingRootView, existingWindow);
       self.moduleNames[identifier] = moduleName ?: @"";
       [existingWindow makeKeyAndOrderFront:nil];
@@ -521,6 +684,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
+    LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
 
     if (darkAppearance) {
       window.appearance = darkAppearance;
@@ -539,6 +703,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     LegendApplyToolbarStyle(window, toolbarStyle);
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+    LegendApplyWindowBackgroundColor(window, backgroundColor);
     if (levelNumber) {
       window.level = levelNumber.integerValue;
     }
@@ -584,6 +749,11 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
 
     window.contentView = rootView;
+    LegendApplyWindowBackgroundColor(window, backgroundColor);
+    if (usesTitlebarBackground) {
+      LegendEnsureRootViewContainer(window, rootView);
+      LegendApplyWindowBackgroundColor(window, backgroundColor);
+    }
     LegendSizeRootViewToWindow(rootView, window);
     if (transparentBackground) {
       rootView.backgroundColor = NSColor.clearColor;
@@ -874,6 +1044,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 - (void)mainWindowDidResize:(NSNotification *)notification
 {
   NSWindow *window = notification.object;
+  RCTUIView *rootView = LegendManagedRootView(window);
+  if (rootView) {
+    LegendSizeRootViewToWindow(rootView, window);
+  }
   [self sendWindowEventWithName:@"onMainWindowResized" body:[self frameDictionary:window.frame]];
 }
 

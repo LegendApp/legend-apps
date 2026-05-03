@@ -60,14 +60,16 @@ function renderDocumentTypes(types: MacOSDocumentType[]) {
 
 export function writeMacOSInfoPlist(manifest: AppManifest, outputDir: string) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
-  if (!documentTypes || documentTypes.length === 0) {
-    return undefined;
-  }
-
   const basePlist = fs.readFileSync(baseInfoPlistPath, "utf8");
+  const appMetadata = [
+    "\t<key>LegendAppId</key>",
+    `\t<string>${escapePlistString(manifest.id)}</string>`,
+    "\t<key>LegendAppDisplayName</key>",
+    `\t<string>${escapePlistString(manifest.displayName)}</string>`,
+  ].join("\n");
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",
-    `\n${renderDocumentTypes(documentTypes)}\n</dict>\n</plist>\n`,
+    `\n${appMetadata}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}\n</dict>\n</plist>\n`,
   );
   const outputPath = path.join(outputDir, "Info.plist");
 
