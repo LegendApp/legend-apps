@@ -12,9 +12,11 @@ import {
   updateMenuItems,
 } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener, noteRecentDocument } from "@legend-desktop/recent-documents";
+import { getLegendTheme } from "@legend-desktop/theme";
 import { setMainWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useResolveClassNames, useUniwind } from "uniwind";
 import { getMarkdownFileTitle } from "./appMetadata";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
@@ -232,6 +234,9 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
   const isUntitledDocument = documentSource === "untitled";
   const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
+  const { theme: uniwindTheme } = useUniwind();
+  const theme = getLegendTheme(uniwindTheme);
+  const backgroundStyle = useResolveClassNames("bg-background");
 
   useEffect(() => {
     updateMenuItems(menuOwnerId, [
@@ -256,7 +261,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
       representedURL: null,
       title: isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename),
       windowStyle: {
-        backgroundColor: "#f5f6f8",
+        backgroundColor: theme.colors.windowBackground,
         hasToolbar: false,
         mask: [
           WindowStyleMask.Titled,
@@ -269,7 +274,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
         titleVisibility: "visible",
       },
     });
-  }, [filename, isUntitledDocument]);
+  }, [filename, isUntitledDocument, theme.colors.windowBackground]);
 
   const handleDocumentError = useCallback(
     (error: Error) => {
@@ -283,8 +288,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
   }
 
   return (
-    <View style={styles.container}>
-      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+    <View className="flex-1 bg-background">
+      {lastError ? <Text className="text-danger" style={styles.error}>{lastError}</Text> : null}
       <MarkdownDocument
         adapter={activeAdapter}
         autoFocusFirstBlock={isUntitledDocument}
@@ -297,7 +302,9 @@ export function App({ launchArguments }: MarkdownAppProps) {
         }}
         onSaveStateChange={setSaveState}
         savePolicy={isUntitledDocument ? { autosave: false } : undefined}
-        style={styles.document}
+        markdownStyle={theme.markdownStyle}
+        style={[styles.document, backgroundStyle]}
+        theme={theme.markdownDocument}
       />
     </View>
   );
@@ -306,15 +313,10 @@ export function App({ launchArguments }: MarkdownAppProps) {
 export default App;
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#f5f6f8",
-    flex: 1,
-  },
   document: {
     flex: 1,
   },
   error: {
-    color: "#b42318",
     fontSize: 13,
     paddingHorizontal: 24,
     paddingVertical: 8,

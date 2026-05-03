@@ -1,0 +1,21 @@
+{
+  "name": "light",
+  "colors": {
+    "background": "#f5f6f8",
+    "foreground": "#111827",
+    "muted": "#6b7280",
+    "surface": "#ffffff",
+    "surfaceMuted": "#f3f4f6",
+    "border": "#d1d5db",
+    "primary": "#2563eb",
+    "danger": "#b42318",
+    "selection": "#bfdbfe",
+    "code": "#111827",
+    "codeForeground": "#f9fafb",
+    "blockquoteBackground": "#f8fafc",
+    "blockquoteBorder": "#94a3b8",
+    "tableHeader": "#f3f4f6",
+    "tableRowAlt": "#f9fafb",
+    "windowBackground": "#f5f6f8"
+  }
+}

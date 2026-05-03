@@ -17,7 +17,9 @@
     "react": "19.1.4",
     "react-native": "0.81.6",
     "react-native-macos": "0.81.7",
-    "react-native-nitro-modules": "0.35.6"
+    "react-native-nitro-modules": "0.35.6",
+    "tailwindcss": "^4.2.4",
+    "uniwind": "^1.6.3"
   },
   "devDependencies": {
     "@react-native-community/cli": "^20.1.1",

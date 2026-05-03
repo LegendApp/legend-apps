@@ -12,6 +12,7 @@
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "test-kitchen-sink": "bun scripts/run-app.ts test-kitchen-sink",
+    "theme:generate": "bun scripts/generate-theme-css.ts",
     "start": "bun scripts/start-app.ts",
     "metro": "bun scripts/start-app.ts",
     "open": "bun scripts/open-app.ts",
