@@ -109,14 +109,7 @@ function useLatestRef<T>(value: T) {
 }
 
 function inputStyleFromMarkdownStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
-  return {
-    link: markdownStyle.link
-      ? {
-          color: markdownStyle.link.color,
-          underline: markdownStyle.link.underline,
-        }
-      : undefined,
-  } satisfies MarkdownTextInputStyle;
+  return markdownStyle as MarkdownTextInputStyle;
 }
 
 function editableTextStyleForBlock(
@@ -131,9 +124,15 @@ function editableTextStyleForBlock(
         ? markdownStyle.h2
         : headingLevel === 3
           ? markdownStyle.h3
-          : block.type === "codeBlock"
-            ? markdownStyle.codeBlock
-            : markdownStyle.paragraph;
+          : headingLevel === 4
+            ? markdownStyle.h4
+            : headingLevel === 5
+              ? markdownStyle.h5
+              : headingLevel === 6
+                ? markdownStyle.h6
+                : block.type === "codeBlock"
+                  ? markdownStyle.codeBlock
+                  : markdownStyle.paragraph;
 
   return [styles.editorInput, markdownTextStyle as TextStyle | undefined];
 }

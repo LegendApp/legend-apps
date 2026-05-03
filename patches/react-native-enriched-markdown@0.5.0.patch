@@ -173,6 +173,79 @@ index 797de6a25adafb12ef6a8d407b527e740cc92351..74cfb4083ad4a5c72d72c659570a6b24
 +  void onSelectionDragOutside(OnSelectionDragOutside value) const;
  };
  } // namespace facebook::react
+diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
+index c9e19844506517f35bd95fd73fc3933c406845ac..91b8ee562e77d631ad6a00410eba533340f82556 100644
+--- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
++++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
+@@ -2120,6 +2120,14 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ #endif
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
++  EnrichedMarkdownMarkdownStyleParagraphStruct paragraph{};
++  EnrichedMarkdownMarkdownStyleH1Struct h1{};
++  EnrichedMarkdownMarkdownStyleH2Struct h2{};
++  EnrichedMarkdownMarkdownStyleH3Struct h3{};
++  EnrichedMarkdownMarkdownStyleH4Struct h4{};
++  EnrichedMarkdownMarkdownStyleH5Struct h5{};
++  EnrichedMarkdownMarkdownStyleH6Struct h6{};
++  EnrichedMarkdownMarkdownStyleCodeBlockStruct codeBlock{};
+   EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
+   EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
+   EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
+@@ -2131,6 +2139,14 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+ 
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
++    result["paragraph"] = ::facebook::react::toDynamic(paragraph);
++    result["h1"] = ::facebook::react::toDynamic(h1);
++    result["h2"] = ::facebook::react::toDynamic(h2);
++    result["h3"] = ::facebook::react::toDynamic(h3);
++    result["h4"] = ::facebook::react::toDynamic(h4);
++    result["h5"] = ::facebook::react::toDynamic(h5);
++    result["h6"] = ::facebook::react::toDynamic(h6);
++    result["codeBlock"] = ::facebook::react::toDynamic(codeBlock);
+     result["strong"] = ::facebook::react::toDynamic(strong);
+     result["em"] = ::facebook::react::toDynamic(em);
+     result["link"] = ::facebook::react::toDynamic(link);
+@@ -2143,6 +2159,38 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+ static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
+   auto map = (std::unordered_map<std::string, RawValue>)value;
+ 
++  auto tmp_paragraph = map.find("paragraph");
++  if (tmp_paragraph != map.end()) {
++    fromRawValue(context, tmp_paragraph->second, result.paragraph);
++  }
++  auto tmp_h1 = map.find("h1");
++  if (tmp_h1 != map.end()) {
++    fromRawValue(context, tmp_h1->second, result.h1);
++  }
++  auto tmp_h2 = map.find("h2");
++  if (tmp_h2 != map.end()) {
++    fromRawValue(context, tmp_h2->second, result.h2);
++  }
++  auto tmp_h3 = map.find("h3");
++  if (tmp_h3 != map.end()) {
++    fromRawValue(context, tmp_h3->second, result.h3);
++  }
++  auto tmp_h4 = map.find("h4");
++  if (tmp_h4 != map.end()) {
++    fromRawValue(context, tmp_h4->second, result.h4);
++  }
++  auto tmp_h5 = map.find("h5");
++  if (tmp_h5 != map.end()) {
++    fromRawValue(context, tmp_h5->second, result.h5);
++  }
++  auto tmp_h6 = map.find("h6");
++  if (tmp_h6 != map.end()) {
++    fromRawValue(context, tmp_h6->second, result.h6);
++  }
++  auto tmp_codeBlock = map.find("codeBlock");
++  if (tmp_codeBlock != map.end()) {
++    fromRawValue(context, tmp_codeBlock->second, result.codeBlock);
++  }
+   auto tmp_strong = map.find("strong");
+   if (tmp_strong != map.end()) {
+     fromRawValue(context, tmp_strong->second, result.strong);
 diff --git a/ios/input/ENRMInputFormatter.h b/ios/input/ENRMInputFormatter.h
 index dfd6c3f9c1fe224660deece9cdf62be9fc5b9219..eb09489d20ec176eb5d49a5ad4b6301d28464afa 100644
 --- a/ios/input/ENRMInputFormatter.h
@@ -182,7 +255,7 @@ index dfd6c3f9c1fe224660deece9cdf62be9fc5b9219..eb09489d20ec176eb5d49a5ad4b6301d
  @property (nonatomic, strong) UIFont *baseFont;
  @property (nonatomic, strong) RCTUIColor *baseTextColor;
 +@property (nonatomic, assign) CGFloat baseLineHeight;
-
+ 
  /// Bold — color override (nil = inherit baseTextColor)
  @property (nonatomic, strong, nullable) RCTUIColor *boldColor;
 diff --git a/ios/input/ENRMInputFormatter.mm b/ios/input/ENRMInputFormatter.mm
@@ -206,7 +279,7 @@ index b81743b7c47f467a70738238dd0ad967ef938f84..f211ab0067bb97029116dacbb054a82c
    copy.italicColor = _italicColor;
    copy.linkColor = _linkColor;
 @@ -119,6 +121,14 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
-
+ 
    [textStorage addAttribute:NSFontAttributeName value:style.baseFont range:fullTextRange];
    [textStorage addAttribute:NSForegroundColorAttributeName value:style.baseTextColor range:fullTextRange];
 +  if (style.baseLineHeight > 0) {
@@ -326,10 +399,18 @@ index f02ae612dc15fb369eaef4d3bedda31049517e21..5e048dac88b368f5f5be3fab0122b8ca
  
  @end
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab3b8c3545 100644
+index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..63cf26a3220ec958c55abb2b6e3f1f859e783a09 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -331,7 +331,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -38,6 +38,7 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+ #endif
+ - (void)setupTextView;
+ - (void)applyFormatting;
++- (void)applyBlockStyleForMarkdown:(NSString *)markdown;
+ - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
+ - (void)resetBaseTypingAttributes;
+ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
+@@ -331,7 +332,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  
      [self resetBaseTypingAttributes];
  
@@ -338,7 +419,16 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
        [self applyFormatting];
      }
  
-@@ -514,10 +514,17 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -453,6 +454,8 @@ - (void)updatePlaceholderVisibility
+ 
+ - (void)importMarkdown:(NSString *)markdown
+ {
++  [self applyBlockStyleForMarkdown:markdown];
++
+   ENRMInputParser *parser = [[ENRMInputParser alloc] init];
+   ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
+ 
+@@ -514,10 +517,66 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  - (void)resetBaseTypingAttributes
  {
@@ -355,10 +445,59 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
 +    attrs[NSParagraphStyleAttributeName] = paragraphStyle;
 +  }
 +  ENRMSetDefaultTypingAttributes(_textView, attrs);
++}
++
++- (void)applyBlockStyleForMarkdown:(NSString *)markdown
++{
++  const auto &viewProps = *std::static_pointer_cast<EnrichedMarkdownTextInputProps const>(_props);
++  NSString *trimmedMarkdown = [markdown stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
++  BOOL changed = NO;
++
++  if ([trimmedMarkdown hasPrefix:@"```"] || [trimmedMarkdown hasPrefix:@"~~~"]) {
++    changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.codeBlock);
++  } else {
++    NSRegularExpression *headingRegex = [NSRegularExpression regularExpressionWithPattern:@"^#{1,6}\\s"
++                                                                                  options:0
++                                                                                    error:nil];
++    NSTextCheckingResult *headingMatch = [headingRegex firstMatchInString:trimmedMarkdown
++                                                                  options:0
++                                                                    range:NSMakeRange(0, trimmedMarkdown.length)];
++    if (headingMatch != nil) {
++      NSUInteger headingLevel = headingMatch.range.length - 1;
++      switch (headingLevel) {
++        case 1:
++          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h1);
++          break;
++        case 2:
++          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h2);
++          break;
++        case 3:
++          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h3);
++          break;
++        case 4:
++          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h4);
++          break;
++        case 5:
++          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h5);
++          break;
++        default:
++          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h6);
++          break;
++      }
++    } else {
++      changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.paragraph);
++    }
++  }
++
++  if (changed) {
++    [_formatterStyle invalidateFontCache];
++    _placeholderLabel.font = _formatterStyle.baseFont;
++    [self resetBaseTypingAttributes];
++  }
  }
-
+ 
  - (void)applyFormatting
-@@ -884,6 +891,21 @@ - (void)emitOnChangeSelection
+@@ -884,6 +943,21 @@ - (void)emitOnChangeSelection
    });
  }
  
@@ -380,7 +519,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
  - (void)emitOnChangeState
  {
    auto emitter = [self getEventEmitter];
-@@ -1142,6 +1164,12 @@ - (void)manageSelectionBasedChanges
+@@ -1149,6 +1223,12 @@ - (void)manageSelectionBasedChanges
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -394,13 +533,13 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..b4b66b71d41969538d90dc0cb31914ab
        }
      }
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..a35502d1ec3d5b0c52d8351bbfb9eae74920c77d 100644
+index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..064aa2c13dde399e7d2ff1137848d40f20e2aaf3 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
 @@ -63,6 +63,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
      changed = YES;
    }
-
+ 
 +  if (newProps.lineHeight != oldProps.lineHeight) {
 +    style.baseLineHeight = newProps.lineHeight > 0 ? newProps.lineHeight : 0;
 +    changed = YES;
@@ -409,6 +548,55 @@ index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..a35502d1ec3d5b0c52d8351bbfb9eae7
    if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
      if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
        style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
+@@ -103,3 +108,48 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+ 
+   return changed;
+ }
++
++template <typename BlockStyleProps>
++BOOL applyInputBlockStyleProps(ENRMInputFormatterStyle *style, const BlockStyleProps &blockStyle)
++{
++  BOOL changed = NO;
++
++  CGFloat fontSize = blockStyle.fontSize > 0 ? blockStyle.fontSize : style.baseFont.pointSize;
++  UIFont *font = nil;
++  if (blockStyle.fontWeight.empty()) {
++    font = [UIFont systemFontOfSize:fontSize];
++  } else {
++    NSString *weightString = [NSString stringWithUTF8String:blockStyle.fontWeight.c_str()];
++    UIFontWeight weight = ENRMFontWeightFromString(weightString);
++    font = [UIFont systemFontOfSize:fontSize weight:weight];
++  }
++
++  if (!blockStyle.fontFamily.empty()) {
++    NSString *familyName = [NSString stringWithUTF8String:blockStyle.fontFamily.c_str()];
++    UIFont *customFont = [UIFont fontWithName:familyName size:fontSize];
++    if (customFont) {
++      font = customFont;
++    }
++  }
++
++  if (![style.baseFont isEqual:font]) {
++    style.baseFont = font;
++    changed = YES;
++  }
++
++  if (isColorMeaningful(blockStyle.color)) {
++    RCTUIColor *color = RCTUIColorFromSharedColor(blockStyle.color);
++    if (![style.baseTextColor isEqual:color]) {
++      style.baseTextColor = color;
++      changed = YES;
++    }
++  }
++
++  CGFloat lineHeight = blockStyle.lineHeight > 0 ? blockStyle.lineHeight : 0;
++  if (style.baseLineHeight != lineHeight) {
++    style.baseLineHeight = lineHeight;
++    changed = YES;
++  }
++
++  return changed;
++}
 diff --git a/ios/views/ENRMContextMenuTextView+macOS.h b/ios/views/ENRMContextMenuTextView+macOS.h
 index 58d865a40ea3d93a4be5255f2fceec9628a3a50c..1a5abb608915f01daaa8f88fa4ed40776d49fa46 100644
 --- a/ios/views/ENRMContextMenuTextView+macOS.h
@@ -602,10 +790,40 @@ index 4b01cfc89e57bd956eb897f3924aa00dd470e1bc..7b26538992186a7bfa5e203c242f79a6
      onLinkDetected: handleLinkDetected,
      onInputFocus: handleFocus,
 diff --git a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index d9368251ce5a49f785fd6572963d470f6fb107be..278c73148581ae5882f3ff8fb703eacfb0b3d596 100644
+index d9368251ce5a49f785fd6572963d470f6fb107be..1312718b22dcae08d32e9bbe5458a8b10e63126c 100644
 --- a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-@@ -42,6 +42,12 @@ export interface OnChangeSelectionEvent {
+@@ -9,6 +9,14 @@ import {
+ import type React from 'react';
+ 
+ interface MarkdownTextInputStyleInternal {
++  paragraph: InputBlockStyleInternal;
++  h1: InputBlockStyleInternal;
++  h2: InputBlockStyleInternal;
++  h3: InputBlockStyleInternal;
++  h4: InputBlockStyleInternal;
++  h5: InputBlockStyleInternal;
++  h6: InputBlockStyleInternal;
++  codeBlock: InputBlockStyleInternal;
+   strong: {
+     color?: ColorValue;
+   };
+@@ -25,6 +33,14 @@ interface MarkdownTextInputStyleInternal {
+   };
+ }
+ 
++interface InputBlockStyleInternal {
++  fontSize: CodegenTypes.Float;
++  fontFamily: string;
++  fontWeight: string;
++  color: ColorValue;
++  lineHeight: CodegenTypes.Float;
++}
++
+ interface TargetedEvent {
+   target: CodegenTypes.Int32;
+ }
+@@ -42,6 +58,12 @@ export interface OnChangeSelectionEvent {
    end: CodegenTypes.Int32;
  }
  
@@ -618,7 +836,7 @@ index d9368251ce5a49f785fd6572963d470f6fb107be..278c73148581ae5882f3ff8fb703eacf
  export interface OnChangeStateEvent {
    bold: { isActive: boolean };
    italic: { isActive: boolean };
-@@ -186,6 +192,7 @@ export interface NativeProps extends ViewProps {
+@@ -186,6 +208,7 @@ export interface NativeProps extends ViewProps {
    onChangeText?: CodegenTypes.DirectEventHandler<OnChangeTextEvent>;
    onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
    onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
@@ -681,11 +899,80 @@ index 490b5670a6c3424123ec88dd51b088be845fee53..a5ef20db99dc36e6801851c0b712dd4b
      ...rest
    };
    if (flavor === 'github') {
+diff --git a/lib/module/normalizeMarkdownTextInputStyle.js b/lib/module/normalizeMarkdownTextInputStyle.js
+index 0bafc38eb77802d975f09b92045721f2ef967192..2322a894fe359dd062b87e03edaf2a892f9792e1 100644
+--- a/lib/module/normalizeMarkdownTextInputStyle.js
++++ b/lib/module/normalizeMarkdownTextInputStyle.js
+@@ -1,11 +1,28 @@
+ "use strict";
+ 
+ import { processColor } from 'react-native';
++import { normalizeMarkdownStyle } from "./normalizeMarkdownStyle.js";
+ import { normalizeColor } from "./styleUtils.js";
+ const DEFAULT_LINK_COLOR = '#2563EB';
+ const DEFAULT_SPOILER_COLOR = '#374151';
+ const DEFAULT_SPOILER_BG_COLOR = '#E5E7EB';
++const pickInputBlockStyle = style => ({
++  fontSize: style.fontSize,
++  fontFamily: style.fontFamily,
++  fontWeight: style.fontWeight,
++  color: style.color,
++  lineHeight: style.lineHeight
++});
++const defaultMarkdownStyle = normalizeMarkdownStyle({});
+ const defaultInternal = Object.freeze({
++  paragraph: pickInputBlockStyle(defaultMarkdownStyle.paragraph),
++  h1: pickInputBlockStyle(defaultMarkdownStyle.h1),
++  h2: pickInputBlockStyle(defaultMarkdownStyle.h2),
++  h3: pickInputBlockStyle(defaultMarkdownStyle.h3),
++  h4: pickInputBlockStyle(defaultMarkdownStyle.h4),
++  h5: pickInputBlockStyle(defaultMarkdownStyle.h5),
++  h6: pickInputBlockStyle(defaultMarkdownStyle.h6),
++  codeBlock: pickInputBlockStyle(defaultMarkdownStyle.codeBlock),
+   strong: {
+     color: undefined
+   },
+@@ -30,7 +47,16 @@ export const normalizeMarkdownTextInputStyle = style => {
+   if (style === cachedInput && cachedResult) {
+     return cachedResult;
+   }
++  const normalizedBlockStyle = normalizeMarkdownStyle(style);
+   const result = {
++    paragraph: pickInputBlockStyle(normalizedBlockStyle.paragraph),
++    h1: pickInputBlockStyle(normalizedBlockStyle.h1),
++    h2: pickInputBlockStyle(normalizedBlockStyle.h2),
++    h3: pickInputBlockStyle(normalizedBlockStyle.h3),
++    h4: pickInputBlockStyle(normalizedBlockStyle.h4),
++    h5: pickInputBlockStyle(normalizedBlockStyle.h5),
++    h6: pickInputBlockStyle(normalizedBlockStyle.h6),
++    codeBlock: pickInputBlockStyle(normalizedBlockStyle.codeBlock),
+     strong: {
+       color: normalizeColor(style.strong?.color)
+     },
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
-index fb360242782f2b1acfc242c87fba0c332c1251ef..cc3ee8ae0cacef521956936533c16ad96c1be570 100644
+index fb360242782f2b1acfc242c87fba0c332c1251ef..82880cf7cde8064d8d81707e8c6ab088a626d36f 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
-@@ -96,6 +96,11 @@ export interface EnrichedMarkdownTextInputProps {
+@@ -2,7 +2,8 @@ import { type OnLinkDetected } from './EnrichedMarkdownTextInputNativeComponent'
+ export type { OnLinkDetected } from './EnrichedMarkdownTextInputNativeComponent';
+ import type { HostInstance, ViewStyle, TextStyle, ColorValue } from 'react-native';
+ import type { RefObject } from 'react';
+-export interface MarkdownTextInputStyle {
++import type { MarkdownStyle } from './types/MarkdownStyle';
++export type MarkdownTextInputStyle = MarkdownStyle & {
+     strong?: {
+         color?: string;
+     };
+@@ -17,7 +18,7 @@ export interface MarkdownTextInputStyle {
+         color?: string;
+         backgroundColor?: string;
+     };
+-}
++};
+ export interface StyleState {
+     bold: {
+         isActive: boolean;
+@@ -96,6 +97,11 @@ export interface EnrichedMarkdownTextInputProps {
          start: number;
          end: number;
      }) => void;
@@ -697,7 +984,7 @@ index fb360242782f2b1acfc242c87fba0c332c1251ef..cc3ee8ae0cacef521956936533c16ad9
      onChangeState?: (state: StyleState) => void;
      onCaretRectChange?: (rect: CaretRect) => void;
      onLinkDetected?: (event: OnLinkDetected) => void;
-@@ -104,6 +109,6 @@ export interface EnrichedMarkdownTextInputProps {
+@@ -104,6 +110,6 @@ export interface EnrichedMarkdownTextInputProps {
      contextMenuItems?: ContextMenuItem[];
      linkRegex?: RegExp | null;
  }
@@ -706,10 +993,39 @@ index fb360242782f2b1acfc242c87fba0c332c1251ef..cc3ee8ae0cacef521956936533c16ad9
  export default EnrichedMarkdownTextInput;
  //# sourceMappingURL=EnrichedMarkdownTextInput.d.ts.map
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..b87f10eca96c1275405ab93dd15e09841a6e11ea 100644
+index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..52479f793fd2111997b0dd6c1747e305b3f5753e 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-@@ -29,6 +29,11 @@ export interface OnChangeSelectionEvent {
+@@ -1,6 +1,14 @@
+ import { type ViewProps, type ColorValue, type HostComponent, type CodegenTypes } from 'react-native';
+ import type React from 'react';
+ interface MarkdownTextInputStyleInternal {
++    paragraph: InputBlockStyleInternal;
++    h1: InputBlockStyleInternal;
++    h2: InputBlockStyleInternal;
++    h3: InputBlockStyleInternal;
++    h4: InputBlockStyleInternal;
++    h5: InputBlockStyleInternal;
++    h6: InputBlockStyleInternal;
++    codeBlock: InputBlockStyleInternal;
+     strong: {
+         color?: ColorValue;
+     };
+@@ -16,6 +24,13 @@ interface MarkdownTextInputStyleInternal {
+         backgroundColor: ColorValue;
+     };
+ }
++interface InputBlockStyleInternal {
++    fontSize: CodegenTypes.Float;
++    fontFamily: string;
++    fontWeight: string;
++    color: ColorValue;
++    lineHeight: CodegenTypes.Float;
++}
+ interface TargetedEvent {
+     target: CodegenTypes.Int32;
+ }
+@@ -29,6 +44,11 @@ export interface OnChangeSelectionEvent {
      start: CodegenTypes.Int32;
      end: CodegenTypes.Int32;
  }
@@ -721,7 +1037,7 @@ index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..b87f10eca96c1275405ab93dd15e0984
  export interface OnChangeStateEvent {
      bold: {
          isActive: boolean;
-@@ -182,6 +187,7 @@ export interface NativeProps extends ViewProps {
+@@ -182,6 +202,7 @@ export interface NativeProps extends ViewProps {
      onChangeText?: CodegenTypes.DirectEventHandler<OnChangeTextEvent>;
      onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
      onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
@@ -729,6 +1045,32 @@ index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..b87f10eca96c1275405ab93dd15e0984
      onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
      onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
      onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
+diff --git a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
+index ddc0716688d088bde3981337eb094c92b83d6bf4..7b964ba9bde010e8a69bade775c7a7b096650faa 100644
+--- a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
++++ b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
+@@ -1,6 +1,21 @@
+ import { type ColorValue } from 'react-native';
+ import type { MarkdownTextInputStyle } from './EnrichedMarkdownTextInput';
++interface InputBlockStyleInternal {
++    fontSize: number;
++    fontFamily: string;
++    fontWeight: string;
++    color: ColorValue;
++    lineHeight: number;
++}
+ interface MarkdownTextInputStyleInternal {
++    paragraph: InputBlockStyleInternal;
++    h1: InputBlockStyleInternal;
++    h2: InputBlockStyleInternal;
++    h3: InputBlockStyleInternal;
++    h4: InputBlockStyleInternal;
++    h5: InputBlockStyleInternal;
++    h6: InputBlockStyleInternal;
++    codeBlock: InputBlockStyleInternal;
+     strong: {
+         color?: ColorValue;
+     };
 diff --git a/lib/typescript/src/types/MarkdownTextProps.d.ts b/lib/typescript/src/types/MarkdownTextProps.d.ts
 index b912aa6e663c5312565e4611801c820a737c68ae..cd5cfc961c4fb285ca8602803d5c4951318900ca 100644
 --- a/lib/typescript/src/types/MarkdownTextProps.d.ts
@@ -789,7 +1131,7 @@ index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858b
  
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
 diff --git a/src/EnrichedMarkdownTextInput.tsx b/src/EnrichedMarkdownTextInput.tsx
-index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78b45cedb1 100644
+index 6ea44db8535d7d14186d8a488c8c83130f8ee889..d2010196cc400c1c455e4b22482f7107c8a9f307 100644
 --- a/src/EnrichedMarkdownTextInput.tsx
 +++ b/src/EnrichedMarkdownTextInput.tsx
 @@ -12,6 +12,7 @@ import EnrichedMarkdownTextInputNativeComponent, {
@@ -800,7 +1142,29 @@ index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78
    type OnChangeStateEvent,
    type OnRequestMarkdownResultEvent,
    type OnRequestCaretRectResultEvent,
-@@ -114,6 +115,11 @@ export interface EnrichedMarkdownTextInputProps {
+@@ -30,10 +31,11 @@ import type {
+ import { normalizeMarkdownTextInputStyle } from './normalizeMarkdownTextInputStyle';
+ import { toNativeRegexConfig } from './utils/regexParser';
+ import type { RefObject } from 'react';
++import type { MarkdownStyle } from './types/MarkdownStyle';
+ 
+ type NativeRef = HostInstance;
+ 
+-export interface MarkdownTextInputStyle {
++export type MarkdownTextInputStyle = MarkdownStyle & {
+   strong?: {
+     color?: string;
+   };
+@@ -48,7 +50,7 @@ export interface MarkdownTextInputStyle {
+     color?: string;
+     backgroundColor?: string;
+   };
+-}
++};
+ 
+ export interface StyleState {
+   bold: { isActive: boolean };
+@@ -114,6 +116,11 @@ export interface EnrichedMarkdownTextInputProps {
    onChangeText?: (text: string) => void;
    onChangeMarkdown?: (markdown: string) => void;
    onChangeSelection?: (selection: { start: number; end: number }) => void;
@@ -812,7 +1176,7 @@ index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78
    onChangeState?: (state: StyleState) => void;
    onCaretRectChange?: (rect: CaretRect) => void;
    onLinkDetected?: (event: OnLinkDetected) => void;
-@@ -154,6 +160,7 @@ export const EnrichedMarkdownTextInput = ({
+@@ -154,6 +161,7 @@ export const EnrichedMarkdownTextInput = ({
    onChangeText,
    onChangeMarkdown,
    onChangeSelection,
@@ -820,7 +1184,7 @@ index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78
    onChangeState,
    onCaretRectChange,
    onLinkDetected,
-@@ -241,6 +248,18 @@ export const EnrichedMarkdownTextInput = ({
+@@ -241,6 +249,18 @@ export const EnrichedMarkdownTextInput = ({
      [onChangeSelection]
    );
  
@@ -839,7 +1203,7 @@ index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78
    const handleChangeState = useCallback(
      (e: NativeSyntheticEvent<OnChangeStateEvent>) => {
        const { bold, italic, underline, strikethrough, spoiler, link } =
-@@ -378,6 +397,9 @@ export const EnrichedMarkdownTextInput = ({
+@@ -378,6 +398,9 @@ export const EnrichedMarkdownTextInput = ({
        onChangeSelection={
          handleChangeSelection as NativeProps['onChangeSelection']
        }
@@ -850,10 +1214,40 @@ index 6ea44db8535d7d14186d8a488c8c83130f8ee889..5be7d3e05317d227f595343e3b541c78
        onLinkDetected={handleLinkDetected as NativeProps['onLinkDetected']}
        onInputFocus={handleFocus as NativeProps['onInputFocus']}
 diff --git a/src/EnrichedMarkdownTextInputNativeComponent.ts b/src/EnrichedMarkdownTextInputNativeComponent.ts
-index d9368251ce5a49f785fd6572963d470f6fb107be..278c73148581ae5882f3ff8fb703eacfb0b3d596 100644
+index d9368251ce5a49f785fd6572963d470f6fb107be..1312718b22dcae08d32e9bbe5458a8b10e63126c 100644
 --- a/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/src/EnrichedMarkdownTextInputNativeComponent.ts
-@@ -42,6 +42,12 @@ export interface OnChangeSelectionEvent {
+@@ -9,6 +9,14 @@ import {
+ import type React from 'react';
+ 
+ interface MarkdownTextInputStyleInternal {
++  paragraph: InputBlockStyleInternal;
++  h1: InputBlockStyleInternal;
++  h2: InputBlockStyleInternal;
++  h3: InputBlockStyleInternal;
++  h4: InputBlockStyleInternal;
++  h5: InputBlockStyleInternal;
++  h6: InputBlockStyleInternal;
++  codeBlock: InputBlockStyleInternal;
+   strong: {
+     color?: ColorValue;
+   };
+@@ -25,6 +33,14 @@ interface MarkdownTextInputStyleInternal {
+   };
+ }
+ 
++interface InputBlockStyleInternal {
++  fontSize: CodegenTypes.Float;
++  fontFamily: string;
++  fontWeight: string;
++  color: ColorValue;
++  lineHeight: CodegenTypes.Float;
++}
++
+ interface TargetedEvent {
+   target: CodegenTypes.Int32;
+ }
+@@ -42,6 +58,12 @@ export interface OnChangeSelectionEvent {
    end: CodegenTypes.Int32;
  }
  
@@ -866,7 +1260,7 @@ index d9368251ce5a49f785fd6572963d470f6fb107be..278c73148581ae5882f3ff8fb703eacf
  export interface OnChangeStateEvent {
    bold: { isActive: boolean };
    italic: { isActive: boolean };
-@@ -186,6 +192,7 @@ export interface NativeProps extends ViewProps {
+@@ -186,6 +208,7 @@ export interface NativeProps extends ViewProps {
    onChangeText?: CodegenTypes.DirectEventHandler<OnChangeTextEvent>;
    onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
    onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
@@ -941,6 +1335,86 @@ index 236c2b7c29fdd7ba080b70b30c4438d166ccbc40..04dcdc275d9940f237e67ff81608015d
      ...rest,
    };
  
+diff --git a/src/normalizeMarkdownTextInputStyle.ts b/src/normalizeMarkdownTextInputStyle.ts
+index 5fd79f8b0e1a2bc441c99c653d54f68496f53188..fdbcbcb23e1892b1bd645a64f097b447c1f47ad7 100644
+--- a/src/normalizeMarkdownTextInputStyle.ts
++++ b/src/normalizeMarkdownTextInputStyle.ts
+@@ -1,8 +1,25 @@
+ import { processColor, type ColorValue } from 'react-native';
+ import type { MarkdownTextInputStyle } from './EnrichedMarkdownTextInput';
++import { normalizeMarkdownStyle } from './normalizeMarkdownStyle';
+ import { normalizeColor } from './styleUtils';
+ 
++interface InputBlockStyleInternal {
++  fontSize: number;
++  fontFamily: string;
++  fontWeight: string;
++  color: ColorValue;
++  lineHeight: number;
++}
++
+ interface MarkdownTextInputStyleInternal {
++  paragraph: InputBlockStyleInternal;
++  h1: InputBlockStyleInternal;
++  h2: InputBlockStyleInternal;
++  h3: InputBlockStyleInternal;
++  h4: InputBlockStyleInternal;
++  h5: InputBlockStyleInternal;
++  h6: InputBlockStyleInternal;
++  codeBlock: InputBlockStyleInternal;
+   strong: {
+     color?: ColorValue;
+   };
+@@ -23,7 +40,31 @@ const DEFAULT_LINK_COLOR = '#2563EB';
+ const DEFAULT_SPOILER_COLOR = '#374151';
+ const DEFAULT_SPOILER_BG_COLOR = '#E5E7EB';
+ 
++const pickInputBlockStyle = (style: {
++  fontSize: number;
++  fontFamily: string;
++  fontWeight: string;
++  color: ColorValue;
++  lineHeight: number;
++}): InputBlockStyleInternal => ({
++  fontSize: style.fontSize,
++  fontFamily: style.fontFamily,
++  fontWeight: style.fontWeight,
++  color: style.color,
++  lineHeight: style.lineHeight,
++});
++
++const defaultMarkdownStyle = normalizeMarkdownStyle({});
++
+ const defaultInternal: MarkdownTextInputStyleInternal = Object.freeze({
++  paragraph: pickInputBlockStyle(defaultMarkdownStyle.paragraph),
++  h1: pickInputBlockStyle(defaultMarkdownStyle.h1),
++  h2: pickInputBlockStyle(defaultMarkdownStyle.h2),
++  h3: pickInputBlockStyle(defaultMarkdownStyle.h3),
++  h4: pickInputBlockStyle(defaultMarkdownStyle.h4),
++  h5: pickInputBlockStyle(defaultMarkdownStyle.h5),
++  h6: pickInputBlockStyle(defaultMarkdownStyle.h6),
++  codeBlock: pickInputBlockStyle(defaultMarkdownStyle.codeBlock),
+   strong: {
+     color: undefined,
+   },
+@@ -54,7 +95,17 @@ export const normalizeMarkdownTextInputStyle = (
+     return cachedResult;
+   }
+ 
++  const normalizedBlockStyle = normalizeMarkdownStyle(style);
++
+   const result: MarkdownTextInputStyleInternal = {
++    paragraph: pickInputBlockStyle(normalizedBlockStyle.paragraph),
++    h1: pickInputBlockStyle(normalizedBlockStyle.h1),
++    h2: pickInputBlockStyle(normalizedBlockStyle.h2),
++    h3: pickInputBlockStyle(normalizedBlockStyle.h3),
++    h4: pickInputBlockStyle(normalizedBlockStyle.h4),
++    h5: pickInputBlockStyle(normalizedBlockStyle.h5),
++    h6: pickInputBlockStyle(normalizedBlockStyle.h6),
++    codeBlock: pickInputBlockStyle(normalizedBlockStyle.codeBlock),
+     strong: {
+       color: normalizeColor(style.strong?.color),
+     },
 diff --git a/src/types/MarkdownTextProps.ts b/src/types/MarkdownTextProps.ts
 index d450699edd84cd75a6763463ac49e67a99c2841d..4c778f6f2f3ce8a228562f823e3598b5d8b2f77b 100644
 --- a/src/types/MarkdownTextProps.ts

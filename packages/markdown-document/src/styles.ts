@@ -47,6 +47,27 @@ export const defaultMarkdownStyle: MarkdownStyle = {
     lineHeight: 28,
     marginBottom: 4,
   },
+  h4: {
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 26,
+    marginBottom: 4,
+  },
+  h5: {
+    color: "#374151",
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 24,
+    marginBottom: 4,
+  },
+  h6: {
+    color: "#4b5563",
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 22,
+    marginBottom: 4,
+  },
   link: {
     color: "#2563eb",
     underline: true,
