@@ -16,6 +16,7 @@ const manifest = {
       "@legend-desktop/markdown-parser",
       "@legend-desktop/native-menu",
       "@legend-desktop/recent-documents",
+      "@legend-desktop/sidebar",
       "@legend-desktop/window-manager",
       "react-native-enriched-markdown",
     ],

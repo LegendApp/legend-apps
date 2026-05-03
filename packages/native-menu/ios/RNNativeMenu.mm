@@ -168,11 +168,20 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
         continue;
       }
 
-      NSMenuItem *rootItem = [mainMenu itemWithTitle:title];
+      NSString *systemMenu = [menuConfig[@"systemMenu"] isKindOfClass:[NSString class]] ? menuConfig[@"systemMenu"] : nil;
+      NSMenuItem *rootItem = nil;
+      if ([systemMenu isEqualToString:@"app"] && mainMenu.numberOfItems > 0) {
+        rootItem = [mainMenu itemAtIndex:0];
+      } else {
+        rootItem = [mainMenu itemWithTitle:title];
+      }
       BOOL isMergedMenu = rootItem.submenu != nil;
       NSMenu *submenu = rootItem.submenu;
 
       if (!submenu) {
+        if (systemMenu.length > 0) {
+          continue;
+        }
         rootItem = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
         submenu = [[NSMenu alloc] initWithTitle:title];
         rootItem.submenu = submenu;
@@ -318,15 +327,29 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
     return targetItem;
   }
 
+  NSMutableArray<NSString *> *targetTitles = [NSMutableArray array];
   NSString *targetTitle = [config[@"targetTitle"] isKindOfClass:[NSString class]] ? config[@"targetTitle"] : nil;
-  if (targetTitle.length == 0) {
+  if (targetTitle.length > 0) {
+    [targetTitles addObject:targetTitle];
+  }
+
+  NSArray *additionalTargetTitles = [config[@"targetTitles"] isKindOfClass:[NSArray class]] ? config[@"targetTitles"] : nil;
+  for (id title in additionalTargetTitles) {
+    if ([title isKindOfClass:[NSString class]] && [title length] > 0) {
+      [targetTitles addObject:title];
+    }
+  }
+
+  if (targetTitles.count == 0) {
     return nil;
   }
 
-  NSString *normalizedTargetTitle = [self normalizedMenuTitle:targetTitle];
-  for (NSMenuItem *item in menu.itemArray) {
-    if ([[self normalizedMenuTitle:item.title ?: @""] isEqualToString:normalizedTargetTitle]) {
-      return item;
+  for (NSString *candidateTitle in targetTitles) {
+    NSString *normalizedTargetTitle = [self normalizedMenuTitle:candidateTitle];
+    for (NSMenuItem *item in menu.itemArray) {
+      if ([[self normalizedMenuTitle:item.title ?: @""] isEqualToString:normalizedTargetTitle]) {
+        return item;
+      }
     }
   }
   return nil;
@@ -335,8 +358,9 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
 - (BOOL)configTargetsExistingItem:(NSDictionary *)config
 {
   NSString *targetTitle = [config[@"targetTitle"] isKindOfClass:[NSString class]] ? config[@"targetTitle"] : nil;
+  NSArray *targetTitles = [config[@"targetTitles"] isKindOfClass:[NSArray class]] ? config[@"targetTitles"] : nil;
   NSArray *targetPath = [config[@"targetPath"] isKindOfClass:[NSArray class]] ? config[@"targetPath"] : nil;
-  return targetTitle.length > 0 || targetPath.count > 0;
+  return targetTitle.length > 0 || targetTitles.count > 0 || targetPath.count > 0;
 }
 
 - (NSDictionary *)representedObjectForConfig:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId

@@ -10,6 +10,7 @@ export type NativeMenuItem = {
   id: string;
   title?: string;
   targetTitle?: string;
+  targetTitles?: string[];
   targetPath?: string[];
   enabled?: boolean;
   checked?: boolean;
@@ -21,6 +22,7 @@ export type NativeMenuItem = {
 export type NativeMenuConfig = {
   id: string;
   title: string;
+  systemMenu?: "app";
   placement?: {
     before?: string;
     after?: string;

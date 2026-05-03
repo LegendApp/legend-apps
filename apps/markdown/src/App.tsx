@@ -13,16 +13,22 @@ import {
 } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener, noteRecentDocument } from "@legend-desktop/recent-documents";
 import { getLegendTheme } from "@legend-desktop/theme";
-import { setMainWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+import { openWindow, setMainWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { AppRegistry, StyleSheet, Text, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
 import { getMarkdownFileTitle } from "./appMetadata";
+import { applyMarkdownThemeSetting } from "./markdownSettings";
+import { SettingsWindow } from "./SettingsWindow";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
 const menuOwnerId = "legend-markdown";
+const settingsWindowModuleName = "MarkdownSettingsWindow";
+const settingsWindowIdentifier = "markdown-settings";
 const markdownFileTypes = ["md", "markdown", "mdown", "mkd", "mdx"];
 const commandModifier = 1 << 20;
+
+AppRegistry.registerComponent(settingsWindowModuleName, () => SettingsWindow);
 
 type OpenSource = "startup" | "dialog" | "recent";
 type DocumentSource = "file" | "untitled";
@@ -53,6 +59,13 @@ export function App({ launchArguments }: MarkdownAppProps) {
   const startupHandledRef = useRef(false);
 
   const hasDocument = filename !== null;
+  const { theme: uniwindTheme } = useUniwind();
+  const theme = getLegendTheme(uniwindTheme);
+  const backgroundStyle = useResolveClassNames("bg-background");
+
+  useEffect(() => {
+    applyMarkdownThemeSetting();
+  }, []);
 
   const openSelectedFile = useCallback((path: string, source: OpenSource) => {
     lastOpenSourceRef.current = source;
@@ -98,6 +111,33 @@ export function App({ launchArguments }: MarkdownAppProps) {
     [openSelectedFile],
   );
 
+  const openSettingsWindow = useCallback(() => {
+    void openWindow({
+      identifier: settingsWindowIdentifier,
+      moduleName: settingsWindowModuleName,
+      title: "Settings",
+      windowStyle: {
+        backgroundColor: theme.colors.windowBackground,
+        hasToolbar: true,
+        height: 560,
+        mask: [
+          WindowStyleMask.Titled,
+          WindowStyleMask.Closable,
+          WindowStyleMask.Resizable,
+          WindowStyleMask.FullSizeContentView,
+          WindowStyleMask.UnifiedTitleAndToolbar,
+        ],
+        minHeight: 420,
+        minWidth: 560,
+        titlebarAppearsTransparent: false,
+        titlebarSeparatorStyle: "line",
+        titleVisibility: "visible",
+        toolbarStyle: "unified",
+        width: 720,
+      },
+    });
+  }, [theme.colors.windowBackground]);
+
   useEffect(() => {
     if (startupHandledRef.current) {
       return;
@@ -139,6 +179,18 @@ export function App({ launchArguments }: MarkdownAppProps) {
             id: "save",
             targetTitle: "Save...",
             enabled: false,
+          },
+        ],
+      },
+      {
+        id: "app",
+        title: "Application",
+        systemMenu: "app",
+        items: [
+          {
+            id: "settings",
+            targetTitles: ["Settings...", "Settings…", "Preferences...", "Preferences…"],
+            enabled: true,
           },
         ],
       },
@@ -205,6 +257,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
       }
       if (action.itemId === "open") {
         void openMarkdownDialog();
+      } else if (action.itemId === "settings") {
+        openSettingsWindow();
       } else if (action.itemId === "save") {
         documentCommandsRef.current?.save();
       } else if (action.itemId === "undo") {
@@ -230,17 +284,15 @@ export function App({ launchArguments }: MarkdownAppProps) {
       subscription.remove();
       clearMenus(menuOwnerId);
     };
-  }, [openMarkdownDialog, openSelectedFile]);
+  }, [openMarkdownDialog, openSelectedFile, openSettingsWindow]);
 
   const isUntitledDocument = documentSource === "untitled";
   const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
-  const { theme: uniwindTheme } = useUniwind();
-  const theme = getLegendTheme(uniwindTheme);
-  const backgroundStyle = useResolveClassNames("bg-background");
 
   useEffect(() => {
     updateMenuItems(menuOwnerId, [
       { id: "save", enabled: hasDocument && !isUntitledDocument && isDirty && saveState !== "saving" },
+      { id: "settings", enabled: true },
       { id: "undo", enabled: hasDocument },
       { id: "redo", enabled: hasDocument },
       { id: "bold", enabled: hasDocument },
