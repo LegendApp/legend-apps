@@ -41,102 +41,6 @@ static void callFocus(id target)
   send(target, selector);
 }
 
-static NSTextView *findTextView(NSView *view)
-{
-  if ([view isKindOfClass:NSTextView.class]) {
-    return (NSTextView *)view;
-  }
-
-  if ([view isKindOfClass:NSScrollView.class]) {
-    NSView *documentView = ((NSScrollView *)view).documentView;
-    if (documentView != nil) {
-      NSTextView *textView = findTextView(documentView);
-      if (textView != nil) {
-        return textView;
-      }
-    }
-  }
-
-  for (NSView *subview in view.subviews) {
-    NSTextView *textView = findTextView(subview);
-    if (textView != nil) {
-      return textView;
-    }
-  }
-
-  return nil;
-}
-
-static NSUInteger characterIndexForEvent(NSTextView *textView, NSEvent *event)
-{
-  NSPoint pointInTextView = [textView convertPoint:event.locationInWindow fromView:nil];
-  pointInTextView.x -= textView.textContainerInset.width;
-  pointInTextView.y -= textView.textContainerInset.height;
-
-  NSLayoutManager *layoutManager = textView.layoutManager;
-  NSTextContainer *textContainer = textView.textContainer;
-  if (layoutManager == nil || textContainer == nil || layoutManager.numberOfGlyphs == 0) {
-    return textView.string.length;
-  }
-
-  NSUInteger glyphIndex = [layoutManager glyphIndexForPoint:pointInTextView inTextContainer:textContainer];
-  glyphIndex = MIN(glyphIndex, layoutManager.numberOfGlyphs - 1);
-  NSUInteger characterIndex = [layoutManager characterIndexForGlyphAtIndex:glyphIndex];
-  return MIN(characterIndex, textView.string.length);
-}
-
-static NSRange wordRangeAtIndex(NSString *string, NSUInteger index)
-{
-  if (string.length == 0) {
-    return NSMakeRange(0, 0);
-  }
-
-  NSCharacterSet *wordCharacters = [NSCharacterSet alphanumericCharacterSet];
-  NSUInteger clampedIndex = MIN(index, string.length - 1);
-
-  if (![wordCharacters characterIsMember:[string characterAtIndex:clampedIndex]] && clampedIndex > 0) {
-    NSUInteger previousIndex = clampedIndex - 1;
-    if ([wordCharacters characterIsMember:[string characterAtIndex:previousIndex]]) {
-      clampedIndex = previousIndex;
-    }
-  }
-
-  if (![wordCharacters characterIsMember:[string characterAtIndex:clampedIndex]]) {
-    return NSMakeRange(index, 0);
-  }
-
-  NSUInteger start = clampedIndex;
-  while (start > 0 && [wordCharacters characterIsMember:[string characterAtIndex:start - 1]]) {
-    start--;
-  }
-
-  NSUInteger end = clampedIndex + 1;
-  while (end < string.length && [wordCharacters characterIsMember:[string characterAtIndex:end]]) {
-    end++;
-  }
-
-  return NSMakeRange(start, end - start);
-}
-
-static void selectTextForEvent(NSView *view, NSEvent *event)
-{
-  NSTextView *textView = findTextView(view);
-  if (textView == nil) {
-    callFocus(view);
-    return;
-  }
-
-  [textView.window makeFirstResponder:textView];
-  NSUInteger characterIndex = characterIndexForEvent(textView, event);
-
-  if (event.clickCount >= 2) {
-    textView.selectedRange = wordRangeAtIndex(textView.string, characterIndex);
-    return;
-  }
-
-  textView.selectedRange = NSMakeRange(characterIndex, 0);
-}
-
 static BOOL isEnrichedMarkdownInput(id view)
 {
   return [view respondsToSelector:setValueSelector()] && [view respondsToSelector:@selector(mouseDown:)];
@@ -442,7 +346,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 
   if (event != nil) {
-    selectTextForEvent(_overlayInput, event);
+    [_overlayInput mouseDown:event];
   } else {
     callFocus(_overlayInput);
   }
