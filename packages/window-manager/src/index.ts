@@ -89,6 +89,7 @@ export type WindowOptions = {
   identifier?: string;
   moduleName?: string;
   title?: string;
+  representedURL?: string | null;
   x?: number;
   y?: number;
   hasShadow?: boolean;
@@ -124,6 +125,8 @@ export type WindowResult = {
   success: boolean;
   message?: string;
 };
+
+export type MainWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
 
 export type WindowClosedEvent = {
   identifier: string;
@@ -236,6 +239,15 @@ export function showMainWindow(): Promise<WindowResult> {
   );
 }
 
+export function setMainWindowOptions(options: MainWindowOptions = {}): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.setMainWindowOptions(JSON.stringify(convertOptionsToNative(options))).then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function getMainWindowFrame(): Promise<WindowFrame> {
   if (Platform.OS !== "macos") {
     return Promise.resolve({ x: 0, y: 0, width: 0, height: 0 });
@@ -306,6 +318,7 @@ export function useWindowManager() {
     closeWindow,
     closeFrontmostWindow,
     showMainWindow,
+    setMainWindowOptions,
     getMainWindowFrame,
     setMainWindowFrame,
     setWindowBlur,

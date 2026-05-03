@@ -174,6 +174,7 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
       addDirectoryFileList(hash, path.join(pkgRoot, "ios"));
       addDirectoryFileList(hash, path.join(pkgRoot, "macos"));
       addDirectoryFileList(hash, path.join(pkgRoot, "nitrogen", "generated"));
+      addCodegenSpecFiles(hash, path.join(pkgRoot, "src"));
       addDirectoryFileList(hash, path.join(pkgRoot, "vendor"));
     }
   }
@@ -215,6 +216,22 @@ function getDirectoryFiles(dirPath: string): string[] {
   }
 
   return files.sort();
+}
+
+function addCodegenSpecFiles(hash: Hash, dirPath: string) {
+  hash.update(path.relative(rootDir, dirPath));
+
+  if (!fs.existsSync(dirPath)) {
+    return;
+  }
+
+  for (const filePath of getDirectoryFiles(dirPath)) {
+    if (!/^Native.*\.[jt]sx?$/.test(path.basename(filePath))) {
+      continue;
+    }
+
+    addFile(hash, filePath);
+  }
 }
 
 function quotePBX(value: string) {

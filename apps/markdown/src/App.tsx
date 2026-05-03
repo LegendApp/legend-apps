@@ -12,11 +12,10 @@ import {
   updateMenuItems,
 } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener, noteRecentDocument } from "@legend-desktop/recent-documents";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { setMainWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import {
-  getMarkdownFileTitle,
-} from "./appMetadata";
+import { getMarkdownFileTitle } from "./appMetadata";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
 const menuOwnerId = "legend-markdown";
@@ -42,7 +41,6 @@ function getLaunchMarkdownFile(launchArguments: string[] | undefined) {
 
 export function App({ launchArguments }: MarkdownAppProps) {
   const [filename, setFilename] = useState<string | null>(null);
-  const [status, setStatus] = useState("Creating untitled document...");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
@@ -61,7 +59,6 @@ export function App({ launchArguments }: MarkdownAppProps) {
     setIsDirty(false);
     setSaveState("idle");
     setLastError(null);
-    setStatus(`Opening ${path}`);
     noteRecentDocument(path);
   }, []);
 
@@ -72,7 +69,6 @@ export function App({ launchArguments }: MarkdownAppProps) {
     setIsDirty(false);
     setSaveState("idle");
     setLastError(null);
-    setStatus("Untitled document.");
   }, []);
 
   const openMarkdownDialog = useCallback(
@@ -82,7 +78,6 @@ export function App({ launchArguments }: MarkdownAppProps) {
       }
 
       openDialogInFlight.current = true;
-      setStatus("Choose a markdown file.");
 
       try {
         const paths = await openFileDialog();
@@ -90,13 +85,10 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
         if (path) {
           openSelectedFile(path, "dialog");
-        } else {
-          setStatus("File selection canceled.");
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setLastError(message);
-        setStatus("Unable to open file.");
       } finally {
         openDialogInFlight.current = false;
       }
@@ -255,12 +247,32 @@ export function App({ launchArguments }: MarkdownAppProps) {
     ]);
   }, [hasDocument, isDirty, isUntitledDocument, saveState]);
 
-  const displayName = useMemo(() => filename?.split("/").pop() ?? "No document open", [filename]);
+  useEffect(() => {
+    if (!filename) {
+      return;
+    }
+
+    void setMainWindowOptions({
+      representedURL: isUntitledDocument ? null : filename,
+      title: isUntitledDocument ? "Untitled" : undefined,
+      windowStyle: {
+        hasToolbar: false,
+        mask: [
+          WindowStyleMask.Titled,
+          WindowStyleMask.Closable,
+          WindowStyleMask.Miniaturizable,
+          WindowStyleMask.Resizable,
+        ],
+        titlebarAppearsTransparent: false,
+        titlebarSeparatorStyle: "automatic",
+        titleVisibility: "visible",
+      },
+    });
+  }, [filename, isUntitledDocument]);
 
   const handleDocumentError = useCallback(
     (error: Error) => {
       setLastError(error.message);
-      setStatus("Unable to load document.");
     },
     [],
   );
@@ -271,17 +283,6 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.statusBar}>
-        <View style={styles.statusTitleGroup}>
-          <Text numberOfLines={1} style={styles.filename}>
-            {displayName}
-          </Text>
-          <Text numberOfLines={1} style={styles.status}>
-            {status}
-          </Text>
-        </View>
-        <Text style={styles.saveState}>{isDirty ? "Edited" : saveState === "saving" ? "Saving..." : "Saved"}</Text>
-      </View>
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
       <MarkdownDocument
         adapter={activeAdapter}
@@ -290,13 +291,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
         filename={filename}
         onDirtyChange={setIsDirty}
         onError={handleDocumentError}
-        onLoaded={(info) => {
+        onLoaded={() => {
           setLastError(null);
-          setStatus(
-            isUntitledDocument
-              ? "Untitled document."
-              : `Loaded ${info.blockCount} blocks from ${getMarkdownFileTitle(info.filename)}.`,
-          );
         }}
         onSaveStateChange={setSaveState}
         savePolicy={isUntitledDocument ? { autosave: false } : undefined}
@@ -322,35 +318,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 8,
     textAlign: "center",
-  },
-  filename: {
-    color: "#111827",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  saveState: {
-    color: "#6b7280",
-    fontSize: 13,
-    minWidth: 64,
-    textAlign: "right",
-  },
-  status: {
-    color: "#4b5563",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  statusBar: {
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderBottomColor: "#d1d5db",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 16,
-    minHeight: 58,
-    paddingHorizontal: 24,
-  },
-  statusTitleGroup: {
-    flex: 1,
-    minWidth: 0,
   },
 });

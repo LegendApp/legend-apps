@@ -82,6 +82,100 @@ static void LegendApplyTitlebarSeparatorStyle(NSWindow *window, NSString *value)
   }
 }
 
+static BOOL LegendDictionaryHasKey(NSDictionary *dictionary, NSString *key)
+{
+  return [dictionary isKindOfClass:NSDictionary.class] && dictionary[key] != nil;
+}
+
+static NSURL *LegendURLFromString(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return nil;
+  }
+
+  NSURL *url = [NSURL URLWithString:value];
+  if (url.scheme.length > 0) {
+    return url;
+  }
+
+  return [NSURL fileURLWithPath:value];
+}
+
+static void LegendApplyWindowTitleAndRepresentedURL(NSWindow *window,
+                                                    NSString *title,
+                                                    BOOL hasRepresentedURL,
+                                                    id representedURLValue,
+                                                    NSString *fallbackTitle)
+{
+  NSURL *representedURL = [representedURLValue isKindOfClass:NSString.class]
+    ? LegendURLFromString((NSString *)representedURLValue)
+    : nil;
+
+  if (hasRepresentedURL) {
+    if ([representedURLValue isKindOfClass:NSNull.class]) {
+      window.representedURL = nil;
+    } else if (representedURL.fileURL && representedURL.path.length > 0) {
+      [window setTitleWithRepresentedFilename:representedURL.path];
+      window.representedURL = representedURL;
+      return;
+    } else {
+      window.representedURL = representedURL;
+    }
+  }
+
+  if (!title && representedURL.lastPathComponent.length > 0) {
+    title = representedURL.lastPathComponent;
+  }
+  window.title = title ?: fallbackTitle ?: @"";
+}
+
+static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
+{
+  if (!window || ![options isKindOfClass:NSDictionary.class]) {
+    return;
+  }
+
+  BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
+  id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
+  NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
+  LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
+
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
+  NSNumber *transparentTitlebar = [windowStyle[@"titlebarAppearsTransparent"] isKindOfClass:NSNumber.class]
+    ? windowStyle[@"titlebarAppearsTransparent"]
+    : nil;
+  NSString *titleVisibility = [windowStyle[@"titleVisibility"] isKindOfClass:NSString.class]
+    ? windowStyle[@"titleVisibility"]
+    : nil;
+  NSString *toolbarStyle = [windowStyle[@"toolbarStyle"] isKindOfClass:NSString.class] ? windowStyle[@"toolbarStyle"] : nil;
+  NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
+    ? windowStyle[@"titlebarSeparatorStyle"]
+    : nil;
+  BOOL hasToolbarKey = LegendDictionaryHasKey(windowStyle, @"hasToolbar");
+  BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
+
+  if (maskNumber) {
+    window.styleMask = maskNumber.unsignedIntegerValue;
+  }
+  if (transparentTitlebar != nil) {
+    window.titlebarAppearsTransparent = transparentTitlebar.boolValue;
+  }
+  LegendApplyTitleVisibility(window, titleVisibility);
+  if (hasToolbarKey) {
+    if (hasToolbar && !window.toolbar) {
+      NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"LegendMainWindowToolbar"];
+      toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+      toolbar.showsBaselineSeparator = NO;
+      window.toolbar = toolbar;
+    } else if (!hasToolbar) {
+      window.toolbar = nil;
+    }
+  }
+  LegendApplyToolbarStyle(window, toolbarStyle);
+  LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+}
+
 static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 {
   if (!rootView || !window) {
@@ -260,6 +354,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 
     NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
     title = title ?: moduleName ?: @"New Window";
+    BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
+    id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
 
     NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
     NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
@@ -396,7 +492,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
         existingRootView.backgroundColor = NSColor.clearColor;
       }
 
-      existingWindow.title = title;
+      LegendApplyWindowTitleAndRepresentedURL(existingWindow, title, hasRepresentedURL, representedURLValue, title);
       if (darkAppearance) {
         existingWindow.appearance = darkAppearance;
       }
@@ -430,7 +526,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       window.appearance = darkAppearance;
     }
     window.releasedWhenClosed = NO;
-    window.title = title;
+    LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, title);
     if (transparentTitlebar != nil) {
       window.titlebarAppearsTransparent = transparentTitlebar.boolValue;
     }
@@ -586,6 +682,24 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     [NSApp activateIgnoringOtherApps:YES];
     [mainWindow makeKeyAndOrderFront:nil];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setMainWindowOptions:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      reject(@"window_not_found", @"Main window not found", nil);
+      return;
+    }
+
+    LegendApplyWindowOptions(mainWindow, [self parseObjectJSON:optionsJson]);
     resolve([self successJson]);
   });
 #else
