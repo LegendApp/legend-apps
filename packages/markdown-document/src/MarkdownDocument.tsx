@@ -11,6 +11,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
+import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown } from "./blockSelection";
 import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { contentHorizontalPadding, contentMaxWidth, editDebounceMs, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
@@ -348,37 +349,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const blockIdAtWindowY = useCallback((y: number) => {
-      const layouts = blockIds
-        .map((blockId) => {
-          const layout = blockWindowLayoutsRef.current.get(blockId);
-          return layout ? { blockId, layout } : undefined;
-        })
-        .filter((entry): entry is { blockId: string; layout: BlockLayout } => entry !== undefined)
-        .sort((a, b) => a.layout.y - b.layout.y);
-
-      for (let index = 0; index < layouts.length; index += 1) {
-        const entry = layouts[index];
-        if (!entry) {
-          continue;
-        }
-
-        const previousEntry = layouts[index - 1];
-        const nextEntry = layouts[index + 1];
-        const blockTop = entry.layout.y;
-        const blockBottom = entry.layout.y + entry.layout.height;
-        const hitTop = previousEntry
-          ? (previousEntry.layout.y + previousEntry.layout.height + blockTop) / 2
-          : Number.NEGATIVE_INFINITY;
-        const hitBottom = nextEntry
-          ? (blockBottom + nextEntry.layout.y) / 2
-          : Number.POSITIVE_INFINITY;
-
-        if (y >= hitTop && y < hitBottom) {
-          return entry.blockId;
-        }
-      }
-
-      return undefined;
+      return findBlockIdAtWindowY({
+        blockIds,
+        layoutsByBlockId: blockWindowLayoutsRef.current,
+        y,
+      });
     }, [blockIds]);
 
     const handleBlockWindowLayout = useCallback((blockId: string, layout: BlockLayout) => {
@@ -525,35 +500,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        const anchorIndex = blockIds.indexOf(blockSelection.anchorBlockId);
-        const focusIndex = blockIds.indexOf(blockSelection.focusBlockId);
-        if (anchorIndex < 0 || focusIndex < 0) {
+        const selectedBlocks = getSelectedBlockMarkdown({ blockIds, blocksById, blockSelection });
+        if (!selectedBlocks) {
           return;
-        }
-
-        const startIndex = Math.min(anchorIndex, focusIndex);
-        const endIndex = Math.max(anchorIndex, focusIndex);
-        const startBlockId = blockIds[startIndex];
-        const endBlockId = blockIds[endIndex];
-        if (!startBlockId || !endBlockId) {
-          return;
-        }
-
-        const selectedMarkdown: string[] = [];
-        for (let index = startIndex; index <= endIndex; index += 1) {
-          const block = blocksById.get(blockIds[index] ?? "");
-          if (!block) {
-            return;
-          }
-          selectedMarkdown.push(block.markdown);
         }
 
         clearEditTimer();
         try {
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "replaceBlockRange",
-            startBlockId,
-            endBlockId,
+            startBlockId: selectedBlocks.startBlockId,
+            endBlockId: selectedBlocks.endBlockId,
             markdown,
           });
           const firstChangedBlockId = result.changedRange.blockIds[0];
@@ -563,7 +520,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               type: "replaceBlockRange",
               startBlockId: firstChangedBlockId,
               endBlockId: lastChangedBlockId,
-              replacementMarkdown: selectedMarkdown.join("\n"),
+              replacementMarkdown: selectedBlocks.markdown,
               inverseMarkdown: markdown,
             });
             redoStackRef.current = [];
@@ -1019,31 +976,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
     const blockSelectionRects = useMemo(() => {
-      const rects: { blockId: string; height: number; y: number }[] = [];
-      if (!blockSelection) {
-        return rects;
-      }
-
-      const anchorIndex = blockIds.indexOf(blockSelection.anchorBlockId);
-      const focusIndex = blockIds.indexOf(blockSelection.focusBlockId);
-      if (anchorIndex < 0 || focusIndex < 0) {
-        return rects;
-      }
-
-      const startIndex = Math.min(anchorIndex, focusIndex);
-      const endIndex = Math.max(anchorIndex, focusIndex);
-      for (let index = startIndex; index <= endIndex; index += 1) {
-        const blockId = blockIds[index];
-        const layout = blockId ? blockWindowLayoutsRef.current.get(blockId) : undefined;
-        if (blockId && layout) {
-          rects.push({
-            blockId,
-            height: layout.height,
-            y: layout.y - containerWindowY,
-          });
-        }
-      }
-      return rects;
+      return getBlockSelectionRects({
+        blockIds,
+        blockSelection,
+        containerWindowY,
+        layoutsByBlockId: blockWindowLayoutsRef.current,
+      });
     }, [blockIds, blockSelection, containerWindowY, layoutVersion]);
     const listExtraData = useMemo(
       () => ({
