@@ -5,24 +5,40 @@ import {
   EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
-  type MarkdownTextInputStyle,
 } from "react-native-enriched-markdown";
 import {
   Linking,
-  Platform,
-  PlatformColor,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
-  type GestureResponderEvent,
   type LayoutChangeEvent,
-  type ColorValue,
-  type TextStyle,
-  type ViewStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
+import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
+import { contentHorizontalPadding, contentMaxWidth, editDebounceMs, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
+import type {
+  BlockLayout,
+  BlockSelectionState,
+  ChangeMarkdownHandler,
+  DocumentState,
+  HistoryEntry,
+  NativeSelectionDragOutsideEvent,
+  OverlayFrame,
+  SelectionDragOutsideEvent,
+  SelectionDragOutsideHandler,
+} from "./internalTypes";
+import {
+  blockRowSpacingStyle,
+  editableTextStyleForBlock,
+  estimateMarkdownEditorHeight,
+  estimateMarkdownSelection,
+  inputStyleFromMarkdownStyle,
+  normalizeSelectionDragOutsideEvent,
+  resolveSelectionColor,
+  splitMarkdownAtFirstLineBreak,
+} from "./markdownLayout";
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 import type {
   MarkdownBlockSnapshot,
@@ -34,78 +50,6 @@ import type {
   MarkdownTransactionResult,
 } from "./types";
 
-const usesNativeEditorOverlay = Platform.OS === "macos";
-
-type DocumentState =
-  | {
-      status: "loading";
-      snapshot?: undefined;
-      error?: undefined;
-    }
-  | {
-      status: "loaded";
-      snapshot: MarkdownDocumentSnapshot;
-      error?: undefined;
-    }
-  | {
-      status: "error";
-      snapshot?: undefined;
-      error: Error;
-    };
-
-type UpdateBlockHistoryEntry = {
-  type: "updateBlockMarkdown";
-  blockId: string;
-  beforeMarkdown: string;
-  afterMarkdown: string;
-};
-
-type ReplaceBlockRangeHistoryEntry = {
-  type: "replaceBlockRange";
-  startBlockId: string;
-  endBlockId: string;
-  replacementMarkdown: string;
-  inverseMarkdown: string;
-};
-
-type HistoryEntry = UpdateBlockHistoryEntry | ReplaceBlockRangeHistoryEntry;
-
-type BlockSelectionState = {
-  anchorBlockId: string;
-  focusBlockId: string;
-};
-
-type SelectionDragOutsideEvent = {
-  direction: string;
-  windowX?: number;
-  windowY?: number;
-};
-
-type NativeSelectionDragOutsideEvent = {
-  nativeEvent?: SelectionDragOutsideEvent;
-} & SelectionDragOutsideEvent;
-
-type BlockLayout = {
-  y: number;
-  height: number;
-};
-
-type OverlayFrame = {
-  height: number;
-  left: number;
-  top: number;
-  width: number;
-};
-
-const estimatedItemSize = 120;
-const hydrateChunkSize = 512;
-const editDebounceMs = 300;
-const contentMaxWidth = 920;
-const contentHorizontalPadding = 40;
-const systemBlockSelectionBackgroundColor = Platform.OS === "macos" ? PlatformColor("selectedTextBackgroundColor") : "#bfdbfe";
-
-type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
-
 function useLatestRef<T>(value: T) {
   const ref = useRef(value);
   useEffect(() => {
@@ -114,150 +58,6 @@ function useLatestRef<T>(value: T) {
   return ref;
 }
 
-function inputStyleFromMarkdownStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
-  return markdownStyle as MarkdownTextInputStyle;
-}
-
-function resolveSelectionColor(selectionColor: string | undefined): ColorValue {
-  return selectionColor === undefined || selectionColor === "auto" ? systemBlockSelectionBackgroundColor : selectionColor;
-}
-
-function editableTextStyleForBlock(
-  block: MarkdownBlockSnapshot,
-  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
-) {
-  const headingLevel = getHeadingLevel(block);
-  const markdownTextStyle =
-    headingLevel === 1
-      ? markdownStyle.h1
-      : headingLevel === 2
-        ? markdownStyle.h2
-        : headingLevel === 3
-          ? markdownStyle.h3
-          : headingLevel === 4
-            ? markdownStyle.h4
-            : headingLevel === 5
-              ? markdownStyle.h5
-              : headingLevel === 6
-                ? markdownStyle.h6
-                : block.type === "codeBlock"
-                  ? markdownStyle.codeBlock
-                  : markdownStyle.paragraph;
-
-  return [styles.editorInput, markdownTextStyle as TextStyle | undefined];
-}
-
-function getHeadingLevel(block: MarkdownBlockSnapshot): HeadingLevel | undefined {
-  return block.type === "heading" && block.headingLevel >= 1 && block.headingLevel <= 6
-    ? block.headingLevel as HeadingLevel
-    : undefined;
-}
-
-function blockSpacingForBlock(block: MarkdownBlockSnapshot, markdownLayout: MarkdownDocumentLayout) {
-  const { blockSpacing } = markdownLayout;
-  const headingLevel = getHeadingLevel(block);
-  if (headingLevel) {
-    return blockSpacing.heading[headingLevel];
-  }
-
-  switch (block.type) {
-    case "paragraph":
-      return blockSpacing.paragraph;
-    case "codeBlock":
-      return blockSpacing.codeBlock;
-    case "quote":
-      return blockSpacing.blockquote;
-    case "unorderedList":
-    case "orderedList":
-    case "listItem":
-      return blockSpacing.list;
-    case "thematicBreak":
-      return blockSpacing.thematicBreak;
-    case "table":
-    case "tableHead":
-    case "tableBody":
-    case "tableRow":
-    case "tableHeaderCell":
-    case "tableCell":
-      return blockSpacing.table;
-    default:
-      return blockSpacing.fallback;
-  }
-}
-
-function blockRowSpacingStyle(
-  block: MarkdownBlockSnapshot,
-  previousBlock: MarkdownBlockSnapshot | undefined,
-  hasPreviousBlock: boolean,
-  hasNextBlock: boolean,
-  markdownLayout: MarkdownDocumentLayout,
-): ViewStyle {
-  const spacing = blockSpacingForBlock(block, markdownLayout);
-  const previousSpacing = previousBlock
-    ? blockSpacingForBlock(previousBlock, markdownLayout)
-    : hasPreviousBlock
-      ? markdownLayout.blockSpacing.fallback
-      : undefined;
-
-  return {
-    marginBottom: hasNextBlock ? 0 : spacing.marginBottom ?? 0,
-    marginTop: previousSpacing ? Math.max(previousSpacing.marginBottom ?? 0, spacing.marginTop ?? 0) : 0,
-  };
-}
-
-function splitMarkdownAtFirstLineBreak(markdown: string) {
-  const lineBreakIndex = markdown.indexOf("\n");
-  if (lineBreakIndex < 0) {
-    return null;
-  }
-
-  const beforeMarkdown = markdown.slice(0, lineBreakIndex);
-  const afterMarkdown = markdown.slice(lineBreakIndex + 1);
-  return { beforeMarkdown, afterMarkdown };
-}
-
-function estimateMarkdownSelection(markdown: string, event: GestureResponderEvent, width: number) {
-  const lineHeight = 25;
-  const averageCharacterWidth = 8;
-  const x = Math.max(0, event.nativeEvent.locationX);
-  const y = Math.max(0, event.nativeEvent.locationY);
-  const visualLine = Math.floor(y / lineHeight);
-  const characterInVisualLine = Math.floor(x / averageCharacterWidth);
-  const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));
-  const lines = markdown.split("\n");
-  let offset = 0;
-  let currentVisualLine = 0;
-
-  for (const line of lines) {
-    const wrappedLineCount = Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine));
-    if (visualLine < currentVisualLine + wrappedLineCount) {
-      const wrappedLine = visualLine - currentVisualLine;
-      return Math.min(markdown.length, offset + Math.min(line.length, wrappedLine * charactersPerLine + characterInVisualLine));
-    }
-    offset += line.length + 1;
-    currentVisualLine += wrappedLineCount;
-  }
-
-  return markdown.length;
-}
-
-function estimateMarkdownEditorHeight(markdown: string, width: number) {
-  const lineHeight = 25;
-  const averageCharacterWidth = 8;
-  const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));
-  const visualLines = markdown
-    .split("\n")
-    .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
-
-  return Math.max(lineHeight, visualLines * lineHeight);
-}
-
-type ChangeMarkdownHandler = (block: MarkdownBlockSnapshot, markdown: string) => void;
-type SelectionDragOutsideHandler = (blockId: string, event: SelectionDragOutsideEvent) => void;
-
-function normalizeSelectionDragOutsideEvent(event: NativeSelectionDragOutsideEvent) {
-  return event.nativeEvent ?? event;
-}
 
 const MarkdownEditorInput = memo(
   function MarkdownEditorInput({
@@ -1703,66 +1503,3 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 );
 
 MarkdownDocument.displayName = "MarkdownDocument";
-
-const styles = StyleSheet.create({
-  blockRow: {
-    paddingHorizontal: 0,
-  },
-  blockSelectionInput: {
-    height: 1,
-    opacity: 0,
-    position: "absolute",
-    width: 1,
-  },
-  blockSelectionOverlay: {
-    left: 0,
-    position: "absolute",
-    right: 0,
-  },
-  centered: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  container: {
-    backgroundColor: "#f5f6f8",
-    flex: 1,
-  },
-  contentContainer: {
-    alignSelf: "center",
-    maxWidth: contentMaxWidth,
-    paddingHorizontal: contentHorizontalPadding,
-    paddingVertical: 48,
-    width: "100%",
-  },
-  errorText: {
-    color: "#b42318",
-    fontSize: 14,
-    padding: 32,
-    textAlign: "center",
-  },
-  editorInput: {
-    backgroundColor: "transparent",
-    color: "#374151",
-    fontSize: 16,
-    lineHeight: 25,
-    minHeight: 25,
-    padding: 0,
-    width: "100%",
-  },
-  list: {
-    flex: 1,
-  },
-  overlayEditorInput: {
-    left: -10000,
-    minHeight: 25,
-    position: "absolute",
-    top: -10000,
-  },
-  renderedText: {
-    width: "100%",
-  },
-  statusText: {
-    color: "#6b7280",
-    fontSize: 14,
-  },
-});
