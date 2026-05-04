@@ -1,134 +1,19 @@
 import { Sidebar } from "@legend-desktop/sidebar";
 import { setWindowTitle } from "@legend-desktop/window-manager";
-import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { useResolveClassNames } from "uniwind";
+import { settingsWindowIdentifier } from "./appConstants";
+import { SettingsPageContent } from "./settings/SettingsPageContent";
 import {
-  getMarkdownStartupBehaviorSetting,
-  getMarkdownThemeSetting,
-  setMarkdownStartupBehaviorSetting,
-  setMarkdownThemeSetting,
-  subscribeToMarkdownSettings,
-  type MarkdownStartupBehaviorSetting,
-  type MarkdownThemeSetting,
-} from "./markdownSettings";
+  getSettingsPageTitle,
+  isSettingsPage,
+  sidebarItems,
+  type SettingsPage,
+} from "./settings/settingsPages";
 
-const settingsWindowIdentifier = "markdown-settings";
-
-type SettingsPage = "general" | "appearance";
-
-const settingsPages: { id: SettingsPage; title: string }[] = [
-  { id: "general", title: "General" },
-  { id: "appearance", title: "Appearance" },
-];
-
-const sidebarItems = settingsPages.map((page) => ({
-  id: page.id,
-  title: page.title,
-}));
-
-function RadioOption<Value extends string>({
-  label,
-  onSelect,
-  selected,
-  value,
-}: {
-  label: string;
-  onSelect: (value: Value) => void;
-  selected: boolean;
-  value: Value;
-}) {
-  const selectedStyle = useResolveClassNames(selected ? "border-primary bg-surface-muted" : "border-border bg-surface");
-  const indicatorStyle = useResolveClassNames(selected ? "border-primary bg-primary" : "border-border bg-surface");
-
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      className="flex-row items-center gap-3 rounded-md border px-3 py-2"
-      onPress={() => onSelect(value)}
-      style={selectedStyle}
-    >
-      <View className="h-3 w-3 rounded-full border" style={indicatorStyle} />
-      <Text className="text-foreground" style={styles.optionText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function GeneralSettingsPage() {
-  const startupBehavior = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownStartupBehaviorSetting,
-    getMarkdownStartupBehaviorSetting,
-  );
-
-  return (
-    <View className="gap-4">
-      <Text className="text-foreground" style={styles.pageTitle}>General</Text>
-      <View className="gap-2">
-        <Text className="text-foreground" style={styles.sectionTitle}>On Startup</Text>
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownStartupBehaviorSetting>
-            label="New Document"
-            onSelect={setMarkdownStartupBehaviorSetting}
-            selected={startupBehavior === "newDocument"}
-            value="newDocument"
-          />
-          <RadioOption<MarkdownStartupBehaviorSetting>
-            label="Last Document"
-            onSelect={setMarkdownStartupBehaviorSetting}
-            selected={startupBehavior === "lastDocument"}
-            value="lastDocument"
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function AppearanceSettingsPage() {
-  const selectedTheme = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownThemeSetting,
-    getMarkdownThemeSetting,
-  );
-
-  return (
-    <View className="gap-4">
-      <Text className="text-foreground" style={styles.pageTitle}>Appearance</Text>
-      <View className="gap-2">
-        <Text className="text-foreground" style={styles.sectionTitle}>Theme</Text>
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownThemeSetting>
-            label="Light"
-            onSelect={setMarkdownThemeSetting}
-            selected={selectedTheme === "light"}
-            value="light"
-          />
-          <RadioOption<MarkdownThemeSetting>
-            label="Dark"
-            onSelect={setMarkdownThemeSetting}
-            selected={selectedTheme === "dark"}
-            value="dark"
-          />
-          <RadioOption<MarkdownThemeSetting>
-            label="Grey"
-            onSelect={setMarkdownThemeSetting}
-            selected={selectedTheme === "grey"}
-            value="grey"
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function SettingsPageContent({ selectedPage }: { selectedPage: SettingsPage }) {
-  if (selectedPage === "appearance") {
-    return <AppearanceSettingsPage />;
-  }
-
-  return <GeneralSettingsPage />;
+function reportSettingsWindowError(error: unknown) {
+  console.error("Failed to update settings window title", error);
 }
 
 export function SettingsWindow() {
@@ -136,13 +21,12 @@ export function SettingsWindow() {
   const backgroundStyle = useResolveClassNames("bg-background");
 
   useEffect(() => {
-    const pageTitle = settingsPages.find((page) => page.id === selectedPage)?.title ?? "Settings";
-    void setWindowTitle(settingsWindowIdentifier, pageTitle);
+    setWindowTitle(settingsWindowIdentifier, getSettingsPageTitle(selectedPage)).catch(reportSettingsWindowError);
   }, [selectedPage]);
 
   const handleSidebarSelectionChange = useCallback((event: { nativeEvent: { id: string } }) => {
     const nextPage = event.nativeEvent.id;
-    if (nextPage === "general" || nextPage === "appearance") {
+    if (isSettingsPage(nextPage)) {
       setSelectedPage(nextPage);
     }
   }, []);
@@ -166,20 +50,6 @@ export function SettingsWindow() {
 export default SettingsWindow;
 
 const styles = StyleSheet.create({
-  optionText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 32,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
   sidebar: {
     width: 190,
   },
