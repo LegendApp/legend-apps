@@ -302,7 +302,6 @@ static BOOL isEnrichedMarkdownInput(id view)
   _activeBlockId = [view.blockId copy];
   [self setBlockView:view contentsHidden:YES];
   [self observeScrollViewForBlockView:view];
-  [self showOverlayForBlockView:view markdown:view.markdown event:event loadValue:YES];
 
   auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
   if (eventEmitter) {
@@ -315,6 +314,8 @@ static BOOL isEnrichedMarkdownInput(id view)
       .y = frame.origin.y,
     });
   }
+
+  [self showOverlayForBlockView:view markdown:view.markdown event:event loadValue:YES];
 }
 
 - (void)showOverlayForBlockView:(RNMarkdownBlockActivationView *)view
