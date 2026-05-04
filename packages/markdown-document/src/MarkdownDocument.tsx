@@ -685,6 +685,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       });
     }, []);
 
+    const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
+      setBlocksById((previousBlocksById) => {
+        const block = previousBlocksById.get(blockId);
+        if (!block || block.markdown === markdown) {
+          return previousBlocksById;
+        }
+
+        const nextBlocksById = new Map(previousBlocksById);
+        nextBlocksById.set(blockId, {
+          ...block,
+          contentEndByte: block.contentStartByte !== undefined ? block.contentStartByte + markdown.length : block.contentEndByte,
+          markdown,
+          sourceEndByte: block.sourceStartByte + markdown.length,
+          textRevision: block.textRevision + 1,
+        });
+        return nextBlocksById;
+      });
+    }, []);
+
     const commitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
       clearEditTimer();
 
@@ -706,6 +725,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       try {
         const beforeMarkdown = committedMarkdownRef.current;
+        if (updateReactState) {
+          updateRenderedBlockMarkdown(activeBlockIdValue, markdown);
+        }
         const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
           type: "updateBlockMarkdown",
           blockId: activeBlockIdValue,
@@ -731,10 +753,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           pendingRenderTransactionRef.current = result;
         }
       } catch (error) {
+        if (updateReactState) {
+          updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
+        }
         const nextError = error instanceof Error ? error : new Error(String(error));
         onErrorRef.current?.(nextError);
       }
-    }, [adapter, applyTransactionResult, clearEditTimer, documentState, onErrorRef]);
+    }, [adapter, applyTransactionResult, clearEditTimer, documentState, onErrorRef, updateRenderedBlockMarkdown]);
 
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
@@ -906,24 +931,31 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
 
         draftMarkdownRef.current = markdown;
+        setDraftMarkdown(markdown);
+        if (usesNativeEditorOverlay) {
+          updateRenderedBlockMarkdown(block.id, markdown);
+        }
         markDirty();
         clearEditTimer();
         editTimerRef.current = setTimeout(() => {
           void commitActiveBlock({ updateReactState: false });
         }, editDebounceMs);
       },
-      [clearEditTimer, commitActiveBlock, markDirty, splitActiveBlock],
+      [clearEditTimer, commitActiveBlock, markDirty, splitActiveBlock, updateRenderedBlockMarkdown],
     );
     const handleChangeMarkdownRef = useLatestRef(handleChangeMarkdown);
 
     const handleEditorBlur = useCallback(() => {
-      void commitActiveBlock({ updateReactState: true });
-      if (blockSelectionRef.current) {
-        return;
-      }
-      activeBlockIdRef.current = null;
-      setActiveBlockId(null);
-      setActiveSelection(0);
+      const blurredBlockId = activeBlockIdRef.current;
+      void (async () => {
+        await commitActiveBlock({ updateReactState: true });
+        if (blockSelectionRef.current || activeBlockIdRef.current !== blurredBlockId) {
+          return;
+        }
+        activeBlockIdRef.current = null;
+        setActiveBlockId(null);
+        setActiveSelection(0);
+      })();
     }, [commitActiveBlock]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 

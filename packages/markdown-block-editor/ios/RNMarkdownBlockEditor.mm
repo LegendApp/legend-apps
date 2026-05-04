@@ -351,7 +351,6 @@ static BOOL isEnrichedMarkdownInput(id view)
 - (void)hideOverlay
 {
   _overlayInput.hidden = YES;
-  [self showActiveBlockContents];
   [self stopObservingScrollView];
   _lastLoadedBlockId = nil;
   _activeBlockId = nil;
