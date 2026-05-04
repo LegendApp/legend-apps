@@ -803,13 +803,38 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, []);
 
     const blockIdAtWindowY = useCallback((y: number) => {
-      for (const [blockId, layout] of blockWindowLayoutsRef.current) {
-        if (y >= layout.y && y <= layout.y + layout.height) {
-          return blockId;
+      const layouts = blockIds
+        .map((blockId) => {
+          const layout = blockWindowLayoutsRef.current.get(blockId);
+          return layout ? { blockId, layout } : undefined;
+        })
+        .filter((entry): entry is { blockId: string; layout: BlockLayout } => entry !== undefined)
+        .sort((a, b) => a.layout.y - b.layout.y);
+
+      for (let index = 0; index < layouts.length; index += 1) {
+        const entry = layouts[index];
+        if (!entry) {
+          continue;
+        }
+
+        const previousEntry = layouts[index - 1];
+        const nextEntry = layouts[index + 1];
+        const blockTop = entry.layout.y;
+        const blockBottom = entry.layout.y + entry.layout.height;
+        const hitTop = previousEntry
+          ? (previousEntry.layout.y + previousEntry.layout.height + blockTop) / 2
+          : Number.NEGATIVE_INFINITY;
+        const hitBottom = nextEntry
+          ? (blockBottom + nextEntry.layout.y) / 2
+          : Number.POSITIVE_INFINITY;
+
+        if (y >= hitTop && y < hitBottom) {
+          return entry.blockId;
         }
       }
+
       return undefined;
-    }, []);
+    }, [blockIds]);
 
     const handleBlockWindowLayout = useCallback((blockId: string, layout: BlockLayout) => {
       const previousLayout = blockWindowLayoutsRef.current.get(blockId);
@@ -949,7 +974,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const blurredBlockId = activeBlockIdRef.current;
       void (async () => {
         await commitActiveBlock({ updateReactState: true });
-        if (blockSelectionRef.current || activeBlockIdRef.current !== blurredBlockId) {
+        if (activeBlockIdRef.current !== blurredBlockId) {
           return;
         }
         activeBlockIdRef.current = null;
