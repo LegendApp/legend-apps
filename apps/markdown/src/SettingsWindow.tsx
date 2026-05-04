@@ -4,9 +4,12 @@ import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useResolveClassNames } from "uniwind";
 import {
+  getMarkdownStartupBehaviorSetting,
   getMarkdownThemeSetting,
+  setMarkdownStartupBehaviorSetting,
   setMarkdownThemeSetting,
   subscribeToMarkdownSettings,
+  type MarkdownStartupBehaviorSetting,
   type MarkdownThemeSetting,
 } from "./markdownSettings";
 
@@ -24,22 +27,16 @@ const sidebarItems = settingsPages.map((page) => ({
   title: page.title,
 }));
 
-function GeneralSettingsPage() {
-  return (
-    <View>
-      <Text className="text-foreground" style={styles.pageTitle}>General</Text>
-    </View>
-  );
-}
-
-function ThemeOption({
+function RadioOption<Value extends string>({
   label,
+  onSelect,
   selected,
   value,
 }: {
   label: string;
+  onSelect: (value: Value) => void;
   selected: boolean;
-  value: MarkdownThemeSetting;
+  value: Value;
 }) {
   const selectedStyle = useResolveClassNames(selected ? "border-primary bg-surface-muted" : "border-border bg-surface");
   const indicatorStyle = useResolveClassNames(selected ? "border-primary bg-primary" : "border-border bg-surface");
@@ -49,12 +46,43 @@ function ThemeOption({
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
       className="flex-row items-center gap-3 rounded-md border px-3 py-2"
-      onPress={() => setMarkdownThemeSetting(value)}
+      onPress={() => onSelect(value)}
       style={selectedStyle}
     >
       <View className="h-3 w-3 rounded-full border" style={indicatorStyle} />
       <Text className="text-foreground" style={styles.optionText}>{label}</Text>
     </Pressable>
+  );
+}
+
+function GeneralSettingsPage() {
+  const startupBehavior = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownStartupBehaviorSetting,
+    getMarkdownStartupBehaviorSetting,
+  );
+
+  return (
+    <View className="gap-4">
+      <Text className="text-foreground" style={styles.pageTitle}>General</Text>
+      <View className="gap-2">
+        <Text className="text-foreground" style={styles.sectionTitle}>On Startup</Text>
+        <View accessibilityRole="radiogroup" className="gap-2">
+          <RadioOption<MarkdownStartupBehaviorSetting>
+            label="New Document"
+            onSelect={setMarkdownStartupBehaviorSetting}
+            selected={startupBehavior === "newDocument"}
+            value="newDocument"
+          />
+          <RadioOption<MarkdownStartupBehaviorSetting>
+            label="Last Document"
+            onSelect={setMarkdownStartupBehaviorSetting}
+            selected={startupBehavior === "lastDocument"}
+            value="lastDocument"
+          />
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -71,9 +99,24 @@ function AppearanceSettingsPage() {
       <View className="gap-2">
         <Text className="text-foreground" style={styles.sectionTitle}>Theme</Text>
         <View accessibilityRole="radiogroup" className="gap-2">
-          <ThemeOption label="Light" selected={selectedTheme === "light"} value="light" />
-          <ThemeOption label="Dark" selected={selectedTheme === "dark"} value="dark" />
-          <ThemeOption label="Grey" selected={selectedTheme === "grey"} value="grey" />
+          <RadioOption<MarkdownThemeSetting>
+            label="Light"
+            onSelect={setMarkdownThemeSetting}
+            selected={selectedTheme === "light"}
+            value="light"
+          />
+          <RadioOption<MarkdownThemeSetting>
+            label="Dark"
+            onSelect={setMarkdownThemeSetting}
+            selected={selectedTheme === "dark"}
+            value="dark"
+          />
+          <RadioOption<MarkdownThemeSetting>
+            label="Grey"
+            onSelect={setMarkdownThemeSetting}
+            selected={selectedTheme === "grey"}
+            value="grey"
+          />
         </View>
       </View>
     </View>

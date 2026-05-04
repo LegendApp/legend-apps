@@ -17,8 +17,13 @@ import { openWindow, setMainWindowOptions, WindowStyleMask } from "@legend-deskt
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppRegistry, StyleSheet, Text, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
-import { getMarkdownFileTitle } from "./appMetadata";
-import { applyMarkdownThemeSetting } from "./markdownSettings";
+import { addRecentMarkdownFile, getMarkdownFileTitle, getRecentMarkdownFiles } from "./appMetadata";
+import {
+  applyMarkdownThemeSetting,
+  getLastMarkdownDocumentPath,
+  getMarkdownStartupBehaviorSetting,
+  setLastMarkdownDocumentPath,
+} from "./markdownSettings";
 import { SettingsWindow } from "./SettingsWindow";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
@@ -74,6 +79,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
     setIsDirty(false);
     setSaveState("idle");
     setLastError(null);
+    addRecentMarkdownFile(path);
+    setLastMarkdownDocumentPath(path);
     noteRecentDocument(path);
   }, []);
 
@@ -144,6 +151,15 @@ export function App({ launchArguments }: MarkdownAppProps) {
     const launchFile = getLaunchMarkdownFile(launchArguments);
     if (launchFile) {
       openSelectedFile(launchFile, "startup");
+    } else if (getMarkdownStartupBehaviorSetting() === "lastDocument") {
+      const lastDocumentPath = getLastMarkdownDocumentPath()
+        ?? getRecentMarkdownFiles().find((file) => isMarkdownPath(file.path))?.path
+        ?? null;
+      if (lastDocumentPath) {
+        openSelectedFile(lastDocumentPath, "startup");
+      } else {
+        openUntitledDocument();
+      }
     } else {
       openUntitledDocument();
     }
