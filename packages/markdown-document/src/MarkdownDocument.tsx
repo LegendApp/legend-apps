@@ -1489,8 +1489,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockIds,
         blocksById,
         resolvedMarkdownLayout,
+        resolvedMarkdownStyle,
       }),
-      [activeBlockId, activeSelection, blockIds, blocksById, resolvedMarkdownLayout],
+      [activeBlockId, activeSelection, blockIds, blocksById, resolvedMarkdownLayout, resolvedMarkdownStyle],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
