@@ -1,4 +1,46 @@
 import type { MarkdownStyle } from "react-native-enriched-markdown";
+import type { MarkdownDocumentLayout } from "./types";
+
+export const defaultMarkdownLayout: MarkdownDocumentLayout = {
+  blockSpacing: {
+    blockquote: {
+      marginBottom: 24,
+      marginTop: 24,
+    },
+    codeBlock: {
+      marginBottom: 51.2,
+      marginTop: 20,
+    },
+    fallback: {
+      marginBottom: 19.2,
+      marginTop: 19.2,
+    },
+    heading: {
+      1: { marginBottom: 24, marginTop: 48 },
+      2: { marginBottom: 19.2, marginTop: 40 },
+      3: { marginBottom: 16, marginTop: 32 },
+      4: { marginBottom: 12.8, marginTop: 28 },
+      5: { marginBottom: 9.6, marginTop: 24 },
+      6: { marginBottom: 9.6, marginTop: 24 },
+    },
+    list: {
+      marginBottom: 19.2,
+      marginTop: 19.2,
+    },
+    paragraph: {
+      marginBottom: 19.2,
+      marginTop: 19.2,
+    },
+    table: {
+      marginBottom: 24,
+      marginTop: 24,
+    },
+    thematicBreak: {
+      marginBottom: 48,
+      marginTop: 48,
+    },
+  },
+};
 
 export const defaultMarkdownStyle: MarkdownStyle = {
   blockquote: {
@@ -23,8 +65,8 @@ export const defaultMarkdownStyle: MarkdownStyle = {
     color: "#f9fafb",
     fontFamily: "Menlo",
     fontSize: 13,
-    lineHeight: 20,
-    padding: 12,
+    lineHeight: 21.45,
+    padding: 20,
   },
   h1: {
     color: "#111827",

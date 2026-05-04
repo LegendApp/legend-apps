@@ -7,6 +7,7 @@ export type MarkdownBlockSnapshot = {
   index: number;
   type: string;
   depth: number;
+  headingLevel: number;
   markdown: string;
   sourceStartByte: number;
   sourceEndByte: number;
@@ -105,6 +106,24 @@ export type MarkdownDocumentTheme = {
   errorColor?: string;
 };
 
+export type MarkdownBlockLayoutStyle = {
+  marginTop?: number;
+  marginBottom?: number;
+};
+
+export type MarkdownDocumentLayout = {
+  blockSpacing: {
+    paragraph: MarkdownBlockLayoutStyle;
+    heading: Record<1 | 2 | 3 | 4 | 5 | 6, MarkdownBlockLayoutStyle>;
+    codeBlock: MarkdownBlockLayoutStyle;
+    blockquote: MarkdownBlockLayoutStyle;
+    list: MarkdownBlockLayoutStyle;
+    thematicBreak: MarkdownBlockLayoutStyle;
+    table: MarkdownBlockLayoutStyle;
+    fallback: MarkdownBlockLayoutStyle;
+  };
+};
+
 export type MarkdownDocumentProps = {
   filename: string;
   adapter?: MarkdownDocumentAdapter;
@@ -113,6 +132,7 @@ export type MarkdownDocumentProps = {
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   markdownStyle?: MarkdownStyle;
+  markdownLayout?: MarkdownDocumentLayout;
   theme?: MarkdownDocumentTheme;
   commandsRef?: Ref<MarkdownDocumentCommands>;
   onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;

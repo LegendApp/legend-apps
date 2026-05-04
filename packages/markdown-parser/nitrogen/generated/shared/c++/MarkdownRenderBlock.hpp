@@ -43,6 +43,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     double index     SWIFT_PRIVATE;
     std::string type     SWIFT_PRIVATE;
     double depth     SWIFT_PRIVATE;
+    double headingLevel     SWIFT_PRIVATE;
     std::string markdown     SWIFT_PRIVATE;
     double sourceStartByte     SWIFT_PRIVATE;
     double sourceEndByte     SWIFT_PRIVATE;
@@ -52,7 +53,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
 
   public:
     MarkdownRenderBlock() = default;
-    explicit MarkdownRenderBlock(std::string id, double index, std::string type, double depth, std::string markdown, double sourceStartByte, double sourceEndByte, double contentStartByte, double contentEndByte, double textRevision): id(id), index(index), type(type), depth(depth), markdown(markdown), sourceStartByte(sourceStartByte), sourceEndByte(sourceEndByte), contentStartByte(contentStartByte), contentEndByte(contentEndByte), textRevision(textRevision) {}
+    explicit MarkdownRenderBlock(std::string id, double index, std::string type, double depth, double headingLevel, std::string markdown, double sourceStartByte, double sourceEndByte, double contentStartByte, double contentEndByte, double textRevision): id(id), index(index), type(type), depth(depth), headingLevel(headingLevel), markdown(markdown), sourceStartByte(sourceStartByte), sourceEndByte(sourceEndByte), contentStartByte(contentStartByte), contentEndByte(contentEndByte), textRevision(textRevision) {}
 
   public:
     friend bool operator==(const MarkdownRenderBlock& lhs, const MarkdownRenderBlock& rhs) = default;
@@ -72,6 +73,7 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "type"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "depth"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "headingLevel"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "markdown"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceStartByte"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceEndByte"))),
@@ -86,6 +88,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "type"), JSIConverter<std::string>::toJSI(runtime, arg.type));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "depth"), JSIConverter<double>::toJSI(runtime, arg.depth));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "headingLevel"), JSIConverter<double>::toJSI(runtime, arg.headingLevel));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "markdown"), JSIConverter<std::string>::toJSI(runtime, arg.markdown));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceStartByte"), JSIConverter<double>::toJSI(runtime, arg.sourceStartByte));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceEndByte"), JSIConverter<double>::toJSI(runtime, arg.sourceEndByte));
@@ -106,6 +109,7 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "type")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "depth")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "headingLevel")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "markdown")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceStartByte")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceEndByte")))) return false;

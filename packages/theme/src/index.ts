@@ -1,3 +1,4 @@
+import { defaultMarkdownLayout } from "@legend-desktop/markdown-document";
 import { generatedThemeFiles } from "./generatedThemes";
 import type { LegendTheme, LegendThemeFile, LegendThemeName } from "./types";
 
@@ -19,6 +20,7 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
       foregroundColor: colors.foreground,
       mutedForegroundColor: colors.muted,
     },
+    markdownLayout: defaultMarkdownLayout,
     markdownStyle: {
       blockquote: {
         backgroundColor: colors.blockquoteBackground,
@@ -42,8 +44,8 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
         color: colors.codeForeground,
         fontFamily: "Menlo",
         fontSize: 13,
-        lineHeight: 20,
-        padding: 12,
+        lineHeight: 21.45,
+        padding: 20,
       },
       h1: {
         color: colors.foreground,

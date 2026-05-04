@@ -41,6 +41,7 @@ struct MarkdownBlockRange {
   std::string id;
   size_t index = 0;
   size_t depth = 0;
+  size_t headingLevel = 0;
   size_t markdownStart = 0;
   size_t markdownEnd = 0;
   size_t contentStart = 0;

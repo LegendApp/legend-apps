@@ -1,4 +1,4 @@
-import type { MarkdownDocumentTheme } from "@legend-desktop/markdown-document";
+import type { MarkdownDocumentLayout, MarkdownDocumentTheme } from "@legend-desktop/markdown-document";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 
 export type LegendThemeName = "light" | "dark" | (string & {});
@@ -32,5 +32,6 @@ export type LegendThemeFile = {
 
 export type LegendTheme = LegendThemeFile & {
   markdownDocument: MarkdownDocumentTheme;
+  markdownLayout: MarkdownDocumentLayout;
   markdownStyle: MarkdownStyle;
 };

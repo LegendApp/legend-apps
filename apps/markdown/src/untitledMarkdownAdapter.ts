@@ -14,18 +14,28 @@ type UntitledState = {
 };
 
 function blockTypeForMarkdown(markdown: string) {
-  if (/^```/.test(markdown)) {
+  if (/^ {0,3}#{1,6}\s/.test(markdown)) {
+    return "heading";
+  }
+  if (/^ {0,3}```/.test(markdown)) {
     return "codeBlock";
   }
   return "paragraph";
 }
 
+function headingLevelForMarkdown(markdown: string) {
+  return markdown.match(/^ {0,3}(#{1,6})\s/)?.[1]?.length ?? 0;
+}
+
 function createBlock(id: string, index: number, markdown: string, revision: number): MarkdownBlockSnapshot {
+  const type = blockTypeForMarkdown(markdown);
+
   return {
     id,
     index,
-    type: blockTypeForMarkdown(markdown),
+    type,
     depth: 0,
+    headingLevel: type === "heading" ? headingLevelForMarkdown(markdown) : 0,
     markdown,
     sourceStartByte: 0,
     sourceEndByte: markdown.length,

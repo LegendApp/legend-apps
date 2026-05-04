@@ -171,6 +171,18 @@ bool lineStartsHeading(const char* bytes, const LineInfo& line) {
   return hashCount > 0 && hashCount <= 6 && start + hashCount < end && isWhitespace(bytes[start + hashCount]);
 }
 
+size_t headingLevelForLine(const char* bytes, const LineInfo& line) {
+  if (!lineStartsHeading(bytes, line)) {
+    return 0;
+  }
+
+  size_t level = 0;
+  while (line.contentStart + level < line.end && bytes[line.contentStart + level] == '#') {
+    level += 1;
+  }
+  return level;
+}
+
 bool lineStartsHeading(const char* bytes, size_t start, size_t end) {
   return lineStartsHeading(bytes, lineInfo(bytes, start, end));
 }
@@ -451,6 +463,7 @@ ParseResult streamMarkdownSource(std::shared_ptr<const MarkdownSource> source, d
         "",
         blocks.size(),
         1,
+        type == MarkdownBlockType::Heading ? headingLevelForLine(bytes, line) : 0,
         line.start,
         std::min(end, length),
         line.contentStart,

@@ -18,12 +18,14 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
-import { defaultMarkdownStyle } from "./styles";
+import { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 import type {
   MarkdownBlockSnapshot,
   MarkdownDocumentCommands,
+  MarkdownDocumentLayout,
   MarkdownDocumentProps,
   MarkdownDocumentSnapshot,
   MarkdownSaveState,
@@ -98,7 +100,8 @@ const hydrateChunkSize = 512;
 const editDebounceMs = 300;
 const contentMaxWidth = 920;
 const contentHorizontalPadding = 40;
-const blockRowVerticalPadding = 4;
+
+type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 function useLatestRef<T>(value: T) {
   const ref = useRef(value);
@@ -116,7 +119,7 @@ function editableTextStyleForBlock(
   block: MarkdownBlockSnapshot,
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
 ) {
-  const headingLevel = block.markdown.match(/^(#{1,6})\s/)?.[1]?.length;
+  const headingLevel = getHeadingLevel(block);
   const markdownTextStyle =
     headingLevel === 1
       ? markdownStyle.h1
@@ -135,6 +138,64 @@ function editableTextStyleForBlock(
                   : markdownStyle.paragraph;
 
   return [styles.editorInput, markdownTextStyle as TextStyle | undefined];
+}
+
+function getHeadingLevel(block: MarkdownBlockSnapshot): HeadingLevel | undefined {
+  return block.type === "heading" && block.headingLevel >= 1 && block.headingLevel <= 6
+    ? block.headingLevel as HeadingLevel
+    : undefined;
+}
+
+function blockSpacingForBlock(block: MarkdownBlockSnapshot, markdownLayout: MarkdownDocumentLayout) {
+  const { blockSpacing } = markdownLayout;
+  const headingLevel = getHeadingLevel(block);
+  if (headingLevel) {
+    return blockSpacing.heading[headingLevel];
+  }
+
+  switch (block.type) {
+    case "paragraph":
+      return blockSpacing.paragraph;
+    case "codeBlock":
+      return blockSpacing.codeBlock;
+    case "quote":
+      return blockSpacing.blockquote;
+    case "unorderedList":
+    case "orderedList":
+    case "listItem":
+      return blockSpacing.list;
+    case "thematicBreak":
+      return blockSpacing.thematicBreak;
+    case "table":
+    case "tableHead":
+    case "tableBody":
+    case "tableRow":
+    case "tableHeaderCell":
+    case "tableCell":
+      return blockSpacing.table;
+    default:
+      return blockSpacing.fallback;
+  }
+}
+
+function blockRowSpacingStyle(
+  block: MarkdownBlockSnapshot,
+  previousBlock: MarkdownBlockSnapshot | undefined,
+  hasPreviousBlock: boolean,
+  hasNextBlock: boolean,
+  markdownLayout: MarkdownDocumentLayout,
+): ViewStyle {
+  const spacing = blockSpacingForBlock(block, markdownLayout);
+  const previousSpacing = previousBlock
+    ? blockSpacingForBlock(previousBlock, markdownLayout)
+    : hasPreviousBlock
+      ? markdownLayout.blockSpacing.fallback
+      : undefined;
+
+  return {
+    marginBottom: hasNextBlock ? 0 : spacing.marginBottom ?? 0,
+    marginTop: previousSpacing ? Math.max(previousSpacing.marginBottom ?? 0, spacing.marginTop ?? 0) : 0,
+  };
 }
 
 function splitMarkdownAtFirstLineBreak(markdown: string) {
@@ -320,6 +381,8 @@ const MarkdownOverlayEditorInput = memo(
 function MarkdownBlockRow({
   activeInputRef,
   draftMarkdown,
+  hasNextBlock,
+  hasPreviousBlock,
   initialSelection,
   isActive,
   onActivate,
@@ -328,19 +391,25 @@ function MarkdownBlockRow({
   onBlockWindowLayout,
   onSelectionDragOutsideRef,
   block,
+  markdownLayout,
   markdownStyle,
+  previousBlock,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   block?: MarkdownBlockSnapshot;
   draftMarkdown: string;
+  hasNextBlock: boolean;
+  hasPreviousBlock: boolean;
   initialSelection: number;
   isActive: boolean;
+  markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onBlockWindowLayout: (blockId: string, layout: BlockLayout) => void;
   onBlurRef: RefObject<() => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
+  previousBlock?: MarkdownBlockSnapshot;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
   const rowRef = useRef<View>(null);
@@ -348,6 +417,8 @@ function MarkdownBlockRow({
   if (!block) {
     return null;
   }
+
+  const rowStyle = blockRowSpacingStyle(block, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
 
   const measureWindowLayout = () => {
     requestAnimationFrame(() => {
@@ -365,7 +436,7 @@ function MarkdownBlockRow({
           setRowWidth(event.nativeEvent.layout.width);
           measureWindowLayout();
         }}
-        style={styles.blockRow}
+        style={rowStyle}
       >
         <MarkdownEditorInput
           activeInputRef={activeInputRef}
@@ -408,7 +479,7 @@ function MarkdownBlockRow({
           setRowWidth(event.nativeEvent.layout.width);
           measureWindowLayout();
         }}
-        style={styles.blockRow}
+        style={rowStyle}
       >
         {renderedMarkdown}
       </MarkdownBlockActivationView>
@@ -427,7 +498,7 @@ function MarkdownBlockRow({
       onPress={(event) => {
         onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
       }}
-      style={styles.blockRow}
+      style={rowStyle}
     >
       {renderedMarkdown}
     </Pressable>
@@ -442,6 +513,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       commandsRef,
       contentContainerStyle,
       filename,
+      markdownLayout,
       markdownStyle,
       onDirtyChange,
       onError,
@@ -1307,6 +1379,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useImperativeHandle(ref, () => commands, [commands]);
     useImperativeHandle(commandsRef, () => commands, [commands]);
 
+    const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
     const blockSelectionRects = useMemo(() => {
       const rects: { blockId: string; height: number; y: number }[] = [];
@@ -1339,9 +1412,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       () => ({
         activeBlockId,
         activeSelection,
+        blockIds,
         blocksById,
+        resolvedMarkdownLayout,
       }),
-      [activeBlockId, activeSelection, blocksById],
+      [activeBlockId, activeSelection, blockIds, blocksById, resolvedMarkdownLayout],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -1358,26 +1433,32 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           activeInputRef={activeInputRef}
           block={blocksById.get(props.item)}
           draftMarkdown={activeBlockId === props.item ? draftMarkdown : ""}
+          hasNextBlock={props.index + 1 < blockIds.length}
+          hasPreviousBlock={props.index > 0}
           initialSelection={activeSelection}
           isActive={activeBlockId === props.item}
+          markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
           onBlockWindowLayout={handleBlockWindowLayout}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
+          previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
         />
       ),
       [
         activateBlock,
         activeBlockId,
         activeSelection,
+        blockIds,
         blocksById,
         draftMarkdown,
         handleBlockWindowLayout,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
         handleSelectionDragOutsideRef,
+        resolvedMarkdownLayout,
         resolvedMarkdownStyle,
       ],
     );
@@ -1504,7 +1585,6 @@ MarkdownDocument.displayName = "MarkdownDocument";
 const styles = StyleSheet.create({
   blockRow: {
     paddingHorizontal: 0,
-    paddingVertical: blockRowVerticalPadding,
   },
   blockSelectionInput: {
     height: 1,

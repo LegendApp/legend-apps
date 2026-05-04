@@ -36,6 +36,7 @@ function toBlockSnapshot(block: MarkdownRenderBlock): MarkdownBlockSnapshot {
     index: block.index,
     type: block.type,
     depth: block.depth,
+    headingLevel: block.headingLevel,
     markdown: block.markdown,
     sourceStartByte: block.sourceStartByte,
     sourceEndByte: block.sourceEndByte,

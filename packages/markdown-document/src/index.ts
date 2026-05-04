@@ -1,10 +1,11 @@
 export { MarkdownDocument } from "./MarkdownDocument";
 export { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
-export { defaultMarkdownStyle } from "./styles";
+export { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 export type {
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
   MarkdownDocumentCommands,
+  MarkdownDocumentLayout,
   MarkdownDocumentLoadedInfo,
   MarkdownDocumentProps,
   MarkdownDocumentSnapshot,

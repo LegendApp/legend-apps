@@ -367,6 +367,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
         }}
         onSaveStateChange={setSaveState}
         savePolicy={isUntitledDocument ? { autosave: false } : undefined}
+        markdownLayout={theme.markdownLayout}
         markdownStyle={theme.markdownStyle}
         style={[styles.document, backgroundStyle]}
         theme={theme.markdownDocument}

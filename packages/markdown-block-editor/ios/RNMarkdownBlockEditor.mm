@@ -7,8 +7,6 @@
 
 using namespace facebook::react;
 
-static const CGFloat RNMarkdownBlockEditorOverlayVerticalInset = 4.0;
-
 static SEL setValueSelector()
 {
   return NSSelectorFromString(@"setValue:");
@@ -243,8 +241,6 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 
   NSRect frame = [view convertRect:view.bounds toView:_overlayInput.superview];
-  frame.origin.y += RNMarkdownBlockEditorOverlayVerticalInset;
-  frame.size.height = MAX(1.0, frame.size.height - RNMarkdownBlockEditorOverlayVerticalInset * 2.0);
   return frame;
 }
 

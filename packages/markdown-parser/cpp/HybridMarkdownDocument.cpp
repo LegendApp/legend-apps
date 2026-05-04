@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -47,6 +48,96 @@ std::string markdownBlockTypeName(MarkdownBlockType type) {
     case MarkdownBlockType::TableCell:
       return "tableCell";
   }
+}
+
+size_t firstContentIndex(const std::string& markdown) {
+  size_t index = 0;
+  size_t spaces = 0;
+  while (index < markdown.size() && markdown[index] == ' ' && spaces < 4) {
+    index += 1;
+    spaces += 1;
+  }
+  return spaces < 4 ? index : 0;
+}
+
+size_t headingLevelForMarkdown(const std::string& markdown) {
+  const size_t start = firstContentIndex(markdown);
+  if (start >= markdown.size() || markdown[start] != '#') {
+    return 0;
+  }
+
+  size_t level = 0;
+  while (start + level < markdown.size() && markdown[start + level] == '#') {
+    level += 1;
+  }
+
+  if (level == 0 || level > 6 || start + level >= markdown.size()) {
+    return 0;
+  }
+
+  const unsigned char next = static_cast<unsigned char>(markdown[start + level]);
+  return std::isspace(next) ? level : 0;
+}
+
+MarkdownBlockType blockTypeForMarkdown(const std::string& markdown) {
+  const size_t start = firstContentIndex(markdown);
+  if (start >= markdown.size()) {
+    return MarkdownBlockType::Paragraph;
+  }
+
+  const char first = markdown[start];
+  if (headingLevelForMarkdown(markdown) > 0) {
+    return MarkdownBlockType::Heading;
+  }
+  if (first == '-' || first == '*' || first == '_') {
+    size_t markerCount = 0;
+    bool onlyMarkersAndSpaces = true;
+    for (size_t index = start; index < markdown.size(); index += 1) {
+      if (markdown[index] == first) {
+        markerCount += 1;
+      } else if (!std::isspace(static_cast<unsigned char>(markdown[index]))) {
+        onlyMarkersAndSpaces = false;
+        break;
+      }
+    }
+    if (onlyMarkersAndSpaces && markerCount >= 3) {
+      return MarkdownBlockType::ThematicBreak;
+    }
+  }
+  if (
+      (first == '`' || first == '~') &&
+      start + 2 < markdown.size() &&
+      markdown[start + 1] == first &&
+      markdown[start + 2] == first) {
+    return MarkdownBlockType::CodeBlock;
+  }
+  if (first == '>') {
+    return MarkdownBlockType::Quote;
+  }
+  if (
+      (first == '-' || first == '*' || first == '+') &&
+      start + 1 < markdown.size() &&
+      std::isspace(static_cast<unsigned char>(markdown[start + 1]))) {
+    return MarkdownBlockType::UnorderedList;
+  }
+  if (first >= '0' && first <= '9') {
+    size_t markerEnd = start;
+    while (markerEnd < markdown.size() && markdown[markerEnd] >= '0' && markdown[markerEnd] <= '9') {
+      markerEnd += 1;
+    }
+    if (
+        markerEnd + 1 < markdown.size() &&
+        (markdown[markerEnd] == '.' || markdown[markerEnd] == ')') &&
+        std::isspace(static_cast<unsigned char>(markdown[markerEnd + 1]))) {
+      return MarkdownBlockType::OrderedList;
+    }
+  }
+  return MarkdownBlockType::Paragraph;
+}
+
+void updateBlockSyntax(MarkdownBlockRange& block, const std::string& markdown) {
+  block.type = blockTypeForMarkdown(markdown);
+  block.headingLevel = block.type == MarkdownBlockType::Heading ? headingLevelForMarkdown(markdown) : 0;
 }
 
 } // namespace
@@ -171,6 +262,7 @@ MarkdownRenderBlock HybridMarkdownDocument::renderBlockForBlock(
       static_cast<double>(block.index),
       markdownBlockTypeName(block.type),
       static_cast<double>(block.depth),
+      static_cast<double>(block.headingLevel),
       markdownForBlock(storageIndex, block),
       static_cast<double>(block.markdownStart),
       static_cast<double>(block.markdownEnd),
@@ -225,6 +317,7 @@ MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const Mark
   block.markdownEnd = block.markdownStart + transaction.markdown->size();
   block.contentStart = block.markdownStart;
   block.contentEnd = block.markdownEnd;
+  updateBlockSyntax(block, *transaction.markdown);
   block.textRevision += 1;
   shiftBlocksAfter(blockIndex + 1, delta);
   markdownCache_[blockIndex] = *transaction.markdown;
@@ -250,6 +343,7 @@ MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTrans
   block.markdownEnd = block.markdownStart + transaction.beforeMarkdown->size();
   block.contentStart = block.markdownStart;
   block.contentEnd = block.markdownEnd;
+  updateBlockSyntax(block, *transaction.beforeMarkdown);
   block.textRevision += 1;
 
   MarkdownBlockRange newBlock;
@@ -260,7 +354,7 @@ MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTrans
   newBlock.markdownEnd = secondStart + transaction.afterMarkdown->size();
   newBlock.contentStart = newBlock.markdownStart;
   newBlock.contentEnd = newBlock.markdownEnd;
-  newBlock.type = MarkdownBlockType::Paragraph;
+  updateBlockSyntax(newBlock, *transaction.afterMarkdown);
 
   blocks_.insert(blocks_.begin() + static_cast<long long>(blockIndex + 1), newBlock);
   markdownCache_.insert(markdownCache_.begin() + static_cast<long long>(blockIndex + 1), *transaction.afterMarkdown);
@@ -334,7 +428,7 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
       replacementBlock.markdownEnd = blockSourceStart + blockMarkdown.size();
       replacementBlock.contentStart = replacementBlock.markdownStart;
       replacementBlock.contentEnd = replacementBlock.markdownEnd;
-      replacementBlock.type = MarkdownBlockType::Paragraph;
+      updateBlockSyntax(replacementBlock, blockMarkdown);
       replacementBlock.textRevision = revision_ + 1;
       insertedBlocks.push_back(std::move(replacementBlock));
       insertedMarkdownCache.push_back(blockMarkdown);

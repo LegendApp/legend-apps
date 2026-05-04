@@ -14,6 +14,7 @@ export interface MarkdownRenderBlock {
   index: number;
   type: string;
   depth: number;
+  headingLevel: number;
   markdown: string;
   sourceStartByte: number;
   sourceEndByte: number;
