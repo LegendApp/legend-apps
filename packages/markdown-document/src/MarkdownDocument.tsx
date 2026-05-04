@@ -100,6 +100,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
 
+    const reportAsyncError = useCallback(
+      (error: unknown) => {
+        const nextError = error instanceof Error ? error : new Error(String(error));
+        onErrorRef.current?.(nextError);
+      },
+      [onErrorRef],
+    );
+
     const clearEditTimer = useCallback(() => {
       if (editTimerRef.current !== undefined) {
         clearTimeout(editTimerRef.current);
@@ -125,9 +133,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       autosaveTimerRef.current = setTimeout(() => {
         autosaveTimerRef.current = undefined;
-        saveRef.current?.();
+        saveRef.current?.().catch(reportAsyncError);
       }, autosaveDebounceMs);
-    }, [autosaveDebounceMs, autosaveEnabled, clearAutosaveTimer]);
+    }, [autosaveDebounceMs, autosaveEnabled, clearAutosaveTimer, reportAsyncError]);
 
     const markDirty = useCallback(() => {
       autosavePausedRef.current = false;
@@ -304,7 +312,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
-        void commitActiveBlock({ updateReactState: true });
+        commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
         blockSelectionGestureRef.current = null;
         setNextBlockSelection(null);
         nativeEditingBlockIdRef.current = block.id;
@@ -315,13 +323,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         setActiveSelection(selection);
         setActiveBlockId(block.id);
       },
-      [commitActiveBlock],
+      [commitActiveBlock, reportAsyncError],
     );
 
     const beginBlockSelection = useCallback(
       (anchorBlockId: string, focusBlockId: string) => {
         const activeBlockIdValue = activeBlockIdRef.current;
-        void commitActiveBlock({ updateReactState: true });
+        commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
         if (activeBlockIdValue && activeBlockIdValue !== anchorBlockId) {
           activeInputRef.current?.blur();
           nativeEditingBlockIdRef.current = null;
@@ -333,7 +341,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelectionGestureRef.current = nextBlockSelection;
         setNextBlockSelection(nextBlockSelection);
       },
-      [commitActiveBlock, setNextBlockSelection],
+      [commitActiveBlock, reportAsyncError, setNextBlockSelection],
     );
 
     const updateBlockSelectionGesture = useCallback(
@@ -459,7 +467,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (block.type !== "codeBlock") {
           const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
           if (splitMarkdown) {
-            void splitActiveBlock(block, splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
+            splitActiveBlock(block, splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown).catch(reportAsyncError);
             return;
           }
         }
@@ -472,17 +480,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty();
         clearEditTimer();
         editTimerRef.current = setTimeout(() => {
-          void commitActiveBlock({ updateReactState: false });
+          commitActiveBlock({ updateReactState: false }).catch(reportAsyncError);
         }, editDebounceMs);
       },
-      [clearEditTimer, commitActiveBlock, markDirty, splitActiveBlock, updateRenderedBlockMarkdown],
+      [clearEditTimer, commitActiveBlock, markDirty, reportAsyncError, splitActiveBlock, updateRenderedBlockMarkdown],
     );
     const handleChangeMarkdownRef = useLatestRef(handleChangeMarkdown);
 
     const handleEditorBlur = useCallback(() => {
       const blurredBlockId = activeBlockIdRef.current;
-      void (async () => {
-        await commitActiveBlock({ updateReactState: true });
+      commitActiveBlock({ updateReactState: true }).then(() => {
         if (activeBlockIdRef.current !== blurredBlockId) {
           return;
         }
@@ -490,8 +497,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
-      })();
-    }, [commitActiveBlock]);
+      }).catch(reportAsyncError);
+    }, [commitActiveBlock, reportAsyncError]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 
     const replaceBlockSelection = useCallback(
@@ -566,20 +573,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         const { key } = event.nativeEvent;
         if (key === "Backspace" || key === "Delete" || key === "Enter") {
-          void replaceBlockSelection("");
+          replaceBlockSelection("").catch(reportAsyncError);
         }
       },
-      [blockSelection, replaceBlockSelection],
+      [blockSelection, replaceBlockSelection, reportAsyncError],
     );
 
     const handleBlockSelectionInputChange = useCallback(
       (text: string) => {
         setBlockSelectionInputText("");
         if (blockSelection && text.length > 0) {
-          void replaceBlockSelection(text);
+          replaceBlockSelection(text).catch(reportAsyncError);
         }
       },
-      [blockSelection, replaceBlockSelection],
+      [blockSelection, replaceBlockSelection, reportAsyncError],
     );
 
     const hydrateRemainingBlocks = useCallback(
@@ -594,7 +601,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
 
           const count = Math.min(hydrateChunkSize, snapshot.blockCount - startIndex);
-          void adapter
+          adapter
             .getBlocks(snapshot.documentId, startIndex, count)
             .then((blocks) => {
               if (loadVersion !== loadVersionRef.current) {
@@ -660,11 +667,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setNextSaveState("idle");
       onDirtyChangeRef.current?.(false);
 
-      void adapter
+      adapter
         .load(filename)
         .then((snapshot) => {
           if (isCanceled || loadVersion !== loadVersionRef.current) {
-            void adapter.close(snapshot.documentId);
+            adapter.close(snapshot.documentId).catch(reportAsyncError);
             return;
           }
 
@@ -721,6 +728,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onDirtyChangeRef,
       onErrorRef,
       onLoadedRef,
+      reportAsyncError,
       setNextSaveState,
     ]);
 
@@ -745,9 +753,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       return () => {
-        void adapter.close(loadedDocumentId);
+        adapter.close(loadedDocumentId).catch(reportAsyncError);
       };
-    }, [adapter, loadedDocumentId]);
+    }, [adapter, loadedDocumentId, reportAsyncError]);
 
     const saveDocument = useCallback(
       async (saveFilename?: string) => {
@@ -762,23 +770,26 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (documentState.status !== "loaded") {
           return;
         }
+        const { documentId } = documentState.snapshot;
 
         clearAutosaveTimer();
         autosavePausedRef.current = false;
         setNextSaveState("saving");
 
-        const savePromise = (async () => {
+        async function performSave() {
           await commitActiveBlock({ updateReactState: false });
           if (saveFilename) {
-            await adapter.saveAs(documentState.snapshot.documentId, saveFilename);
+            await adapter.saveAs(documentId, saveFilename);
           } else {
-            await adapter.save(documentState.snapshot.documentId);
+            await adapter.save(documentId);
           }
           savedRevisionRef.current = currentRevisionRef.current;
           setNextSaveState("idle");
           isDirtyRef.current = currentRevisionRef.current !== savedRevisionRef.current;
           onDirtyChangeRef.current?.(isDirtyRef.current);
-        })();
+        }
+
+        const savePromise = performSave();
         saveInFlightRef.current = savePromise;
 
         try {
@@ -906,7 +917,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const undo = useCallback(() => {
-      void (async () => {
+      async function runUndo() {
         await commitActiveBlock({ updateReactState: true });
         const entry = undoStackRef.current.pop();
         if (!entry) {
@@ -919,11 +930,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         } else {
           undoStackRef.current.push(entry);
         }
-      })();
-    }, [applyHistoryEntry, commitActiveBlock]);
+      }
+
+      runUndo().catch(reportAsyncError);
+    }, [applyHistoryEntry, commitActiveBlock, reportAsyncError]);
 
     const redo = useCallback(() => {
-      void (async () => {
+      async function runRedo() {
         await commitActiveBlock({ updateReactState: true });
         const entry = redoStackRef.current.pop();
         if (!entry) {
@@ -936,8 +949,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         } else {
           redoStackRef.current.push(entry);
         }
-      })();
-    }, [applyHistoryEntry, commitActiveBlock]);
+      }
+
+      runRedo().catch(reportAsyncError);
+    }, [applyHistoryEntry, commitActiveBlock, reportAsyncError]);
 
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
