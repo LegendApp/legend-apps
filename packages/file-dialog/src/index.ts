@@ -53,4 +53,12 @@ export function revealInFinder(path: string) {
   return NativeFileDialog.revealInFinder(path);
 }
 
+export function writeTextFile(path: string, contents: string) {
+  if (Platform.OS !== "macos") {
+    return Promise.resolve();
+  }
+
+  return NativeFileDialog.writeTextFile(path, contents);
+}
+
 export { default as NativeFileDialog } from "./NativeFileDialog";

@@ -232,7 +232,20 @@ void HybridMarkdownDocument::save() {
     throw std::runtime_error("Cannot save markdown document without a file path.");
   }
 
-  const std::string temporaryPath = filePath_ + ".tmp";
+  writeToFilePath(filePath_);
+}
+
+void HybridMarkdownDocument::saveAs(const std::string& filePath) {
+  if (filePath.empty()) {
+    throw std::runtime_error("Cannot save markdown document without a file path.");
+  }
+
+  writeToFilePath(filePath);
+  filePath_ = filePath;
+}
+
+void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const {
+  const std::string temporaryPath = filePath + ".tmp";
   {
     std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
     if (!output) {
@@ -244,9 +257,9 @@ void HybridMarkdownDocument::save() {
     }
   }
 
-  if (std::rename(temporaryPath.c_str(), filePath_.c_str()) != 0) {
+  if (std::rename(temporaryPath.c_str(), filePath.c_str()) != 0) {
     std::remove(temporaryPath.c_str());
-    throw std::runtime_error("Failed to replace markdown file: " + filePath_);
+    throw std::runtime_error("Failed to replace markdown file: " + filePath);
   }
 }
 

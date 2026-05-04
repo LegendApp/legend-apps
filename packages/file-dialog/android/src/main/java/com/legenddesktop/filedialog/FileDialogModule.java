@@ -29,4 +29,9 @@ public class FileDialogModule extends NativeFileDialogSpec {
   public void revealInFinder(String path, Promise promise) {
     promise.resolve(false);
   }
+
+  @Override
+  public void writeTextFile(String path, String contents, Promise promise) {
+    promise.resolve(null);
+  }
 }

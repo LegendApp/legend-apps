@@ -23,6 +23,7 @@ namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransac
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransaction; }
 
 #include "MarkdownRenderBlock.hpp"
+#include <string>
 #include <vector>
 #include "MarkdownDocumentTiming.hpp"
 #include "MarkdownTransactionResult.hpp"
@@ -64,6 +65,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       virtual MarkdownDocumentTiming getTiming() = 0;
       virtual MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) = 0;
       virtual void save() = 0;
+      virtual void saveAs(const std::string& filePath) = 0;
 
     protected:
       // Hybrid Setup

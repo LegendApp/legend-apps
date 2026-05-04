@@ -65,6 +65,7 @@ export type MarkdownDocumentAdapter = {
   getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot>;
   getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]>;
   save(documentId: string): Promise<void>;
+  saveAs(documentId: string, filename: string): Promise<void>;
   close(documentId: string): Promise<void>;
   applyTransaction?: (
     documentId: string,
@@ -73,7 +74,8 @@ export type MarkdownDocumentAdapter = {
 };
 
 export type MarkdownDocumentCommands = {
-  save(): void;
+  save(): Promise<void>;
+  saveAs(filename: string): Promise<void>;
   undo(): void;
   redo(): void;
   focus(): void;

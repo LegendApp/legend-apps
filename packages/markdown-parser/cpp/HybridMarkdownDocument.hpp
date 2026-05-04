@@ -66,6 +66,7 @@ public:
   MarkdownDocumentTiming getTiming() override;
   MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) override;
   void save() override;
+  void saveAs(const std::string& filePath) override;
 
 protected:
   size_t getExternalMemorySize() noexcept override;
@@ -84,6 +85,7 @@ private:
       const std::vector<size_t>& changedBlockIndices,
       std::vector<std::string> retiredBlockIds = {}) const;
   void replaceSourceRange(size_t start, size_t end, const std::string& markdown);
+  void writeToFilePath(const std::string& filePath) const;
   void shiftBlocksAfter(size_t startIndex, long long delta);
   void renumberBlocks(size_t startIndex);
   std::string nextBlockId();

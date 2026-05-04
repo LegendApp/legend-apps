@@ -137,6 +137,10 @@ export const nativeMarkdownDocumentAdapter: MarkdownDocumentAdapter = {
     getSession(documentId).nativeDocument.save();
   },
 
+  async saveAs(documentId: string, filename: string): Promise<void> {
+    getSession(documentId).nativeDocument.saveAs(filename);
+  },
+
   async close(documentId: string): Promise<void> {
     sessions.delete(documentId);
   },

@@ -1,4 +1,5 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
+import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
+import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,
@@ -32,6 +33,7 @@ const settingsWindowModuleName = "MarkdownSettingsWindow";
 const settingsWindowIdentifier = "markdown-settings";
 const markdownFileTypes = ["md", "markdown", "mdown", "mkd", "mdx"];
 const commandModifier = 1 << 20;
+const shiftModifier = 1 << 17;
 
 AppRegistry.registerComponent(settingsWindowModuleName, () => SettingsWindow);
 
@@ -52,6 +54,16 @@ function getLaunchMarkdownFile(launchArguments: string[] | undefined) {
   return launchArguments?.find(isMarkdownPath) ?? argv.find(isMarkdownPath) ?? null;
 }
 
+function getDirectory(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex > 0 ? path.slice(0, separatorIndex) : undefined;
+}
+
+function getFilename(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+}
+
 export function App({ launchArguments }: MarkdownAppProps) {
   const [filename, setFilename] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -64,6 +76,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
   const startupHandledRef = useRef(false);
 
   const hasDocument = filename !== null;
+  const isUntitledDocument = documentSource === "untitled";
+  const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
   const { theme: uniwindTheme } = useUniwind();
   const theme = getLegendTheme(uniwindTheme);
   const backgroundStyle = useResolveClassNames("bg-background");
@@ -93,6 +107,70 @@ export function App({ launchArguments }: MarkdownAppProps) {
     setLastError(null);
   }, []);
 
+  const completeSaveAs = useCallback((path: string) => {
+    setDocumentSource("file");
+    setFilename(path);
+    setIsDirty(false);
+    setSaveState("idle");
+    setLastError(null);
+    addRecentMarkdownFile(path);
+    setLastMarkdownDocumentPath(path);
+    noteRecentDocument(path);
+  }, []);
+
+  const saveCurrentDocumentAs = useCallback(async () => {
+    if (!filename || !documentCommandsRef.current) {
+      return false;
+    }
+
+    try {
+      const path = await saveFileDialog({
+        allowedFileTypes: markdownFileTypes,
+        defaultName: isUntitledDocument ? untitledFilename : getFilename(filename),
+        directory: isUntitledDocument ? undefined : getDirectory(filename),
+      });
+
+      if (!path) {
+        return false;
+      }
+
+      await documentCommandsRef.current.saveAs(path);
+      completeSaveAs(path);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError(message);
+      return false;
+    }
+  }, [completeSaveAs, filename, isUntitledDocument]);
+
+  const saveCurrentDocument = useCallback(async () => {
+    if (!documentCommandsRef.current) {
+      return false;
+    }
+
+    if (isUntitledDocument) {
+      return saveCurrentDocumentAs();
+    }
+
+    try {
+      await documentCommandsRef.current.save();
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError(message);
+      return false;
+    }
+  }, [isUntitledDocument, saveCurrentDocumentAs]);
+
+  const flushCurrentDocumentBeforeTransition = useCallback(async () => {
+    if (!hasDocument || !isDirty) {
+      return true;
+    }
+
+    return saveCurrentDocument();
+  }, [hasDocument, isDirty, saveCurrentDocument]);
+
   const openMarkdownDialog = useCallback(
     async () => {
       if (openDialogInFlight.current) {
@@ -102,6 +180,11 @@ export function App({ launchArguments }: MarkdownAppProps) {
       openDialogInFlight.current = true;
 
       try {
+        const didFlush = await flushCurrentDocumentBeforeTransition();
+        if (!didFlush) {
+          return;
+        }
+
         const paths = await openFileDialog();
         const path = paths?.find(isMarkdownPath) ?? null;
 
@@ -115,7 +198,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
         openDialogInFlight.current = false;
       }
     },
-    [openSelectedFile],
+    [flushCurrentDocumentBeforeTransition, openSelectedFile],
   );
 
   const openSettingsWindow = useCallback(() => {
@@ -167,14 +250,44 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
   useEffect(() => {
     const subscription = addRecentDocumentOpenListener(({ path }) => {
-      if (isMarkdownPath(path)) {
-        openSelectedFile(path, "recent");
-      }
+      void (async () => {
+        if (!isMarkdownPath(path)) {
+          return;
+        }
+
+        const didFlush = await flushCurrentDocumentBeforeTransition();
+        if (didFlush) {
+          openSelectedFile(path, "recent");
+        }
+      })();
     });
     return () => {
       subscription.remove();
     };
-  }, [openSelectedFile]);
+  }, [flushCurrentDocumentBeforeTransition, openSelectedFile]);
+
+  useEffect(() => {
+    const subscription = addAppExitListener((event) => {
+      if (event.reason !== "requested") {
+        return;
+      }
+
+      void (async () => {
+        try {
+          const didFlush = await flushCurrentDocumentBeforeTransition();
+          completeAppExit(didFlush);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setLastError(message);
+          completeAppExit(false);
+        }
+      })();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [flushCurrentDocumentBeforeTransition]);
 
   useEffect(() => {
     configureMenus(menuOwnerId, [
@@ -192,6 +305,12 @@ export function App({ launchArguments }: MarkdownAppProps) {
             id: "save",
             targetTitle: "Save...",
             enabled: false,
+          },
+          {
+            id: "saveAs",
+            title: "Save As...",
+            enabled: false,
+            shortcut: { key: "s", modifiers: commandModifier | shiftModifier },
           },
         ],
       },
@@ -273,7 +392,9 @@ export function App({ launchArguments }: MarkdownAppProps) {
       } else if (action.itemId === "settings") {
         openSettingsWindow();
       } else if (action.itemId === "save") {
-        documentCommandsRef.current?.save();
+        void saveCurrentDocument();
+      } else if (action.itemId === "saveAs") {
+        void saveCurrentDocumentAs();
       } else if (action.itemId === "undo") {
         documentCommandsRef.current?.undo();
       } else if (action.itemId === "redo") {
@@ -297,14 +418,12 @@ export function App({ launchArguments }: MarkdownAppProps) {
       subscription.remove();
       clearMenus(menuOwnerId);
     };
-  }, [openMarkdownDialog, openSelectedFile, openSettingsWindow]);
-
-  const isUntitledDocument = documentSource === "untitled";
-  const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
+  }, [openMarkdownDialog, openSettingsWindow, saveCurrentDocument, saveCurrentDocumentAs]);
 
   useEffect(() => {
     updateMenuItems(menuOwnerId, [
-      { id: "save", enabled: hasDocument && !isUntitledDocument && isDirty && saveState !== "saving" },
+      { id: "save", enabled: hasDocument && isDirty && saveState !== "saving" },
+      { id: "saveAs", enabled: hasDocument && saveState !== "saving" },
       { id: "settings", enabled: true },
       { id: "undo", enabled: hasDocument },
       { id: "redo", enabled: hasDocument },

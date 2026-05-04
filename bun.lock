@@ -16,6 +16,7 @@
       "name": "@legend-desktop/app-markdown",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-document": "workspace:*",

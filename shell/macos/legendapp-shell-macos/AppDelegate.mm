@@ -48,6 +48,29 @@ static NSString *LegendInitialMarkdownWindowTitle(void)
   [super applicationDidFinishLaunching:notification];
 }
 
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
+{
+  Class appExitClass = NSClassFromString(@"RNAppExit");
+  SEL selector = NSSelectorFromString(@"applicationShouldTerminate");
+  if (!appExitClass || ![appExitClass respondsToSelector:selector]) {
+    return NSTerminateNow;
+  }
+
+  NSMethodSignature *signature = [appExitClass methodSignatureForSelector:selector];
+  if (!signature) {
+    return NSTerminateNow;
+  }
+
+  NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+  invocation.target = appExitClass;
+  invocation.selector = selector;
+  [invocation invoke];
+
+  NSApplicationTerminateReply reply = NSTerminateNow;
+  [invocation getReturnValue:&reply];
+  return reply;
+}
+
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions
 {
   RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName

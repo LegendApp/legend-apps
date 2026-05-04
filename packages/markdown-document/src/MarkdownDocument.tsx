@@ -541,7 +541,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const activeInputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
     const editTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const saveRef = useRef<(() => void) | undefined>(undefined);
+    const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
+    const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
     const activeBlockIdRef = useRef<string | null>(null);
     const blockSelectionInputRef = useRef<TextInput | null>(null);
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
@@ -1269,39 +1270,78 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       };
     }, [adapter, loadedDocumentId]);
 
-    const save = useCallback(() => {
-      if (documentState.status !== "loaded" || saveState === "saving") {
-        return;
-      }
+    const saveDocument = useCallback(
+      async (saveFilename?: string) => {
+        while (saveInFlightRef.current) {
+          try {
+            await saveInFlightRef.current;
+          } catch {
+            // A fresh explicit save should get a chance to retry after a failed in-flight save.
+          }
+        }
 
-      clearAutosaveTimer();
-      autosavePausedRef.current = false;
-      setNextSaveState("saving");
-      void (async () => {
-        try {
+        if (documentState.status !== "loaded") {
+          return;
+        }
+
+        clearAutosaveTimer();
+        autosavePausedRef.current = false;
+        setNextSaveState("saving");
+
+        const savePromise = (async () => {
           await commitActiveBlock({ updateReactState: false });
-          await adapter.save(documentState.snapshot.documentId);
+          if (saveFilename) {
+            await adapter.saveAs(documentState.snapshot.documentId, saveFilename);
+          } else {
+            await adapter.save(documentState.snapshot.documentId);
+          }
           savedRevisionRef.current = currentRevisionRef.current;
           setNextSaveState("idle");
           isDirtyRef.current = currentRevisionRef.current !== savedRevisionRef.current;
           onDirtyChangeRef.current?.(isDirtyRef.current);
+        })();
+        saveInFlightRef.current = savePromise;
+
+        try {
+          await savePromise;
         } catch (error: unknown) {
           const nextError = error instanceof Error ? error : new Error(String(error));
           autosavePausedRef.current = true;
           setNextSaveState("error");
           onErrorRef.current?.(nextError);
+          throw nextError;
+        } finally {
+          if (saveInFlightRef.current === savePromise) {
+            saveInFlightRef.current = undefined;
+          }
         }
-      })();
-    }, [
-      adapter,
-      clearAutosaveTimer,
-      commitActiveBlock,
-      documentState,
-      onDirtyChangeRef,
-      onErrorRef,
-      saveState,
-      setNextSaveState,
-    ]);
+      },
+      [
+        adapter,
+        clearAutosaveTimer,
+        commitActiveBlock,
+        documentState,
+        onDirtyChangeRef,
+        onErrorRef,
+        setNextSaveState,
+      ],
+    );
+
+    const save = useCallback(async () => {
+      if (documentState.status !== "loaded") {
+        return;
+      }
+
+      await saveDocument();
+    }, [documentState.status, saveDocument]);
+
+    const saveAs = useCallback(async (saveFilename: string) => {
+      if (documentState.status !== "loaded") {
+        return;
+      }
+
+      await saveDocument(saveFilename);
+    }, [documentState.status, saveDocument]);
 
     useEffect(() => {
       saveRef.current = save;
@@ -1430,6 +1470,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         redo,
         save,
+        saveAs,
         toggleBold() {
           activeInputRef.current?.toggleBold();
         },
@@ -1447,7 +1488,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         undo,
       }),
-      [redo, save, undo],
+      [redo, save, saveAs, undo],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);

@@ -60,6 +60,7 @@ export interface MarkdownDocument
   getTiming(): MarkdownDocumentTiming;
   applyTransaction(transaction: MarkdownTransaction): MarkdownTransactionResult;
   save(): void;
+  saveAs(filePath: string): void;
 }
 
 export interface MarkdownParser

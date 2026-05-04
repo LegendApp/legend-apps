@@ -4,6 +4,7 @@ import type {
   MarkdownTransaction,
   MarkdownTransactionResult,
 } from "@legend-desktop/markdown-document";
+import { writeTextFile } from "@legend-desktop/file-dialog";
 
 const untitledDocumentId = "untitled:document";
 const untitledFilename = "Untitled.md";
@@ -47,6 +48,10 @@ function createBlock(id: string, index: number, markdown: string, revision: numb
 
 function sourceLength(blocks: MarkdownBlockSnapshot[]) {
   return blocks.reduce((total, block, index) => total + block.markdown.length + (index > 0 ? 1 : 0), 0);
+}
+
+function sourceMarkdown() {
+  return state.blocks.map((block) => block.markdown).join("\n");
 }
 
 function normalizeBlocks(blocks: MarkdownBlockSnapshot[]) {
@@ -201,6 +206,9 @@ export const untitledMarkdownAdapter: MarkdownDocumentAdapter = {
   },
   async save() {
     // Untitled documents are in-memory until a save-as flow exists.
+  },
+  async saveAs(_documentId, filename) {
+    await writeTextFile(filename, sourceMarkdown());
   },
   async close() {
     state = createState();

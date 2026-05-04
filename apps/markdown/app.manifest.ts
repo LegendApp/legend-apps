@@ -11,6 +11,7 @@ const manifest = {
   androidPackage: "app.legend.markdown",
   nativeModules: {
     macos: [
+      "@legend-desktop/app-exit",
       "@legend-desktop/file-dialog",
       "@legend-desktop/markdown-block-editor",
       "@legend-desktop/markdown-parser",

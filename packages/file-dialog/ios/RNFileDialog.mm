@@ -143,4 +143,28 @@ RCT_EXPORT_MODULE(NativeFileDialog)
 #endif
 }
 
+- (void)writeTextFile:(NSString *)path contents:(NSString *)contents resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    if (path.length == 0) {
+      reject(@"invalid_path", @"Cannot write file without a path.", nil);
+      return;
+    }
+
+    NSString *expandedPath = [path stringByExpandingTildeInPath];
+    NSError *error = nil;
+    BOOL ok = [contents writeToFile:expandedPath atomically:YES encoding:NSUTF8StringEncoding error:&error];
+    if (!ok) {
+      reject(@"write_failed", error.localizedDescription ?: @"Failed to write file.", error);
+      return;
+    }
+
+    resolve(nil);
+  });
+#else
+  resolve(nil);
+#endif
+}
+
 @end

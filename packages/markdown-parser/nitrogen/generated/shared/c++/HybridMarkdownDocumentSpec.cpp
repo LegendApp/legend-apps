@@ -20,6 +20,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       prototype.registerHybridMethod("getTiming", &HybridMarkdownDocumentSpec::getTiming);
       prototype.registerHybridMethod("applyTransaction", &HybridMarkdownDocumentSpec::applyTransaction);
       prototype.registerHybridMethod("save", &HybridMarkdownDocumentSpec::save);
+      prototype.registerHybridMethod("saveAs", &HybridMarkdownDocumentSpec::saveAs);
     });
   }
 
