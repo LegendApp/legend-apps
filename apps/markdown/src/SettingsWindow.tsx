@@ -73,6 +73,7 @@ function AppearanceSettingsPage() {
         <View accessibilityRole="radiogroup" className="gap-2">
           <ThemeOption label="Light" selected={selectedTheme === "light"} value="light" />
           <ThemeOption label="Dark" selected={selectedTheme === "dark"} value="dark" />
+          <ThemeOption label="Grey" selected={selectedTheme === "grey"} value="grey" />
         </View>
       </View>
     </View>

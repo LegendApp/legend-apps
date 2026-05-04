@@ -11,10 +11,13 @@ export type LegendThemeColors = {
   surfaceMuted: string;
   border: string;
   primary: string;
+  link?: string;
   danger: string;
   selection: string;
   code: string;
   codeForeground: string;
+  inlineCodeBackground?: string;
+  inlineCodeForeground?: string;
   blockquoteBackground: string;
   blockquoteBorder: string;
   tableHeader: string;

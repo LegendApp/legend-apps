@@ -42,5 +42,29 @@ export const generatedThemeFiles = [
       "tableRowAlt": "#172033",
       "windowBackground": "#111827"
     }
+  },
+  {
+    "name": "grey",
+    "colors": {
+      "background": "#191919",
+      "foreground": "#d4d4d4",
+      "muted": "#9c9c9c",
+      "surface": "#202020",
+      "surfaceMuted": "#2d2d2d",
+      "border": "#3d3d3d",
+      "primary": "#9ca6a8",
+      "link": "#7fb3ff",
+      "danger": "#ff7b72",
+      "selection": "#ffeea0",
+      "code": "#202020",
+      "codeForeground": "#e6edf3",
+      "inlineCodeBackground": "#2d2d2d",
+      "inlineCodeForeground": "#eb5757",
+      "blockquoteBackground": "#202020",
+      "blockquoteBorder": "#9ca6a8",
+      "tableHeader": "#303030",
+      "tableRowAlt": "#1e1e1e",
+      "windowBackground": "#191919"
+    }
   }
 ] satisfies LegendThemeFile[];

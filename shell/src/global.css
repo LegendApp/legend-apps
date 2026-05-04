@@ -44,5 +44,24 @@
       --color-table-row-alt: #172033;
       --color-window-background: #111827;
     }
+
+    @variant grey {
+      --color-background: #191919;
+      --color-foreground: #d4d4d4;
+      --color-muted: #9c9c9c;
+      --color-surface: #202020;
+      --color-surface-muted: #2d2d2d;
+      --color-border: #3d3d3d;
+      --color-primary: #9ca6a8;
+      --color-danger: #ff7b72;
+      --color-selection: #ffeea0;
+      --color-code: #202020;
+      --color-code-foreground: #e6edf3;
+      --color-blockquote-background: #202020;
+      --color-blockquote-border: #9ca6a8;
+      --color-table-header: #303030;
+      --color-table-row-alt: #1e1e1e;
+      --color-window-background: #191919;
+    }
   }
 }

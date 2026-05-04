@@ -3,12 +3,12 @@ import { Uniwind, type ThemeName } from "uniwind";
 
 const settingsKey = "legend-markdown.settings.theme";
 
-export type MarkdownThemeSetting = "light" | "dark";
+export type MarkdownThemeSetting = "light" | "dark" | "grey";
 
 const subscribers = new Set<() => void>();
 
 function isMarkdownThemeSetting(value: unknown): value is MarkdownThemeSetting {
-  return value === "light" || value === "dark";
+  return value === "light" || value === "dark" || value === "grey";
 }
 
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {

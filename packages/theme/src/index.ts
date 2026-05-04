@@ -29,8 +29,8 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
         lineHeight: 23,
       },
       code: {
-        backgroundColor: colors.surfaceMuted,
-        color: colors.foreground,
+        backgroundColor: colors.inlineCodeBackground ?? colors.surfaceMuted,
+        color: colors.inlineCodeForeground ?? colors.foreground,
         fontFamily: "Menlo",
         fontSize: 14,
       },
@@ -88,7 +88,7 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
         marginBottom: 4,
       },
       link: {
-        color: colors.primary,
+        color: colors.link ?? colors.primary,
         underline: true,
       },
       list: {
