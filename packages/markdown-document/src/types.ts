@@ -104,6 +104,7 @@ export type MarkdownDocumentTheme = {
   foregroundColor?: string;
   mutedForegroundColor?: string;
   errorColor?: string;
+  selectionColor?: string;
 };
 
 export type MarkdownBlockLayoutStyle = {

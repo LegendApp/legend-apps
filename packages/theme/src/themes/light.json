@@ -9,7 +9,7 @@
     "border": "#d1d5db",
     "primary": "#2563eb",
     "danger": "#b42318",
-    "selection": "#bfdbfe",
+    "selection": "auto",
     "code": "#111827",
     "codeForeground": "#f9fafb",
     "blockquoteBackground": "#f8fafc",

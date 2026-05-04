@@ -10,6 +10,7 @@ import {
 import {
   Linking,
   Platform,
+  PlatformColor,
   Pressable,
   StyleSheet,
   Text,
@@ -17,6 +18,7 @@ import {
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
+  type ColorValue,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
@@ -100,6 +102,7 @@ const hydrateChunkSize = 512;
 const editDebounceMs = 300;
 const contentMaxWidth = 920;
 const contentHorizontalPadding = 40;
+const systemBlockSelectionBackgroundColor = Platform.OS === "macos" ? PlatformColor("selectedTextBackgroundColor") : "#bfdbfe";
 
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -113,6 +116,10 @@ function useLatestRef<T>(value: T) {
 
 function inputStyleFromMarkdownStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
   return markdownStyle as MarkdownTextInputStyle;
+}
+
+function resolveSelectionColor(selectionColor: string | undefined): ColorValue {
+  return selectionColor === undefined || selectionColor === "auto" ? systemBlockSelectionBackgroundColor : selectionColor;
 }
 
 function editableTextStyleForBlock(
@@ -1493,6 +1500,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       () => [styles.contentContainer, contentContainerStyle],
       [contentContainerStyle],
     );
+    const blockSelectionOverlayStyle = useMemo(
+      () => [styles.blockSelectionOverlay, { backgroundColor: resolveSelectionColor(theme?.selectionColor) }],
+      [theme?.selectionColor],
+    );
     const renderMarkdownBlockRow = useCallback(
       (props: LegendListRenderItemProps<string>) => (
         <MarkdownBlockRow
@@ -1584,7 +1595,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             key={rect.blockId}
             pointerEvents="none"
             style={[
-              styles.blockSelectionOverlay,
+              blockSelectionOverlayStyle,
               {
                 height: rect.height,
                 top: rect.y,
@@ -1662,7 +1673,6 @@ const styles = StyleSheet.create({
     width: 1,
   },
   blockSelectionOverlay: {
-    backgroundColor: "#bfdbfe",
     left: 0,
     position: "absolute",
     right: 0,

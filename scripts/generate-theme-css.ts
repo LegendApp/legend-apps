@@ -74,7 +74,12 @@ function validateThemes(themes: LegendThemeFile[]) {
 
 function renderThemeVariables(theme: LegendThemeFile) {
   const variables = colorVariables
-    .map((colorName) => `      ${tailwindColorName(colorName)}: ${theme.colors[colorName]};`)
+    .map((colorName) => {
+      const colorValue = colorName === "selection" && theme.colors[colorName] === "auto"
+        ? "Highlight"
+        : theme.colors[colorName];
+      return `      ${tailwindColorName(colorName)}: ${colorValue};`;
+    })
     .join("\n");
 
   return `    @variant ${theme.name} {\n${variables}\n    }`;

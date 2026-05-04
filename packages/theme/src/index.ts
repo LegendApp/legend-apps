@@ -19,6 +19,7 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
       errorColor: colors.danger,
       foregroundColor: colors.foreground,
       mutedForegroundColor: colors.muted,
+      selectionColor: colors.selection,
     },
     markdownLayout: defaultMarkdownLayout,
     markdownStyle: {

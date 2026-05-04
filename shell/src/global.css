@@ -16,7 +16,7 @@
       --color-border: #d1d5db;
       --color-primary: #2563eb;
       --color-danger: #b42318;
-      --color-selection: #bfdbfe;
+      --color-selection: Highlight;
       --color-code: #111827;
       --color-code-foreground: #f9fafb;
       --color-blockquote-background: #f8fafc;
@@ -35,7 +35,7 @@
       --color-border: #374151;
       --color-primary: #60a5fa;
       --color-danger: #f87171;
-      --color-selection: #1d4ed8;
+      --color-selection: Highlight;
       --color-code: #020617;
       --color-code-foreground: #f8fafc;
       --color-blockquote-background: #172033;
@@ -54,7 +54,7 @@
       --color-border: #3d3d3d;
       --color-primary: #9ca6a8;
       --color-danger: #ff7b72;
-      --color-selection: #ffeea0;
+      --color-selection: Highlight;
       --color-code: #202020;
       --color-code-foreground: #e6edf3;
       --color-blockquote-background: #202020;

@@ -10,7 +10,7 @@
     "primary": "#9ca6a8",
     "link": "#7fb3ff",
     "danger": "#ff7b72",
-    "selection": "#ffeea0",
+    "selection": "auto",
     "code": "#202020",
     "codeForeground": "#e6edf3",
     "inlineCodeBackground": "#2d2d2d",
