@@ -8,6 +8,7 @@ export type {
   MarkdownDocumentLayout,
   MarkdownDocumentLoadedInfo,
   MarkdownDocumentProps,
+  MarkdownSelectionAnchor,
   MarkdownDocumentSnapshot,
   MarkdownDocumentTheme,
   MarkdownSavePolicy,

@@ -1,8 +1,10 @@
-import { MarkdownDocument } from "@legend-desktop/markdown-document";
+import { MarkdownDocument, type MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
 import { getLegendTheme } from "@legend-desktop/theme";
-import { useEffect } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
+import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
+import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
   useMarkdownAppExit,
   useMarkdownStartupDocument,
@@ -14,7 +16,11 @@ import {
   useMarkdownMainWindowOptions,
   useMarkdownSettingsWindow,
 } from "./useMarkdownWindows";
-import { applyMarkdownThemeSetting } from "./markdownSettings";
+import {
+  applyMarkdownThemeSetting,
+  getMarkdownFormattingToolbarModeSetting,
+  subscribeToMarkdownSettings,
+} from "./markdownSettings";
 import { registerMarkdownWindows } from "./markdownWindows";
 
 registerMarkdownWindows();
@@ -28,6 +34,12 @@ export function App({ launchArguments }: MarkdownAppProps) {
   const { theme: uniwindTheme } = useUniwind();
   const theme = getLegendTheme(uniwindTheme);
   const backgroundStyle = useResolveClassNames("bg-background");
+  const formattingToolbarMode = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownFormattingToolbarModeSetting,
+    getMarkdownFormattingToolbarModeSetting,
+  );
+  const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: theme.colors.windowBackground,
     onError: session.handleError,
@@ -80,21 +92,32 @@ export function App({ launchArguments }: MarkdownAppProps) {
   return (
     <View className="flex-1 bg-background">
       {session.lastError ? <Text className="text-danger" style={styles.error}>{session.lastError}</Text> : null}
-      <MarkdownDocument
-        adapter={session.activeAdapter}
-        autoFocusFirstBlock={session.isUntitledDocument}
-        commandsRef={session.documentCommandsRef}
-        filename={session.filename}
-        markdownLayout={theme.markdownLayout}
-        markdownStyle={theme.markdownStyle}
-        onDirtyChange={session.setIsDirty}
-        onError={session.handleError}
-        onLoaded={session.clearDocumentError}
-        onSaveStateChange={session.setSaveState}
-        savePolicy={session.isUntitledDocument ? { autosave: false } : undefined}
-        style={[styles.document, backgroundStyle]}
-        theme={theme.markdownDocument}
-      />
+      {formattingToolbarMode === "top" ? (
+        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} />
+      ) : null}
+      <View style={styles.documentFrame}>
+        <MarkdownDocument
+          adapter={session.activeAdapter}
+          autoFocusFirstBlock={session.isUntitledDocument}
+          commandsRef={session.documentCommandsRef}
+          filename={session.filename}
+          markdownLayout={theme.markdownLayout}
+          markdownStyle={theme.markdownStyle}
+          onDirtyChange={session.setIsDirty}
+          onError={session.handleError}
+          onLoaded={session.clearDocumentError}
+          onSaveStateChange={session.setSaveState}
+          onSelectionAnchorChange={setSelectionAnchor}
+          savePolicy={session.isUntitledDocument ? { autosave: false } : undefined}
+          style={[styles.document, backgroundStyle]}
+          theme={theme.markdownDocument}
+        />
+        {formattingToolbarMode === "selection" && selectionAnchor ? (
+          <MarkdownFloatingSurface anchor={selectionAnchor}>
+            <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating />
+          </MarkdownFloatingSurface>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -103,6 +126,9 @@ export default App;
 
 const styles = StyleSheet.create({
   document: {
+    flex: 1,
+  },
+  documentFrame: {
     flex: 1,
   },
   error: {

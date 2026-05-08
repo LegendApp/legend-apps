@@ -2,8 +2,11 @@ import { useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   getMarkdownStartupBehaviorSetting,
+  getMarkdownFormattingToolbarModeSetting,
   setMarkdownStartupBehaviorSetting,
+  setMarkdownFormattingToolbarModeSetting,
   subscribeToMarkdownSettings,
+  type MarkdownFormattingToolbarModeSetting,
   type MarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
 import { RadioOption } from "./RadioOption";
@@ -13,6 +16,11 @@ export function GeneralSettingsPage() {
     subscribeToMarkdownSettings,
     getMarkdownStartupBehaviorSetting,
     getMarkdownStartupBehaviorSetting,
+  );
+  const formattingToolbarMode = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownFormattingToolbarModeSetting,
+    getMarkdownFormattingToolbarModeSetting,
   );
 
   return (
@@ -32,6 +40,23 @@ export function GeneralSettingsPage() {
             onSelect={setMarkdownStartupBehaviorSetting}
             selected={startupBehavior === "lastDocument"}
             value="lastDocument"
+          />
+        </View>
+      </View>
+      <View className="gap-2">
+        <Text className="text-foreground" style={styles.sectionTitle}>Formatting Toolbar</Text>
+        <View accessibilityRole="radiogroup" className="gap-2">
+          <RadioOption<MarkdownFormattingToolbarModeSetting>
+            label="Above Selection"
+            onSelect={setMarkdownFormattingToolbarModeSetting}
+            selected={formattingToolbarMode === "selection"}
+            value="selection"
+          />
+          <RadioOption<MarkdownFormattingToolbarModeSetting>
+            label="Top Toolbar"
+            onSelect={setMarkdownFormattingToolbarModeSetting}
+            selected={formattingToolbarMode === "top"}
+            value="top"
           />
         </View>
       </View>

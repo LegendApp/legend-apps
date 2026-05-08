@@ -79,12 +79,28 @@ export type MarkdownDocumentCommands = {
   undo(): void;
   redo(): void;
   focus(): void;
+  setParagraph(): void;
+  setHeading(level: 1 | 2 | 3 | 4 | 5 | 6): void;
   toggleBold(): void;
   toggleItalic(): void;
   toggleUnderline(): void;
   toggleStrikethrough(): void;
   toggleSpoiler(): void;
+  toggleBlockquote(): void;
+  toggleCodeBlock(): void;
+  toggleOrderedList(): void;
+  toggleTaskList(): void;
+  toggleUnorderedList(): void;
+  insertThematicBreak(): void;
   insertLink(): void;
+};
+
+export type MarkdownSelectionAnchor = {
+  kind: "textSelection" | "blockSelection";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 export type MarkdownSavePolicy = {
@@ -141,5 +157,6 @@ export type MarkdownDocumentProps = {
   onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onSaveStateChange?: (state: MarkdownSaveState) => void;
+  onSelectionAnchorChange?: (anchor: MarkdownSelectionAnchor | null) => void;
   onError?: (error: Error) => void;
 };

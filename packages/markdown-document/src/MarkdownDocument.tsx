@@ -27,11 +27,23 @@ import {
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
+import {
+  setHeadingMarkdown,
+  setParagraphMarkdown,
+  thematicBreakMarkdown,
+  toggleBlockquoteMarkdown,
+  toggleCodeBlockMarkdown,
+  toggleOrderedListMarkdown,
+  toggleTaskListMarkdown,
+  toggleUnorderedListMarkdown,
+  type HeadingLevel,
+} from "./markdownFormatting";
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 import type {
   MarkdownBlockSnapshot,
   MarkdownDocumentCommands,
   MarkdownDocumentProps,
+  MarkdownSelectionAnchor,
   MarkdownDocumentSnapshot,
   MarkdownSaveState,
   MarkdownTransactionResult,
@@ -52,6 +64,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onError,
       onLoaded,
       onSaveStateChange,
+      onSelectionAnchorChange,
       savePolicy,
       style,
       theme,
@@ -69,6 +82,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const activeBlockIdRef = useRef<string | null>(null);
     const blockSelectionInputRef = useRef<TextInput | null>(null);
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
+    const activeInputSelectionRef = useRef({ start: 0, end: 0 });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
     const blockWindowLayoutsRef = useRef(new Map<string, BlockLayout>());
     const draftMarkdownRef = useRef("");
@@ -81,6 +95,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const undoStackRef = useRef<HistoryEntry[]>([]);
     const redoStackRef = useRef<HistoryEntry[]>([]);
     const suppressHistoryRef = useRef(false);
+    const selectionAnchorRequestRef = useRef(0);
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -92,6 +107,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [layoutVersion, setLayoutVersion] = useState(0);
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
+    const [contentOffsetX, setContentOffsetX] = useState(contentHorizontalPadding);
+    const [textSelectionAnchor, setTextSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
     const [inactiveOverlayWidth, setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
@@ -158,6 +175,53 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockSelectionRef.current = nextBlockSelection;
       setBlockSelection(nextBlockSelection);
     }, []);
+
+    const clearTextSelectionAnchor = useCallback(() => {
+      selectionAnchorRequestRef.current += 1;
+      activeInputSelectionRef.current = { start: 0, end: 0 };
+      setTextSelectionAnchor(null);
+    }, []);
+
+    const updateTextSelectionAnchor = useCallback((selection: { start: number; end: number }) => {
+      activeInputSelectionRef.current = selection;
+      const requestId = selectionAnchorRequestRef.current + 1;
+      selectionAnchorRequestRef.current = requestId;
+
+      if (selection.start === selection.end) {
+        setTextSelectionAnchor(null);
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        const input = activeInputRef.current;
+        if (!input || !containerRef.current || requestId !== selectionAnchorRequestRef.current) {
+          return;
+        }
+
+        input.getCaretRect().then((caretRect) => {
+          if (requestId !== selectionAnchorRequestRef.current) {
+            return;
+          }
+
+          input.measureInWindow((inputX, inputY) => {
+            containerRef.current?.measureInWindow((containerX, containerY) => {
+              if (requestId !== selectionAnchorRequestRef.current) {
+                return;
+              }
+
+              setTextSelectionAnchor({
+                height: Math.max(caretRect.height, 1),
+                kind: "textSelection",
+                width: Math.max(caretRect.width, 1),
+                x: inputX - containerX + caretRect.x,
+                y: inputY - containerY + caretRect.y,
+              });
+            });
+          });
+        }).catch(reportAsyncError);
+      });
+    }, [reportAsyncError]);
+    const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
 
     const cancelHydration = useCallback(() => {
       if (hydrateFrameRef.current !== undefined) {
@@ -315,6 +379,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
         blockSelectionGestureRef.current = null;
         setNextBlockSelection(null);
+        clearTextSelectionAnchor();
         nativeEditingBlockIdRef.current = block.id;
         activeBlockIdRef.current = block.id;
         draftMarkdownRef.current = block.markdown;
@@ -323,13 +388,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         setActiveSelection(selection);
         setActiveBlockId(block.id);
       },
-      [commitActiveBlock, reportAsyncError],
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError],
     );
 
     const beginBlockSelection = useCallback(
       (anchorBlockId: string, focusBlockId: string) => {
         const activeBlockIdValue = activeBlockIdRef.current;
         commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
+        clearTextSelectionAnchor();
         if (activeBlockIdValue && activeBlockIdValue !== anchorBlockId) {
           activeInputRef.current?.blur();
           nativeEditingBlockIdRef.current = null;
@@ -341,7 +407,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelectionGestureRef.current = nextBlockSelection;
         setNextBlockSelection(nextBlockSelection);
       },
-      [commitActiveBlock, reportAsyncError, setNextBlockSelection],
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setNextBlockSelection],
     );
 
     const updateBlockSelectionGesture = useCallback(
@@ -375,10 +441,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
       if (event) {
-        const nextContentWidth = Math.max(
-          1,
-          Math.min(event.nativeEvent.layout.width, contentMaxWidth) - contentHorizontalPadding * 2,
-        );
+        const containerWidth = event.nativeEvent.layout.width;
+        const constrainedContentWidth = Math.min(containerWidth, contentMaxWidth);
+        const nextContentWidth = Math.max(1, constrainedContentWidth - contentHorizontalPadding * 2);
+        setContentOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2) + contentHorizontalPadding);
         setInactiveOverlayWidth(nextContentWidth);
       }
       requestAnimationFrame(() => {
@@ -497,8 +563,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
+        clearTextSelectionAnchor();
       }).catch(reportAsyncError);
-    }, [commitActiveBlock, reportAsyncError]);
+    }, [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 
     const replaceBlockSelection = useCallback(
@@ -564,6 +631,108 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         onErrorRef,
       ],
     );
+
+    const replaceActiveBlockMarkdown = useCallback(
+      async (markdown: string) => {
+        const activeBlockIdValue = activeBlockIdRef.current;
+        if (documentState.status !== "loaded" || !adapter.applyTransaction || !activeBlockIdValue) {
+          return;
+        }
+
+        clearEditTimer();
+        try {
+          const beforeMarkdown = draftMarkdownRef.current;
+          if (markdown === beforeMarkdown) {
+            return;
+          }
+          updateRenderedBlockMarkdown(activeBlockIdValue, markdown);
+          const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+            type: "updateBlockMarkdown",
+            blockId: activeBlockIdValue,
+            markdown,
+          });
+
+          if (!suppressHistoryRef.current) {
+            undoStackRef.current.push({
+              type: "updateBlockMarkdown",
+              blockId: activeBlockIdValue,
+              beforeMarkdown,
+              afterMarkdown: markdown,
+            });
+            redoStackRef.current = [];
+          }
+
+          applyTransactionResult(result);
+          const nextActiveBlock = result.changedBlocks[0] ?? blocksById.get(activeBlockIdValue);
+          if (nextActiveBlock) {
+            nativeEditingBlockIdRef.current = nextActiveBlock.id;
+            activeBlockIdRef.current = nextActiveBlock.id;
+            draftMarkdownRef.current = nextActiveBlock.markdown;
+            committedMarkdownRef.current = nextActiveBlock.markdown;
+            setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveBlockId(nextActiveBlock.id);
+            setActiveSelection(0);
+            activeInputRef.current?.setValue(nextActiveBlock.markdown);
+            activeInputRef.current?.setSelection(0, 0);
+          }
+          markDirty();
+        } catch (error) {
+          updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
+          const nextError = error instanceof Error ? error : new Error(String(error));
+          onErrorRef.current?.(nextError);
+        }
+      },
+      [
+        adapter,
+        applyTransactionResult,
+        blocksById,
+        clearEditTimer,
+        documentState,
+        markDirty,
+        onErrorRef,
+        updateRenderedBlockMarkdown,
+      ],
+    );
+
+    const formatCurrentBlockRange = useCallback(
+      (transform: (markdown: string) => string) => {
+        async function runFormat() {
+          if (blockSelection) {
+            const selectedBlocks = getSelectedBlockMarkdown({ blockIds, blocksById, blockSelection });
+            if (selectedBlocks) {
+              await replaceBlockSelection(transform(selectedBlocks.markdown));
+            }
+            return;
+          }
+
+          if (activeBlockIdRef.current) {
+            await replaceActiveBlockMarkdown(transform(draftMarkdownRef.current));
+          }
+        }
+
+        runFormat().catch(reportAsyncError);
+      },
+      [
+        blockIds,
+        blockSelection,
+        blocksById,
+        replaceActiveBlockMarkdown,
+        replaceBlockSelection,
+        reportAsyncError,
+      ],
+    );
+
+    const runActiveInputCommand = useCallback((command: () => void) => {
+      const input = activeInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      const selection = activeInputSelectionRef.current;
+      input.focus();
+      input.setSelection(selection.start, selection.end);
+      command();
+    }, []);
 
     const handleBlockSelectionKeyPress = useCallback(
       (event: { nativeEvent: { key: string } }) => {
@@ -654,6 +823,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       redoStackRef.current = [];
       suppressHistoryRef.current = false;
       blockSelectionGestureRef.current = null;
+      activeInputSelectionRef.current = { start: 0, end: 0 };
+      selectionAnchorRequestRef.current += 1;
       nativeEditingBlockIdRef.current = null;
       setDocumentState({ status: "loading" });
       setBlockIds([]);
@@ -664,6 +835,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setBlockSelectionInputText("");
       setDraftMarkdown("");
       setOverlayFrame(undefined);
+      setTextSelectionAnchor(null);
       setNextSaveState("idle");
       onDirtyChangeRef.current?.(false);
 
@@ -960,29 +1132,53 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           activeInputRef.current?.focus();
         },
         insertLink() {
-          activeInputRef.current?.insertLink("link", "https://");
+          runActiveInputCommand(() => activeInputRef.current?.insertLink("link", "https://"));
+        },
+        insertThematicBreak() {
+          formatCurrentBlockRange(thematicBreakMarkdown);
         },
         redo,
         save,
         saveAs,
+        setHeading(level: HeadingLevel) {
+          formatCurrentBlockRange((markdown) => setHeadingMarkdown(markdown, level));
+        },
+        setParagraph() {
+          formatCurrentBlockRange(setParagraphMarkdown);
+        },
         toggleBold() {
-          activeInputRef.current?.toggleBold();
+          runActiveInputCommand(() => activeInputRef.current?.toggleBold());
+        },
+        toggleBlockquote() {
+          formatCurrentBlockRange(toggleBlockquoteMarkdown);
+        },
+        toggleCodeBlock() {
+          formatCurrentBlockRange(toggleCodeBlockMarkdown);
         },
         toggleItalic() {
-          activeInputRef.current?.toggleItalic();
+          runActiveInputCommand(() => activeInputRef.current?.toggleItalic());
+        },
+        toggleOrderedList() {
+          formatCurrentBlockRange(toggleOrderedListMarkdown);
         },
         toggleSpoiler() {
-          activeInputRef.current?.toggleSpoiler();
+          runActiveInputCommand(() => activeInputRef.current?.toggleSpoiler());
         },
         toggleStrikethrough() {
-          activeInputRef.current?.toggleStrikethrough();
+          runActiveInputCommand(() => activeInputRef.current?.toggleStrikethrough());
+        },
+        toggleTaskList() {
+          formatCurrentBlockRange(toggleTaskListMarkdown);
         },
         toggleUnderline() {
-          activeInputRef.current?.toggleUnderline();
+          runActiveInputCommand(() => activeInputRef.current?.toggleUnderline());
+        },
+        toggleUnorderedList() {
+          formatCurrentBlockRange(toggleUnorderedListMarkdown);
         },
         undo,
       }),
-      [redo, save, saveAs, undo],
+      [formatCurrentBlockRange, redo, runActiveInputCommand, save, saveAs, undo],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);
@@ -998,6 +1194,33 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         layoutsByBlockId: blockWindowLayoutsRef.current,
       });
     }, [blockIds, blockSelection, containerWindowY, layoutVersion]);
+    const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
+      if (blockSelectionRects.length === 0) {
+        return null;
+      }
+
+      const firstRect = blockSelectionRects.reduce((closestRect, rect) => (
+        rect.y < closestRect.y ? rect : closestRect
+      ), blockSelectionRects[0]);
+      if (!firstRect) {
+        return null;
+      }
+
+      return {
+        height: firstRect.height,
+        kind: "blockSelection",
+        width: inactiveOverlayWidth,
+        x: contentOffsetX,
+        y: firstRect.y,
+      };
+    }, [blockSelectionRects, contentOffsetX, inactiveOverlayWidth]);
+    const selectionAnchor = blockSelectionAnchor ?? textSelectionAnchor;
+    useEffect(() => {
+      onSelectionAnchorChange?.(selectionAnchor);
+    }, [onSelectionAnchorChange, selectionAnchor]);
+    useEffect(() => {
+      return () => onSelectionAnchorChange?.(null);
+    }, [onSelectionAnchorChange]);
     const listExtraData = useMemo(
       () => ({
         activeBlockId,
@@ -1038,6 +1261,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onBlockWindowLayout={handleBlockWindowLayout}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
+          onChangeSelectionRef={handleChangeSelectionRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
           previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
         />
@@ -1052,6 +1276,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         handleBlockWindowLayout,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
+        handleChangeSelectionRef,
         handleSelectionDragOutsideRef,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
@@ -1136,7 +1361,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         />
       </>
     );
-
     const containerStyle = [styles.container, theme?.backgroundColor ? { backgroundColor: theme.backgroundColor } : null, style];
 
     if (usesNativeEditorOverlay) {
@@ -1157,6 +1381,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             markdownStyle={resolvedMarkdownStyle}
             onBlurRef={handleEditorBlurRef}
             onChangeMarkdownRef={handleChangeMarkdownRef}
+            onChangeSelectionRef={handleChangeSelectionRef}
             onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
             overlayFrame={overlayFrame}
             sourceBlockIdRef={nativeEditingBlockIdRef}

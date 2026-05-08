@@ -62,4 +62,5 @@ export type OverlayFrame = {
 };
 
 export type ChangeMarkdownHandler = (block: MarkdownBlockSnapshot, markdown: string) => void;
+export type ChangeSelectionHandler = (selection: { start: number; end: number }) => void;
 export type SelectionDragOutsideHandler = (blockId: string, event: SelectionDragOutsideEvent) => void;

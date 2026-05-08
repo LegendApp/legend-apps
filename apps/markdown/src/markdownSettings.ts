@@ -3,10 +3,12 @@ import { Uniwind, type ThemeName } from "uniwind";
 
 const themeSettingsKey = "legend-markdown.settings.theme";
 const startupBehaviorSettingsKey = "legend-markdown.settings.startupBehavior";
+const formattingToolbarModeSettingsKey = "legend-markdown.settings.formattingToolbarMode";
 const lastDocumentPathSettingsKey = "legend-markdown.settings.lastDocumentPath";
 
 export type MarkdownThemeSetting = "light" | "dark" | "grey";
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
+export type MarkdownFormattingToolbarModeSetting = "selection" | "top";
 
 const subscribers = new Set<() => void>();
 
@@ -18,6 +20,10 @@ function isMarkdownStartupBehaviorSetting(value: unknown): value is MarkdownStar
   return value === "newDocument" || value === "lastDocument";
 }
 
+function isMarkdownFormattingToolbarModeSetting(value: unknown): value is MarkdownFormattingToolbarModeSetting {
+  return value === "selection" || value === "top";
+}
+
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
   const value = Settings.get(themeSettingsKey);
   return isMarkdownThemeSetting(value) ? value : "light";
@@ -26,6 +32,11 @@ export function getMarkdownThemeSetting(): MarkdownThemeSetting {
 export function getMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
   const value = Settings.get(startupBehaviorSettingsKey);
   return isMarkdownStartupBehaviorSetting(value) ? value : "newDocument";
+}
+
+export function getMarkdownFormattingToolbarModeSetting(): MarkdownFormattingToolbarModeSetting {
+  const value = Settings.get(formattingToolbarModeSettingsKey);
+  return isMarkdownFormattingToolbarModeSetting(value) ? value : "selection";
 }
 
 export function getLastMarkdownDocumentPath() {
@@ -48,6 +59,11 @@ export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
   Settings.set({ [startupBehaviorSettingsKey]: startupBehavior });
+  subscribers.forEach((listener) => listener());
+}
+
+export function setMarkdownFormattingToolbarModeSetting(formattingToolbarMode: MarkdownFormattingToolbarModeSetting) {
+  Settings.set({ [formattingToolbarModeSettingsKey]: formattingToolbarMode });
   subscribers.forEach((listener) => listener());
 }
 

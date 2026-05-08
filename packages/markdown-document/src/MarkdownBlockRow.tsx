@@ -11,6 +11,7 @@ import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { usesNativeEditorOverlay } from "./constants";
 import type {
   BlockLayout,
+  ChangeSelectionHandler,
   ChangeMarkdownHandler,
   OverlayFrame,
   SelectionDragOutsideHandler,
@@ -35,6 +36,7 @@ export const MarkdownEditorInput = memo(
     markdownStyle,
     onBlurRef,
     onChangeMarkdownRef,
+    onChangeSelectionRef,
     onSelectionDragOutsideRef,
     rowWidth,
   }: {
@@ -45,6 +47,7 @@ export const MarkdownEditorInput = memo(
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
+    onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
     rowWidth: number;
   }) {
@@ -66,6 +69,7 @@ export const MarkdownEditorInput = memo(
         multiline
         onBlur={() => onBlurRef.current()}
         onChangeMarkdown={(markdown) => onChangeMarkdownRef.current(block, markdown)}
+        onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
         onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
         scrollEnabled={false}
         style={StyleSheet.flatten([
@@ -83,6 +87,7 @@ export const MarkdownEditorInput = memo(
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
+    previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
     previousProps.rowWidth === nextProps.rowWidth,
 );
@@ -94,6 +99,7 @@ export const MarkdownOverlayEditorInput = memo(
     markdownStyle,
     onBlurRef,
     onChangeMarkdownRef,
+    onChangeSelectionRef,
     inactiveOverlayWidth,
     onSelectionDragOutsideRef,
     overlayFrame,
@@ -105,6 +111,7 @@ export const MarkdownOverlayEditorInput = memo(
     inactiveOverlayWidth: number;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
+    onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
     overlayFrame?: OverlayFrame;
     sourceBlockIdRef: RefObject<string | null>;
@@ -124,6 +131,7 @@ export const MarkdownOverlayEditorInput = memo(
             onChangeMarkdownRef.current(block, markdown);
           }
         }}
+        onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
         onSelectionDragOutside={(event) => {
           const blockId = sourceBlockIdRef.current ?? activeBlockRef.current?.id;
           if (blockId) {
@@ -147,6 +155,7 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.inactiveOverlayWidth === nextProps.inactiveOverlayWidth &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
+    previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
     previousProps.overlayFrame?.height === nextProps.overlayFrame?.height &&
     previousProps.overlayFrame?.left === nextProps.overlayFrame?.left &&
@@ -165,6 +174,7 @@ export function MarkdownBlockRow({
   onActivate,
   onBlurRef,
   onChangeMarkdownRef,
+  onChangeSelectionRef,
   onBlockWindowLayout,
   onSelectionDragOutsideRef,
   block,
@@ -185,6 +195,7 @@ export function MarkdownBlockRow({
   onBlockWindowLayout: (blockId: string, layout: BlockLayout) => void;
   onBlurRef: RefObject<() => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
+  onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
   previousBlock?: MarkdownBlockSnapshot;
 }) {
@@ -223,6 +234,7 @@ export function MarkdownBlockRow({
           markdownStyle={markdownStyle}
           onBlurRef={onBlurRef}
           onChangeMarkdownRef={onChangeMarkdownRef}
+          onChangeSelectionRef={onChangeSelectionRef}
           onSelectionDragOutsideRef={onSelectionDragOutsideRef}
           rowWidth={rowWidth}
         />
