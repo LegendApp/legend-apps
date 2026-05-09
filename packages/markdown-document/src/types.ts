@@ -98,6 +98,7 @@ export type MarkdownDocumentCommands = {
 export type MarkdownSelectionAnchor = {
   kind: "textSelection" | "blockSelection";
   blockId?: string;
+  selectedLength?: number;
   x: number;
   y: number;
   width: number;

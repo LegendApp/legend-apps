@@ -190,6 +190,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       activeInputSelectionRef.current = selection;
       const requestId = selectionAnchorRequestRef.current + 1;
       selectionAnchorRequestRef.current = requestId;
+      const selectedLength = Math.abs(selection.end - selection.start);
 
       if (selection.start === selection.end) {
         setTextSelectionAnchor(null);
@@ -223,6 +224,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 itemX,
                 itemY,
                 kind: "textSelection",
+                selectedLength,
                 width: Math.max(caretRect.width, 1),
                 x: itemX + caretRect.x,
                 y: itemY + caretRect.y,

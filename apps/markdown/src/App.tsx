@@ -50,8 +50,11 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
   const handleSelectionAnchorChange = useCallback((anchor: MarkdownSelectionAnchor | null) => {
     setSelectionAnchor(anchor);
-    if (anchor?.kind === "textSelection") {
+    if (anchor?.kind === "textSelection" && (anchor.selectedLength ?? 0) > 1) {
       setCommentAnchor(anchor);
+      setCommentDraft("");
+    } else {
+      setCommentAnchor(null);
       setCommentDraft("");
     }
   }, []);
