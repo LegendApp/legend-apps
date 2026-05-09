@@ -3,7 +3,10 @@ import { contentHorizontalPadding, contentMaxWidth } from "./constants";
 
 export const markdownDocumentStyles = StyleSheet.create({
   blockRow: {
+    overflow: "visible",
     paddingHorizontal: 0,
+    position: "relative",
+    width: "100%",
   },
   blockSelectionInput: {
     height: 1,
@@ -56,6 +59,9 @@ export const markdownDocumentStyles = StyleSheet.create({
     top: -10000,
   },
   renderedText: {
+    width: "100%",
+  },
+  rowContent: {
     width: "100%",
   },
   statusText: {

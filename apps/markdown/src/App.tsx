@@ -1,8 +1,9 @@
 import { MarkdownDocument, type MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
 import { getLegendTheme } from "@legend-desktop/theme";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
+import { MarkdownCommentBubble } from "./MarkdownCommentBubble";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
@@ -40,10 +41,47 @@ export function App({ launchArguments }: MarkdownAppProps) {
     getMarkdownFormattingToolbarModeSetting,
   );
   const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
+  const [commentAnchor, setCommentAnchor] = useState<MarkdownSelectionAnchor | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: theme.colors.windowBackground,
     onError: session.handleError,
   });
+
+  const handleSelectionAnchorChange = useCallback((anchor: MarkdownSelectionAnchor | null) => {
+    setSelectionAnchor(anchor);
+    if (anchor?.kind === "textSelection") {
+      setCommentAnchor(anchor);
+      setCommentDraft("");
+    }
+  }, []);
+
+  const closeCommentBubble = useCallback(() => {
+    setCommentAnchor(null);
+    setCommentDraft("");
+  }, []);
+
+  const renderCommentBubble = useCallback(
+    (anchor: MarkdownSelectionAnchor) => (
+      <MarkdownCommentBubble
+        anchor={anchor}
+        onCancel={closeCommentBubble}
+        onChangeText={setCommentDraft}
+        onSave={closeCommentBubble}
+        value={commentDraft}
+      />
+    ),
+    [closeCommentBubble, commentDraft],
+  );
+
+  const renderSelectionToolbar = useCallback(
+    (anchor: MarkdownSelectionAnchor) => (
+      <MarkdownFloatingSurface anchor={anchor}>
+        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating />
+      </MarkdownFloatingSurface>
+    ),
+    [session.documentCommandsRef],
+  );
 
   useEffect(() => {
     applyMarkdownThemeSetting();
@@ -99,6 +137,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
         <MarkdownDocument
           adapter={session.activeAdapter}
           autoFocusFirstBlock={session.isUntitledDocument}
+          commentAnchor={commentAnchor}
           commandsRef={session.documentCommandsRef}
           filename={session.filename}
           markdownLayout={theme.markdownLayout}
@@ -107,16 +146,14 @@ export function App({ launchArguments }: MarkdownAppProps) {
           onError={session.handleError}
           onLoaded={session.clearDocumentError}
           onSaveStateChange={session.setSaveState}
-          onSelectionAnchorChange={setSelectionAnchor}
+          onSelectionAnchorChange={handleSelectionAnchorChange}
+          renderCommentBubble={renderCommentBubble}
+          renderSelectionToolbar={renderSelectionToolbar}
           savePolicy={session.isUntitledDocument ? { autosave: false } : undefined}
+          selectionToolbarAnchor={formattingToolbarMode === "selection" ? selectionAnchor : null}
           style={[styles.document, backgroundStyle]}
           theme={theme.markdownDocument}
         />
-        {formattingToolbarMode === "selection" && selectionAnchor ? (
-          <MarkdownFloatingSurface anchor={selectionAnchor}>
-            <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating />
-          </MarkdownFloatingSurface>
-        ) : null}
       </View>
     </View>
   );

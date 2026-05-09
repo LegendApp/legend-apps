@@ -56,6 +56,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       adapter = nativeMarkdownDocumentAdapter,
       autoFocusFirstBlock,
       commandsRef,
+      commentAnchor,
       contentContainerStyle,
       filename,
       markdownLayout,
@@ -65,7 +66,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onLoaded,
       onSaveStateChange,
       onSelectionAnchorChange,
+      renderCommentBubble,
+      renderSelectionToolbar,
       savePolicy,
+      selectionToolbarAnchor,
       style,
       theme,
     },
@@ -203,18 +207,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             return;
           }
 
-          input.measureInWindow((inputX, inputY) => {
+          input.measureInWindow((inputX, inputY, inputWidth, inputHeight) => {
             containerRef.current?.measureInWindow((containerX, containerY) => {
               if (requestId !== selectionAnchorRequestRef.current) {
                 return;
               }
+              const itemX = inputX - containerX;
+              const itemY = inputY - containerY;
 
               setTextSelectionAnchor({
+                blockId: activeBlockIdRef.current ?? undefined,
                 height: Math.max(caretRect.height, 1),
+                itemHeight: inputHeight,
+                itemWidth: inputWidth,
+                itemX,
+                itemY,
                 kind: "textSelection",
                 width: Math.max(caretRect.width, 1),
-                x: inputX - containerX + caretRect.x,
-                y: inputY - containerY + caretRect.y,
+                x: itemX + caretRect.x,
+                y: itemY + caretRect.y,
               });
             });
           });
@@ -1207,7 +1218,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       return {
+        blockId: firstRect.blockId,
         height: firstRect.height,
+        itemHeight: firstRect.height,
+        itemWidth: inactiveOverlayWidth,
+        itemX: contentOffsetX,
+        itemY: firstRect.y,
         kind: "blockSelection",
         width: inactiveOverlayWidth,
         x: contentOffsetX,
@@ -1227,10 +1243,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeSelection,
         blockIds,
         blocksById,
+        commentAnchor,
+        renderCommentBubble,
+        renderSelectionToolbar,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
+        selectionToolbarAnchor,
       }),
-      [activeBlockId, activeSelection, blockIds, blocksById, resolvedMarkdownLayout, resolvedMarkdownStyle],
+      [activeBlockId, activeSelection, blockIds, blocksById, commentAnchor, renderCommentBubble, renderSelectionToolbar, resolvedMarkdownLayout, resolvedMarkdownStyle, selectionToolbarAnchor],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -1255,6 +1275,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           hasPreviousBlock={props.index > 0}
           initialSelection={activeSelection}
           isActive={activeBlockId === props.item}
+          commentAnchor={commentAnchor?.blockId === props.item ? commentAnchor : null}
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
@@ -1264,6 +1285,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onChangeSelectionRef={handleChangeSelectionRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
           previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
+          renderCommentBubble={renderCommentBubble}
+          renderSelectionToolbar={renderSelectionToolbar}
+          selectionToolbarAnchor={selectionToolbarAnchor?.blockId === props.item ? selectionToolbarAnchor : null}
         />
       ),
       [
@@ -1272,14 +1296,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeSelection,
         blockIds,
         blocksById,
+        commentAnchor,
         draftMarkdown,
         handleBlockWindowLayout,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
         handleChangeSelectionRef,
         handleSelectionDragOutsideRef,
+        renderCommentBubble,
+        renderSelectionToolbar,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
+        selectionToolbarAnchor,
       ],
     );
     const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;

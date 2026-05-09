@@ -1,6 +1,6 @@
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { MarkdownBlockActivationView } from "@legend-desktop/markdown-block-editor";
-import { memo, useEffect, useRef, useState, type RefObject } from "react";
+import { Fragment, memo, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
@@ -24,7 +24,7 @@ import {
   inputStyleFromMarkdownStyle,
   normalizeSelectionDragOutsideEvent,
 } from "./markdownLayout";
-import type { MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps } from "./types";
+import type { MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
 import { useLatestRef } from "./useLatestRef";
 
 export const MarkdownEditorInput = memo(
@@ -166,6 +166,7 @@ export const MarkdownOverlayEditorInput = memo(
 
 export function MarkdownBlockRow({
   activeInputRef,
+  commentAnchor,
   draftMarkdown,
   hasNextBlock,
   hasPreviousBlock,
@@ -181,9 +182,13 @@ export function MarkdownBlockRow({
   markdownLayout,
   markdownStyle,
   previousBlock,
+  renderCommentBubble,
+  renderSelectionToolbar,
+  selectionToolbarAnchor,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   block?: MarkdownBlockSnapshot;
+  commentAnchor?: MarkdownSelectionAnchor | null;
   draftMarkdown: string;
   hasNextBlock: boolean;
   hasPreviousBlock: boolean;
@@ -198,6 +203,9 @@ export function MarkdownBlockRow({
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
   previousBlock?: MarkdownBlockSnapshot;
+  renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
+  renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
+  selectionToolbarAnchor?: MarkdownSelectionAnchor | null;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
   const rowRef = useRef<View>(null);
@@ -207,6 +215,8 @@ export function MarkdownBlockRow({
   }
 
   const rowStyle = blockRowSpacingStyle(block, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
+  const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
+  const selectionToolbar = selectionToolbarAnchor && renderSelectionToolbar ? renderSelectionToolbar(selectionToolbarAnchor) : null;
 
   const measureWindowLayout = () => {
     requestAnimationFrame(() => {
@@ -224,7 +234,7 @@ export function MarkdownBlockRow({
           setRowWidth(event.nativeEvent.layout.width);
           measureWindowLayout();
         }}
-        style={rowStyle}
+        style={[rowStyle, styles.blockRow]}
       >
         <MarkdownEditorInput
           activeInputRef={activeInputRef}
@@ -238,6 +248,8 @@ export function MarkdownBlockRow({
           onSelectionDragOutsideRef={onSelectionDragOutsideRef}
           rowWidth={rowWidth}
         />
+        {selectionToolbar}
+        {commentBubble}
       </View>
     );
   }
@@ -259,37 +271,47 @@ export function MarkdownBlockRow({
 
   if (usesNativeEditorOverlay) {
     return (
-      <MarkdownBlockActivationView
-        ref={rowRef}
-        blockId={block.id}
-        contentsHidden={isActive}
-        markdown={block.markdown}
-        onLayout={(event) => {
-          setRowWidth(event.nativeEvent.layout.width);
-          measureWindowLayout();
-        }}
-        style={rowStyle}
-      >
-        {renderedMarkdown}
-      </MarkdownBlockActivationView>
+      <Fragment>
+        <MarkdownBlockActivationView
+          ref={rowRef}
+          blockId={block.id}
+          contentsHidden={isActive}
+          markdown={block.markdown}
+          onLayout={(event) => {
+            setRowWidth(event.nativeEvent.layout.width);
+            measureWindowLayout();
+          }}
+          style={rowStyle}
+        >
+          {renderedMarkdown}
+        </MarkdownBlockActivationView>
+        {selectionToolbar}
+        {commentBubble}
+      </Fragment>
     );
   }
 
   return (
-    <Pressable
+    <View
       ref={rowRef}
-      delayHoverIn={0}
-      delayHoverOut={0}
       onLayout={(event) => {
         setRowWidth(event.nativeEvent.layout.width);
         measureWindowLayout();
       }}
-      onPress={(event) => {
-        onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
-      }}
-      style={rowStyle}
+      style={[rowStyle, styles.blockRow]}
     >
-      {renderedMarkdown}
-    </Pressable>
+      <Pressable
+        delayHoverIn={0}
+        delayHoverOut={0}
+        onPress={(event) => {
+          onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
+        }}
+        style={styles.rowContent}
+      >
+        {renderedMarkdown}
+      </Pressable>
+      {selectionToolbar}
+      {commentBubble}
+    </View>
   );
 }

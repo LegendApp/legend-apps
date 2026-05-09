@@ -11,9 +11,12 @@ export function MarkdownFloatingSurface({
   children: ReactNode;
   placement?: "above" | "below";
 }) {
+  const itemTop = anchor.itemY ?? anchor.y;
+  const itemWidth = anchor.itemWidth ?? anchor.width;
+  const selectionTop = anchor.y - itemTop;
   const top = placement === "above"
-    ? Math.max(8, anchor.y - 44)
-    : anchor.y + anchor.height + 6;
+    ? Math.max(-26, selectionTop - 56)
+    : Math.max(0, selectionTop + anchor.height + 6);
 
   return (
     <View
@@ -21,9 +24,9 @@ export function MarkdownFloatingSurface({
       style={[
         styles.container,
         {
-          left: 16,
-          right: 16,
+          left: 0,
           top,
+          width: itemWidth,
         },
       ]}
     >

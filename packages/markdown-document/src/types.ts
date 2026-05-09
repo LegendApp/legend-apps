@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 
@@ -97,10 +97,15 @@ export type MarkdownDocumentCommands = {
 
 export type MarkdownSelectionAnchor = {
   kind: "textSelection" | "blockSelection";
+  blockId?: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  itemY?: number;
+  itemHeight?: number;
+  itemX?: number;
+  itemWidth?: number;
 };
 
 export type MarkdownSavePolicy = {
@@ -158,5 +163,9 @@ export type MarkdownDocumentProps = {
   onDirtyChange?: (isDirty: boolean) => void;
   onSaveStateChange?: (state: MarkdownSaveState) => void;
   onSelectionAnchorChange?: (anchor: MarkdownSelectionAnchor | null) => void;
+  commentAnchor?: MarkdownSelectionAnchor | null;
+  renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
+  selectionToolbarAnchor?: MarkdownSelectionAnchor | null;
+  renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   onError?: (error: Error) => void;
 };
