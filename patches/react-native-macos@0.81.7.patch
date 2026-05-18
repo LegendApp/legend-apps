@@ -1,0 +1,14 @@
+diff --git a/ReactCommon/react/runtime/hermes/HermesInstance.cpp b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
+index 485912d..121a80c 100644
+--- a/ReactCommon/react/runtime/hermes/HermesInstance.cpp
++++ b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
+@@ -110,7 +110,9 @@ class HermesJSRuntime : public JSRuntime {
+   }
+ 
+   void unstable_initializeOnJsThread() override {
++#ifndef NDEBUG
+     runtime_->registerForProfiling();
++#endif
+   }
+ 
+  private:

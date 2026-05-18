@@ -1,7 +1,7 @@
 import { createHash, type Hash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { rootDir, shellDir } from "./apps";
+import { appsDir, rootDir, shellDir } from "./apps";
 import { runCommand } from "./run";
 import type { AppManifest } from "./types";
 
@@ -27,15 +27,19 @@ export function getMacOSReleaseWorkspaceDir(appId: string) {
   return path.join(workspaceRoot, "release", appId, "macos");
 }
 
+export function getMacOSReleaseAppRootDir(appId: string) {
+  return path.join(workspaceRoot, "release", appId);
+}
+
 export function getMacOSReleaseProjectPath(appId: string) {
   return path.relative(shellDir, getMacOSReleaseWorkspaceDir(appId));
 }
 
-export function ensureMacOSReleaseWorkspace(manifest: AppManifest) {
+export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: string) {
   const workspaceDir = getMacOSReleaseWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
   ensureReleaseNodeModulesLink();
-  ensureReleaseAppRoot(manifest.id);
+  ensureReleaseAppRoot(manifest, configPath);
 
   for (const entry of macosTemplateEntries) {
     copyTemplateEntry(entry, workspaceDir);
@@ -58,12 +62,13 @@ function ensureReleaseNodeModulesLink() {
   fs.symlinkSync(targetPath, linkPath, "dir");
 }
 
-function ensureReleaseAppRoot(appId: string) {
-  const appRoot = path.join(workspaceRoot, "release", appId);
+function ensureReleaseAppRoot(manifest: AppManifest, configPath: string) {
+  const appRoot = getMacOSReleaseAppRootDir(manifest.id);
 
   fs.mkdirSync(appRoot, { recursive: true });
-  ensureSymlink(path.join(shellDir, "package.json"), path.join(appRoot, "package.json"), "file");
   ensureSymlink(path.join(shellDir, "app.config.ts"), path.join(appRoot, "app.config.ts"), "file");
+  ensureSymlink(path.join(shellDir, "react-native.config.js"), path.join(appRoot, "react-native.config.js"), "file");
+  writeReleasePackageJson(manifest, configPath, appRoot);
 }
 
 function ensureSymlink(targetPath: string, linkPath: string, type: fs.symlink.Type) {
@@ -74,7 +79,12 @@ function ensureSymlink(targetPath: string, linkPath: string, type: fs.symlink.Ty
   fs.symlinkSync(targetPath, linkPath, type);
 }
 
-export function installMacOSPods(workspaceDir: string, configPath: string, appId: string) {
+export function installMacOSPods(
+  workspaceDir: string,
+  configPath: string,
+  appId: string,
+  appRoot = shellDir,
+) {
   const hash = getNativeGraphHash(workspaceDir, configPath);
   const hashPath = path.join(workspaceDir, graphHashFile);
   const lockPath = path.join(workspaceDir, "Podfile.lock");
@@ -92,20 +102,69 @@ export function installMacOSPods(workspaceDir: string, configPath: string, appId
 
   runCommand("pod", ["install"], {
     cwd: workspaceDir,
-    env: getMacOSEnv(appId, configPath),
+    env: getMacOSEnv(appId, configPath, appRoot),
   });
 
   fs.writeFileSync(hashPath, `${hash}\n`);
 }
 
-export function getMacOSEnv(appId: string, configPath: string) {
+export function getMacOSEnv(appId: string, configPath: string, appRoot = shellDir) {
   return {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: "macos",
     LEGEND_NATIVE_CONFIG: configPath,
     LEGEND_APP_CONFIG: configPath,
+    LEGEND_APP_ROOT: appRoot,
+    LEGEND_REPO_ROOT: rootDir,
     LEGEND_SHELL_ROOT: shellDir,
   };
+}
+
+function writeReleasePackageJson(manifest: AppManifest, configPath: string, appRoot: string) {
+  const shellPackage = readJson(path.join(shellDir, "package.json"));
+  const appPackage = readJson(path.join(appsDir, manifest.id, "package.json"));
+  const generatedConfig = readJson(configPath) as {
+    excludedNativePackages?: { name: string }[];
+  };
+  const excludedPackages = new Set(generatedConfig.excludedNativePackages?.map((pkg) => pkg.name) ?? []);
+  const packageJsonPath = path.join(appRoot, "package.json");
+  const packageJson = {
+    ...shellPackage,
+    name: `shell-${manifest.id}-release`,
+    dependencies: filterDependencies({
+      ...shellPackage.dependencies,
+      ...appPackage.dependencies,
+    }, excludedPackages),
+    devDependencies: filterDependencies({
+      ...shellPackage.devDependencies,
+      ...appPackage.devDependencies,
+    }, excludedPackages),
+  };
+
+  fs.rmSync(packageJsonPath, { force: true });
+  fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+}
+
+function readJson(filePath: string) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  } & Record<string, unknown>;
+}
+
+function filterDependencies(
+  dependencies: Record<string, string> | undefined,
+  excludedPackages: Set<string>,
+) {
+  if (!dependencies) {
+    return undefined;
+  }
+
+  const filtered = Object.fromEntries(
+    Object.entries(dependencies).filter(([name]) => !excludedPackages.has(name)),
+  );
+
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
 }
 
 function copyTemplateEntry(entry: string, workspaceDir: string) {
@@ -145,6 +204,7 @@ function patchMacOSProjectForApp(workspaceDir: string, manifest: AppManifest) {
 function getNativeGraphHash(workspaceDir: string, configPath: string) {
   const hash = createHash("sha256");
   const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+    id?: string;
     activeNativePackages?: { root: string }[];
     nativeGraphMode?: string;
     platform?: string;
@@ -158,6 +218,10 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
   addFile(hash, path.join(rootDir, "bun.lock"));
   addFile(hash, path.join(rootDir, "package.json"));
   addFile(hash, path.join(shellDir, "package.json"));
+  addFile(hash, path.join(shellDir, "react-native.config.js"));
+  if (config.id) {
+    addFile(hash, path.join(appsDir, config.id, "package.json"));
+  }
   addFile(hash, path.join(workspaceDir, "Podfile"));
 
   for (const pkg of config.activeNativePackages ?? []) {

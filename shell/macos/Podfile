@@ -2,6 +2,7 @@ require File.join(File.dirname(`node --print "require.resolve('expo/package.json
 require 'pathname'
 
 shell_dir = Pathname.new(ENV['LEGEND_SHELL_ROOT'] || File.expand_path("..", __dir__))
+app_root = Pathname.new(ENV['LEGEND_APP_ROOT'] || shell_dir.to_s)
 rn_macos_absolute_path = shell_dir.join("node_modules", "react-native-macos")
 rn_macos_path = rn_macos_absolute_path.relative_path_from(Pathname.new(__dir__)).to_s
 require "#{rn_macos_absolute_path}/scripts/react_native_pods.rb"
@@ -31,7 +32,7 @@ target 'legendapp-shell-macos' do
     :path => rn_macos_path,
     :fabric_enabled => ENV['RCT_NEW_ARCH_ENABLED'] == '1',
     # An absolute path to your application root.
-    :app_path => shell_dir.to_s
+    :app_path => app_root.to_s
   )
 
   post_install do |installer|

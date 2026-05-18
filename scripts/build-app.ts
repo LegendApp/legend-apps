@@ -2,6 +2,7 @@
 import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, shellDir } from "./lib/apps";
 import {
   ensureMacOSReleaseWorkspace,
+  getMacOSReleaseAppRootDir,
   getMacOSEnv,
   installMacOSPods,
 } from "./lib/macosWorkspaces";
@@ -15,8 +16,9 @@ async function buildOne(appId: string, platform: Platform) {
   const generated = writeGeneratedConfig(manifest, platform, "release");
 
   if (platform === "macos") {
-    const workspaceDir = ensureMacOSReleaseWorkspace(manifest);
-    installMacOSPods(workspaceDir, generated.configPath, appId);
+    const appRoot = getMacOSReleaseAppRootDir(appId);
+    const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
+    installMacOSPods(workspaceDir, generated.configPath, appId, appRoot);
     runCommand(
       "xcodebuild",
       [
@@ -32,7 +34,7 @@ async function buildOne(appId: string, platform: Platform) {
       {
         cwd: shellDir,
         env: {
-          ...getMacOSEnv(appId, generated.configPath),
+          ...getMacOSEnv(appId, generated.configPath, appRoot),
           LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
         },
       },

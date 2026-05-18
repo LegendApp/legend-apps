@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
+const rootDir = process.env.LEGEND_REPO_ROOT || path.resolve(__dirname, "..");
+
 function readGeneratedConfig() {
   const explicitConfigPath = process.env.LEGEND_NATIVE_CONFIG;
   const appId = process.env.LEGEND_APP;
@@ -30,7 +32,7 @@ const generated = readGeneratedConfig();
 const dependencies = {};
 
 for (const pkg of generated?.activeNativePackages ?? []) {
-  const root = path.resolve(__dirname, "..", pkg.root);
+  const root = path.resolve(rootDir, pkg.root);
   dependencies[pkg.name] = {
     root,
   };
