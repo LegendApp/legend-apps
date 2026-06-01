@@ -1,0 +1,22 @@
+{
+  "name": "@legend-desktop/drag-drop",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNDragDropSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "ios": {
+      "componentProvider": {
+        "DragDropView": "RNDragDropView",
+        "TrackDragSource": "RNTrackDragSource"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

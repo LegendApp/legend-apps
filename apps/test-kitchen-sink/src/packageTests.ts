@@ -19,12 +19,20 @@ export const packages: KitchenSinkPackage[] = [
     title: "Auto Updater",
   },
   {
+    id: "audio-player",
+    title: "Audio Player",
+  },
+  {
     id: "context-menu",
     title: "Context Menu",
   },
   {
     id: "document-scanner",
     title: "Document Scanner",
+  },
+  {
+    id: "drag-drop",
+    title: "Drag Drop",
   },
   {
     id: "file-dialog",
@@ -45,6 +53,10 @@ export const packages: KitchenSinkPackage[] = [
   {
     id: "global-hotkey",
     title: "Global Hotkey",
+  },
+  {
+    id: "keyboard-manager",
+    title: "Keyboard Manager",
   },
   {
     id: "markdown-parser",
@@ -69,6 +81,10 @@ export const packages: KitchenSinkPackage[] = [
   {
     id: "sf-symbol",
     title: "SF Symbol",
+  },
+  {
+    id: "text-input-search",
+    title: "Text Input Search",
   },
   {
     id: "window-controls",
@@ -118,6 +134,11 @@ export const tests: KitchenSinkTestConfig[] = [
     title: "Updater Status",
   },
   {
+    id: "audio-player-playback",
+    packageId: "audio-player",
+    title: "Playback",
+  },
+  {
     id: "context-menu-show",
     packageId: "context-menu",
     title: "Show Menu",
@@ -126,6 +147,11 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "document-scanner-markdown",
     packageId: "document-scanner",
     title: "Scan Markdown",
+  },
+  {
+    id: "drag-drop-files-tracks",
+    packageId: "drag-drop",
+    title: "Files and Tracks",
   },
   {
     id: "file-dialog-open-save",
@@ -151,6 +177,11 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "global-hotkey-register",
     packageId: "global-hotkey",
     title: "Register Hotkey",
+  },
+  {
+    id: "keyboard-manager-events",
+    packageId: "keyboard-manager",
+    title: "Focused Key Events",
   },
   {
     id: "markdown-parser-blocks",
@@ -191,6 +222,11 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "sf-symbol-basic",
     packageId: "sf-symbol",
     title: "Basic Symbol",
+  },
+  {
+    id: "text-input-search-basic",
+    packageId: "text-input-search",
+    title: "Native Search Field",
   },
   {
     id: "window-controls-visibility",

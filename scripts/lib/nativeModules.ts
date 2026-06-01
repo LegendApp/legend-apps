@@ -23,6 +23,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/audio-player",
+    root: path.join(packagesDir, "audio-player"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/native-menu",
     root: path.join(packagesDir, "native-menu"),
     platforms: ["macos", "ios", "android"],
@@ -53,6 +58,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/drag-drop",
+    root: path.join(packagesDir, "drag-drop"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/file-scanner",
     root: path.join(packagesDir, "file-scanner"),
     platforms: ["macos", "ios", "android"],
@@ -71,6 +81,11 @@ export const nativePackages: NativePackage[] = [
     name: "@legend-desktop/global-hotkey",
     root: path.join(packagesDir, "global-hotkey"),
     platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/keyboard-manager",
+    root: path.join(packagesDir, "keyboard-manager"),
+    platforms: ["macos", "ios"],
   },
   {
     name: "@legend-desktop/file-system-watcher",
@@ -106,6 +121,11 @@ export const nativePackages: NativePackage[] = [
     name: "@legend-desktop/sf-symbol",
     root: path.join(packagesDir, "sf-symbol"),
     platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "@legend-desktop/text-input-search",
+    root: path.join(packagesDir, "text-input-search"),
+    platforms: ["macos", "ios"],
   },
   {
     name: "react-native-enriched-markdown",

@@ -40,14 +40,17 @@
       "dependencies": {
         "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/document-scanner": "0.0.0",
+        "@legend-desktop/drag-drop": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/file-scanner": "0.0.0",
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/glass-effect-view": "0.0.0",
         "@legend-desktop/global-hotkey": "0.0.0",
+        "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-parser": "0.0.0",
         "@legend-desktop/media-library-scanner": "0.0.0",
@@ -55,6 +58,7 @@
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/sidebar": "0.0.0",
+        "@legend-desktop/text-input-search": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
         "@legendapp/list": "^3.0.0-beta.56",
@@ -71,6 +75,14 @@
     },
     "packages/appkit-split-view": {
       "name": "@legend-desktop/appkit-split-view",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/audio-player": {
+      "name": "@legend-desktop/audio-player",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -99,6 +111,14 @@
       "dependencies": {
         "@legend-desktop/file-scanner": "0.0.0",
       },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/drag-drop": {
+      "name": "@legend-desktop/drag-drop",
+      "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
@@ -138,6 +158,14 @@
     },
     "packages/global-hotkey": {
       "name": "@legend-desktop/global-hotkey",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/keyboard-manager": {
+      "name": "@legend-desktop/keyboard-manager",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -225,6 +253,14 @@
     },
     "packages/sidebar": {
       "name": "@legend-desktop/sidebar",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/text-input-search": {
+      "name": "@legend-desktop/text-input-search",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
@@ -576,11 +612,15 @@
 
     "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
 
+    "@legend-desktop/audio-player": ["@legend-desktop/audio-player@workspace:packages/audio-player"],
+
     "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
 
     "@legend-desktop/document-scanner": ["@legend-desktop/document-scanner@workspace:packages/document-scanner"],
+
+    "@legend-desktop/drag-drop": ["@legend-desktop/drag-drop@workspace:packages/drag-drop"],
 
     "@legend-desktop/file-dialog": ["@legend-desktop/file-dialog@workspace:packages/file-dialog"],
 
@@ -591,6 +631,8 @@
     "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+
+    "@legend-desktop/keyboard-manager": ["@legend-desktop/keyboard-manager@workspace:packages/keyboard-manager"],
 
     "@legend-desktop/markdown-block-editor": ["@legend-desktop/markdown-block-editor@workspace:packages/markdown-block-editor"],
 
@@ -609,6 +651,8 @@
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
 
     "@legend-desktop/sidebar": ["@legend-desktop/sidebar@workspace:packages/sidebar"],
+
+    "@legend-desktop/text-input-search": ["@legend-desktop/text-input-search@workspace:packages/text-input-search"],
 
     "@legend-desktop/theme": ["@legend-desktop/theme@workspace:packages/theme"],
 
