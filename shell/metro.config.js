@@ -32,6 +32,19 @@ config.resolver.extraNodeModules = {
   "@legend-desktop/app": appSrc,
 };
 
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName.startsWith("@/")) {
+    return context.resolveRequest(context, path.join(appSrc, moduleName.slice(2)), platform);
+  }
+
+  if (defaultResolveRequest) {
+    return defaultResolveRequest(context, moduleName, platform);
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 config.resolver.platforms = [...new Set([...(config.resolver.platforms || []), "macos"])];
 config.resolver.unstable_conditionsByPlatform = {
   ...(config.resolver.unstable_conditionsByPlatform || {}),

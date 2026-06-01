@@ -1,0 +1,2 @@
+export const DEFAULT_LOCAL_PLAYLIST_ID = "LOCAL_FILES";
+export const DEFAULT_LOCAL_PLAYLIST_NAME = "All Songs";
