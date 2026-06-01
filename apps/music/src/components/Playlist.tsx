@@ -832,6 +832,7 @@ export function Playlist() {
     return (
         <View
             className="flex-1"
+            style={styles.flex}
             onStartShouldSetResponderCapture={(event) => {
                 handlePlaylistBackgroundMouseDown(event);
                 return false;
@@ -840,6 +841,7 @@ export function Playlist() {
             <DragDropView
                 ref={dropAreaRef}
                 className={cn("flex-1", overlayClassName)}
+                style={styles.flex}
                 onDragEnter={handleDragEnter}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -947,6 +949,9 @@ export function Playlist() {
 const styles = StyleSheet.create({
     container: {
         // paddingVertical: 2,
+    },
+    flex: {
+        flex: 1,
     },
 });
 

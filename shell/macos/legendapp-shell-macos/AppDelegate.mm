@@ -4,8 +4,6 @@
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
-static NSString *const LegendMainWindowFrameAutoSaveName = @"RCTAppDelegateMainWindow";
-
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
   if (![value isKindOfClass:NSString.class] || value.length == 0) {
@@ -25,6 +23,16 @@ static NSString *LegendInitialMarkdownWindowTitle(void)
   }
 
   return @"Untitled";
+}
+
+static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
+{
+  if ([appId isEqualToString:@"music"]) {
+    return @"LegendMusicMainWindow";
+  }
+
+  NSString *normalizedAppId = appId.length > 0 ? appId : @"default";
+  return [NSString stringWithFormat:@"RCTAppDelegateMainWindow.%@", normalizedAppId];
 }
 
 @implementation AppDelegate
@@ -77,14 +85,16 @@ static NSString *LegendInitialMarkdownWindowTitle(void)
                                                      initialProperties:self.initialProps
                                                          launchOptions:launchOptions];
 
-  NSRect frame = NSMakeRect(0, 0, 1280, 720);
-  self.window = [[NSWindow alloc] initWithContentRect:NSZeroRect
+  NSString *appId = NSProcessInfo.processInfo.environment[@"LEGEND_APP"] ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
+  BOOL isMarkdown = [appId isEqualToString:@"markdown"];
+  BOOL isMusic = [appId isEqualToString:@"music"];
+  NSRect frame = isMusic ? NSMakeRect(0, 0, 360, 640) : NSMakeRect(0, 0, 1280, 720);
+  self.window = [[NSWindow alloc] initWithContentRect:frame
                                            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
                                              backing:NSBackingStoreBuffered
                                                defer:NO];
 
-  NSString *appId = NSProcessInfo.processInfo.environment[@"LEGEND_APP"] ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
-  if ([appId isEqualToString:@"markdown"]) {
+  if (isMarkdown) {
     NSColor *backgroundColor = [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
     self.window.title = LegendInitialMarkdownWindowTitle();
     self.window.backgroundColor = backgroundColor;
@@ -95,6 +105,20 @@ static NSString *LegendInitialMarkdownWindowTitle(void)
     if (@available(macOS 11.0, *)) {
       self.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
+  } else if (isMusic) {
+    self.window.title = @"Legend Music";
+    self.window.backgroundColor = NSColor.clearColor;
+    self.window.opaque = NO;
+    self.window.minSize = NSMakeSize(200, 300);
+    self.window.titleVisibility = NSWindowTitleHidden;
+    self.window.titlebarAppearsTransparent = YES;
+    self.window.styleMask = self.window.styleMask | NSWindowStyleMaskFullSizeContentView;
+    if (@available(macOS 10.14, *)) {
+      self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    }
+    if (@available(macOS 11.0, *)) {
+      self.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+    }
   } else {
     self.window.title = self.moduleName;
   }
@@ -102,22 +126,28 @@ static NSString *LegendInitialMarkdownWindowTitle(void)
   self.window.autorecalculatesKeyViewLoop = YES;
   NSViewController *rootViewController = [NSViewController new];
   rootViewController.view = rootView;
-  rootView.frame = frame;
+  rootView.frame = self.window.contentView.bounds;
+  rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   self.window.contentViewController = rootViewController;
 
-  if ([appId isEqualToString:@"markdown"]) {
-    NSColor *backgroundColor = [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
+  if (isMarkdown || isMusic) {
+    NSColor *backgroundColor = isMusic
+      ? NSColor.clearColor
+      : [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
     self.window.contentView.wantsLayer = YES;
     self.window.contentView.layer.backgroundColor = backgroundColor.CGColor;
+    self.window.contentView.layer.masksToBounds = NO;
     rootView.wantsLayer = YES;
     rootView.layer.backgroundColor = backgroundColor.CGColor;
+    rootView.layer.masksToBounds = NO;
   }
 
-  [self.window makeKeyAndOrderFront:self];
-  if (![self.window setFrameUsingName:LegendMainWindowFrameAutoSaveName]) {
+  NSString *autosaveName = LegendMainWindowFrameAutoSaveName(appId);
+  [self.window setFrameAutosaveName:autosaveName];
+  if (![self.window setFrameUsingName:autosaveName]) {
     [self.window center];
   }
-  [self.window setFrameAutosaveName:LegendMainWindowFrameAutoSaveName];
+  [self.window makeKeyAndOrderFront:self];
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

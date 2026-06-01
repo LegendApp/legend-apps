@@ -1,6 +1,6 @@
 import { useObservable, useValue } from "@legendapp/state/react";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { createJSONManager } from "@/utils/JSONManager";
 import { colors } from "./colors";
@@ -66,7 +66,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
     return (
         <ThemeContext.Provider value={contextValue}>
-            <View className="flex-1">{children}</View>
+            <View className="flex-1" style={styles.root}>
+                {children}
+            </View>
         </ThemeContext.Provider>
     );
 };
@@ -79,3 +81,9 @@ export const useTheme = () => {
     }
     return context;
 };
+
+const styles = StyleSheet.create({
+    root: {
+        flex: 1,
+    },
+});

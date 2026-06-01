@@ -2,9 +2,8 @@ import { PortalProvider } from "@gorhom/portal";
 import { useMount } from "@legendapp/state/react";
 import type React from "react";
 import { useRef } from "react";
-import { LogBox, View } from "react-native";
+import { LogBox, StyleSheet, View } from "react-native";
 import { DragDropProvider } from "@/components/dnd";
-import { EffectView } from "@/components/EffectView";
 import { MainContainer } from "@/components/MainContainer";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastProvider } from "@/components/Toast";
@@ -55,21 +54,25 @@ function App(): React.JSX.Element {
         <ThemeProvider>
             <HookKeyboard />
             <GlobalHotkeyManager />
-            <EffectView glassStyle="regular" style={{ flex: 1 }}>
-                <View className="flex-1 bg-background-primary/40" onLayout={handleFirstLayout}>
-                    <PortalProvider>
-                        <ToastProvider />
-                        <TooltipProvider>
-                            <DragDropProvider>
-                                <MainContainer />
-                            </DragDropProvider>
-                        </TooltipProvider>
-                    </PortalProvider>
-                </View>
-            </EffectView>
+            <View className="flex-1 bg-background-primary/40" style={styles.root} onLayout={handleFirstLayout}>
+                <PortalProvider>
+                    <ToastProvider />
+                    <TooltipProvider>
+                        <DragDropProvider>
+                            <MainContainer />
+                        </DragDropProvider>
+                    </TooltipProvider>
+                </PortalProvider>
+            </View>
             <TitleBar />
         </ThemeProvider>
     );
 }
+
+const styles = StyleSheet.create({
+    root: {
+        flex: 1,
+    },
+});
 
 export default App;

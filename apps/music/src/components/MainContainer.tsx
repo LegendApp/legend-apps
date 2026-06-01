@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { initializeLocalAudioPlayer, localAudioControls } from "@/components/LocalAudioPlayer";
 import { PlaybackArea } from "@/components/PlaybackArea";
 import { Playlist } from "@/components/Playlist";
@@ -35,8 +35,8 @@ export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     });
 
     return (
-        <View className="flex-1 flex-row items-stretch">
-            <View className="flex-1">
+        <View className="flex-1 flex-row items-stretch" style={styles.root}>
+            <View className="flex-1" style={styles.root}>
                 <PlaybackArea benchmarkElapsedSeconds={benchmarkElapsedSeconds} />
                 <Playlist />
                 {SUPPORT_ACCOUNTS && <Unregistered />}
@@ -44,3 +44,9 @@ export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    root: {
+        flex: 1,
+    },
+});
