@@ -10,12 +10,33 @@ import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
-async function buildOne(appId: string, platform: Platform) {
+type MacOSBuildArch = "arm" | "x86";
+
+function parseMacOSBuildArch(args: string[]) {
+  const arch = args[0] ?? "arm";
+
+  if (arch !== "arm" && arch !== "x86") {
+    throw new Error(`Invalid macOS build architecture "${arch}". Expected "arm" or "x86".`);
+  }
+
+  if (args.length > 1) {
+    throw new Error(`Unexpected build arguments: ${args.slice(1).join(" ")}`);
+  }
+
+  return arch;
+}
+
+function getXcodeArch(arch: MacOSBuildArch) {
+  return arch === "arm" ? "arm64" : "x86_64";
+}
+
+async function buildOne(appId: string, platform: Platform, args: string[] = []) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
   const generated = writeGeneratedConfig(manifest, platform, "release");
 
   if (platform === "macos") {
+    const arch = parseMacOSBuildArch(args);
     const appRoot = getMacOSReleaseAppRootDir(appId);
     const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
     installMacOSPods(workspaceDir, generated.configPath, appId, appRoot);
@@ -29,7 +50,9 @@ async function buildOne(appId: string, platform: Platform) {
         "-configuration",
         "Release",
         "-derivedDataPath",
-        `${workspaceDir}/build/xcodebuild-release`,
+        `${workspaceDir}/build/xcodebuild-release-${arch}`,
+        `ARCHS=${getXcodeArch(arch)}`,
+        "ONLY_ACTIVE_ARCH=NO",
       ],
       {
         cwd: shellDir,
@@ -40,6 +63,10 @@ async function buildOne(appId: string, platform: Platform) {
       },
     );
     return;
+  }
+
+  if (args.length > 0) {
+    throw new Error(`Unexpected build arguments for ${platform}: ${args.join(" ")}`);
   }
 
   runPlatformCommand(appId, platform, "release", [], {
@@ -60,7 +87,7 @@ async function main() {
     return;
   }
 
-  await buildOne(command.appId, command.platform);
+  await buildOne(command.appId, command.platform, command.extraArgs);
 }
 
 main().catch((error) => {

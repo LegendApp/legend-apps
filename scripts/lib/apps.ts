@@ -62,6 +62,7 @@ export function formatAppUsage(appId = "<app>") {
     `  bun run ${appId} run`,
     `  bun run ${appId} pods`,
     `  bun run ${appId} build macos`,
+    `  bun run ${appId} build macos x86`,
   ].join("\n");
 }
 
