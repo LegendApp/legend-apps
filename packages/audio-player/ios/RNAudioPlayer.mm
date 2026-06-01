@@ -169,43 +169,43 @@ RCT_EXPORT_MODULE(NativeAudioPlayer)
     return;
   }
 
-  __weak typeof(self) weakSelf = self;
+  __weak RNAudioPlayer *weakSelf = self;
   CMTime interval = CMTimeMakeWithSeconds(1, NSEC_PER_SEC);
   _progressObserver = [_player addPeriodicTimeObserverForInterval:interval queue:dispatch_get_main_queue() usingBlock:^(__unused CMTime time) {
-    __strong typeof(weakSelf) self = weakSelf;
-    if (!self || !self.player) {
+    __strong RNAudioPlayer *strongSelf = weakSelf;
+    if (!strongSelf || !strongSelf.player) {
       return;
     }
 
-    double currentTime = CMTimeGetSeconds(self.player.currentTime);
+    double currentTime = CMTimeGetSeconds(strongSelf.player.currentTime);
     if (!isfinite(currentTime)) {
       currentTime = 0;
     }
 
-    [self sendAudioEvent:@"onProgress"
-                    body:@{
-                      @"currentTime": @(currentTime),
-                      @"duration": @(self.duration),
-                    }];
+    [strongSelf sendAudioEvent:@"onProgress"
+                          body:@{
+                            @"currentTime": @(currentTime),
+                            @"duration": @(strongSelf.duration),
+                          }];
   }];
 }
 
 - (void)addCompletionObserverForItem:(AVPlayerItem *)item
 {
   [self removeCompletionObserver];
-  __weak typeof(self) weakSelf = self;
+  __weak RNAudioPlayer *weakSelf = self;
   _completionObserver = [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemDidPlayToEndTimeNotification
                                                                           object:item
                                                                            queue:[NSOperationQueue mainQueue]
                                                                       usingBlock:^(__unused NSNotification *notification) {
-    __strong typeof(weakSelf) self = weakSelf;
-    if (!self) {
+    __strong RNAudioPlayer *strongSelf = weakSelf;
+    if (!strongSelf) {
       return;
     }
 
-    self.isPlaying = NO;
-    [self sendAudioEvent:@"onPlaybackStateChanged" body:@{@"isPlaying": @NO}];
-    [self sendAudioEvent:@"onCompletion" body:@{}];
+    strongSelf.isPlaying = NO;
+    [strongSelf sendAudioEvent:@"onPlaybackStateChanged" body:@{@"isPlaying": @NO}];
+    [strongSelf sendAudioEvent:@"onCompletion" body:@{}];
   }];
 }
 
@@ -230,10 +230,10 @@ RCT_EXPORT_MODULE(NativeAudioPlayer)
   }
 
   AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
-  __weak typeof(self) weakSelf = self;
+  __weak RNAudioPlayer *weakSelf = self;
   [asset loadValuesAsynchronouslyForKeys:@[@"duration"] completionHandler:^{
-    __strong typeof(weakSelf) self = weakSelf;
-    if (!self) {
+    __strong RNAudioPlayer *strongSelf = weakSelf;
+    if (!strongSelf) {
       return;
     }
 
@@ -242,27 +242,27 @@ RCT_EXPORT_MODULE(NativeAudioPlayer)
     dispatch_async(dispatch_get_main_queue(), ^{
       if (status == AVKeyValueStatusFailed || status == AVKeyValueStatusCancelled) {
         NSString *message = error.localizedDescription ?: @"Failed to load audio track";
-        [self sendAudioEvent:@"onLoadError" body:@{@"error": message}];
-        resolve([self errorResult:message]);
+        [strongSelf sendAudioEvent:@"onLoadError" body:@{@"error": message}];
+        resolve([strongSelf errorResult:message]);
         return;
       }
 
-      [self removeProgressObserver];
-      [self removeCompletionObserver];
+      [strongSelf removeProgressObserver];
+      [strongSelf removeCompletionObserver];
 
       AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset];
-      self.player = [AVPlayer playerWithPlayerItem:item];
-      self.player.volume = self.volume;
-      self.isPlaying = NO;
+      strongSelf.player = [AVPlayer playerWithPlayerItem:item];
+      strongSelf.player.volume = strongSelf.volume;
+      strongSelf.isPlaying = NO;
 
       double duration = CMTimeGetSeconds(asset.duration);
-      self.duration = isfinite(duration) ? duration : 0;
+      strongSelf.duration = isfinite(duration) ? duration : 0;
 
-      [self addCompletionObserverForItem:item];
-      [self addProgressObserver];
-      [self sendAudioEvent:@"onLoadSuccess" body:@{@"duration": @(self.duration)}];
-      [self sendAudioEvent:@"onPlaybackStateChanged" body:@{@"isPlaying": @NO}];
-      resolve([self successResult]);
+      [strongSelf addCompletionObserverForItem:item];
+      [strongSelf addProgressObserver];
+      [strongSelf sendAudioEvent:@"onLoadSuccess" body:@{@"duration": @(strongSelf.duration)}];
+      [strongSelf sendAudioEvent:@"onPlaybackStateChanged" body:@{@"isPlaying": @NO}];
+      resolve([strongSelf successResult]);
     });
   }];
 }
