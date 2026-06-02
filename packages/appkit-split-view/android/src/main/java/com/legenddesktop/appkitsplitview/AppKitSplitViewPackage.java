@@ -6,7 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.module.model.ReactModuleInfo;
 import com.facebook.react.module.model.ReactModuleInfoProvider;
 import com.facebook.react.uimanager.ViewManager;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +22,7 @@ public class AppKitSplitViewPackage extends BaseReactPackage {
 
   @Override
   public List<ViewManager<?, ?>> createViewManagers(ReactApplicationContext reactContext) {
-    return Collections.singletonList(new AppKitSplitViewManager());
+    return Arrays.asList(new AppKitSplitViewManager(), new SidebarSplitViewManager());
   }
 
   @Override

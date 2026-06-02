@@ -1,6 +1,10 @@
-import { NativeEventEmitter, Platform } from "react-native";
+import { createElement, type ReactNode } from "react";
+import { NativeEventEmitter, Platform, type NativeSyntheticEvent, type ViewProps } from "react-native";
 import NativeAppKitSplitView, { type NativeMenuPackage, type NativeMenuTest } from "./NativeAppKitSplitView";
 import AppKitSplitViewNativeComponent from "./AppKitSplitViewNativeComponent";
+import SidebarSplitViewNativeComponent, {
+  type SidebarSplitViewResizeEvent,
+} from "./SidebarSplitViewNativeComponent";
 
 export type AppKitSplitViewMenuAction =
   | { type: "package"; id: string }
@@ -8,8 +12,37 @@ export type AppKitSplitViewMenuAction =
 
 export type KitchenSinkPackage = NativeMenuPackage;
 export type KitchenSinkTest = NativeMenuTest;
+export type { SidebarSplitViewResizeEvent };
 
 export const AppKitSplitView = AppKitSplitViewNativeComponent;
+
+export interface SidebarSplitViewProps extends ViewProps {
+  children?: ReactNode;
+  className?: string;
+  contentMinWidth?: number;
+  onSplitViewDidResize?: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void | Promise<void>;
+  sidebarMinWidth?: number;
+}
+
+export function SidebarSplitView({
+  children,
+  className,
+  contentMinWidth = 320,
+  sidebarMinWidth = 180,
+  style,
+  ...props
+}: SidebarSplitViewProps) {
+  return createElement(
+    SidebarSplitViewNativeComponent,
+    {
+      contentMinWidth,
+      sidebarMinWidth,
+      style,
+      ...props,
+    },
+    children,
+  );
+}
 
 export function configureKitchenSinkMenus(
   packages: KitchenSinkPackage[],
