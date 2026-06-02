@@ -1,4 +1,3 @@
-import "@/../global.css";
 import { PortalProvider } from "@gorhom/portal";
 import { GlassEffectView } from "@legend-desktop/glass-effect-view";
 import { useObserveEffect } from "@legendapp/state/react";

@@ -1,4 +1,3 @@
-import "@/../global.css";
 import { PortalProvider } from "@gorhom/portal";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useState } from "react";
