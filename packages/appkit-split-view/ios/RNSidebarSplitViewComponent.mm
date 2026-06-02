@@ -163,12 +163,13 @@ using namespace facebook::react;
     return;
   }
 
-  CGFloat sidebarWidth = _splitViewController.splitView.subviews.count > 0
-    ? _splitViewController.splitView.subviews[0].frame.size.width
-    : 0;
-  CGFloat contentWidth = _splitViewController.splitView.subviews.count > 1
-    ? _splitViewController.splitView.subviews[1].frame.size.width
-    : 0;
+  CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
+  CGFloat contentWidth = _contentContainer.bounds.size.width;
+
+  if ((sidebarWidth <= 0 || contentWidth <= 0) && _splitViewController.splitView.subviews.count > 1) {
+    sidebarWidth = _splitViewController.splitView.subviews[0].frame.size.width;
+    contentWidth = _splitViewController.splitView.subviews[1].frame.size.width;
+  }
 
   if (sidebarWidth <= 0 || contentWidth <= 0) {
     return;
