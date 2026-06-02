@@ -1,7 +1,7 @@
 import { observable } from "@legendapp/state";
 import { createJSONManager } from "@/utils/JSONManager";
 
-type SettingsPage = "account" | "general" | "library" | "overlay" | "theme";
+type SettingsPage = "account" | "general" | "library" | "overlay" | "theme" | "ui-customize" | "open-source";
 
 export const state$ = observable({
     isDropdownOpen: false,

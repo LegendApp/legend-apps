@@ -36,6 +36,7 @@
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/app-exit": "0.0.0",
+        "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/drag-drop": "0.0.0",
@@ -47,6 +48,7 @@
         "@legend-desktop/media-library-scanner": "0.0.0",
         "@legend-desktop/media-tags": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
+        "@legend-desktop/sidebar": "0.0.0",
         "@legend-desktop/text-input-search": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",

@@ -23,6 +23,8 @@ const manifest = {
       "@legend-desktop/media-library-scanner",
       "@legend-desktop/media-tags",
       "@legend-desktop/sf-symbol",
+      "@legend-desktop/sidebar",
+      "@legend-desktop/appkit-split-view",
       "@legend-desktop/text-input-search",
       "@legend-desktop/window-controls",
       "@legend-desktop/window-manager",
