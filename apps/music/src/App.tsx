@@ -54,7 +54,7 @@ function App(): React.JSX.Element {
         <ThemeProvider>
             <HookKeyboard />
             <GlobalHotkeyManager />
-            <View className="flex-1 bg-background-primary/40" style={styles.root} onLayout={handleFirstLayout}>
+            <View className="flex-1" style={styles.root} onLayout={handleFirstLayout}>
                 <PortalProvider>
                     <ToastProvider />
                     <TooltipProvider>

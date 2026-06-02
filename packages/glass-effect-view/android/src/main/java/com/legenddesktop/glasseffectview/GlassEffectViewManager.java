@@ -4,22 +4,10 @@ import androidx.annotation.Nullable;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.uimanager.SimpleViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
-import com.facebook.react.uimanager.ViewManagerDelegate;
-import com.facebook.react.viewmanagers.GlassEffectViewManagerDelegate;
-import com.facebook.react.viewmanagers.GlassEffectViewManagerInterface;
 
 @ReactModule(name = GlassEffectViewManager.REACT_CLASS)
-public class GlassEffectViewManager extends SimpleViewManager<GlassEffectView>
-    implements GlassEffectViewManagerInterface<GlassEffectView> {
-  public static final String REACT_CLASS = "GlassEffectView";
-
-  private final ViewManagerDelegate<GlassEffectView> delegate =
-      new GlassEffectViewManagerDelegate<>(this);
-
-  @Override
-  public ViewManagerDelegate<GlassEffectView> getDelegate() {
-    return delegate;
-  }
+public class GlassEffectViewManager extends SimpleViewManager<GlassEffectView> {
+  public static final String REACT_CLASS = "RNGlassEffectView";
 
   @Override
   public String getName() {

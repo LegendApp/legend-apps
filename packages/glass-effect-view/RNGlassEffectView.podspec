@@ -11,11 +11,7 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :ios => "15.0", :osx => "14.0" }
-  s.source_files = "ios/**/*.{h,m,mm}"
-  s.pod_target_xcconfig = {
-    "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/Headers/Private/Yoga\""
-  }
+  s.source_files = "ios/**/*.{m,swift}"
+  s.swift_version = "6.0"
   s.dependency "React-Core"
-  s.dependency "React-RCTFabric"
-  s.dependency "ReactCodegen"
 end

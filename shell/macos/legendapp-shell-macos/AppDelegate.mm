@@ -28,11 +28,53 @@ static NSString *LegendInitialMarkdownWindowTitle(void)
 static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
 {
   if ([appId isEqualToString:@"music"]) {
-    return @"LegendMusicMainWindow";
+    return @"MainWindow";
   }
 
   NSString *normalizedAppId = appId.length > 0 ? appId : @"default";
   return [NSString stringWithFormat:@"RCTAppDelegateMainWindow.%@", normalizedAppId];
+}
+
+static NSString *LegendCurrentAppId(void)
+{
+  return NSProcessInfo.processInfo.environment[@"LEGEND_APP"] ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
+}
+
+static void LegendConfigureMusicWindow(NSWindow *window)
+{
+  [window setTitleVisibility:NSWindowTitleHidden];
+  [window setTitlebarAppearsTransparent:YES];
+  [window setStyleMask:[window styleMask] | NSWindowStyleMaskFullSizeContentView];
+  [[window standardWindowButton:NSWindowCloseButton] setHidden:YES];
+  [[window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
+  [[window standardWindowButton:NSWindowZoomButton] setHidden:YES];
+}
+
+static void LegendMakeViewTransparent(NSView *view)
+{
+  view.wantsLayer = YES;
+  view.layer.backgroundColor = NSColor.clearColor.CGColor;
+  view.layer.masksToBounds = NO;
+}
+
+static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView)
+{
+  NSRect bounds = NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame));
+  NSView *content = [[NSView alloc] initWithFrame:bounds];
+  content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  LegendMakeViewTransparent(content);
+
+  NSView *hostView = content;
+  if (@available(macOS 26.0, *)) {
+    NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:bounds];
+    glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    glassView.contentView = content;
+    LegendMakeViewTransparent(glassView);
+    hostView = glassView;
+  }
+
+  *contentView = content;
+  return hostView;
 }
 
 @implementation AppDelegate
@@ -52,8 +94,27 @@ static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
     @"launchArguments": [[NSProcessInfo processInfo] arguments] ?: @[],
   };
   self.dependencyProvider = [RCTAppDependencyProvider new];
+
+  if ([LegendCurrentAppId() isEqualToString:@"music"]) {
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(windowDidBecomeKey:)
+                                                 name:NSWindowDidBecomeKeyNotification
+                                               object:nil];
+  }
   
   [super applicationDidFinishLaunching:notification];
+
+  if ([LegendCurrentAppId() isEqualToString:@"music"]) {
+    NSAppearance *darkAppearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    if (darkAppearance) {
+      [NSApp setAppearance:darkAppearance];
+    }
+  }
+}
+
+- (void)dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
@@ -79,13 +140,62 @@ static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
   return reply;
 }
 
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag
+{
+  NSString *appId = LegendCurrentAppId();
+  BOOL isMusic = [appId isEqualToString:@"music"];
+
+  if (isMusic) {
+    if (self.window == nil) {
+      [self loadReactNativeWindow:nil];
+    } else if (!self.window.isVisible) {
+      [self.window makeKeyAndOrderFront:self];
+    } else {
+      [self.window makeKeyAndOrderFront:self];
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+  }
+
+  return YES;
+}
+
+- (BOOL)windowShouldClose:(NSWindow *)sender
+{
+  NSString *appId = LegendCurrentAppId();
+  BOOL shouldHideMusicWindow = [appId isEqualToString:@"music"] && sender == self.window;
+
+  if (shouldHideMusicWindow) {
+    [self.window orderOut:self];
+  }
+
+  return !shouldHideMusicWindow;
+}
+
+- (void)windowDidBecomeKey:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  BOOL isMusicMainWindow = [LegendCurrentAppId() isEqualToString:@"music"] && window == self.window;
+
+  if (isMusicMainWindow) {
+    if (!self.mainWindowFrameAdjusted) {
+      CGFloat titleBarHeight = NSHeight(window.frame) - NSHeight(window.contentLayoutRect);
+      if (titleBarHeight > 0.0) {
+        NSRect frame = window.frame;
+        frame.size.height += titleBarHeight;
+        frame.origin.y -= titleBarHeight;
+        [window setFrame:frame display:NO animate:NO];
+      }
+      self.mainWindowFrameAdjusted = YES;
+    }
+
+    LegendConfigureMusicWindow(window);
+    [window setDelegate:self];
+  }
+}
+
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions
 {
-  RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName
-                                                     initialProperties:self.initialProps
-                                                         launchOptions:launchOptions];
-
-  NSString *appId = NSProcessInfo.processInfo.environment[@"LEGEND_APP"] ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
+  NSString *appId = LegendCurrentAppId();
   BOOL isMarkdown = [appId isEqualToString:@"markdown"];
   BOOL isMusic = [appId isEqualToString:@"music"];
   NSRect frame = isMusic ? NSMakeRect(0, 0, 360, 640) : NSMakeRect(0, 0, 1280, 720);
@@ -110,36 +220,59 @@ static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
     self.window.backgroundColor = NSColor.clearColor;
     self.window.opaque = NO;
     self.window.minSize = NSMakeSize(200, 300);
-    self.window.titleVisibility = NSWindowTitleHidden;
-    self.window.titlebarAppearsTransparent = YES;
-    self.window.styleMask = self.window.styleMask | NSWindowStyleMaskFullSizeContentView;
     if (@available(macOS 10.14, *)) {
       self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-    }
-    if (@available(macOS 11.0, *)) {
-      self.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
   } else {
     self.window.title = self.moduleName;
   }
 
   self.window.autorecalculatesKeyViewLoop = YES;
-  NSViewController *rootViewController = [NSViewController new];
-  rootViewController.view = rootView;
-  rootView.frame = self.window.contentView.bounds;
+
+  RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName
+                                                     initialProperties:self.initialProps
+                                                         launchOptions:launchOptions];
+
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  self.window.contentViewController = rootViewController;
+
+  if (isMusic) {
+    NSView *glassContentView = nil;
+    NSView *glassHostView = LegendCreateMusicGlassHostView(frame, &glassContentView);
+    self.musicGlassContentView = glassContentView;
+
+    NSViewController *glassViewController = [NSViewController new];
+    glassViewController.view = glassHostView;
+    self.window.contentViewController = glassViewController;
+
+    self.musicRootViewController = [NSViewController new];
+    self.musicRootViewController.view = rootView;
+    [glassViewController addChildViewController:self.musicRootViewController];
+
+    rootView.frame = glassContentView.bounds;
+    [glassContentView addSubview:rootView];
+  } else {
+    NSViewController *rootViewController = [NSViewController new];
+    rootView.frame = self.window.contentView.bounds;
+    rootViewController.view = rootView;
+    self.window.contentViewController = rootViewController;
+  }
 
   if (isMarkdown || isMusic) {
     NSColor *backgroundColor = isMusic
       ? NSColor.clearColor
       : [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
-    self.window.contentView.wantsLayer = YES;
-    self.window.contentView.layer.backgroundColor = backgroundColor.CGColor;
-    self.window.contentView.layer.masksToBounds = NO;
-    rootView.wantsLayer = YES;
+    LegendMakeViewTransparent(self.window.contentView);
+    if (isMarkdown) {
+      self.window.contentView.layer.backgroundColor = backgroundColor.CGColor;
+    }
+    if (isMusic && [rootView respondsToSelector:@selector(setBackgroundColor:)]) {
+      [(id)rootView setBackgroundColor:[NSColor clearColor]];
+    }
+    LegendMakeViewTransparent(rootView);
     rootView.layer.backgroundColor = backgroundColor.CGColor;
-    rootView.layer.masksToBounds = NO;
+  }
+  if (isMusic) {
+    [self.window setDelegate:self];
   }
 
   NSString *autosaveName = LegendMainWindowFrameAutoSaveName(appId);
@@ -148,6 +281,9 @@ static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
     [self.window center];
   }
   [self.window makeKeyAndOrderFront:self];
+  if (isMusic) {
+    LegendConfigureMusicWindow(self.window);
+  }
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
