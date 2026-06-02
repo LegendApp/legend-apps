@@ -132,6 +132,7 @@ using namespace facebook::react;
   }
 
   CGRect bounds = container.bounds;
+  subview.translatesAutoresizingMaskIntoConstraints = YES;
   subview.frame = bounds;
   LayoutMetrics nextLayoutMetrics = _currentLayoutMetrics;
   if (nextLayoutMetrics == EmptyLayoutMetrics) {
@@ -149,6 +150,8 @@ using namespace facebook::react;
   [subview finalizeUpdates:RNComponentViewUpdateMaskLayoutMetrics];
   *previousLayoutMetrics = nextLayoutMetrics;
   subview.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [subview setNeedsLayout:YES];
+  [subview layoutSubtreeIfNeeded];
 }
 
 - (void)splitViewDidResize

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { cn } from "@/utils/cn";
 
@@ -12,11 +12,13 @@ interface SettingsPageProps {
 
 export function SettingsPage({ children, contentClassName, actions }: SettingsPageProps) {
     return (
-        <View className={cn("flex-1")}>
+        <View className="flex-1 overflow-hidden" style={styles.page}>
             {actions ? <View className="flex-row justify-end px-6 pt-4">{actions}</View> : null}
             <ScrollView
                 className="flex-1"
-                contentContainerClassName={cn("mx-auto w-full max-w-4xl px-6 flex flex-col", contentClassName)}
+                contentContainerClassName={cn("flex flex-col", contentClassName)}
+                contentContainerStyle={styles.pageContent}
+                horizontal={false}
             >
                 {children}
             </ScrollView>
@@ -113,13 +115,36 @@ export function SettingsRow({
                 className,
             )}
         >
-            <View className={cn("flex-1 flex-col gap-1.5 pr-6", contentClassName)}>
+            <View className={cn("min-w-0 flex-1 flex-col gap-1.5 pr-6", contentClassName)} style={styles.rowText}>
                 <Text className="text-base font-semibold text-text-primary leading-tight">{title}</Text>
                 {description ? (
                     <Text className="text-sm leading-relaxed text-text-secondary">{description}</Text>
                 ) : null}
             </View>
-            <View className={cn("flex-none", controlWrapperClassName)}>{control}</View>
+            <View className={cn("max-w-full flex-shrink", controlWrapperClassName)} style={styles.rowControl}>
+                {control}
+            </View>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    page: {
+        flex: 1,
+        overflow: "hidden",
+    },
+    pageContent: {
+        alignSelf: "center",
+        flexDirection: "column",
+        maxWidth: 896,
+        paddingHorizontal: 24,
+        width: "100%",
+    },
+    rowControl: {
+        flexShrink: 1,
+        maxWidth: "100%",
+    },
+    rowText: {
+        minWidth: 0,
+    },
+});

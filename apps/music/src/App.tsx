@@ -13,6 +13,7 @@ import { CurrentSongOverlayController } from "@/overlay/CurrentSongOverlayContro
 import { CurrentSongOverlayWindowManager } from "@/overlay/CurrentSongOverlayWindowManager";
 import { SettingsWindowManager } from "@/settings/SettingsWindowManager";
 import { GlobalHotkeyManager } from "@/systems/GlobalHotkey";
+import { AppMenuController } from "@/systems/AppMenu";
 import { HookKeyboard } from "@/systems/keyboard/HookKeyboard";
 import { hydrateLibraryFromCache } from "@/systems/LibraryState";
 import { initializeLocalMusic } from "@/systems/LocalMusicState";
@@ -74,6 +75,7 @@ function App(): React.JSX.Element {
             <ThemeProvider>
                 <HookKeyboard />
                 <GlobalHotkeyManager />
+                <AppMenuController />
                 <View className="flex-1" style={styles.root} onLayout={handleFirstLayout}>
                     <PortalProvider>
                         <ToastProvider />

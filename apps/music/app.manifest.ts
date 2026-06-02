@@ -22,6 +22,7 @@ const manifest = {
       "@legend-desktop/keyboard-manager",
       "@legend-desktop/media-library-scanner",
       "@legend-desktop/media-tags",
+      "@legend-desktop/native-menu",
       "@legend-desktop/sf-symbol",
       "@legend-desktop/sidebar",
       "@legend-desktop/appkit-split-view",
