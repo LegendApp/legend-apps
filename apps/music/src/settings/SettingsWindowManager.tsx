@@ -17,7 +17,10 @@ export const SettingsWindowManager = () => {
             perfLog("SettingsWindowManager.showSettingsChange", { value });
             if (value) {
                 try {
-                    await WindowsNavigator.open(SETTINGS_WINDOW_KEY);
+                    const initialPage = state$.showSettingsPage.get();
+                    await WindowsNavigator.open(SETTINGS_WINDOW_KEY, {
+                        initialProperties: initialPage ? { initialPage } : undefined,
+                    });
                 } catch (error) {
                     console.error("Failed to open window:", error);
                     perfLog("SettingsWindowManager.openWindow.error", error);

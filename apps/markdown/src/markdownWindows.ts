@@ -1,3 +1,4 @@
+import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import {
   openWindow,
   setMainWindowOptions,
@@ -23,30 +24,10 @@ export function registerMarkdownWindows() {
 }
 
 export function openMarkdownSettingsWindow() {
-  return openWindow({
+  return openWindow(createSettingsWindowOptions({
     identifier: settingsWindowIdentifier,
     moduleName: settingsWindowModuleName,
-    title: "Settings",
-    transparentBackground: true,
-    windowStyle: {
-      hasToolbar: true,
-      height: 800,
-      mask: [
-        WindowStyleMask.Titled,
-        WindowStyleMask.Closable,
-        WindowStyleMask.Resizable,
-        WindowStyleMask.FullSizeContentView,
-        WindowStyleMask.UnifiedTitleAndToolbar,
-      ],
-      minHeight: 600,
-      minWidth: 600,
-      titlebarAppearsTransparent: false,
-      titlebarSeparatorStyle: "line",
-      titleVisibility: "visible",
-      toolbarStyle: "unified",
-      width: 800,
-    },
-  });
+  }));
 }
 
 export function setMarkdownMainWindowOptions({

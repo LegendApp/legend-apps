@@ -1,5 +1,6 @@
+import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
 import { useSyncExternalStore } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { View } from "react-native";
 import {
   getMarkdownStartupBehaviorSetting,
   getMarkdownFormattingToolbarModeSetting,
@@ -24,10 +25,8 @@ export function GeneralSettingsPage() {
   );
 
   return (
-    <View className="gap-4">
-      <Text className="text-foreground" style={styles.pageTitle}>General</Text>
-      <View className="gap-2">
-        <Text className="text-foreground" style={styles.sectionTitle}>On Startup</Text>
+    <SettingsPage>
+      <SettingsSection card={false} first title="On Startup">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownStartupBehaviorSetting>
             label="New Document"
@@ -42,9 +41,8 @@ export function GeneralSettingsPage() {
             value="lastDocument"
           />
         </View>
-      </View>
-      <View className="gap-2">
-        <Text className="text-foreground" style={styles.sectionTitle}>Formatting Toolbar</Text>
+      </SettingsSection>
+      <SettingsSection card={false} title="Formatting Toolbar">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownFormattingToolbarModeSetting>
             label="Above Selection"
@@ -59,20 +57,7 @@ export function GeneralSettingsPage() {
             value="top"
           />
         </View>
-      </View>
-    </View>
+      </SettingsSection>
+    </SettingsPage>
   );
 }
-
-const styles = StyleSheet.create({
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 32,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-});

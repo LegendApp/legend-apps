@@ -1,3 +1,4 @@
+import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "@/overlay/OverlayConstants";
 import { createWindowsNavigator, WindowStyleMask, type WindowsConfig } from "./api";
 
@@ -5,28 +6,7 @@ const windowsConfig = {
     SettingsWindow: {
         loadComponent: () => import("@/settings/SettingsContainer"),
         identifier: "settings",
-        options: {
-            title: "Settings",
-            transparentBackground: true,
-            windowStyle: {
-                width: 800,
-                height: 800,
-                minWidth: 600,
-                minHeight: 600,
-                mask: [
-                    WindowStyleMask.Titled,
-                    WindowStyleMask.Closable,
-                    WindowStyleMask.Resizable,
-                    WindowStyleMask.FullSizeContentView,
-                    WindowStyleMask.UnifiedTitleAndToolbar,
-                ],
-                titleVisibility: "visible",
-                titlebarAppearsTransparent: false,
-                titlebarSeparatorStyle: "line",
-                toolbarStyle: "unified",
-                hasToolbar: true,
-            },
-        },
+        options: createSettingsWindowOptions(),
     },
     MediaLibraryWindow: {
         loadComponent: () => import("@/media-library/MediaLibraryWindow"),

@@ -11,6 +11,7 @@
     "@legend-desktop/markdown-document": "workspace:*",
     "@legend-desktop/native-menu": "0.0.0",
     "@legend-desktop/recent-documents": "0.0.0",
+    "@legend-desktop/settings-window": "0.0.0",
     "@legend-desktop/theme": "workspace:*",
     "@legend-desktop/window-manager": "0.0.0",
     "@legendapp/state": "^3.0.0-beta.42",

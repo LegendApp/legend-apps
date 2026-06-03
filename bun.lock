@@ -23,6 +23,7 @@
         "@legend-desktop/markdown-document": "workspace:*",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/recent-documents": "0.0.0",
+        "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legendapp/state": "^3.0.0-beta.42",
@@ -47,6 +48,7 @@
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/media-library-scanner": "0.0.0",
         "@legend-desktop/media-tags": "0.0.0",
+        "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/sidebar": "0.0.0",
         "@legend-desktop/text-input-search": "0.0.0",
@@ -265,6 +267,18 @@
     "packages/recent-documents": {
       "name": "@legend-desktop/recent-documents",
       "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/settings-window": {
+      "name": "@legend-desktop/settings-window",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-desktop/window-manager": "0.0.0",
+      },
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
@@ -678,6 +692,8 @@
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
 
     "@legend-desktop/recent-documents": ["@legend-desktop/recent-documents@workspace:packages/recent-documents"],
+
+    "@legend-desktop/settings-window": ["@legend-desktop/settings-window@workspace:packages/settings-window"],
 
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
 

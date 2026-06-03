@@ -1,5 +1,6 @@
+import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
 import { useSyncExternalStore } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { View } from "react-native";
 import {
   getMarkdownThemeSetting,
   setMarkdownThemeSetting,
@@ -16,10 +17,8 @@ export function AppearanceSettingsPage() {
   );
 
   return (
-    <View className="gap-4">
-      <Text className="text-foreground" style={styles.pageTitle}>Appearance</Text>
-      <View className="gap-2">
-        <Text className="text-foreground" style={styles.sectionTitle}>Theme</Text>
+    <SettingsPage>
+      <SettingsSection card={false} first title="Theme">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownThemeSetting>
             label="Light"
@@ -40,20 +39,7 @@ export function AppearanceSettingsPage() {
             value="grey"
           />
         </View>
-      </View>
-    </View>
+      </SettingsSection>
+    </SettingsPage>
   );
 }
-
-const styles = StyleSheet.create({
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 32,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-});
