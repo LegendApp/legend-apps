@@ -25,7 +25,7 @@ export const generatedThemeFiles = [
   {
     "name": "dark",
     "colors": {
-      "background": "#111827",
+      "background": "#191A1B",
       "foreground": "#f9fafb",
       "muted": "#9ca3af",
       "surface": "#1f2937",
@@ -40,7 +40,7 @@ export const generatedThemeFiles = [
       "blockquoteBorder": "#64748b",
       "tableHeader": "#243041",
       "tableRowAlt": "#172033",
-      "windowBackground": "#111827"
+      "windowBackground": "#191A1B"
     }
   },
   {

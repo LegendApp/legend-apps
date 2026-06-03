@@ -46,7 +46,7 @@
     }
 
     @variant dark {
-      --color-background: #111827;
+      --color-background: #191A1B;
       --color-foreground: #f9fafb;
       --color-muted: #9ca3af;
       --color-surface: #1f2937;
@@ -61,7 +61,7 @@
       --color-blockquote-border: #64748b;
       --color-table-header: #243041;
       --color-table-row-alt: #172033;
-      --color-window-background: #111827;
+      --color-window-background: #191A1B;
       --color-background-primary: #111111;
       --color-background-secondary: #17181a;
       --color-background-tertiary: #212224;
