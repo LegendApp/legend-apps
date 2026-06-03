@@ -34,6 +34,7 @@ using namespace facebook::react;
   CGFloat _contentMinWidth;
   CGFloat _lastSidebarWidth;
   CGFloat _lastContentWidth;
+  CGFloat _lastHeight;
 #else
   UIView *_sidebarContainer;
   UIView *_contentContainer;
@@ -53,6 +54,7 @@ using namespace facebook::react;
     _contentMinWidth = 320;
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
+    _lastHeight = -1;
     _sidebarContainer = [NSView new];
     _contentContainer = [NSView new];
     _sidebarContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -165,26 +167,33 @@ using namespace facebook::react;
 
   CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
   CGFloat contentWidth = _contentContainer.bounds.size.width;
+  CGFloat height = MAX(_sidebarContainer.bounds.size.height, _contentContainer.bounds.size.height);
 
   if ((sidebarWidth <= 0 || contentWidth <= 0) && _splitViewController.splitView.subviews.count > 1) {
     sidebarWidth = _splitViewController.splitView.subviews[0].frame.size.width;
     contentWidth = _splitViewController.splitView.subviews[1].frame.size.width;
+    height = MAX(
+      _splitViewController.splitView.subviews[0].frame.size.height,
+      _splitViewController.splitView.subviews[1].frame.size.height);
   }
 
-  if (sidebarWidth <= 0 || contentWidth <= 0) {
+  if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0) {
     return;
   }
 
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
-      fabs(contentWidth - _lastContentWidth) < 0.5) {
+      fabs(contentWidth - _lastContentWidth) < 0.5 &&
+      fabs(height - _lastHeight) < 0.5) {
     return;
   }
 
   _lastSidebarWidth = sidebarWidth;
   _lastContentWidth = contentWidth;
+  _lastHeight = height;
 
   eventEmitter->onSplitViewDidResize(SidebarSplitViewEventEmitter::OnSplitViewDidResize{
     .contentWidth = contentWidth,
+    .height = height,
     .isVertical = true,
     .sidebarWidth = sidebarWidth,
   });
@@ -348,6 +357,7 @@ using namespace facebook::react;
       if (self.window) {
         _lastSidebarWidth = -1;
         _lastContentWidth = -1;
+        _lastHeight = -1;
         [self layoutSplitView];
       }
     });
@@ -384,6 +394,7 @@ using namespace facebook::react;
   _contentMinWidth = 320;
   _lastSidebarWidth = -1;
   _lastContentWidth = -1;
+  _lastHeight = -1;
   [self updateSplitItemSizing];
 #else
   for (UIView *subview in _sidebarContainer.subviews) {

@@ -1,12 +1,12 @@
 import { PortalProvider } from "@gorhom/portal";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo } from "react";
-import { Platform, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Platform, View, type NativeSyntheticEvent } from "react-native";
 import { NativeSidebar } from "@/components/NativeSidebar";
 import { Sidebar } from "@/components/Sidebar";
 import { TooltipProvider } from "@/components/TooltipProvider";
-import { SidebarSplitView } from "@legend-desktop/appkit-split-view";
+import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
 import { setWindowTitle } from "@legend-desktop/window-manager";
 import { AccountSettings } from "@/settings/AccountSettings";
 import { CustomizeUISettings } from "@/settings/CustomizeUISettings";
@@ -61,6 +61,7 @@ export default function SettingsContainer() {
     const selectedItem$ = useObservable<SettingsPage>(showSettingsPage || "general");
     const selectedItem = useValue(selectedItem$);
     const isMacOS = Platform.OS === "macos";
+    const [contentWidth, setContentWidth] = useState(0);
 
     const nativeItems = useMemo(() => {
         return SETTING_PAGES.map((item) => ({ id: item.id, label: item.name }));
@@ -77,6 +78,12 @@ export default function SettingsContainer() {
         },
         [selectedItem$],
     );
+    const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
+        const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
+        if (nextContentWidth > 0) {
+            setContentWidth((current) => (current === nextContentWidth ? current : nextContentWidth));
+        }
+    }, []);
 
     return (
         <View className="flex-1" style={{ flex: 1 }}>
@@ -87,18 +94,19 @@ export default function SettingsContainer() {
                             <SidebarSplitView
                                 className="flex-1 bg-background-primary"
                                 contentMinWidth={360}
+                                onSplitViewDidResize={handleSplitViewResize}
                                 sidebarMinWidth={180}
                                 style={{ flex: 1 }}
                             >
                                 <NativeSidebar
-                                    className="flex-1"
-                                    contentInsetTop={52}
                                     items={nativeItems}
                                     selectedId={selectedItem}
                                     onSelectionChange={handleSelectionChange}
-                                    style={{ flex: 1 }}
                                 />
-                                <View className="flex-1 overflow-hidden" style={{ flex: 1, overflow: "hidden" }}>
+                                <View
+                                    className="flex-1"
+                                    style={{ flex: 1, minWidth: 0, width: contentWidth || undefined }}
+                                >
                                     <Content selectedItem$={selectedItem$} />
                                 </View>
                             </SidebarSplitView>

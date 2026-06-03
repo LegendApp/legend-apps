@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { AppRegistry, Pressable, ScrollView, Text, View } from "react-native";
 import shellPackage from "../../../shell/package.json";
 import { AppExitExample } from "./examples/app-exit";
-import { AppKitSplitViewExample } from "./examples/appkit-split-view";
+import { SidebarSplitViewExample } from "./examples/appkit-split-view";
 import { AudioPlayerExample } from "./examples/audio-player";
 import { AutoUpdaterExample } from "./examples/auto-updater";
 import { ContextMenuExample } from "./examples/context-menu";
@@ -162,7 +162,7 @@ function renderKitchenSinkTest(selectedPackageId: string, selectedTestId: string
   }
 
   if (selectedPackageId === "appkit-split-view") {
-    return <AppKitSplitViewExample testId={selectedTestId} />;
+    return <SidebarSplitViewExample />;
   }
 
   if (selectedPackageId === "app-exit") {

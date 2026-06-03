@@ -1,5 +1,5 @@
 import type { KitchenSinkPackage, KitchenSinkTest } from "@legend-desktop/appkit-split-view";
-import { WindowStyleMask, type WindowOptions } from "@legend-desktop/window-manager";
+import { type WindowOptions } from "@legend-desktop/window-manager";
 
 export type KitchenSinkTestConfig = KitchenSinkTest & {
   windowOptions?: WindowOptions;
@@ -106,27 +106,6 @@ export const tests: KitchenSinkTestConfig[] = [
     id: "split-view-basic",
     packageId: "appkit-split-view",
     title: "Basic SplitView",
-  },
-  {
-    id: "split-view-liquid-glass",
-    packageId: "appkit-split-view",
-    title: "Liquid Glass Sidebar",
-    windowOptions: {
-      windowStyle: {
-        hasToolbar: true,
-        mask: [
-          WindowStyleMask.Titled,
-          WindowStyleMask.Closable,
-          WindowStyleMask.Miniaturizable,
-          WindowStyleMask.Resizable,
-          WindowStyleMask.FullSizeContentView,
-        ],
-        titlebarAppearsTransparent: true,
-        titlebarSeparatorStyle: "none",
-        titleVisibility: "visible",
-        toolbarStyle: "unified",
-      },
-    },
   },
   {
     id: "auto-updater-status",

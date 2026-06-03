@@ -16,7 +16,6 @@
         "NativeAppKitSplitView": "RNAppKitSplitView"
       },
       "componentProvider": {
-        "AppKitSplitView": "RNAppKitSplitViewComponent",
         "SidebarSplitView": "RNSidebarSplitViewComponent"
       }
     }

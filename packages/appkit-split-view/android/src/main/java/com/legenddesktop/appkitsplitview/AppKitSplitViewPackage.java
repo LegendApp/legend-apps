@@ -22,7 +22,7 @@ public class AppKitSplitViewPackage extends BaseReactPackage {
 
   @Override
   public List<ViewManager<?, ?>> createViewManagers(ReactApplicationContext reactContext) {
-    return Arrays.asList(new AppKitSplitViewManager(), new SidebarSplitViewManager());
+    return Arrays.asList(new SidebarSplitViewManager());
   }
 
   @Override

@@ -1,4 +1,5 @@
-import { AppKitSplitView } from "@legend-desktop/appkit-split-view";
+import { SidebarSplitView } from "@legend-desktop/appkit-split-view";
+import { StyleSheet, Text, View } from "react-native";
 import { styles } from "./shared";
 
 const splitViewSidebarItems = [
@@ -23,63 +24,87 @@ const splitViewSidebarItems = [
     title: "Liquid Glass",
   },
 ];
-const splitViewSidebarItemsJson = JSON.stringify(splitViewSidebarItems);
-const splitViewTitlebarItems = [
-  {
-    id: "back",
-    placement: "leading",
-    symbolName: "chevron.left",
-    title: "Back",
-  },
-  {
-    id: "forward",
-    placement: "leading",
-    symbolName: "chevron.right",
-    title: "Forward",
-  },
-  {
-    id: "view",
-    placement: "trailing",
-    symbolName: "square.grid.2x2",
-    title: "View",
-  },
-  {
-    id: "share",
-    placement: "trailing",
-    symbolName: "square.and.arrow.up",
-    title: "Share",
-  },
-  {
-    id: "tags",
-    placement: "trailing",
-    symbolName: "tag",
-    title: "Tags",
-  },
-  {
-    id: "more",
-    placement: "trailing",
-    symbolName: "ellipsis",
-    title: "More",
-  },
-  {
-    id: "search",
-    placement: "trailing",
-    symbolName: "magnifyingglass",
-    title: "Search",
-  },
-];
-const splitViewTitlebarItemsJson = JSON.stringify(splitViewTitlebarItems);
 
-export function AppKitSplitViewExample({ testId }: { testId: string }) {
+export function SidebarSplitViewExample() {
   return (
-    <AppKitSplitView
-      mainTitle={testId === "split-view-liquid-glass" ? "Liquid Glass Main Content" : "Main Content"}
-      selectedSidebarItemId={testId === "split-view-liquid-glass" ? "liquid-glass" : "split-view"}
-      sidebarItemsJson={splitViewSidebarItemsJson}
-      sidebarTitle={testId === "split-view-liquid-glass" ? "Liquid Glass Sidebar" : "Sidebar"}
-      style={styles.root}
-      titlebarItemsJson={testId === "split-view-liquid-glass" ? splitViewTitlebarItemsJson : ""}
-      usesLiquidGlass={testId === "split-view-liquid-glass"}
-    />
+    <SidebarSplitView contentMinWidth={320} sidebarMinWidth={180} style={styles.root}>
+      <View style={splitStyles.sidebar}>
+        <Text style={splitStyles.sidebarTitle}>Sidebar</Text>
+        <View style={splitStyles.sidebarList}>
+          {splitViewSidebarItems.map((item) => (
+            <View
+              key={item.id}
+              style={[
+                splitStyles.sidebarRow,
+                item.id === "split-view" ? splitStyles.sidebarRowSelected : null,
+              ]}
+            >
+              <Text style={splitStyles.sidebarSymbol}>{item.symbolName}</Text>
+              <Text style={splitStyles.sidebarRowTitle}>{item.title}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={splitStyles.content}>
+        <Text style={splitStyles.contentTitle}>Main Content</Text>
+        <Text style={splitStyles.contentBody}>Both split view panes are rendered from React content.</Text>
+      </View>
+    </SidebarSplitView>
   );
 }
+
+const splitStyles = StyleSheet.create({
+  content: {
+    backgroundColor: "#f8fafc",
+    flex: 1,
+    gap: 8,
+    justifyContent: "center",
+    padding: 28,
+  },
+  contentBody: {
+    color: "#475569",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  contentTitle: {
+    color: "#0f172a",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  sidebar: {
+    backgroundColor: "#e2e8f0",
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingTop: 52,
+  },
+  sidebarList: {
+    gap: 4,
+  },
+  sidebarRow: {
+    alignItems: "center",
+    borderRadius: 6,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 30,
+    paddingHorizontal: 10,
+  },
+  sidebarRowSelected: {
+    backgroundColor: "#cbd5e1",
+  },
+  sidebarRowTitle: {
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  sidebarSymbol: {
+    color: "#64748b",
+    fontSize: 11,
+    width: 88,
+  },
+  sidebarTitle: {
+    color: "#0f172a",
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 14,
+  },
+});
