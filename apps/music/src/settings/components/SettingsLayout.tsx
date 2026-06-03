@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { cn } from "@/utils/cn";
 
+const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
+
 interface SettingsPageProps {
     children: ReactNode;
     className?: string;
@@ -138,6 +140,7 @@ const styles = StyleSheet.create({
         flexDirection: "column",
         maxWidth: 896,
         paddingHorizontal: 24,
+        paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
         width: "100%",
     },
     rowControl: {
