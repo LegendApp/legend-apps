@@ -108,7 +108,7 @@ export default function SettingsContainer() {
     const selectedItem$ = useObservable<SettingsPage>(showSettingsPage || "general");
     const selectedItem = useValue(selectedItem$);
     const isMacOS = Platform.OS === "macos";
-    const [paneWidths, setPaneWidths] = useState({ content: 0, sidebar: 0 });
+    const [paneMetrics, setPaneMetrics] = useState({ contentWidth: 0, height: 0, sidebarWidth: 0 });
 
     useEffect(() => {
         const pageName = SETTING_PAGES.find((page) => page.id === selectedItem)?.name ?? "Settings";
@@ -123,14 +123,20 @@ export default function SettingsContainer() {
     );
     const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
         const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
+        const nextHeight = Math.round(event.nativeEvent.height);
         const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
-        if (nextContentWidth > 0 || nextSidebarWidth > 0) {
-            setPaneWidths((current) => {
+        if (nextContentWidth > 0 || nextHeight > 0 || nextSidebarWidth > 0) {
+            setPaneMetrics((current) => {
                 const next = {
-                    content: nextContentWidth > 0 ? nextContentWidth : current.content,
-                    sidebar: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebar,
+                    contentWidth: nextContentWidth > 0 ? nextContentWidth : current.contentWidth,
+                    height: nextHeight > 0 ? nextHeight : current.height,
+                    sidebarWidth: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebarWidth,
                 };
-                return current.content === next.content && current.sidebar === next.sidebar ? current : next;
+                return current.contentWidth === next.contentWidth &&
+                    current.height === next.height &&
+                    current.sidebarWidth === next.sidebarWidth
+                    ? current
+                    : next;
             });
         }
     }, []);
@@ -150,7 +156,13 @@ export default function SettingsContainer() {
                             >
                                 <View
                                     className="flex-1"
-                                    style={{ flex: 1, minWidth: 0, width: paneWidths.sidebar || undefined }}
+                                    style={{
+                                        flex: 1,
+                                        height: paneMetrics.height || undefined,
+                                        minHeight: paneMetrics.height || undefined,
+                                        minWidth: 0,
+                                        width: paneMetrics.sidebarWidth || undefined,
+                                    }}
                                 >
                                     <SettingsSidebarContent
                                         selectedItem={selectedItem}
@@ -159,7 +171,13 @@ export default function SettingsContainer() {
                                 </View>
                                 <View
                                     className="flex-1"
-                                    style={{ flex: 1, minWidth: 0, width: paneWidths.content || undefined }}
+                                    style={{
+                                        flex: 1,
+                                        height: paneMetrics.height || undefined,
+                                        minHeight: paneMetrics.height || undefined,
+                                        minWidth: 0,
+                                        width: paneMetrics.contentWidth || undefined,
+                                    }}
                                 >
                                     <Content selectedItem$={selectedItem$} />
                                 </View>
