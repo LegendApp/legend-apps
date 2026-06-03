@@ -54,7 +54,16 @@ class GlassEffectView: NSView {
     }
 
     override func insertReactSubview(_ subview: NSView!, at atIndex: Int) {
+        super.insertReactSubview(subview, at: atIndex)
         contentContainer.addSubview(subview)
+    }
+
+    override func removeReactSubview(_ subview: NSView!) {
+        super.removeReactSubview(subview)
+    }
+
+    override func didUpdateReactSubviews() {
+        // React children are physically hosted inside contentContainer.
     }
 
     private func setupView() {
