@@ -1,9 +1,9 @@
 import { PortalProvider } from "@gorhom/portal";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, View, type NativeSyntheticEvent } from "react-native";
-import { NativeSidebar } from "@/components/NativeSidebar";
+import { useCallback, useEffect, useState } from "react";
+import { Platform, Text, View, type NativeSyntheticEvent } from "react-native";
+import { NativeSidebar, SidebarItem } from "@/components/NativeSidebar";
 import { Sidebar } from "@/components/Sidebar";
 import { TooltipProvider } from "@/components/TooltipProvider";
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
@@ -63,10 +63,6 @@ export default function SettingsContainer() {
     const isMacOS = Platform.OS === "macos";
     const [contentWidth, setContentWidth] = useState(0);
 
-    const nativeItems = useMemo(() => {
-        return SETTING_PAGES.map((item) => ({ id: item.id, label: item.name }));
-    }, []);
-
     useEffect(() => {
         const pageName = SETTING_PAGES.find((page) => page.id === selectedItem)?.name ?? "Settings";
         setWindowTitle("settings", pageName);
@@ -99,10 +95,16 @@ export default function SettingsContainer() {
                                 style={{ flex: 1 }}
                             >
                                 <NativeSidebar
-                                    items={nativeItems}
+                                    className="flex-1 h-full"
                                     selectedId={selectedItem}
                                     onSelectionChange={handleSelectionChange}
-                                />
+                                >
+                                    {SETTING_PAGES.map((item) => (
+                                        <SidebarItem key={item.id} itemId={item.id}>
+                                            <Text className="text-sm text-text-primary">{item.name}</Text>
+                                        </SidebarItem>
+                                    ))}
+                                </NativeSidebar>
                                 <View
                                     className="flex-1"
                                     style={{ flex: 1, minWidth: 0, width: contentWidth || undefined }}
