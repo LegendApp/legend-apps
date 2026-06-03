@@ -1,9 +1,7 @@
 import { useValue } from "@legendapp/state/react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
     Alert,
-    LayoutChangeEvent,
-    type LayoutRectangle,
     Platform,
     ScrollView,
     Text,
@@ -20,7 +18,6 @@ import {
     type MediaLibraryDragData,
 } from "@/components/dnd";
 import { localAudioControls } from "@/components/LocalAudioPlayer";
-import { NativeSidebar, SidebarItem } from "@/components/NativeSidebar";
 import type { TextInputSearchRef } from "@/components/TextInputSearch";
 import { showToast } from "@/components/Toast";
 import { useListItemStyles } from "@/hooks/useListItemStyles";
@@ -50,11 +47,7 @@ const LIBRARY_VIEWS: { id: LibraryView; label: string; disabled?: boolean }[] = 
     { id: "starred", label: "Starred", disabled: true },
 ];
 
-interface MediaLibrarySidebarProps {
-    useNativeLibraryList?: boolean;
-}
-
-export function MediaLibrarySidebar({ useNativeLibraryList = false }: MediaLibrarySidebarProps) {
+export function MediaLibrarySidebar() {
     perfCount("MediaLibrary.Sidebar.render");
     const selectedView = useValue(libraryUI$.selectedView);
     const selectedPlaylistId = useValue(libraryUI$.selectedPlaylistId);
@@ -67,16 +60,6 @@ export function MediaLibrarySidebar({ useNativeLibraryList = false }: MediaLibra
     const [activeNativeDropPlaylistId, setActiveNativeDropPlaylistId] = useState<string | null>(null);
     const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
     const [editingPlaylistName, setEditingPlaylistName] = useState("");
-    const shouldUseNativeLibraryList = useNativeLibraryList && Platform.OS === "macos";
-    const [outerWidth, setWidth] = useState(0);
-    const width = Math.max(outerWidth - 28, 0);
-
-    const onNativeSidebarLayout = useCallback(
-        (layout: { width: number; height: number }) => {
-            setWidth(layout.width);
-        },
-        [setWidth],
-    );
     const handleSelectView = useCallback((view: LibraryView) => {
         selectLibraryView(view);
     }, []);
@@ -316,152 +299,9 @@ export function MediaLibrarySidebar({ useNativeLibraryList = false }: MediaLibra
         [],
     );
 
-    // Compute selected ID for native sidebar
-    const nativeSidebarSelectedId = useMemo(() => {
-        if (selectedView === "playlist" && selectedPlaylistId) {
-            return `playlist-${selectedPlaylistId}`;
-        }
-        return selectedView;
-    }, [selectedView, selectedPlaylistId]);
-
-    const handleNativeSidebarSelection = useCallback(
-        (id: string) => {
-            if (id.startsWith("playlist-")) {
-                const playlistId = id.replace("playlist-", "");
-                selectLibraryPlaylist(playlistId);
-            } else {
-                handleSelectView(id as LibraryView);
-            }
-        },
-        [handleSelectView],
-    );
-
-    // Native macOS sidebar with custom RN content
-    if (shouldUseNativeLibraryList) {
-        return (
-            <NativeSidebar
-                selectedId={nativeSidebarSelectedId}
-                onSelectionChange={handleNativeSidebarSelection}
-                contentInsetTop={0}
-                className="flex-1 h-full"
-                onLayout={onNativeSidebarLayout}
-            >
-                <SidebarItem itemId="header-search" selectable={false} rowHeight={48}>
-                    <MediaLibrarySearchBar searchInputRef={searchInputRef} query={searchQuery} width={width + 8} />
-                </SidebarItem>
-
-                {/* Library Section Header */}
-                <SidebarItem itemId="header-library" selectable={false} rowHeight={20}>
-                    <Text className="text-xs font-semibold text-white/40 uppercase tracking-wider">Library</Text>
-                </SidebarItem>
-
-                {/* Library Views */}
-                {LIBRARY_VIEWS.filter((view) => !view.disabled).map((view) => (
-                    <SidebarItem key={view.id} itemId={view.id} className="py-2">
-                        <Text className="text-sm text-text-primary pt-1">{view.label}</Text>
-                    </SidebarItem>
-                ))}
-
-                {/* Playlists Section Header */}
-                {SUPPORT_PLAYLISTS ? (
-                    <SidebarItem itemId="header-playlists" selectable={false} rowHeight={36}>
-                        <View className="flex-row items-center justify-between pt-3" style={{ width }}>
-                            <Text className="text-xs font-semibold text-white/40 uppercase tracking-wider">
-                                Playlists
-                            </Text>
-                            <Button
-                                icon="plus"
-                                variant="icon-hover"
-                                size="small"
-                                accessibilityLabel="Add playlist"
-                                disabled={Boolean(tempPlaylistId)}
-                                onClick={handleAddPlaylist}
-                            />
-                        </View>
-                    </SidebarItem>
-                ) : null}
-
-                {/* Playlist Items */}
-                {SUPPORT_PLAYLISTS && playlists.length === 0 ? (
-                    <SidebarItem itemId="no-playlists" selectable={false}>
-                        <Text className="text-sm text-white/40">No playlists yet</Text>
-                    </SidebarItem>
-                ) : null}
-
-                {SUPPORT_PLAYLISTS
-                    ? playlists.map((playlist) => {
-                          const isTemp = playlist.id === tempPlaylistId;
-                          const isEditing = playlist.id === editingPlaylistId;
-
-                          if (isTemp) {
-                              return (
-                                  <SidebarItem key={playlist.id} itemId={`playlist-${playlist.id}`}>
-                                      <TextInput
-                                          value={tempPlaylistName}
-                                          onChangeText={setTempPlaylistName}
-                                          onSubmitEditing={finalizeTempPlaylist}
-                                          onBlur={finalizeTempPlaylist}
-                                          autoFocus
-                                          selectTextOnFocus
-                                          placeholder="New Playlist"
-                                          className="flex-1 text-sm text-text-primary"
-                                      />
-                                  </SidebarItem>
-                              );
-                          }
-
-                          if (isEditing) {
-                              return (
-                                  <SidebarItem key={playlist.id} itemId={`playlist-${playlist.id}`}>
-                                      <TextInput
-                                          value={editingPlaylistName}
-                                          onChangeText={setEditingPlaylistName}
-                                          onSubmitEditing={finalizeRename}
-                                          onBlur={finalizeRename}
-                                          autoFocus
-                                          selectTextOnFocus
-                                          placeholder="Playlist name"
-                                          className="flex-1 text-sm text-text-primary"
-                                      />
-                                  </SidebarItem>
-                              );
-                          }
-
-                          return (
-                              <SidebarItem
-                                  key={playlist.id}
-                                  itemId={`playlist-${playlist.id}`}
-                                  onRightClick={(event) => handlePlaylistContextMenu(playlist, event, "basic")}
-                              >
-                                  <View
-                                      className="flex-row items-center justify-between"
-                                      onLayout={(e) => console.log(e.nativeEvent.layout)}
-                                  >
-                                      <Text className="text-sm text-text-primary flex-1 py-1" numberOfLines={1}>
-                                          {playlist.name}
-                                      </Text>
-                                      <Text className="text-xs text-white/40">{playlist.trackCount}</Text>
-                                  </View>
-                              </SidebarItem>
-                          );
-                      })
-                    : null}
-
-                {/* Sources Section */}
-                {/* <SidebarItem itemId="header-sources" selectable={false} rowHeight={36}>
-                    <Text className="text-xs font-semibold text-white/40 uppercase tracking-wider pt-3">Sources</Text>
-                </SidebarItem>
-                <SidebarItem itemId="source-local" selectable={false}>
-                    <Text className="text-sm text-white/70">✓ Local Music</Text>
-                </SidebarItem> */}
-            </NativeSidebar>
-        );
-    }
-
-    // Fallback: non-native sidebar
     return (
         <View className="flex-1 min-h-0">
-                    <MediaLibrarySearchBar searchInputRef={searchInputRef} query={searchQuery} width={width} />
+            <MediaLibrarySearchBar searchInputRef={searchInputRef} query={searchQuery} />
             <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                 <View className="pb-3">
                     <Text className="px-3 pt-2 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wider">

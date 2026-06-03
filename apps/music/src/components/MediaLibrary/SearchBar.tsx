@@ -7,7 +7,7 @@ import { libraryUI$ } from "@/systems/LibraryState";
 interface MediaLibrarySearchBarProps {
     searchInputRef: RefObject<TextInputSearchRef | null>;
     query: string;
-    width: number;
+    width?: number;
 }
 
 export function MediaLibrarySearchBar({ searchInputRef, query, width }: MediaLibrarySearchBarProps) {

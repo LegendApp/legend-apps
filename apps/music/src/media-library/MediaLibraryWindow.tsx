@@ -17,7 +17,7 @@ const MEDIA_LIBRARY_WINDOW_ID = "media-library";
 
 export default function MediaLibraryWindow() {
     const isMacOS = Platform.OS === "macos";
-    const [contentWidth, setContentWidth] = useState(0);
+    const [paneWidths, setPaneWidths] = useState({ content: 0, sidebar: 0 });
     const [height, setHeight] = useState(0);
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const { width, height } = event.nativeEvent.layout;
@@ -28,8 +28,15 @@ export default function MediaLibraryWindow() {
     }, []);
     const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
         const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
-        if (nextContentWidth > 0) {
-            setContentWidth((current) => (current === nextContentWidth ? current : nextContentWidth));
+        const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
+        if (nextContentWidth > 0 || nextSidebarWidth > 0) {
+            setPaneWidths((current) => {
+                const next = {
+                    content: nextContentWidth > 0 ? nextContentWidth : current.content,
+                    sidebar: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebar,
+                };
+                return current.content === next.content && current.sidebar === next.sidebar ? current : next;
+            });
         }
     }, []);
 
@@ -50,10 +57,15 @@ export default function MediaLibraryWindow() {
                                     sidebarMinWidth={220}
                                     style={{ flex: 1 }}
                                 >
-                                    <MediaLibrarySidebar useNativeLibraryList />
                                     <View
                                         className="flex-1"
-                                        style={{ flex: 1, minWidth: 0, width: contentWidth || undefined }}
+                                        style={{ flex: 1, minWidth: 0, width: paneWidths.sidebar || undefined }}
+                                    >
+                                        <MediaLibrarySidebar />
+                                    </View>
+                                    <View
+                                        className="flex-1"
+                                        style={{ flex: 1, minWidth: 0, width: paneWidths.content || undefined }}
                                     >
                                         <View
                                             className="flex-1"
