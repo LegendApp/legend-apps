@@ -25,33 +25,35 @@ function SettingsSidebarContent({
   selectedPage: SettingsPage;
 }) {
   return (
-    <ScrollView
-      className="flex-1"
-      contentContainerStyle={styles.sidebarContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {sidebarItems.map((item) => {
-        const isSelected = selectedPage === item.id;
+    <View className="flex-1 min-h-0">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={styles.sidebarContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {sidebarItems.map((item) => {
+          const isSelected = selectedPage === item.id;
 
-        return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected }}
-            className={`h-7 justify-center rounded-md px-2 ${isSelected ? "bg-white/10" : "hover:bg-white/10 active:bg-white/15"}`}
-            key={item.id}
-            onPress={() => onSelectionChange(item.id)}
-          >
-            <Text
-              className={isSelected ? "text-foreground font-medium" : "text-foreground"}
-              numberOfLines={1}
-              style={styles.sidebarItemText}
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              className={`h-7 justify-center rounded-md px-2 ${isSelected ? "bg-white/10" : "hover:bg-white/10 active:bg-white/15"}`}
+              key={item.id}
+              onPress={() => onSelectionChange(item.id)}
             >
-              {item.title}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+              <Text
+                className={isSelected ? "text-foreground font-medium" : "text-foreground"}
+                numberOfLines={1}
+                style={styles.sidebarItemText}
+              >
+                {item.title}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 

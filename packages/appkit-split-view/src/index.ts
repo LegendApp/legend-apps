@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from "react";
 import {
   NativeEventEmitter,
   Platform,
+  StyleSheet,
   type NativeSyntheticEvent,
   type ViewProps,
 } from "react-native";
@@ -30,6 +31,7 @@ export function SidebarSplitView({
   children,
   contentMinWidth = 320,
   sidebarMinWidth = 180,
+  style,
   ...props
 }: SidebarSplitViewProps) {
   return createElement(
@@ -37,11 +39,18 @@ export function SidebarSplitView({
     {
       contentMinWidth,
       sidebarMinWidth,
+      style: [styles.root, style],
       ...props,
     },
     children,
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flexDirection: "row",
+  },
+});
 
 export function configureKitchenSinkMenus(
   packages: KitchenSinkPackage[],
