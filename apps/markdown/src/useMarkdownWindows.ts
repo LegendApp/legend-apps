@@ -5,15 +5,14 @@ import {
 } from "./markdownWindows";
 
 export function useMarkdownSettingsWindow({
-  backgroundColor,
   onError,
 }: {
   backgroundColor: string;
   onError: (error: unknown) => void;
 }) {
   return useCallback(() => {
-    openMarkdownSettingsWindow(backgroundColor).catch(onError);
-  }, [backgroundColor, onError]);
+    openMarkdownSettingsWindow().catch(onError);
+  }, [onError]);
 }
 
 export function useMarkdownMainWindowOptions({

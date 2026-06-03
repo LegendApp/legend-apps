@@ -22,26 +22,29 @@ export function registerMarkdownWindows() {
   didRegisterWindows = true;
 }
 
-export function openMarkdownSettingsWindow(backgroundColor: string) {
+export function openMarkdownSettingsWindow() {
   return openWindow({
     identifier: settingsWindowIdentifier,
     moduleName: settingsWindowModuleName,
     title: "Settings",
+    transparentBackground: true,
     windowStyle: {
-      backgroundColor,
-      hasToolbar: false,
-      height: 560,
+      hasToolbar: true,
+      height: 800,
       mask: [
         WindowStyleMask.Titled,
         WindowStyleMask.Closable,
         WindowStyleMask.Resizable,
+        WindowStyleMask.FullSizeContentView,
+        WindowStyleMask.UnifiedTitleAndToolbar,
       ],
-      minHeight: 420,
-      minWidth: 560,
+      minHeight: 600,
+      minWidth: 600,
       titlebarAppearsTransparent: false,
       titlebarSeparatorStyle: "line",
       titleVisibility: "visible",
-      width: 720,
+      toolbarStyle: "unified",
+      width: 800,
     },
   });
 }

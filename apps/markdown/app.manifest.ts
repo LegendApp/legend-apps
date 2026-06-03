@@ -12,12 +12,12 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-desktop/app-exit",
+      "@legend-desktop/appkit-split-view",
       "@legend-desktop/file-dialog",
       "@legend-desktop/markdown-block-editor",
       "@legend-desktop/markdown-parser",
       "@legend-desktop/native-menu",
       "@legend-desktop/recent-documents",
-      "@legend-desktop/sidebar",
       "@legend-desktop/window-manager",
       "react-native-enriched-markdown",
     ],
