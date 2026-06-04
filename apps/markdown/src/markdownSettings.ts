@@ -14,7 +14,7 @@ const documentDensitySettingsKey = "legend-markdown.settings.documentDensity";
 
 export type MarkdownThemeSetting = "light" | "dark" | "grey";
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
-export type MarkdownFormattingToolbarModeSetting = "selection" | "top";
+export type MarkdownFormattingToolbarModeSetting = "selection" | "top" | "hidden";
 export type MarkdownFontFamilySetting = "system" | "serif" | "mono";
 export type MarkdownFontSizeSetting = "small" | "default" | "large" | "xlarge";
 export type MarkdownLineHeightSetting = "compact" | "normal" | "relaxed";
@@ -43,7 +43,7 @@ function isMarkdownStartupBehaviorSetting(value: unknown): value is MarkdownStar
 }
 
 function isMarkdownFormattingToolbarModeSetting(value: unknown): value is MarkdownFormattingToolbarModeSetting {
-  return value === "selection" || value === "top";
+  return value === "selection" || value === "top" || value === "hidden";
 }
 
 function isMarkdownFontFamilySetting(value: unknown): value is MarkdownFontFamilySetting {

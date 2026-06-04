@@ -56,6 +56,12 @@ export function GeneralSettingsPage() {
             selected={formattingToolbarMode === "top"}
             value="top"
           />
+          <RadioOption<MarkdownFormattingToolbarModeSetting>
+            label="Hidden"
+            onSelect={setMarkdownFormattingToolbarModeSetting}
+            selected={formattingToolbarMode === "hidden"}
+            value="hidden"
+          />
         </View>
       </SettingsSection>
     </SettingsPage>
