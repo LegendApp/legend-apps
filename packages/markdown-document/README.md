@@ -21,6 +21,6 @@ export function DocumentScreen({ filename }: { filename: string }) {
 }
 ```
 
-`MarkdownDocument` owns document loading, block caching, and list rendering. App shells own menus, toolbars, recent files, window behavior, and other chrome.
+`MarkdownDocument` owns document loading, block caching, active block editing, save/autosave state, undo/redo history, and list rendering. App shells own menus, toolbars, recent files, window behavior, and other chrome.
 
-The initial implementation is read-only. Editing, autosave, undo/redo, and richer commands are added through the adapter and command ref without changing the app-shell boundary.
+Editing and save behavior are driven through the adapter and command ref so app shells can wire native menus, formatting toolbars, and document lifecycle prompts without reaching into internal document state.
