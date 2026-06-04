@@ -54,6 +54,12 @@ import { useLatestRef } from "./useLatestRef";
 
 const typingHistoryGroupTimeoutMs = 1000;
 
+function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
+  if (__DEV__) {
+    console.info(`[MarkdownDocument] ${event}`, data);
+  }
+}
+
 export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDocumentProps>(
   (
     {
@@ -846,6 +852,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         cancelHydration();
 
         let startIndex = snapshot.initialBlocks.length;
+        let hydratedBlockCount = 0;
+        let hydrationChunkCount = 0;
+        const hydrationStartedAt = Date.now();
         const hydrateNextChunk = () => {
           hydrateFrameRef.current = undefined;
           if (loadVersion !== loadVersionRef.current || startIndex >= snapshot.blockCount) {
@@ -862,9 +871,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
               mergeBlocks(blocks);
               startIndex += blocks.length;
+              hydratedBlockCount += blocks.length;
+              hydrationChunkCount += 1;
 
               if (blocks.length > 0 && startIndex < snapshot.blockCount) {
                 hydrateFrameRef.current = requestAnimationFrame(hydrateNextChunk);
+              } else {
+                logMarkdownDocumentDiagnostics("hydrated", {
+                  blockCount: snapshot.blockCount,
+                  chunks: hydrationChunkCount,
+                  durationMs: Date.now() - hydrationStartedAt,
+                  hydratedBlockCount,
+                  initialBlockCount: snapshot.initialBlocks.length,
+                });
               }
             })
             .catch((error: unknown) => {
@@ -940,6 +959,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           setBlocksById(nextBlocksById);
           setBlockIds(snapshot.initialBlocks.map((block) => block.id));
           setDocumentState({ status: "loaded", snapshot });
+          logMarkdownDocumentDiagnostics("loaded", {
+            blockCount: snapshot.blockCount,
+            documentMs: snapshot.timing.documentMs,
+            initialBlockCount: snapshot.initialBlocks.length,
+            parseMs: snapshot.timing.parseMs,
+            readMs: snapshot.timing.readMs,
+            sourceSize: snapshot.sourceSize,
+          });
           if (autoFocusFirstBlock) {
             const firstBlock = snapshot.initialBlocks[0];
             if (firstBlock) {
