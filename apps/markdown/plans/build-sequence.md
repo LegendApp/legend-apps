@@ -120,14 +120,14 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Use `EnrichedMarkdownTextInput` for active block editing.
 - [ ] Use current enriched APIs first:
   - [x] `onChangeMarkdown`
-  - [ ] `onChangeSelection`
+  - [x] `onChangeSelection`
   - [ ] `onChangeState`
   - [x] focus/blur
   - [x] inline formatting commands
   - [x] link commands
   - [ ] `getMarkdown`
-  - [ ] caret rect APIs
-- [ ] Best effort: place cursor near click position; fall back to end.
+  - [x] caret rect APIs
+- [x] Best effort: place cursor near click position; fall back to end.
 - [x] Commit active block edits with 300ms debounce.
 - [x] Mark dirty immediately on editor change.
 - [x] Flush pending edit on block switch.
@@ -178,18 +178,18 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [ ] If close-save fails, show error and keep window open.
 - [x] Validate `bun run typecheck`.
 - [ ] Validate manual save, autosave, undo, redo, and dirty-state transitions.
-- [ ] Commit with a `type: subject` message.
+- [x] Commit with a `type: subject` message.
 
 ## Phase 9: Final Cleanup And Documentation
 
-- [ ] Review public exports and remove accidental internals.
-- [ ] Review app shell to confirm chrome stays outside `MarkdownDocument`.
-- [ ] Confirm markdown/document styles are externally configurable.
-- [ ] Confirm no fixed toolbar/button layout is baked into `MarkdownDocument`.
-- [ ] Confirm `@legend-desktop/markdown-document` has no `@legendapp/state` dependency.
-- [ ] Confirm DEV-only diagnostics are not visible in normal UI.
-- [ ] Update README/API notes if implementation differs from plan.
-- [ ] Run `bun run typecheck`.
+- [x] Review public exports and remove accidental internals.
+- [x] Review app shell to confirm chrome stays outside `MarkdownDocument`.
+- [x] Confirm markdown/document styles are externally configurable.
+- [x] Confirm no fixed toolbar/button layout is baked into `MarkdownDocument`.
+- [x] Confirm `@legend-desktop/markdown-document` has no `@legendapp/state` dependency.
+- [x] Confirm DEV-only diagnostics are not visible in normal UI.
+- [x] Update README/API notes if implementation differs from plan.
+- [x] Run `bun run typecheck`.
 - [ ] Run `bun run markdown run macos`.
 - [ ] Validate open, render, edit, split, save, autosave, undo, redo on a real markdown file.
 - [ ] Validate a 10k-20k block markdown file renders and scrolls acceptably.
@@ -202,7 +202,6 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [ ] External merge/conflict handling.
 - [ ] Whole-block selection UI.
 - [ ] Whole-block clipboard.
-- [ ] Visible formatting toolbar.
 - [ ] Custom toolbar configuration UI.
 - [ ] Full markdown source mode.
 - [ ] Web adapter.
