@@ -18,11 +18,13 @@ export function useMarkdownSettingsWindow({
 export function useMarkdownMainWindowOptions({
   backgroundColor,
   filename,
+  isDirty,
   isUntitledDocument,
   onError,
 }: {
   backgroundColor: string;
   filename: string | null;
+  isDirty: boolean;
   isUntitledDocument: boolean;
   onError: (error: unknown) => void;
 }) {
@@ -34,7 +36,8 @@ export function useMarkdownMainWindowOptions({
     setMarkdownMainWindowOptions({
       backgroundColor,
       filename,
+      isDirty,
       isUntitledDocument,
     }).catch(onError);
-  }, [backgroundColor, filename, isUntitledDocument, onError]);
+  }, [backgroundColor, filename, isDirty, isUntitledDocument, onError]);
 }

@@ -34,15 +34,19 @@ export function openMarkdownSettingsWindow() {
 export function setMarkdownMainWindowOptions({
   backgroundColor,
   filename,
+  isDirty,
   isUntitledDocument,
 }: {
   backgroundColor: string;
   filename: string;
+  isDirty: boolean;
   isUntitledDocument: boolean;
 }) {
+  const title = isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename);
+
   return setMainWindowOptions({
     representedURL: null,
-    title: isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename),
+    title: isDirty ? `• ${title}` : title,
     windowStyle: {
       backgroundColor,
       hasToolbar: false,

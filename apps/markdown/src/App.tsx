@@ -113,6 +113,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
   useMarkdownMainWindowOptions({
     backgroundColor: theme.colors.windowBackground,
     filename: session.filename,
+    isDirty: session.isDirty,
     isUntitledDocument: session.isUntitledDocument,
     onError: session.handleError,
   });
