@@ -66,6 +66,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       markdownStyle,
       onDirtyChange,
       onError,
+      onLoadError,
       onLoaded,
       onSaveStateChange,
       onSelectionAnchorChange,
@@ -125,6 +126,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
     const onErrorRef = useLatestRef(onError);
+    const onLoadErrorRef = useLatestRef(onLoadError);
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
@@ -943,6 +945,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
           const nextError = error instanceof Error ? error : new Error(String(error));
           setDocumentState({ status: "error", error: nextError });
+          onLoadErrorRef.current?.(nextError);
           onErrorRef.current?.(nextError);
         });
 
@@ -961,6 +964,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       filename,
       onDirtyChangeRef,
       onErrorRef,
+      onLoadErrorRef,
       onLoadedRef,
       reportAsyncError,
       setNextSaveState,

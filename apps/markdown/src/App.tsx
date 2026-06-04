@@ -138,7 +138,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
           markdownStyle={markdownStyle}
           onDirtyChange={session.setIsDirty}
           onError={session.handleError}
-          onLoaded={session.clearDocumentError}
+          onLoadError={session.handleDocumentLoadError}
+          onLoaded={session.handleDocumentLoaded}
           onSaveStateChange={session.setSaveState}
           onSelectionAnchorChange={handleSelectionAnchorChange}
           renderSelectionToolbar={renderSelectionToolbar}

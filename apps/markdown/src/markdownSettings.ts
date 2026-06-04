@@ -221,6 +221,13 @@ export function setLastMarkdownDocumentPath(path: string) {
   Settings.set({ [lastDocumentPathSettingsKey]: path });
 }
 
+export function clearLastMarkdownDocumentPath(path?: string) {
+  const currentPath = getLastMarkdownDocumentPath();
+  if (!path || currentPath === path) {
+    Settings.set({ [lastDocumentPathSettingsKey]: null });
+  }
+}
+
 export function applyMarkdownThemeSetting() {
   Uniwind.setTheme(getMarkdownThemeSetting() as ThemeName);
 }

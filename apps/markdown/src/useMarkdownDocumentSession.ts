@@ -7,13 +7,17 @@ import {
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { useCallback, useRef, useState } from "react";
 import { markdownFileTypes } from "./appConstants";
-import { addRecentMarkdownFile } from "./appMetadata";
+import { addRecentMarkdownFile, removeRecentMarkdownFile } from "./appMetadata";
 import { confirmDirtyDocumentTransition } from "./confirmDirtyDocumentTransition";
 import { getDirectory, getFilename, isMarkdownPath } from "./markdownFiles";
-import { setLastMarkdownDocumentPath } from "./markdownSettings";
+import { clearLastMarkdownDocumentPath, setLastMarkdownDocumentPath } from "./markdownSettings";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 
 export type DocumentSource = "file" | "untitled";
+
+type OpenUntitledDocumentOptions = {
+  preserveError?: boolean;
+};
 
 export function useMarkdownDocumentSession() {
   const [filename, setFilename] = useState<string | null>(null);
@@ -23,6 +27,7 @@ export function useMarkdownDocumentSession() {
   const [documentSource, setDocumentSource] = useState<DocumentSource>("untitled");
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
+  const preserveNextLoadedError = useRef(false);
 
   const hasDocument = filename !== null;
   const isUntitledDocument = documentSource === "untitled";
@@ -30,6 +35,14 @@ export function useMarkdownDocumentSession() {
 
   const clearDocumentError = useCallback(() => {
     setLastError(null);
+  }, []);
+
+  const handleDocumentLoaded = useCallback(() => {
+    if (preserveNextLoadedError.current) {
+      preserveNextLoadedError.current = false;
+    } else {
+      setLastError(null);
+    }
   }, []);
 
   const handleError = useCallback((error: unknown) => {
@@ -52,13 +65,26 @@ export function useMarkdownDocumentSession() {
     markOpenedFile(path);
   }, [markOpenedFile]);
 
-  const openUntitledDocument = useCallback(() => {
+  const openUntitledDocument = useCallback((options: OpenUntitledDocumentOptions = {}) => {
     setDocumentSource("untitled");
     setFilename(untitledFilename);
     setIsDirty(false);
     setSaveState("idle");
-    setLastError(null);
+    if (!options.preserveError) {
+      setLastError(null);
+    }
   }, []);
+
+  const handleDocumentLoadError = useCallback((error: Error) => {
+    handleError(error);
+
+    if (documentSource === "file" && filename) {
+      removeRecentMarkdownFile(filename);
+      clearLastMarkdownDocumentPath(filename);
+      preserveNextLoadedError.current = true;
+      openUntitledDocument({ preserveError: true });
+    }
+  }, [documentSource, filename, handleError, openUntitledDocument]);
 
   const completeSaveAs = useCallback((path: string) => {
     setDocumentSource("file");
@@ -171,7 +197,9 @@ export function useMarkdownDocumentSession() {
     filename,
     flushCurrentDocumentBeforeTransition,
     handleError,
+    handleDocumentLoaded,
     hasDocument,
+    handleDocumentLoadError,
     isDirty,
     isUntitledDocument,
     lastError,

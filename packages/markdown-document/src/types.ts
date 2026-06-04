@@ -165,6 +165,7 @@ export type MarkdownDocumentProps = {
   markdownLayout?: MarkdownDocumentLayout;
   theme?: MarkdownDocumentTheme;
   commandsRef?: Ref<MarkdownDocumentCommands>;
+  onLoadError?: (error: Error) => void;
   onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onSaveStateChange?: (state: MarkdownSaveState) => void;
