@@ -112,7 +112,7 @@ export function useMarkdownDocumentSession() {
     }
   }, [handleError, isUntitledDocument, saveCurrentDocumentAs]);
 
-  const flushCurrentDocumentBeforeTransition = useCallback(async (reason: "open" | "quit" = "open") => {
+  const flushCurrentDocumentBeforeTransition = useCallback(async (reason: "new" | "open" | "quit" = "open") => {
     if (!hasDocument || !isDirty) {
       return true;
     }
@@ -132,6 +132,13 @@ export function useMarkdownDocumentSession() {
 
     return false;
   }, [filename, hasDocument, isDirty, saveCurrentDocument]);
+
+  const newMarkdownDocument = useCallback(async () => {
+    const didFlush = await flushCurrentDocumentBeforeTransition("new");
+    if (didFlush) {
+      openUntitledDocument();
+    }
+  }, [flushCurrentDocumentBeforeTransition, openUntitledDocument]);
 
   const openMarkdownDialog = useCallback(async () => {
     if (openDialogInFlight.current) {
@@ -168,6 +175,7 @@ export function useMarkdownDocumentSession() {
     isDirty,
     isUntitledDocument,
     lastError,
+    newMarkdownDocument,
     openMarkdownDialog,
     openSelectedFile,
     openUntitledDocument,

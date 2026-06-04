@@ -18,6 +18,7 @@ type MarkdownMenuOptions = {
   hasDocument: boolean;
   isDirty: boolean;
   onError: (error: unknown) => void;
+  onNewDocument: () => Promise<void>;
   onOpenDocument: () => Promise<void>;
   onOpenSettings: () => void;
   onSaveDocument: () => Promise<boolean>;
@@ -30,6 +31,7 @@ export function useMarkdownMenus({
   hasDocument,
   isDirty,
   onError,
+  onNewDocument,
   onOpenDocument,
   onOpenSettings,
   onSaveDocument,
@@ -42,6 +44,9 @@ export function useMarkdownMenus({
     italic: () => documentCommandsRef.current?.toggleItalic(),
     increaseFontSize: increaseMarkdownFontSizeSetting,
     link: () => documentCommandsRef.current?.insertLink(),
+    new: () => {
+      onNewDocument().catch(onError);
+    },
     open: () => {
       onOpenDocument().catch(onError);
     },
@@ -61,6 +66,7 @@ export function useMarkdownMenus({
   }), [
     documentCommandsRef,
     onError,
+    onNewDocument,
     onOpenDocument,
     onOpenSettings,
     onSaveDocument,

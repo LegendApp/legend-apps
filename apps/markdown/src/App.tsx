@@ -102,6 +102,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
     hasDocument: session.hasDocument,
     isDirty: session.isDirty,
     onError: session.handleError,
+    onNewDocument: session.newMarkdownDocument,
     onOpenDocument: session.openMarkdownDialog,
     onOpenSettings: openSettingsWindow,
     onSaveDocument: session.saveCurrentDocument,

@@ -8,6 +8,12 @@ export const markdownMenuConfig: NativeMenuConfig[] = [
     placement: { before: "Window" },
     items: [
       {
+        id: "new",
+        targetTitle: "New",
+        enabled: true,
+        shortcut: { key: "n", modifiers: commandModifier },
+      },
+      {
         id: "open",
         targetTitle: "Open...",
         enabled: true,

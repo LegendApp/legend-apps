@@ -9,7 +9,7 @@ import {
 } from "./markdownSettings";
 
 type DocumentEventsOptions = {
-  flushCurrentDocumentBeforeTransition: (reason?: "open" | "quit") => Promise<boolean>;
+  flushCurrentDocumentBeforeTransition: (reason?: "new" | "open" | "quit") => Promise<boolean>;
   handleError: (error: unknown) => void;
   launchArguments?: string[];
   openSelectedFile: (path: string) => void;
