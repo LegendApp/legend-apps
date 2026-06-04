@@ -29,6 +29,7 @@ import {
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
 import {
+  getListContinuationMarkdown,
   setHeadingMarkdown,
   setParagraphMarkdown,
   thematicBreakMarkdown,
@@ -604,6 +605,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           draftMarkdownRef.current = afterMarkdown;
           committedMarkdownRef.current = afterMarkdown;
           setDraftMarkdown(afterMarkdown);
+          setActiveSelection(afterMarkdown.length);
           setActiveBlockId(nextActiveBlockId);
           markDirty();
         } catch (error) {
@@ -619,7 +621,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (block.type !== "codeBlock") {
           const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
           if (splitMarkdown) {
-            splitActiveBlock(block, splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown).catch(reportAsyncError);
+            splitActiveBlock(
+              block,
+              splitMarkdown.beforeMarkdown,
+              getListContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown),
+            ).catch(reportAsyncError);
             return;
           }
         }

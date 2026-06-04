@@ -142,7 +142,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
   - [x] new/right block gets new ID
   - [x] focus moves to new/right block
   - [x] use newline-detection workaround if Enter interception is unavailable
-  - [ ] list continuation is best effort
+  - [x] list continuation is best effort
 - [x] Leave Backspace-at-start on enriched input default first.
 - [x] Leave paste on enriched input default first.
 - [x] Validate `bun run typecheck`.

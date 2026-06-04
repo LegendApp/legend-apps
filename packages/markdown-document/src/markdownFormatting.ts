@@ -8,6 +8,9 @@ const blockquotePrefixPattern = /^\s{0,3}>\s?/;
 const unorderedListPrefixPattern = /^\s*[-*+]\s+/;
 const orderedListPrefixPattern = /^\s*\d+[.)]\s+/;
 const taskListPrefixPattern = /^\s*[-*+]\s+\[[ xX]\]\s+/;
+const unorderedListContinuationPattern = /^(\s*)([-*+])\s+\S/;
+const orderedListContinuationPattern = /^(\s*)(\d+)([.)])\s+\S/;
+const taskListContinuationPattern = /^(\s*)([-*+])\s+\[[ xX]\]\s+\S/;
 
 function splitLines(markdown: string) {
   return markdown.split(/\r?\n/);
@@ -65,6 +68,29 @@ function everyNonEmptyLine(markdown: string, predicate: (line: string) => boolea
 
 export function setParagraphMarkdown(markdown: string) {
   return mapNonEmptyLines(markdown, (line) => stripLinePrefix(line));
+}
+
+export function getListContinuationMarkdown(beforeMarkdown: string, afterMarkdown: string) {
+  if (afterMarkdown.length > 0) {
+    return afterMarkdown;
+  }
+
+  const taskListMatch = taskListContinuationPattern.exec(beforeMarkdown);
+  if (taskListMatch) {
+    return `${taskListMatch[1] ?? ""}${taskListMatch[2] ?? "-"} [ ] `;
+  }
+
+  const orderedListMatch = orderedListContinuationPattern.exec(beforeMarkdown);
+  if (orderedListMatch) {
+    return `${orderedListMatch[1] ?? ""}${Number(orderedListMatch[2] ?? 0) + 1}${orderedListMatch[3] ?? "."} `;
+  }
+
+  const unorderedListMatch = unorderedListContinuationPattern.exec(beforeMarkdown);
+  if (unorderedListMatch) {
+    return `${unorderedListMatch[1] ?? ""}${unorderedListMatch[2] ?? "-"} `;
+  }
+
+  return afterMarkdown;
 }
 
 export function setHeadingMarkdown(markdown: string, level: HeadingLevel) {
