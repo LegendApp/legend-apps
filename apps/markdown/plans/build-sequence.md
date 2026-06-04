@@ -132,10 +132,10 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Mark dirty immediately on editor change.
 - [x] Flush pending edit on block switch.
 - [x] Flush pending edit on blur.
-- [ ] Flush pending edit on Escape.
+- [x] Flush pending edit on Escape.
 - [x] Flush pending edit on Save.
 - [x] Blur returns block to rendered mode.
-- [ ] Escape commits and blurs.
+- [x] Escape commits and blurs.
 - [ ] Keep empty active block as empty paragraph.
 - [x] Implement Enter split:
   - [x] left/original block keeps original ID

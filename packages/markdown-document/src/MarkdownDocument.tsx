@@ -655,6 +655,28 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 
+    const commitAndBlurActiveBlock = useCallback(() => {
+      const activeBlockIdValue = activeBlockIdRef.current;
+      if (!activeBlockIdValue) {
+        return false;
+      }
+
+      commitActiveBlock({ updateReactState: true }).then(() => {
+        if (activeBlockIdRef.current !== activeBlockIdValue) {
+          return;
+        }
+        activeInputRef.current?.blur();
+        nativeEditingBlockIdRef.current = null;
+        activeBlockIdRef.current = null;
+        setActiveBlockId(null);
+        setActiveSelection(0);
+        clearTextSelectionAnchor();
+        clearTypingHistoryGroup();
+      }).catch(reportAsyncError);
+
+      return true;
+    }, [clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
+
     const replaceBlockSelection = useCallback(
       async (markdown: string) => {
         if (documentState.status !== "loaded" || !adapter.applyTransaction || !blockSelection) {
@@ -1260,6 +1282,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         redo,
         save,
         saveAs,
+        commitAndBlurActiveBlock,
         setHeading(level: HeadingLevel) {
           formatCurrentBlockRange((markdown) => setHeadingMarkdown(markdown, level));
         },
@@ -1298,7 +1321,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         undo,
       }),
-      [formatCurrentBlockRange, redo, runActiveInputCommand, save, saveAs, undo],
+      [commitAndBlurActiveBlock, formatCurrentBlockRange, redo, runActiveInputCommand, save, saveAs, undo],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);

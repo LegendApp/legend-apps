@@ -78,6 +78,7 @@ export type MarkdownDocumentCommands = {
   saveAs(filename: string): Promise<void>;
   undo(): void;
   redo(): void;
+  commitAndBlurActiveBlock(): boolean;
   focus(): void;
   setParagraph(): void;
   setHeading(level: 1 | 2 | 3 | 4 | 5 | 6): void;

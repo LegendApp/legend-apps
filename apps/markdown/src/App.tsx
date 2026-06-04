@@ -15,6 +15,7 @@ import {
   useRecentMarkdownDocumentOpener,
 } from "./useMarkdownDocumentEvents";
 import { useMarkdownDocumentSession } from "./useMarkdownDocumentSession";
+import { useMarkdownKeyboardShortcuts } from "./useMarkdownKeyboardShortcuts";
 import { useMarkdownMenus } from "./useMarkdownMenus";
 import {
   useMarkdownMainWindowOptions,
@@ -104,6 +105,10 @@ export function App({ launchArguments }: MarkdownAppProps) {
   useMarkdownAppExit({
     flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
     handleError: session.handleError,
+  });
+
+  useMarkdownKeyboardShortcuts({
+    documentCommandsRef: session.documentCommandsRef,
   });
 
   useMarkdownMenus({
