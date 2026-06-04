@@ -22,13 +22,21 @@
     "dev:all": "bun scripts/run-app.ts --all --dev-check",
     "build:all": "bun scripts/build-app.ts --all",
     "verify:all": "bun scripts/verify-app.ts --all",
+    "test:music": "jest --config apps/music/jest.config.cjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@babel/runtime": "^7.29.7",
+    "@react-native/babel-preset": "0.81.6",
+    "@types/jest": "29.5.14",
     "@types/node": "^22.10.0",
     "@types/react": "~19.1.0",
+    "@types/react-test-renderer": "19.1.0",
+    "babel-jest": "29.7.0",
+    "jest": "29.7.0",
     "react": "19.1.4",
     "react-native": "0.81.6",
+    "react-test-renderer": "19.1.4",
     "typescript": "~5.9.2"
   },
   "patchedDependencies": {
