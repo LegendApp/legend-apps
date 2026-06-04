@@ -4,6 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@legend-desktop/app-settings": "0.0.0",
     "@legend-desktop/app-exit": "0.0.0",
     "@legend-desktop/appkit-split-view": "0.0.0",
     "@legend-desktop/file-dialog": "0.0.0",

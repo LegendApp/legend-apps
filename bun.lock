@@ -24,6 +24,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/app-exit": "0.0.0",
+        "@legend-desktop/app-settings": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/markdown-block-editor": "0.0.0",
@@ -45,6 +46,7 @@
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/app-exit": "0.0.0",
+        "@legend-desktop/app-settings": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
@@ -110,6 +112,16 @@
       "version": "0.0.0",
       "peerDependencies": {
         "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/app-settings": {
+      "name": "@legend-desktop/app-settings",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legendapp/state": "^3.0.0-beta.42",
+      },
+      "peerDependencies": {
         "react-native": "*",
       },
     },
@@ -695,6 +707,8 @@
     "@legend-desktop/app-markdown": ["@legend-desktop/app-markdown@workspace:apps/markdown"],
 
     "@legend-desktop/app-music": ["@legend-desktop/app-music@workspace:apps/music"],
+
+    "@legend-desktop/app-settings": ["@legend-desktop/app-settings@workspace:packages/app-settings"],
 
     "@legend-desktop/app-test-kitchen-sink": ["@legend-desktop/app-test-kitchen-sink@workspace:apps/test-kitchen-sink"],
 

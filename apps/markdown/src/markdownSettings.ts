@@ -1,3 +1,4 @@
+import { createNativeSettingsValue, createSettingsSubscription } from "@legend-desktop/app-settings";
 import { Settings } from "react-native";
 import { Uniwind, type ThemeName } from "uniwind";
 
@@ -28,7 +29,8 @@ export type MarkdownAppearanceSettings = {
   lineHeight: MarkdownLineHeightSetting;
 };
 
-const subscribers = new Set<() => void>();
+const settingsSubscription = createSettingsSubscription();
+const notifyMarkdownSettingsChanged = settingsSubscription.notify;
 
 function isMarkdownThemeSetting(value: unknown): value is MarkdownThemeSetting {
   return value === "light" || value === "dark" || value === "grey";
@@ -62,44 +64,88 @@ function isMarkdownDocumentDensitySetting(value: unknown): value is MarkdownDocu
   return value === "compact" || value === "comfortable" || value === "spacious";
 }
 
+const themeSetting = createNativeSettingsValue<MarkdownThemeSetting>({
+  afterSet: (theme) => {
+    Uniwind.setTheme(theme as ThemeName);
+  },
+  defaultValue: "light",
+  isValue: isMarkdownThemeSetting,
+  key: themeSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const startupBehaviorSetting = createNativeSettingsValue<MarkdownStartupBehaviorSetting>({
+  defaultValue: "newDocument",
+  isValue: isMarkdownStartupBehaviorSetting,
+  key: startupBehaviorSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const formattingToolbarModeSetting = createNativeSettingsValue<MarkdownFormattingToolbarModeSetting>({
+  defaultValue: "selection",
+  isValue: isMarkdownFormattingToolbarModeSetting,
+  key: formattingToolbarModeSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const fontFamilySetting = createNativeSettingsValue<MarkdownFontFamilySetting>({
+  defaultValue: "system",
+  isValue: isMarkdownFontFamilySetting,
+  key: fontFamilySettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const fontSizeSetting = createNativeSettingsValue<MarkdownFontSizeSetting>({
+  defaultValue: "default",
+  isValue: isMarkdownFontSizeSetting,
+  key: fontSizeSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const lineHeightSetting = createNativeSettingsValue<MarkdownLineHeightSetting>({
+  defaultValue: "normal",
+  isValue: isMarkdownLineHeightSetting,
+  key: lineHeightSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const contentWidthSetting = createNativeSettingsValue<MarkdownContentWidthSetting>({
+  defaultValue: "standard",
+  isValue: isMarkdownContentWidthSetting,
+  key: contentWidthSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const documentDensitySetting = createNativeSettingsValue<MarkdownDocumentDensitySetting>({
+  defaultValue: "comfortable",
+  isValue: isMarkdownDocumentDensitySetting,
+  key: documentDensitySettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
-  const value = Settings.get(themeSettingsKey);
-  return isMarkdownThemeSetting(value) ? value : "light";
+  return themeSetting.get();
 }
 
 export function getMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
-  const value = Settings.get(startupBehaviorSettingsKey);
-  return isMarkdownStartupBehaviorSetting(value) ? value : "newDocument";
+  return startupBehaviorSetting.get();
 }
 
 export function getMarkdownFormattingToolbarModeSetting(): MarkdownFormattingToolbarModeSetting {
-  const value = Settings.get(formattingToolbarModeSettingsKey);
-  return isMarkdownFormattingToolbarModeSetting(value) ? value : "selection";
+  return formattingToolbarModeSetting.get();
 }
 
 export function getMarkdownFontFamilySetting(): MarkdownFontFamilySetting {
-  const value = Settings.get(fontFamilySettingsKey);
-  return isMarkdownFontFamilySetting(value) ? value : "system";
+  return fontFamilySetting.get();
 }
 
 export function getMarkdownFontSizeSetting(): MarkdownFontSizeSetting {
-  const value = Settings.get(fontSizeSettingsKey);
-  return isMarkdownFontSizeSetting(value) ? value : "default";
+  return fontSizeSetting.get();
 }
 
 export function getMarkdownLineHeightSetting(): MarkdownLineHeightSetting {
-  const value = Settings.get(lineHeightSettingsKey);
-  return isMarkdownLineHeightSetting(value) ? value : "normal";
+  return lineHeightSetting.get();
 }
 
 export function getMarkdownContentWidthSetting(): MarkdownContentWidthSetting {
-  const value = Settings.get(contentWidthSettingsKey);
-  return isMarkdownContentWidthSetting(value) ? value : "standard";
+  return contentWidthSetting.get();
 }
 
 export function getMarkdownDocumentDensitySetting(): MarkdownDocumentDensitySetting {
-  const value = Settings.get(documentDensitySettingsKey);
-  return isMarkdownDocumentDensitySetting(value) ? value : "comfortable";
+  return documentDensitySetting.get();
 }
 
 export function getMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
@@ -118,51 +164,39 @@ export function getLastMarkdownDocumentPath() {
 }
 
 export function subscribeToMarkdownSettings(listener: () => void) {
-  subscribers.add(listener);
-  return () => {
-    subscribers.delete(listener);
-  };
+  return settingsSubscription.subscribe(listener);
 }
 
 export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
-  Settings.set({ [themeSettingsKey]: theme });
-  Uniwind.setTheme(theme as ThemeName);
-  subscribers.forEach((listener) => listener());
+  themeSetting.set(theme);
 }
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
-  Settings.set({ [startupBehaviorSettingsKey]: startupBehavior });
-  subscribers.forEach((listener) => listener());
+  startupBehaviorSetting.set(startupBehavior);
 }
 
 export function setMarkdownFormattingToolbarModeSetting(formattingToolbarMode: MarkdownFormattingToolbarModeSetting) {
-  Settings.set({ [formattingToolbarModeSettingsKey]: formattingToolbarMode });
-  subscribers.forEach((listener) => listener());
+  formattingToolbarModeSetting.set(formattingToolbarMode);
 }
 
 export function setMarkdownFontFamilySetting(fontFamily: MarkdownFontFamilySetting) {
-  Settings.set({ [fontFamilySettingsKey]: fontFamily });
-  subscribers.forEach((listener) => listener());
+  fontFamilySetting.set(fontFamily);
 }
 
 export function setMarkdownFontSizeSetting(fontSize: MarkdownFontSizeSetting) {
-  Settings.set({ [fontSizeSettingsKey]: fontSize });
-  subscribers.forEach((listener) => listener());
+  fontSizeSetting.set(fontSize);
 }
 
 export function setMarkdownLineHeightSetting(lineHeight: MarkdownLineHeightSetting) {
-  Settings.set({ [lineHeightSettingsKey]: lineHeight });
-  subscribers.forEach((listener) => listener());
+  lineHeightSetting.set(lineHeight);
 }
 
 export function setMarkdownContentWidthSetting(contentWidth: MarkdownContentWidthSetting) {
-  Settings.set({ [contentWidthSettingsKey]: contentWidth });
-  subscribers.forEach((listener) => listener());
+  contentWidthSetting.set(contentWidth);
 }
 
 export function setMarkdownDocumentDensitySetting(density: MarkdownDocumentDensitySetting) {
-  Settings.set({ [documentDensitySettingsKey]: density });
-  subscribers.forEach((listener) => listener());
+  documentDensitySetting.set(density);
 }
 
 export function setLastMarkdownDocumentPath(path: string) {
