@@ -118,6 +118,8 @@ const documentDensitySetting = createNativeSettingsValue<MarkdownDocumentDensity
   notify: notifyMarkdownSettingsChanged,
 });
 
+let cachedAppearanceSettings: MarkdownAppearanceSettings | null = null;
+
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
   return themeSetting.get();
 }
@@ -151,13 +153,27 @@ export function getMarkdownDocumentDensitySetting(): MarkdownDocumentDensitySett
 }
 
 export function getMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
-  return {
+  const nextSettings = {
     contentWidth: getMarkdownContentWidthSetting(),
     density: getMarkdownDocumentDensitySetting(),
     fontFamily: getMarkdownFontFamilySetting(),
     fontSize: getMarkdownFontSizeSetting(),
     lineHeight: getMarkdownLineHeightSetting(),
   };
+
+  if (
+    cachedAppearanceSettings &&
+    cachedAppearanceSettings.contentWidth === nextSettings.contentWidth &&
+    cachedAppearanceSettings.density === nextSettings.density &&
+    cachedAppearanceSettings.fontFamily === nextSettings.fontFamily &&
+    cachedAppearanceSettings.fontSize === nextSettings.fontSize &&
+    cachedAppearanceSettings.lineHeight === nextSettings.lineHeight
+  ) {
+    return cachedAppearanceSettings;
+  }
+
+  cachedAppearanceSettings = nextSettings;
+  return nextSettings;
 }
 
 export function getLastMarkdownDocumentPath() {
