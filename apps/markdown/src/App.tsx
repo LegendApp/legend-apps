@@ -66,6 +66,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
     canRedo: false,
     canUndo: false,
   });
+  const currentFilePath = session.isUntitledDocument ? null : session.filename;
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: theme.colors.windowBackground,
     onError: session.handleError,
@@ -106,6 +107,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
   });
 
   useMarkdownMenus({
+    currentFilePath,
     documentCommandsRef: session.documentCommandsRef,
     documentCommandState,
     hasDocument: session.hasDocument,

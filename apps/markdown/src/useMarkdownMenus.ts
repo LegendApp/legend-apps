@@ -3,6 +3,7 @@ import type {
   MarkdownDocumentCommandState,
   MarkdownSaveState,
 } from "@legend-desktop/markdown-document";
+import { revealInFinder } from "@legend-desktop/file-dialog";
 import {
   updateMenuItems,
   useNativeMenu,
@@ -18,6 +19,7 @@ import {
 } from "./markdownSettings";
 
 type MarkdownMenuOptions = {
+  currentFilePath: string | null;
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
   documentCommandState: MarkdownDocumentCommandState;
   hasDocument: boolean;
@@ -32,6 +34,7 @@ type MarkdownMenuOptions = {
 };
 
 export function useMarkdownMenus({
+  currentFilePath,
   documentCommandsRef,
   documentCommandState,
   hasDocument,
@@ -57,6 +60,17 @@ export function useMarkdownMenus({
       onOpenDocument().catch(onError);
     },
     redo: () => documentCommandsRef.current?.redo(),
+    revealInFinder: () => {
+      if (currentFilePath) {
+        revealInFinder(currentFilePath)
+          .then((didReveal) => {
+            if (!didReveal) {
+              onError(new Error("Unable to reveal document in Finder."));
+            }
+          })
+          .catch(onError);
+      }
+    },
     save: () => {
       onSaveDocument().catch(onError);
     },
@@ -71,6 +85,7 @@ export function useMarkdownMenus({
     undo: () => documentCommandsRef.current?.undo(),
   }), [
     documentCommandsRef,
+    currentFilePath,
     onError,
     onNewDocument,
     onOpenDocument,
@@ -89,6 +104,7 @@ export function useMarkdownMenus({
     updateMenuItems(markdownMenuOwnerId, [
       { id: "save", enabled: hasDocument && isDirty && saveState !== "saving" },
       { id: "saveAs", enabled: hasDocument && saveState !== "saving" },
+      { id: "revealInFinder", enabled: currentFilePath !== null },
       { id: "settings", enabled: true },
       { id: "undo", enabled: hasDocument && documentCommandState.canUndo },
       { id: "redo", enabled: hasDocument && documentCommandState.canRedo },
@@ -99,5 +115,5 @@ export function useMarkdownMenus({
       { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
     ]);
-  }, [documentCommandState, hasDocument, isDirty, saveState]);
+  }, [currentFilePath, documentCommandState, hasDocument, isDirty, saveState]);
 }

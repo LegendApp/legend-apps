@@ -29,6 +29,12 @@ export const markdownMenuConfig: NativeMenuConfig[] = [
         enabled: false,
         shortcut: { key: "s", modifiers: commandModifier | shiftModifier },
       },
+      { separator: true, id: "separator-file-location" },
+      {
+        id: "revealInFinder",
+        title: "Reveal in Finder",
+        enabled: false,
+      },
     ],
   },
   {
