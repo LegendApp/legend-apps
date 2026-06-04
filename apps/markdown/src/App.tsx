@@ -21,6 +21,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
   useEffect(() => {
     if (!didOpenEditorRef.current) {
       didOpenEditorRef.current = true;
+      applyMarkdownThemeSetting();
       console.info("[MarkdownAppController] mounted in hidden host; opening editor window.");
       openMarkdownEditorWindow(launchArguments).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);

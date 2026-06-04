@@ -16,11 +16,13 @@ export function useMarkdownSettingsWindow({
 }
 
 export function useMarkdownEditorWindowOptions({
+  backgroundColor,
   filename,
   isDirty,
   isUntitledDocument,
   onError,
 }: {
+  backgroundColor: string;
   filename: string | null;
   isDirty: boolean;
   isUntitledDocument: boolean;
@@ -32,9 +34,10 @@ export function useMarkdownEditorWindowOptions({
     }
 
     setMarkdownEditorWindowOptions({
+      backgroundColor,
       filename,
       isDirty,
       isUntitledDocument,
     }).catch(onError);
-  }, [filename, isDirty, isUntitledDocument, onError]);
+  }, [backgroundColor, filename, isDirty, isUntitledDocument, onError]);
 }

@@ -1,7 +1,6 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import {
-  setWindowTitle,
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
 import { getLegendTheme } from "@legend-desktop/theme";
@@ -15,15 +14,25 @@ import {
 import { getMarkdownThemeSetting } from "./markdownSettings";
 import { SettingsWindow } from "./SettingsWindow";
 
-function createMarkdownEditorWindowStyle() {
+function createMarkdownEditorWindowStyle({
+  backgroundColor,
+  includeFrame,
+}: {
+  backgroundColor?: string;
+  includeFrame: boolean;
+}) {
   const theme = getLegendTheme(getMarkdownThemeSetting());
 
   return {
-    backgroundColor: theme.colors.windowBackground,
-    width: 900,
-    height: 700,
-    minWidth: 520,
-    minHeight: 420,
+    backgroundColor: backgroundColor ?? theme.colors.windowBackground,
+    ...(includeFrame
+      ? {
+          width: 900,
+          height: 700,
+          minWidth: 520,
+          minHeight: 420,
+        }
+      : null),
     hasToolbar: false,
     mask: [
       WindowStyleMask.Titled,
@@ -44,7 +53,7 @@ const markdownWindowsConfig = {
     identifier: editorWindowIdentifier,
     options: {
       title: "Untitled",
-      windowStyle: createMarkdownEditorWindowStyle(),
+      windowStyle: createMarkdownEditorWindowStyle({ includeFrame: true }),
     },
   },
   [settingsWindowModuleName]: {
@@ -69,19 +78,24 @@ export function openMarkdownSettingsWindow() {
 export function openMarkdownEditorWindow(launchArguments?: string[]) {
   return MarkdownWindowsNavigator.open(editorWindowModuleName as MarkdownWindow, {
     initialProperties: launchArguments ? { launchArguments } : undefined,
-    windowStyle: createMarkdownEditorWindowStyle(),
+    windowStyle: createMarkdownEditorWindowStyle({ includeFrame: true }),
   });
 }
 
 export function setMarkdownEditorWindowOptions({
+  backgroundColor,
   filename,
   isDirty,
   isUntitledDocument,
 }: {
+  backgroundColor: string;
   filename: string;
   isDirty: boolean;
   isUntitledDocument: boolean;
 }) {
   const title = isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename);
-  return setWindowTitle(editorWindowIdentifier, isDirty ? `• ${title}` : title);
+  return MarkdownWindowsNavigator.open(editorWindowModuleName as MarkdownWindow, {
+    title: isDirty ? `• ${title}` : title,
+    windowStyle: createMarkdownEditorWindowStyle({ backgroundColor, includeFrame: false }),
+  });
 }

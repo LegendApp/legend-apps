@@ -6,7 +6,6 @@ import {
 import { getLegendTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useResolveClassNames, useUniwind } from "uniwind";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
@@ -25,6 +24,7 @@ import {
   applyMarkdownThemeSetting,
   getMarkdownAppearanceSettings,
   getMarkdownFormattingToolbarModeSetting,
+  getMarkdownThemeSetting,
   subscribeToMarkdownSettings,
 } from "./markdownSettings";
 import {
@@ -37,9 +37,13 @@ type MarkdownEditorWindowProps = {
 
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   const session = useMarkdownDocumentSession();
-  const { theme: uniwindTheme } = useUniwind();
-  const theme = getLegendTheme(uniwindTheme);
-  const backgroundStyle = useResolveClassNames("bg-background");
+  const themeSetting = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownThemeSetting,
+    getMarkdownThemeSetting,
+  );
+  const theme = getLegendTheme(themeSetting);
+  const backgroundStyle = useMemo(() => ({ backgroundColor: theme.colors.background }), [theme.colors.background]);
   const formattingToolbarMode = useSyncExternalStore(
     subscribeToMarkdownSettings,
     getMarkdownFormattingToolbarModeSetting,
@@ -123,6 +127,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   useMarkdownEditorWindowOptions({
+    backgroundColor: theme.colors.windowBackground,
     filename: session.filename,
     isDirty: session.isDirty,
     isUntitledDocument: session.isUntitledDocument,
@@ -134,8 +139,10 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   }
 
   return (
-    <View className="flex-1 bg-background">
-      {session.lastError ? <Text className="text-danger" style={styles.error}>{session.lastError}</Text> : null}
+    <View style={[styles.root, backgroundStyle]}>
+      {session.lastError ? (
+        <Text style={[styles.error, { color: theme.colors.danger }]}>{session.lastError}</Text>
+      ) : null}
       {formattingToolbarMode === "top" ? (
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} />
       ) : null}
@@ -179,5 +186,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 8,
     textAlign: "center",
+  },
+  root: {
+    flex: 1,
   },
 });
