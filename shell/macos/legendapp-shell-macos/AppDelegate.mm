@@ -280,7 +280,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   if (![self.window setFrameUsingName:autosaveName]) {
     [self.window center];
   }
-  [self.window makeKeyAndOrderFront:self];
+  if (!isMarkdown) {
+    [self.window makeKeyAndOrderFront:self];
+  }
   if (isMusic) {
     LegendConfigureMusicWindow(self.window);
   }

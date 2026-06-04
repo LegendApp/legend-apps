@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from "react";
 import {
+  setMarkdownEditorWindowOptions,
   openMarkdownSettingsWindow,
-  setMarkdownMainWindowOptions,
 } from "./markdownWindows";
 
 export function useMarkdownSettingsWindow({
@@ -15,14 +15,12 @@ export function useMarkdownSettingsWindow({
   }, [onError]);
 }
 
-export function useMarkdownMainWindowOptions({
-  backgroundColor,
+export function useMarkdownEditorWindowOptions({
   filename,
   isDirty,
   isUntitledDocument,
   onError,
 }: {
-  backgroundColor: string;
   filename: string | null;
   isDirty: boolean;
   isUntitledDocument: boolean;
@@ -33,11 +31,10 @@ export function useMarkdownMainWindowOptions({
       return;
     }
 
-    setMarkdownMainWindowOptions({
-      backgroundColor,
+    setMarkdownEditorWindowOptions({
       filename,
       isDirty,
       isUntitledDocument,
     }).catch(onError);
-  }, [backgroundColor, filename, isDirty, isUntitledDocument, onError]);
+  }, [filename, isDirty, isUntitledDocument, onError]);
 }
