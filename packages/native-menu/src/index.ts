@@ -1,4 +1,5 @@
 import { NativeEventEmitter, Platform } from "react-native";
+import { useEffect } from "react";
 import NativeMenu from "./NativeMenu";
 
 export type NativeMenuShortcut = {
@@ -41,6 +42,15 @@ export type NativeMenuAction = {
   payload?: Record<string, unknown>;
 };
 
+export type NativeMenuActionHandlers = Record<string, (action: NativeMenuAction) => void>;
+
+export type UseNativeMenuOptions = {
+  handlers?: NativeMenuActionHandlers;
+  menus: NativeMenuConfig[];
+  onAction?: (action: NativeMenuAction) => void;
+  ownerId: string;
+};
+
 export function configureMenus(ownerId: string, menus: NativeMenuConfig[]) {
   if (Platform.OS === "macos") {
     NativeMenu.configureMenus(ownerId, JSON.stringify(menus));
@@ -72,6 +82,28 @@ export function addNativeMenuActionListener(listener: (action: NativeMenuAction)
 
   const emitter = new NativeEventEmitter(NativeMenu as never);
   return emitter.addListener("NativeMenuAction", listener);
+}
+
+export function useNativeMenu({ handlers, menus, onAction, ownerId }: UseNativeMenuOptions) {
+  useEffect(() => {
+    configureMenus(ownerId, menus);
+
+    const subscription = addNativeMenuActionListener((action) => {
+      if (action.ownerId === ownerId) {
+        const handler = handlers?.[action.itemId];
+        if (handler) {
+          handler(action);
+        } else {
+          onAction?.(action);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      clearMenus(ownerId);
+    };
+  }, [handlers, menus, onAction, ownerId]);
 }
 
 export { default as NativeMenu } from "./NativeMenu";

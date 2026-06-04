@@ -1,14 +1,12 @@
 import { useEffect } from "react";
 import { AutoUpdater } from "@legend-desktop/auto-updater";
 import {
-    addNativeMenuActionListener,
-    clearMenus,
-    configureMenus,
     type NativeMenuAction,
     type NativeMenuConfig,
     type NativeMenuItemPatch,
     type NativeMenuShortcut,
     updateMenuItems,
+    useNativeMenu,
 } from "@legend-desktop/native-menu";
 import { localAudioControls, localPlayerState$, queue$ } from "@/components/LocalAudioPlayer";
 import { savePlaylistUI$ } from "@/state/savePlaylistUIState";
@@ -238,52 +236,55 @@ function toggleLibraryWindow() {
 }
 
 function handleMenuAction(action: NativeMenuAction) {
-    if (action.ownerId === MENU_OWNER_ID) {
-        perfCount("AppMenu.onMenuCommand");
-        perfLog("AppMenu.onMenuCommand", action);
+    perfCount("AppMenu.onMenuCommand");
+    perfLog("AppMenu.onMenuCommand", action);
 
-        switch (action.itemId) {
-            case "settings":
-                state$.showSettings.set(true);
-                break;
-            case "jump":
-                perfLog("AppMenu.jumpCommand");
-                break;
-            case "savePlaylist":
-                if (queue$.tracks.get().length > 0) {
-                    savePlaylistUI$.isOpen.set(true);
-                }
-                break;
-            case "toggleLibrary":
-                toggleLibraryWindow();
-                break;
-            case "playbackPrevious":
-                localAudioControls.playPrevious();
-                break;
-            case "playbackPlayPause":
-                void localAudioControls.togglePlayPause();
-                break;
-            case "playbackNext":
-                localAudioControls.playNext();
-                break;
-            case "playbackToggleShuffle":
-                localAudioControls.toggleShuffle();
-                break;
-            case "playbackToggleRepeat":
-                localAudioControls.cycleRepeatMode();
-                break;
-            case "checkForUpdates":
-                void AutoUpdater.checkForUpdates();
-                break;
-            default:
-                break;
-        }
+    switch (action.itemId) {
+        case "settings":
+            state$.showSettings.set(true);
+            break;
+        case "jump":
+            perfLog("AppMenu.jumpCommand");
+            break;
+        case "savePlaylist":
+            if (queue$.tracks.get().length > 0) {
+                savePlaylistUI$.isOpen.set(true);
+            }
+            break;
+        case "toggleLibrary":
+            toggleLibraryWindow();
+            break;
+        case "playbackPrevious":
+            localAudioControls.playPrevious();
+            break;
+        case "playbackPlayPause":
+            void localAudioControls.togglePlayPause();
+            break;
+        case "playbackNext":
+            localAudioControls.playNext();
+            break;
+        case "playbackToggleShuffle":
+            localAudioControls.toggleShuffle();
+            break;
+        case "playbackToggleRepeat":
+            localAudioControls.cycleRepeatMode();
+            break;
+        case "checkForUpdates":
+            void AutoUpdater.checkForUpdates();
+            break;
+        default:
+            break;
     }
 }
 
 export function AppMenuController() {
+    useNativeMenu({
+        menus: MENU_CONFIG,
+        onAction: handleMenuAction,
+        ownerId: MENU_OWNER_ID,
+    });
+
     useEffect(() => {
-        const subscription = addNativeMenuActionListener(handleMenuAction);
         const unsubscribeMenuState = [
             settings$.playback.shuffle.onChange(({ value }) => {
                 updateMusicMenuItems([{ id: "playbackToggleShuffle", checked: !!value }]);
@@ -305,15 +306,12 @@ export function AppMenuController() {
             }),
         ];
 
-        configureMenus(MENU_OWNER_ID, MENU_CONFIG);
         syncMenuState();
 
         return () => {
             for (const unsubscribe of unsubscribeMenuState) {
                 unsubscribe();
             }
-            subscription.remove();
-            clearMenus(MENU_OWNER_ID);
         };
     }, []);
 

@@ -1,11 +1,10 @@
 import type { MarkdownDocumentCommands, MarkdownSaveState } from "@legend-desktop/markdown-document";
 import {
-  addNativeMenuActionListener,
-  clearMenus,
-  configureMenus,
   updateMenuItems,
+  useNativeMenu,
+  type NativeMenuActionHandlers,
 } from "@legend-desktop/native-menu";
-import { useEffect, type RefObject } from "react";
+import { useEffect, useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";
 import { markdownMenuConfig } from "./markdownMenus";
 
@@ -32,43 +31,26 @@ export function useMarkdownMenus({
   onSaveDocumentAs,
   saveState,
 }: MarkdownMenuOptions) {
-  useEffect(() => {
-    configureMenus(markdownMenuOwnerId, markdownMenuConfig);
-
-    const subscription = addNativeMenuActionListener((action) => {
-      if (action.ownerId !== markdownMenuOwnerId) {
-        return;
-      }
-
-      const commandActions: Record<string, (() => void) | undefined> = {
-        bold: () => documentCommandsRef.current?.toggleBold(),
-        italic: () => documentCommandsRef.current?.toggleItalic(),
-        link: () => documentCommandsRef.current?.insertLink(),
-        redo: () => documentCommandsRef.current?.redo(),
-        spoiler: () => documentCommandsRef.current?.toggleSpoiler(),
-        strikethrough: () => documentCommandsRef.current?.toggleStrikethrough(),
-        underline: () => documentCommandsRef.current?.toggleUnderline(),
-        undo: () => documentCommandsRef.current?.undo(),
-      };
-
-      if (action.itemId === "open") {
-        onOpenDocument().catch(onError);
-      } else if (action.itemId === "settings") {
-        onOpenSettings();
-      } else if (action.itemId === "save") {
-        onSaveDocument().catch(onError);
-      } else if (action.itemId === "saveAs") {
-        onSaveDocumentAs().catch(onError);
-      } else {
-        commandActions[action.itemId]?.();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-      clearMenus(markdownMenuOwnerId);
-    };
-  }, [
+  const menuHandlers = useMemo<NativeMenuActionHandlers>(() => ({
+    bold: () => documentCommandsRef.current?.toggleBold(),
+    italic: () => documentCommandsRef.current?.toggleItalic(),
+    link: () => documentCommandsRef.current?.insertLink(),
+    open: () => {
+      onOpenDocument().catch(onError);
+    },
+    redo: () => documentCommandsRef.current?.redo(),
+    save: () => {
+      onSaveDocument().catch(onError);
+    },
+    saveAs: () => {
+      onSaveDocumentAs().catch(onError);
+    },
+    settings: onOpenSettings,
+    spoiler: () => documentCommandsRef.current?.toggleSpoiler(),
+    strikethrough: () => documentCommandsRef.current?.toggleStrikethrough(),
+    underline: () => documentCommandsRef.current?.toggleUnderline(),
+    undo: () => documentCommandsRef.current?.undo(),
+  }), [
     documentCommandsRef,
     onError,
     onOpenDocument,
@@ -76,6 +58,12 @@ export function useMarkdownMenus({
     onSaveDocument,
     onSaveDocumentAs,
   ]);
+
+  useNativeMenu({
+    handlers: menuHandlers,
+    menus: markdownMenuConfig,
+    ownerId: markdownMenuOwnerId,
+  });
 
   useEffect(() => {
     updateMenuItems(markdownMenuOwnerId, [
