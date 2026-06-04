@@ -4,6 +4,7 @@ import {
   setWindowTitle,
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
+import { getLegendTheme } from "@legend-desktop/theme";
 import { getMarkdownFileTitle } from "./appMetadata";
 import {
   editorWindowIdentifier,
@@ -11,7 +12,31 @@ import {
   settingsWindowIdentifier,
   settingsWindowModuleName,
 } from "./appConstants";
+import { getMarkdownThemeSetting } from "./markdownSettings";
 import { SettingsWindow } from "./SettingsWindow";
+
+function createMarkdownEditorWindowStyle() {
+  const theme = getLegendTheme(getMarkdownThemeSetting());
+
+  return {
+    backgroundColor: theme.colors.windowBackground,
+    width: 900,
+    height: 700,
+    minWidth: 520,
+    minHeight: 420,
+    hasToolbar: false,
+    mask: [
+      WindowStyleMask.Titled,
+      WindowStyleMask.Closable,
+      WindowStyleMask.Miniaturizable,
+      WindowStyleMask.Resizable,
+      WindowStyleMask.FullSizeContentView,
+    ],
+    titlebarAppearsTransparent: true,
+    titlebarSeparatorStyle: "none" as const,
+    titleVisibility: "visible" as const,
+  };
+}
 
 const markdownWindowsConfig = {
   [editorWindowModuleName]: {
@@ -19,22 +44,7 @@ const markdownWindowsConfig = {
     identifier: editorWindowIdentifier,
     options: {
       title: "Untitled",
-      windowStyle: {
-        width: 900,
-        height: 700,
-        minWidth: 520,
-        minHeight: 420,
-        hasToolbar: false,
-        mask: [
-          WindowStyleMask.Titled,
-          WindowStyleMask.Closable,
-          WindowStyleMask.Miniaturizable,
-          WindowStyleMask.Resizable,
-        ],
-        titlebarAppearsTransparent: true,
-        titlebarSeparatorStyle: "none",
-        titleVisibility: "visible",
-      },
+      windowStyle: createMarkdownEditorWindowStyle(),
     },
   },
   [settingsWindowModuleName]: {
@@ -59,6 +69,7 @@ export function openMarkdownSettingsWindow() {
 export function openMarkdownEditorWindow(launchArguments?: string[]) {
   return MarkdownWindowsNavigator.open(editorWindowModuleName as MarkdownWindow, {
     initialProperties: launchArguments ? { launchArguments } : undefined,
+    windowStyle: createMarkdownEditorWindowStyle(),
   });
 }
 
