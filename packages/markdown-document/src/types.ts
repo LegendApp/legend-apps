@@ -137,6 +137,11 @@ export type MarkdownBlockLayoutStyle = {
 };
 
 export type MarkdownDocumentLayout = {
+  content?: {
+    maxWidth?: number;
+    horizontalPadding?: number;
+    verticalPadding?: number;
+  };
   blockSpacing: {
     paragraph: MarkdownBlockLayoutStyle;
     heading: Record<1 | 2 | 3 | 4 | 5 | 6, MarkdownBlockLayoutStyle>;

@@ -1,6 +1,6 @@
 import { MarkdownDocument, type MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
 import { getLegendTheme } from "@legend-desktop/theme";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
@@ -18,9 +18,14 @@ import {
 } from "./useMarkdownWindows";
 import {
   applyMarkdownThemeSetting,
+  getMarkdownAppearanceSettings,
   getMarkdownFormattingToolbarModeSetting,
   subscribeToMarkdownSettings,
 } from "./markdownSettings";
+import {
+  getMarkdownLayoutForAppearance,
+  getMarkdownStyleForAppearance,
+} from "./markdownAppearance";
 import { registerMarkdownWindows } from "./markdownWindows";
 
 registerMarkdownWindows();
@@ -38,6 +43,19 @@ export function App({ launchArguments }: MarkdownAppProps) {
     subscribeToMarkdownSettings,
     getMarkdownFormattingToolbarModeSetting,
     getMarkdownFormattingToolbarModeSetting,
+  );
+  const appearanceSettings = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownAppearanceSettings,
+    getMarkdownAppearanceSettings,
+  );
+  const markdownStyle = useMemo(
+    () => getMarkdownStyleForAppearance(theme, appearanceSettings),
+    [appearanceSettings, theme],
+  );
+  const markdownLayout = useMemo(
+    () => getMarkdownLayoutForAppearance(theme, appearanceSettings),
+    [appearanceSettings, theme],
   );
   const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
   const openSettingsWindow = useMarkdownSettingsWindow({
@@ -114,8 +132,8 @@ export function App({ launchArguments }: MarkdownAppProps) {
           autoFocusFirstBlock={session.isUntitledDocument}
           commandsRef={session.documentCommandsRef}
           filename={session.filename}
-          markdownLayout={theme.markdownLayout}
-          markdownStyle={theme.markdownStyle}
+          markdownLayout={markdownLayout}
+          markdownStyle={markdownStyle}
           onDirtyChange={session.setIsDirty}
           onError={session.handleError}
           onLoaded={session.clearDocumentError}

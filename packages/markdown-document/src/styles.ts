@@ -2,6 +2,11 @@ import type { MarkdownStyle } from "react-native-enriched-markdown";
 import type { MarkdownDocumentLayout } from "./types";
 
 export const defaultMarkdownLayout: MarkdownDocumentLayout = {
+  content: {
+    horizontalPadding: 40,
+    maxWidth: 920,
+    verticalPadding: 48,
+  },
   blockSpacing: {
     blockquote: {
       marginBottom: 24,

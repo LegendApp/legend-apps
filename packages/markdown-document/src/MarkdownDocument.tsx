@@ -120,6 +120,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onErrorRef = useLatestRef(onError);
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
+    const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
+    const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
+    const resolvedContentMaxWidth = resolvedMarkdownLayout.content?.maxWidth ?? contentMaxWidth;
+    const resolvedContentHorizontalPadding = resolvedMarkdownLayout.content?.horizontalPadding ?? contentHorizontalPadding;
+    const resolvedContentVerticalPadding = resolvedMarkdownLayout.content?.verticalPadding ?? 48;
 
     const reportAsyncError = useCallback(
       (error: unknown) => {
@@ -455,9 +460,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
       if (event) {
         const containerWidth = event.nativeEvent.layout.width;
-        const constrainedContentWidth = Math.min(containerWidth, contentMaxWidth);
-        const nextContentWidth = Math.max(1, constrainedContentWidth - contentHorizontalPadding * 2);
-        setContentOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2) + contentHorizontalPadding);
+        const constrainedContentWidth = Math.min(containerWidth, resolvedContentMaxWidth);
+        const nextContentWidth = Math.max(1, constrainedContentWidth - resolvedContentHorizontalPadding * 2);
+        setContentOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2) + resolvedContentHorizontalPadding);
         setInactiveOverlayWidth(nextContentWidth);
       }
       requestAnimationFrame(() => {
@@ -465,7 +470,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           setContainerWindowY(y);
         });
       });
-    }, []);
+    }, [resolvedContentHorizontalPadding, resolvedContentMaxWidth]);
 
     const handleSelectionDragOutside = useCallback(
       (blockId: string, event: SelectionDragOutsideEvent) => {
@@ -1197,8 +1202,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useImperativeHandle(ref, () => commands, [commands]);
     useImperativeHandle(commandsRef, () => commands, [commands]);
 
-    const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
-    const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
     const blockSelectionRects = useMemo(() => {
       return getBlockSelectionRects({
         blockIds,
@@ -1259,8 +1262,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [activeBlockId],
     );
     const contentStyle = useMemo(
-      () => [styles.contentContainer, contentContainerStyle],
-      [contentContainerStyle],
+      () => [
+        styles.contentContainer,
+        {
+          maxWidth: resolvedContentMaxWidth,
+          paddingHorizontal: resolvedContentHorizontalPadding,
+          paddingVertical: resolvedContentVerticalPadding,
+        },
+        contentContainerStyle,
+      ],
+      [contentContainerStyle, resolvedContentHorizontalPadding, resolvedContentMaxWidth, resolvedContentVerticalPadding],
     );
     const blockSelectionOverlayStyle = useMemo(
       () => [styles.blockSelectionOverlay, { backgroundColor: resolveSelectionColor(theme?.selectionColor) }],
