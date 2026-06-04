@@ -15,12 +15,12 @@ export const markdownMenuConfig: NativeMenuConfig[] = [
       },
       {
         id: "open",
-        targetTitle: "Open...",
+        targetTitles: ["Open", "Open...", "Open…"],
         enabled: true,
       },
       {
         id: "save",
-        targetTitle: "Save...",
+        targetTitles: ["Save", "Save...", "Save…"],
         enabled: false,
       },
       {
