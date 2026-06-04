@@ -82,7 +82,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Hydrate all remaining blocks after first paint / `LegendList` loaded signal.
 - [x] Hydrate in chunks of 512.
 - [x] Cancel hydration on document replacement/unmount.
-- [ ] Keep DEV-only timing/block/hydration diagnostics available.
+- [x] Keep DEV-only timing/block/hydration diagnostics available.
 - [x] Do not show benchmark-style diagnostics in normal app UI.
 - [x] Validate `bun run typecheck`.
 - [ ] Validate 10k-20k block markdown file renders and scrolls without hydration gaps.
@@ -163,17 +163,17 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Dirty becomes false when current revision equals saved revision.
 - [x] Preserve undo history across saves.
 - [x] Implement JS undo/redo stack.
-- [ ] Group continuous typing in the same block.
-- [ ] Split typing groups after 1000ms pause.
-- [ ] Split groups on blur, selection jump, formatting command, or structural command.
+- [x] Group continuous typing in the same block.
+- [x] Split typing groups after 1000ms pause.
+- [x] Split groups on blur, selection jump, formatting command, or structural command.
 - [x] Implement Undo command.
 - [x] Implement Redo command.
 - [x] Wire Cmd+O, Cmd+S, Cmd+Z, Shift+Cmd+Z, Cmd+B, Cmd+I, Cmd+K.
 - [x] Disable Save when clean or no document is open.
-- [ ] Disable Undo/Redo when unavailable.
+- [x] Disable Undo/Redo when unavailable.
 - [x] Route formatting commands to active enriched editor when available.
-- [ ] Prompt Save / Discard / Cancel when opening another file while dirty.
-- [ ] If prompt-save fails, show error and stay on current document.
+- [x] Prompt Save / Discard / Cancel when opening another file while dirty.
+- [x] If prompt-save fails, show error and stay on current document.
 - [ ] Prompt Save / Discard / Cancel when closing a dirty document window.
 - [ ] If close-save fails, show error and keep window open.
 - [x] Validate `bun run typecheck`.
@@ -197,7 +197,6 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Deferred
 
-- [ ] Save As.
 - [ ] Multi-window document behavior.
 - [ ] External file watching.
 - [ ] External merge/conflict handling.
