@@ -1,10 +1,9 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
+import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import {
-  openWindow,
   setMainWindowOptions,
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
-import { AppRegistry } from "react-native";
 import { getMarkdownFileTitle } from "./appMetadata";
 import {
   settingsWindowIdentifier,
@@ -12,22 +11,24 @@ import {
 } from "./appConstants";
 import { SettingsWindow } from "./SettingsWindow";
 
-let didRegisterWindows = false;
+const markdownWindowsConfig = {
+  [settingsWindowModuleName]: {
+    component: SettingsWindow,
+    identifier: settingsWindowIdentifier,
+    options: createSettingsWindowOptions(),
+  },
+} satisfies WindowsConfig;
+
+const MarkdownWindowsNavigator = createWindowsNavigator(markdownWindowsConfig);
+
+type MarkdownWindow = keyof typeof markdownWindowsConfig;
 
 export function registerMarkdownWindows() {
-  if (didRegisterWindows) {
-    return;
-  }
-
-  AppRegistry.registerComponent(settingsWindowModuleName, () => SettingsWindow);
-  didRegisterWindows = true;
+  // Importing this module registers the windows above.
 }
 
 export function openMarkdownSettingsWindow() {
-  return openWindow(createSettingsWindowOptions({
-    identifier: settingsWindowIdentifier,
-    moduleName: settingsWindowModuleName,
-  }));
+  return MarkdownWindowsNavigator.open(settingsWindowModuleName as MarkdownWindow);
 }
 
 export function setMarkdownMainWindowOptions({

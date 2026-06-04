@@ -21,7 +21,7 @@ import { perfCount, perfMark } from "@/utils/perfLogger";
 import { runAfterInteractionsWithLabel } from "@/utils/runAfterInteractions";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { WindowsNavigator } from "@/windows";
-import { WindowProvider } from "@/windows/WindowProvider";
+import { WindowProvider } from "@legend-desktop/windows";
 
 LogBox.ignoreLogs(["Open debugger", "unknown error"]);
 
