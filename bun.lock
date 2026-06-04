@@ -64,6 +64,7 @@
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/sidebar": "0.0.0",
         "@legend-desktop/text-input-search": "0.0.0",
+        "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
@@ -336,6 +337,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/markdown-document": "workspace:*",
+        "@legendapp/state": "^3.0.0-beta.42",
         "react-native-enriched-markdown": "0.5.0",
       },
       "peerDependencies": {

@@ -2,6 +2,12 @@ import { defaultMarkdownLayout } from "@legend-desktop/markdown-document";
 import { generatedThemeFiles } from "./generatedThemes";
 import type { LegendTheme, LegendThemeFile, LegendThemeName } from "./types";
 
+export {
+  createAppTheme,
+  type AppThemeContextValue,
+  type CreateAppThemeOptions,
+} from "./appTheme";
+
 export type {
   LegendTheme,
   LegendThemeColors,
