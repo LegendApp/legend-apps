@@ -1,4 +1,8 @@
-import type { MarkdownDocumentCommands, MarkdownSaveState } from "@legend-desktop/markdown-document";
+import type {
+  MarkdownDocumentCommands,
+  MarkdownDocumentCommandState,
+  MarkdownSaveState,
+} from "@legend-desktop/markdown-document";
 import {
   updateMenuItems,
   useNativeMenu,
@@ -15,6 +19,7 @@ import {
 
 type MarkdownMenuOptions = {
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
+  documentCommandState: MarkdownDocumentCommandState;
   hasDocument: boolean;
   isDirty: boolean;
   onError: (error: unknown) => void;
@@ -28,6 +33,7 @@ type MarkdownMenuOptions = {
 
 export function useMarkdownMenus({
   documentCommandsRef,
+  documentCommandState,
   hasDocument,
   isDirty,
   onError,
@@ -84,8 +90,8 @@ export function useMarkdownMenus({
       { id: "save", enabled: hasDocument && isDirty && saveState !== "saving" },
       { id: "saveAs", enabled: hasDocument && saveState !== "saving" },
       { id: "settings", enabled: true },
-      { id: "undo", enabled: hasDocument },
-      { id: "redo", enabled: hasDocument },
+      { id: "undo", enabled: hasDocument && documentCommandState.canUndo },
+      { id: "redo", enabled: hasDocument && documentCommandState.canRedo },
       { id: "bold", enabled: hasDocument },
       { id: "italic", enabled: hasDocument },
       { id: "underline", enabled: hasDocument },
@@ -93,5 +99,5 @@ export function useMarkdownMenus({
       { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
     ]);
-  }, [hasDocument, isDirty, saveState]);
+  }, [documentCommandState, hasDocument, isDirty, saveState]);
 }

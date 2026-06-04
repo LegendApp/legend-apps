@@ -4,6 +4,7 @@ export { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 export type {
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
+  MarkdownDocumentCommandState,
   MarkdownDocumentCommands,
   MarkdownDocumentLayout,
   MarkdownDocumentLoadedInfo,

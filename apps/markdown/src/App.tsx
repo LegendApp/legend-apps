@@ -1,4 +1,8 @@
-import { MarkdownDocument, type MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
+import {
+  MarkdownDocument,
+  type MarkdownDocumentCommandState,
+  type MarkdownSelectionAnchor,
+} from "@legend-desktop/markdown-document";
 import { getLegendTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -58,6 +62,10 @@ export function App({ launchArguments }: MarkdownAppProps) {
     [appearanceSettings, theme],
   );
   const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
+  const [documentCommandState, setDocumentCommandState] = useState<MarkdownDocumentCommandState>({
+    canRedo: false,
+    canUndo: false,
+  });
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: theme.colors.windowBackground,
     onError: session.handleError,
@@ -99,6 +107,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
 
   useMarkdownMenus({
     documentCommandsRef: session.documentCommandsRef,
+    documentCommandState,
     hasDocument: session.hasDocument,
     isDirty: session.isDirty,
     onError: session.handleError,
@@ -136,6 +145,7 @@ export function App({ launchArguments }: MarkdownAppProps) {
           filename={session.filename}
           markdownLayout={markdownLayout}
           markdownStyle={markdownStyle}
+          onCommandStateChange={setDocumentCommandState}
           onDirtyChange={session.setIsDirty}
           onError={session.handleError}
           onLoadError={session.handleDocumentLoadError}

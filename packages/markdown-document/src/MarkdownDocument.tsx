@@ -42,6 +42,7 @@ import {
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 import type {
   MarkdownBlockSnapshot,
+  MarkdownDocumentCommandState,
   MarkdownDocumentCommands,
   MarkdownDocumentProps,
   MarkdownSelectionAnchor,
@@ -65,6 +66,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       markdownLayout,
       markdownStyle,
       onDirtyChange,
+      onCommandStateChange,
       onError,
       onLoadError,
       onLoaded,
@@ -102,6 +104,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const autosavePausedRef = useRef(false);
     const undoStackRef = useRef<HistoryEntry[]>([]);
     const redoStackRef = useRef<HistoryEntry[]>([]);
+    const commandStateRef = useRef<MarkdownDocumentCommandState>({ canRedo: false, canUndo: false });
     const suppressHistoryRef = useRef(false);
     const typingHistoryGroupRef = useRef<{
       entry: UpdateBlockHistoryEntry;
@@ -125,6 +128,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
+    const onCommandStateChangeRef = useLatestRef(onCommandStateChange);
     const onErrorRef = useLatestRef(onError);
     const onLoadErrorRef = useLatestRef(onLoadError);
     const onLoadedRef = useLatestRef(onLoaded);
@@ -194,6 +198,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setBlockSelection(nextBlockSelection);
     }, []);
 
+    const publishCommandState = useCallback(() => {
+      const nextState: MarkdownDocumentCommandState = {
+        canRedo: redoStackRef.current.length > 0,
+        canUndo: undoStackRef.current.length > 0,
+      };
+      const currentState = commandStateRef.current;
+      if (nextState.canRedo !== currentState.canRedo || nextState.canUndo !== currentState.canUndo) {
+        commandStateRef.current = nextState;
+        onCommandStateChangeRef.current?.(nextState);
+      }
+    }, [onCommandStateChangeRef]);
+
     const clearTypingHistoryGroup = useCallback(() => {
       typingHistoryGroupRef.current = undefined;
     }, []);
@@ -216,6 +232,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           currentGroup.entry.afterMarkdown = entry.afterMarkdown;
           currentGroup.updatedAt = now;
           redoStackRef.current = [];
+          publishCommandState();
           return;
         }
 
@@ -224,8 +241,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         typingHistoryGroupRef.current = options.groupTyping
           ? { entry, updatedAt: now }
           : undefined;
+        publishCommandState();
       },
-      [],
+      [publishCommandState],
     );
 
     const clearTextSelectionAnchor = useCallback(() => {
@@ -662,6 +680,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               inverseMarkdown: markdown,
             });
             redoStackRef.current = [];
+            publishCommandState();
           }
           applyTransactionResult(result);
           blockSelectionGestureRef.current = null;
@@ -694,6 +713,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         documentState,
         markDirty,
         onErrorRef,
+        publishCommandState,
       ],
     );
 
@@ -884,6 +904,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       autosavePausedRef.current = false;
       undoStackRef.current = [];
       redoStackRef.current = [];
+      publishCommandState();
       suppressHistoryRef.current = false;
       clearTypingHistoryGroup();
       blockSelectionGestureRef.current = null;
@@ -966,6 +987,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onErrorRef,
       onLoadErrorRef,
       onLoadedRef,
+      publishCommandState,
       reportAsyncError,
       setNextSaveState,
       clearTypingHistoryGroup,
@@ -1170,10 +1192,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         } else {
           undoStackRef.current.push(entry);
         }
+        publishCommandState();
       }
 
       runUndo().catch(reportAsyncError);
-    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
+    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, reportAsyncError]);
 
     const redo = useCallback(() => {
       async function runRedo() {
@@ -1190,10 +1213,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         } else {
           redoStackRef.current.push(entry);
         }
+        publishCommandState();
       }
 
       runRedo().catch(reportAsyncError);
-    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
+    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, reportAsyncError]);
 
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({

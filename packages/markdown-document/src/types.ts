@@ -95,6 +95,11 @@ export type MarkdownDocumentCommands = {
   insertLink(): void;
 };
 
+export type MarkdownDocumentCommandState = {
+  canRedo: boolean;
+  canUndo: boolean;
+};
+
 export type MarkdownSelectionAnchor = {
   kind: "textSelection" | "blockSelection";
   blockId?: string;
@@ -165,6 +170,7 @@ export type MarkdownDocumentProps = {
   markdownLayout?: MarkdownDocumentLayout;
   theme?: MarkdownDocumentTheme;
   commandsRef?: Ref<MarkdownDocumentCommands>;
+  onCommandStateChange?: (state: MarkdownDocumentCommandState) => void;
   onLoadError?: (error: Error) => void;
   onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;
   onDirtyChange?: (isDirty: boolean) => void;
