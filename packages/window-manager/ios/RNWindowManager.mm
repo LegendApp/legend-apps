@@ -121,6 +121,13 @@ static NSColor *LegendColorFromHexString(NSString *value)
 
 static void LegendApplyBackgroundColorToView(NSView *view, NSColor *backgroundColor)
 {
+  if (!view || !backgroundColor) {
+    return;
+  }
+
+  if ([view respondsToSelector:@selector(setBackgroundColor:)]) {
+    [(id)view setBackgroundColor:backgroundColor];
+  }
   view.wantsLayer = YES;
   view.layer.backgroundColor = backgroundColor.CGColor;
 }
@@ -197,12 +204,18 @@ static void LegendEnsureRootViewContainer(NSWindow *window, RCTUIView *rootView)
 
   NSView *containerView = [[NSView alloc] initWithFrame:rootView.frame];
   containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  containerView.wantsLayer = YES;
-  containerView.layer.backgroundColor = window.backgroundColor.CGColor;
+  LegendApplyBackgroundColorToView(containerView, window.backgroundColor);
 
   window.contentView = containerView;
   [containerView addSubview:rootView];
   objc_setAssociatedObject(window, &LegendManagedRootViewKey, rootView, OBJC_ASSOCIATION_ASSIGN);
+}
+
+static void LegendPrepareWindowForDisplay(NSWindow *window, NSString *backgroundColor)
+{
+  LegendApplyWindowBackgroundColor(window, backgroundColor);
+  [window.contentView displayIfNeeded];
+  [window displayIfNeeded];
 }
 
 static void LegendApplyContentLayoutMode(NSWindow *window, NSNumber *maskNumber, BOOL usesTitlebarBackground)
@@ -671,6 +684,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
         LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
       }
       LegendSizeRootViewToWindow(existingRootView, existingWindow);
+      LegendPrepareWindowForDisplay(existingWindow, backgroundColor);
       self.moduleNames[identifier] = moduleName ?: @"";
       [existingWindow makeKeyAndOrderFront:nil];
       resolve([self successJson]);
@@ -767,6 +781,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       rootView.layer = [CALayer layer];
     }
     rootView.layer.masksToBounds = NO;
+    LegendPrepareWindowForDisplay(window, backgroundColor);
     window.delegate = self;
 
     self.windows[identifier] = window;
