@@ -8,6 +8,7 @@ import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { useCallback, useRef, useState } from "react";
 import { markdownFileTypes } from "./appConstants";
 import { addRecentMarkdownFile } from "./appMetadata";
+import { confirmDirtyDocumentTransition } from "./confirmDirtyDocumentTransition";
 import { getDirectory, getFilename, isMarkdownPath } from "./markdownFiles";
 import { setLastMarkdownDocumentPath } from "./markdownSettings";
 import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
@@ -111,13 +112,26 @@ export function useMarkdownDocumentSession() {
     }
   }, [handleError, isUntitledDocument, saveCurrentDocumentAs]);
 
-  const flushCurrentDocumentBeforeTransition = useCallback(async () => {
+  const flushCurrentDocumentBeforeTransition = useCallback(async (reason: "open" | "quit" = "open") => {
     if (!hasDocument || !isDirty) {
       return true;
     }
 
-    return saveCurrentDocument();
-  }, [hasDocument, isDirty, saveCurrentDocument]);
+    const action = await confirmDirtyDocumentTransition({
+      filename: filename ? getFilename(filename) : untitledFilename,
+      reason,
+    });
+
+    if (action === "discard") {
+      return true;
+    }
+
+    if (action === "save") {
+      return saveCurrentDocument();
+    }
+
+    return false;
+  }, [filename, hasDocument, isDirty, saveCurrentDocument]);
 
   const openMarkdownDialog = useCallback(async () => {
     if (openDialogInFlight.current) {
@@ -127,16 +141,14 @@ export function useMarkdownDocumentSession() {
     openDialogInFlight.current = true;
 
     try {
-      const didFlush = await flushCurrentDocumentBeforeTransition();
-      if (!didFlush) {
-        return;
-      }
-
       const paths = await openFileDialog();
       const path = paths?.find(isMarkdownPath) ?? null;
 
       if (path) {
-        openSelectedFile(path);
+        const didFlush = await flushCurrentDocumentBeforeTransition("open");
+        if (didFlush) {
+          openSelectedFile(path);
+        }
       }
     } catch (error) {
       handleError(error);

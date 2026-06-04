@@ -9,7 +9,7 @@ import {
 } from "./markdownSettings";
 
 type DocumentEventsOptions = {
-  flushCurrentDocumentBeforeTransition: () => Promise<boolean>;
+  flushCurrentDocumentBeforeTransition: (reason?: "open" | "quit") => Promise<boolean>;
   handleError: (error: unknown) => void;
   launchArguments?: string[];
   openSelectedFile: (path: string) => void;
@@ -64,7 +64,7 @@ export function useRecentMarkdownDocumentOpener({
         return;
       }
 
-      const didFlush = await flushCurrentDocumentBeforeTransition();
+      const didFlush = await flushCurrentDocumentBeforeTransition("open");
       if (didFlush) {
         openSelectedFile(path);
       }
@@ -87,7 +87,7 @@ export function useMarkdownAppExit({
   useEffect(() => {
     async function completeRequestedExit() {
       try {
-        const didFlush = await flushCurrentDocumentBeforeTransition();
+        const didFlush = await flushCurrentDocumentBeforeTransition("quit");
         completeAppExit(didFlush);
       } catch (error) {
         handleError(error);
