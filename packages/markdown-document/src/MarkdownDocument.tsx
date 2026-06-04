@@ -22,6 +22,7 @@ import type {
   HistoryEntry,
   OverlayFrame,
   SelectionDragOutsideEvent,
+  UpdateBlockHistoryEntry,
 } from "./internalTypes";
 import {
   resolveSelectionColor,
@@ -49,6 +50,8 @@ import type {
   MarkdownTransactionResult,
 } from "./types";
 import { useLatestRef } from "./useLatestRef";
+
+const typingHistoryGroupTimeoutMs = 1000;
 
 export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDocumentProps>(
   (
@@ -99,6 +102,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const undoStackRef = useRef<HistoryEntry[]>([]);
     const redoStackRef = useRef<HistoryEntry[]>([]);
     const suppressHistoryRef = useRef(false);
+    const typingHistoryGroupRef = useRef<{
+      entry: UpdateBlockHistoryEntry;
+      updatedAt: number;
+    } | undefined>(undefined);
     const selectionAnchorRequestRef = useRef(0);
     const [blockIds, setBlockIds] = useState<string[]>([]);
     const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
@@ -184,6 +191,40 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockSelectionRef.current = nextBlockSelection;
       setBlockSelection(nextBlockSelection);
     }, []);
+
+    const clearTypingHistoryGroup = useCallback(() => {
+      typingHistoryGroupRef.current = undefined;
+    }, []);
+
+    const pushUpdateBlockHistoryEntry = useCallback(
+      (entry: UpdateBlockHistoryEntry, options: { groupTyping?: boolean } = {}) => {
+        if (suppressHistoryRef.current) {
+          return;
+        }
+
+        const now = Date.now();
+        const currentGroup = typingHistoryGroupRef.current;
+        if (
+          options.groupTyping &&
+          currentGroup &&
+          currentGroup.entry.blockId === entry.blockId &&
+          currentGroup.entry.afterMarkdown === entry.beforeMarkdown &&
+          now - currentGroup.updatedAt <= typingHistoryGroupTimeoutMs
+        ) {
+          currentGroup.entry.afterMarkdown = entry.afterMarkdown;
+          currentGroup.updatedAt = now;
+          redoStackRef.current = [];
+          return;
+        }
+
+        undoStackRef.current.push(entry);
+        redoStackRef.current = [];
+        typingHistoryGroupRef.current = options.groupTyping
+          ? { entry, updatedAt: now }
+          : undefined;
+      },
+      [],
+    );
 
     const clearTextSelectionAnchor = useCallback(() => {
       selectionAnchorRequestRef.current += 1;
@@ -364,15 +405,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockId: activeBlockIdValue,
           markdown,
         });
-        if (!suppressHistoryRef.current) {
-          undoStackRef.current.push({
+        pushUpdateBlockHistoryEntry(
+          {
             type: "updateBlockMarkdown",
             blockId: activeBlockIdValue,
             beforeMarkdown,
             afterMarkdown: markdown,
-          });
-          redoStackRef.current = [];
-        }
+          },
+          { groupTyping: true },
+        );
         if (activeBlockIdRef.current === activeBlockIdValue) {
           committedMarkdownRef.current = markdown;
         }
@@ -390,7 +431,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const nextError = error instanceof Error ? error : new Error(String(error));
         onErrorRef.current?.(nextError);
       }
-    }, [adapter, applyTransactionResult, clearEditTimer, documentState, onErrorRef, updateRenderedBlockMarkdown]);
+    }, [adapter, applyTransactionResult, clearEditTimer, documentState, onErrorRef, pushUpdateBlockHistoryEntry, updateRenderedBlockMarkdown]);
 
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
@@ -522,6 +563,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
 
         try {
+          clearTypingHistoryGroup();
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "splitBlock",
             blockId: block.id,
@@ -543,7 +585,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onErrorRef.current?.(nextError);
         }
       },
-      [adapter, applyTransactionResult, clearEditTimer, documentState, markDirty, onErrorRef],
+      [adapter, applyTransactionResult, clearEditTimer, clearTypingHistoryGroup, documentState, markDirty, onErrorRef],
     );
 
     const handleChangeMarkdown = useCallback(
@@ -582,8 +624,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         setActiveBlockId(null);
         setActiveSelection(0);
         clearTextSelectionAnchor();
+        clearTypingHistoryGroup();
       }).catch(reportAsyncError);
-    }, [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError]);
+    }, [clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 
     const replaceBlockSelection = useCallback(
@@ -599,6 +642,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         clearEditTimer();
         try {
+          clearTypingHistoryGroup();
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "replaceBlockRange",
             startBlockId: selectedBlocks.startBlockId,
@@ -644,6 +688,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelection,
         blocksById,
         clearEditTimer,
+        clearTypingHistoryGroup,
         documentState,
         markDirty,
         onErrorRef,
@@ -670,15 +715,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             markdown,
           });
 
-          if (!suppressHistoryRef.current) {
-            undoStackRef.current.push({
-              type: "updateBlockMarkdown",
-              blockId: activeBlockIdValue,
-              beforeMarkdown,
-              afterMarkdown: markdown,
-            });
-            redoStackRef.current = [];
-          }
+          pushUpdateBlockHistoryEntry({
+            type: "updateBlockMarkdown",
+            blockId: activeBlockIdValue,
+            beforeMarkdown,
+            afterMarkdown: markdown,
+          });
 
           applyTransactionResult(result);
           const nextActiveBlock = result.changedBlocks[0] ?? blocksById.get(activeBlockIdValue);
@@ -708,6 +750,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         documentState,
         markDirty,
         onErrorRef,
+        pushUpdateBlockHistoryEntry,
         updateRenderedBlockMarkdown,
       ],
     );
@@ -840,6 +883,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       undoStackRef.current = [];
       redoStackRef.current = [];
       suppressHistoryRef.current = false;
+      clearTypingHistoryGroup();
       blockSelectionGestureRef.current = null;
       activeInputSelectionRef.current = { start: 0, end: 0 };
       selectionAnchorRequestRef.current += 1;
@@ -920,6 +964,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onLoadedRef,
       reportAsyncError,
       setNextSaveState,
+      clearTypingHistoryGroup,
     ]);
 
     const loadedDocumentId = documentState.status === "loaded" ? documentState.snapshot.documentId : undefined;
@@ -1108,6 +1153,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const undo = useCallback(() => {
       async function runUndo() {
+        clearTypingHistoryGroup();
         await commitActiveBlock({ updateReactState: true });
         const entry = undoStackRef.current.pop();
         if (!entry) {
@@ -1123,10 +1169,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       runUndo().catch(reportAsyncError);
-    }, [applyHistoryEntry, commitActiveBlock, reportAsyncError]);
+    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
 
     const redo = useCallback(() => {
       async function runRedo() {
+        clearTypingHistoryGroup();
         await commitActiveBlock({ updateReactState: true });
         const entry = redoStackRef.current.pop();
         if (!entry) {
@@ -1142,7 +1189,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       runRedo().catch(reportAsyncError);
-    }, [applyHistoryEntry, commitActiveBlock, reportAsyncError]);
+    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
 
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
