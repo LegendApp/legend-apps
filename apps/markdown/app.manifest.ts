@@ -3,7 +3,7 @@ import type { AppManifest } from "../../scripts/lib/types";
 const manifest = {
   id: "markdown",
   displayName: "Legend Markdown",
-  platforms: ["macos", "ios", "android"],
+  platforms: ["macos"],
   bundleIds: {
     ios: "app.legend.markdown",
     macos: "app.legend.markdown.macos",
