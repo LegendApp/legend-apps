@@ -29,6 +29,8 @@ export type MarkdownAppearanceSettings = {
   lineHeight: MarkdownLineHeightSetting;
 };
 
+const fontSizeOrder: MarkdownFontSizeSetting[] = ["small", "default", "large", "xlarge"];
+
 const settingsSubscription = createSettingsSubscription();
 const notifyMarkdownSettingsChanged = settingsSubscription.notify;
 
@@ -185,6 +187,22 @@ export function setMarkdownFontFamilySetting(fontFamily: MarkdownFontFamilySetti
 
 export function setMarkdownFontSizeSetting(fontSize: MarkdownFontSizeSetting) {
   fontSizeSetting.set(fontSize);
+}
+
+export function increaseMarkdownFontSizeSetting() {
+  const currentIndex = fontSizeOrder.indexOf(getMarkdownFontSizeSetting());
+  const nextIndex = Math.min(fontSizeOrder.length - 1, currentIndex + 1);
+  setMarkdownFontSizeSetting(fontSizeOrder[nextIndex] ?? "default");
+}
+
+export function decreaseMarkdownFontSizeSetting() {
+  const currentIndex = fontSizeOrder.indexOf(getMarkdownFontSizeSetting());
+  const nextIndex = Math.max(0, currentIndex - 1);
+  setMarkdownFontSizeSetting(fontSizeOrder[nextIndex] ?? "default");
+}
+
+export function resetMarkdownFontSizeSetting() {
+  setMarkdownFontSizeSetting("default");
 }
 
 export function setMarkdownLineHeightSetting(lineHeight: MarkdownLineHeightSetting) {

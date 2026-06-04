@@ -7,6 +7,11 @@ import {
 import { useEffect, useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";
 import { markdownMenuConfig } from "./markdownMenus";
+import {
+  decreaseMarkdownFontSizeSetting,
+  increaseMarkdownFontSizeSetting,
+  resetMarkdownFontSizeSetting,
+} from "./markdownSettings";
 
 type MarkdownMenuOptions = {
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
@@ -33,7 +38,9 @@ export function useMarkdownMenus({
 }: MarkdownMenuOptions) {
   const menuHandlers = useMemo<NativeMenuActionHandlers>(() => ({
     bold: () => documentCommandsRef.current?.toggleBold(),
+    decreaseFontSize: decreaseMarkdownFontSizeSetting,
     italic: () => documentCommandsRef.current?.toggleItalic(),
+    increaseFontSize: increaseMarkdownFontSizeSetting,
     link: () => documentCommandsRef.current?.insertLink(),
     open: () => {
       onOpenDocument().catch(onError);
@@ -46,6 +53,7 @@ export function useMarkdownMenus({
       onSaveDocumentAs().catch(onError);
     },
     settings: onOpenSettings,
+    resetFontSize: resetMarkdownFontSizeSetting,
     spoiler: () => documentCommandsRef.current?.toggleSpoiler(),
     strikethrough: () => documentCommandsRef.current?.toggleStrikethrough(),
     underline: () => documentCommandsRef.current?.toggleUnderline(),

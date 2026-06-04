@@ -90,6 +90,25 @@ export const markdownMenuConfig: NativeMenuConfig[] = [
         enabled: false,
         shortcut: { key: "k", modifiers: commandModifier },
       },
+      { separator: true, id: "separator-markdown-appearance" },
+      {
+        id: "increaseFontSize",
+        targetPath: ["Font", "Bigger"],
+        enabled: true,
+        shortcut: { key: "=", modifiers: commandModifier },
+      },
+      {
+        id: "decreaseFontSize",
+        targetPath: ["Font", "Smaller"],
+        enabled: true,
+        shortcut: { key: "-", modifiers: commandModifier },
+      },
+      {
+        id: "resetFontSize",
+        title: "Reset Font Size",
+        enabled: true,
+        shortcut: { key: "0", modifiers: commandModifier },
+      },
     ],
   },
 ];
