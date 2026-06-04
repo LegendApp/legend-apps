@@ -41,6 +41,17 @@ export function editableTextStyleForBlock(
   return [markdownDocumentStyles.editorInput, markdownTextStyle as TextStyle | undefined];
 }
 
+export function emptyParagraphPlaceholderStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
+  const paragraphStyle = markdownStyle.paragraph as TextStyle | undefined;
+  const lineHeight = typeof paragraphStyle?.lineHeight === "number"
+    ? paragraphStyle.lineHeight
+    : typeof paragraphStyle?.fontSize === "number"
+      ? Math.ceil(paragraphStyle.fontSize * 1.5)
+      : 25;
+
+  return { minHeight: lineHeight };
+}
+
 export function getHeadingLevel(block: MarkdownBlockSnapshot): HeadingLevel | undefined {
   return block.type === "heading" && block.headingLevel >= 1 && block.headingLevel <= 6
     ? block.headingLevel as HeadingLevel

@@ -49,6 +49,9 @@ export const markdownDocumentStyles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
+  emptyParagraphPlaceholder: {
+    width: "100%",
+  },
   list: {
     flex: 1,
   },

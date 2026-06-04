@@ -136,7 +136,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Flush pending edit on Save.
 - [x] Blur returns block to rendered mode.
 - [x] Escape commits and blurs.
-- [ ] Keep empty active block as empty paragraph.
+- [x] Keep empty active block as empty paragraph.
 - [x] Implement Enter split:
   - [x] left/original block keeps original ID
   - [x] new/right block gets new ID

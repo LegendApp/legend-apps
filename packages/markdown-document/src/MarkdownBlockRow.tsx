@@ -19,6 +19,7 @@ import type {
 import {
   blockRowSpacingStyle,
   editableTextStyleForBlock,
+  emptyParagraphPlaceholderStyle,
   estimateMarkdownEditorHeight,
   estimateMarkdownSelection,
   inputStyleFromMarkdownStyle,
@@ -254,7 +255,10 @@ export function MarkdownBlockRow({
     );
   }
 
-  const renderedMarkdown = (
+  const isEmptyParagraph = block.type === "paragraph" && block.markdown.length === 0;
+  const renderedMarkdown = isEmptyParagraph ? (
+    <View style={[styles.emptyParagraphPlaceholder, emptyParagraphPlaceholderStyle(markdownStyle)]} />
+  ) : (
     <EnrichedMarkdownText
       allowTrailingMargin={false}
       containerStyle={styles.renderedText}
