@@ -51,6 +51,7 @@ namespace margelo::nitro::legenddesktop::markdownparser {
 
     public:
       // Methods
+      virtual std::shared_ptr<Promise<MarkdownFileLoadResult>> createMarkdownDocument(const std::string& markdown, double initialBlockCount) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileLoadResult>> loadMarkdownFile(const std::string& filePath, double initialBlockCount) = 0;
 
     protected:

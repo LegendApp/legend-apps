@@ -67,5 +67,6 @@ export interface MarkdownParser
   extends HybridObject<{
     ios: "c++";
   }> {
+  createMarkdownDocument(markdown: string, initialBlockCount: number): Promise<MarkdownFileLoadResult>;
   loadMarkdownFile(filePath: string, initialBlockCount: number): Promise<MarkdownFileLoadResult>;
 }

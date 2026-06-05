@@ -23,11 +23,11 @@ namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransac
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransaction; }
 
 #include "MarkdownRenderBlock.hpp"
-#include <string>
 #include <vector>
 #include "MarkdownDocumentTiming.hpp"
 #include "MarkdownTransactionResult.hpp"
 #include "MarkdownTransaction.hpp"
+#include <string>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 

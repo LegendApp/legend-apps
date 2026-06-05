@@ -18,6 +18,10 @@ export function loadMarkdownFile(filePath: string, options: MarkdownFileLoadOpti
   return getMarkdownParser().loadMarkdownFile(filePath, options.initialBlockCount ?? DEFAULT_INITIAL_BLOCK_COUNT);
 }
 
+export function createMarkdownDocument(markdown = "", options: MarkdownFileLoadOptions = {}) {
+  return getMarkdownParser().createMarkdownDocument(markdown, options.initialBlockCount ?? DEFAULT_INITIAL_BLOCK_COUNT);
+}
+
 export type {
   MarkdownDocument,
   MarkdownDocumentTiming,

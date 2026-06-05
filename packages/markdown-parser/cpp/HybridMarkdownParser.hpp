@@ -8,6 +8,10 @@ class HybridMarkdownParser final : public HybridMarkdownParserSpec {
 public:
   HybridMarkdownParser();
 
+  std::shared_ptr<Promise<MarkdownFileLoadResult>> createMarkdownDocument(
+      const std::string& markdown,
+      double initialBlockCount) override;
+
   std::shared_ptr<Promise<MarkdownFileLoadResult>> loadMarkdownFile(
       const std::string& filePath,
       double initialBlockCount) override;

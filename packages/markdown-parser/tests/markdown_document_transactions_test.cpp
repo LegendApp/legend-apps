@@ -142,6 +142,19 @@ void testLoadsBaselineBlocks() {
   expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
 }
 
+void testCreatesDocumentFromMarkdownString() {
+  HybridMarkdownParser parser;
+  const auto result = parser.createMarkdownDocument("# Untitled\n\nDraft paragraph\n", 1000)->get();
+  const auto blocks = blocksFor(result.document);
+  const std::string source = savedSourceFor(result.document);
+
+  expectEqual(blocks.size(), 2, "string document block count");
+  expectEqual(blocks[0].type, "heading", "string document heading type");
+  expectEqual(blocks[1].type, "paragraph", "string document paragraph type");
+  expectEqual(source, "# Untitled\n\nDraft paragraph\n", "string document save-as source");
+  expectBlockSourceSlices(result.document, source);
+}
+
 void testUpdateParagraphPreservesId() {
   LoadedDocument loaded("First paragraph\n\nSecond paragraph\n");
   const auto before = blocksFor(loaded.document);
@@ -280,6 +293,7 @@ struct TestCase {
 int main() {
   const TestCase tests[] = {
       {"loads baseline blocks", testLoadsBaselineBlocks},
+      {"creates document from markdown string", testCreatesDocumentFromMarkdownString},
       {"update paragraph preserves id", testUpdateParagraphPreservesId},
       {"update paragraph to heading preserves id and changes type", testUpdateParagraphToHeadingPreservesIdAndTypeChanges},
       {"split block creates second block", testSplitBlockCreatesSecondBlock},

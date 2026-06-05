@@ -36,15 +36,6 @@ RCT_EXPORT_MODULE(NativeFileDialog)
   return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
 }
 
-- (NSString *)safePathComponent:(NSString *)component fallback:(NSString *)fallback
-{
-  NSString *candidate = component.length > 0 ? component : fallback;
-  NSCharacterSet *invalidCharacters = [NSCharacterSet characterSetWithCharactersInString:@"/:"];
-  NSArray<NSString *> *parts = [candidate componentsSeparatedByCharactersInSet:invalidCharacters];
-  NSString *safeComponent = [parts componentsJoinedByString:@"-"];
-  return safeComponent.length > 0 ? safeComponent : fallback;
-}
-
 - (void)open:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
 #if TARGET_OS_OSX
@@ -145,62 +136,6 @@ RCT_EXPORT_MODULE(NativeFileDialog)
     }
 
     [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[fileURL]];
-    resolve(@YES);
-  });
-#else
-  resolve(@NO);
-#endif
-}
-
-- (void)createTemporaryTextFile:(NSString *)prefix
-                      extension:(NSString *)extension
-                       contents:(NSString *)contents
-                        resolve:(RCTPromiseResolveBlock)resolve
-                         reject:(RCTPromiseRejectBlock)reject
-{
-#if TARGET_OS_OSX
-  RCTExecuteOnMainQueue(^{
-    NSString *safePrefix = [self safePathComponent:prefix fallback:@"legend-desktop"];
-    NSString *safeExtension = [self safePathComponent:extension fallback:@"tmp"];
-    NSString *filename = [NSString stringWithFormat:@"%@-%@.%@", safePrefix, NSUUID.UUID.UUIDString, safeExtension];
-    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
-    NSError *error = nil;
-    BOOL ok = [contents writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error];
-    if (!ok) {
-      reject(@"temporary_file_failed", error.localizedDescription ?: @"Failed to create temporary file.", error);
-      return;
-    }
-
-    resolve(path);
-  });
-#else
-  reject(@"unsupported_platform", @"Temporary text files are only supported on macOS.", nil);
-#endif
-}
-
-- (void)removeFile:(NSString *)path resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
-{
-#if TARGET_OS_OSX
-  RCTExecuteOnMainQueue(^{
-    if (path.length == 0) {
-      resolve(@NO);
-      return;
-    }
-
-    NSString *expandedPath = [path stringByExpandingTildeInPath];
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    if (![fileManager fileExistsAtPath:expandedPath]) {
-      resolve(@NO);
-      return;
-    }
-
-    NSError *error = nil;
-    BOOL ok = [fileManager removeItemAtPath:expandedPath error:&error];
-    if (!ok) {
-      reject(@"remove_failed", error.localizedDescription ?: @"Failed to remove file.", error);
-      return;
-    }
-
     resolve(@YES);
   });
 #else

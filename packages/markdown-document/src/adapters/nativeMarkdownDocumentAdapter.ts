@@ -1,5 +1,7 @@
 import {
+  createMarkdownDocument,
   loadMarkdownFile,
+  type MarkdownFileLoadResult,
   type MarkdownDocument as NativeMarkdownDocument,
   type MarkdownRenderBlock,
   type MarkdownTransactionResult as NativeMarkdownTransactionResult,
@@ -75,9 +77,13 @@ function getSession(documentId: string) {
   return session;
 }
 
-export const nativeMarkdownDocumentAdapter: MarkdownDocumentAdapter = {
-  async load(filename: string): Promise<MarkdownDocumentSnapshot> {
-    const result = await loadMarkdownFile(filename, { initialBlockCount });
+type NativeMarkdownDocumentAdapter = MarkdownDocumentAdapter & {
+  loadDocument(filename: string, result: MarkdownFileLoadResult): Promise<MarkdownDocumentSnapshot>;
+  loadMarkdown(filename: string, markdown: string): Promise<MarkdownDocumentSnapshot>;
+};
+
+export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
+  async loadDocument(filename: string, result: MarkdownFileLoadResult): Promise<MarkdownDocumentSnapshot> {
     const documentId = nextDocumentId();
     const timing = result.document.getTiming();
     const initialBlocks = result.initialBlocks.map(toBlockSnapshot);
@@ -98,6 +104,14 @@ export const nativeMarkdownDocumentAdapter: MarkdownDocumentAdapter = {
       initialBlocks,
       timing,
     };
+  },
+
+  async load(filename: string): Promise<MarkdownDocumentSnapshot> {
+    return nativeMarkdownDocumentAdapter.loadDocument(filename, await loadMarkdownFile(filename, { initialBlockCount }));
+  },
+
+  async loadMarkdown(filename: string, markdown: string): Promise<MarkdownDocumentSnapshot> {
+    return nativeMarkdownDocumentAdapter.loadDocument(filename, await createMarkdownDocument(markdown, { initialBlockCount }));
   },
 
   async getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot> {

@@ -166,6 +166,20 @@ std::shared_ptr<HybridMarkdownDocument> createDocument(std::string filePath, Mar
 
 HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
 
+std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::createMarkdownDocument(
+    const std::string& markdown,
+    double initialBlockCount) {
+  return Promise<MarkdownFileLoadResult>::async([markdown, initialBlockCount]() -> MarkdownFileLoadResult {
+    auto document = createDocument(
+        "",
+        streamMarkdownSource(makeStringSource(markdown), 0));
+    MarkdownFileLoadResult result;
+    result.document = document;
+    result.initialBlocks = document->getRenderBlocks(0, initialBlockCount);
+    return result;
+  });
+}
+
 std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::loadMarkdownFile(
     const std::string& filePath,
     double initialBlockCount) {

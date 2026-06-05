@@ -15,12 +15,6 @@ export type FileDialogSaveOptions = {
   allowedFileTypes?: string[];
 };
 
-export type TemporaryTextFileOptions = {
-  prefix?: string;
-  extension?: string;
-  contents?: string;
-};
-
 function parseJsonResult<T>(value: string, fallback: T): T {
   if (!value) {
     return fallback;
@@ -57,26 +51,6 @@ export function revealInFinder(path: string) {
   }
 
   return NativeFileDialog.revealInFinder(path);
-}
-
-export function createTemporaryTextFile(options: TemporaryTextFileOptions = {}) {
-  if (Platform.OS !== "macos") {
-    return Promise.reject(new Error("Temporary text files are only supported on macOS."));
-  }
-
-  return NativeFileDialog.createTemporaryTextFile(
-    options.prefix ?? "legend-desktop",
-    options.extension ?? "tmp",
-    options.contents ?? "",
-  );
-}
-
-export function removeFile(path: string) {
-  if (Platform.OS !== "macos") {
-    return Promise.resolve(false);
-  }
-
-  return NativeFileDialog.removeFile(path);
 }
 
 export function writeTextFile(path: string, contents: string) {
