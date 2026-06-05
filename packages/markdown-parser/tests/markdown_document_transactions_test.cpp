@@ -175,6 +175,55 @@ void testSplitBlockCreatesSecondBlock() {
   expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
 }
 
+void testUpdateBlockCanBecomeMultipleParagraphs() {
+  LoadedDocument loaded("First\n\nTail\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(updateBlock(before[0].id, "First\n\nInserted"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "First\n\nInserted\n\nTail\n", "multi-paragraph source");
+  expectEqual(after.size(), 3, "multi-paragraph block count");
+  expectEqual(after[0].id, before[0].id, "multi-paragraph preserves first id");
+  expectEqual(after[0].markdown, "First", "multi-paragraph first block");
+  expectEqual(after[1].markdown, "Inserted", "multi-paragraph inserted block");
+  expectEqual(after[2].id, before[1].id, "multi-paragraph preserves suffix id");
+  expectEqual(result.changedRange.deleteCount, 1, "multi-paragraph delete count");
+  expectEqual(result.changedRange.blockIds.size(), 2, "multi-paragraph inserted range count");
+  expectBlockSourceSlices(loaded.document, source);
+}
+
+void testUpdateBlockUsesParserForCodeBlockBoundaries() {
+  LoadedDocument loaded("Intro\n\nTail\n");
+  const auto before = blocksFor(loaded.document);
+  loaded.document->applyTransaction(updateBlock(before[0].id, "```js\nconst x = 1\n```\n\nAfter code"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "```js\nconst x = 1\n```\n\nAfter code\n\nTail\n", "code block source");
+  expectEqual(after.size(), 3, "code block structural edit count");
+  expectEqual(after[0].id, before[0].id, "code block preserves edited id");
+  expectEqual(after[0].type, "codeBlock", "code block type");
+  expectEqual(after[0].markdown, "```js\nconst x = 1\n```", "code block markdown");
+  expectEqual(after[1].markdown, "After code", "code block following paragraph");
+  expectEqual(after[2].id, before[1].id, "code block preserves suffix id");
+  expectBlockSourceSlices(loaded.document, source);
+}
+
+void testUpdateBlockUsesParserForTables() {
+  LoadedDocument loaded("Intro\n\nTail\n");
+  const auto before = blocksFor(loaded.document);
+  loaded.document->applyTransaction(updateBlock(before[0].id, "| A | B |\n|---|---|\n| 1 | 2 |"));
+  const auto after = blocksFor(loaded.document);
+
+  expectEqual(after.size(), 2, "table edit block count");
+  expectEqual(after[0].id, before[0].id, "table edit preserves id");
+  expectEqual(after[0].type, "table", "table edit type");
+  expectEqual(after[0].markdown, "| A | B |\n|---|---|\n| 1 | 2 |", "table markdown");
+  expectEqual(after[1].id, before[1].id, "table edit preserves suffix id");
+  expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
+}
+
 using TestFunction = void (*)();
 
 struct TestCase {
@@ -190,6 +239,9 @@ int main() {
       {"update paragraph preserves id", testUpdateParagraphPreservesId},
       {"update paragraph to heading preserves id and changes type", testUpdateParagraphToHeadingPreservesIdAndTypeChanges},
       {"split block creates second block", testSplitBlockCreatesSecondBlock},
+      {"update block can become multiple paragraphs", testUpdateBlockCanBecomeMultipleParagraphs},
+      {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},
+      {"update block uses parser for tables", testUpdateBlockUsesParserForTables},
   };
 
   for (const auto& test : tests) {

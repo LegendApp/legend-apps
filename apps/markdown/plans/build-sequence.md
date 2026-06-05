@@ -102,8 +102,8 @@ Do not let failures accumulate across phases. If validation fails, fix it before
   - [x] inserted block IDs
   - [x] changed block snapshots
   - [x] retired block IDs
-- [ ] Add dirty-region parse fallback when a block markdown update changes structure unexpectedly.
-- [x] Keep full-document reparse out of the normal edit path.
+- [x] Reparse and reconcile parser-owned block structure when a block markdown update changes structure unexpectedly.
+- [x] Use parser-owned full reparse and reconciliation for `updateBlockMarkdown`; defer dirty-region optimization.
 - [x] Add native save method.
 - [x] Save UTF-8.
 - [x] Preserve dominant line endings when practical.

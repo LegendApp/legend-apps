@@ -140,6 +140,277 @@ void updateBlockSyntax(MarkdownBlockRange& block, const std::string& markdown) {
   block.headingLevel = block.type == MarkdownBlockType::Heading ? headingLevelForMarkdown(markdown) : 0;
 }
 
+struct ParsedLine {
+  size_t start = 0;
+  size_t end = 0;
+  size_t contentStart = 0;
+  char first = 0;
+  bool blank = false;
+};
+
+bool isLineBreak(char value) {
+  return value == '\n' || value == '\r';
+}
+
+bool isMarkdownWhitespace(char value) {
+  return value == ' ' || value == '\t' || value == '\n' || value == '\r';
+}
+
+size_t physicalLineEnd(const std::string& source, size_t start) {
+  while (start < source.size() && !isLineBreak(source[start])) {
+    start += 1;
+  }
+  return start;
+}
+
+size_t nextPhysicalLineStart(const std::string& source, size_t end) {
+  if (end < source.size() && source[end] == '\r' && end + 1 < source.size() && source[end + 1] == '\n') {
+    return end + 2;
+  }
+
+  if (end < source.size() && isLineBreak(source[end])) {
+    return end + 1;
+  }
+  return end;
+}
+
+size_t trimMarkdownLinePrefix(const std::string& source, size_t start, size_t end) {
+  while (start < end && (source[start] == ' ' || source[start] == '\t')) {
+    start += 1;
+  }
+  return start;
+}
+
+ParsedLine parsedLineAt(const std::string& source, size_t start) {
+  const size_t end = physicalLineEnd(source, start);
+  const size_t contentStart = trimMarkdownLinePrefix(source, start, end);
+  const bool blank = contentStart >= end;
+  return ParsedLine{
+      start,
+      end,
+      contentStart,
+      blank ? '\0' : source[contentStart],
+      blank,
+  };
+}
+
+bool parsedLineStartsHeading(const std::string& source, const ParsedLine& line) {
+  if (line.first != '#') {
+    return false;
+  }
+
+  size_t hashCount = 0;
+  while (line.contentStart + hashCount < line.end && source[line.contentStart + hashCount] == '#') {
+    hashCount += 1;
+  }
+  return hashCount > 0 &&
+      hashCount <= 6 &&
+      line.contentStart + hashCount < line.end &&
+      isMarkdownWhitespace(source[line.contentStart + hashCount]);
+}
+
+size_t parsedHeadingLevel(const std::string& source, const ParsedLine& line) {
+  if (!parsedLineStartsHeading(source, line)) {
+    return 0;
+  }
+
+  size_t level = 0;
+  while (line.contentStart + level < line.end && source[line.contentStart + level] == '#') {
+    level += 1;
+  }
+  return level;
+}
+
+bool parsedLineStartsFence(const std::string& source, const ParsedLine& line, char fenceChar) {
+  size_t count = 0;
+  while (line.contentStart + count < line.end && source[line.contentStart + count] == fenceChar) {
+    count += 1;
+  }
+  return count >= 3;
+}
+
+char parsedLineFenceChar(const std::string& source, const ParsedLine& line) {
+  if (line.first != '`' && line.first != '~') {
+    return 0;
+  }
+  return parsedLineStartsFence(source, line, line.first) ? line.first : 0;
+}
+
+bool parsedLineStartsUnorderedList(const std::string& source, const ParsedLine& line) {
+  const size_t start = line.contentStart;
+  return start + 1 < line.end &&
+      (source[start] == '-' || source[start] == '*' || source[start] == '+') &&
+      isMarkdownWhitespace(source[start + 1]);
+}
+
+bool parsedLineStartsOrderedList(const std::string& source, const ParsedLine& line) {
+  size_t index = line.contentStart;
+  const size_t markerStart = index;
+  if (line.first < '0' || line.first > '9') {
+    return false;
+  }
+
+  while (index < line.end && source[index] >= '0' && source[index] <= '9') {
+    index += 1;
+  }
+  return index > markerStart &&
+      index + 1 < line.end &&
+      (source[index] == '.' || source[index] == ')') &&
+      isMarkdownWhitespace(source[index + 1]);
+}
+
+bool parsedLineStartsThematicBreak(const std::string& source, const ParsedLine& line) {
+  if (line.first != '-' && line.first != '*' && line.first != '_') {
+    return false;
+  }
+
+  size_t markerCount = 0;
+  for (size_t index = line.contentStart; index < line.end; index += 1) {
+    if (source[index] == line.first) {
+      markerCount += 1;
+    } else if (!isMarkdownWhitespace(source[index])) {
+      return false;
+    }
+  }
+  return markerCount >= 3;
+}
+
+bool parsedLineHasPipe(const std::string& source, const ParsedLine& line) {
+  for (size_t index = line.contentStart; index < line.end; index += 1) {
+    if (source[index] == '|') {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool parsedLineLooksLikeTableDelimiter(const std::string& source, const ParsedLine& line) {
+  bool hasDash = false;
+  for (size_t index = line.contentStart; index < line.end; index += 1) {
+    const char value = source[index];
+    if (value == '-') {
+      hasDash = true;
+    } else if (value != '|' && value != ':' && value != ' ' && value != '\t') {
+      return false;
+    }
+  }
+  return hasDash && parsedLineHasPipe(source, line);
+}
+
+MarkdownBlockType parsedBlockType(const std::string& source, const ParsedLine& line) {
+  if (parsedLineStartsHeading(source, line)) {
+    return MarkdownBlockType::Heading;
+  }
+  if (parsedLineFenceChar(source, line) != 0) {
+    return MarkdownBlockType::CodeBlock;
+  }
+  if (line.first == '>') {
+    return MarkdownBlockType::Quote;
+  }
+  if (parsedLineStartsThematicBreak(source, line)) {
+    return MarkdownBlockType::ThematicBreak;
+  }
+  if (parsedLineStartsUnorderedList(source, line)) {
+    return MarkdownBlockType::UnorderedList;
+  }
+  if (parsedLineStartsOrderedList(source, line)) {
+    return MarkdownBlockType::OrderedList;
+  }
+
+  const size_t nextStart = nextPhysicalLineStart(source, line.end);
+  if (nextStart < source.size() && parsedLineHasPipe(source, line)) {
+    const ParsedLine nextLine = parsedLineAt(source, nextStart);
+    if (parsedLineLooksLikeTableDelimiter(source, nextLine)) {
+      return MarkdownBlockType::Table;
+    }
+  }
+
+  return MarkdownBlockType::Paragraph;
+}
+
+bool parsedLineInterruptsParagraph(const std::string& source, const ParsedLine& line) {
+  return parsedLineStartsHeading(source, line) ||
+      parsedLineFenceChar(source, line) != 0 ||
+      parsedLineStartsThematicBreak(source, line) ||
+      parsedLineStartsUnorderedList(source, line) ||
+      parsedLineStartsOrderedList(source, line) ||
+      line.first == '>';
+}
+
+size_t parsedFencedCodeBlockEnd(const std::string& source, size_t offset, char fenceChar) {
+  size_t start = nextPhysicalLineStart(source, physicalLineEnd(source, offset));
+  while (start < source.size()) {
+    const ParsedLine line = parsedLineAt(source, start);
+    if (parsedLineStartsFence(source, line, fenceChar)) {
+      return line.end;
+    }
+    start = nextPhysicalLineStart(source, line.end);
+  }
+  return source.size();
+}
+
+size_t parsedStreamingBlockEnd(
+    const std::string& source,
+    const ParsedLine& line,
+    MarkdownBlockType type) {
+  if (type == MarkdownBlockType::Heading || type == MarkdownBlockType::ThematicBreak) {
+    return line.end;
+  }
+
+  if (type == MarkdownBlockType::CodeBlock) {
+    return parsedFencedCodeBlockEnd(source, line.start, parsedLineFenceChar(source, line));
+  }
+
+  size_t end = line.end;
+  size_t nextStart = nextPhysicalLineStart(source, end);
+  while (nextStart < source.size()) {
+    const ParsedLine nextLine = parsedLineAt(source, nextStart);
+    if (nextLine.blank) {
+      break;
+    }
+    if (type == MarkdownBlockType::Paragraph && parsedLineInterruptsParagraph(source, nextLine)) {
+      break;
+    }
+    end = nextLine.end;
+    nextStart = nextPhysicalLineStart(source, end);
+  }
+  return end;
+}
+
+std::vector<MarkdownBlockRange> parseBlocksFromSource(const std::string& source) {
+  std::vector<MarkdownBlockRange> blocks;
+  if (!source.empty()) {
+    blocks.reserve(std::max<size_t>(16, source.size() / 128));
+  }
+
+  size_t lineStartOffset = 0;
+  while (lineStartOffset < source.size()) {
+    const ParsedLine line = parsedLineAt(source, lineStartOffset);
+    if (line.blank) {
+      lineStartOffset = nextPhysicalLineStart(source, line.end);
+      continue;
+    }
+
+    const MarkdownBlockType type = parsedBlockType(source, line);
+    const size_t end = parsedStreamingBlockEnd(source, line, type);
+    blocks.push_back(MarkdownBlockRange{
+        "",
+        blocks.size(),
+        1,
+        type == MarkdownBlockType::Heading ? parsedHeadingLevel(source, line) : 0,
+        line.start,
+        std::min(end, source.size()),
+        line.contentStart,
+        std::min(end, source.size()),
+        0,
+        type,
+    });
+    lineStartOffset = nextPhysicalLineStart(source, end);
+  }
+
+  return blocks;
+}
+
 } // namespace
 
 std::string nextDocumentId() {
@@ -322,21 +593,84 @@ MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const Mark
   }
 
   const size_t blockIndex = findBlockIndex(transaction.blockId);
-  auto& block = blocks_[blockIndex];
-  const size_t oldEnd = block.markdownEnd;
-  replaceSourceRange(block.markdownStart, block.markdownEnd, *transaction.markdown);
-  const long long delta = static_cast<long long>(transaction.markdown->size()) -
-      static_cast<long long>(oldEnd - block.markdownStart);
-  block.markdownEnd = block.markdownStart + transaction.markdown->size();
-  block.contentStart = block.markdownStart;
-  block.contentEnd = block.markdownEnd;
-  updateBlockSyntax(block, *transaction.markdown);
-  block.textRevision += 1;
-  shiftBlocksAfter(blockIndex + 1, delta);
-  markdownCache_[blockIndex] = *transaction.markdown;
+  const std::vector<MarkdownBlockRange> oldBlocks = blocks_;
+  std::vector<std::string> oldMarkdown;
+  oldMarkdown.reserve(oldBlocks.size());
+  for (size_t index = 0; index < oldBlocks.size(); index += 1) {
+    oldMarkdown.push_back(markdownForBlock(index, oldBlocks[index]));
+  }
+
+  const size_t sourceStart = oldBlocks[blockIndex].markdownStart;
+  const size_t sourceEnd = oldBlocks[blockIndex].markdownEnd;
+  replaceSourceRange(sourceStart, sourceEnd, *transaction.markdown);
+
+  std::vector<MarkdownBlockRange> newBlocks = parseBlocksFromSource(sourceText_);
+  std::vector<std::string> newMarkdown;
+  newMarkdown.reserve(newBlocks.size());
+  for (const auto& block : newBlocks) {
+    newMarkdown.push_back(sourceString(block.markdownStart, block.markdownEnd));
+  }
+
+  size_t prefixCount = 0;
+  while (
+      prefixCount < blockIndex &&
+      prefixCount < oldBlocks.size() &&
+      prefixCount < newBlocks.size() &&
+      oldMarkdown[prefixCount] == newMarkdown[prefixCount]) {
+    newBlocks[prefixCount].id = oldBlocks[prefixCount].id;
+    newBlocks[prefixCount].textRevision = oldBlocks[prefixCount].textRevision;
+    prefixCount += 1;
+  }
+
+  size_t suffixCount = 0;
+  while (
+      oldBlocks.size() > prefixCount + suffixCount &&
+      newBlocks.size() > prefixCount + suffixCount &&
+      oldBlocks.size() - suffixCount - 1 > blockIndex &&
+      oldMarkdown[oldBlocks.size() - suffixCount - 1] == newMarkdown[newBlocks.size() - suffixCount - 1]) {
+    const size_t oldIndex = oldBlocks.size() - suffixCount - 1;
+    const size_t newIndex = newBlocks.size() - suffixCount - 1;
+    newBlocks[newIndex].id = oldBlocks[oldIndex].id;
+    newBlocks[newIndex].textRevision = oldBlocks[oldIndex].textRevision;
+    suffixCount += 1;
+  }
+
+  const size_t deleteCount = oldBlocks.size() - prefixCount - suffixCount;
+  const size_t insertCount = newBlocks.size() - prefixCount - suffixCount;
+  const bool preservesEditedBlockId = deleteCount > 0 && insertCount > 0;
+  std::vector<std::string> retiredBlockIds;
+  retiredBlockIds.reserve(deleteCount);
+
+  for (size_t index = prefixCount; index < oldBlocks.size() - suffixCount; index += 1) {
+    if (preservesEditedBlockId && index == blockIndex) {
+      continue;
+    }
+    retiredBlockIds.push_back(oldBlocks[index].id);
+  }
+
+  for (size_t offset = 0; offset < insertCount; offset += 1) {
+    auto& block = newBlocks[prefixCount + offset];
+    if (offset == 0 && preservesEditedBlockId) {
+      block.id = oldBlocks[blockIndex].id;
+      block.textRevision = oldBlocks[blockIndex].textRevision + 1;
+    } else {
+      block.id = nextBlockId();
+      block.textRevision = revision_ + 1;
+    }
+  }
+
+  blocks_ = std::move(newBlocks);
+  markdownCache_.assign(blocks_.size(), std::nullopt);
+  renumberBlocks(prefixCount);
   revision_ += 1;
   timing_.sourceBytes = static_cast<double>(sourceText_.size());
-  return makeTransactionResult(blockIndex, 1, {blockIndex});
+
+  std::vector<size_t> changedBlockIndices;
+  changedBlockIndices.reserve(insertCount);
+  for (size_t offset = 0; offset < insertCount; offset += 1) {
+    changedBlockIndices.push_back(prefixCount + offset);
+  }
+  return makeTransactionResult(prefixCount, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTransaction& transaction) {
