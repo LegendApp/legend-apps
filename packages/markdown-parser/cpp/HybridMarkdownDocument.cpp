@@ -453,10 +453,15 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
   const size_t secondIndex = findBlockIndex(*transaction.beforeMarkdown);
   const size_t rangeStartIndex = std::min(firstIndex, secondIndex);
   const size_t rangeEndIndex = std::max(firstIndex, secondIndex);
-  const size_t deleteCount = rangeEndIndex - rangeStartIndex + 1;
   const bool hasReplacement = transaction.markdown.has_value();
   const bool hasPreviousBlock = rangeStartIndex > 0;
   const bool hasNextBlock = rangeEndIndex + 1 < blocks_.size();
+  const std::vector<MarkdownBlockRange> oldBlocks = blocks_;
+  std::vector<std::string> oldMarkdown;
+  oldMarkdown.reserve(oldBlocks.size());
+  for (size_t index = 0; index < oldBlocks.size(); index += 1) {
+    oldMarkdown.push_back(markdownForBlock(index, oldBlocks[index]));
+  }
 
   size_t sourceStart = blocks_[rangeStartIndex].markdownStart;
   size_t sourceEnd = blocks_[rangeEndIndex].markdownEnd;
@@ -473,79 +478,75 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
     sourceStart = sourceStart >= lineEnding_.size() ? sourceStart - lineEnding_.size() : 0;
   }
 
-  std::vector<std::string> retiredBlockIds;
-  retiredBlockIds.reserve(deleteCount);
-  for (size_t index = rangeStartIndex; index <= rangeEndIndex; index += 1) {
-    retiredBlockIds.push_back(blocks_[index].id);
-  }
-
-  const size_t oldRangeSize = sourceEnd - sourceStart;
   replaceSourceRange(sourceStart, sourceEnd, replacementSource);
 
-  std::vector<MarkdownBlockRange> insertedBlocks;
-  std::vector<std::optional<std::string>> insertedMarkdownCache;
-  if (hasReplacement || (!hasPreviousBlock && !hasNextBlock)) {
-    const std::string markdown = transaction.markdown.value_or("");
-    size_t lineStart = 0;
-    while (lineStart <= markdown.size()) {
-      size_t lineEnd = markdown.find('\n', lineStart);
-      if (lineEnd == std::string::npos) {
-        lineEnd = markdown.size();
-      }
-      size_t markdownEnd = lineEnd;
-      if (markdownEnd > lineStart && markdown[markdownEnd - 1] == '\r') {
-        markdownEnd -= 1;
-      }
+  std::vector<MarkdownBlockRange> newBlocks = parseMarkdownBlocks(sourceText_);
+  std::vector<std::string> newMarkdown;
+  newMarkdown.reserve(newBlocks.size());
+  for (const auto& block : newBlocks) {
+    newMarkdown.push_back(sourceString(block.markdownStart, block.markdownEnd));
+  }
 
-      const std::string blockMarkdown = markdown.substr(lineStart, markdownEnd - lineStart);
-      const size_t blockSourceStart = sourceStart + lineStart;
-      MarkdownBlockRange replacementBlock;
-      replacementBlock.id = nextBlockId();
-      replacementBlock.index = rangeStartIndex + insertedBlocks.size();
-      replacementBlock.markdownStart = blockSourceStart;
-      replacementBlock.markdownEnd = blockSourceStart + blockMarkdown.size();
-      replacementBlock.contentStart = replacementBlock.markdownStart;
-      replacementBlock.contentEnd = replacementBlock.markdownEnd;
-      updateBlockSyntax(replacementBlock, blockMarkdown);
-      replacementBlock.textRevision = revision_ + 1;
-      insertedBlocks.push_back(std::move(replacementBlock));
-      insertedMarkdownCache.push_back(blockMarkdown);
+  size_t prefixCount = 0;
+  while (
+      prefixCount < rangeStartIndex &&
+      prefixCount < oldBlocks.size() &&
+      prefixCount < newBlocks.size() &&
+      oldMarkdown[prefixCount] == newMarkdown[prefixCount]) {
+    newBlocks[prefixCount].id = oldBlocks[prefixCount].id;
+    newBlocks[prefixCount].textRevision = oldBlocks[prefixCount].textRevision;
+    prefixCount += 1;
+  }
 
-      if (lineEnd >= markdown.size()) {
-        break;
-      }
-      lineStart = lineEnd + 1;
+  size_t suffixCount = 0;
+  while (
+      oldBlocks.size() > prefixCount + suffixCount &&
+      newBlocks.size() > prefixCount + suffixCount &&
+      oldBlocks.size() - suffixCount - 1 > rangeEndIndex &&
+      oldMarkdown[oldBlocks.size() - suffixCount - 1] == newMarkdown[newBlocks.size() - suffixCount - 1]) {
+    const size_t oldIndex = oldBlocks.size() - suffixCount - 1;
+    const size_t newIndex = newBlocks.size() - suffixCount - 1;
+    newBlocks[newIndex].id = oldBlocks[oldIndex].id;
+    newBlocks[newIndex].textRevision = oldBlocks[oldIndex].textRevision;
+    suffixCount += 1;
+  }
+
+  const size_t deleteCount = oldBlocks.size() - prefixCount - suffixCount;
+  const size_t insertCount = newBlocks.size() - prefixCount - suffixCount;
+  const bool preservesFirstSelectedBlockId = deleteCount > 0 && insertCount > 0;
+  std::vector<std::string> retiredBlockIds;
+  retiredBlockIds.reserve(deleteCount);
+
+  for (size_t index = prefixCount; index < oldBlocks.size() - suffixCount; index += 1) {
+    if (preservesFirstSelectedBlockId && index == rangeStartIndex) {
+      continue;
+    }
+    retiredBlockIds.push_back(oldBlocks[index].id);
+  }
+
+  for (size_t offset = 0; offset < insertCount; offset += 1) {
+    auto& block = newBlocks[prefixCount + offset];
+    if (offset == 0 && preservesFirstSelectedBlockId) {
+      block.id = oldBlocks[rangeStartIndex].id;
+      block.textRevision = oldBlocks[rangeStartIndex].textRevision + 1;
+    } else {
+      block.id = nextBlockId();
+      block.textRevision = revision_ + 1;
     }
   }
 
-  const size_t insertedCount = insertedBlocks.size();
-  blocks_.erase(
-      blocks_.begin() + static_cast<long long>(rangeStartIndex),
-      blocks_.begin() + static_cast<long long>(rangeEndIndex + 1));
-  markdownCache_.erase(
-      markdownCache_.begin() + static_cast<long long>(rangeStartIndex),
-      markdownCache_.begin() + static_cast<long long>(rangeEndIndex + 1));
-  blocks_.insert(
-      blocks_.begin() + static_cast<long long>(rangeStartIndex),
-      std::make_move_iterator(insertedBlocks.begin()),
-      std::make_move_iterator(insertedBlocks.end()));
-  markdownCache_.insert(
-      markdownCache_.begin() + static_cast<long long>(rangeStartIndex),
-      std::make_move_iterator(insertedMarkdownCache.begin()),
-      std::make_move_iterator(insertedMarkdownCache.end()));
-
-  const long long delta = static_cast<long long>(replacementSource.size()) - static_cast<long long>(oldRangeSize);
-  shiftBlocksAfter(rangeStartIndex + insertedCount, delta);
-  renumberBlocks(rangeStartIndex);
+  blocks_ = std::move(newBlocks);
+  markdownCache_.assign(blocks_.size(), std::nullopt);
+  renumberBlocks(prefixCount);
   revision_ += 1;
   timing_.sourceBytes = static_cast<double>(sourceText_.size());
 
   std::vector<size_t> changedBlockIndices;
-  changedBlockIndices.reserve(insertedCount);
-  for (size_t index = 0; index < insertedCount; index += 1) {
-    changedBlockIndices.push_back(rangeStartIndex + index);
+  changedBlockIndices.reserve(insertCount);
+  for (size_t offset = 0; offset < insertCount; offset += 1) {
+    changedBlockIndices.push_back(prefixCount + offset);
   }
-  return makeTransactionResult(rangeStartIndex, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
+  return makeTransactionResult(prefixCount, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::makeTransactionResult(

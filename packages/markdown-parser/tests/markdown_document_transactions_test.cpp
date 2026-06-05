@@ -122,6 +122,15 @@ MarkdownTransaction splitBlock(std::string blockId, std::string beforeMarkdown, 
       std::move(afterMarkdown));
 }
 
+MarkdownTransaction replaceBlockRange(std::string startBlockId, std::string endBlockId, std::optional<std::string> markdown) {
+  return MarkdownTransaction(
+      "replaceBlockRange",
+      std::move(startBlockId),
+      std::move(markdown),
+      std::move(endBlockId),
+      std::nullopt);
+}
+
 void testLoadsBaselineBlocks() {
   LoadedDocument loaded("# Title\n\nParagraph\n\n```js\nconst x = 1\n```\n");
   const auto blocks = blocksFor(loaded.document);
@@ -224,6 +233,41 @@ void testUpdateBlockUsesParserForTables() {
   expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
 }
 
+void testReplaceBlockRangeUsesParserForCodeBlockBoundaries() {
+  LoadedDocument loaded("Intro\n\nMiddle\n\nTail\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(replaceBlockRange(
+      before[0].id,
+      before[1].id,
+      "```js\nconst x = 1\n```\n\nAfter code"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "```js\nconst x = 1\n```\n\nAfter code\n\nTail\n", "range code block source");
+  expectEqual(after.size(), 3, "range code block count");
+  expectEqual(after[0].type, "codeBlock", "range code block type");
+  expectEqual(after[0].markdown, "```js\nconst x = 1\n```", "range code block markdown");
+  expectEqual(after[1].markdown, "After code", "range following paragraph");
+  expectEqual(after[2].id, before[2].id, "range code block preserves suffix id");
+  expectEqual(result.retiredBlockIds.size(), 1, "range code block retired count");
+  expectBlockSourceSlices(loaded.document, source);
+}
+
+void testReplaceBlockRangeUsesParserForTables() {
+  LoadedDocument loaded("Intro\n\nMiddle\n\nTail\n");
+  const auto before = blocksFor(loaded.document);
+  loaded.document->applyTransaction(replaceBlockRange(before[0].id, before[1].id, "| A | B |\n|---|---|\n| 1 | 2 |"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "| A | B |\n|---|---|\n| 1 | 2 |\n\nTail\n", "range table source");
+  expectEqual(after.size(), 2, "range table count");
+  expectEqual(after[0].type, "table", "range table type");
+  expectEqual(after[0].markdown, "| A | B |\n|---|---|\n| 1 | 2 |", "range table markdown");
+  expectEqual(after[1].id, before[2].id, "range table preserves suffix id");
+  expectBlockSourceSlices(loaded.document, source);
+}
+
 using TestFunction = void (*)();
 
 struct TestCase {
@@ -242,6 +286,8 @@ int main() {
       {"update block can become multiple paragraphs", testUpdateBlockCanBecomeMultipleParagraphs},
       {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},
       {"update block uses parser for tables", testUpdateBlockUsesParserForTables},
+      {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
+      {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
   };
 
   for (const auto& test : tests) {
