@@ -23,6 +23,7 @@
     "build:all": "bun scripts/build-app.ts --all",
     "verify:all": "bun scripts/verify-app.ts --all",
     "test:music": "jest --config apps/music/jest.config.cjs",
+    "test:markdown-parser": "bash packages/markdown-parser/tests/run.sh",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
