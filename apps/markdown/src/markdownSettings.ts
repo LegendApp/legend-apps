@@ -4,6 +4,7 @@ import { Uniwind, type ThemeName } from "uniwind";
 
 const themeSettingsKey = "legend-markdown.settings.theme";
 const startupBehaviorSettingsKey = "legend-markdown.settings.startupBehavior";
+const autosaveSettingsKey = "legend-markdown.settings.autosave";
 const formattingToolbarModeSettingsKey = "legend-markdown.settings.formattingToolbarMode";
 const lastDocumentPathSettingsKey = "legend-markdown.settings.lastDocumentPath";
 const fontFamilySettingsKey = "legend-markdown.settings.fontFamily";
@@ -14,6 +15,7 @@ const documentDensitySettingsKey = "legend-markdown.settings.documentDensity";
 
 export type MarkdownThemeSetting = "light" | "dark" | "grey";
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
+export type MarkdownAutosaveSetting = "enabled" | "disabled";
 export type MarkdownFormattingToolbarModeSetting = "selection" | "top" | "hidden";
 export type MarkdownFontFamilySetting = "system" | "serif" | "mono";
 export type MarkdownFontSizeSetting = "small" | "default" | "large" | "xlarge";
@@ -40,6 +42,10 @@ function isMarkdownThemeSetting(value: unknown): value is MarkdownThemeSetting {
 
 function isMarkdownStartupBehaviorSetting(value: unknown): value is MarkdownStartupBehaviorSetting {
   return value === "newDocument" || value === "lastDocument";
+}
+
+function isMarkdownAutosaveSetting(value: unknown): value is MarkdownAutosaveSetting {
+  return value === "enabled" || value === "disabled";
 }
 
 function isMarkdownFormattingToolbarModeSetting(value: unknown): value is MarkdownFormattingToolbarModeSetting {
@@ -79,6 +85,12 @@ const startupBehaviorSetting = createNativeSettingsValue<MarkdownStartupBehavior
   defaultValue: "newDocument",
   isValue: isMarkdownStartupBehaviorSetting,
   key: startupBehaviorSettingsKey,
+  notify: notifyMarkdownSettingsChanged,
+});
+const autosaveSetting = createNativeSettingsValue<MarkdownAutosaveSetting>({
+  defaultValue: "enabled",
+  isValue: isMarkdownAutosaveSetting,
+  key: autosaveSettingsKey,
   notify: notifyMarkdownSettingsChanged,
 });
 const formattingToolbarModeSetting = createNativeSettingsValue<MarkdownFormattingToolbarModeSetting>({
@@ -126,6 +138,10 @@ export function getMarkdownThemeSetting(): MarkdownThemeSetting {
 
 export function getMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
   return startupBehaviorSetting.get();
+}
+
+export function getMarkdownAutosaveSetting(): MarkdownAutosaveSetting {
+  return autosaveSetting.get();
 }
 
 export function getMarkdownFormattingToolbarModeSetting(): MarkdownFormattingToolbarModeSetting {
@@ -191,6 +207,10 @@ export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
   startupBehaviorSetting.set(startupBehavior);
+}
+
+export function setMarkdownAutosaveSetting(autosave: MarkdownAutosaveSetting) {
+  autosaveSetting.set(autosave);
 }
 
 export function setMarkdownFormattingToolbarModeSetting(formattingToolbarMode: MarkdownFormattingToolbarModeSetting) {

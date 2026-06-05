@@ -3,10 +3,13 @@ import { useSyncExternalStore } from "react";
 import { View } from "react-native";
 import {
   getMarkdownStartupBehaviorSetting,
+  getMarkdownAutosaveSetting,
   getMarkdownFormattingToolbarModeSetting,
+  setMarkdownAutosaveSetting,
   setMarkdownStartupBehaviorSetting,
   setMarkdownFormattingToolbarModeSetting,
   subscribeToMarkdownSettings,
+  type MarkdownAutosaveSetting,
   type MarkdownFormattingToolbarModeSetting,
   type MarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
@@ -17,6 +20,11 @@ export function GeneralSettingsPage() {
     subscribeToMarkdownSettings,
     getMarkdownStartupBehaviorSetting,
     getMarkdownStartupBehaviorSetting,
+  );
+  const autosave = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownAutosaveSetting,
+    getMarkdownAutosaveSetting,
   );
   const formattingToolbarMode = useSyncExternalStore(
     subscribeToMarkdownSettings,
@@ -39,6 +47,22 @@ export function GeneralSettingsPage() {
             onSelect={setMarkdownStartupBehaviorSetting}
             selected={startupBehavior === "lastDocument"}
             value="lastDocument"
+          />
+        </View>
+      </SettingsSection>
+      <SettingsSection card={false} title="Autosave">
+        <View accessibilityRole="radiogroup" className="gap-2">
+          <RadioOption<MarkdownAutosaveSetting>
+            label="Enabled"
+            onSelect={setMarkdownAutosaveSetting}
+            selected={autosave === "enabled"}
+            value="enabled"
+          />
+          <RadioOption<MarkdownAutosaveSetting>
+            label="Disabled"
+            onSelect={setMarkdownAutosaveSetting}
+            selected={autosave === "disabled"}
+            value="disabled"
           />
         </View>
       </SettingsSection>

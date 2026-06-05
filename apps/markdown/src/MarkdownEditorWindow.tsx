@@ -23,6 +23,7 @@ import {
 import {
   applyMarkdownThemeSetting,
   getMarkdownAppearanceSettings,
+  getMarkdownAutosaveSetting,
   getMarkdownFormattingToolbarModeSetting,
   getMarkdownThemeSetting,
   subscribeToMarkdownSettings,
@@ -48,6 +49,11 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     subscribeToMarkdownSettings,
     getMarkdownFormattingToolbarModeSetting,
     getMarkdownFormattingToolbarModeSetting,
+  );
+  const autosave = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownAutosaveSetting,
+    getMarkdownAutosaveSetting,
   );
   const appearanceSettings = useSyncExternalStore(
     subscribeToMarkdownSettings,
@@ -162,7 +168,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
           onSaveStateChange={session.setSaveState}
           onSelectionAnchorChange={handleSelectionAnchorChange}
           renderSelectionToolbar={renderSelectionToolbar}
-          savePolicy={session.isUntitledDocument ? { autosave: false } : undefined}
+          savePolicy={{ autosave: !session.isUntitledDocument && autosave === "enabled" }}
           selectionToolbarAnchor={formattingToolbarMode === "selection" ? selectionAnchor : null}
           style={[styles.document, backgroundStyle]}
           theme={theme.markdownDocument}
