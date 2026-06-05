@@ -363,6 +363,7 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleNames;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
+@property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
 @property (nonatomic, assign) BOOL hasListeners;
 @property (nonatomic, assign) BOOL mainWindowObserversInstalled;
 @end
@@ -383,13 +384,20 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _rootViews = [NSMutableDictionary new];
     _moduleNames = [NSMutableDictionary new];
     _windowBlurFilters = [NSMutableDictionary new];
+    _closeRequestIdentifiers = [NSMutableSet new];
   }
   return self;
 }
 
 - (NSArray<NSString *> *)supportedEvents
 {
-  return @[@"onWindowClosed", @"onMainWindowMoved", @"onMainWindowResized", @"onWindowFocused"];
+  return @[
+    @"onWindowClosed",
+    @"onWindowCloseRequested",
+    @"onMainWindowMoved",
+    @"onMainWindowResized",
+    @"onWindowFocused",
+  ];
 }
 
 - (void)startObserving
@@ -541,6 +549,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
     NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
     BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
+    BOOL interceptClose = [options[@"interceptClose"] boolValue];
     NSNumber *hasShadowNumber = [options[@"hasShadow"] isKindOfClass:NSNumber.class] ? options[@"hasShadow"] : nil;
     BOOL shouldApplyHasShadow = hasShadowNumber != nil;
     BOOL hasShadow = shouldApplyHasShadow ? hasShadowNumber.boolValue : NO;
@@ -685,6 +694,11 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
       LegendSizeRootViewToWindow(existingRootView, existingWindow);
       LegendPrepareWindowForDisplay(existingWindow, backgroundColor);
+      if (interceptClose) {
+        [self.closeRequestIdentifiers addObject:identifier];
+      } else {
+        [self.closeRequestIdentifiers removeObject:identifier];
+      }
       self.moduleNames[identifier] = moduleName ?: @"";
       [existingWindow makeKeyAndOrderFront:nil];
       resolve([self successJson]);
@@ -787,6 +801,11 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     self.windows[identifier] = window;
     self.rootViews[identifier] = rootView;
     self.moduleNames[identifier] = moduleName ?: @"";
+    if (interceptClose) {
+      [self.closeRequestIdentifiers addObject:identifier];
+    } else {
+      [self.closeRequestIdentifiers removeObject:identifier];
+    }
 
     [window makeKeyAndOrderFront:nil];
     if (levelNumber) {
@@ -1099,7 +1118,18 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 
 - (BOOL)windowShouldClose:(NSWindow *)window
 {
-  return [self identifierForWindow:window] != nil ? YES : NO;
+  NSString *identifier = [self identifierForWindow:window];
+  if (!identifier) {
+    return NO;
+  }
+
+  if ([self.closeRequestIdentifiers containsObject:identifier]) {
+    [self sendWindowEventWithName:@"onWindowCloseRequested"
+                             body:@{@"identifier": identifier, @"moduleName": self.moduleNames[identifier] ?: @""}];
+    return NO;
+  }
+
+  return YES;
 }
 
 - (NSDictionary *)frameDictionary:(NSRect)frame
@@ -1146,6 +1176,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
   }
   [self.windowBlurFilters removeObjectForKey:identifier];
+  [self.closeRequestIdentifiers removeObject:identifier];
   [self.windows removeObjectForKey:identifier];
   [self.rootViews removeObjectForKey:identifier];
   [self.moduleNames removeObjectForKey:identifier];

@@ -98,6 +98,7 @@ export type WindowOptions = {
   initialProperties?: Record<string, unknown>;
   level?: WindowLevel;
   transparentBackground?: boolean;
+  interceptClose?: boolean;
   animateFrameChange?: boolean;
   frameAnimationDurationMs?: number;
 };
@@ -130,6 +131,11 @@ export type WindowResult = {
 export type MainWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
 
 export type WindowClosedEvent = {
+  identifier: string;
+  moduleName?: string;
+};
+
+export type WindowCloseRequestedEvent = {
   identifier: string;
   moduleName?: string;
 };
@@ -292,6 +298,13 @@ export function addWindowClosedListener(listener: (event: WindowClosedEvent) => 
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowClosed", listener);
 }
 
+export function addWindowCloseRequestedListener(listener: (event: WindowCloseRequestedEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowCloseRequested", listener);
+}
+
 export function addWindowFocusedListener(listener: (event: WindowFocusedEvent) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -325,6 +338,7 @@ export function useWindowManager() {
     setWindowBlur,
     setWindowTitle,
     onWindowClosed: addWindowClosedListener,
+    onWindowCloseRequested: addWindowCloseRequestedListener,
     onWindowFocused: addWindowFocusedListener,
     onMainWindowMoved: addMainWindowMovedListener,
     onMainWindowResized: addMainWindowResizedListener,

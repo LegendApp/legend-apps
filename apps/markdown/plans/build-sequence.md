@@ -174,8 +174,8 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Route formatting commands to active enriched editor when available.
 - [x] Prompt Save / Discard / Cancel when opening another file while dirty.
 - [x] If prompt-save fails, show error and stay on current document.
-- [ ] Prompt Save / Discard / Cancel when closing a dirty document window.
-- [ ] If close-save fails, show error and keep window open.
+- [x] Prompt Save / Discard / Cancel when closing a dirty document window.
+- [x] If close-save fails, show error and keep window open.
 - [x] Validate `bun run typecheck`.
 - [ ] Validate manual save, autosave, undo, redo, and dirty-state transitions.
 - [x] Commit with a `type: subject` message.

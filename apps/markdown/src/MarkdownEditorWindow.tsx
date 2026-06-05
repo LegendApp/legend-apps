@@ -11,6 +11,7 @@ import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
   useMarkdownAppExit,
   useMarkdownStartupDocument,
+  useMarkdownWindowCloseRequest,
   useRecentMarkdownDocumentOpener,
 } from "./useMarkdownDocumentEvents";
 import { useMarkdownDocumentSession } from "./useMarkdownDocumentSession";
@@ -111,6 +112,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   useMarkdownAppExit({
     flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
     handleError: session.handleError,
+  });
+
+  useMarkdownWindowCloseRequest({
+    autosaveEnabled: autosave === "enabled",
+    handleError: session.handleError,
+    prepareCurrentDocumentForClose: session.prepareCurrentDocumentForClose,
   });
 
   useMarkdownKeyboardShortcuts({

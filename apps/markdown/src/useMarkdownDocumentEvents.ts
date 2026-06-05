@@ -1,8 +1,11 @@
 import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
 import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
+import { addWindowCloseRequestedListener } from "@legend-desktop/window-manager";
 import { useEffect, useRef } from "react";
+import { editorWindowIdentifier } from "./appConstants";
 import { getRecentMarkdownFiles } from "./appMetadata";
 import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import { closeMarkdownEditorWindow } from "./markdownWindows";
 import {
   getLastMarkdownDocumentPath,
   getMarkdownStartupBehaviorSetting,
@@ -14,6 +17,7 @@ type DocumentEventsOptions = {
   launchArguments?: string[];
   openSelectedFile: (path: string) => void;
   openUntitledDocument: () => void;
+  prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean }) => Promise<boolean>;
 };
 
 function getStartupMarkdownPath(launchArguments: string[] | undefined) {
@@ -105,4 +109,45 @@ export function useMarkdownAppExit({
       subscription.remove();
     };
   }, [flushCurrentDocumentBeforeTransition, handleError]);
+}
+
+export function useMarkdownWindowCloseRequest({
+  autosaveEnabled,
+  handleError,
+  prepareCurrentDocumentForClose,
+}: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & {
+  autosaveEnabled: boolean;
+}) {
+  const closeInFlightRef = useRef(false);
+
+  useEffect(() => {
+    async function closeRequestedWindow() {
+      if (closeInFlightRef.current) {
+        return;
+      }
+
+      closeInFlightRef.current = true;
+
+      try {
+        const canClose = await prepareCurrentDocumentForClose({ autosaveEnabled });
+        if (canClose) {
+          await closeMarkdownEditorWindow();
+        }
+      } catch (error) {
+        handleError(error);
+      } finally {
+        closeInFlightRef.current = false;
+      }
+    }
+
+    const subscription = addWindowCloseRequestedListener((event) => {
+      if (event.identifier === editorWindowIdentifier) {
+        closeRequestedWindow().catch(handleError);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
 }

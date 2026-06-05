@@ -2,7 +2,7 @@ import { Alert } from "react-native";
 
 export type DirtyDocumentTransitionAction = "save" | "discard" | "cancel";
 
-type DirtyDocumentTransitionReason = "new" | "open" | "quit";
+type DirtyDocumentTransitionReason = "new" | "open" | "close" | "quit";
 
 type ConfirmDirtyDocumentTransitionOptions = {
   filename: string;
@@ -12,6 +12,10 @@ type ConfirmDirtyDocumentTransitionOptions = {
 function messageForReason(reason: DirtyDocumentTransitionReason, filename: string) {
   if (reason === "quit") {
     return `Save changes to ${filename} before quitting?`;
+  }
+
+  if (reason === "close") {
+    return `Save changes to ${filename} before closing?`;
   }
 
   if (reason === "new") {

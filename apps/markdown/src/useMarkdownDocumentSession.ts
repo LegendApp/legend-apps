@@ -159,6 +159,31 @@ export function useMarkdownDocumentSession() {
     return false;
   }, [filename, hasDocument, isDirty, saveCurrentDocument]);
 
+  const prepareCurrentDocumentForClose = useCallback(async ({ autosaveEnabled }: { autosaveEnabled: boolean }) => {
+    if (!hasDocument || !isDirty) {
+      return true;
+    }
+
+    if (!isUntitledDocument && autosaveEnabled) {
+      return saveCurrentDocument();
+    }
+
+    const action = await confirmDirtyDocumentTransition({
+      filename: filename ? getFilename(filename) : untitledFilename,
+      reason: "close",
+    });
+
+    if (action === "discard") {
+      return true;
+    }
+
+    if (action === "save") {
+      return saveCurrentDocument();
+    }
+
+    return false;
+  }, [filename, hasDocument, isDirty, isUntitledDocument, saveCurrentDocument]);
+
   const newMarkdownDocument = useCallback(async () => {
     const didFlush = await flushCurrentDocumentBeforeTransition("new");
     if (didFlush) {
@@ -207,6 +232,7 @@ export function useMarkdownDocumentSession() {
     openMarkdownDialog,
     openSelectedFile,
     openUntitledDocument,
+    prepareCurrentDocumentForClose,
     saveCurrentDocument,
     saveCurrentDocumentAs,
     saveState,
