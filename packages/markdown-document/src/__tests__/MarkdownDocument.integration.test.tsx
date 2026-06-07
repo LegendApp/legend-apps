@@ -42,6 +42,113 @@ function orderedListBlock(id: string, index: number, markdown = "1. First\n2. Se
   };
 }
 
+function unorderedListBlock(id: string, index: number, markdown = "- First\n- Second"): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    type: "unorderedList",
+  };
+}
+
+function taskListBlock(id: string, index: number, markdown = "- [ ] First\n- [x] Second"): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    type: "unorderedList",
+  };
+}
+
+function quoteBlock(id: string, index: number, markdown = "> First\n> Second"): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    type: "quote",
+  };
+}
+
+function thematicBreakBlock(id: string, index: number, markdown = "---"): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    type: "thematicBreak",
+  };
+}
+
+function markdownDepth(markdown: string) {
+  const firstLine = markdown.split("\n", 1)[0] ?? "";
+  const match = /^(\s*)/.exec(firstLine);
+  return Math.floor((match?.[1].replace(/\t/g, "    ").length ?? 0) / 2);
+}
+
+function markdownBlockType(markdown: string) {
+  const firstLine = markdown.split("\n", 1)[0] ?? "";
+  let type = "paragraph";
+  if (/^#{1,6}\s/.test(firstLine)) {
+    type = "heading";
+  } else if (/^\s*(```|~~~)/.test(firstLine)) {
+    type = "codeBlock";
+  } else if (/^\s*\d+\.\s/.test(firstLine)) {
+    type = "orderedList";
+  } else if (/^\s*[-*+]\s+\[[ xX]\]\s/.test(firstLine)) {
+    type = "unorderedList";
+  } else if (/^\s*[-*+]\s/.test(firstLine)) {
+    type = "unorderedList";
+  } else if (/^\s*>/.test(firstLine)) {
+    type = "quote";
+  } else if (markdown.includes("\n") && /\|/.test(firstLine) && /^\s*\|?[\s:-]+\|/.test(markdown.split("\n")[1] ?? "")) {
+    type = "table";
+  } else if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(firstLine)) {
+    type = "thematicBreak";
+  }
+  return type;
+}
+
+function markdownBlock(id: string, index: number, markdown: string): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    depth: markdownDepth(markdown),
+    type: markdownBlockType(markdown),
+  };
+}
+
+function splitMarkdownBlocks(markdown: string) {
+  const blocks: string[] = [];
+  const lines = markdown.split("\n");
+  let currentLines: string[] = [];
+  let inCodeBlock = false;
+  let fenceMarker = "";
+
+  const pushCurrentBlock = () => {
+    while (currentLines.length > 0 && currentLines[currentLines.length - 1] === "") {
+      currentLines.pop();
+    }
+    if (currentLines.length > 0) {
+      blocks.push(currentLines.join("\n"));
+      currentLines = [];
+    }
+  };
+
+  for (const line of lines) {
+    const fenceMatch = /^\s*(```|~~~)/.exec(line);
+    const startsCodeBlock = currentLines.length === 0 && !!fenceMatch;
+    if (startsCodeBlock) {
+      inCodeBlock = true;
+      fenceMarker = fenceMatch[1];
+      currentLines.push(line);
+    } else if (inCodeBlock) {
+      currentLines.push(line);
+      if (fenceMarker.length > 0 && line.trimStart().startsWith(fenceMarker) && currentLines.length > 1) {
+        inCodeBlock = false;
+        fenceMarker = "";
+        pushCurrentBlock();
+      }
+    } else if (line.trim().length === 0) {
+      pushCurrentBlock();
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  pushCurrentBlock();
+  return blocks;
+}
+
 function snapshot(initialBlocks: MarkdownBlockSnapshot[], blockCount = initialBlocks.length): MarkdownDocumentSnapshot {
   return {
     blockCount,
@@ -133,6 +240,14 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     return this.blocks.map((candidate) => candidate.id);
   }
 
+  get blockTypes() {
+    return this.blocks.map((candidate) => candidate.type);
+  }
+
+  get blockDepths() {
+    return this.blocks.map((candidate) => candidate.depth);
+  }
+
   get markdownById() {
     return new Map(this.blocks.map((candidate) => [candidate.id, candidate.markdown]));
   }
@@ -221,7 +336,7 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
       return [];
     }
 
-    return markdown.split(/\n\n/).map((part, offset) => block(
+    return splitMarkdownBlocks(markdown).map((part, offset) => markdownBlock(
       offset === 0 && firstBlockId ? firstBlockId : this.nextBlockId(),
       startIndex + offset,
       part,
@@ -260,7 +375,9 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
 
   private applyUpdateBlockMarkdown(index: number, markdown: string) {
     const originalBlock = this.blocks[index]!;
-    const changedBlocks = this.blocksFromMarkdown(markdown, index, originalBlock.id);
+    const changedBlocks = originalBlock.type === "codeBlock"
+      ? [{ ...originalBlock, markdown }]
+      : this.blocksFromMarkdown(markdown, index, originalBlock.id);
     return this.commitChangedRange(index, 1, changedBlocks, changedBlocks.length > 0 ? [] : [originalBlock.id]);
   }
 
@@ -330,6 +447,15 @@ function editorInput(renderer: TestRenderer.ReactTestRenderer, index = 0) {
   return input;
 }
 
+function expectUniqueBlockIds(adapter: MountedEditorAdapter) {
+  expect(new Set(adapter.blockIds).size).toBe(adapter.blockIds.length);
+}
+
+function expectActiveBlockExists(renderer: TestRenderer.ReactTestRenderer, adapter: MountedEditorAdapter) {
+  const activeMarkdown = editorInput(renderer).props.defaultValue;
+  expect([...adapter.markdownById.values()]).toContain(activeMarkdown);
+}
+
 function renderedMarkdownNodes(renderer: TestRenderer.ReactTestRenderer, markdown: string) {
   return renderer.root.findAll((node) => node.props.markdown === markdown);
 }
@@ -348,6 +474,13 @@ function blockSelectionInput(renderer: TestRenderer.ReactTestRenderer) {
 async function changeText(input: TestRenderer.ReactTestInstance, markdown: string) {
   await act(async () => {
     input.props.onChangeText(markdown);
+  });
+  await flushPromises();
+}
+
+async function changeSelection(input: TestRenderer.ReactTestInstance, start: number, end = start) {
+  await act(async () => {
+    input.props.onChangeSelection({ end, start });
   });
   await flushPromises();
 }
@@ -547,6 +680,59 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("continues ordered lists from their current number when splitting", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "5. Existing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "5. Existing\n");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "6. ",
+        beforeMarkdown: "5. Existing",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("splits an ordered list line into the next item with trailing text", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "5. Existing trailing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "5. Existing".length);
+    await changeText(editorInput(renderer), "5. Existing\ntrailing");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "6. trailing",
+        beforeMarkdown: "5. Existing",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("splits a task list line into the next unchecked item with trailing text", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "- [x] Done trailing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- [x] Done".length);
+    await changeText(editorInput(renderer), "- [x] Done\ntrailing");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "- [ ] trailing",
+        beforeMarkdown: "- [x] Done",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("continues task lists when splitting an empty trailing list item", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "- [x] Done")]));
     const { onError, renderer } = await renderDocument({ adapter });
@@ -561,6 +747,78 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["level 1", "  - Child trailing", "  - Child", "  - trailing"],
+    ["level 2", "    - Child trailing", "    - Child", "    - trailing"],
+    ["level 3", "      - Child trailing", "      - Child", "      - trailing"],
+  ])("splits a nested unordered list item with trailing text at %s", async (_label, originalMarkdown, beforeMarkdown, afterMarkdown) => {
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), beforeMarkdown.length);
+    await changeText(editorInput(renderer), `${beforeMarkdown}\ntrailing`);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown,
+        beforeMarkdown,
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["level 1", "  - "],
+    ["level 2", "    - "],
+    ["level 3", "      - "],
+  ])("pressing enter on an empty nested unordered list item exits the list at %s", async (_label, marker) => {
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, marker)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), marker.length);
+    await changeText(editorInput(renderer), `${marker}\n`);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace at the start of a nested list line joins within the list block", async () => {
+    const originalMarkdown = [
+      "- Parent",
+      "  - Child",
+      "    - Grandchild",
+    ].join("\n");
+    const nextMarkdown = [
+      "- Parent  - Child",
+      "    - Grandchild",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- Parent\n".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -588,6 +846,159 @@ describe("MarkdownDocument mounted editing", () => {
           "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
           "6. Fix race condition in Container layout (Issue #3) edited",
           "7. Add cleanup for sticky indices changes (Issue #13)",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("appends a line to an existing multi-line numbered list without splitting the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      orderedListBlock("d1:b0", 0, [
+        "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+        "6. Fix race condition in Container layout (Issue #3)",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+      "6. Fix race condition in Container layout (Issue #3)",
+      "7. Add cleanup for sticky indices changes (Issue #13)",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+          "6. Fix race condition in Container layout (Issue #3)",
+          "7. Add cleanup for sticky indices changes (Issue #13)",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing multi-line unordered list without splitting the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      unorderedListBlock("d1:b0", 0, [
+        "- First task",
+        "- Second task",
+        "- Third task",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "- First task",
+      "- Second task edited",
+      "- Third task",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "- First task",
+          "- Second task edited",
+          "- Third task",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing multi-line task list without splitting the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      taskListBlock("d1:b0", 0, [
+        "- [ ] First task",
+        "- [x] Second task",
+        "- [ ] Third task",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "- [ ] First task",
+      "- [ ] Second task",
+      "- [ ] Third task edited",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "- [ ] First task",
+          "- [ ] Second task",
+          "- [ ] Third task edited",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing multi-line blockquote without splitting the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      quoteBlock("d1:b0", 0, [
+        "> First line",
+        "> Second line",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "> First line",
+      "> Second line edited",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "> First line",
+          "> Second line edited",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing multi-line paragraph without splitting the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, [
+        "First soft-wrapped line",
+        "Second soft-wrapped line",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "First soft-wrapped line edited",
+      "Second soft-wrapped line",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "First soft-wrapped line edited",
+          "Second soft-wrapped line",
         ].join("\n"),
         type: "updateBlockMarkdown",
       },
@@ -628,6 +1039,41 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("updates a label plus blank-line numbered list without duplicating the label", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      orderedListBlock("d1:b0", 0, [
+        "Medium Priority:",
+        "",
+        "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+        "6. Fix race condition in Container layout (Issue #3)",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "Medium Priority:",
+      "",
+      "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+      "6. Fix race condition in Container layout (Issue #3) edited",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "Medium Priority:",
+          "",
+          "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+          "6. Fix race condition in Container layout (Issue #3) edited",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.sourceMarkdown.match(/Medium Priority:/g)).toHaveLength(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("does not split code blocks on newline edits", async () => {
     const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, "```\nold\n```")]));
     const { onError, renderer } = await renderDocument({ adapter });
@@ -640,6 +1086,1059 @@ describe("MarkdownDocument mounted editing", () => {
         blockId: "d1:b0",
         markdown: "```\nold\nnew\n```",
         type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter in the middle of a code block adds a line within the code block", async () => {
+    const originalMarkdown = "```\nconst before = 1;\nconst after = 2;\n```";
+    const nextMarkdown = "```\nconst before = 1;\n\nconst after = 2;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```\nconst before = 1;".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter after the opening code fence adds a line within the code block", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n```";
+    const nextMarkdown = "```\n\nconst value = 1;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter before the closing code fence adds a line within the code block", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n```";
+    const nextMarkdown = "```\nconst value = 1;\n\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```\nconst value = 1;".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter at the start of a code block creates a new markdown block before it", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), `\n${originalMarkdown}`);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: originalMarkdown,
+        beforeMarkdown: "",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b100", "d1:b101"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter at the end of a code block creates a new markdown block after it", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), originalMarkdown.length);
+    await changeText(editorInput(renderer), `${originalMarkdown}\n`);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: originalMarkdown,
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b100", "d1:b101"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter at the end of a multi-line numbered list appends within the list block", async () => {
+    const originalMarkdown = [
+      "5. First item",
+      "6. Second item",
+    ].join("\n");
+    const nextMarkdown = [
+      "5. First item",
+      "6. Second item",
+      "7. ",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([orderedListBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), originalMarkdown.length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter at the end of a multi-line blockquote appends within the blockquote", async () => {
+    const originalMarkdown = [
+      "> First line",
+      "> Second line",
+    ].join("\n");
+    const nextMarkdown = [
+      "> First line",
+      "> Second line",
+      "> ",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([quoteBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), originalMarkdown.length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter on an empty unordered list item exits the list", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "- ")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- ".length);
+    await changeText(editorInput(renderer), "- \n");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter on an empty ordered list item exits the list", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "3. ")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "3. ".length);
+    await changeText(editorInput(renderer), "3. \n");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace in the middle of a code block updates within the code block", async () => {
+    const originalMarkdown = "```\nconst before = 1;\nconst after = 2;\n```";
+    const nextMarkdown = "```\nconst before = 1;\nconst after = ;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```\nconst before = 1;\nconst after = 2".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace at the start of the second code line joins within the code block", async () => {
+    const originalMarkdown = "```\nconst before = 1;\nconst after = 2;\n```";
+    const nextMarkdown = "```\nconst before = 1;const after = 2;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```\nconst before = 1;\n".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace at a code block trailing blank line keeps the edit within the code block", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n\n```";
+    const nextMarkdown = "```\nconst value = 1;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```\nconst value = 1;\n\n".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace at the start of the second numbered-list line joins within the list block", async () => {
+    const originalMarkdown = [
+      "5. First item",
+      "6. Second item",
+      "7. Third item",
+    ].join("\n");
+    const nextMarkdown = [
+      "5. First item6. Second item",
+      "7. Third item",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([orderedListBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "5. First item\n".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace in the middle of a multi-line numbered list updates within the block", async () => {
+    const originalMarkdown = [
+      "5. First item",
+      "6. Second item",
+      "7. Third item",
+    ].join("\n");
+    const nextMarkdown = [
+      "5. First item",
+      "6. Second",
+      "7. Third item",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([orderedListBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "5. First item\n6. Second item".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter in the middle of a heading splits the heading and trailing text", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([markdownBlock("d1:b0", 0, "## Heading trailing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "## Heading".length);
+    await changeText(editorInput(renderer), "## Heading\ntrailing");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "trailing",
+        beforeMarkdown: "## Heading",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter at the start of a heading creates a paragraph block before it", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([markdownBlock("d1:b0", 0, "## Heading")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), "\n## Heading");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "## Heading",
+        beforeMarkdown: "",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter at the end of a heading creates an empty paragraph block after it", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([markdownBlock("d1:b0", 0, "## Heading")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "## Heading".length);
+    await changeText(editorInput(renderer), "## Heading\n");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "## Heading",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("splits a blockquote line into a continued quote with trailing text", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([quoteBlock("d1:b0", 0, "> Quote trailing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "> Quote".length);
+    await changeText(editorInput(renderer), "> Quote\ntrailing");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "> trailing",
+        beforeMarkdown: "> Quote",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter on an empty blockquote exits the quote", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([quoteBlock("d1:b0", 0, "> ")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "> ".length);
+    await changeText(editorInput(renderer), "> \n");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("preserves a language-tagged code block edit with nested backticks", async () => {
+    const originalMarkdown = [
+      "```ts",
+      "const fence = \"```\";",
+      "```",
+    ].join("\n");
+    const nextMarkdown = [
+      "```ts",
+      "const fence = \"```\";",
+      "const value = 1;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("preserves edits to an empty fenced code block", async () => {
+    const originalMarkdown = "```js\n```";
+    const nextMarkdown = "```js\n\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "```js\n".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("preserves code block edits adjacent to paragraph and list blocks", async () => {
+    const originalMarkdown = "```js\nconst value = 1;\n```";
+    const nextMarkdown = "```js\nconst value = 2;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "Intro"),
+      codeBlock("d1:b1", 1, originalMarkdown),
+      unorderedListBlock("d1:b2", 2, "- Item"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, originalMarkdown);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b1",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "codeBlock", "unorderedList"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("typing a thematic break converts the active block to a thematic break", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "---");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "---",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["thematicBreak"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter after a thematic break creates a paragraph block after it", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([thematicBreakBlock("d1:b0", 0)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "---".length);
+    await changeText(editorInput(renderer), "---\n");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "---",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("backspace inside a thematic break updates it as plain markdown", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([thematicBreakBlock("d1:b0", 0)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "---".length);
+    await changeText(editorInput(renderer), "--");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "--",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["paragraph"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("preserves inline markdown syntax and unicode text during edits", async () => {
+    const originalMarkdown = "A **bold** [link](https://example.com) `code` \\*escaped\\* café 😊";
+    const nextMarkdown = `${originalMarkdown} edited`;
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.markdownById.get("d1:b0")).toBe(nextMarkdown);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting multi-paragraph markdown into a single-line block creates multiple markdown blocks", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "Original".length);
+    await changeText(editorInput(renderer), "First paragraph\n\nSecond paragraph");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "First paragraph\n\nSecond paragraph",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting multi-line list markdown into an empty block creates one list block", async () => {
+    const markdown = [
+      "1. First",
+      "2. Second",
+      "3. Third",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting single paragraph text into an empty block creates one paragraph block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), "Just text");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Just text",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["paragraph"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting single heading markdown into an empty block creates one heading block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), "## Heading");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "## Heading",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["heading"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting single list item markdown into an empty block creates one list block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), "- Item");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "- Item",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["unorderedList"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting single blockquote markdown into an empty block creates one quote block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), "> Quote");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "> Quote",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["quote"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting single table markdown into an empty block creates one table block", async () => {
+    const markdown = [
+      "| A | B |",
+      "|---|---|",
+      "| 1 | 2 |",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["table"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting fenced code markdown into an empty block creates one code block", async () => {
+    const markdown = [
+      "```js",
+      "const value = 1;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting mixed code and paragraphs creates code paragraph paragraph code blocks", async () => {
+    const markdown = [
+      "```js",
+      "const first = 1;",
+      "```",
+      "",
+      "One",
+      "",
+      "Two",
+      "",
+      "```ts",
+      "const second = 2;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100", "d1:b101", "d1:b102"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock", "paragraph", "paragraph", "codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting incomplete fenced code markdown keeps one incomplete code block", async () => {
+    const markdown = [
+      "```js",
+      "const value = 1;",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting multi-paragraph markdown over a text selection replaces the selection through the parser", async () => {
+    const markdown = [
+      "Before",
+      "",
+      "After",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Replace me")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0, "Replace me".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "paragraph"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting multi-line list markdown into an existing single-line list updates one list block", async () => {
+    const markdown = [
+      "1. Existing",
+      "2. Pasted first",
+      "3. Pasted second",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([orderedListBlock("d1:b0", 0, "1. Existing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "1. Existing".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["orderedList"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting fenced code markdown into an existing code block keeps the edit inside that code block", async () => {
+    const originalMarkdown = [
+      "```js",
+      "const before = 1;",
+      "```",
+    ].join("\n");
+    const nextMarkdown = [
+      "```js",
+      "const before = 1;",
+      "```",
+      "```ts",
+      "const pasted = 2;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), originalMarkdown.length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting fenced code markdown into a paragraph parses through document blocks", async () => {
+    const markdown = [
+      "Intro",
+      "",
+      "```js",
+      "const pasted = 1;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Intro")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "Intro".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting fenced code markdown into a list item parses through document blocks", async () => {
+    const markdown = [
+      "- Item",
+      "",
+      "```js",
+      "const pasted = 1;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, "- Item")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- Item".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["unorderedList", "codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting multiple list items inside an existing list item keeps one list block", async () => {
+    const markdown = [
+      "- Existing pasted first",
+      "- Pasted second",
+      "- Pasted third",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, "- Existing")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- Existing".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["unorderedList"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting mixed heading paragraph list code and quote parses all block types", async () => {
+    const markdown = [
+      "# Heading",
+      "",
+      "Paragraph",
+      "",
+      "- Item",
+      "- Item two",
+      "",
+      "```js",
+      "const value = 1;",
+      "```",
+      "",
+      "> Quote",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["heading", "paragraph", "unorderedList", "codeBlock", "quote"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting CRLF markdown normalizes into parsed markdown blocks", async () => {
+    const markdown = "First\r\n\r\nSecond\r\n\r\n```js\r\nconst value = 1;\r\n```";
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "paragraph", "codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting huge markdown far down in the document updates the intended block only", async () => {
+    const blocks = Array.from({ length: 160 }, (_value, index) => block(`d1:b${index}`, index, `Block ${index}`));
+    const targetMarkdown = "Block 140";
+    const pastedMarkdown = Array.from({ length: 30 }, (_value, index) => `Pasted paragraph ${index}`).join("\n\n");
+    const adapter = new MountedEditorAdapter(snapshot(blocks));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, targetMarkdown);
+    await changeSelection(editorInput(renderer), targetMarkdown.length);
+    await changeText(editorInput(renderer), pastedMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b140",
+        markdown: pastedMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.markdownById.get("d1:b139")).toBe("Block 139");
+    expect(adapter.markdownById.get("d1:b0")).toBe("Block 0");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale text-change events after a code-block boundary split", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+    const staleOnChangeText = editorInput(renderer).props.onChangeText;
+
+    await changeSelection(editorInput(renderer), originalMarkdown.length);
+    await act(async () => {
+      staleOnChangeText(`${originalMarkdown}\n`);
+    });
+    await flushPromises();
+    await act(async () => {
+      staleOnChangeText(`${originalMarkdown}\nstale`);
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: originalMarkdown,
+        blockId: "d1:b0",
+        type: "splitBlock",
       },
     ]);
     expect(onError).not.toHaveBeenCalled();
@@ -749,6 +2248,146 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("undoes and redoes a paragraph split", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "Original".length);
+    await changeText(editorInput(renderer), "Original\nInserted");
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "Inserted",
+        beforeMarkdown: "Original",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+      {
+        endBlockId: "d1:b101",
+        markdown: "Original",
+        startBlockId: "d1:b100",
+        type: "replaceBlockRange",
+      },
+      {
+        afterMarkdown: "Inserted",
+        beforeMarkdown: "Original",
+        blockId: "d1:b100",
+        type: "splitBlock",
+      },
+    ]);
+    expect(adapter.sourceMarkdown).toBe("Original\n\nInserted");
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes a paste that creates multiple blocks", async () => {
+    const markdown = [
+      "First",
+      "",
+      "Second",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0, "Original".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    expect(adapter.blockTypes).toEqual(["paragraph", "paragraph"]);
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes deleting a block selection", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await act(async () => {
+      blockSelectionInput(renderer).props.onKeyPress({ nativeEvent: { key: "Backspace" } });
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.sourceMarkdown).toBe("Third");
+    expect(adapter.blockIds).toHaveLength(1);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes exiting an empty list item", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, "- ")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- ".length);
+    await changeText(editorInput(renderer), "- \n");
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.sourceMarkdown).toBe("");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes a code-block boundary split", async () => {
+    const originalMarkdown = "```\nconst value = 1;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), originalMarkdown.length);
+    await changeText(editorInput(renderer), `${originalMarkdown}\n`);
+    await runPendingTimers();
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.sourceMarkdown).toBe(`${originalMarkdown}\n\n`);
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("publishes command state changes for undo and redo availability", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const onCommandStateChange = jest.fn();
@@ -786,6 +2425,120 @@ describe("MarkdownDocument mounted editing", () => {
     ]);
     expect(adapter.blockIds).toEqual(["d1:b100", "d1:b2"]);
     expect(editorInput(renderer).props.defaultValue).toBe("Replacement");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("replaces selected text inside a multiline block", async () => {
+    const originalMarkdown = [
+      "First line",
+      "Second line",
+      "Third line",
+    ].join("\n");
+    const nextMarkdown = [
+      "First line",
+      "Replacement",
+      "Third line",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, originalMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "First line\n".length, "First line\nSecond line".length);
+    await changeText(editorInput(renderer), nextMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: nextMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("replaces selected text inside a block with pasted markdown through the parser", async () => {
+    const markdown = [
+      "Before",
+      "",
+      "Pasted",
+      "",
+      "After",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Before selected After")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "Before ".length, "Before selected".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "paragraph", "paragraph"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("replaces a block selection with pasted mixed markdown", async () => {
+    const markdown = [
+      "# Replacement",
+      "",
+      "- Item",
+      "",
+      "```js",
+      "const value = 1;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await changeText(blockSelectionInput(renderer), markdown);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        endBlockId: "d1:b1",
+        markdown,
+        startBlockId: "d1:b0",
+        type: "replaceBlockRange",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["heading", "unorderedList", "codeBlock", "paragraph"]);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pressing enter on a block selection deletes the selected blocks", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await act(async () => {
+      blockSelectionInput(renderer).props.onKeyPress({ nativeEvent: { key: "Enter" } });
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        endBlockId: "d1:b1",
+        markdown: "",
+        startBlockId: "d1:b0",
+        type: "replaceBlockRange",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b2"]);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -930,6 +2683,257 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.markdownById.get("d1:b0")).toBe("Second edit");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("edits the first block without affecting later blocks", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "First edited");
+    await runPendingTimers();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("First edited");
+    expect(adapter.markdownById.get("d1:b1")).toBe("Second");
+    expect(adapter.markdownById.get("d1:b2")).toBe("Third");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("edits the last block without affecting earlier blocks", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "Third");
+    await changeText(editorInput(renderer), "Third edited");
+    await runPendingTimers();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("First");
+    expect(adapter.markdownById.get("d1:b1")).toBe("Second");
+    expect(adapter.markdownById.get("d1:b2")).toBe("Third edited");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("edits the only block and keeps it active", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Only")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Only edited");
+    await runPendingTimers();
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("edits the block after deleting previous siblings", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await act(async () => {
+      blockSelectionInput(renderer).props.onKeyPress({ nativeEvent: { key: "Backspace" } });
+    });
+    await flushPromises();
+    await pressRenderedMarkdown(renderer, "Third");
+    await changeText(editorInput(renderer), "Third edited");
+    await runPendingTimers();
+
+    expect(adapter.sourceMarkdown).toBe("Third edited");
+    expect(adapter.blockIds).toHaveLength(1);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("coalesces rapid sequential text events from the same block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Edit 1");
+    await changeText(editorInput(renderer), "Edit 2");
+    await changeText(editorInput(renderer), "Edit 3");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Edit 3",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("duplicate native text events do not create duplicate transactions", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Duplicate");
+    await changeText(editorInput(renderer), "Duplicate");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Duplicate",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("accepts text events after save commits the active draft", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Saved");
+    await act(async () => {
+      await commandsRef.current?.save();
+    });
+    await flushPromises();
+    await changeText(editorInput(renderer), "Saved again");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Saved",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
+        markdown: "Saved again",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("Saved again");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale text events after switching the active block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+    const staleOnChangeText = editorInput(renderer).props.onChangeText;
+
+    await pressRenderedMarkdown(renderer, "Second");
+    await act(async () => {
+      staleOnChangeText("First stale");
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("applies text events after undo to the restored active block state", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Edited");
+    await runPendingTimers();
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await changeText(editorInput(renderer), "Restored edit");
+    await runPendingTimers();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("Restored edit");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("applies text events after redo to the redone active block state", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Edited");
+    await runPendingTimers();
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+    await changeText(editorInput(renderer), "Redone edit");
+    await runPendingTimers();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("Redone edit");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("maintains block invariants across a deterministic edit sequence", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "Alpha"),
+      block("d1:b1", 1, "Beta"),
+      block("d1:b2", 2, "Gamma"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Alpha edited");
+    await runPendingTimers();
+    expectUniqueBlockIds(adapter);
+    expectActiveBlockExists(renderer, adapter);
+
+    await changeSelection(editorInput(renderer), "Alpha".length);
+    await changeText(editorInput(renderer), "Alpha\nsplit");
+    expectUniqueBlockIds(adapter);
+    expectActiveBlockExists(renderer, adapter);
+
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+    expectUniqueBlockIds(adapter);
+    expectActiveBlockExists(renderer, adapter);
+
+    await pressRenderedMarkdown(renderer, "Beta");
+    await changeText(editorInput(renderer), "Beta edited");
+    await runPendingTimers();
+    expectUniqueBlockIds(adapter);
+    expectActiveBlockExists(renderer, adapter);
+
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps parser-model invariants for generated simple markdown updates", async () => {
+    const cases = [
+      "Plain text",
+      "# Heading",
+      "- Item\n- Item two",
+      "> Quote\n> Quote two",
+      "```js\nconst value = 1;\n```",
+      "---",
+    ];
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    for (const markdown of cases) {
+      await changeText(editorInput(renderer), markdown);
+      await runPendingTimers();
+      expectUniqueBlockIds(adapter);
+      expectActiveBlockExists(renderer, adapter);
+    }
+
     expect(onError).not.toHaveBeenCalled();
   });
 
