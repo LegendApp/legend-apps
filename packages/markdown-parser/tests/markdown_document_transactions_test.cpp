@@ -2,12 +2,14 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <unistd.h>
@@ -83,6 +85,15 @@ std::vector<MarkdownRenderBlock> blocksFor(const std::shared_ptr<HybridMarkdownD
   return document->getRenderBlocks(0, document->getBlockCount());
 }
 
+std::vector<std::string> blockIdsFor(const std::vector<MarkdownRenderBlock>& blocks) {
+  std::vector<std::string> blockIds;
+  blockIds.reserve(blocks.size());
+  for (const auto& block : blocks) {
+    blockIds.push_back(block.id);
+  }
+  return blockIds;
+}
+
 std::string savedSourceFor(const std::shared_ptr<HybridMarkdownDocumentSpec>& document) {
   TempFile saved;
   document->saveAs(saved.path);
@@ -106,6 +117,74 @@ void expectBlockSourceSlices(
         block.markdown,
         "block markdown must match its source slice");
     previousEnd = block.sourceEndByte;
+  }
+}
+
+bool containsBlockId(const std::vector<MarkdownRenderBlock>& blocks, const std::string& blockId) {
+  for (const auto& block : blocks) {
+    if (block.id == blockId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void expectUniqueBlockIds(const std::vector<MarkdownRenderBlock>& blocks) {
+  std::unordered_set<std::string> seen;
+  for (const auto& block : blocks) {
+    expect(!block.id.empty(), "block id must not be empty");
+    expect(seen.insert(block.id).second, "block id must be unique: " + block.id);
+  }
+}
+
+void expectDocumentInvariants(const std::shared_ptr<HybridMarkdownDocumentSpec>& document) {
+  const auto blocks = blocksFor(document);
+  const auto source = savedSourceFor(document);
+  expectEqual(blocks.size(), static_cast<size_t>(document->getBlockCount()), "render block count matches document count");
+  expectUniqueBlockIds(blocks);
+  for (size_t index = 0; index < blocks.size(); index += 1) {
+    expectEqual(static_cast<size_t>(blocks[index].index), index, "block index matches storage position");
+  }
+  expectEqual(static_cast<size_t>(document->getSourceSize()), source.size(), "source size matches saved source size");
+  expectBlockSourceSlices(document, source);
+}
+
+void expectTransactionResultInvariants(
+    const std::vector<MarkdownRenderBlock>& before,
+    const std::vector<MarkdownRenderBlock>& after,
+    const MarkdownTransactionResult& result,
+    const std::string& savedSource) {
+  const auto startBlockIndex = static_cast<size_t>(result.changedRange.startBlockIndex);
+  const auto deleteCount = static_cast<size_t>(result.changedRange.deleteCount);
+  expect(startBlockIndex <= before.size(), "changed range starts after previous block list");
+  expect(startBlockIndex + deleteCount <= before.size(), "changed range deletes past previous block list");
+  expectEqual(static_cast<size_t>(result.sourceLength), savedSource.size(), "transaction source length matches saved source");
+
+  auto expectedBlockIds = blockIdsFor(before);
+  expectedBlockIds.erase(
+      expectedBlockIds.begin() + static_cast<long long>(startBlockIndex),
+      expectedBlockIds.begin() + static_cast<long long>(startBlockIndex + deleteCount));
+  expectedBlockIds.insert(
+      expectedBlockIds.begin() + static_cast<long long>(startBlockIndex),
+      result.changedRange.blockIds.begin(),
+      result.changedRange.blockIds.end());
+
+  const auto afterBlockIds = blockIdsFor(after);
+  expectEqual(expectedBlockIds.size(), afterBlockIds.size(), "changed range splice result size");
+  for (size_t index = 0; index < afterBlockIds.size(); index += 1) {
+    expectEqual(afterBlockIds[index], expectedBlockIds[index], "changed range splice id");
+  }
+
+  std::unordered_set<std::string> changedBlockIds;
+  for (const auto& block : result.changedBlocks) {
+    changedBlockIds.insert(block.id);
+  }
+  for (const auto& blockId : result.changedRange.blockIds) {
+    expect(containsBlockId(after, blockId), "changed range block id must be live: " + blockId);
+    expect(changedBlockIds.contains(blockId), "changed range block id must have changed block payload: " + blockId);
+  }
+  for (const auto& retiredBlockId : result.retiredBlockIds) {
+    expect(!containsBlockId(after, retiredBlockId), "retired block id must not remain live: " + retiredBlockId);
   }
 }
 
@@ -139,7 +218,7 @@ void testLoadsBaselineBlocks() {
   expectEqual(blocks[0].type, "heading", "heading type");
   expectEqual(blocks[1].type, "paragraph", "paragraph type");
   expectEqual(blocks[2].type, "codeBlock", "code block type");
-  expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
+  expectDocumentInvariants(loaded.document);
 }
 
 void testCreatesDocumentFromMarkdownString() {
@@ -152,7 +231,7 @@ void testCreatesDocumentFromMarkdownString() {
   expectEqual(blocks[0].type, "heading", "string document heading type");
   expectEqual(blocks[1].type, "paragraph", "string document paragraph type");
   expectEqual(source, "# Untitled\n\nDraft paragraph\n", "string document save-as source");
-  expectBlockSourceSlices(result.document, source);
+  expectDocumentInvariants(result.document);
 }
 
 void testUpdateParagraphPreservesId() {
@@ -166,7 +245,8 @@ void testUpdateParagraphPreservesId() {
   expectEqual(after[0].id, before[0].id, "paragraph update preserves id");
   expectEqual(after[0].markdown, "Updated paragraph", "paragraph update markdown");
   expectEqual(result.changedRange.deleteCount, 1, "paragraph update delete count");
-  expectBlockSourceSlices(loaded.document, source);
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
 }
 
 void testUpdateParagraphToHeadingPreservesIdAndTypeChanges() {
@@ -178,7 +258,7 @@ void testUpdateParagraphToHeadingPreservesIdAndTypeChanges() {
   expectEqual(after[0].id, before[0].id, "heading update preserves id");
   expectEqual(after[0].type, "heading", "heading update type");
   expectEqual(static_cast<size_t>(after[0].headingLevel), 2, "heading update level");
-  expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
+  expectDocumentInvariants(loaded.document);
 }
 
 void testSplitBlockCreatesSecondBlock() {
@@ -194,7 +274,8 @@ void testSplitBlockCreatesSecondBlock() {
   expectEqual(after[1].markdown, "world", "split second markdown");
   expectEqual(result.changedRange.deleteCount, 1, "split delete count");
   expectEqual(result.changedRange.blockIds.size(), 2, "split inserted block ids");
-  expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
+  expectTransactionResultInvariants(before, after, result, savedSourceFor(loaded.document));
+  expectDocumentInvariants(loaded.document);
 }
 
 void testUpdateBlockCanBecomeMultipleParagraphs() {
@@ -212,7 +293,8 @@ void testUpdateBlockCanBecomeMultipleParagraphs() {
   expectEqual(after[2].id, before[1].id, "multi-paragraph preserves suffix id");
   expectEqual(result.changedRange.deleteCount, 1, "multi-paragraph delete count");
   expectEqual(result.changedRange.blockIds.size(), 2, "multi-paragraph inserted range count");
-  expectBlockSourceSlices(loaded.document, source);
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
 }
 
 void testUpdateBlockUsesParserForCodeBlockBoundaries() {
@@ -229,7 +311,7 @@ void testUpdateBlockUsesParserForCodeBlockBoundaries() {
   expectEqual(after[0].markdown, "```js\nconst x = 1\n```", "code block markdown");
   expectEqual(after[1].markdown, "After code", "code block following paragraph");
   expectEqual(after[2].id, before[1].id, "code block preserves suffix id");
-  expectBlockSourceSlices(loaded.document, source);
+  expectDocumentInvariants(loaded.document);
 }
 
 void testUpdateBlockUsesParserForTables() {
@@ -243,7 +325,7 @@ void testUpdateBlockUsesParserForTables() {
   expectEqual(after[0].type, "table", "table edit type");
   expectEqual(after[0].markdown, "| A | B |\n|---|---|\n| 1 | 2 |", "table markdown");
   expectEqual(after[1].id, before[1].id, "table edit preserves suffix id");
-  expectBlockSourceSlices(loaded.document, savedSourceFor(loaded.document));
+  expectDocumentInvariants(loaded.document);
 }
 
 void testReplaceBlockRangeUsesParserForCodeBlockBoundaries() {
@@ -263,7 +345,8 @@ void testReplaceBlockRangeUsesParserForCodeBlockBoundaries() {
   expectEqual(after[1].markdown, "After code", "range following paragraph");
   expectEqual(after[2].id, before[2].id, "range code block preserves suffix id");
   expectEqual(result.retiredBlockIds.size(), 1, "range code block retired count");
-  expectBlockSourceSlices(loaded.document, source);
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
 }
 
 void testReplaceBlockRangeUsesParserForTables() {
@@ -278,7 +361,108 @@ void testReplaceBlockRangeUsesParserForTables() {
   expectEqual(after[0].type, "table", "range table type");
   expectEqual(after[0].markdown, "| A | B |\n|---|---|\n| 1 | 2 |", "range table markdown");
   expectEqual(after[1].id, before[2].id, "range table preserves suffix id");
-  expectBlockSourceSlices(loaded.document, source);
+  expectDocumentInvariants(loaded.document);
+}
+
+std::string repeatedParagraphs(size_t count) {
+  std::ostringstream source;
+  for (size_t index = 0; index < count; index += 1) {
+    if (index > 0) {
+      source << "\n\n";
+    }
+    source << "Paragraph " << index;
+  }
+  source << "\n";
+  return source.str();
+}
+
+void testLargeDocumentFarDownTransactions() {
+  LoadedDocument loaded(repeatedParagraphs(180));
+  expectDocumentInvariants(loaded.document);
+
+  auto before = blocksFor(loaded.document);
+  auto result = loaded.document->applyTransaction(updateBlock(before[140].id, "Far down\n\nInserted paragraph"));
+  auto after = blocksFor(loaded.document);
+  auto source = savedSourceFor(loaded.document);
+  expectEqual(after[140].id, before[140].id, "far down edit preserves edited block id");
+  expectEqual(after[142].id, before[141].id, "far down edit preserves following suffix id");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+
+  before = blocksFor(loaded.document);
+  result = loaded.document->applyTransaction(replaceBlockRange(before[135].id, before[145].id, "Replacement after scroll"));
+  after = blocksFor(loaded.document);
+  source = savedSourceFor(loaded.document);
+  expectEqual(after[135].markdown, "Replacement after scroll", "far down range replacement markdown");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
+class DeterministicRandom {
+public:
+  explicit DeterministicRandom(uint32_t seed) : state_(seed) {}
+
+  size_t nextIndex(size_t maxExclusive) {
+    state_ = state_ * 1664525u + 1013904223u;
+    return maxExclusive == 0 ? 0 : state_ % maxExclusive;
+  }
+
+private:
+  uint32_t state_;
+};
+
+void testRandomizedTransactionSequence() {
+  constexpr uint32_t seed = 0x7d3a49f1u;
+  DeterministicRandom random(seed);
+  LoadedDocument loaded(repeatedParagraphs(96));
+
+  const std::vector<std::string> replacementMarkdown = {
+      "Updated paragraph",
+      "First paragraph\n\nSecond paragraph",
+      "```ts\nconst value = 1;\n```",
+      "| A | B |\n|---|---|\n| 1 | 2 |",
+      "> Quote\n>\n> More quote",
+      "- item one\n- item two",
+      "1. ordered\n2. list",
+      "## Heading",
+  };
+
+  for (size_t actionIndex = 0; actionIndex < 80; actionIndex += 1) {
+    const auto before = blocksFor(loaded.document);
+    expect(!before.empty(), "randomized document should keep at least one block");
+    const auto action = random.nextIndex(3);
+    const auto blockIndex = random.nextIndex(before.size());
+
+    try {
+      MarkdownTransactionResult result;
+      if (action == 0 || before.size() < 3) {
+        const auto& markdown = replacementMarkdown[random.nextIndex(replacementMarkdown.size())];
+        result = loaded.document->applyTransaction(updateBlock(before[blockIndex].id, markdown));
+      } else if (action == 1) {
+        result = loaded.document->applyTransaction(splitBlock(before[blockIndex].id, "Split before", "Split after"));
+      } else {
+        const auto secondOffset = random.nextIndex(5);
+        const auto secondIndex = std::min(before.size() - 1, blockIndex + secondOffset);
+        const auto rangeStart = std::min(blockIndex, secondIndex);
+        const auto rangeEnd = std::max(blockIndex, secondIndex);
+        result = loaded.document->applyTransaction(replaceBlockRange(before[rangeStart].id, before[rangeEnd].id, "Range replacement"));
+      }
+
+      const auto after = blocksFor(loaded.document);
+      const auto source = savedSourceFor(loaded.document);
+      expectTransactionResultInvariants(before, after, result, source);
+      expectDocumentInvariants(loaded.document);
+    } catch (const std::exception& error) {
+      std::ostringstream output;
+      output << "random transaction sequence failed"
+             << "\nseed: " << seed
+             << "\naction index: " << actionIndex
+             << "\nblock index: " << blockIndex
+             << "\nerror: " << error.what()
+             << "\nsource:\n" << savedSourceFor(loaded.document);
+      throw std::runtime_error(output.str());
+    }
+  }
 }
 
 using TestFunction = void (*)();
@@ -300,9 +484,11 @@ int main() {
       {"update block can become multiple paragraphs", testUpdateBlockCanBecomeMultipleParagraphs},
       {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},
       {"update block uses parser for tables", testUpdateBlockUsesParserForTables},
-      {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
-      {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
-  };
+	      {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
+	      {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
+	      {"large document far down transactions", testLargeDocumentFarDownTransactions},
+	      {"randomized transaction sequence", testRandomizedTransactionSequence},
+	  };
 
   for (const auto& test : tests) {
     try {
