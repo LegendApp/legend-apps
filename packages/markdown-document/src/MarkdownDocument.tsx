@@ -594,6 +594,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const handleChangeMarkdown = useCallback(
       (block: MarkdownBlockSnapshot, markdown: string) => {
+        if (activeBlockIdRef.current !== block.id) {
+          return;
+        }
+
         if (block.type !== "codeBlock") {
           const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
           if (splitMarkdown) {
