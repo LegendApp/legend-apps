@@ -6,6 +6,7 @@ import {
 import { getLegendTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { getMarkdownE2ERunFromLaunchArguments, MarkdownE2ERunner } from "./MarkdownE2ERunner";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
@@ -39,6 +40,7 @@ type MarkdownEditorWindowProps = {
 
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   const session = useMarkdownDocumentSession();
+  const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   const themeSetting = useSyncExternalStore(
     subscribeToMarkdownSettings,
     getMarkdownThemeSetting,
@@ -146,6 +148,10 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     isUntitledDocument: session.isUntitledDocument,
     onError: session.handleError,
   });
+
+  if (e2eRun) {
+    return <MarkdownE2ERunner {...e2eRun} />;
+  }
 
   if (!session.hasDocument || !session.filename) {
     return null;

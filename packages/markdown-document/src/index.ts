@@ -1,5 +1,11 @@
 export { MarkdownDocument } from "./MarkdownDocument";
 export { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
+export {
+  runMarkdownDocumentE2EScenario,
+  type MarkdownDocumentE2EResult,
+  type MarkdownDocumentE2EScenarioName,
+  type MarkdownDocumentE2EScenarioOptions,
+} from "./e2eScenarios";
 export { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 export type {
   MarkdownBlockSnapshot,
