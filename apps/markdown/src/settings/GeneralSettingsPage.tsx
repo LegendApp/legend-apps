@@ -14,6 +14,7 @@ import {
   type MarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
 import { RadioOption } from "./RadioOption";
+import { ToolbarLayoutEditor } from "./ToolbarLayoutEditor";
 
 export function GeneralSettingsPage() {
   const startupBehavior = useSyncExternalStore(
@@ -87,6 +88,16 @@ export function GeneralSettingsPage() {
             value="hidden"
           />
         </View>
+        <ToolbarLayoutEditor
+          description="Choose the controls and order used by the top toolbar."
+          layoutId="top"
+          title="Top Toolbar"
+        />
+        <ToolbarLayoutEditor
+          description="Choose the controls and order used by the floating toolbar above selected text."
+          layoutId="selection"
+          title="Floating Toolbar"
+        />
       </SettingsSection>
     </SettingsPage>
   );

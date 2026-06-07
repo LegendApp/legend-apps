@@ -1,3 +1,4 @@
+import { PortalProvider } from "@gorhom/portal";
 import {
   SettingsWindow as SharedSettingsWindow,
   type SettingsWindowPage,
@@ -29,11 +30,13 @@ const pages: SettingsWindowPage<SettingsPage>[] = [
 export function SettingsWindow({ initialPage }: { initialPage?: string }) {
   const initialSettingsPage = initialPage && isSettingsPage(initialPage) ? initialPage : undefined;
   return (
-    <SharedSettingsWindow
-      initialPage={initialSettingsPage}
-      pages={pages}
-      windowIdentifier={settingsWindowIdentifier}
-    />
+    <PortalProvider>
+      <SharedSettingsWindow
+        initialPage={initialSettingsPage}
+        pages={pages}
+        windowIdentifier={settingsWindowIdentifier}
+      />
+    </PortalProvider>
   );
 }
 

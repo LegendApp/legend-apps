@@ -154,6 +154,8 @@ const documentDensitySetting = createNativeSettingsValue<MarkdownDocumentDensity
 let cachedAppearanceSettings: MarkdownAppearanceSettings | null = null;
 let cachedHotkeySettings: HotkeyState<MarkdownHotkeyId> | null = null;
 let cachedHotkeySettingsSource: string | null = null;
+let cachedToolbarLayoutSettings: Partial<Record<MarkdownToolbarLayoutId, MarkdownToolbarLayout>> = {};
+let cachedToolbarLayoutSettingsSource: Partial<Record<MarkdownToolbarLayoutId, string>> = {};
 
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
   return themeSetting.get();
@@ -284,11 +286,20 @@ export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
 
 export function getMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout {
   const stored = readStoredMarkdownToolbarLayout(layoutId);
-  const normalized = normalizeMarkdownToolbarLayout(stored, layoutId);
+  const source = JSON.stringify(stored ?? null);
+  const cached = cachedToolbarLayoutSettings[layoutId];
+  if (cached && cachedToolbarLayoutSettingsSource[layoutId] === source) {
+    return cached;
+  }
 
-  return {
+  const normalized = normalizeMarkdownToolbarLayout(stored, layoutId);
+  const nextLayout = {
     shown: normalized.shown,
   };
+
+  cachedToolbarLayoutSettings[layoutId] = nextLayout;
+  cachedToolbarLayoutSettingsSource[layoutId] = source;
+  return nextLayout;
 }
 
 export function getLastMarkdownDocumentPath() {
@@ -365,10 +376,15 @@ export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValu
 
 export function setMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId, layout: MarkdownToolbarLayout) {
   const normalized = normalizeMarkdownToolbarLayout(layout, layoutId);
+  const nextLayout = {
+    shown: normalized.shown,
+  };
+  const source = JSON.stringify(nextLayout);
+
+  cachedToolbarLayoutSettings[layoutId] = nextLayout;
+  cachedToolbarLayoutSettingsSource[layoutId] = source;
   Settings.set({
-    [getMarkdownToolbarLayoutSettingsKey(layoutId)]: JSON.stringify({
-      shown: normalized.shown,
-    }),
+    [getMarkdownToolbarLayoutSettingsKey(layoutId)]: source,
   });
   notifyMarkdownSettingsChanged();
 }
