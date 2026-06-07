@@ -115,7 +115,9 @@ export function getSelectedBlockMarkdown({
 
   return {
     endBlockId,
-    markdown: selectedMarkdown.join("\n"),
+    endIndex,
+    markdown: selectedMarkdown.join("\n\n"),
     startBlockId,
+    startIndex,
   };
 }

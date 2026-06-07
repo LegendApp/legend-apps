@@ -685,16 +685,46 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
-          if (!suppressHistoryRef.current && firstChangedBlockId && lastChangedBlockId) {
-            undoStackRef.current.push({
-              type: "replaceBlockRange",
-              startBlockId: firstChangedBlockId,
-              endBlockId: lastChangedBlockId,
-              replacementMarkdown: selectedBlocks.markdown,
-              inverseMarkdown: markdown,
-            });
-            redoStackRef.current = [];
-            publishCommandState();
+          if (!suppressHistoryRef.current) {
+            const nextHistoryEntry = firstChangedBlockId && lastChangedBlockId
+              ? {
+                  type: "replaceBlockRange" as const,
+                  startBlockId: firstChangedBlockId,
+                  endBlockId: lastChangedBlockId,
+                  replacementMarkdown: selectedBlocks.markdown,
+                  inverseMarkdown: markdown,
+                }
+              : (() => {
+                  const nextBlockId = blockIds[selectedBlocks.endIndex + 1];
+                  const previousBlockId = blockIds[selectedBlocks.startIndex - 1];
+                  const nextBlock = nextBlockId ? blocksById.get(nextBlockId) : undefined;
+                  const previousBlock = previousBlockId ? blocksById.get(previousBlockId) : undefined;
+                  if (nextBlock) {
+                    return {
+                      type: "replaceBlockRange" as const,
+                      startBlockId: nextBlock.id,
+                      endBlockId: nextBlock.id,
+                      replacementMarkdown: `${selectedBlocks.markdown}\n\n${nextBlock.markdown}`,
+                      inverseMarkdown: nextBlock.markdown,
+                    };
+                  }
+                  if (previousBlock) {
+                    return {
+                      type: "replaceBlockRange" as const,
+                      startBlockId: previousBlock.id,
+                      endBlockId: previousBlock.id,
+                      replacementMarkdown: `${previousBlock.markdown}\n\n${selectedBlocks.markdown}`,
+                      inverseMarkdown: previousBlock.markdown,
+                    };
+                  }
+                  return undefined;
+                })();
+
+            if (nextHistoryEntry) {
+              undoStackRef.current.push(nextHistoryEntry);
+              redoStackRef.current = [];
+              publishCommandState();
+            }
           }
           applyTransactionResult(result);
           blockSelectionGestureRef.current = null;
