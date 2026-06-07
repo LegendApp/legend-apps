@@ -218,6 +218,19 @@
         "react-native": "*",
       },
     },
+    "packages/hotkeys": {
+      "name": "@legend-desktop/hotkeys",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/keyboard-manager": "0.0.0",
+        "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/settings-window": "0.0.0",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/keyboard-manager": {
       "name": "@legend-desktop/keyboard-manager",
       "version": "0.0.0",
@@ -736,6 +749,8 @@
     "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+
+    "@legend-desktop/hotkeys": ["@legend-desktop/hotkeys@workspace:packages/hotkeys"],
 
     "@legend-desktop/keyboard-manager": ["@legend-desktop/keyboard-manager@workspace:packages/keyboard-manager"],
 

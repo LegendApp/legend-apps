@@ -1,0 +1,441 @@
+import {
+  addKeyDownListener,
+  addKeyUpListener,
+  createModifierMask,
+  hasModifier,
+  KeyCodes,
+  type KeyboardEvent,
+} from "@legend-desktop/keyboard-manager";
+import type { NativeMenuShortcut } from "@legend-desktop/native-menu";
+import { SettingsPage, SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Pressable, Text, View } from "react-native";
+
+export type HotkeyValue =
+  | number
+  | `${number}`
+  | `${number}+${number}`
+  | `${number}+${number}+${number}`
+  | `${number}+${number}+${number}+${number}`;
+
+export type HotkeyDefinition<HotkeyId extends string = string> = {
+  defaultValue: HotkeyValue | null;
+  description?: string;
+  id: HotkeyId;
+  repeat?: boolean;
+  title: string;
+};
+
+export type HotkeyState<HotkeyId extends string = string> = Record<HotkeyId, HotkeyValue | null>;
+
+export type HotkeyHandlers<HotkeyId extends string = string> = Partial<Record<HotkeyId, () => void>>;
+
+const modifierCodes = [
+  KeyCodes.MODIFIER_COMMAND,
+  KeyCodes.MODIFIER_SHIFT,
+  KeyCodes.MODIFIER_OPTION,
+  KeyCodes.MODIFIER_CONTROL,
+  KeyCodes.MODIFIER_CAPS_LOCK,
+  KeyCodes.MODIFIER_FUNCTION,
+] as const;
+
+const menuModifierCodes = [
+  KeyCodes.MODIFIER_COMMAND,
+  KeyCodes.MODIFIER_SHIFT,
+  KeyCodes.MODIFIER_OPTION,
+  KeyCodes.MODIFIER_CONTROL,
+  KeyCodes.MODIFIER_CAPS_LOCK,
+  KeyCodes.MODIFIER_FUNCTION,
+] as const;
+
+const modifierSet = new Set<number>(modifierCodes);
+const menuModifierSet = new Set<number>(menuModifierCodes);
+
+export const KeyText: Record<number, string> = (() => {
+  const keyText: Record<number, string> = {};
+
+  for (const [key, value] of Object.entries(KeyCodes)) {
+    if (typeof value === "number" && !key.startsWith("MODIFIER_")) {
+      const name = key.startsWith("KEY_") ? key.substring(4) : key;
+      keyText[value] = name.length === 1 ? name : name.charAt(0) + name.slice(1).toLowerCase();
+    }
+  }
+
+  return {
+    ...keyText,
+    [KeyCodes.KEY_RETURN]: "↩",
+    [KeyCodes.KEY_TAB]: "⇥",
+    [KeyCodes.KEY_SPACE]: "Space",
+    [KeyCodes.KEY_DELETE]: "⌫",
+    [KeyCodes.KEY_FORWARD_DELETE]: "⌦",
+    [KeyCodes.KEY_ESCAPE]: "Esc",
+    [KeyCodes.KEY_LEFT]: "←",
+    [KeyCodes.KEY_RIGHT]: "→",
+    [KeyCodes.KEY_DOWN]: "↓",
+    [KeyCodes.KEY_UP]: "↑",
+    [KeyCodes.KEY_MINUS]: "-",
+    [KeyCodes.KEY_EQUALS]: "=",
+    [KeyCodes.KEY_COMMA]: ",",
+    [KeyCodes.KEY_PERIOD]: ".",
+    [KeyCodes.KEY_SLASH]: "/",
+    [KeyCodes.KEY_MEDIA_PLAY_PAUSE]: "Play/Pause",
+    [KeyCodes.KEY_MEDIA_NEXT]: "Next Track",
+    [KeyCodes.KEY_MEDIA_PREVIOUS]: "Previous Track",
+    [KeyCodes.MODIFIER_COMMAND]: "⌘",
+    [KeyCodes.MODIFIER_SHIFT]: "⇧",
+    [KeyCodes.MODIFIER_OPTION]: "⌥",
+    [KeyCodes.MODIFIER_CONTROL]: "⌃",
+    [KeyCodes.MODIFIER_CAPS_LOCK]: "⇪",
+    [KeyCodes.MODIFIER_FUNCTION]: "Fn",
+  };
+})();
+
+const textToKeyCode = Object.entries(KeyText).reduce<Record<string, number>>((acc, [keyCode, text]) => {
+  acc[text] = Number(keyCode);
+  return acc;
+}, {});
+
+const functionKeyEquivalents: Record<number, number> = {
+  [KeyCodes.KEY_UP]: 0xf700,
+  [KeyCodes.KEY_DOWN]: 0xf701,
+  [KeyCodes.KEY_LEFT]: 0xf702,
+  [KeyCodes.KEY_RIGHT]: 0xf703,
+};
+
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
+function isModifierKeyCode(keyCode: number) {
+  return modifierSet.has(keyCode);
+}
+
+function uniqueKeyCodes(keyCodes: readonly number[]) {
+  return keyCodes.filter((keyCode, index) => keyCodes.indexOf(keyCode) === index);
+}
+
+function orderedKeyCodes(keyCodes: readonly number[]) {
+  return uniqueKeyCodes([
+    ...modifierCodes.filter((modifier) => keyCodes.includes(modifier)),
+    ...keyCodes.filter((keyCode) => !isModifierKeyCode(keyCode)),
+  ]);
+}
+
+export function parseHotkey(value: HotkeyValue | null | undefined): number[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  return `${value}`
+    .split("+")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => {
+      if (textToKeyCode[segment] !== undefined) {
+        return textToKeyCode[segment];
+      }
+
+      const numeric = Number(segment);
+      return Number.isNaN(numeric) ? undefined : numeric;
+    })
+    .filter((keyCode): keyCode is number => typeof keyCode === "number");
+}
+
+export function serializeHotkey(keyCodes: readonly number[]): HotkeyValue | null {
+  const ordered = orderedKeyCodes(keyCodes);
+  const hasNonModifier = ordered.some((keyCode) => !isModifierKeyCode(keyCode));
+  return hasNonModifier ? ordered.map((keyCode) => `${keyCode}`).join("+") as HotkeyValue : null;
+}
+
+export function formatHotkey(value: HotkeyValue | null | undefined, placeholder = "") {
+  const keyCodes = parseHotkey(value);
+  return keyCodes.length > 0
+    ? orderedKeyCodes(keyCodes).map((keyCode) => KeyText[keyCode] ?? `${keyCode}`).join(" + ")
+    : placeholder;
+}
+
+export function createDefaultHotkeyState<HotkeyId extends string>(
+  definitions: readonly HotkeyDefinition<HotkeyId>[],
+): HotkeyState<HotkeyId> {
+  return Object.fromEntries(definitions.map((definition) => [definition.id, definition.defaultValue])) as HotkeyState<HotkeyId>;
+}
+
+function eventModifierCodes(event: KeyboardEvent) {
+  return modifierCodes.filter((modifier) => hasModifier(event, modifier));
+}
+
+export function matchesHotkey(event: KeyboardEvent, value: HotkeyValue | null | undefined) {
+  const keyCodes = parseHotkey(value);
+  if (keyCodes.length === 0) {
+    return false;
+  }
+
+  const configuredModifiers = keyCodes.filter(isModifierKeyCode);
+  const configuredKeyCode = keyCodes.find((keyCode) => !isModifierKeyCode(keyCode));
+  const activeModifiers = eventModifierCodes(event);
+  const modifierMask = createModifierMask(...configuredModifiers);
+  const activeMask = createModifierMask(...activeModifiers);
+
+  return configuredKeyCode !== undefined && event.keyCode === configuredKeyCode && activeMask === modifierMask;
+}
+
+function keyCodeToMenuKeyEquivalent(keyCode: number): string | null {
+  if (functionKeyEquivalents[keyCode] !== undefined) {
+    return String.fromCharCode(functionKeyEquivalents[keyCode]);
+  }
+
+  switch (keyCode) {
+    case KeyCodes.KEY_RETURN:
+      return "\r";
+    case KeyCodes.KEY_TAB:
+      return "\t";
+    case KeyCodes.KEY_SPACE:
+      return " ";
+    case KeyCodes.KEY_ESCAPE:
+      return "\u001b";
+    case KeyCodes.KEY_DELETE:
+    case KeyCodes.KEY_BACKSPACE:
+      return "\u0008";
+    case KeyCodes.KEY_FORWARD_DELETE:
+      return String.fromCharCode(0x007f);
+    default: {
+      const text = KeyText[keyCode];
+      return text && text.length === 1 ? text.toLowerCase() : null;
+    }
+  }
+}
+
+export function hotkeyToMenuShortcut(hotkey: HotkeyValue | null | undefined): NativeMenuShortcut | null {
+  const keyCodes = parseHotkey(hotkey);
+  let modifiers = 0;
+  let keyCode: number | null = null;
+
+  for (const code of keyCodes) {
+    if (menuModifierSet.has(code)) {
+      modifiers |= code;
+    } else if (keyCode === null) {
+      keyCode = code;
+    }
+  }
+
+  const keyEquivalent = keyCode === null ? null : keyCodeToMenuKeyEquivalent(keyCode);
+  return keyEquivalent ? { key: keyEquivalent, modifiers } : null;
+}
+
+export function useHotkeys<HotkeyId extends string>({
+  definitions,
+  enabled = true,
+  handlers,
+  values,
+}: {
+  definitions: readonly HotkeyDefinition<HotkeyId>[];
+  enabled?: boolean;
+  handlers: HotkeyHandlers<HotkeyId>;
+  values: HotkeyState<HotkeyId>;
+}) {
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
+    return addKeyDownListener((event) => {
+      for (const definition of definitions) {
+        const handler = handlers[definition.id];
+        const value = values[definition.id] ?? definition.defaultValue;
+        if (handler && matchesHotkey(event, value)) {
+          handler();
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [definitions, enabled, handlers, values]);
+}
+
+type HotkeyCaptureProps = {
+  className?: string;
+  disabled?: boolean;
+  onCaptureChange?: (isCapturing: boolean) => void;
+  onChange: (value: HotkeyValue | null) => void;
+  placeholder?: string;
+  value: HotkeyValue | null;
+};
+
+function pressedCodesFromSet(pressedCodes: Set<number>) {
+  return [...pressedCodes].filter((keyCode) => Number.isFinite(keyCode));
+}
+
+export function HotkeyCapture({
+  className,
+  disabled = false,
+  onCaptureChange,
+  onChange,
+  placeholder = "Click to record",
+  value,
+}: HotkeyCaptureProps) {
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [pressedDisplay, setPressedDisplay] = useState<string | null>(null);
+  const lastValidCapture = useRef<number[] | null>(null);
+  const pressedCodesRef = useRef(new Set<number>());
+
+  const setNextCapturing = useCallback((nextCapturing: boolean) => {
+    setIsCapturing(nextCapturing);
+    onCaptureChange?.(nextCapturing);
+  }, [onCaptureChange]);
+
+  const handleCancel = useCallback(() => {
+    pressedCodesRef.current.clear();
+    lastValidCapture.current = null;
+    setPressedDisplay(null);
+    setNextCapturing(false);
+  }, [setNextCapturing]);
+
+  const handleCommit = useCallback(() => {
+    const nextValue = lastValidCapture.current ? serializeHotkey(lastValidCapture.current) : null;
+    if (nextValue) {
+      onChange(nextValue);
+    }
+    handleCancel();
+  }, [handleCancel, onChange]);
+
+  const handleStart = useCallback(() => {
+    if (!disabled) {
+      lastValidCapture.current = null;
+      pressedCodesRef.current.clear();
+      setPressedDisplay(null);
+      setNextCapturing(true);
+    }
+  }, [disabled, setNextCapturing]);
+
+  useEffect(() => {
+    if (!isCapturing) {
+      return undefined;
+    }
+
+    const updateCapture = () => {
+      const pressedCodes = pressedCodesFromSet(pressedCodesRef.current);
+      if (pressedCodes.includes(KeyCodes.KEY_ESCAPE)) {
+        handleCancel();
+      } else if (pressedCodes.length > 0) {
+        setPressedDisplay(formatHotkey(serializeHotkey(pressedCodes)));
+        if (pressedCodes.some((keyCode) => !isModifierKeyCode(keyCode))) {
+          lastValidCapture.current = pressedCodes;
+        }
+      } else if (lastValidCapture.current) {
+        handleCommit();
+      } else {
+        handleCancel();
+      }
+    };
+
+    const removeDown = addKeyDownListener((event) => {
+      pressedCodesRef.current.add(event.keyCode);
+      for (const modifier of modifierCodes) {
+        if (hasModifier(event, modifier)) {
+          pressedCodesRef.current.add(modifier);
+        } else {
+          pressedCodesRef.current.delete(modifier);
+        }
+      }
+      updateCapture();
+      return true;
+    });
+    const removeUp = addKeyUpListener((event) => {
+      pressedCodesRef.current.delete(event.keyCode);
+      for (const modifier of modifierCodes) {
+        if (!hasModifier(event, modifier)) {
+          pressedCodesRef.current.delete(modifier);
+        }
+      }
+      updateCapture();
+      return true;
+    });
+
+    return () => {
+      removeDown();
+      removeUp();
+    };
+  }, [handleCancel, handleCommit, isCapturing]);
+
+  useEffect(() => {
+    if (disabled && isCapturing) {
+      handleCancel();
+    }
+  }, [disabled, handleCancel, isCapturing]);
+
+  const displayValue = useMemo(() => {
+    if (isCapturing) {
+      return pressedDisplay || "Press keys...";
+    }
+    return formatHotkey(value, placeholder);
+  }, [isCapturing, placeholder, pressedDisplay, value]);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      className={cx(
+        "min-h-9 min-w-44 justify-center rounded-md border border-border-primary bg-background-secondary px-3 py-2",
+        isCapturing && "border-accent-primary",
+        disabled && "opacity-60",
+        className,
+      )}
+      disabled={disabled}
+      focusable
+      onBlur={() => {
+        if (isCapturing) {
+          handleCancel();
+        }
+      }}
+      onPress={handleStart}
+    >
+      <View className="flex-row items-center">
+        <Text className={cx("text-sm text-text-primary", !value && !isCapturing && "text-text-tertiary")}>
+          {displayValue}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+type HotkeysSettingsPageProps<HotkeyId extends string> = {
+  definitions: readonly HotkeyDefinition<HotkeyId>[];
+  onCaptureChange?: (isCapturing: boolean) => void;
+  onChange: (id: HotkeyId, value: HotkeyValue | null) => void;
+  renderFooter?: () => ReactNode;
+  values: HotkeyState<HotkeyId>;
+};
+
+export function HotkeysSettingsPage<HotkeyId extends string>({
+  definitions,
+  onCaptureChange,
+  onChange,
+  renderFooter,
+  values,
+}: HotkeysSettingsPageProps<HotkeyId>) {
+  return (
+    <SettingsPage>
+      <SettingsSection card={false} first title="Hotkeys">
+        <View className="gap-3">
+          {definitions.map((definition) => (
+            <SettingsRow
+              align="center"
+              control={(
+                <HotkeyCapture
+                  onCaptureChange={onCaptureChange}
+                  onChange={(value) => onChange(definition.id, value)}
+                  value={values[definition.id] ?? definition.defaultValue}
+                />
+              )}
+              description={definition.description}
+              key={definition.id}
+              title={definition.title}
+            />
+          ))}
+        </View>
+      </SettingsSection>
+      {renderFooter?.()}
+    </SettingsPage>
+  );
+}
+
+export { KeyCodes };
