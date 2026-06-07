@@ -52,6 +52,7 @@
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
+        "@legend-desktop/classnames": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/drag-drop": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
@@ -74,10 +75,8 @@
         "@legendapp/list": "^3.0.0-beta.56",
         "@legendapp/motion": "^2.5.3",
         "@legendapp/state": "^3.0.0-beta.42",
-        "clsx": "^2.1.1",
         "expo-file-system": "~19.0.21",
         "sf-symbols-typescript": "^2.2.0",
-        "tailwind-merge": "^3.4.0",
       },
     },
     "apps/test-kitchen-sink": {
@@ -153,6 +152,14 @@
         "react-native": "*",
       },
     },
+    "packages/classnames": {
+      "name": "@legend-desktop/classnames",
+      "version": "0.0.0",
+      "dependencies": {
+        "clsx": "^2.1.1",
+        "tailwind-merge": "^3.4.0",
+      },
+    },
     "packages/context-menu": {
       "name": "@legend-desktop/context-menu",
       "version": "0.0.0",
@@ -224,6 +231,7 @@
       "name": "@legend-desktop/hotkeys",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-desktop/classnames": "0.0.0",
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
       },
@@ -316,6 +324,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-desktop/classnames": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
       },
       "peerDependencies": {
@@ -734,6 +743,8 @@
     "@legend-desktop/audio-player": ["@legend-desktop/audio-player@workspace:packages/audio-player"],
 
     "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
+
+    "@legend-desktop/classnames": ["@legend-desktop/classnames@workspace:packages/classnames"],
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
 

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { View } from "react-native";
 
 import { Checkbox } from "@/components/Checkbox";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 interface WithCheckboxProps {
     checked$?: Observable<boolean>;

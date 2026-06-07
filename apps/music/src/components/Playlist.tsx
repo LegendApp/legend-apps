@@ -31,7 +31,7 @@ import {
 import { settings$ } from "@/systems/Settings";
 import { state$, stateSaved$ } from "@/systems/State";
 import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { perfCount, perfLog } from "@/utils/perfLogger";
 import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "@/utils/trackContextMenu";
 import {

@@ -9,7 +9,7 @@ import { Icon } from "@/systems/Icon";
 import { localMusicState$ } from "@/systems/LocalMusicState";
 import { setIsScrubbing } from "@/systems/PlaybackInteractionState";
 import { settings$ } from "@/systems/Settings";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@/utils/perfLogger";
 
 export type OverlayPlaybackMode = {

@@ -5,6 +5,7 @@
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
+    "@legend-desktop/classnames": "0.0.0",
     "@legend-desktop/keyboard-manager": "0.0.0",
     "@legend-desktop/native-menu": "0.0.0"
   },

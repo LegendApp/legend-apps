@@ -3,7 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import { Text, View } from "react-native";
 
 import { Icon } from "@/systems/Icon";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { Button } from "./Button";
 
 export interface CheckboxProps {

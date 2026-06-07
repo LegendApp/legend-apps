@@ -6,6 +6,7 @@ import {
   KeyCodes,
   type KeyboardEvent,
 } from "@legend-desktop/keyboard-manager";
+import { cn } from "@legend-desktop/classnames";
 import type { NativeMenuShortcut } from "@legend-desktop/native-menu";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -100,10 +101,6 @@ const functionKeyEquivalents: Record<number, number> = {
   [KeyCodes.KEY_LEFT]: 0xf702,
   [KeyCodes.KEY_RIGHT]: 0xf703,
 };
-
-function cx(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
 
 function isModifierKeyCode(keyCode: number) {
   return modifierSet.has(keyCode);
@@ -371,7 +368,7 @@ export function HotkeyCapture({
   return (
     <Pressable
       accessibilityRole="button"
-      className={cx(
+      className={cn(
         "min-h-9 min-w-44 justify-center rounded-md border border-border-primary bg-background-secondary px-3 py-2",
         isCapturing && "border-accent-primary",
         disabled && "opacity-60",
@@ -387,7 +384,7 @@ export function HotkeyCapture({
       onPress={handleStart}
     >
       <View className="flex-row items-center">
-        <Text className={cx("text-sm text-text-primary", !value && !isCapturing && "text-text-tertiary")}>
+        <Text className={cn("text-sm text-text-primary", !value && !isCapturing && "text-text-tertiary")}>
           {displayValue}
         </Text>
       </View>

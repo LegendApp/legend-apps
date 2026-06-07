@@ -1,3 +1,10 @@
+import { cn } from "@legend-desktop/classnames";
+import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
+import {
+  setWindowTitle,
+  WindowStyleMask,
+  type WindowOptions,
+} from "@legend-desktop/window-manager";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -8,19 +15,9 @@ import {
   View,
   type NativeSyntheticEvent,
 } from "react-native";
-import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
-import {
-  setWindowTitle,
-  WindowStyleMask,
-  type WindowOptions,
-} from "@legend-desktop/window-manager";
 
 const SETTINGS_SIDEBAR_TOP_INSET = 52;
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
-
-function cx(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
 
 export type SettingsWindowPage<PageId extends string = string> = {
   id: PageId;
@@ -141,7 +138,7 @@ export function SettingsWindow<PageId extends string = string>({
 
   return (
     <SidebarSplitView
-      className={cx("flex-1", backgroundClassName)}
+      className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       onSplitViewDidResize={handleSplitViewResize}
       sidebarMinWidth={sidebarMinWidth}
@@ -165,7 +162,7 @@ export function SettingsWindow<PageId extends string = string>({
         />
       </View>
       <View
-        className={cx("flex-1", contentBackgroundClassName)}
+        className={cn("flex-1", contentBackgroundClassName)}
         style={[
           styles.pane,
           {
@@ -206,7 +203,7 @@ export function SettingsSidebar<PageId extends string = string>({
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              className={cx(
+              className={cn(
                 "h-7 justify-center rounded-md px-2",
                 isSelected ? "bg-white/10" : "hover:bg-white/10 active:bg-white/15",
               )}
@@ -240,7 +237,7 @@ export function SettingsPage({ actions, children, contentClassName }: SettingsPa
       {actions ? <View className="flex-row justify-end px-6 pt-4">{actions}</View> : null}
       <ScrollView
         className="flex-1"
-        contentContainerClassName={cx("flex flex-col", contentClassName)}
+        contentContainerClassName={cn("flex flex-col", contentClassName)}
         contentContainerStyle={styles.pageContent}
         horizontal={false}
       >
@@ -271,7 +268,7 @@ export function SettingsSection({
   headerRight,
   title,
 }: SettingsSectionProps) {
-  const containerClassName = cx("flex flex-col gap-6", !first && "mt-6", className);
+  const containerClassName = cn("flex flex-col gap-6", !first && "mt-6", className);
   const content = (
     <>
       <View className="flex-row items-start justify-between gap-4">
@@ -283,7 +280,7 @@ export function SettingsSection({
         </View>
         {headerRight ? <View className="flex-none ml-4">{headerRight}</View> : null}
       </View>
-      {children ? <View className={cx("flex flex-col gap-5", contentClassName)}>{children}</View> : null}
+      {children ? <View className={cn("flex flex-col gap-5", contentClassName)}>{children}</View> : null}
     </>
   );
 
@@ -301,7 +298,7 @@ interface SettingsCardProps {
 
 export function SettingsCard({ children, className }: SettingsCardProps) {
   return (
-    <View className={cx("rounded-2xl border border-border-primary bg-background-secondary p-6 shadow-xl", className)}>
+    <View className={cn("rounded-2xl border border-border-primary bg-background-secondary p-6 shadow-xl", className)}>
       {children}
     </View>
   );
@@ -330,20 +327,20 @@ export function SettingsRow({
 }: SettingsRowProps) {
   return (
     <View
-      className={cx(
+      className={cn(
         "flex-row justify-between gap-6 rounded-xl border border-border-primary bg-background-tertiary px-5 py-4",
         align === "center" ? "items-center" : "items-start",
         disabled ? "opacity-60" : "",
         className,
       )}
     >
-      <View className={cx("min-w-0 flex-1 flex-col gap-1.5 pr-6", contentClassName)} style={styles.rowText}>
+      <View className={cn("min-w-0 flex-1 flex-col gap-1.5 pr-6", contentClassName)} style={styles.rowText}>
         <Text className="text-base font-semibold text-text-primary leading-tight">{title}</Text>
         {description ? (
           <Text className="text-sm leading-relaxed text-text-secondary">{description}</Text>
         ) : null}
       </View>
-      <View className={cx("max-w-full flex-shrink", controlWrapperClassName)} style={styles.rowControl}>
+      <View className={cn("max-w-full flex-shrink", controlWrapperClassName)} style={styles.rowControl}>
         {control}
       </View>
     </View>

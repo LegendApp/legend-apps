@@ -5,7 +5,7 @@ import { type GestureResponderEvent, PanResponder, type PanResponderGestureState
 
 import { useRefValue } from "@/hooks/useRefValue";
 import { settings$ } from "@/systems/Settings";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 interface PanelConfig {
     id: string;

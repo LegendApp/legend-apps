@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Platform, View, type ViewProps } from "react-native";
 import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
 import { SidebarItem as NativeSidebarItemView } from "@legend-desktop/sidebar";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 export interface SidebarItemProps extends ViewProps {
     /** Unique identifier for this item, used for selection */

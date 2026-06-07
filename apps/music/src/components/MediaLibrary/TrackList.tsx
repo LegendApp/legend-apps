@@ -26,7 +26,7 @@ import { Icon } from "@/systems/Icon";
 import { libraryUI$ } from "@/systems/LibraryState";
 import { localMusicState$, saveLocalPlaylistTracks } from "@/systems/LocalMusicState";
 import { themeState$ } from "@/theme/ThemeProvider";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import type { QueueAction } from "@/utils/queueActions";
 import { useLibraryTrackList } from "./useLibraryTrackList";
 

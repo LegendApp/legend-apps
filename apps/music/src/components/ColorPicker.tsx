@@ -2,7 +2,7 @@ import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Text, TextInput, View } from "react-native";
 
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 export interface ColorPickerProps {
     label: string;

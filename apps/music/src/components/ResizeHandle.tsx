@@ -2,7 +2,7 @@ import type { Observable } from "@legendapp/state";
 import { useRef } from "react";
 import { type GestureResponderEvent, PanResponder, type PanResponderGestureState, View } from "react-native";
 
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 interface ResizeHandleProps {
     width$: Observable<number>;

@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
 import { Button } from "@/components/Button";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 type ToastType = "info" | "error";
 

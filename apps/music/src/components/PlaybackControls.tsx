@@ -14,7 +14,7 @@ import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
 import { library$ } from "@/systems/LibraryState";
 import { localMusicState$ } from "@/systems/LocalMusicState";
 import { type PlaybackControlId, settings$ } from "@/systems/Settings";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import {
     useLibraryToggle,
     usePlaylistOptions,

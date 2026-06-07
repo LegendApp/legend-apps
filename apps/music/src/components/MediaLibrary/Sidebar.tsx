@@ -34,7 +34,7 @@ import {
     exportPlaylistToFile,
     renamePlaylist,
 } from "@/systems/LocalPlaylists";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@/utils/perfLogger";
 import { getQueueAction } from "@/utils/queueActions";
 import { buildTrackLookup, resolvePlaylistTracks } from "@/utils/trackResolution";

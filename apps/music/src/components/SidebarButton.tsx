@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
 
 import { state$ } from "@/systems/State";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { Button } from "./Button";
 
 export interface SidebarButtonProps {

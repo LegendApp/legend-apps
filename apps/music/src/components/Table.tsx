@@ -6,7 +6,7 @@ import { Button } from "@/components/Button";
 import { PlaybackIndicator } from "@/components/PlaybackIndicator";
 import { useListItemStyles } from "@/hooks/useListItemStyles";
 import { Icon } from "@/systems/Icon";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 
 export type TableColumnAlign = "left" | "center" | "right";
 

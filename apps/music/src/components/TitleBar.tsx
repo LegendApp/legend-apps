@@ -8,7 +8,7 @@ import { hideWindowControls, showWindowControls } from "@legend-desktop/window-c
 import { IS_TAHOE } from "@/systems/constants";
 import { settings$ } from "@/systems/Settings";
 import { state$ } from "@/systems/State";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { perfCount, perfLog } from "@/utils/perfLogger";
 
 type MotionViewProps = Parameters<typeof Motion.View>[0];

@@ -8,7 +8,7 @@ import { useListItemStyles } from "@/hooks/useListItemStyles";
 import { Icon } from "@/systems/Icon";
 import { themeState$ } from "@/theme/ThemeProvider";
 import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@/utils/perfLogger";
 
 export interface TrackData {

@@ -10,7 +10,7 @@ import type { LibraryItem } from "@/systems/LibraryState";
 import { library$ } from "@/systems/LibraryState";
 import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
 import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
-import { cn } from "@/utils/cn";
+import { cn } from "@legend-desktop/classnames";
 import { getQueueAction, type QueueAction } from "@/utils/queueActions";
 
 import {
