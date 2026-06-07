@@ -58,6 +58,7 @@
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/glass-effect-view": "0.0.0",
         "@legend-desktop/global-hotkey": "0.0.0",
+        "@legend-desktop/hotkeys": "workspace:*",
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/media-library-scanner": "0.0.0",
         "@legend-desktop/media-tags": "0.0.0",
@@ -225,7 +226,6 @@
       "dependencies": {
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/settings-window": "0.0.0",
       },
       "peerDependencies": {
         "react": "*",

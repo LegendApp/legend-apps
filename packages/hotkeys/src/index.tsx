@@ -7,9 +7,8 @@ import {
   type KeyboardEvent,
 } from "@legend-desktop/keyboard-manager";
 import type { NativeMenuShortcut } from "@legend-desktop/native-menu";
-import { SettingsPage, SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export type HotkeyValue =
   | number
@@ -413,29 +412,66 @@ export function HotkeysSettingsPage<HotkeyId extends string>({
   values,
 }: HotkeysSettingsPageProps<HotkeyId>) {
   return (
-    <SettingsPage>
-      <SettingsSection card={false} first title="Hotkeys">
-        <View className="gap-3">
+    <View className="flex-1 overflow-hidden" style={styles.page}>
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="flex flex-col"
+        contentContainerStyle={styles.pageContent}
+        horizontal={false}
+      >
+        <View className="flex-col gap-6">
+          <View className="flex-col gap-1.5">
+            <Text className="text-xl font-semibold text-text-primary leading-tight">Hotkeys</Text>
+          </View>
+          <View className="gap-3">
           {definitions.map((definition) => (
-            <SettingsRow
-              align="center"
-              control={(
+            <View
+              className="flex-row items-center justify-between gap-6 rounded-xl border border-border-primary bg-background-tertiary px-5 py-4"
+              key={definition.id}
+            >
+              <View className="min-w-0 flex-1 flex-col gap-1.5 pr-6" style={styles.rowText}>
+                <Text className="text-base font-semibold text-text-primary leading-tight">{definition.title}</Text>
+                {definition.description ? (
+                  <Text className="text-sm leading-relaxed text-text-secondary">{definition.description}</Text>
+                ) : null}
+              </View>
+              <View className="max-w-full flex-shrink" style={styles.rowControl}>
                 <HotkeyCapture
                   onCaptureChange={onCaptureChange}
                   onChange={(value) => onChange(definition.id, value)}
                   value={values[definition.id] ?? definition.defaultValue}
                 />
-              )}
-              description={definition.description}
-              key={definition.id}
-              title={definition.title}
-            />
+              </View>
+            </View>
           ))}
+          </View>
         </View>
-      </SettingsSection>
-      {renderFooter?.()}
-    </SettingsPage>
+        {renderFooter?.()}
+      </ScrollView>
+    </View>
   );
 }
 
 export { KeyCodes };
+
+const styles = StyleSheet.create({
+  page: {
+    flex: 1,
+    overflow: "hidden",
+  },
+  pageContent: {
+    alignSelf: "center",
+    flexDirection: "column",
+    maxWidth: 896,
+    paddingHorizontal: 24,
+    paddingTop: 56,
+    width: "100%",
+  },
+  rowControl: {
+    flexShrink: 1,
+    maxWidth: "100%",
+  },
+  rowText: {
+    minWidth: 0,
+  },
+});

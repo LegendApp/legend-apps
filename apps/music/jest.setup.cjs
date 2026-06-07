@@ -27,6 +27,12 @@ const createListenerRegistry = () => {
 const audioPlayerListeners = createListenerRegistry();
 const mediaScannerListeners = createListenerRegistry();
 const nativeMenuListeners = createListenerRegistry();
+const mockNativeMenu = {
+    addNativeMenuActionListener: nativeMenuListeners.addListener.bind(null, "action"),
+    clearMenus: jest.fn(),
+    configureMenus: jest.fn(),
+    updateMenuItems: jest.fn(),
+};
 
 const mockAudioPlayer = {
     addListener: audioPlayerListeners.addListener,
@@ -133,10 +139,26 @@ jest.mock("@legend-desktop/auto-updater", () => ({
 
 jest.mock("@legend-desktop/native-menu", () => ({
     __esModule: true,
-    addNativeMenuActionListener: nativeMenuListeners.addListener.bind(null, "action"),
-    clearMenus: jest.fn(),
-    configureMenus: jest.fn(),
-    updateMenuItems: jest.fn(),
+    ...mockNativeMenu,
+    useNativeMenu: ({ handlers, menus, onAction, ownerId }) => {
+        React.useEffect(() => {
+            mockNativeMenu.configureMenus(ownerId, menus);
+            const subscription = mockNativeMenu.addNativeMenuActionListener((action) => {
+                if (action.ownerId === ownerId) {
+                    const handler = handlers?.[action.itemId];
+                    if (handler) {
+                        handler(action);
+                    } else {
+                        onAction?.(action);
+                    }
+                }
+            });
+            return () => {
+                subscription.remove();
+                mockNativeMenu.clearMenus(ownerId);
+            };
+        }, [handlers, menus, onAction, ownerId]);
+    },
     __emitNativeMenuAction: (action) => nativeMenuListeners.emit("action", action),
 }));
 

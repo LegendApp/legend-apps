@@ -1,5 +1,6 @@
 import { batch, event, observable } from "@legendapp/state";
 import { useMount, useObserveEffect } from "@legendapp/state/react";
+import type { HotkeyValue } from "@legend-desktop/hotkeys";
 import { DEBUG_HOTKEY_LOGS } from "@/systems/constants";
 import { getHotkey, getHotkeyMetadata, type HotkeyName } from "@/systems/hotkeys";
 import KeyboardManager, { type KeyboardEvent, KeyCodes, KeyText } from "@/systems/keyboard/KeyboardManager";
@@ -7,19 +8,12 @@ import { state$ } from "@/systems/State";
 import { ax } from "@/utils/ax";
 import { perfCount, perfLog } from "@/utils/perfLogger";
 
-type KeyboardEventCode = number;
-type KeyboardEventCodeModifier = string;
-
-export type KeyboardEventCodeHotkey =
-    | KeyboardEventCode
-    | `${KeyboardEventCode}`
-    | `${KeyboardEventCodeModifier}+${KeyboardEventCode}`
-    | `${KeyboardEventCodeModifier}+${KeyboardEventCodeModifier}+${KeyboardEventCode}`;
+export type KeyboardEventCodeHotkey = HotkeyValue;
 
 export const keysPressed$ = observable<Record<string, boolean>>({});
 const keyRepeat$ = event();
 
-const keysToPreventDefault = new Set<KeyboardEventCode>();
+const keysToPreventDefault = new Set<number>();
 export const activeWindowId$ = observable("main");
 
 const nativeHotkeyMap = {

@@ -6,8 +6,7 @@
   "react-native": "src/index.tsx",
   "dependencies": {
     "@legend-desktop/keyboard-manager": "0.0.0",
-    "@legend-desktop/native-menu": "0.0.0",
-    "@legend-desktop/settings-window": "0.0.0"
+    "@legend-desktop/native-menu": "0.0.0"
   },
   "peerDependencies": {
     "react": "*",

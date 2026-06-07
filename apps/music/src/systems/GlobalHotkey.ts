@@ -3,6 +3,7 @@ import { useMount, useObserveEffect } from "@legendapp/state/react";
 import { useRef } from "react";
 import { Platform } from "react-native";
 import { addGlobalHotkeyListener, registerGlobalHotkey, unregisterGlobalHotkey } from "@legend-desktop/global-hotkey";
+import { parseHotkey as parseHotkeyValue } from "@legend-desktop/hotkeys";
 import { useWindowManager } from "@legend-desktop/window-manager";
 import { settings$ } from "@/systems/Settings";
 import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
@@ -32,10 +33,7 @@ const MODIFIER_CODES = new Set<number>([
 function parseHotkey(value: KeyboardEventCodeHotkey | null) {
     let parsed: { keyCode: number; modifiers: number } | null = null;
     if (value) {
-        const codes = `${value}`
-            .split("+")
-            .map((segment) => Number(segment.trim()))
-            .filter((code) => Number.isFinite(code));
+        const codes = parseHotkeyValue(value);
         const modifiers = codes.filter((code) => MODIFIER_CODES.has(code));
         const keys = codes.filter((code) => !MODIFIER_CODES.has(code));
         const keyCode = keys.length > 0 ? keys[keys.length - 1] : null;
