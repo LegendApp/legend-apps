@@ -6,7 +6,12 @@ import {
 import { getLegendTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { getMarkdownE2ERunFromLaunchArguments, MarkdownE2ERunner } from "./MarkdownE2ERunner";
+import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
+import {
+  getMarkdownE2ERunFromLaunchArguments,
+  isMarkdownDocumentE2EScenario,
+  MarkdownE2ERunner,
+} from "./MarkdownE2ERunner";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
@@ -150,7 +155,18 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   if (e2eRun) {
-    return <MarkdownE2ERunner {...e2eRun} />;
+    if (e2eRun.scenario === "editor-ui-smoke") {
+      return <MarkdownE2EEditorSmoke />;
+    }
+    if (isMarkdownDocumentE2EScenario(e2eRun.scenario)) {
+      return (
+        <MarkdownE2ERunner
+          blockCount={e2eRun.blockCount}
+          scenario={e2eRun.scenario}
+          seed={e2eRun.seed}
+        />
+      );
+    }
   }
 
   if (!session.hasDocument || !session.filename) {

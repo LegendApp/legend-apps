@@ -12,6 +12,18 @@ type MarkdownE2ERunnerProps = {
   seed?: number;
 };
 
+export type MarkdownE2ELaunchScenario = MarkdownDocumentE2EScenarioName | "editor-ui-smoke";
+
+export function isMarkdownDocumentE2EScenario(
+  scenario: string,
+): scenario is MarkdownDocumentE2EScenarioName {
+  return scenario === "far-down-structural-edits" || scenario === "hydrate-while-editing";
+}
+
+function isMarkdownE2ELaunchScenario(scenario: string): scenario is MarkdownE2ELaunchScenario {
+  return scenario === "editor-ui-smoke" || isMarkdownDocumentE2EScenario(scenario);
+}
+
 type MarkdownE2ERunnerState =
   | { status: "running" }
   | { result: MarkdownDocumentE2EResult; status: "passed" }
@@ -24,8 +36,8 @@ export function getMarkdownE2ERunFromLaunchArguments(launchArguments: string[] |
 
   const args = launchArguments ?? [];
   const scenarioArgument = args.find((argument) => argument.startsWith("--markdown-e2e="));
-  const scenario = scenarioArgument?.slice("--markdown-e2e=".length) as MarkdownDocumentE2EScenarioName | undefined;
-  if (!scenario) {
+  const scenarioValue = scenarioArgument?.slice("--markdown-e2e=".length);
+  if (!scenarioValue || !isMarkdownE2ELaunchScenario(scenarioValue)) {
     return null;
   }
 
@@ -36,7 +48,7 @@ export function getMarkdownE2ERunFromLaunchArguments(launchArguments: string[] |
 
   return {
     blockCount: Number.isFinite(blockCount) ? blockCount : undefined,
-    scenario,
+    scenario: scenarioValue,
     seed: Number.isFinite(seed) ? seed : undefined,
   };
 }
