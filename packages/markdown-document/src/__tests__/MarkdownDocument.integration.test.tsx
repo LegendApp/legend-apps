@@ -652,6 +652,20 @@ async function moveActiveBlockDown(commandsRef: React.RefObject<MarkdownDocument
   await flushPromises();
 }
 
+async function focusPreviousBlock(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  await act(async () => {
+    commandsRef.current?.focusPreviousBlock();
+  });
+  await flushPromises();
+}
+
+async function focusNextBlock(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  await act(async () => {
+    commandsRef.current?.focusNextBlock();
+  });
+  await flushPromises();
+}
+
 async function expectStableEditingState(renderer: TestRenderer.ReactTestRenderer, adapter: MountedEditorAdapter) {
   await flushPromises();
   expectActiveBlockExists(renderer, adapter);
@@ -2988,6 +3002,81 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("focuses the next markdown block with the navigation command", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await focusNextBlock(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("focuses the previous markdown block with the navigation command", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "Second");
+    await focusPreviousBlock(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(editorInput(renderer).props.defaultValue).toBe("First");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate past the first or last markdown block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await focusPreviousBlock(commandsRef);
+    expect(editorInput(renderer).props.defaultValue).toBe("First");
+
+    await pressRenderedMarkdown(renderer, "Second");
+    await focusNextBlock(commandsRef);
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+
+    expect(adapter.applyTransactions).toEqual([]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("commits a pending draft before focusing the next markdown block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "First edited");
+    await focusNextBlock(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "First edited",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("First edited");
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    await expectStableEditingState(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 

@@ -2,6 +2,18 @@ import { createDefaultHotkeyState, KeyCodes, type HotkeyDefinition } from "@lege
 
 export const markdownHotkeyDefinitions = [
   {
+    defaultValue: KeyCodes.KEY_UP,
+    description: "Focus the previous markdown block.",
+    id: "focusPreviousBlock",
+    title: "Focus Previous Block",
+  },
+  {
+    defaultValue: KeyCodes.KEY_DOWN,
+    description: "Focus the next markdown block.",
+    id: "focusNextBlock",
+    title: "Focus Next Block",
+  },
+  {
     defaultValue: `${KeyCodes.MODIFIER_OPTION}+${KeyCodes.KEY_UP}`,
     description: "Move the active block or selected blocks one position up.",
     id: "moveBlockUp",

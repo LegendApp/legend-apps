@@ -521,21 +521,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       validateTransactionResult,
     ]);
 
+    const setActiveBlock = useCallback((block: MarkdownBlockSnapshot, selection: number) => {
+      nativeEditingBlockIdRef.current = block.id;
+      activeBlockIdRef.current = block.id;
+      draftMarkdownRef.current = block.markdown;
+      committedMarkdownRef.current = block.markdown;
+      setDraftMarkdown(block.markdown);
+      setActiveSelection(selection);
+      setActiveBlockId(block.id);
+    }, []);
+
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
         commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
         blockSelectionGestureRef.current = null;
         setNextBlockSelection(null);
         clearTextSelectionAnchor();
-        nativeEditingBlockIdRef.current = block.id;
-        activeBlockIdRef.current = block.id;
-        draftMarkdownRef.current = block.markdown;
-        committedMarkdownRef.current = block.markdown;
-        setDraftMarkdown(block.markdown);
-        setActiveSelection(selection);
-        setActiveBlockId(block.id);
+        setActiveBlock(block, selection);
       },
-      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError],
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
     );
 
     const beginBlockSelection = useCallback(
@@ -1143,6 +1147,35 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [applyMoveBlockRange, commitActiveBlock, reportAsyncError],
     );
 
+    const focusAdjacentBlock = useCallback(
+      (direction: "up" | "down") => {
+        async function runFocus() {
+          await commitActiveBlock({ updateReactState: true });
+          const activeBlockIdValue = activeBlockIdRef.current;
+          if (activeBlockIdValue) {
+            const currentBlockState = blockStateRef.current;
+            const activeBlockIndex = currentBlockState.blockIds.indexOf(activeBlockIdValue);
+            const targetBlockId = direction === "up"
+              ? currentBlockState.blockIds[activeBlockIndex - 1]
+              : currentBlockState.blockIds[activeBlockIndex + 1];
+            const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
+            if (targetBlock) {
+              blockSelectionGestureRef.current = null;
+              setNextBlockSelection(null);
+              clearTextSelectionAnchor();
+              setActiveBlock(
+                targetBlock,
+                Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
+              );
+            }
+          }
+        }
+
+        runFocus().catch(reportAsyncError);
+      },
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
+    );
+
     const runActiveInputCommand = useCallback((command: () => void) => {
       const input = activeInputRef.current;
       if (!input) {
@@ -1669,6 +1702,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         insertThematicBreak() {
           formatCurrentBlockRange(thematicBreakMarkdown);
         },
+        focusNextBlock() {
+          focusAdjacentBlock("down");
+        },
+        focusPreviousBlock() {
+          focusAdjacentBlock("up");
+        },
         redo,
         save,
         saveAs,
@@ -1717,7 +1756,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         undo,
       }),
-      [commitAndBlurActiveBlock, formatCurrentBlockRange, moveActiveBlock, redo, runActiveInputCommand, save, saveAs, undo],
+      [commitAndBlurActiveBlock, focusAdjacentBlock, formatCurrentBlockRange, moveActiveBlock, redo, runActiveInputCommand, save, saveAs, undo],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);
