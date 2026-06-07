@@ -27,7 +27,7 @@ export type HotkeyDefinition<HotkeyId extends string = string> = {
 
 export type HotkeyState<HotkeyId extends string = string> = Record<HotkeyId, HotkeyValue | null>;
 
-export type HotkeyHandlers<HotkeyId extends string = string> = Partial<Record<HotkeyId, () => void>>;
+export type HotkeyHandlers<HotkeyId extends string = string> = Partial<Record<HotkeyId, () => boolean | void>>;
 
 const modifierCodes = [
   KeyCodes.MODIFIER_COMMAND,
@@ -242,8 +242,7 @@ export function useHotkeys<HotkeyId extends string>({
         const handler = handlers[definition.id];
         const value = values[definition.id] ?? definition.defaultValue;
         if (handler && matchesHotkey(event, value)) {
-          handler();
-          return true;
+          return handler() !== false;
         }
       }
       return false;

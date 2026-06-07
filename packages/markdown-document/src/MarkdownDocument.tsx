@@ -1176,6 +1176,103 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
     );
 
+    const focusBoundaryBlock = useCallback(
+      (direction: "up" | "down") => {
+        async function runFocus() {
+          await commitActiveBlock({ updateReactState: true });
+          const currentBlockState = blockStateRef.current;
+          const targetBlockId = direction === "up"
+            ? currentBlockState.blockIds[0]
+            : currentBlockState.blockIds[currentBlockState.blockIds.length - 1];
+          const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
+          if (targetBlock) {
+            blockSelectionGestureRef.current = null;
+            setNextBlockSelection(null);
+            clearTextSelectionAnchor();
+            setActiveBlock(
+              targetBlock,
+              Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
+            );
+          }
+        }
+
+        runFocus().catch(reportAsyncError);
+      },
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
+    );
+
+    const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
+      activeInputRef.current?.blur?.();
+      nativeEditingBlockIdRef.current = null;
+      activeBlockIdRef.current = null;
+      blockSelectionGestureRef.current = null;
+      clearTextSelectionAnchor();
+      setActiveBlockId(null);
+      setActiveSelection(0);
+      setNextBlockSelection({ anchorBlockId, focusBlockId });
+    }, [clearTextSelectionAnchor, setNextBlockSelection]);
+
+    const extendBlockSelection = useCallback(
+      (direction: "up" | "down") => {
+        const currentBlockState = blockStateRef.current;
+        const currentBlockSelection = blockSelectionRef.current;
+        if (currentBlockSelection) {
+          const focusIndex = currentBlockState.blockIds.indexOf(currentBlockSelection.focusBlockId);
+          const nextFocusBlockId = direction === "up"
+            ? currentBlockState.blockIds[focusIndex - 1]
+            : currentBlockState.blockIds[focusIndex + 1];
+          if (focusIndex >= 0 && nextFocusBlockId) {
+            setNextBlockSelection({
+              anchorBlockId: currentBlockSelection.anchorBlockId,
+              focusBlockId: nextFocusBlockId,
+            });
+          }
+          return true;
+        }
+
+        const activeBlockIdValue = activeBlockIdRef.current;
+        const activeBlockIndex = activeBlockIdValue ? currentBlockState.blockIds.indexOf(activeBlockIdValue) : -1;
+        const selection = activeInputSelectionRef.current;
+        const selectionStart = Math.min(selection.start, selection.end);
+        const selectionEnd = Math.max(selection.start, selection.end);
+        const isAtSelectionBoundary = direction === "up"
+          ? selectionStart === 0
+          : selectionEnd === draftMarkdownRef.current.length;
+        const targetBlockId = direction === "up"
+          ? currentBlockState.blockIds[activeBlockIndex - 1]
+          : currentBlockState.blockIds[activeBlockIndex + 1];
+        if (activeBlockIdValue && activeBlockIndex >= 0 && isAtSelectionBoundary && targetBlockId) {
+          const shouldCommitBeforeSelecting = (
+            draftMarkdownRef.current !== committedMarkdownRef.current ||
+            pendingRenderTransactionRef.current !== undefined
+          );
+          if (!shouldCommitBeforeSelecting) {
+            setKeyboardBlockSelection(activeBlockIdValue, targetBlockId);
+            return true;
+          }
+
+          async function runExtendSelection() {
+            await commitActiveBlock({ updateReactState: true });
+            const nextActiveBlockId = activeBlockIdRef.current;
+            const nextBlockState = blockStateRef.current;
+            const nextActiveBlockIndex = nextActiveBlockId ? nextBlockState.blockIds.indexOf(nextActiveBlockId) : -1;
+            const nextFocusBlockId = direction === "up"
+              ? nextBlockState.blockIds[nextActiveBlockIndex - 1]
+              : nextBlockState.blockIds[nextActiveBlockIndex + 1];
+            if (nextActiveBlockId && nextActiveBlockIndex >= 0 && nextFocusBlockId) {
+              setKeyboardBlockSelection(nextActiveBlockId, nextFocusBlockId);
+            }
+          }
+
+          runExtendSelection().catch(reportAsyncError);
+          return true;
+        }
+
+        return false;
+      },
+      [commitActiveBlock, reportAsyncError, setKeyboardBlockSelection, setNextBlockSelection],
+    );
+
     const runActiveInputCommand = useCallback((command: () => void) => {
       const input = activeInputRef.current;
       if (!input) {
@@ -1702,6 +1799,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         insertThematicBreak() {
           formatCurrentBlockRange(thematicBreakMarkdown);
         },
+        extendBlockSelectionDown() {
+          return extendBlockSelection("down");
+        },
+        extendBlockSelectionUp() {
+          return extendBlockSelection("up");
+        },
+        focusFirstBlock() {
+          focusBoundaryBlock("up");
+        },
+        focusLastBlock() {
+          focusBoundaryBlock("down");
+        },
         focusNextBlock() {
           focusAdjacentBlock("down");
         },
@@ -1756,7 +1865,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         undo,
       }),
-      [commitAndBlurActiveBlock, focusAdjacentBlock, formatCurrentBlockRange, moveActiveBlock, redo, runActiveInputCommand, save, saveAs, undo],
+      [
+        commitAndBlurActiveBlock,
+        extendBlockSelection,
+        focusAdjacentBlock,
+        focusBoundaryBlock,
+        formatCurrentBlockRange,
+        moveActiveBlock,
+        redo,
+        runActiveInputCommand,
+        save,
+        saveAs,
+        undo,
+      ],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);

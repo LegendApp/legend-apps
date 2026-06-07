@@ -19,6 +19,10 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKe
     getMarkdownHotkeySettings,
   );
   const hotkeyHandlers = useMemo(() => ({
+    extendBlockSelectionDown: () => documentCommandsRef.current?.extendBlockSelectionDown() ?? false,
+    extendBlockSelectionUp: () => documentCommandsRef.current?.extendBlockSelectionUp() ?? false,
+    focusFirstBlock: () => documentCommandsRef.current?.focusFirstBlock(),
+    focusLastBlock: () => documentCommandsRef.current?.focusLastBlock(),
     focusNextBlock: () => documentCommandsRef.current?.focusNextBlock(),
     focusPreviousBlock: () => documentCommandsRef.current?.focusPreviousBlock(),
     moveBlockDown: () => documentCommandsRef.current?.moveActiveBlockDown(),

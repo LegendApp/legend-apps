@@ -86,7 +86,11 @@ export type MarkdownDocumentCommands = {
   undo(): void;
   redo(): void;
   commitAndBlurActiveBlock(): boolean;
+  extendBlockSelectionDown(): boolean;
+  extendBlockSelectionUp(): boolean;
   focus(): void;
+  focusFirstBlock(): void;
+  focusLastBlock(): void;
   focusNextBlock(): void;
   focusPreviousBlock(): void;
   moveActiveBlockDown(): void;
