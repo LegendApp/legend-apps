@@ -34,7 +34,7 @@ import {
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
 import {
-  getListContinuationMarkdown,
+  getSplitContinuationMarkdown,
   setHeadingMarkdown,
   setParagraphMarkdown,
   thematicBreakMarkdown,
@@ -624,10 +624,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (block.type !== "codeBlock" && !committedMarkdownRef.current.includes("\n")) {
           const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
           if (splitMarkdown) {
+            const continuationMarkdown = getSplitContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
             splitActiveBlock(
               block,
-              splitMarkdown.beforeMarkdown,
-              getListContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown),
+              continuationMarkdown.beforeMarkdown ?? splitMarkdown.beforeMarkdown,
+              continuationMarkdown.afterMarkdown,
             ).catch(reportAsyncError);
             return;
           }

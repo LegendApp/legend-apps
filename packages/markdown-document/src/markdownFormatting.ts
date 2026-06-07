@@ -8,9 +8,10 @@ const blockquotePrefixPattern = /^\s{0,3}>\s?/;
 const unorderedListPrefixPattern = /^\s*[-*+]\s+/;
 const orderedListPrefixPattern = /^\s*\d+[.)]\s+/;
 const taskListPrefixPattern = /^\s*[-*+]\s+\[[ xX]\]\s+/;
-const unorderedListContinuationPattern = /^(\s*)([-*+])\s+\S/;
-const orderedListContinuationPattern = /^(\s*)(\d+)([.)])\s+\S/;
-const taskListContinuationPattern = /^(\s*)([-*+])\s+\[[ xX]\]\s+\S/;
+const blockquoteContinuationPattern = /^(\s{0,3}>\s?)(.*)$/;
+const unorderedListContinuationPattern = /^(\s*)([-*+])(?:\s+(.*)|\s*)$/;
+const orderedListContinuationPattern = /^(\s*)(\d+)([.)])(?:\s+(.*)|\s*)$/;
+const taskListContinuationPattern = /^(\s*)([-*+])\s+\[[ xX]\](?:\s+(.*)|\s*)$/;
 
 function splitLines(markdown: string) {
   return markdown.split(/\r?\n/);
@@ -70,27 +71,48 @@ export function setParagraphMarkdown(markdown: string) {
   return mapNonEmptyLines(markdown, (line) => stripLinePrefix(line));
 }
 
-export function getListContinuationMarkdown(beforeMarkdown: string, afterMarkdown: string) {
-  if (afterMarkdown.length > 0) {
-    return afterMarkdown;
+function continueLine(prefix: string, content: string, afterMarkdown: string) {
+  if (content.trim().length === 0 && afterMarkdown.length === 0) {
+    return {
+      afterMarkdown: "",
+      beforeMarkdown: "",
+    };
   }
+  return {
+    afterMarkdown: afterMarkdown.length > 0 ? `${prefix}${afterMarkdown}` : prefix,
+    beforeMarkdown: undefined,
+  };
+}
 
+export function getSplitContinuationMarkdown(beforeMarkdown: string, afterMarkdown: string) {
   const taskListMatch = taskListContinuationPattern.exec(beforeMarkdown);
   if (taskListMatch) {
-    return `${taskListMatch[1] ?? ""}${taskListMatch[2] ?? "-"} [ ] `;
+    return continueLine(`${taskListMatch[1] ?? ""}${taskListMatch[2] ?? "-"} [ ] `, taskListMatch[3] ?? "", afterMarkdown);
   }
 
   const orderedListMatch = orderedListContinuationPattern.exec(beforeMarkdown);
   if (orderedListMatch) {
-    return `${orderedListMatch[1] ?? ""}${Number(orderedListMatch[2] ?? 0) + 1}${orderedListMatch[3] ?? "."} `;
+    return continueLine(
+      `${orderedListMatch[1] ?? ""}${Number(orderedListMatch[2] ?? 0) + 1}${orderedListMatch[3] ?? "."} `,
+      orderedListMatch[4] ?? "",
+      afterMarkdown,
+    );
   }
 
   const unorderedListMatch = unorderedListContinuationPattern.exec(beforeMarkdown);
   if (unorderedListMatch) {
-    return `${unorderedListMatch[1] ?? ""}${unorderedListMatch[2] ?? "-"} `;
+    return continueLine(`${unorderedListMatch[1] ?? ""}${unorderedListMatch[2] ?? "-"} `, unorderedListMatch[3] ?? "", afterMarkdown);
   }
 
-  return afterMarkdown;
+  const blockquoteMatch = blockquoteContinuationPattern.exec(beforeMarkdown);
+  if (blockquoteMatch) {
+    return continueLine(blockquoteMatch[1] ?? "> ", blockquoteMatch[2] ?? "", afterMarkdown);
+  }
+
+  return {
+    afterMarkdown,
+    beforeMarkdown: undefined,
+  };
 }
 
 export function setHeadingMarkdown(markdown: string, level: HeadingLevel) {
