@@ -7,11 +7,19 @@ import {
   markdownHotkeyDefinitions,
   type MarkdownHotkeyId,
 } from "./markdownHotkeys";
+import {
+  getDefaultMarkdownToolbarLayout,
+  normalizeMarkdownToolbarLayout,
+  type MarkdownToolbarLayout,
+  type MarkdownToolbarLayoutId,
+} from "./markdownToolbarLayout";
 
 const themeSettingsKey = "legend-markdown.settings.theme";
 const startupBehaviorSettingsKey = "legend-markdown.settings.startupBehavior";
 const autosaveSettingsKey = "legend-markdown.settings.autosave";
 const formattingToolbarModeSettingsKey = "legend-markdown.settings.formattingToolbarMode";
+const topToolbarLayoutSettingsKey = "legend-markdown.settings.toolbarLayout.top";
+const selectionToolbarLayoutSettingsKey = "legend-markdown.settings.toolbarLayout.selection";
 const lastDocumentPathSettingsKey = "legend-markdown.settings.lastDocumentPath";
 const fontFamilySettingsKey = "legend-markdown.settings.fontFamily";
 const fontSizeSettingsKey = "legend-markdown.settings.fontSize";
@@ -37,6 +45,12 @@ export type MarkdownAppearanceSettings = {
   fontSize: MarkdownFontSizeSetting;
   lineHeight: MarkdownLineHeightSetting;
 };
+
+export type {
+  MarkdownToolbarControlGroup,
+  MarkdownToolbarLayout,
+  MarkdownToolbarLayoutId,
+} from "./markdownToolbarLayout";
 
 const fontSizeOrder: MarkdownFontSizeSetting[] = ["small", "default", "large", "xlarge"];
 
@@ -223,6 +237,29 @@ function readStoredMarkdownHotkeys() {
   return value;
 }
 
+function getMarkdownToolbarLayoutSettingsKey(layoutId: MarkdownToolbarLayoutId) {
+  return layoutId === "top" ? topToolbarLayoutSettingsKey : selectionToolbarLayoutSettingsKey;
+}
+
+function readStoredMarkdownToolbarLayout(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout | undefined {
+  const value = Settings.get(getMarkdownToolbarLayoutSettingsKey(layoutId));
+  let parsedValue: unknown = value;
+
+  if (typeof value === "string" && value.length > 0) {
+    try {
+      parsedValue = JSON.parse(value) as unknown;
+    } catch {
+      parsedValue = undefined;
+    }
+  }
+
+  if (parsedValue && typeof parsedValue === "object" && Array.isArray((parsedValue as { shown?: unknown }).shown)) {
+    return parsedValue as MarkdownToolbarLayout;
+  }
+
+  return undefined;
+}
+
 export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
   const stored = readStoredMarkdownHotkeys();
   const source = JSON.stringify(stored ?? null);
@@ -243,6 +280,15 @@ export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
   cachedHotkeySettings = nextSettings;
   cachedHotkeySettingsSource = source;
   return nextSettings;
+}
+
+export function getMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout {
+  const stored = readStoredMarkdownToolbarLayout(layoutId);
+  const normalized = normalizeMarkdownToolbarLayout(stored, layoutId);
+
+  return {
+    shown: normalized.shown,
+  };
 }
 
 export function getLastMarkdownDocumentPath() {
@@ -315,6 +361,20 @@ export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValu
   cachedHotkeySettingsSource = JSON.stringify(nextSettings);
   Settings.set({ [hotkeysSettingsKey]: cachedHotkeySettingsSource });
   notifyMarkdownSettingsChanged();
+}
+
+export function setMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId, layout: MarkdownToolbarLayout) {
+  const normalized = normalizeMarkdownToolbarLayout(layout, layoutId);
+  Settings.set({
+    [getMarkdownToolbarLayoutSettingsKey(layoutId)]: JSON.stringify({
+      shown: normalized.shown,
+    }),
+  });
+  notifyMarkdownSettingsChanged();
+}
+
+export function resetMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId) {
+  setMarkdownToolbarLayoutSetting(layoutId, getDefaultMarkdownToolbarLayout(layoutId));
 }
 
 export function setLastMarkdownDocumentPath(path: string) {

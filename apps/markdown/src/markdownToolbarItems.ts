@@ -1,12 +1,36 @@
 import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
 
 export type MarkdownToolbarItem = {
-  id: string;
+  id: MarkdownToolbarItemId;
   label: string;
   accessibilityLabel: string;
   textStyle?: "bold" | "italic" | "underline" | "strikethrough";
   run: (commands: MarkdownDocumentCommands) => void;
 };
+
+export const markdownToolbarItemIds = [
+  "paragraph",
+  "heading-1",
+  "heading-2",
+  "heading-3",
+  "heading-4",
+  "heading-5",
+  "heading-6",
+  "bold",
+  "italic",
+  "underline",
+  "strikethrough",
+  "spoiler",
+  "link",
+  "blockquote",
+  "unordered-list",
+  "ordered-list",
+  "task-list",
+  "code-block",
+  "thematic-break",
+] as const;
+
+export type MarkdownToolbarItemId = (typeof markdownToolbarItemIds)[number];
 
 export const markdownToolbarItems = [
   {
@@ -15,8 +39,8 @@ export const markdownToolbarItems = [
     accessibilityLabel: "Paragraph",
     run: (commands) => commands.setParagraph(),
   },
-  ...([1, 2, 3, 4, 5, 6] as const).map((level) => ({
-    id: `heading-${level}`,
+  ...([1, 2, 3, 4, 5, 6] as const).map((level): MarkdownToolbarItem => ({
+    id: `heading-${level}` as MarkdownToolbarItemId,
     label: `H${level}`,
     accessibilityLabel: `Heading ${level}`,
     run: (commands: MarkdownDocumentCommands) => commands.setHeading(level),
@@ -98,8 +122,6 @@ export const markdownToolbarItems = [
     run: (commands) => commands.insertThematicBreak(),
   },
 ] as const satisfies readonly MarkdownToolbarItem[];
-
-export type MarkdownToolbarItemId = (typeof markdownToolbarItems)[number]["id"];
 
 export const markdownToolbarItemMap = Object.fromEntries(
   markdownToolbarItems.map((item) => [item.id, item]),
