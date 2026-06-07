@@ -575,6 +575,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
           applyTransactionResult(result);
 
+          const firstChangedBlockId = result.changedRange.blockIds[0];
+          const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
+          if (!suppressHistoryRef.current && firstChangedBlockId && lastChangedBlockId) {
+            undoStackRef.current.push({
+              type: "replaceBlockRange",
+              startBlockId: firstChangedBlockId,
+              endBlockId: lastChangedBlockId,
+              replacementMarkdown: block.markdown,
+              inverseMarkdown: `${beforeMarkdown}\n\n${afterMarkdown}`,
+            });
+            redoStackRef.current = [];
+            publishCommandState();
+          }
+
           const nextActiveBlockId = result.changedRange.blockIds[1] ?? result.changedRange.blockIds[0] ?? block.id;
           activeBlockIdRef.current = nextActiveBlockId;
           nativeEditingBlockIdRef.current = nextActiveBlockId;
@@ -589,7 +603,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onErrorRef.current?.(nextError);
         }
       },
-      [adapter, applyTransactionResult, clearEditTimer, clearTypingHistoryGroup, documentState, markDirty, onErrorRef],
+      [
+        adapter,
+        applyTransactionResult,
+        clearEditTimer,
+        clearTypingHistoryGroup,
+        documentState,
+        markDirty,
+        onErrorRef,
+        publishCommandState,
+      ],
     );
 
     const handleChangeMarkdown = useCallback(

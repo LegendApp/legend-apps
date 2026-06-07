@@ -2263,26 +2263,21 @@ describe("MarkdownDocument mounted editing", () => {
     });
     await flushPromises();
 
-    expect(adapter.applyTransactions).toEqual([
-      {
-        afterMarkdown: "Inserted",
-        beforeMarkdown: "Original",
-        blockId: "d1:b0",
-        type: "splitBlock",
-      },
-      {
-        endBlockId: "d1:b101",
-        markdown: "Original",
-        startBlockId: "d1:b100",
-        type: "replaceBlockRange",
-      },
-      {
-        afterMarkdown: "Inserted",
-        beforeMarkdown: "Original",
-        blockId: "d1:b100",
-        type: "splitBlock",
-      },
-    ]);
+    expect(adapter.applyTransactions).toHaveLength(3);
+    expect(adapter.applyTransactions[0]).toEqual({
+      afterMarkdown: "Inserted",
+      beforeMarkdown: "Original",
+      blockId: "d1:b0",
+      type: "splitBlock",
+    });
+    expect(adapter.applyTransactions[1]).toMatchObject({
+      markdown: "Original",
+      type: "replaceBlockRange",
+    });
+    expect(adapter.applyTransactions[2]).toMatchObject({
+      markdown: "Original\n\nInserted",
+      type: "replaceBlockRange",
+    });
     expect(adapter.sourceMarkdown).toBe("Original\n\nInserted");
     expectActiveBlockExists(renderer, adapter);
     expectUniqueBlockIds(adapter);
