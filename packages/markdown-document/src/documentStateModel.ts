@@ -113,7 +113,7 @@ export function validateMarkdownTransactionResultToBlockState(
 
   const seenChangedRangeBlockIds = new Set<string>();
   const retiredBlockIds = new Set(result.retiredBlockIds);
-  for (const blockId of blockIds) {
+  for (const [offset, blockId] of blockIds.entries()) {
     if (blockId.length === 0) {
       throw new Error("Markdown transaction changed range contains an empty block id.");
     }
@@ -125,6 +125,23 @@ export function validateMarkdownTransactionResultToBlockState(
     }
     if (retiredBlockIds.has(blockId)) {
       throw new Error(`Markdown transaction reuses a retired block id: ${blockId}`);
+    }
+    const block = result.changedBlocks[offset];
+    if (block?.id !== blockId) {
+      throw new Error(`Markdown transaction changed block order does not match changed range: ${blockId}`);
+    }
+    if (block.index !== startBlockIndex + offset) {
+      throw new Error(`Markdown transaction changed block index is inconsistent: ${block.id}`);
+    }
+    if (block.sourceStartByte > block.sourceEndByte || block.sourceEndByte > result.sourceLength) {
+      throw new Error(`Markdown transaction changed block source range is invalid: ${block.id}`);
+    }
+    if (
+      block.contentStartByte !== undefined &&
+      block.contentEndByte !== undefined &&
+      (block.contentStartByte > block.contentEndByte || block.contentEndByte > result.sourceLength)
+    ) {
+      throw new Error(`Markdown transaction changed block content range is invalid: ${block.id}`);
     }
     seenChangedRangeBlockIds.add(blockId);
   }

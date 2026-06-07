@@ -220,6 +220,55 @@ describe("documentStateModel", () => {
       }),
       "retired",
     ],
+    [
+      "changed block order mismatch",
+      transactionResult({
+        blockIds: ["d1:b0", "d1:b2"],
+        changedBlocks: [
+          block("d1:b2", 1, "Inserted"),
+          block("d1:b0", 0, "Edited"),
+        ],
+        deleteCount: 1,
+        startBlockIndex: 0,
+      }),
+      "order",
+    ],
+    [
+      "changed block index mismatch",
+      transactionResult({
+        blockIds: ["d1:b0"],
+        changedBlocks: [block("d1:b0", 5, "Edited")],
+        deleteCount: 1,
+        startBlockIndex: 0,
+      }),
+      "index",
+    ],
+    [
+      "changed block source range exceeds source length",
+      {
+        ...transactionResult({
+          blockIds: ["d1:b0"],
+          changedBlocks: [block("d1:b0", 0, "Edited")],
+          deleteCount: 1,
+          startBlockIndex: 0,
+        }),
+        changedBlocks: [{ ...block("d1:b0", 0, "Edited"), sourceEndByte: 1000 }],
+      },
+      "source range",
+    ],
+    [
+      "changed block content range exceeds source length",
+      {
+        ...transactionResult({
+          blockIds: ["d1:b0"],
+          changedBlocks: [block("d1:b0", 0, "Edited")],
+          deleteCount: 1,
+          startBlockIndex: 0,
+        }),
+        changedBlocks: [{ ...block("d1:b0", 0, "Edited"), contentEndByte: 1000 }],
+      },
+      "content range",
+    ],
   ])("rejects malformed transaction result for %s", (_label, result, expectedMessage) => {
     const state = createMarkdownDocumentBlockState([
       block("d1:b0", 0),

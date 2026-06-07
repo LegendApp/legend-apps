@@ -273,4 +273,27 @@ describe("markdown document adapter contract", () => {
     expect(harness.blocksById.has("d1:b2")).toBe(false);
     expect(() => harness.assertInvariants(["d1:b2"])).not.toThrow();
   });
+
+  it("keeps ids stable for a delayed transaction in a massive document", async () => {
+    const blocks = Array.from({ length: 10000 }, (_value, index) => block(`d1:b${index}`, index, `Block ${index}`));
+    const adapter = new FakeMarkdownAdapter(snapshot(blocks));
+    const harness = new MarkdownAdapterHarness(adapter, await adapter.load("test.md"));
+
+    const applyPromise = harness.apply(updateTransaction("d1:b5000", "Middle edited"));
+    adapter.pendingTransactionRequests[0]?.deferred.resolve(transactionResult({
+      blockIds: ["d1:b5000"],
+      changedBlocks: [block("d1:b5000", 5000, "Middle edited")],
+      deleteCount: 1,
+      revision: 1,
+      startBlockIndex: 5000,
+    }));
+    await applyPromise;
+
+    expect(harness.blockIds).toHaveLength(10000);
+    expect(harness.blockIds[4999]).toBe("d1:b4999");
+    expect(harness.blockIds[5000]).toBe("d1:b5000");
+    expect(harness.blockIds[5001]).toBe("d1:b5001");
+    expect(harness.blocksById.get("d1:b5000")?.markdown).toBe("Middle edited");
+    expect(() => harness.assertInvariants()).not.toThrow();
+  });
 });

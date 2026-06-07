@@ -229,6 +229,7 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
   failNextSave: Error | undefined;
   failNextTransaction: Error | undefined;
   mutateNextTransactionResult: ((result: MarkdownTransactionResult) => MarkdownTransactionResult) | undefined;
+  pendingTransactionGates: Deferred<void>[] = [];
   pendingHydrationRequests: Array<{
     count: number;
     deferred: Deferred<MarkdownBlockSnapshot[]>;
@@ -263,6 +264,10 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
 
   get sourceMarkdown() {
     return this.blocks.map((candidate) => candidate.markdown).join("\n\n");
+  }
+
+  get blockSnapshots() {
+    return this.blocks.map((candidate) => ({ ...candidate }));
   }
 
   async load() {
@@ -315,12 +320,22 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     this.closeCount += 1;
   }
 
+  deferNextTransaction() {
+    const deferred = new Deferred<void>();
+    this.pendingTransactionGates.push(deferred);
+    return deferred;
+  }
+
   async applyTransaction(_documentId: string, transaction: MarkdownTransaction) {
     this.applyTransactions.push(transaction);
     if (this.failNextTransaction) {
       const error = this.failNextTransaction;
       this.failNextTransaction = undefined;
       throw error;
+    }
+    const transactionGate = this.pendingTransactionGates.shift();
+    if (transactionGate) {
+      await transactionGate.promise;
     }
     const index = this.blocks.findIndex((candidate) => candidate.id === transactionBlockId(transaction));
     if (index < 0) {
@@ -358,12 +373,12 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     return id;
   }
 
-  private normalizeBlocks(blocks: MarkdownBlockSnapshot[]) {
+  private normalizeBlocks(blocks: MarkdownBlockSnapshot[], startIndex = 0) {
     return blocks.map((candidate, index) => ({
       ...candidate,
       contentEndByte: candidate.markdown.length,
       contentStartByte: 0,
-      index,
+      index: startIndex + index,
       sourceEndByte: candidate.markdown.length,
       sourceStartByte: 0,
     }));
@@ -388,7 +403,7 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     retiredBlockIds: string[],
   ) {
     this.revision += 1;
-    const normalizedChangedBlocks = this.normalizeBlocks(changedBlocks);
+    const normalizedChangedBlocks = this.normalizeBlocks(changedBlocks, startIndex);
     this.blocks.splice(startIndex, deleteCount, ...normalizedChangedBlocks);
     this.blocks = this.normalizeBlocks(this.blocks);
     return transactionResult({
@@ -2440,7 +2455,7 @@ describe("MarkdownDocument mounted editing", () => {
 
     expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
     expect(adapter.markdownById.get("d1:b1")).toBe("");
-    await expectRepresentableDocument(renderer, adapter);
+    expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -3788,6 +3803,123 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "transaction failed" }));
   });
 
+  it("waits for a pending edit transaction before save completes", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const transactionGate = adapter.deferNextTransaction();
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Edited while saving");
+    let savePromise: Promise<void> | undefined;
+    await act(async () => {
+      savePromise = commandsRef.current?.save();
+      await Promise.resolve();
+    });
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Edited while saving",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.saveCount).toBe(0);
+
+    transactionGate.resolve();
+    await act(async () => {
+      await savePromise;
+    });
+    await flushPromises();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("Edited while saving");
+    expect(adapter.saveCount).toBe(1);
+    expect(adapter.saveRevisions).toEqual([1]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps the newly focused block active while the previous block transaction is pending", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const transactionGate = adapter.deferNextTransaction();
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "First edited");
+    await pressRenderedMarkdown(renderer, "Second");
+
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    expect(adapter.markdownById.get("d1:b0")).toBe("First");
+
+    transactionGate.resolve();
+    await flushPromises();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("First edited");
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    await expectRepresentableDocument(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("handles unmount while a debounced edit transaction is pending", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const transactionGate = adapter.deferNextTransaction();
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Pending edit");
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+    expect(adapter.applyTransactions).toHaveLength(1);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+    transactionGate.resolve();
+    await flushPromises();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("Pending edit");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("cancels a debounced edit when unmounted before the timer fires", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Uncommitted");
+    await act(async () => {
+      renderer.unmount();
+    });
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("Original");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("continues editing after saving reloading and reopening a weird document state", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, "Before \ud83d After\n\n```js\nconst value = 1;\n```", "Original");
+    await act(async () => {
+      await commandsRef.current?.save();
+    });
+    await flushPromises();
+
+    const reloadedAdapter = new MountedEditorAdapter(snapshot(adapter.blockSnapshots));
+    const reloaded = await renderDocument({ adapter: reloadedAdapter });
+    await changeText(editorInput(reloaded.renderer), "Reloaded edit");
+    await runPendingTimers();
+
+    expect(reloadedAdapter.markdownById.get("d1:b0")).toBe("Reloaded edit");
+    await expectRepresentableDocument(reloaded.renderer, reloadedAdapter);
+    expect(onError).not.toHaveBeenCalled();
+    expect(reloaded.onError).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       "duplicate changed range ids",
@@ -3844,6 +3976,45 @@ describe("MarkdownDocument mounted editing", () => {
         retiredBlockIds: [result.changedBlocks[0]!.id],
       }),
       "retired",
+    ],
+    [
+      "changed block order mismatch",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [
+          { ...result.changedBlocks[0]!, id: "d1:b101", index: result.changedBlocks[0]!.index },
+          result.changedBlocks[0]!,
+        ],
+        changedRange: {
+          ...result.changedRange,
+          blockIds: [result.changedBlocks[0]!.id, "d1:b101"],
+        },
+      }),
+      "order",
+    ],
+    [
+      "changed block index mismatch",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [{ ...result.changedBlocks[0]!, index: 10 }],
+      }),
+      "index",
+    ],
+    [
+      "changed block source range exceeds source length",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [{ ...result.changedBlocks[0]!, sourceEndByte: result.sourceLength + 1 }],
+      }),
+      "source range",
+    ],
+    [
+      "changed block content range exceeds source length",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [{ ...result.changedBlocks[0]!, contentEndByte: result.sourceLength + 1 }],
+      }),
+      "content range",
     ],
   ])("rejects malformed adapter transaction results with %s", async (_label, mutateResult, expectedMessage) => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
