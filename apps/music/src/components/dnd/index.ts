@@ -1,6 +1,10 @@
-export { DragDropProvider, type DraggedItem } from "./DragDropContext";
-export { DraggableItem } from "./DraggableItem";
-export { DroppableZone } from "./DroppableZone";
+export {
+    DragDropProvider,
+    DraggableItem,
+    type DraggedItem,
+    DroppableZone,
+    useDragDrop,
+} from "@legend-desktop/reorder-controls";
 export {
     type DragData,
     LOCAL_PLAYLIST_DRAG_ZONE_ID,

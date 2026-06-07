@@ -42,8 +42,8 @@ import {
     MEDIA_LIBRARY_DRAG_ZONE_ID,
     PLAYLIST_DRAG_ZONE_ID,
     type PlaylistDragData,
+    useDragDrop,
 } from "./dnd";
-import { useDragDrop } from "./dnd/DragDropContext";
 
 type PlaylistTrackWithSuggestions = TrackData & {
     queueEntryId: string;

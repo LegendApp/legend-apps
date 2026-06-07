@@ -3,6 +3,8 @@ import { useObservable, useValue } from "@legendapp/state/react";
 import { createContext, type ReactNode, useContext, useRef } from "react";
 import { type LayoutRectangle, View } from "react-native";
 
+import { cn } from "@legend-desktop/classnames";
+
 const MAX_VERTICAL_PROXIMITY = 80;
 
 export type DropZoneHitSlop =
@@ -63,10 +65,11 @@ export const useDragDrop = () => {
 // Props for the drag drop provider
 interface DragDropProviderProps {
     children: ReactNode;
+    className?: string;
 }
 
 // DragDropProvider component
-export const DragDropProvider = ({ children }: DragDropProviderProps) => {
+export const DragDropProvider = ({ children, className }: DragDropProviderProps) => {
     // State for the dragged item
     const draggedItem$ = useObservable<DraggedItem | null>(null);
 
@@ -200,7 +203,7 @@ export const DragDropProvider = ({ children }: DragDropProviderProps) => {
 
     return (
         <DragDropContext.Provider value={value}>
-            <View className="flex-1">{children}</View>
+            <View className={cn("flex-1", className)}>{children}</View>
         </DragDropContext.Provider>
     );
 };

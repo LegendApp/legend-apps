@@ -22,6 +22,7 @@
     "@legend-desktop/media-library-scanner": "0.0.0",
     "@legend-desktop/media-tags": "0.0.0",
     "@legend-desktop/native-menu": "0.0.0",
+    "@legend-desktop/reorder-controls": "0.0.0",
     "@legend-desktop/settings-window": "0.0.0",
     "@legend-desktop/sf-symbol": "0.0.0",
     "@legend-desktop/sidebar": "0.0.0",
