@@ -1,6 +1,7 @@
 import { observable, syncState } from "@legendapp/state";
+import { formatHotkey, parseHotkey, serializeHotkey } from "@legend-desktop/hotkeys";
 import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
-import { KeyCodes, KeyText } from "@/systems/keyboard/KeyboardManager";
+import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
 import { createJSONManager } from "@/utils/JSONManager";
 
 // Default hotkey settings
@@ -78,48 +79,19 @@ export const hotkeys$ = createJSONManager<Record<HotkeyName, KeyboardEventCodeHo
         load: (value: Record<string, KeyboardEventCodeHotkey>) => {
             return Object.fromEntries(
                 Object.entries(value).map(([key, val]) => {
-                    if (typeof val === "number") {
-                        return [key, val];
-                    }
-
-                    const segments = `${val}`.split("+");
-                    const parsed = segments.map((segment) => {
-                        const keyCodeEntry = Object.entries(KeyText).find(([, text]) => text === segment);
-                        if (keyCodeEntry) {
-                            return Number(keyCodeEntry[0]);
-                        }
-
-                        const numeric = Number(segment);
-                        if (!Number.isNaN(numeric) && `${numeric}` === segment) {
-                            return numeric;
-                        }
-
-                        return segment;
-                    });
-
+                    const parsed = parseHotkey(val);
                     if (parsed.length === 1) {
-                        const [single] = parsed;
-                        return [key, typeof single === "number" ? single : `${single}`];
+                        return [key, parsed[0]];
                     }
 
-                    return [key, parsed.map((part) => `${part}`).join("+")];
+                    return [key, serializeHotkey(parsed) ?? val];
                 }),
             );
         },
         save: (value: Record<string, KeyboardEventCodeHotkey>) => {
             return Object.fromEntries(
                 Object.entries(value).map(([key, val]) => {
-                    const vals = `${val}`.split("+");
-                    // Add the main key text
-                    const parts = vals.map((v) => {
-                        if (KeyText[+v]) {
-                            return KeyText[+v];
-                        }
-                        return +v;
-                    });
-
-                    // Join with + or return empty string if no parts
-                    return [key, parts.join("+")];
+                    return [key, formatHotkey(val).replaceAll(" + ", "+")];
                 }),
             );
         },

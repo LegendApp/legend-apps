@@ -1,6 +1,6 @@
 import { batch, event, observable } from "@legendapp/state";
 import { useMount, useObserveEffect } from "@legendapp/state/react";
-import type { HotkeyValue } from "@legend-desktop/hotkeys";
+import { formatHotkey, parseHotkey, type HotkeyValue } from "@legend-desktop/hotkeys";
 import { DEBUG_HOTKEY_LOGS } from "@/systems/constants";
 import { getHotkey, getHotkeyMetadata, type HotkeyName } from "@/systems/hotkeys";
 import KeyboardManager, { type KeyboardEvent, KeyCodes, KeyText } from "@/systems/keyboard/KeyboardManager";
@@ -174,8 +174,11 @@ export function onHotkeys(hotkeyCallbacks: HotkeyCallbacks, options: HotkeyScope
                 console.log("onHotkeys", name, configuredKey);
             }
 
-            const keys =
-                typeof configuredKey === "number" ? [configuredKey.toString()] : configuredKey.toLowerCase().split("+");
+            const keys = parseHotkey(configuredKey).map((keyCode) => keyCode.toString());
+            if (keys.length === 0) {
+                console.warn(`No usable hotkey configuration found for ${name}`);
+                continue;
+            }
 
             // keysToPreventDefault.add(Number(keys[keys.length - 1]));
             hotkeyMap.set(keys, action);
@@ -189,15 +192,12 @@ export function onHotkeys(hotkeyCallbacks: HotkeyCallbacks, options: HotkeyScope
 
             // Register the hotkey with its name and action description
             if (metadata) {
-                // Get keyText from KeyText mapping for numeric keys
-                const keyText = typeof configuredKey === "number" ? KeyText[configuredKey] : configuredKey;
-
                 hotkeyRegistry$[hotkeyName].set({
                     name: hotkeyName,
                     key: configuredKey,
                     description: metadata.description,
                     repeat: metadata.repeat,
-                    keyText,
+                    keyText: formatHotkey(configuredKey),
                 });
             }
         }
