@@ -71,19 +71,26 @@ function thematicBreakBlock(id: string, index: number, markdown = "---"): Markdo
   };
 }
 
+function splitMarkdownLines(markdown: string) {
+  return markdown.split(/\r\n|\r|\n/);
+}
+
 function markdownDepth(markdown: string) {
-  const firstLine = markdown.split("\n", 1)[0] ?? "";
+  const firstLine = splitMarkdownLines(markdown)[0] ?? "";
   const match = /^(\s*)/.exec(firstLine);
   return Math.floor((match?.[1].replace(/\t/g, "    ").length ?? 0) / 2);
 }
 
 function markdownBlockType(markdown: string) {
-  const firstLine = markdown.split("\n", 1)[0] ?? "";
+  const lines = splitMarkdownLines(markdown);
+  const firstLine = lines[0] ?? "";
   let type = "paragraph";
   if (/^#{1,6}\s/.test(firstLine)) {
     type = "heading";
   } else if (/^\s*(```|~~~)/.test(firstLine)) {
     type = "codeBlock";
+  } else if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(firstLine)) {
+    type = "thematicBreak";
   } else if (/^\s*\d+\.\s/.test(firstLine)) {
     type = "orderedList";
   } else if (/^\s*[-*+]\s+\[[ xX]\]\s/.test(firstLine)) {
@@ -92,10 +99,8 @@ function markdownBlockType(markdown: string) {
     type = "unorderedList";
   } else if (/^\s*>/.test(firstLine)) {
     type = "quote";
-  } else if (markdown.includes("\n") && /\|/.test(firstLine) && /^\s*\|?[\s:-]+\|/.test(markdown.split("\n")[1] ?? "")) {
+  } else if (lines.length > 1 && /\|/.test(firstLine) && /^\s*\|?[\s:-]+\|/.test(lines[1] ?? "")) {
     type = "table";
-  } else if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(firstLine)) {
-    type = "thematicBreak";
   }
   return type;
 }
@@ -110,7 +115,7 @@ function markdownBlock(id: string, index: number, markdown: string): MarkdownBlo
 
 function splitMarkdownBlocks(markdown: string) {
   const blocks: string[] = [];
-  const lines = markdown.split("\n");
+  const lines = splitMarkdownLines(markdown);
   let currentLines: string[] = [];
   let inCodeBlock = false;
   let fenceMarker = "";
@@ -221,6 +226,7 @@ function transactionBlockId(transaction: MarkdownTransaction) {
 class MountedEditorAdapter implements MarkdownDocumentAdapter {
   applyTransactions: MarkdownTransaction[] = [];
   closeCount = 0;
+  failNextSave: Error | undefined;
   pendingHydrationRequests: Array<{
     count: number;
     deferred: Deferred<MarkdownBlockSnapshot[]>;
@@ -285,11 +291,21 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
 
   async save() {
     this.saveCount += 1;
+    if (this.failNextSave) {
+      const error = this.failNextSave;
+      this.failNextSave = undefined;
+      throw error;
+    }
     this.saveRevisions.push(this.revision);
   }
 
   async saveAs() {
     this.saveCount += 1;
+    if (this.failNextSave) {
+      const error = this.failNextSave;
+      this.failNextSave = undefined;
+      throw error;
+    }
     this.saveRevisions.push(this.revision);
   }
 
@@ -411,6 +427,7 @@ async function renderDocument({
   onCommandStateChange = jest.fn(),
   onDirtyChange = jest.fn(),
   onError = jest.fn(),
+  onSaveStateChange = jest.fn(),
   savePolicy = { autosave: false },
 }: {
   adapter: MountedEditorAdapter;
@@ -418,6 +435,7 @@ async function renderDocument({
   onCommandStateChange?: jest.Mock;
   onDirtyChange?: jest.Mock;
   onError?: jest.Mock;
+  onSaveStateChange?: jest.Mock;
   savePolicy?: MarkdownDocumentProps["savePolicy"];
 }) {
   const commandsRef = React.createRef<MarkdownDocumentCommands>();
@@ -433,6 +451,7 @@ async function renderDocument({
         onCommandStateChange={onCommandStateChange}
         onDirtyChange={onDirtyChange}
         onError={onError}
+        onSaveStateChange={onSaveStateChange}
         savePolicy={savePolicy}
       />,
     );
@@ -444,6 +463,7 @@ async function renderDocument({
     onCommandStateChange,
     onDirtyChange,
     onError,
+    onSaveStateChange,
     renderer: renderer!,
   };
 }
@@ -532,6 +552,36 @@ async function runPendingTimers() {
     jest.runOnlyPendingTimers();
   });
   await flushPromises();
+}
+
+async function undo(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  await act(async () => {
+    commandsRef.current?.undo();
+  });
+  await flushPromises();
+}
+
+async function redo(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  await act(async () => {
+    commandsRef.current?.redo();
+  });
+  await flushPromises();
+}
+
+async function expectStableEditingState(renderer: TestRenderer.ReactTestRenderer, adapter: MountedEditorAdapter) {
+  await flushPromises();
+  expectActiveBlockExists(renderer, adapter);
+  expectUniqueBlockIds(adapter);
+}
+
+async function replaceActiveMarkdown(
+  renderer: TestRenderer.ReactTestRenderer,
+  markdown: string,
+  previousMarkdown = editorInput(renderer).props.defaultValue,
+) {
+  await changeSelection(editorInput(renderer), 0, previousMarkdown.length);
+  await changeText(editorInput(renderer), markdown);
+  await runPendingTimers();
 }
 
 describe("MarkdownDocument mounted editing", () => {
@@ -656,6 +706,84 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.saveRevisions).toEqual([1]);
     expectActiveBlockExists(renderer, adapter);
     expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("recovers from a failed structural autosave with an explicit save", async () => {
+    const markdown = [
+      "First",
+      "",
+      "Second",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    adapter.failNextSave = new Error("autosave failed");
+    const onDirtyChange = jest.fn();
+    const onError = jest.fn();
+    const onSaveStateChange = jest.fn();
+    const { commandsRef, renderer } = await renderDocument({
+      adapter,
+      onDirtyChange,
+      onError,
+      onSaveStateChange,
+      savePolicy: { autosave: true, debounceMs: 0 },
+    });
+
+    await changeSelection(editorInput(renderer), 0, "Original".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    expect(adapter.saveCount).toBe(1);
+    expect(adapter.saveRevisions).toEqual([]);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "autosave failed" }));
+    expect(onSaveStateChange).toHaveBeenCalledWith("error");
+    expect(onDirtyChange).toHaveBeenCalledWith(true);
+    expectActiveBlockExists(renderer, adapter);
+
+    await act(async () => {
+      await commandsRef.current?.save();
+    });
+    await flushPromises();
+
+    expect(adapter.saveCount).toBe(2);
+    expect(adapter.saveRevisions).toEqual([1]);
+    expect(onSaveStateChange).toHaveBeenCalledWith("idle");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+  });
+
+  it("undoes and redoes a structural paste after autosave", async () => {
+    const markdown = [
+      "First",
+      "",
+      "Second",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({
+      adapter,
+      savePolicy: { autosave: true, debounceMs: 0 },
+    });
+
+    await changeSelection(editorInput(renderer), 0, "Original".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+    expect(adapter.saveRevisions).toEqual([1]);
+
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Original");
+    await expectStableEditingState(renderer, adapter);
+
+    await redo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    await expectStableEditingState(renderer, adapter);
+
+    await act(async () => {
+      await commandsRef.current?.save();
+    });
+    await flushPromises();
+
+    expect(adapter.saveRevisions).toEqual([1, 3]);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -1997,6 +2125,269 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("handles composition-like in-progress fenced code edits before final commit", async () => {
+    const finalMarkdown = [
+      "```js",
+      "const value = 1;",
+      "```",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "```");
+    await changeText(editorInput(renderer), "```js");
+    await changeText(editorInput(renderer), "```js\nconst value = 1;");
+    expect(adapter.applyTransactions).toEqual([]);
+
+    await changeText(editorInput(renderer), finalMarkdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: finalMarkdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps an incomplete code fence stable while editing below it", async () => {
+    const incompleteMarkdown = [
+      "```ts",
+      "const value = 1;",
+      "- this remains code",
+    ].join("\n");
+    const completedMarkdown = `${incompleteMarkdown}\n\`\`\``;
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, incompleteMarkdown, "");
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+
+    await replaceActiveMarkdown(renderer, completedMarkdown, incompleteMarkdown);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+
+    await undo(commandsRef);
+    expect(adapter.markdownById.get("d1:b0")).toBe("");
+    await expectStableEditingState(renderer, adapter);
+
+    await redo(commandsRef);
+    expect(adapter.markdownById.get("d1:b0")).toBe(completedMarkdown);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("supports tilde fences and longer backtick runs inside code content", async () => {
+    const markdown = [
+      "~~~md",
+      "```",
+      "not a closing tilde fence",
+      "```",
+      "~~~",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe(markdown);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps code block identity while deleting and re-adding the closing fence", async () => {
+    const completeMarkdown = [
+      "```js",
+      "const value = 1;",
+      "```",
+    ].join("\n");
+    const incompleteMarkdown = [
+      "```js",
+      "const value = 1;",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, completeMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, incompleteMarkdown, completeMarkdown);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+
+    await replaceActiveMarkdown(renderer, completeMarkdown, incompleteMarkdown);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("converts an in-progress table into a table once the separator is valid", async () => {
+    const headerMarkdown = "| A | B |";
+    const malformedMarkdown = [
+      "| A | B |",
+      "| not a separator |",
+    ].join("\n");
+    const tableMarkdown = [
+      "| A | B |",
+      "|---|---|",
+      "| 1 | 2 |",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, headerMarkdown, "");
+    expect(adapter.blockTypes).toEqual(["paragraph"]);
+
+    await replaceActiveMarkdown(renderer, malformedMarkdown, headerMarkdown);
+    expect(adapter.blockTypes).toEqual(["paragraph"]);
+
+    await replaceActiveMarkdown(renderer, tableMarkdown, malformedMarkdown);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["table"]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("turns a table back into paragraph markdown when the separator is deleted", async () => {
+    const tableMarkdown = [
+      "| A | B |",
+      "|---|---|",
+      "| 1 | 2 |",
+    ].join("\n");
+    const paragraphMarkdown = [
+      "| A | B |",
+      "| 1 | 2 |",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([markdownBlock("d1:b0", 0, tableMarkdown)]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, paragraphMarkdown, tableMarkdown);
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["paragraph"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe(paragraphMarkdown);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["dash marker", "-", "paragraph"],
+    ["dash marker with space", "- ", "unorderedList"],
+    ["ordered marker", "1.", "paragraph"],
+    ["ordered marker with space", "1. ", "orderedList"],
+    ["task marker prefix", "- [", "unorderedList"],
+    ["task marker", "- [ ] ", "unorderedList"],
+    ["nested dash marker", "  - ", "unorderedList"],
+  ])("handles in-progress list typing for %s", async (_label, markdown, expectedType) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual([expectedType]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes list marker transitions", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, "1. ", "");
+    expect(adapter.blockTypes).toEqual(["orderedList"]);
+
+    await undo(commandsRef);
+    expect(adapter.markdownById.get("d1:b0")).toBe("");
+    expect(adapter.blockTypes).toEqual(["paragraph"]);
+
+    await redo(commandsRef);
+    expect(adapter.markdownById.get("d1:b0")).toBe("1. ");
+    expect(adapter.blockTypes).toEqual(["orderedList"]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["empty blockquote marker", ">", "quote"],
+    ["spaced empty blockquote marker", "> ", "quote"],
+    ["blockquote content", "> Quote", "quote"],
+    ["removed marker", "Quote", "paragraph"],
+  ])("handles blockquote typing state for %s", async (_label, markdown, expectedType) => {
+    const adapter = new MountedEditorAdapter(snapshot([quoteBlock("d1:b0", 0, "> Quote")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "> Quote");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual([expectedType]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["hash only", "#", "paragraph"],
+    ["hashes only", "##", "paragraph"],
+    ["heading marker", "## ", "heading"],
+    ["heading content", "## Heading", "heading"],
+    ["missing space", "##Heading", "paragraph"],
+  ])("handles heading typing state for %s", async (_label, markdown, expectedType) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual([expectedType]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["single dash", "-", "paragraph"],
+    ["double dash", "--", "paragraph"],
+    ["triple dash", "---", "thematicBreak"],
+    ["triple dash plus text", "--- text", "paragraph"],
+    ["asterisks", "***", "thematicBreak"],
+    ["underscores", "___", "thematicBreak"],
+    ["spaced stars", "* * *", "thematicBreak"],
+  ])("handles thematic break typing ambiguity for %s", async (_label, markdown, expectedType) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual([expectedType]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps mixed incomplete structures stable inside an incomplete code fence", async () => {
+    const markdown = [
+      "```md",
+      "- list-looking line",
+      "| A | B |",
+      "|---|---|",
+      "> quote-looking line",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual(["codeBlock"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe(markdown);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("pasting multi-paragraph markdown over a text selection replaces the selection through the parser", async () => {
     const markdown = [
       "Before",
@@ -2207,6 +2598,81 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.blockTypes).toEqual(["paragraph", "paragraph", "codeBlock"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pasting mixed CRLF LF and lone CR markdown parses stable block boundaries", async () => {
+    const markdown = "First\r\n\r\nSecond\n\n> Quote\r\r```js\rconst value = 1;\r```";
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "paragraph", "quote", "codeBlock"]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["large code block", ["```js", ...Array.from({ length: 140 }, (_value, index) => `const value${index} = ${index};`), "```"].join("\n"), "codeBlock"],
+    ["large ordered list", Array.from({ length: 140 }, (_value, index) => `${index + 1}. Item ${index}`).join("\n"), "orderedList"],
+    ["large table", [
+      "| A | B |",
+      "|---|---|",
+      ...Array.from({ length: 140 }, (_value, index) => `| ${index} | ${index + 1} |`),
+    ].join("\n"), "table"],
+  ])("edits a %s without splitting or losing active state", async (_label, markdown, expectedType) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "Original");
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.blockTypes).toEqual([expectedType]);
+    expect(adapter.markdownById.get("d1:b0")).toBe(markdown);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("pastes adjacent structural blocks and preserves them through undo and redo", async () => {
+    const markdown = [
+      "```js",
+      "const value = 1;",
+      "```",
+      "",
+      "- Item",
+      "- Item two",
+      "",
+      "| A | B |",
+      "|---|---|",
+      "| 1 | 2 |",
+      "",
+      "> Quote",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "Original");
+    expect(adapter.blockTypes).toEqual(["codeBlock", "unorderedList", "table", "quote"]);
+    await expectStableEditingState(renderer, adapter);
+
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Original");
+    await expectStableEditingState(renderer, adapter);
+
+    await redo(commandsRef);
+    expect(adapter.blockTypes).toEqual(["codeBlock", "unorderedList", "table", "quote"]);
+    expect(adapter.sourceMarkdown).toBe(markdown);
+    await expectStableEditingState(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -2976,6 +3442,29 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["first", "First", "d1:b0"],
+    ["middle", "Second", "d1:b1"],
+    ["last", "Third", "d1:b2"],
+  ])("keeps an emptied %s block active next to siblings", async (_label, targetMarkdown, targetBlockId) => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, targetMarkdown);
+    await changeSelection(editorInput(renderer), 0, targetMarkdown.length);
+    await changeText(editorInput(renderer), "");
+    await runPendingTimers();
+
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
+    expect(adapter.markdownById.get(targetBlockId)).toBe("");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("edits the block after deleting previous siblings", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
@@ -2996,6 +3485,67 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.sourceMarkdown).toBe("Third edited");
     expect(adapter.blockIds).toHaveLength(1);
     expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("handles selection and text events arriving in old-length then new-text order", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "Original".length);
+    await changeText(editorInput(renderer), "Original extended");
+    await changeSelection(editorInput(renderer), "Original".length);
+    await changeText(editorInput(renderer), "Original extended again");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Original extended again",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("handles text and selection events arriving in new-text then old-length order", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Original extended");
+    await changeSelection(editorInput(renderer), "Original".length);
+    await changeText(editorInput(renderer), "Original extended final");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Original extended final",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("handles selection races around a structural split without stale active state", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+    const staleOnChangeSelection = editorInput(renderer).props.onChangeSelection;
+
+    await changeSelection(editorInput(renderer), "Original".length);
+    await changeText(editorInput(renderer), "Original\nSplit");
+    await act(async () => {
+      staleOnChangeSelection({ end: 0, start: 0 });
+    });
+    await flushPromises();
+    await changeText(editorInput(renderer), "Split edited");
+    await runPendingTimers();
+
+    expect(adapter.sourceMarkdown).toBe("Original\n\nSplit edited");
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
+    await expectStableEditingState(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -3175,6 +3725,114 @@ describe("MarkdownDocument mounted editing", () => {
     }
 
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("maintains invariants while undoing and redoing twenty structural edits", async () => {
+    const structuralEdits = Array.from({ length: 20 }, (_value, index) => {
+      const editIndex = index + 1;
+      if (index % 4 === 0) {
+        return [
+          "```js",
+          `const value = ${editIndex};`,
+          "```",
+        ].join("\n");
+      }
+      if (index % 4 === 1) {
+        return [
+          `${editIndex}. Item ${editIndex}`,
+          `${editIndex + 1}. Item ${editIndex + 1}`,
+        ].join("\n");
+      }
+      if (index % 4 === 2) {
+        return [
+          "| A | B |",
+          "|---|---|",
+          `| ${editIndex} | ${editIndex + 1} |`,
+        ].join("\n");
+      }
+      return [
+        "> Quote",
+        "> Continued",
+      ].join("\n");
+    });
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    let previousMarkdown = "Original";
+    for (const markdown of structuralEdits) {
+      await replaceActiveMarkdown(renderer, markdown, previousMarkdown);
+      previousMarkdown = markdown;
+      expect(adapter.blockIds).toEqual(["d1:b0"]);
+      await expectStableEditingState(renderer, adapter);
+    }
+
+    for (let index = 0; index < structuralEdits.length; index += 1) {
+      await undo(commandsRef);
+      expect(adapter.blockIds).toEqual(["d1:b0"]);
+      await expectStableEditingState(renderer, adapter);
+    }
+    expect(adapter.markdownById.get("d1:b0")).toBe("Original");
+
+    for (let index = 0; index < structuralEdits.length; index += 1) {
+      await redo(commandsRef);
+      expect(adapter.blockIds).toEqual(["d1:b0"]);
+      await expectStableEditingState(renderer, adapter);
+    }
+    expect(adapter.markdownById.get("d1:b0")).toBe(structuralEdits[structuralEdits.length - 1]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps adapter invariants for generated edit split paste undo redo sequences", async () => {
+    const generatedDocs = [
+      [block("d1:b0", 0, "Alpha")],
+      [
+        block("d1:b0", 0, "Alpha"),
+        unorderedListBlock("d1:b1", 1, "- Beta"),
+        codeBlock("d1:b2", 2, "```js\nconst gamma = 1;\n```"),
+      ],
+      [
+        markdownBlock("d1:b0", 0, "# Heading"),
+        markdownBlock("d1:b1", 1, "> Quote"),
+      ],
+    ];
+    const markdownCases = [
+      "Plain generated edit",
+      "- Generated item\n- Generated item two",
+      "```js\nconst generated = true;\n```",
+      "> Generated quote\n> continued",
+      "| A | B |\n|---|---|\n| 1 | 2 |",
+      "First generated\nSecond generated",
+    ];
+
+    for (const [docIndex, initialBlocks] of generatedDocs.entries()) {
+      const adapter = new MountedEditorAdapter(snapshot(initialBlocks));
+      const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+      for (let step = 0; step < 24; step += 1) {
+        const operation = (step + docIndex) % 6;
+        const currentMarkdown = editorInput(renderer).props.defaultValue;
+        if (operation === 0) {
+          await replaceActiveMarkdown(renderer, markdownCases[(step + docIndex) % markdownCases.length], currentMarkdown);
+        } else if (operation === 1) {
+          await changeSelection(editorInput(renderer), currentMarkdown.length);
+          await changeText(editorInput(renderer), `${currentMarkdown}\nTail ${step}`);
+          await flushPromises();
+        } else if (operation === 2) {
+          await replaceActiveMarkdown(renderer, `Edit ${docIndex}-${step}`, currentMarkdown);
+        } else if (operation === 3) {
+          await undo(commandsRef);
+        } else if (operation === 4) {
+          await redo(commandsRef);
+        } else {
+          await changeSelection(editorInput(renderer), 0, Math.min(4, currentMarkdown.length));
+          await changeText(editorInput(renderer), `Head ${step}${currentMarkdown.slice(Math.min(4, currentMarkdown.length))}`);
+          await runPendingTimers();
+        }
+        await expectStableEditingState(renderer, adapter);
+      }
+
+      expect(onError).not.toHaveBeenCalled();
+    }
   });
 
   it("ignores stale selection drag events from retired rendered blocks", async () => {
