@@ -1,6 +1,12 @@
+import { parseHotkey, type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
 import { createNativeSettingsValue, createSettingsSubscription } from "@legend-desktop/app-settings";
 import { Settings } from "react-native";
 import { Uniwind, type ThemeName } from "uniwind";
+import {
+  defaultMarkdownHotkeySettings,
+  markdownHotkeyDefinitions,
+  type MarkdownHotkeyId,
+} from "./markdownHotkeys";
 
 const themeSettingsKey = "legend-markdown.settings.theme";
 const startupBehaviorSettingsKey = "legend-markdown.settings.startupBehavior";
@@ -12,6 +18,7 @@ const fontSizeSettingsKey = "legend-markdown.settings.fontSize";
 const lineHeightSettingsKey = "legend-markdown.settings.lineHeight";
 const contentWidthSettingsKey = "legend-markdown.settings.contentWidth";
 const documentDensitySettingsKey = "legend-markdown.settings.documentDensity";
+const hotkeysSettingsKey = "legend-markdown.settings.hotkeys";
 
 export type MarkdownThemeSetting = "light" | "dark" | "grey";
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
@@ -131,6 +138,8 @@ const documentDensitySetting = createNativeSettingsValue<MarkdownDocumentDensity
 });
 
 let cachedAppearanceSettings: MarkdownAppearanceSettings | null = null;
+let cachedHotkeySettings: HotkeyState<MarkdownHotkeyId> | null = null;
+let cachedHotkeySettingsSource: string | null = null;
 
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
   return themeSetting.get();
@@ -189,6 +198,50 @@ export function getMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
   }
 
   cachedAppearanceSettings = nextSettings;
+  return nextSettings;
+}
+
+function isHotkeyValue(value: unknown): value is HotkeyValue | null {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value !== "number" && typeof value !== "string") {
+    return false;
+  }
+  return parseHotkey(value as HotkeyValue).length > 0;
+}
+
+function readStoredMarkdownHotkeys() {
+  const value = Settings.get(hotkeysSettingsKey);
+  if (typeof value === "string" && value.length > 0) {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+  return value;
+}
+
+export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
+  const stored = readStoredMarkdownHotkeys();
+  const source = JSON.stringify(stored ?? null);
+  if (cachedHotkeySettings && cachedHotkeySettingsSource === source) {
+    return cachedHotkeySettings;
+  }
+
+  const nextSettings: HotkeyState<MarkdownHotkeyId> = { ...defaultMarkdownHotkeySettings };
+  if (stored && typeof stored === "object") {
+    for (const definition of markdownHotkeyDefinitions) {
+      const value = (stored as Record<string, unknown>)[definition.id];
+      if (isHotkeyValue(value)) {
+        nextSettings[definition.id] = value;
+      }
+    }
+  }
+
+  cachedHotkeySettings = nextSettings;
+  cachedHotkeySettingsSource = source;
   return nextSettings;
 }
 
@@ -251,6 +304,17 @@ export function setMarkdownContentWidthSetting(contentWidth: MarkdownContentWidt
 
 export function setMarkdownDocumentDensitySetting(density: MarkdownDocumentDensitySetting) {
   documentDensitySetting.set(density);
+}
+
+export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValue | null) {
+  const nextSettings = {
+    ...getMarkdownHotkeySettings(),
+    [id]: value,
+  };
+  cachedHotkeySettings = nextSettings;
+  cachedHotkeySettingsSource = JSON.stringify(nextSettings);
+  Settings.set({ [hotkeysSettingsKey]: cachedHotkeySettingsSource });
+  notifyMarkdownSettingsChanged();
 }
 
 export function setLastMarkdownDocumentPath(path: string) {

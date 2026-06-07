@@ -5,6 +5,7 @@ import {
 import { settingsWindowIdentifier } from "./appConstants";
 import { AppearanceSettingsPage } from "./settings/AppearanceSettingsPage";
 import { GeneralSettingsPage } from "./settings/GeneralSettingsPage";
+import { HotkeysSettingsPage } from "./settings/HotkeysSettingsPage";
 import { isSettingsPage, type SettingsPage } from "./settings/settingsPages";
 
 const pages: SettingsWindowPage<SettingsPage>[] = [
@@ -12,6 +13,11 @@ const pages: SettingsWindowPage<SettingsPage>[] = [
     id: "general",
     render: () => <GeneralSettingsPage />,
     title: "General",
+  },
+  {
+    id: "hotkeys",
+    render: () => <HotkeysSettingsPage />,
+    title: "Hotkeys",
   },
   {
     id: "appearance",
