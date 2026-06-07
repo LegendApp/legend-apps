@@ -328,6 +328,24 @@ void testUpdateBlockUsesParserForTables() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testUpdateBlockToEmptyPreservesEditableBlock() {
+  LoadedDocument loaded("First\n\nSecond\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(updateBlock(before[0].id, ""));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "\n\nSecond\n", "empty update source");
+  expectEqual(after.size(), 2, "empty update block count");
+  expectEqual(after[0].id, before[0].id, "empty update preserves edited id");
+  expectEqual(after[0].markdown, "", "empty update markdown");
+  expectEqual(after[0].type, "paragraph", "empty update type");
+  expectEqual(after[1].id, before[1].id, "empty update preserves suffix id");
+  expectEqual(result.changedRange.deleteCount, 1, "empty update delete count");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
 void testReplaceBlockRangeUsesParserForCodeBlockBoundaries() {
   LoadedDocument loaded("Intro\n\nMiddle\n\nTail\n");
   const auto before = blocksFor(loaded.document);
@@ -484,11 +502,12 @@ int main() {
       {"update block can become multiple paragraphs", testUpdateBlockCanBecomeMultipleParagraphs},
       {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},
       {"update block uses parser for tables", testUpdateBlockUsesParserForTables},
-	      {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
-	      {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
-	      {"large document far down transactions", testLargeDocumentFarDownTransactions},
-	      {"randomized transaction sequence", testRandomizedTransactionSequence},
-	  };
+      {"update block to empty preserves editable block", testUpdateBlockToEmptyPreservesEditableBlock},
+      {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
+      {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
+      {"large document far down transactions", testLargeDocumentFarDownTransactions},
+      {"randomized transaction sequence", testRandomizedTransactionSequence},
+  };
 
   for (const auto& test : tests) {
     try {

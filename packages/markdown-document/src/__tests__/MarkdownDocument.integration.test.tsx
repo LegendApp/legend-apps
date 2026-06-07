@@ -5,6 +5,7 @@ import type {
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
   MarkdownDocumentCommands,
+  MarkdownDocumentProps,
   MarkdownDocumentSnapshot,
   MarkdownTransaction,
   MarkdownTransactionResult,
@@ -383,7 +384,9 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
 
   private applyUpdateBlockMarkdown(index: number, markdown: string) {
     const originalBlock = this.blocks[index]!;
-    const changedBlocks = originalBlock.type === "codeBlock"
+    const changedBlocks = markdown.length === 0
+      ? [markdownBlock(originalBlock.id, index, "")]
+      : originalBlock.type === "codeBlock"
       ? [{ ...originalBlock, markdown }]
       : this.blocksFromMarkdown(markdown, index, originalBlock.id);
     return this.commitChangedRange(index, 1, changedBlocks, changedBlocks.length > 0 ? [] : [originalBlock.id]);
@@ -408,12 +411,14 @@ async function renderDocument({
   onCommandStateChange = jest.fn(),
   onDirtyChange = jest.fn(),
   onError = jest.fn(),
+  savePolicy = { autosave: false },
 }: {
   adapter: MountedEditorAdapter;
   autoFocusFirstBlock?: boolean;
   onCommandStateChange?: jest.Mock;
   onDirtyChange?: jest.Mock;
   onError?: jest.Mock;
+  savePolicy?: MarkdownDocumentProps["savePolicy"];
 }) {
   const commandsRef = React.createRef<MarkdownDocumentCommands>();
   let renderer: TestRenderer.ReactTestRenderer;
@@ -428,7 +433,7 @@ async function renderDocument({
         onCommandStateChange={onCommandStateChange}
         onDirtyChange={onDirtyChange}
         onError={onError}
-        savePolicy={{ autosave: false }}
+        savePolicy={savePolicy}
       />,
     );
     await Promise.resolve();
@@ -589,6 +594,68 @@ describe("MarkdownDocument mounted editing", () => {
     ]);
     expect(adapter.saveCount).toBe(1);
     expect(adapter.saveRevisions).toEqual([1]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("flushes a pending structural paste before save", async () => {
+    const markdown = [
+      "First",
+      "",
+      "Second",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0, "Original".length);
+    await changeText(editorInput(renderer), markdown);
+    await act(async () => {
+      await commandsRef.current?.save();
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    expect(adapter.saveCount).toBe(1);
+    expect(adapter.saveRevisions).toEqual([1]);
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("autosaves a structural paste after debounce", async () => {
+    const markdown = [
+      "First",
+      "",
+      "Second",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({
+      adapter,
+      savePolicy: { autosave: true, debounceMs: 0 },
+    });
+
+    await changeSelection(editorInput(renderer), 0, "Original".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    expect(adapter.saveCount).toBe(1);
+    expect(adapter.saveRevisions).toEqual([1]);
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -1488,6 +1555,30 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["paragraph", block("d1:b0", 0, "Before After"), "Before\r\nAfter", "Before", "After"],
+    ["ordered list", orderedListBlock("d1:b0", 0, "1. Item"), "1. Item\r\n", "1. Item", "2. "],
+    ["heading", block("d1:b0", 0, "## Heading trailing"), "## Heading\r\ntrailing", "## Heading", "trailing"],
+    ["blockquote", quoteBlock("d1:b0", 0, "> Quote trailing"), "> Quote\r\ntrailing", "> Quote", "> trailing"],
+  ])("splits %s on CRLF without preserving carriage returns", async (_label, initialBlock, markdown, beforeMarkdown, afterMarkdown) => {
+    const adapter = new MountedEditorAdapter(snapshot([initialBlock]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), markdown);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown,
+        beforeMarkdown,
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(adapter.markdownById.get("d1:b0")).toBe(beforeMarkdown);
+    expect(adapter.markdownById.get("d1:b100")).toBe(afterMarkdown);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("pressing enter on an empty blockquote exits the quote", async () => {
     const adapter = new MountedEditorAdapter(snapshot([quoteBlock("d1:b0", 0, "> ")]));
     const { onError, renderer } = await renderDocument({ adapter });
@@ -1697,6 +1788,25 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("treats exactly two plain lines in an empty block as a structural split", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0);
+    await changeText(editorInput(renderer), "First\nSecond");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "Second",
+        beforeMarkdown: "First",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -2125,6 +2235,39 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("undoes and redoes a huge paste far down in the document", async () => {
+    const blocks = Array.from({ length: 160 }, (_value, index) => block(`d1:b${index}`, index, `Block ${index}`));
+    const targetMarkdown = "Block 140";
+    const pastedMarkdown = Array.from({ length: 30 }, (_value, index) => `Pasted paragraph ${index}`).join("\n\n");
+    const adapter = new MountedEditorAdapter(snapshot(blocks));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, targetMarkdown);
+    await changeSelection(editorInput(renderer), targetMarkdown.length);
+    await changeText(editorInput(renderer), pastedMarkdown);
+    await runPendingTimers();
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+
+    expect(adapter.sourceMarkdown).toContain("Block 140");
+    expect(adapter.sourceMarkdown).not.toContain("Pasted paragraph 0");
+    expectUniqueBlockIds(adapter);
+
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.sourceMarkdown).toContain("Pasted paragraph 0");
+    expect(adapter.sourceMarkdown).toContain("Pasted paragraph 29");
+    expect(adapter.sourceMarkdown).toContain("Block 141");
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("ignores stale text-change events after a code-block boundary split", async () => {
     const originalMarkdown = "```\nconst value = 1;\n```";
     const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, originalMarkdown)]));
@@ -2253,6 +2396,46 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.markdownById.get("d1:b0")).toBe("Edited");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes editing the active block to empty markdown", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0, "Original".length);
+    await changeText(editorInput(renderer), "");
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("");
+    expectActiveBlockExists(renderer, adapter);
+
+    await act(async () => {
+      commandsRef.current?.undo();
+    });
+    await flushPromises();
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("Original");
+    expectActiveBlockExists(renderer, adapter);
+
+    await act(async () => {
+      commandsRef.current?.redo();
+    });
+    await flushPromises();
+
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("");
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -2483,6 +2666,60 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.blockTypes).toEqual(["paragraph", "paragraph", "paragraph"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("replaces a selection at the start of a block with pasted markdown", async () => {
+    const markdown = [
+      "First",
+      "",
+      "Second tail",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "selected tail")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 0, "selected".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["paragraph", "paragraph"]);
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond tail");
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("replaces selected list item content with pasted markdown around the marker", async () => {
+    const markdown = [
+      "- Replacement",
+      "",
+      "Paragraph",
+    ].join("\n");
+    const adapter = new MountedEditorAdapter(snapshot([unorderedListBlock("d1:b0", 0, "- selected item")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "- ".length, "- selected item".length);
+    await changeText(editorInput(renderer), markdown);
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown,
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["unorderedList", "paragraph"]);
+    expect(adapter.sourceMarkdown).toBe("- Replacement\n\nParagraph");
+    expectActiveBlockExists(renderer, adapter);
+    expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 

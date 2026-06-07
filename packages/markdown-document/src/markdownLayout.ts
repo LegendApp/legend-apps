@@ -111,13 +111,14 @@ export function blockRowSpacingStyle(
 }
 
 export function splitMarkdownAtFirstLineBreak(markdown: string) {
-  const lineBreakIndex = markdown.indexOf("\n");
-  if (lineBreakIndex < 0) {
+  const lineBreakMatch = /\r\n|\r|\n/.exec(markdown);
+  if (!lineBreakMatch) {
     return null;
   }
 
+  const lineBreakIndex = lineBreakMatch.index;
   const beforeMarkdown = markdown.slice(0, lineBreakIndex);
-  const afterMarkdown = markdown.slice(lineBreakIndex + 1);
+  const afterMarkdown = markdown.slice(lineBreakIndex + lineBreakMatch[0].length);
   return { beforeMarkdown, afterMarkdown };
 }
 

@@ -341,6 +341,18 @@ MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const Mark
   for (const auto& block : newBlocks) {
     newMarkdown.push_back(sourceString(block.markdownStart, block.markdownEnd));
   }
+  if (transaction.markdown->empty()) {
+    MarkdownBlockRange emptyBlock;
+    emptyBlock.index = blockIndex;
+    emptyBlock.markdownStart = sourceStart;
+    emptyBlock.markdownEnd = sourceStart;
+    emptyBlock.contentStart = sourceStart;
+    emptyBlock.contentEnd = sourceStart;
+    updateBlockSyntax(emptyBlock, "");
+    const size_t insertIndex = std::min(blockIndex, newBlocks.size());
+    newBlocks.insert(newBlocks.begin() + static_cast<long long>(insertIndex), emptyBlock);
+    newMarkdown.insert(newMarkdown.begin() + static_cast<long long>(insertIndex), "");
+  }
 
   size_t prefixCount = 0;
   while (

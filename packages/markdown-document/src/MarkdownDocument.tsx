@@ -465,7 +465,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           publishCommandState();
         }
         if (activeBlockIdRef.current === activeBlockIdValue) {
-          committedMarkdownRef.current = markdown;
+          const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue) ?? result.changedBlocks[0];
+          if (nextActiveBlock) {
+            activeBlockIdRef.current = nextActiveBlock.id;
+            nativeEditingBlockIdRef.current = nextActiveBlock.id;
+            draftMarkdownRef.current = nextActiveBlock.markdown;
+            committedMarkdownRef.current = nextActiveBlock.markdown;
+            setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
+            setActiveBlockId(nextActiveBlock.id);
+          } else {
+            committedMarkdownRef.current = markdown;
+          }
         }
         if (updateReactState) {
           applyTransactionResult(result);
