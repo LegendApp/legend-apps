@@ -315,7 +315,15 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
   }
 
   private nextBlockId() {
-    const id = `d1:b${this.nextBlockNumber}`;
+    const existingBlockIds = new Set([
+      ...this.allBlocks.map((candidate) => candidate.id),
+      ...this.blocks.map((candidate) => candidate.id),
+    ]);
+    let id = `d1:b${this.nextBlockNumber}`;
+    while (existingBlockIds.has(id)) {
+      this.nextBlockNumber += 1;
+      id = `d1:b${this.nextBlockNumber}`;
+    }
     this.nextBlockNumber += 1;
     return id;
   }

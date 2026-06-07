@@ -59,11 +59,43 @@ import type {
 import { useLatestRef } from "./useLatestRef";
 
 const typingHistoryGroupTimeoutMs = 1000;
+const markdownLineBreakPattern = /\r\n|\r|\n/g;
+const markdownListLinePattern = /^\s*(?:[-*+]|\d+[.)])(?:\s|$)/;
+const markdownFenceStartPattern = /^\s*(?:```|~~~)/;
 
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
   if (__DEV__) {
     console.info(`[MarkdownDocument] ${event}`, data);
   }
+}
+
+function countMarkdownLineBreaks(markdown: string) {
+  return markdown.match(markdownLineBreakPattern)?.length ?? 0;
+}
+
+function isTwoLineMarkdownPasteFromEmptyBlock(markdown: string) {
+  const lines = markdown.split(markdownLineBreakPattern);
+  return lines.length === 2 && (
+    (markdownFenceStartPattern.test(lines[0] ?? "") && (lines[1] ?? "").length > 0) ||
+    (markdownListLinePattern.test(lines[0] ?? "") && markdownListLinePattern.test(lines[1] ?? ""))
+  );
+}
+
+function getStructuralSplitMarkdown(
+  markdown: string,
+  committedMarkdown: string,
+  selection: { start: number; end: number },
+) {
+  const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
+  const isCollapsedSelection = selection.start === selection.end;
+  const shouldSplit =
+    splitMarkdown &&
+    isCollapsedSelection &&
+    !committedMarkdown.includes("\n") &&
+    countMarkdownLineBreaks(markdown) === 1 &&
+    !(committedMarkdown.length === 0 && isTwoLineMarkdownPasteFromEmptyBlock(markdown));
+
+  return shouldSplit ? splitMarkdown : null;
 }
 
 export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDocumentProps>(
@@ -408,15 +440,30 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockId: activeBlockIdValue,
           markdown,
         });
-        pushUpdateBlockHistoryEntry(
-          {
-            type: "updateBlockMarkdown",
-            blockId: activeBlockIdValue,
-            beforeMarkdown,
-            afterMarkdown: markdown,
-          },
-          { groupTyping: true },
-        );
+        const firstChangedBlockId = result.changedRange.blockIds[0];
+        const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
+        if (result.changedRange.blockIds.length === 1 && firstChangedBlockId === activeBlockIdValue) {
+          pushUpdateBlockHistoryEntry(
+            {
+              type: "updateBlockMarkdown",
+              blockId: activeBlockIdValue,
+              beforeMarkdown,
+              afterMarkdown: markdown,
+            },
+            { groupTyping: true },
+          );
+        } else if (firstChangedBlockId && lastChangedBlockId) {
+          clearTypingHistoryGroup();
+          undoStackRef.current.push({
+            type: "replaceBlockRange",
+            startBlockId: firstChangedBlockId,
+            endBlockId: lastChangedBlockId,
+            replacementMarkdown: beforeMarkdown,
+            inverseMarkdown: markdown,
+          });
+          redoStackRef.current = [];
+          publishCommandState();
+        }
         if (activeBlockIdRef.current === activeBlockIdValue) {
           committedMarkdownRef.current = markdown;
         }
@@ -434,7 +481,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const nextError = error instanceof Error ? error : new Error(String(error));
         onErrorRef.current?.(nextError);
       }
-    }, [adapter, applyTransactionResult, clearEditTimer, documentState, onErrorRef, pushUpdateBlockHistoryEntry, updateRenderedBlockMarkdown]);
+    }, [
+      adapter,
+      applyTransactionResult,
+      clearEditTimer,
+      clearTypingHistoryGroup,
+      documentState,
+      onErrorRef,
+      publishCommandState,
+      pushUpdateBlockHistoryEntry,
+      updateRenderedBlockMarkdown,
+    ]);
 
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
@@ -647,8 +704,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         }
 
-        if (block.type !== "codeBlock" && !committedMarkdownRef.current.includes("\n")) {
-          const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
+        if (block.type !== "codeBlock") {
+          const splitMarkdown = getStructuralSplitMarkdown(markdown, committedMarkdownRef.current, activeInputSelectionRef.current);
           if (splitMarkdown) {
             const continuationMarkdown = getSplitContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
             splitActiveBlock(
