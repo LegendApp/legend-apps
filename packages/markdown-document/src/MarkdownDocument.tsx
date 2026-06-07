@@ -12,6 +12,11 @@ import {
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown } from "./blockSelection";
+import {
+  applyMarkdownTransactionResultToBlockState,
+  createMarkdownDocumentBlockState,
+  mergeHydratedMarkdownBlocksForRevision,
+} from "./documentStateModel";
 import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { contentHorizontalPadding, contentMaxWidth, editDebounceMs, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
@@ -118,8 +123,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       updatedAt: number;
     } | undefined>(undefined);
     const selectionAnchorRequestRef = useRef(0);
-    const [blockIds, setBlockIds] = useState<string[]>([]);
-    const [blocksById, setBlocksById] = useState(() => new Map<string, MarkdownBlockSnapshot>());
+    const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
+    const { blockIds, blocksById } = blockState;
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
     const [activeSelection, setActiveSelection] = useState(0);
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
@@ -316,54 +321,22 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, []);
 
-    const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[]) => {
+    const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[], requestRevision: number) => {
       if (blocks.length === 0) {
         return;
       }
 
-      setBlocksById((previousBlocksById) => {
-        const nextBlocksById = new Map(previousBlocksById);
-        for (const block of blocks) {
-          nextBlocksById.set(block.id, block);
-        }
-        return nextBlocksById;
-      });
-
-      setBlockIds((previousBlockIds) => {
-        const seen = new Set(previousBlockIds);
-        const nextBlockIds = [...previousBlockIds];
-        for (const block of blocks) {
-          if (!seen.has(block.id)) {
-            seen.add(block.id);
-            nextBlockIds.push(block.id);
-          }
-        }
-        return nextBlockIds;
-      });
+      setBlockState((previousBlockState) => mergeHydratedMarkdownBlocksForRevision({
+        blocks,
+        currentRevision: currentRevisionRef.current,
+        previousState: previousBlockState,
+        requestRevision,
+      }));
     }, []);
 
     const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
       currentRevisionRef.current = result.revision;
-      setBlocksById((previousBlocksById) => {
-        const nextBlocksById = new Map(previousBlocksById);
-        for (const retiredBlockId of result.retiredBlockIds) {
-          nextBlocksById.delete(retiredBlockId);
-        }
-        for (const block of result.changedBlocks) {
-          nextBlocksById.set(block.id, block);
-        }
-        return nextBlocksById;
-      });
-
-      setBlockIds((previousBlockIds) => {
-        const nextBlockIds = [...previousBlockIds];
-        nextBlockIds.splice(
-          result.changedRange.startBlockIndex,
-          result.changedRange.deleteCount,
-          ...result.changedRange.blockIds,
-        );
-        return nextBlockIds;
-      });
+      setBlockState((previousBlockState) => applyMarkdownTransactionResultToBlockState(previousBlockState, result));
 
       setDocumentState((previousDocumentState) => {
         if (previousDocumentState.status !== "loaded") {
@@ -385,21 +358,24 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, []);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
-      setBlocksById((previousBlocksById) => {
-        const block = previousBlocksById.get(blockId);
+      setBlockState((previousBlockState) => {
+        const block = previousBlockState.blocksById.get(blockId);
         if (!block || block.markdown === markdown) {
-          return previousBlocksById;
+          return previousBlockState;
         }
 
-        const nextBlocksById = new Map(previousBlocksById);
-        nextBlocksById.set(blockId, {
+        const blocksById = new Map(previousBlockState.blocksById);
+        blocksById.set(blockId, {
           ...block,
           contentEndByte: block.contentStartByte !== undefined ? block.contentStartByte + markdown.length : block.contentEndByte,
           markdown,
           sourceEndByte: block.sourceStartByte + markdown.length,
           textRevision: block.textRevision + 1,
         });
-        return nextBlocksById;
+        return {
+          ...previousBlockState,
+          blocksById,
+        };
       });
     }, []);
 
@@ -882,10 +858,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         let startIndex = snapshot.initialBlocks.length;
         let hydratedBlockCount = 0;
         let hydrationChunkCount = 0;
+        const requestRevision = currentRevisionRef.current;
         const hydrationStartedAt = Date.now();
         const hydrateNextChunk = () => {
           hydrateFrameRef.current = undefined;
-          if (loadVersion !== loadVersionRef.current || startIndex >= snapshot.blockCount) {
+          if (loadVersion !== loadVersionRef.current || requestRevision !== currentRevisionRef.current || startIndex >= snapshot.blockCount) {
             return;
           }
 
@@ -893,11 +870,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           adapter
             .getBlocks(snapshot.documentId, startIndex, count)
             .then((blocks) => {
-              if (loadVersion !== loadVersionRef.current) {
+              if (loadVersion !== loadVersionRef.current || requestRevision !== currentRevisionRef.current) {
                 return;
               }
 
-              mergeBlocks(blocks);
+              mergeBlocks(blocks, requestRevision);
               startIndex += blocks.length;
               hydratedBlockCount += blocks.length;
               hydrationChunkCount += 1;
@@ -959,8 +936,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selectionAnchorRequestRef.current += 1;
       nativeEditingBlockIdRef.current = null;
       setDocumentState({ status: "loading" });
-      setBlockIds([]);
-      setBlocksById(new Map());
+      setBlockState(createMarkdownDocumentBlockState([]));
       setActiveBlockId(null);
       setActiveSelection(0);
       setNextBlockSelection(null);
@@ -979,13 +955,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             return;
           }
 
-          const nextBlocksById = new Map<string, MarkdownBlockSnapshot>();
-          for (const block of snapshot.initialBlocks) {
-            nextBlocksById.set(block.id, block);
-          }
-
-          setBlocksById(nextBlocksById);
-          setBlockIds(snapshot.initialBlocks.map((block) => block.id));
+          setBlockState(createMarkdownDocumentBlockState(snapshot.initialBlocks));
           setDocumentState({ status: "loaded", snapshot });
           logMarkdownDocumentDiagnostics("loaded", {
             blockCount: snapshot.blockCount,
