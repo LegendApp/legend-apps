@@ -84,6 +84,56 @@ export function applyMarkdownTransactionResultToBlockState(
   return { blockIds, blocksById };
 }
 
+export function validateMarkdownTransactionResultToBlockState(
+  previousState: MarkdownDocumentBlockState,
+  result: MarkdownTransactionResult,
+): MarkdownDocumentBlockState {
+  const { blockIds, deleteCount, startBlockIndex } = result.changedRange;
+  if (startBlockIndex < 0 || deleteCount < 0 || startBlockIndex + deleteCount > previousState.blockIds.length) {
+    throw new Error("Markdown transaction changed range is out of bounds.");
+  }
+
+  if (blockIds.length !== result.changedBlocks.length) {
+    throw new Error("Markdown transaction changed block ids do not match changed blocks.");
+  }
+
+  const changedBlocksById = new Map<string, MarkdownBlockSnapshot>();
+  for (const block of result.changedBlocks) {
+    if (block.id.length === 0) {
+      throw new Error("Markdown transaction returned a changed block with an empty id.");
+    }
+    if (block.type.length === 0) {
+      throw new Error(`Markdown transaction returned a changed block with an empty type: ${block.id}`);
+    }
+    if (changedBlocksById.has(block.id)) {
+      throw new Error(`Markdown transaction returned duplicate changed block id: ${block.id}`);
+    }
+    changedBlocksById.set(block.id, block);
+  }
+
+  const seenChangedRangeBlockIds = new Set<string>();
+  const retiredBlockIds = new Set(result.retiredBlockIds);
+  for (const blockId of blockIds) {
+    if (blockId.length === 0) {
+      throw new Error("Markdown transaction changed range contains an empty block id.");
+    }
+    if (seenChangedRangeBlockIds.has(blockId)) {
+      throw new Error(`Markdown transaction changed range contains duplicate block id: ${blockId}`);
+    }
+    if (!changedBlocksById.has(blockId)) {
+      throw new Error(`Markdown transaction changed range block is missing a snapshot: ${blockId}`);
+    }
+    if (retiredBlockIds.has(blockId)) {
+      throw new Error(`Markdown transaction reuses a retired block id: ${blockId}`);
+    }
+    seenChangedRangeBlockIds.add(blockId);
+  }
+
+  const nextState = applyMarkdownTransactionResultToBlockState(previousState, result);
+  assertMarkdownDocumentBlockStateInvariants(nextState, { retiredBlockIds });
+  return nextState;
+}
+
 export function assertMarkdownDocumentBlockStateInvariants(
   state: MarkdownDocumentBlockState,
   context: MarkdownDocumentBlockStateInvariantContext = {},

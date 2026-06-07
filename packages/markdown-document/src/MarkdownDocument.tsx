@@ -13,9 +13,9 @@ import {
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown } from "./blockSelection";
 import {
-  applyMarkdownTransactionResultToBlockState,
   createMarkdownDocumentBlockState,
   mergeHydratedMarkdownBlocksForRevision,
+  validateMarkdownTransactionResultToBlockState,
 } from "./documentStateModel";
 import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
@@ -157,6 +157,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const selectionAnchorRequestRef = useRef(0);
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
+    const blockStateRef = useRef(blockState);
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
     const [activeSelection, setActiveSelection] = useState(0);
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
@@ -190,6 +191,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       },
       [onErrorRef],
     );
+
+    useEffect(() => {
+      blockStateRef.current = blockState;
+    }, [blockState]);
 
     const clearEditTimer = useCallback(() => {
       if (editTimerRef.current !== undefined) {
@@ -366,9 +371,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }));
     }, []);
 
+    const validateTransactionResult = useCallback((result: MarkdownTransactionResult) => {
+      return validateMarkdownTransactionResultToBlockState(blockStateRef.current, result);
+    }, []);
+
     const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
+      const nextBlockState = validateTransactionResult(result);
+      blockStateRef.current = nextBlockState;
       currentRevisionRef.current = result.revision;
-      setBlockState((previousBlockState) => applyMarkdownTransactionResultToBlockState(previousBlockState, result));
+      setBlockState(nextBlockState);
 
       setDocumentState((previousDocumentState) => {
         if (previousDocumentState.status !== "loaded") {
@@ -387,7 +398,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           },
         };
       });
-    }, []);
+    }, [validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
       setBlockState((previousBlockState) => {
@@ -440,6 +451,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockId: activeBlockIdValue,
           markdown,
         });
+        validateTransactionResult(result);
         const firstChangedBlockId = result.changedRange.blockIds[0];
         const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
         if (result.changedRange.blockIds.length === 1 && firstChangedBlockId === activeBlockIdValue) {
@@ -488,6 +500,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       } catch (error) {
         if (updateReactState) {
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
+          draftMarkdownRef.current = committedMarkdownRef.current;
+          setDraftMarkdown(committedMarkdownRef.current);
+          activeInputRef.current?.setValue(committedMarkdownRef.current);
+          setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
         }
         const nextError = error instanceof Error ? error : new Error(String(error));
         onErrorRef.current?.(nextError);
@@ -502,6 +518,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       publishCommandState,
       pushUpdateBlockHistoryEntry,
       updateRenderedBlockMarkdown,
+      validateTransactionResult,
     ]);
 
     const activateBlock = useCallback(
@@ -641,6 +658,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             beforeMarkdown,
             afterMarkdown,
           });
+          validateTransactionResult(result);
           applyTransactionResult(result);
 
           const firstChangedBlockId = result.changedRange.blockIds[0];
@@ -687,6 +705,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+        validateTransactionResult,
       ],
     );
 
@@ -801,6 +820,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             endBlockId: selectedBlocks.endBlockId,
             markdown,
           });
+          validateTransactionResult(result);
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
           if (!suppressHistoryRef.current) {
@@ -876,6 +896,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+        validateTransactionResult,
       ],
     );
 
@@ -898,6 +919,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             blockId: activeBlockIdValue,
             markdown,
           });
+          validateTransactionResult(result);
 
           pushUpdateBlockHistoryEntry({
             type: "updateBlockMarkdown",
@@ -922,6 +944,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markDirty();
         } catch (error) {
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
+          draftMarkdownRef.current = committedMarkdownRef.current;
+          setDraftMarkdown(committedMarkdownRef.current);
+          activeInputRef.current?.setValue(committedMarkdownRef.current);
+          setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
         }
@@ -936,6 +962,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         onErrorRef,
         pushUpdateBlockHistoryEntry,
         updateRenderedBlockMarkdown,
+        validateTransactionResult,
       ],
     );
 

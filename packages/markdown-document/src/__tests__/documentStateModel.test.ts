@@ -4,6 +4,7 @@ import {
   createMarkdownDocumentBlockState,
   mergeHydratedMarkdownBlocks,
   mergeHydratedMarkdownBlocksForRevision,
+  validateMarkdownTransactionResultToBlockState,
 } from "../documentStateModel";
 import type { MarkdownBlockSnapshot, MarkdownTransactionResult } from "../types";
 
@@ -152,5 +153,79 @@ describe("documentStateModel", () => {
       activeBlockId: "d1:b0",
       retiredBlockIds: ["d1:b1"],
     })).toThrow("Retired markdown block id remains in document state: d1:b1");
+  });
+
+  it.each([
+    [
+      "out-of-bounds changed range",
+      transactionResult({
+        blockIds: ["d1:b2"],
+        changedBlocks: [block("d1:b2", 2, "Inserted")],
+        deleteCount: 1,
+        startBlockIndex: 3,
+      }),
+      "out of bounds",
+    ],
+    [
+      "missing changed block snapshot",
+      transactionResult({
+        blockIds: ["d1:b0"],
+        changedBlocks: [],
+        deleteCount: 1,
+        startBlockIndex: 0,
+      }),
+      "do not match",
+    ],
+    [
+      "duplicate changed range id",
+      transactionResult({
+        blockIds: ["d1:b0", "d1:b0"],
+        changedBlocks: [
+          block("d1:b0", 0, "Edited"),
+          block("d1:b0", 1, "Duplicate"),
+        ],
+        deleteCount: 1,
+        startBlockIndex: 0,
+      }),
+      "duplicate",
+    ],
+    [
+      "empty changed block id",
+      transactionResult({
+        blockIds: [""],
+        changedBlocks: [block("", 0, "Edited")],
+        deleteCount: 1,
+        startBlockIndex: 0,
+      }),
+      "empty id",
+    ],
+    [
+      "empty changed block type",
+      transactionResult({
+        blockIds: ["d1:b0"],
+        changedBlocks: [{ ...block("d1:b0", 0, "Edited"), type: "" }],
+        deleteCount: 1,
+        startBlockIndex: 0,
+      }),
+      "empty type",
+    ],
+    [
+      "retired id reused in changed range",
+      transactionResult({
+        blockIds: ["d1:b0"],
+        changedBlocks: [block("d1:b0", 0, "Edited")],
+        deleteCount: 1,
+        retiredBlockIds: ["d1:b0"],
+        startBlockIndex: 0,
+      }),
+      "retired",
+    ],
+  ])("rejects malformed transaction result for %s", (_label, result, expectedMessage) => {
+    const state = createMarkdownDocumentBlockState([
+      block("d1:b0", 0),
+      block("d1:b1", 1),
+    ]);
+
+    expect(() => validateMarkdownTransactionResultToBlockState(state, result)).toThrow(expectedMessage);
   });
 });

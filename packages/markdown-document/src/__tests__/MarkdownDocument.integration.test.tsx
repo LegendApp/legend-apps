@@ -227,6 +227,8 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
   applyTransactions: MarkdownTransaction[] = [];
   closeCount = 0;
   failNextSave: Error | undefined;
+  failNextTransaction: Error | undefined;
+  mutateNextTransactionResult: ((result: MarkdownTransactionResult) => MarkdownTransactionResult) | undefined;
   pendingHydrationRequests: Array<{
     count: number;
     deferred: Deferred<MarkdownBlockSnapshot[]>;
@@ -315,20 +317,31 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
 
   async applyTransaction(_documentId: string, transaction: MarkdownTransaction) {
     this.applyTransactions.push(transaction);
+    if (this.failNextTransaction) {
+      const error = this.failNextTransaction;
+      this.failNextTransaction = undefined;
+      throw error;
+    }
     const index = this.blocks.findIndex((candidate) => candidate.id === transactionBlockId(transaction));
     if (index < 0) {
       throw new Error(`Markdown block not found: ${transactionBlockId(transaction)}`);
     }
 
+    let result: MarkdownTransactionResult;
     if (transaction.type === "replaceBlockRange") {
-      return this.applyReplaceBlockRange(index, transaction);
+      result = this.applyReplaceBlockRange(index, transaction);
+    } else if (transaction.type === "splitBlock") {
+      result = this.applySplitBlock(index, transaction.beforeMarkdown, transaction.afterMarkdown);
+    } else {
+      result = this.applyUpdateBlockMarkdown(index, transaction.markdown);
     }
 
-    if (transaction.type === "splitBlock") {
-      return this.applySplitBlock(index, transaction.beforeMarkdown, transaction.afterMarkdown);
+    if (this.mutateNextTransactionResult) {
+      const mutate = this.mutateNextTransactionResult;
+      this.mutateNextTransactionResult = undefined;
+      return mutate(result);
     }
-
-    return this.applyUpdateBlockMarkdown(index, transaction.markdown);
+    return result;
   }
 
   private nextBlockId() {
@@ -2489,8 +2502,15 @@ describe("MarkdownDocument mounted editing", () => {
     ["negative selection", -20, -10],
     ["reversed selection", 8, 2],
     ["far beyond selection", 1000, 2000],
+    ["middle of surrogate pair", "😀".length - 1, "😀".length - 1],
+    ["middle of combining sequence", "e".length, "e".length],
   ])("keeps text edits representable after an impossible %s range", async (_label, start, end) => {
-    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const originalMarkdown = _label.includes("surrogate")
+      ? "😀 Original"
+      : _label.includes("combining")
+      ? "e\u0301 Original"
+      : "Original";
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, originalMarkdown)]));
     const { onError, renderer } = await renderDocument({ adapter });
 
     await changeSelection(editorInput(renderer), start, end);
@@ -2499,6 +2519,32 @@ describe("MarkdownDocument mounted editing", () => {
 
     expect(adapter.blockIds).toEqual(["d1:b0"]);
     expect(adapter.markdownById.get("d1:b0")).toBe("Edited after impossible selection");
+    await expectRepresentableDocument(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["extremely long word", `${"a".repeat(10000)}`],
+    ["deep nested list", `${"  ".repeat(50)}- deeply nested`],
+    ["huge whitespace-only paste", `${" \n".repeat(500)}`],
+    ["mixed tabs and spaces", "\t- tab item\n  \t- mixed child\n    - space child"],
+    ["trailing hard-break spaces", "First line  \nSecond line    \nThird"],
+    ["unpaired high surrogate", "Before \ud83d After"],
+    ["unpaired low surrogate", "Before \ude00 After"],
+    ["combining mark stack", `a${"\u0301".repeat(20)}`],
+    ["emoji zwj sequence", "Family: 👨‍👩‍👧‍👦"],
+    ["rtl marker stack", `RTL ${"\u202e".repeat(10)}text`],
+  ])("keeps hostile text input representable for %s", async (_label, markdown) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await replaceActiveMarkdown(renderer, markdown, "Original");
+
+    if (markdown.trim().length === 0) {
+      expect(adapter.markdownById.get("d1:b0")).toBe("");
+    } else {
+      expect(adapter.markdownById.get("d1:b0")).toBe(markdown);
+    }
     await expectRepresentableDocument(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
   });
@@ -3680,6 +3726,136 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
     await expectStableEditingState(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["update", async (renderer: TestRenderer.ReactTestRenderer) => {
+      await changeText(editorInput(renderer), "Edited");
+      await runPendingTimers();
+    }],
+    ["split", async (renderer: TestRenderer.ReactTestRenderer) => {
+      await changeSelection(editorInput(renderer), "Original".length);
+      await changeText(editorInput(renderer), "Original\nSplit");
+      await flushPromises();
+    }],
+  ])("recovers when an adapter transaction throws during %s", async (_label, runEdit) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    adapter.failNextTransaction = new Error("transaction failed");
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await runEdit(renderer);
+
+    expect(adapter.sourceMarkdown).toBe("Original");
+    expectUniqueBlockIds(adapter);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "transaction failed" }));
+  });
+
+  it("recovers when an adapter transaction throws during range replacement", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    adapter.failNextTransaction = new Error("range transaction failed");
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await changeText(blockSelectionInput(renderer), "Replacement");
+
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond\n\nThird");
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "range transaction failed" }));
+    expectUniqueBlockIds(adapter);
+  });
+
+  it("does not add failed transactions to undo history", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    adapter.failNextTransaction = new Error("transaction failed");
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Failed edit");
+    await runPendingTimers();
+    await changeText(editorInput(renderer), "Successful edit");
+    await runPendingTimers();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("Successful edit");
+
+    await undo(commandsRef);
+    expect(adapter.markdownById.get("d1:b0")).toBe("Original");
+
+    await redo(commandsRef);
+    expect(adapter.markdownById.get("d1:b0")).toBe("Successful edit");
+    await expectRepresentableDocument(renderer, adapter);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "transaction failed" }));
+  });
+
+  it.each([
+    [
+      "duplicate changed range ids",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [
+          result.changedBlocks[0]!,
+          { ...result.changedBlocks[0]!, id: result.changedBlocks[0]!.id },
+        ],
+        changedRange: {
+          ...result.changedRange,
+          blockIds: [result.changedBlocks[0]!.id, result.changedBlocks[0]!.id],
+        },
+      }),
+      "duplicate",
+    ],
+    [
+      "missing changed block snapshot",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [],
+      }),
+      "do not match",
+    ],
+    [
+      "empty changed block id",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [{ ...result.changedBlocks[0]!, id: "" }],
+        changedRange: { ...result.changedRange, blockIds: [""] },
+      }),
+      "empty id",
+    ],
+    [
+      "empty changed block type",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedBlocks: [{ ...result.changedBlocks[0]!, type: "" }],
+      }),
+      "empty type",
+    ],
+    [
+      "out-of-bounds changed range",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        changedRange: { ...result.changedRange, startBlockIndex: 99 },
+      }),
+      "out of bounds",
+    ],
+    [
+      "retired id reused by changed block",
+      (result: MarkdownTransactionResult): MarkdownTransactionResult => ({
+        ...result,
+        retiredBlockIds: [result.changedBlocks[0]!.id],
+      }),
+      "retired",
+    ],
+  ])("rejects malformed adapter transaction results with %s", async (_label, mutateResult, expectedMessage) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    adapter.mutateNextTransactionResult = mutateResult;
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "Edited");
+    await runPendingTimers();
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining(expectedMessage),
+    }));
   });
 
   it("coalesces rapid sequential text events from the same block", async () => {
