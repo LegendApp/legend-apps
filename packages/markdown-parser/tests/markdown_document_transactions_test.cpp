@@ -346,6 +346,24 @@ void testUpdateBlockToEmptyPreservesEditableBlock() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testUpdateBlockToWhitespaceOnlyPreservesEditableBlock() {
+  LoadedDocument loaded("First\n\nSecond\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(updateBlock(before[0].id, "\n \n"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expect(source.find("Second\n") != std::string::npos, "whitespace update preserves suffix source");
+  expectEqual(after.size(), 2, "whitespace update block count");
+  expectEqual(after[0].id, before[0].id, "whitespace update preserves edited id");
+  expectEqual(after[0].markdown, "", "whitespace update markdown");
+  expectEqual(after[0].type, "paragraph", "whitespace update type");
+  expectEqual(after[1].id, before[1].id, "whitespace update preserves suffix id");
+  expectEqual(result.changedRange.deleteCount, 1, "whitespace update delete count");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
 void testReplaceBlockRangeUsesParserForCodeBlockBoundaries() {
   LoadedDocument loaded("Intro\n\nMiddle\n\nTail\n");
   const auto before = blocksFor(loaded.document);
@@ -379,6 +397,24 @@ void testReplaceBlockRangeUsesParserForTables() {
   expectEqual(after[0].type, "table", "range table type");
   expectEqual(after[0].markdown, "| A | B |\n|---|---|\n| 1 | 2 |", "range table markdown");
   expectEqual(after[1].id, before[2].id, "range table preserves suffix id");
+  expectDocumentInvariants(loaded.document);
+}
+
+void testReplaceBlockRangeWithWhitespaceOnlyPreservesEditableBlock() {
+  LoadedDocument loaded("Intro\n\nMiddle\n\nTail\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(replaceBlockRange(before[0].id, before[1].id, "\n \n"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expect(source.find("Tail\n") != std::string::npos, "range whitespace preserves suffix source");
+  expectEqual(after.size(), 2, "range whitespace block count");
+  expectEqual(after[0].id, before[0].id, "range whitespace preserves first selected id");
+  expectEqual(after[0].markdown, "", "range whitespace markdown");
+  expectEqual(after[0].type, "paragraph", "range whitespace type");
+  expectEqual(after[1].id, before[2].id, "range whitespace preserves suffix id");
+  expectEqual(result.retiredBlockIds.size(), 1, "range whitespace retired count");
+  expectTransactionResultInvariants(before, after, result, source);
   expectDocumentInvariants(loaded.document);
 }
 
@@ -503,8 +539,10 @@ int main() {
       {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},
       {"update block uses parser for tables", testUpdateBlockUsesParserForTables},
       {"update block to empty preserves editable block", testUpdateBlockToEmptyPreservesEditableBlock},
+      {"update block to whitespace only preserves editable block", testUpdateBlockToWhitespaceOnlyPreservesEditableBlock},
       {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
       {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
+      {"replace block range with whitespace only preserves editable block", testReplaceBlockRangeWithWhitespaceOnlyPreservesEditableBlock},
       {"large document far down transactions", testLargeDocumentFarDownTransactions},
       {"randomized transaction sequence", testRandomizedTransactionSequence},
   };

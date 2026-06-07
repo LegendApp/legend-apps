@@ -81,6 +81,12 @@ size_t headingLevelForMarkdown(const std::string& markdown) {
   return std::isspace(next) ? level : 0;
 }
 
+bool isWhitespaceOnly(const std::string& markdown) {
+  return std::all_of(markdown.begin(), markdown.end(), [](unsigned char character) {
+    return std::isspace(character);
+  });
+}
+
 MarkdownBlockType blockTypeForMarkdown(const std::string& markdown) {
   const size_t start = firstContentIndex(markdown);
   if (start >= markdown.size()) {
@@ -341,7 +347,7 @@ MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const Mark
   for (const auto& block : newBlocks) {
     newMarkdown.push_back(sourceString(block.markdownStart, block.markdownEnd));
   }
-  if (transaction.markdown->empty()) {
+  if (isWhitespaceOnly(*transaction.markdown)) {
     MarkdownBlockRange emptyBlock;
     emptyBlock.index = blockIndex;
     emptyBlock.markdownStart = sourceStart;
@@ -497,6 +503,18 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
   newMarkdown.reserve(newBlocks.size());
   for (const auto& block : newBlocks) {
     newMarkdown.push_back(sourceString(block.markdownStart, block.markdownEnd));
+  }
+  if (hasReplacement && !transaction.markdown->empty() && isWhitespaceOnly(*transaction.markdown)) {
+    MarkdownBlockRange emptyBlock;
+    emptyBlock.index = rangeStartIndex;
+    emptyBlock.markdownStart = sourceStart;
+    emptyBlock.markdownEnd = sourceStart;
+    emptyBlock.contentStart = sourceStart;
+    emptyBlock.contentEnd = sourceStart;
+    updateBlockSyntax(emptyBlock, "");
+    const size_t insertIndex = std::min(rangeStartIndex, newBlocks.size());
+    newBlocks.insert(newBlocks.begin() + static_cast<long long>(insertIndex), emptyBlock);
+    newMarkdown.insert(newMarkdown.begin() + static_cast<long long>(insertIndex), "");
   }
 
   size_t prefixCount = 0;
