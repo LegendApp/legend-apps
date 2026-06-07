@@ -367,10 +367,10 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
   private applySplitBlock(index: number, beforeMarkdown: string, afterMarkdown: string) {
     const originalBlock = this.blocks[index]!;
     const changedBlocks = [
-      block(this.nextBlockId(), index, beforeMarkdown),
-      block(this.nextBlockId(), index + 1, afterMarkdown),
+      markdownBlock(originalBlock.id, index, beforeMarkdown),
+      markdownBlock(this.nextBlockId(), index + 1, afterMarkdown),
     ];
-    return this.commitChangedRange(index, 1, changedBlocks, [originalBlock.id]);
+    return this.commitChangedRange(index, 1, changedBlocks, []);
   }
 
   private applyUpdateBlockMarkdown(index: number, markdown: string) {
@@ -641,7 +641,7 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
-    expect(adapter.blockIds).toEqual(["d1:b100", "d1:b101"]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
     expect(editorInput(renderer).props.defaultValue).toBe("After");
     expect(onError).not.toHaveBeenCalled();
   });
@@ -1171,7 +1171,7 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
-    expect(adapter.blockIds).toEqual(["d1:b100", "d1:b101"]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -1192,7 +1192,7 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
-    expect(adapter.blockIds).toEqual(["d1:b100", "d1:b101"]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b100"]);
     expect(onError).not.toHaveBeenCalled();
   });
 
