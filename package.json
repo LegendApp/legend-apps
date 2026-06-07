@@ -24,6 +24,9 @@
     "verify:all": "bun scripts/verify-app.ts --all",
     "test:music": "jest --config apps/music/jest.config.cjs",
     "test:markdown-document": "jest --config packages/markdown-document/jest.config.cjs",
+    "test:markdown-e2e": "bun scripts/test-markdown-e2e.ts",
+    "test:markdown-editing": "bun run test:markdown-parser && bun run test:markdown-document",
+    "test:markdown-editing:all": "bun run test:markdown-editing && bun run test:markdown-e2e",
     "test:markdown-parser": "bash packages/markdown-parser/tests/run.sh",
     "typecheck": "tsc --noEmit"
   },

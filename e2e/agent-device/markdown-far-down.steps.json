@@ -1,0 +1,33 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "app.legend.markdown.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E passed: far-down-structural-edits",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "E2E passed: far-down-structural-edits"
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/markdown-e2e/far-down-structural-edits.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]
