@@ -30,9 +30,21 @@ export type ReplaceBlockRangeHistoryEntry = {
   endBlockId: string;
   replacementMarkdown: string;
   inverseMarkdown: string;
+  inverseSplit?: {
+    afterMarkdown: string;
+    beforeMarkdown: string;
+  };
 };
 
-export type HistoryEntry = UpdateBlockHistoryEntry | ReplaceBlockRangeHistoryEntry;
+export type SplitBlockHistoryEntry = {
+  type: "splitBlock";
+  blockId: string;
+  beforeMarkdown: string;
+  afterMarkdown: string;
+  replacementMarkdown: string;
+};
+
+export type HistoryEntry = UpdateBlockHistoryEntry | ReplaceBlockRangeHistoryEntry | SplitBlockHistoryEntry;
 
 export type BlockSelectionState = {
   anchorBlockId: string;

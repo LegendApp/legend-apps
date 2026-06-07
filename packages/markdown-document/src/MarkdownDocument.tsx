@@ -578,13 +578,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
           if (!suppressHistoryRef.current && firstChangedBlockId && lastChangedBlockId) {
-            undoStackRef.current.push({
+            const historyEntry: HistoryEntry = {
               type: "replaceBlockRange",
               startBlockId: firstChangedBlockId,
               endBlockId: lastChangedBlockId,
               replacementMarkdown: block.markdown,
               inverseMarkdown: `${beforeMarkdown}\n\n${afterMarkdown}`,
-            });
+            };
+            if (block.type === "codeBlock") {
+              historyEntry.inverseSplit = {
+                afterMarkdown,
+                beforeMarkdown,
+              };
+            }
+            undoStackRef.current.push(historyEntry);
             redoStackRef.current = [];
             publishCommandState();
           }
@@ -619,6 +626,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       (block: MarkdownBlockSnapshot, markdown: string) => {
         if (activeBlockIdRef.current !== block.id) {
           return;
+        }
+
+        if (block.type === "codeBlock") {
+          const committedMarkdown = committedMarkdownRef.current;
+          const selection = activeInputSelectionRef.current;
+          const isCollapsedSelection = selection.start === selection.end;
+          const isBoundaryNewline =
+            isCollapsedSelection &&
+            ((selection.start === 0 && markdown === `\n${committedMarkdown}`) ||
+              (selection.start === committedMarkdown.length && markdown === `${committedMarkdown}\n`));
+
+          if (isBoundaryNewline) {
+            splitActiveBlock(
+              block,
+              selection.start === 0 ? "" : committedMarkdown,
+              selection.start === 0 ? committedMarkdown : "",
+            ).catch(reportAsyncError);
+            return;
+          }
         }
 
         if (block.type !== "codeBlock" && !committedMarkdownRef.current.includes("\n")) {
@@ -1217,6 +1243,47 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             } satisfies HistoryEntry;
           }
 
+          if (entry.type === "splitBlock") {
+            const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+              type: "splitBlock",
+              blockId: entry.blockId,
+              beforeMarkdown: entry.beforeMarkdown,
+              afterMarkdown: entry.afterMarkdown,
+            });
+            applyTransactionResult(result);
+            blockSelectionGestureRef.current = null;
+            setNextBlockSelection(null);
+
+            const firstChangedBlockId = result.changedRange.blockIds[0];
+            const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
+            const nextActiveBlockId = result.changedRange.blockIds[1] ?? result.changedRange.blockIds[0];
+            const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === nextActiveBlockId);
+            if (nextActiveBlock) {
+              activeBlockIdRef.current = nextActiveBlock.id;
+              nativeEditingBlockIdRef.current = nextActiveBlock.id;
+              draftMarkdownRef.current = nextActiveBlock.markdown;
+              committedMarkdownRef.current = nextActiveBlock.markdown;
+              setDraftMarkdown(nextActiveBlock.markdown);
+              setActiveSelection(nextActiveBlock.markdown.length);
+              setActiveBlockId(nextActiveBlock.id);
+            }
+            markDirty();
+            if (!firstChangedBlockId || !lastChangedBlockId) {
+              return null;
+            }
+            return {
+              type: "replaceBlockRange",
+              startBlockId: firstChangedBlockId,
+              endBlockId: lastChangedBlockId,
+              replacementMarkdown: entry.replacementMarkdown,
+              inverseMarkdown: `${entry.beforeMarkdown}\n\n${entry.afterMarkdown}`,
+              inverseSplit: {
+                afterMarkdown: entry.afterMarkdown,
+                beforeMarkdown: entry.beforeMarkdown,
+              },
+            } satisfies HistoryEntry;
+          }
+
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "replaceBlockRange",
             startBlockId: entry.startBlockId,
@@ -1241,6 +1308,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markDirty();
           if (!firstChangedBlockId || !lastChangedBlockId) {
             return null;
+          }
+          if (entry.inverseSplit) {
+            return {
+              type: "splitBlock",
+              blockId: firstChangedBlockId,
+              beforeMarkdown: entry.inverseSplit.beforeMarkdown,
+              afterMarkdown: entry.inverseSplit.afterMarkdown,
+              replacementMarkdown: entry.replacementMarkdown,
+            } satisfies HistoryEntry;
           }
           return {
             type: "replaceBlockRange",
