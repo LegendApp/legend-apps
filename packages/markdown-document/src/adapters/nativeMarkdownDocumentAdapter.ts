@@ -169,6 +169,14 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
             beforeMarkdown: transaction.endBlockId,
             markdown: transaction.markdown,
           }
+        : transaction.type === "moveBlockRange"
+        ? {
+            type: transaction.type,
+            blockId: transaction.startBlockId,
+            beforeMarkdown: transaction.endBlockId,
+            markdown: transaction.targetBlockId,
+            afterMarkdown: transaction.placement,
+          }
         : transaction;
     const result = toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
     cacheBlocks(session, result.changedBlocks);

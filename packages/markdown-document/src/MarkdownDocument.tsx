@@ -994,6 +994,155 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       ],
     );
 
+    const applyMoveBlockRange = useCallback(
+      async ({
+        endBlockId,
+        placement,
+        startBlockId,
+        targetBlockId,
+      }: {
+        endBlockId: string;
+        placement: "before" | "after";
+        startBlockId: string;
+        targetBlockId: string;
+      }) => {
+        if (documentState.status !== "loaded" || !adapter.applyTransaction) {
+          return;
+        }
+
+        const currentBlockIds = blockStateRef.current.blockIds;
+        const firstIndex = currentBlockIds.indexOf(startBlockId);
+        const secondIndex = currentBlockIds.indexOf(endBlockId);
+        const targetIndex = currentBlockIds.indexOf(targetBlockId);
+        if (firstIndex < 0 || secondIndex < 0 || targetIndex < 0) {
+          return;
+        }
+
+        const rangeStartIndex = Math.min(firstIndex, secondIndex);
+        const rangeEndIndex = Math.max(firstIndex, secondIndex);
+        if (targetIndex >= rangeStartIndex && targetIndex <= rangeEndIndex) {
+          return;
+        }
+
+        const previousBlockId = currentBlockIds[rangeStartIndex - 1];
+        const nextBlockId = currentBlockIds[rangeEndIndex + 1];
+        const inverseTargetBlockId = previousBlockId ?? nextBlockId;
+        const inversePlacement = previousBlockId ? "after" : "before";
+        if (!inverseTargetBlockId) {
+          return;
+        }
+
+        clearEditTimer();
+        try {
+          clearTypingHistoryGroup();
+          const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+            type: "moveBlockRange",
+            startBlockId,
+            endBlockId,
+            targetBlockId,
+            placement,
+          });
+          validateTransactionResult(result);
+          applyTransactionResult(result);
+          const nextBlockSelection = blockSelectionRef.current;
+          blockSelectionGestureRef.current = null;
+          setNextBlockSelection(nextBlockSelection);
+          if (!suppressHistoryRef.current) {
+            undoStackRef.current.push({
+              type: "moveBlockRange",
+              startBlockId,
+              endBlockId,
+              targetBlockId: inverseTargetBlockId,
+              placement: inversePlacement,
+              inverseTargetBlockId: targetBlockId,
+              inversePlacement: placement,
+            });
+            redoStackRef.current = [];
+            publishCommandState();
+          }
+
+          const activeBlockIdValue = activeBlockIdRef.current;
+          const nextActiveBlock = activeBlockIdValue
+            ? result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue)
+            : undefined;
+          if (nextActiveBlock) {
+            nativeEditingBlockIdRef.current = nextActiveBlock.id;
+            draftMarkdownRef.current = nextActiveBlock.markdown;
+            committedMarkdownRef.current = nextActiveBlock.markdown;
+            setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
+            setActiveBlockId(nextActiveBlock.id);
+          }
+          markDirty();
+        } catch (error) {
+          const nextError = error instanceof Error ? error : new Error(String(error));
+          onErrorRef.current?.(nextError);
+        }
+      },
+      [
+        adapter,
+        applyTransactionResult,
+        clearEditTimer,
+        clearTypingHistoryGroup,
+        documentState,
+        markDirty,
+        onErrorRef,
+        publishCommandState,
+        setNextBlockSelection,
+        validateTransactionResult,
+      ],
+    );
+
+    const moveActiveBlock = useCallback(
+      (direction: "up" | "down") => {
+        async function runMove() {
+          await commitActiveBlock({ updateReactState: true });
+          const currentBlockIds = blockStateRef.current.blockIds;
+          const currentBlockSelection = blockSelectionRef.current;
+          if (currentBlockSelection) {
+            const anchorIndex = currentBlockIds.indexOf(currentBlockSelection.anchorBlockId);
+            const focusIndex = currentBlockIds.indexOf(currentBlockSelection.focusBlockId);
+            if (anchorIndex >= 0 && focusIndex >= 0) {
+              const rangeStartIndex = Math.min(anchorIndex, focusIndex);
+              const rangeEndIndex = Math.max(anchorIndex, focusIndex);
+              const targetBlockId = direction === "up"
+                ? currentBlockIds[rangeStartIndex - 1]
+                : currentBlockIds[rangeEndIndex + 1];
+              if (targetBlockId) {
+                await applyMoveBlockRange({
+                  endBlockId: currentBlockIds[rangeEndIndex]!,
+                  placement: direction === "up" ? "before" : "after",
+                  startBlockId: currentBlockIds[rangeStartIndex]!,
+                  targetBlockId,
+                });
+              }
+            }
+          } else {
+            const activeBlockIdValue = activeBlockIdRef.current;
+            if (!activeBlockIdValue) {
+              return;
+            }
+
+            const activeBlockIndex = currentBlockIds.indexOf(activeBlockIdValue);
+            const targetBlockId = direction === "up"
+              ? currentBlockIds[activeBlockIndex - 1]
+              : currentBlockIds[activeBlockIndex + 1];
+            if (targetBlockId) {
+              await applyMoveBlockRange({
+                endBlockId: activeBlockIdValue,
+                placement: direction === "up" ? "before" : "after",
+                startBlockId: activeBlockIdValue,
+                targetBlockId,
+              });
+            }
+          }
+        }
+
+        runMove().catch(reportAsyncError);
+      },
+      [applyMoveBlockRange, commitActiveBlock, reportAsyncError],
+    );
+
     const runActiveInputCommand = useCallback((command: () => void) => {
       const input = activeInputRef.current;
       if (!input) {
@@ -1379,6 +1528,42 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             } satisfies HistoryEntry;
           }
 
+          if (entry.type === "moveBlockRange") {
+            const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+              type: "moveBlockRange",
+              startBlockId: entry.startBlockId,
+              endBlockId: entry.endBlockId,
+              targetBlockId: entry.targetBlockId,
+              placement: entry.placement,
+            });
+            applyTransactionResult(result);
+            const nextBlockSelection = blockSelectionRef.current;
+            blockSelectionGestureRef.current = null;
+            setNextBlockSelection(nextBlockSelection);
+            const activeBlockIdValue = activeBlockIdRef.current;
+            const nextActiveBlock = activeBlockIdValue
+              ? result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue)
+              : undefined;
+            if (nextActiveBlock) {
+              nativeEditingBlockIdRef.current = nextActiveBlock.id;
+              draftMarkdownRef.current = nextActiveBlock.markdown;
+              committedMarkdownRef.current = nextActiveBlock.markdown;
+              setDraftMarkdown(nextActiveBlock.markdown);
+              setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
+              setActiveBlockId(nextActiveBlock.id);
+            }
+            markDirty();
+            return {
+              type: "moveBlockRange",
+              startBlockId: entry.startBlockId,
+              endBlockId: entry.endBlockId,
+              targetBlockId: entry.inverseTargetBlockId,
+              placement: entry.inversePlacement,
+              inverseTargetBlockId: entry.targetBlockId,
+              inversePlacement: entry.placement,
+            } satisfies HistoryEntry;
+          }
+
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "replaceBlockRange",
             startBlockId: entry.startBlockId,
@@ -1488,6 +1673,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         save,
         saveAs,
         commitAndBlurActiveBlock,
+        moveActiveBlockDown() {
+          moveActiveBlock("down");
+        },
+        moveActiveBlockUp() {
+          moveActiveBlock("up");
+        },
         setHeading(level: HeadingLevel) {
           formatCurrentBlockRange((markdown) => setHeadingMarkdown(markdown, level));
         },
@@ -1526,7 +1717,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         undo,
       }),
-      [commitAndBlurActiveBlock, formatCurrentBlockRange, redo, runActiveInputCommand, save, saveAs, undo],
+      [commitAndBlurActiveBlock, formatCurrentBlockRange, moveActiveBlock, redo, runActiveInputCommand, save, saveAs, undo],
     );
 
     useImperativeHandle(ref, () => commands, [commands]);

@@ -46,6 +46,13 @@ export type MarkdownTransaction =
       startBlockId: string;
       endBlockId: string;
       markdown?: string;
+    }
+  | {
+      type: "moveBlockRange";
+      startBlockId: string;
+      endBlockId: string;
+      targetBlockId: string;
+      placement: "before" | "after";
     };
 
 export type MarkdownTransactionResult = {
@@ -80,6 +87,8 @@ export type MarkdownDocumentCommands = {
   redo(): void;
   commitAndBlurActiveBlock(): boolean;
   focus(): void;
+  moveActiveBlockDown(): void;
+  moveActiveBlockUp(): void;
   setParagraph(): void;
   setHeading(level: 1 | 2 | 3 | 4 | 5 | 6): void;
   toggleBold(): void;

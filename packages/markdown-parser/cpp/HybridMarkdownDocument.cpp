@@ -232,6 +232,9 @@ MarkdownTransactionResult HybridMarkdownDocument::applyTransaction(const Markdow
   if (transaction.type == "replaceBlockRange") {
     return replaceBlockRange(transaction);
   }
+  if (transaction.type == "moveBlockRange") {
+    return moveBlockRange(transaction);
+  }
   throw std::runtime_error("Unsupported markdown transaction: " + transaction.type);
 }
 
@@ -577,6 +580,113 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
     changedBlockIndices.push_back(prefixCount + offset);
   }
   return makeTransactionResult(prefixCount, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
+}
+
+MarkdownTransactionResult HybridMarkdownDocument::moveBlockRange(const MarkdownTransaction& transaction) {
+  if (!transaction.beforeMarkdown.has_value() || !transaction.markdown.has_value() || !transaction.afterMarkdown.has_value()) {
+    throw std::runtime_error("moveBlockRange requires end block id, target block id, and placement.");
+  }
+
+  const std::string& targetBlockId = *transaction.markdown;
+  const std::string& placement = *transaction.afterMarkdown;
+  if (placement != "before" && placement != "after") {
+    throw std::runtime_error("moveBlockRange placement must be before or after.");
+  }
+
+  const size_t firstIndex = findBlockIndex(transaction.blockId);
+  const size_t secondIndex = findBlockIndex(*transaction.beforeMarkdown);
+  const size_t targetIndex = findBlockIndex(targetBlockId);
+  const size_t rangeStartIndex = std::min(firstIndex, secondIndex);
+  const size_t rangeEndIndex = std::max(firstIndex, secondIndex);
+  if (targetIndex >= rangeStartIndex && targetIndex <= rangeEndIndex) {
+    throw std::runtime_error("moveBlockRange target must be outside the moved range.");
+  }
+
+  std::vector<MarkdownBlockRange> oldBlocks = blocks_;
+  std::vector<std::string> oldMarkdown;
+  oldMarkdown.reserve(oldBlocks.size());
+  for (size_t index = 0; index < oldBlocks.size(); index += 1) {
+    oldMarkdown.push_back(markdownForBlock(index, oldBlocks[index]));
+  }
+
+  const size_t movedBlockCount = rangeEndIndex - rangeStartIndex + 1;
+  std::vector<MarkdownBlockRange> movedBlocks;
+  movedBlocks.reserve(movedBlockCount);
+  std::vector<std::string> movedMarkdown;
+  movedMarkdown.reserve(movedBlockCount);
+  for (size_t index = rangeStartIndex; index <= rangeEndIndex; index += 1) {
+    movedBlocks.push_back(oldBlocks[index]);
+    movedMarkdown.push_back(oldMarkdown[index]);
+  }
+
+  std::vector<MarkdownBlockRange> reorderedBlocks;
+  std::vector<std::string> reorderedMarkdown;
+  reorderedBlocks.reserve(oldBlocks.size());
+  reorderedMarkdown.reserve(oldMarkdown.size());
+  for (size_t index = 0; index < oldBlocks.size(); index += 1) {
+    if (index < rangeStartIndex || index > rangeEndIndex) {
+      reorderedBlocks.push_back(oldBlocks[index]);
+      reorderedMarkdown.push_back(oldMarkdown[index]);
+    }
+  }
+
+  size_t insertionIndex = targetIndex;
+  if (targetIndex > rangeEndIndex) {
+    insertionIndex -= movedBlockCount;
+  }
+  if (placement == "after") {
+    insertionIndex += 1;
+  }
+
+  reorderedBlocks.insert(
+      reorderedBlocks.begin() + static_cast<long long>(insertionIndex),
+      movedBlocks.begin(),
+      movedBlocks.end());
+  reorderedMarkdown.insert(
+      reorderedMarkdown.begin() + static_cast<long long>(insertionIndex),
+      movedMarkdown.begin(),
+      movedMarkdown.end());
+
+  std::string nextSource;
+  for (size_t index = 0; index < reorderedMarkdown.size(); index += 1) {
+    if (index > 0) {
+      nextSource += lineEnding_;
+      nextSource += lineEnding_;
+    }
+    nextSource += reorderedMarkdown[index];
+  }
+  const bool hadTrailingLineEnding =
+      sourceText_.size() >= lineEnding_.size() &&
+      sourceText_.compare(sourceText_.size() - lineEnding_.size(), lineEnding_.size(), lineEnding_) == 0;
+  if (hadTrailingLineEnding) {
+    nextSource += lineEnding_;
+  }
+
+  std::vector<MarkdownBlockRange> newBlocks = parseMarkdownBlocks(nextSource);
+  if (newBlocks.size() != reorderedBlocks.size()) {
+    throw std::runtime_error("moveBlockRange could not preserve markdown block boundaries.");
+  }
+
+  for (size_t index = 0; index < newBlocks.size(); index += 1) {
+    newBlocks[index].id = reorderedBlocks[index].id;
+    newBlocks[index].textRevision = reorderedBlocks[index].textRevision;
+  }
+
+  sourceText_ = std::move(nextSource);
+  blocks_ = std::move(newBlocks);
+  markdownCache_.assign(blocks_.size(), std::nullopt);
+  renumberBlocks(0);
+  revision_ += 1;
+  timing_.sourceBytes = static_cast<double>(sourceText_.size());
+
+  const size_t changedStartIndex = std::min(rangeStartIndex, targetIndex);
+  const size_t changedEndIndex = std::max(rangeEndIndex, targetIndex);
+  std::vector<size_t> changedBlockIndices;
+  changedBlockIndices.reserve(changedEndIndex - changedStartIndex + 1);
+  for (size_t index = changedStartIndex; index <= changedEndIndex; index += 1) {
+    changedBlockIndices.push_back(index);
+  }
+  return makeTransactionResult(changedStartIndex, changedBlockIndices.size(), changedBlockIndices);
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::makeTransactionResult(

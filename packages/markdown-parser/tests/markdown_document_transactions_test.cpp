@@ -210,6 +210,19 @@ MarkdownTransaction replaceBlockRange(std::string startBlockId, std::string endB
       std::nullopt);
 }
 
+MarkdownTransaction moveBlockRange(
+    std::string startBlockId,
+    std::string endBlockId,
+    std::string targetBlockId,
+    std::string placement) {
+  return MarkdownTransaction(
+      "moveBlockRange",
+      std::move(startBlockId),
+      std::move(targetBlockId),
+      std::move(endBlockId),
+      std::move(placement));
+}
+
 void testLoadsBaselineBlocks() {
   LoadedDocument loaded("# Title\n\nParagraph\n\n```js\nconst x = 1\n```\n");
   const auto blocks = blocksFor(loaded.document);
@@ -418,6 +431,70 @@ void testReplaceBlockRangeWithWhitespaceOnlyPreservesEditableBlock() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testMoveBlockRangeMovesSingleBlockUp() {
+  LoadedDocument loaded("First\n\nSecond\n\nThird\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(moveBlockRange(before[1].id, before[1].id, before[0].id, "before"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "Second\n\nFirst\n\nThird\n", "move single block up source");
+  expectEqual(after[0].id, before[1].id, "move up first id");
+  expectEqual(after[1].id, before[0].id, "move up second id");
+  expectEqual(after[2].id, before[2].id, "move up suffix id");
+  expectEqual(result.retiredBlockIds.size(), 0, "move up retired ids");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
+void testMoveBlockRangeMovesSingleBlockDown() {
+  LoadedDocument loaded("First\n\nSecond\n\nThird\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(moveBlockRange(before[1].id, before[1].id, before[2].id, "after"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "First\n\nThird\n\nSecond\n", "move single block down source");
+  expectEqual(after[1].id, before[2].id, "move down middle id");
+  expectEqual(after[2].id, before[1].id, "move down last id");
+  expectEqual(result.changedRange.deleteCount, 2, "move down changed range delete count");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
+void testMoveBlockRangeMovesMultipleBlocksAcrossTarget() {
+  LoadedDocument loaded("One\n\nTwo\n\nThree\n\nFour\n\nFive\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(moveBlockRange(before[1].id, before[2].id, before[4].id, "after"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(source, "One\n\nFour\n\nFive\n\nTwo\n\nThree\n", "move range after target source");
+  expectEqual(after[1].id, before[3].id, "move range fills first changed slot");
+  expectEqual(after[2].id, before[4].id, "move range fills second changed slot");
+  expectEqual(after[3].id, before[1].id, "move range first moved id");
+  expectEqual(after[4].id, before[2].id, "move range second moved id");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
+void testMoveBlockRangePreservesMixedBlockTypes() {
+  LoadedDocument loaded("# Heading\n\n- One\n- Two\n\n```ts\nconst value = 1;\n```\n\n> Quote\n");
+  const auto before = blocksFor(loaded.document);
+  const auto result = loaded.document->applyTransaction(moveBlockRange(before[2].id, before[2].id, before[0].id, "before"));
+  const auto after = blocksFor(loaded.document);
+  const std::string source = savedSourceFor(loaded.document);
+
+  expectEqual(after[0].id, before[2].id, "mixed move code id");
+  expectEqual(after[0].type, "codeBlock", "mixed move code type");
+  expectEqual(after[1].type, "heading", "mixed move heading type");
+  expectEqual(after[2].type, "unorderedList", "mixed move list type");
+  expectEqual(after[3].type, "quote", "mixed move quote type");
+  expect(source.find("```ts\nconst value = 1;\n```\n\n# Heading") == 0, "mixed move source starts with code then heading");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+}
+
 std::string repeatedParagraphs(size_t count) {
   std::ostringstream source;
   for (size_t index = 0; index < count; index += 1) {
@@ -448,6 +525,16 @@ void testLargeDocumentFarDownTransactions() {
   after = blocksFor(loaded.document);
   source = savedSourceFor(loaded.document);
   expectEqual(after[135].markdown, "Replacement after scroll", "far down range replacement markdown");
+  expectTransactionResultInvariants(before, after, result, source);
+  expectDocumentInvariants(loaded.document);
+
+  before = blocksFor(loaded.document);
+  result = loaded.document->applyTransaction(moveBlockRange(before[150].id, before[152].id, before[130].id, "before"));
+  after = blocksFor(loaded.document);
+  source = savedSourceFor(loaded.document);
+  expectEqual(after[130].id, before[150].id, "far down move first moved id");
+  expectEqual(after[131].id, before[151].id, "far down move second moved id");
+  expectEqual(after[132].id, before[152].id, "far down move third moved id");
   expectTransactionResultInvariants(before, after, result, source);
   expectDocumentInvariants(loaded.document);
 }
@@ -484,7 +571,7 @@ void testRandomizedTransactionSequence() {
   for (size_t actionIndex = 0; actionIndex < 80; actionIndex += 1) {
     const auto before = blocksFor(loaded.document);
     expect(!before.empty(), "randomized document should keep at least one block");
-    const auto action = random.nextIndex(3);
+    const auto action = random.nextIndex(4);
     const auto blockIndex = random.nextIndex(before.size());
 
     try {
@@ -494,12 +581,22 @@ void testRandomizedTransactionSequence() {
         result = loaded.document->applyTransaction(updateBlock(before[blockIndex].id, markdown));
       } else if (action == 1) {
         result = loaded.document->applyTransaction(splitBlock(before[blockIndex].id, "Split before", "Split after"));
-      } else {
+      } else if (action == 2) {
         const auto secondOffset = random.nextIndex(5);
         const auto secondIndex = std::min(before.size() - 1, blockIndex + secondOffset);
         const auto rangeStart = std::min(blockIndex, secondIndex);
         const auto rangeEnd = std::max(blockIndex, secondIndex);
         result = loaded.document->applyTransaction(replaceBlockRange(before[rangeStart].id, before[rangeEnd].id, "Range replacement"));
+      } else {
+        const size_t rangeStart = std::min(blockIndex, before.size() - 2);
+        const size_t maxRangeLength = std::min(static_cast<size_t>(3), before.size() - rangeStart - 1);
+        const size_t rangeEnd = rangeStart + random.nextIndex(maxRangeLength);
+        size_t targetIndex = random.nextIndex(before.size() - (rangeEnd - rangeStart + 1));
+        if (targetIndex >= rangeStart) {
+          targetIndex += rangeEnd - rangeStart + 1;
+        }
+        const std::string placement = random.nextIndex(2) == 0 ? "before" : "after";
+        result = loaded.document->applyTransaction(moveBlockRange(before[rangeStart].id, before[rangeEnd].id, before[targetIndex].id, placement));
       }
 
       const auto after = blocksFor(loaded.document);
@@ -543,6 +640,10 @@ int main() {
       {"replace block range uses parser for code block boundaries", testReplaceBlockRangeUsesParserForCodeBlockBoundaries},
       {"replace block range uses parser for tables", testReplaceBlockRangeUsesParserForTables},
       {"replace block range with whitespace only preserves editable block", testReplaceBlockRangeWithWhitespaceOnlyPreservesEditableBlock},
+      {"move block range moves single block up", testMoveBlockRangeMovesSingleBlockUp},
+      {"move block range moves single block down", testMoveBlockRangeMovesSingleBlockDown},
+      {"move block range moves multiple blocks across target", testMoveBlockRangeMovesMultipleBlocksAcrossTarget},
+      {"move block range preserves mixed block types", testMoveBlockRangePreservesMixedBlockTypes},
       {"large document far down transactions", testLargeDocumentFarDownTransactions},
       {"randomized transaction sequence", testRandomizedTransactionSequence},
   };

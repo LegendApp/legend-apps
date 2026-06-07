@@ -220,7 +220,9 @@ function flushPromises() {
 }
 
 function transactionBlockId(transaction: MarkdownTransaction) {
-  return transaction.type === "replaceBlockRange" ? transaction.startBlockId : transaction.blockId;
+  return transaction.type === "replaceBlockRange" || transaction.type === "moveBlockRange"
+    ? transaction.startBlockId
+    : transaction.blockId;
 }
 
 class MountedEditorAdapter implements MarkdownDocumentAdapter {
@@ -345,6 +347,8 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     let result: MarkdownTransactionResult;
     if (transaction.type === "replaceBlockRange") {
       result = this.applyReplaceBlockRange(index, transaction);
+    } else if (transaction.type === "moveBlockRange") {
+      result = this.applyMoveBlockRange(index, transaction);
     } else if (transaction.type === "splitBlock") {
       result = this.applySplitBlock(index, transaction.beforeMarkdown, transaction.afterMarkdown);
     } else {
@@ -448,6 +452,42 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
       ? [markdownBlock(this.nextBlockId(), index, "")]
       : this.blocksFromMarkdown(transaction.markdown ?? "", index);
     return this.commitChangedRange(index, deleteCount, changedBlocks, retiredBlockIds);
+  }
+
+  private applyMoveBlockRange(index: number, transaction: Extract<MarkdownTransaction, { type: "moveBlockRange" }>) {
+    const endIndex = this.blocks.findIndex((candidate) => candidate.id === transaction.endBlockId);
+    const targetIndex = this.blocks.findIndex((candidate) => candidate.id === transaction.targetBlockId);
+    if (endIndex < 0 || targetIndex < 0) {
+      throw new Error(`Markdown block not found: ${transaction.endBlockId} ${transaction.targetBlockId}`);
+    }
+
+    const rangeStartIndex = Math.min(index, endIndex);
+    const rangeEndIndex = Math.max(index, endIndex);
+    if (targetIndex >= rangeStartIndex && targetIndex <= rangeEndIndex) {
+      throw new Error("move target is inside moved range");
+    }
+
+    const movedBlocks = this.blocks.slice(rangeStartIndex, rangeEndIndex + 1);
+    const remainingBlocks = [
+      ...this.blocks.slice(0, rangeStartIndex),
+      ...this.blocks.slice(rangeEndIndex + 1),
+    ];
+    let insertionIndex = targetIndex;
+    if (targetIndex > rangeEndIndex) {
+      insertionIndex -= movedBlocks.length;
+    }
+    if (transaction.placement === "after") {
+      insertionIndex += 1;
+    }
+    const reorderedBlocks = [
+      ...remainingBlocks.slice(0, insertionIndex),
+      ...movedBlocks,
+      ...remainingBlocks.slice(insertionIndex),
+    ];
+    const changedStartIndex = Math.min(rangeStartIndex, targetIndex);
+    const changedEndIndex = Math.max(rangeEndIndex, targetIndex);
+    const changedBlocks = reorderedBlocks.slice(changedStartIndex, changedEndIndex + 1);
+    return this.commitChangedRange(changedStartIndex, changedBlocks.length, changedBlocks, []);
   }
 }
 
@@ -594,6 +634,20 @@ async function undo(commandsRef: React.RefObject<MarkdownDocumentCommands | null
 async function redo(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
   await act(async () => {
     commandsRef.current?.redo();
+  });
+  await flushPromises();
+}
+
+async function moveActiveBlockUp(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  await act(async () => {
+    commandsRef.current?.moveActiveBlockUp();
+  });
+  await flushPromises();
+}
+
+async function moveActiveBlockDown(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  await act(async () => {
+    commandsRef.current?.moveActiveBlockDown();
   });
   await flushPromises();
 }
@@ -2934,6 +2988,258 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("moves the active block up and keeps it active", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "Second");
+    await moveActiveBlockUp(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        endBlockId: "d1:b1",
+        placement: "before",
+        startBlockId: "d1:b1",
+        targetBlockId: "d1:b0",
+        type: "moveBlockRange",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b1", "d1:b0", "d1:b2"]);
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("moves the active block down and keeps it active", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await moveActiveBlockDown(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        endBlockId: "d1:b0",
+        placement: "after",
+        startBlockId: "d1:b0",
+        targetBlockId: "d1:b1",
+        type: "moveBlockRange",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b1", "d1:b0", "d1:b2"]);
+    expect(editorInput(renderer).props.defaultValue).toBe("First");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("moves the current block selection up as a range", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "Second", "down");
+    await moveActiveBlockUp(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        endBlockId: "d1:b2",
+        placement: "before",
+        startBlockId: "d1:b1",
+        targetBlockId: "d1:b0",
+        type: "moveBlockRange",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b1", "d1:b2", "d1:b0", "d1:b3"]);
+    expect(() => blockSelectionInput(renderer)).not.toThrow();
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("moves the current block selection down as a range", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await moveActiveBlockDown(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        endBlockId: "d1:b1",
+        placement: "after",
+        startBlockId: "d1:b0",
+        targetBlockId: "d1:b2",
+        type: "moveBlockRange",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b2", "d1:b0", "d1:b1", "d1:b3"]);
+    expect(() => blockSelectionInput(renderer)).not.toThrow();
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not move selected block ranges past document boundaries", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await moveActiveBlockUp(commandsRef);
+    await dragSelectionOutside(renderer, "Second", "down");
+    await moveActiveBlockDown(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes moving the current block selection", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    await moveActiveBlockDown(commandsRef);
+    expect(adapter.blockIds).toEqual(["d1:b2", "d1:b0", "d1:b1", "d1:b3"]);
+
+    await undo(commandsRef);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2", "d1:b3"]);
+    expect(() => blockSelectionInput(renderer)).not.toThrow();
+
+    await redo(commandsRef);
+    expect(adapter.blockIds).toEqual(["d1:b2", "d1:b0", "d1:b1", "d1:b3"]);
+    expect(() => blockSelectionInput(renderer)).not.toThrow();
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not move active blocks past document boundaries", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await moveActiveBlockUp(commandsRef);
+    await pressRenderedMarkdown(renderer, "Second");
+    await moveActiveBlockDown(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1"]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("commits a pending active draft before moving the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "First edited");
+    await moveActiveBlockDown(commandsRef);
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "First edited",
+        type: "updateBlockMarkdown",
+      },
+      {
+        endBlockId: "d1:b0",
+        placement: "after",
+        startBlockId: "d1:b0",
+        targetBlockId: "d1:b1",
+        type: "moveBlockRange",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b1", "d1:b0"]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("First edited");
+    expect(editorInput(renderer).props.defaultValue).toBe("First edited");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("undoes and redoes moving the active block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await moveActiveBlockDown(commandsRef);
+    expect(adapter.blockIds).toEqual(["d1:b1", "d1:b0", "d1:b2"]);
+
+    await undo(commandsRef);
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
+    expect(editorInput(renderer).props.defaultValue).toBe("First");
+    await expectStableEditingState(renderer, adapter);
+
+    await redo(commandsRef);
+    expect(adapter.blockIds).toEqual(["d1:b1", "d1:b0", "d1:b2"]);
+    expect(editorInput(renderer).props.defaultValue).toBe("First");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("moves mixed markdown block types without changing their identities", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      markdownBlock("d1:b0", 0, "## Heading"),
+      orderedListBlock("d1:b1", 1, "1. One\n2. Two"),
+      codeBlock("d1:b2", 2, "```ts\nconst value = 1;\n```"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "```ts\nconst value = 1;\n```");
+    await moveActiveBlockUp(commandsRef);
+
+    expect(adapter.blockIds).toEqual(["d1:b0", "d1:b2", "d1:b1"]);
+    expect(adapter.blockTypes).toEqual(["heading", "codeBlock", "orderedList"]);
+    expect(editorInput(renderer).props.defaultValue).toBe("```ts\nconst value = 1;\n```");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("moves a far-down active block without disturbing earlier siblings", async () => {
+    const blocks = Array.from({ length: 160 }, (_value, index) => block(`d1:b${index}`, index, `Block ${index}`));
+    const adapter = new MountedEditorAdapter(snapshot(blocks));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "Block 140");
+    await moveActiveBlockUp(commandsRef);
+
+    expect(adapter.blockIds[139]).toBe("d1:b140");
+    expect(adapter.blockIds[140]).toBe("d1:b139");
+    expect(adapter.blockIds[0]).toBe("d1:b0");
+    expect(editorInput(renderer).props.defaultValue).toBe("Block 140");
+    await expectStableEditingState(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
   });
 

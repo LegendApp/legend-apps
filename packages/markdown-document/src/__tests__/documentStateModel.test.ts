@@ -93,6 +93,37 @@ describe("documentStateModel", () => {
     })).not.toThrow();
   });
 
+  it("applies move transaction changed ranges without retiring moved ids", () => {
+    const state = createMarkdownDocumentBlockState([
+      block("d1:b0", 0),
+      block("d1:b1", 1),
+      block("d1:b2", 2),
+      block("d1:b3", 3),
+      block("d1:b4", 4),
+    ]);
+
+    const nextState = applyMarkdownTransactionResultToBlockState(
+      state,
+      transactionResult({
+        blockIds: ["d1:b0", "d1:b3", "d1:b1", "d1:b2", "d1:b4"],
+        changedBlocks: [
+          block("d1:b0", 0),
+          block("d1:b3", 1),
+          block("d1:b1", 2),
+          block("d1:b2", 3),
+          block("d1:b4", 4),
+        ],
+        deleteCount: 5,
+        startBlockIndex: 0,
+      }),
+    );
+
+    expect(nextState.blockIds).toEqual(["d1:b0", "d1:b3", "d1:b1", "d1:b2", "d1:b4"]);
+    expect(nextState.blocksById.get("d1:b1")?.index).toBe(2);
+    expect(nextState.blocksById.get("d1:b3")?.index).toBe(1);
+    expect(() => assertMarkdownDocumentBlockStateInvariants(nextState)).not.toThrow();
+  });
+
   it("appends hydrated blocks without duplicating existing ids", () => {
     const state = createMarkdownDocumentBlockState([
       block("d1:b0", 0),
