@@ -35,6 +35,13 @@ function codeBlock(id: string, index: number, markdown = "```\ncode\n```"): Mark
   };
 }
 
+function orderedListBlock(id: string, index: number, markdown = "1. First\n2. Second"): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    type: "orderedList",
+  };
+}
+
 function snapshot(initialBlocks: MarkdownBlockSnapshot[], blockCount = initialBlocks.length): MarkdownDocumentSnapshot {
   return {
     blockCount,
@@ -554,6 +561,70 @@ describe("MarkdownDocument mounted editing", () => {
         type: "splitBlock",
       },
     ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing multi-line numbered list without splitting the block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      orderedListBlock("d1:b0", 0, [
+        "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+        "6. Fix race condition in Container layout (Issue #3)",
+        "7. Add cleanup for sticky indices changes (Issue #13)",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+      "6. Fix race condition in Container layout (Issue #3) edited",
+      "7. Add cleanup for sticky indices changes (Issue #13)",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+          "6. Fix race condition in Container layout (Issue #3) edited",
+          "7. Add cleanup for sticky indices changes (Issue #13)",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates a label plus numbered list block without duplicating the label", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      orderedListBlock("d1:b0", 0, [
+        "Medium Priority:",
+        "5. Optimize zxcvzxcv with reverse lookup map (Issue #6)",
+        "6. Fix race condition in Container layout (Issue #3)",
+      ].join("\n")),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), [
+      "Medium Priority:",
+      "5. Optimize zxcvzxcv with reverse lookup map (Issue #6) edited",
+      "6. Fix race condition in Container layout (Issue #3)",
+    ].join("\n"));
+    await runPendingTimers();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: [
+          "Medium Priority:",
+          "5. Optimize zxcvzxcv with reverse lookup map (Issue #6) edited",
+          "6. Fix race condition in Container layout (Issue #3)",
+        ].join("\n"),
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.sourceMarkdown.match(/Medium Priority:/g)).toHaveLength(1);
     expect(onError).not.toHaveBeenCalled();
   });
 

@@ -598,7 +598,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        if (block.type !== "codeBlock") {
+        if (block.type !== "codeBlock" && !committedMarkdownRef.current.includes("\n")) {
           const splitMarkdown = splitMarkdownAtFirstLineBreak(markdown);
           if (splitMarkdown) {
             splitActiveBlock(
