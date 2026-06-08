@@ -10,7 +10,7 @@ import { ensureLocalTrackThumbnail } from "@/systems/LocalMusicState";
 import { playbackInteractionState$ } from "@/systems/PlaybackInteractionState";
 import { type RepeatMode, settings$ } from "@/systems/Settings";
 import { stateSaved$ } from "@/systems/State";
-import { getPersistPlugin } from "@/utils/JSONManager";
+import { getPersistPlugin } from "@legend-desktop/storage";
 import { parseDurationToSeconds } from "@/utils/m3u";
 import { clearQueueM3U, loadQueueFromM3U, saveQueueToM3U } from "@/utils/m3uManager";
 import { perfCount, perfDelta, perfLog, perfMark } from "@/utils/perfLogger";

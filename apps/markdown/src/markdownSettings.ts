@@ -13,7 +13,6 @@ import {
   type MarkdownToolbarLayout,
   type MarkdownToolbarLayoutId,
 } from "./markdownToolbarLayout";
-import { markdownStorage } from "./markdownStorage";
 
 export type MarkdownThemeSetting = string;
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
@@ -76,7 +75,6 @@ const initialMarkdownSettings: MarkdownSettingsFile = {
 const markdownSettings$ = createObservableFile<MarkdownSettingsFile>({
   filename: "settings",
   initialValue: initialMarkdownSettings,
-  storage: markdownStorage,
 });
 
 const settingsSubscribers = new Set<() => void>();

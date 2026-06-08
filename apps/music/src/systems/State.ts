@@ -1,5 +1,5 @@
 import { observable } from "@legendapp/state";
-import { createJSONManager } from "@/utils/JSONManager";
+import { createObservableFile } from "@legend-desktop/storage";
 
 type SettingsPage = "account" | "general" | "library" | "overlay" | "theme" | "ui-customize" | "open-source";
 
@@ -25,7 +25,7 @@ type SavedState = {
     playbackTime: number;
 };
 
-export const stateSaved$ = createJSONManager<SavedState>({
+export const stateSaved$ = createObservableFile<SavedState>({
     filename: "state",
     initialValue: {
         playlist: undefined as string | undefined,
@@ -35,4 +35,5 @@ export const stateSaved$ = createJSONManager<SavedState>({
         playbackIndex: -1,
         playbackTime: 0,
     },
+    subfolder: "data",
 });

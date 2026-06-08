@@ -14,10 +14,11 @@ type AppThemeStateObservable<TTheme extends string, TColors extends object> =
     customColors: any;
   };
 
-type CreateThemeJSONManager = <T extends object>(params: {
+type CreateThemeObservableFile = <T extends object>(params: {
   filename: string;
   initialValue: T;
   saveDefaultToFile?: boolean;
+  subfolder?: string;
 }) => Observable<T>;
 
 export type AppThemeContextValue<TTheme extends string> = {
@@ -28,9 +29,10 @@ export type AppThemeContextValue<TTheme extends string> = {
 
 export type CreateAppThemeOptions<TTheme extends string, TColors extends object> = {
   colors: TColors;
-  createJSONManager: CreateThemeJSONManager;
+  createObservableFile: CreateThemeObservableFile;
   defaultTheme: TTheme;
   filename?: string;
+  subfolder?: string;
 };
 
 function clone<T>(value: T): T {
@@ -39,17 +41,19 @@ function clone<T>(value: T): T {
 
 export function createAppTheme<TTheme extends string, TColors extends object>({
   colors,
-  createJSONManager,
+  createObservableFile,
   defaultTheme,
   filename = "theme",
+  subfolder,
 }: CreateAppThemeOptions<TTheme, TColors>) {
-  const themeState$ = createJSONManager<CreateThemeState<TTheme, TColors>>({
+  const themeState$ = createObservableFile<CreateThemeState<TTheme, TColors>>({
     filename,
     initialValue: {
       currentTheme: defaultTheme,
       customColors: clone(colors),
     },
     saveDefaultToFile: true,
+    subfolder,
   }) as AppThemeStateObservable<TTheme, TColors>;
 
   const ThemeContext = createContext<AppThemeContextValue<TTheme> | undefined>(undefined);

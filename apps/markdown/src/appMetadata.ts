@@ -1,5 +1,4 @@
 import { createObservableFile } from "@legend-desktop/storage";
-import { markdownStorage } from "./markdownStorage";
 
 const maxRecentFiles = 20;
 
@@ -18,7 +17,6 @@ export const markdownAppMetadata$ = createObservableFile<MarkdownAppMetadata>({
   initialValue: {
     recentFiles: [],
   },
-  storage: markdownStorage,
 });
 
 export function getMarkdownFileTitle(path: string) {

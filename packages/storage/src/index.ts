@@ -18,8 +18,8 @@ export type StorageRoot = "applicationSupport" | "cache" | "document";
 export type StorageFormat = "json" | "m3u" | "text";
 
 export type StorageOptions = {
-  namespace?: string;
   root?: StorageRoot;
+  subfolder?: string;
 };
 
 export type StorageListOptions = {
@@ -64,9 +64,11 @@ export type CreateObservableFileOptions<T extends object> = {
   format?: "json";
   initialValue: T;
   preload?: boolean | string[];
+  root?: StorageRoot;
   saveDefaultToFile?: boolean;
   saveTimeout?: number;
-  storage: Storage;
+  storage?: Storage;
+  subfolder?: string;
   transform?: SyncTransform<any, any>;
 };
 
@@ -156,8 +158,10 @@ function getRootDirectory(root: StorageRoot) {
   return Paths.document;
 }
 
-export function createStorage({ namespace, root = "applicationSupport" }: StorageOptions = {}): Storage {
-  const rootDirectory = namespace ? new Directory(getRootDirectory(root), namespace) : getRootDirectory(root);
+export function createStorage({ root = "applicationSupport", subfolder }: StorageOptions = {}): Storage {
+  const rootDirectory = subfolder
+    ? new Directory(getRootDirectory(root), ...splitRelativePath(subfolder))
+    : getRootDirectory(root);
 
   const directory = (relativePath = "") => new Directory(rootDirectory, ...splitRelativePath(relativePath));
   const file = (relativePath: string) => new File(rootDirectory, ...splitRelativePath(relativePath));
@@ -324,16 +328,19 @@ export function createObservableFile<T extends object>({
   format = "json",
   initialValue,
   preload = [filename],
+  root = "applicationSupport",
   saveDefaultToFile,
   saveTimeout = 300,
   storage,
+  subfolder,
   transform,
 }: CreateObservableFileOptions<T>): Observable<T> {
+  const targetStorage = storage ?? createStorage({ root, subfolder });
   const plugin = observablePersistStorage({
     format,
     preload: preload === false ? undefined : Array.isArray(preload) ? preload : [filename],
     saveTimeout,
-    storage,
+    storage: targetStorage,
   });
 
   const data$ = observable<Record<string, any>>(
@@ -348,7 +355,7 @@ export function createObservableFile<T extends object>({
   );
 
   if (saveDefaultToFile) {
-    storage.write(`${filename}.json`, initialValue, { format: "json" });
+    targetStorage.write(`${filename}.json`, initialValue, { format: "json" });
   }
 
   observablePersistPlugins.set(data$ as unknown as Observable<unknown>, plugin);

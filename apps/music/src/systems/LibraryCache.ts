@@ -1,4 +1,4 @@
-import { createJSONManager } from "@/utils/JSONManager";
+import { createObservableFile } from "@legend-desktop/storage";
 import { deriveThumbnailKey } from "@/utils/thumbnails";
 
 export interface PersistedLibraryTrack {
@@ -31,11 +31,12 @@ const defaultSnapshot: LibrarySnapshot = {
     roots: [],
 };
 
-const libraryCache$ = createJSONManager<LibrarySnapshot>({
+const libraryCache$ = createObservableFile<LibrarySnapshot>({
     filename: "libraryCache",
     initialValue: defaultSnapshot,
     format: "json",
     saveTimeout: 0,
+    subfolder: "data",
     preload: false,
 });
 

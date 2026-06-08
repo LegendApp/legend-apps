@@ -1,8 +1,8 @@
 import { observable, syncState } from "@legendapp/state";
 import { formatHotkey, parseHotkey, serializeHotkey } from "@legend-desktop/hotkeys";
+import { createObservableFile } from "@legend-desktop/storage";
 import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
 import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import { createJSONManager } from "@/utils/JSONManager";
 
 // Default hotkey settings
 const DEFAULT_HOTKEYS = {
@@ -70,11 +70,12 @@ export const HotkeyMetadata: Record<HotkeyName, { description: string; repeat?: 
 };
 
 // Create the hotkeys manager
-export const hotkeys$ = createJSONManager<Record<HotkeyName, KeyboardEventCodeHotkey>>({
-    basePath: "Cache",
+export const hotkeys$ = createObservableFile<Record<HotkeyName, KeyboardEventCodeHotkey>>({
     filename: "hotkeys.json",
     initialValue: DEFAULT_HOTKEYS,
+    root: "cache",
     saveDefaultToFile: true,
+    subfolder: "data",
     transform: {
         load: (value: Record<string, KeyboardEventCodeHotkey>) => {
             return Object.fromEntries(

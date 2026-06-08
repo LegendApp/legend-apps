@@ -1,6 +1,6 @@
+import { createObservableFile } from "@legend-desktop/storage";
 import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
 import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import { createJSONManager } from "@/utils/JSONManager";
 
 export type PlaylistStyle = "compact";
 
@@ -76,7 +76,7 @@ export interface AppSettings {
     isAuthed: boolean;
 }
 
-export const settings$ = createJSONManager<AppSettings>({
+export const settings$ = createObservableFile<AppSettings>({
     filename: "settings",
     initialValue: {
         // State
@@ -132,4 +132,5 @@ export const settings$ = createJSONManager<AppSettings>({
         uniqueId: "",
         isAuthed: false,
     },
+    subfolder: "data",
 });

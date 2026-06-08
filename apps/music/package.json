@@ -5,7 +5,6 @@
   "main": "src/index.ts",
   "dependencies": {
     "@gorhom/portal": "^1.0.14",
-    "@legend-desktop/app-settings": "0.0.0",
     "@legend-desktop/app-exit": "0.0.0",
     "@legend-desktop/appkit-split-view": "0.0.0",
     "@legend-desktop/audio-player": "0.0.0",
