@@ -1,0 +1,147 @@
+import { useCallback, useState } from "react";
+import { Text, TextInput, View } from "react-native";
+
+import { Button } from "@/components/Button";
+import { showToast } from "@/components/Toast";
+import { generatePlaylistExtension } from "@/systems/ai/playlistGeneration";
+import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+
+export type AIButtonsAddResult = {
+    addedCount: number;
+    targetName?: string;
+    undo?: () => void;
+};
+
+export type AIButtonsProps = {
+    canUseAI: boolean;
+    libraryTracks: LocalTrack[];
+    onAddTracks: (tracks: LocalTrack[]) => Promise<AIButtonsAddResult> | AIButtonsAddResult;
+    playlist: LocalPlaylist;
+};
+
+export function AIButtons({ canUseAI, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
+    const [isPromptOpen, setIsPromptOpen] = useState(false);
+    const [prompt, setPrompt] = useState("");
+    const [isGenerating, setIsGenerating] = useState(false);
+    const trimmedPrompt = prompt.trim();
+    const canAutoGenerate = canUseAI && playlist.trackPaths.length > 0 && !isGenerating;
+    const canPromptGenerate = canUseAI && !isGenerating;
+
+    const handleGenerate = useCallback(
+        async (userPrompt?: string) => {
+            if (!canUseAI || isGenerating) {
+                return;
+            }
+
+            setIsGenerating(true);
+            try {
+                const result = await generatePlaylistExtension({
+                    libraryTracks,
+                    playlist,
+                    userPrompt,
+                });
+                const addResult = await onAddTracks(result.tracks);
+
+                if (addResult.addedCount === 0) {
+                    showToast("No new tracks to add", "info");
+                    return;
+                }
+
+                const targetName = addResult.targetName ?? playlist.name;
+                const unresolvedSuffix =
+                    result.unresolvedCount > 0 ? ` (${result.unresolvedCount} unresolved)` : "";
+                const undo = addResult.undo ? { label: "Undo", onPress: addResult.undo } : undefined;
+
+                showToast(
+                    `Added ${addResult.addedCount} ${addResult.addedCount === 1 ? "track" : "tracks"} to ${targetName}${unresolvedSuffix}`,
+                    "info",
+                    undo,
+                );
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to generate playlist tracks";
+                showToast(message, "error");
+            } finally {
+                setIsGenerating(false);
+            }
+        },
+        [canUseAI, isGenerating, libraryTracks, onAddTracks, playlist],
+    );
+
+    const handleSubmitPrompt = useCallback(() => {
+        if (!trimmedPrompt) {
+            showToast("Enter a prompt first", "error");
+            return;
+        }
+
+        setIsPromptOpen(false);
+        setPrompt("");
+        void handleGenerate(trimmedPrompt);
+    }, [handleGenerate, trimmedPrompt]);
+
+    return (
+        <>
+            <View className="px-3 py-2 flex-row items-center justify-end gap-2 border-t border-border-primary">
+                <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={!canAutoGenerate}
+                    className={!canAutoGenerate ? "opacity-50" : undefined}
+                    onClick={() => void handleGenerate()}
+                >
+                    {isGenerating ? "Generating..." : "Auto"}
+                </Button>
+                <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={!canPromptGenerate}
+                    className={!canPromptGenerate ? "opacity-50" : undefined}
+                    onClick={() => setIsPromptOpen(true)}
+                >
+                    Prompt
+                </Button>
+            </View>
+            {isPromptOpen ? (
+                <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
+                    <View className="w-[440px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
+                        <View className="gap-1">
+                            <Text className="text-base font-semibold text-text-primary">Prompt</Text>
+                            <Text className="text-xs text-text-secondary" numberOfLines={2}>
+                                {playlist.name}
+                            </Text>
+                        </View>
+                        <TextInput
+                            multiline
+                            value={prompt}
+                            onChangeText={setPrompt}
+                            placeholder="More upbeat, less acoustic, similar era..."
+                            placeholderTextColor="rgba(255,255,255,0.35)"
+                            className="min-h-28 rounded-md border border-border-primary bg-black/20 px-3 py-2 text-sm text-text-primary"
+                            textAlignVertical="top"
+                        />
+                        <View className="flex-row justify-end gap-2">
+                            <Button
+                                size="small"
+                                variant="secondary"
+                                onClick={() => {
+                                    setIsPromptOpen(false);
+                                    setPrompt("");
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="accent"
+                                disabled={!trimmedPrompt}
+                                className={!trimmedPrompt ? "opacity-50" : undefined}
+                                onClick={handleSubmitPrompt}
+                            >
+                                Generate
+                            </Button>
+                        </View>
+                    </View>
+                </View>
+            ) : null}
+        </>
+    );
+}

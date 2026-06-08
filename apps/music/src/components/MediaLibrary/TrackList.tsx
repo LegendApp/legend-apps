@@ -1,12 +1,12 @@
 import { LegendList } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
-import { useCallback, useMemo, useState } from "react";
-import { Platform, Text, TextInput, View } from "react-native";
+import { useCallback, useMemo } from "react";
+import { Platform, Text, View } from "react-native";
 import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
 
+import { AIButtons, type AIButtonsAddResult } from "@/components/AIButtons";
 import { Button } from "@/components/Button";
-import { showToast } from "@/components/Toast";
 import {
     type DragData,
     DraggableItem,
@@ -24,9 +24,8 @@ import { useListItemStyles } from "@/hooks/useListItemStyles";
 import { type ContextMenuItem, showContextMenu } from "@legend-desktop/context-menu";
 import { type NativeDragTrack, TrackDragSource } from "@legend-desktop/drag-drop";
 import { Icon } from "@/systems/Icon";
-import { generatePlaylistExtension } from "@/systems/ai/playlistGeneration";
 import { libraryUI$ } from "@/systems/LibraryState";
-import { localMusicState$, saveLocalPlaylistTracks } from "@/systems/LocalMusicState";
+import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "@/systems/LocalMusicState";
 import { addTracksToPlaylist } from "@/systems/LocalPlaylists";
 import { themeState$ } from "@/theme/ThemeProvider";
 import { cn } from "@legend-desktop/classnames";
@@ -73,10 +72,6 @@ export function TrackList(_props: TrackListProps) {
     const playlistSortDirection = useValue(libraryUI$.playlistSortDirection);
     const playlists = useValue(localMusicState$.playlists);
     const libraryTracks = useValue(localMusicState$.tracks);
-    const [isAIPromptOpen, setIsAIPromptOpen] = useState(false);
-    const [aiPrompt, setAIPrompt] = useState("");
-    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-    const trimmedAIPrompt = aiPrompt.trim();
 
     const nonSeparatorTrackCount = useMemo(
         () => tracks.reduce((count, track) => (track.isSeparator ? count : count + 1), 0),
@@ -118,74 +113,41 @@ export function TrackList(_props: TrackListProps) {
         playlistSort === "playlist-order" &&
         playlistSortDirection === "asc" &&
         searchQuery.trim().length === 0;
-    const canGenerateAIPlaylist = Boolean(selectedPlaylist && isPlaylistEditable && !isGeneratingAI);
 
-    const handleGenerateAIPlaylist = useCallback(
-        async (userPrompt?: string) => {
-            if (!selectedPlaylist || !isPlaylistEditable || isGeneratingAI) {
-                return;
+    const handleAddAITracksToPlaylist = useCallback(
+        async (tracksToAdd: LocalTrack[]): Promise<AIButtonsAddResult> => {
+            if (!selectedPlaylist) {
+                return { addedCount: 0 };
             }
 
-            setIsGeneratingAI(true);
-            try {
-                const result = await generatePlaylistExtension({
-                    libraryTracks,
-                    playlist: selectedPlaylist,
-                    userPrompt,
-                });
-                const { addedPaths, playlist } = await addTracksToPlaylist(
-                    selectedPlaylist.id,
-                    result.tracks.map((track) => track.filePath),
-                );
+            const { addedPaths, playlist } = await addTracksToPlaylist(
+                selectedPlaylist.id,
+                tracksToAdd.map((track) => track.filePath),
+            );
 
-                if (addedPaths.length === 0) {
-                    showToast("No new tracks to add", "info");
-                    return;
-                }
+            let undo: (() => void) | undefined;
+            if (addedPaths.length > 0) {
+                undo = () => {
+                    const latestPlaylist =
+                        localMusicState$.playlists.peek().find((candidate) => candidate.id === playlist.id) ?? null;
+                    if (!latestPlaylist) {
+                        return;
+                    }
 
-                const unresolvedSuffix =
-                    result.unresolvedCount > 0 ? ` (${result.unresolvedCount} unresolved)` : "";
-                showToast(
-                    `Added ${addedPaths.length} ${addedPaths.length === 1 ? "track" : "tracks"} to ${playlist.name}${unresolvedSuffix}`,
-                    "info",
-                    {
-                        label: "Undo",
-                        onPress: () => {
-                            const latestPlaylist =
-                                localMusicState$.playlists.peek().find((candidate) => candidate.id === playlist.id) ??
-                                null;
-                            if (!latestPlaylist) {
-                                return;
-                            }
-
-                            const addedKeys = new Set(addedPaths.map((path) => path.toLowerCase()));
-                            const nextPaths = latestPlaylist.trackPaths.filter(
-                                (path) => !addedKeys.has(path.toLowerCase()),
-                            );
-                            saveLocalPlaylistTracks(latestPlaylist, nextPaths);
-                        },
-                    },
-                );
-            } catch (error) {
-                const message = error instanceof Error ? error.message : "Failed to generate playlist tracks";
-                showToast(message, "error");
-            } finally {
-                setIsGeneratingAI(false);
+                    const addedKeys = new Set(addedPaths.map((path) => path.toLowerCase()));
+                    const nextPaths = latestPlaylist.trackPaths.filter((path) => !addedKeys.has(path.toLowerCase()));
+                    saveLocalPlaylistTracks(latestPlaylist, nextPaths);
+                };
             }
+
+            return {
+                addedCount: addedPaths.length,
+                targetName: playlist.name,
+                undo,
+            };
         },
-        [isGeneratingAI, isPlaylistEditable, libraryTracks, selectedPlaylist],
+        [selectedPlaylist],
     );
-
-    const handleSubmitAIPrompt = useCallback(() => {
-        if (!trimmedAIPrompt) {
-            showToast("Enter a prompt first", "error");
-            return;
-        }
-
-        setIsAIPromptOpen(false);
-        setAIPrompt("");
-        void handleGenerateAIPlaylist(trimmedAIPrompt);
-    }, [handleGenerateAIPlaylist, trimmedAIPrompt]);
 
     const showDateAddedColumn = selectedView === "playlist";
 
@@ -427,68 +389,12 @@ export function TrackList(_props: TrackListProps) {
                 />
             </Table>
             {selectedView === "playlist" && selectedPlaylist ? (
-                <View className="px-3 py-2 flex-row items-center justify-end gap-2 border-t border-border-primary">
-                    <Button
-                        size="small"
-                        variant="secondary"
-                        disabled={!canGenerateAIPlaylist}
-                        className={!canGenerateAIPlaylist ? "opacity-50" : undefined}
-                        onClick={() => void handleGenerateAIPlaylist()}
-                    >
-                        {isGeneratingAI ? "Generating..." : "Auto"}
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="secondary"
-                        disabled={!canGenerateAIPlaylist}
-                        className={!canGenerateAIPlaylist ? "opacity-50" : undefined}
-                        onClick={() => setIsAIPromptOpen(true)}
-                    >
-                        Prompt
-                    </Button>
-                </View>
-            ) : null}
-            {isAIPromptOpen ? (
-                <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
-                    <View className="w-[440px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
-                        <View className="gap-1">
-                            <Text className="text-base font-semibold text-text-primary">Prompt</Text>
-                            <Text className="text-xs text-text-secondary" numberOfLines={2}>
-                                {selectedPlaylist?.name ?? "Playlist"}
-                            </Text>
-                        </View>
-                        <TextInput
-                            multiline
-                            value={aiPrompt}
-                            onChangeText={setAIPrompt}
-                            placeholder="More upbeat, less acoustic, similar era..."
-                            placeholderTextColor="rgba(255,255,255,0.35)"
-                            className="min-h-28 rounded-md border border-border-primary bg-black/20 px-3 py-2 text-sm text-text-primary"
-                            textAlignVertical="top"
-                        />
-                        <View className="flex-row justify-end gap-2">
-                            <Button
-                                size="small"
-                                variant="secondary"
-                                onClick={() => {
-                                    setIsAIPromptOpen(false);
-                                    setAIPrompt("");
-                                }}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                size="small"
-                                variant="accent"
-                                disabled={!trimmedAIPrompt}
-                                className={!trimmedAIPrompt ? "opacity-50" : undefined}
-                                onClick={handleSubmitAIPrompt}
-                            >
-                                Generate
-                            </Button>
-                        </View>
-                    </View>
-                </View>
+                <AIButtons
+                    canUseAI={isPlaylistEditable}
+                    libraryTracks={libraryTracks}
+                    onAddTracks={handleAddAITracksToPlaylist}
+                    playlist={selectedPlaylist}
+                />
             ) : null}
         </View>
     );

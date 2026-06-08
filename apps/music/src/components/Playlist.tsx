@@ -2,6 +2,7 @@ import { LegendList } from "@legendapp/list/react-native";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { type ElementRef, useCallback, useMemo, useRef, useState } from "react";
 import { findNodeHandle, type GestureResponderEvent, Platform, StyleSheet, Text, UIManager, View } from "react-native";
+import { AIButtons, type AIButtonsAddResult } from "@/components/AIButtons";
 import { Button } from "@/components/Button";
 import { localAudioControls, localPlayerState$, type QueuedTrack, queue$ } from "@/components/LocalAudioPlayer";
 import { showToast } from "@/components/Toast";
@@ -17,7 +18,7 @@ import {
 } from "@legend-desktop/drag-drop";
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "@/systems/audioFormats";
 import { DEBUG_PLAYLIST_LOGS } from "@/systems/constants";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
 import {
     createLocalTrackFromFile,
     DEFAULT_LOCAL_PLAYLIST_ID,
@@ -90,6 +91,24 @@ export function Playlist() {
     const hasConfiguredLibrary = libraryPaths.length > 0;
     const hasLibraryTracks = localMusicState.tracks.length > 0;
     const isDefaultPlaylistSelected = localMusicState.isLocalFilesSelected;
+    const queueAIPlaylist = useMemo<LocalPlaylist>(
+        () => ({
+            id: "__queue__",
+            name: "Queue",
+            filePath: "",
+            trackPaths: queueTracks.map((track) => track.filePath),
+            tracks: queueTracks.map((track) => ({
+                id: track.id,
+                title: track.title,
+                artist: track.artist,
+                filePath: track.filePath,
+                duration: -1,
+            })),
+            trackCount: queueTracks.length,
+            source: "cache",
+        }),
+        [queueTracks],
+    );
     const existingTrackPathSet = useMemo(() => {
         const set = new Set<string>();
         for (const track of localMusicState.tracks) {
@@ -299,6 +318,39 @@ export function Playlist() {
         perfLog("Playlist.openLibraryFromEmptyState");
         stateSaved$.libraryIsOpen.set(true);
     }, []);
+
+    const handleAddAITracksToQueue = useCallback(
+        (tracksToAdd: LocalTrack[]): AIButtonsAddResult => {
+            if (tracksToAdd.length === 0) {
+                return { addedCount: 0, targetName: "Queue" };
+            }
+
+            const startIndex = queueTracks.length;
+            localAudioControls.queue.append(tracksToAdd, { playImmediately: false });
+            const addedQueueEntryIds = queue$.tracks
+                .peek()
+                .slice(startIndex, startIndex + tracksToAdd.length)
+                .map((track) => track.queueEntryId);
+            let undo: (() => void) | undefined;
+            if (addedQueueEntryIds.length > 0) {
+                undo = () => {
+                    const idSet = new Set(addedQueueEntryIds);
+                    const indices = queue$.tracks
+                        .peek()
+                        .map((track, index) => (idSet.has(track.queueEntryId) ? index : -1))
+                        .filter((index) => index >= 0);
+                    localAudioControls.queue.remove(indices);
+                };
+            }
+
+            return {
+                addedCount: addedQueueEntryIds.length,
+                targetName: "Queue",
+                undo,
+            };
+        },
+        [queueTracks.length],
+    );
 
     const toWindowCoordinates = useCallback((location: { x: number; y: number }) => {
         const rect = dropAreaWindowRectRef.current;
@@ -831,7 +883,7 @@ export function Playlist() {
 
     return (
         <View
-            className="flex-1"
+            className="flex-1 relative"
             style={styles.flex}
             onStartShouldSetResponderCapture={(event) => {
                 handlePlaylistBackgroundMouseDown(event);
@@ -942,6 +994,12 @@ export function Playlist() {
                     </>
                 )}
             </DragDropView>
+            <AIButtons
+                canUseAI
+                libraryTracks={localMusicState.tracks}
+                onAddTracks={handleAddAITracksToQueue}
+                playlist={queueAIPlaylist}
+            />
         </View>
     );
 }
