@@ -8,7 +8,6 @@ import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
 const DEFAULT_HOTKEYS = {
     Search: KeyCodes.KEY_J,
     ToggleLibrary: KeyCodes.KEY_L,
-    ToggleVisualizer: KeyCodes.KEY_V,
     PlayPause: KeyCodes.KEY_MEDIA_PLAY_PAUSE,
     PlayPauseSpace: KeyCodes.KEY_SPACE,
     NextTrack: KeyCodes.KEY_MEDIA_NEXT,
@@ -30,9 +29,6 @@ export const HotkeyMetadata: Record<HotkeyName, { description: string; repeat?: 
     },
     ToggleLibrary: {
         description: "Toggle media library",
-    },
-    ToggleVisualizer: {
-        description: "Toggle visualizer window",
     },
     PlayPause: {
         description: "Toggle playback",

@@ -68,7 +68,7 @@ describe("AppMenuController", () => {
         stateSaved$.libraryIsOpen.set(false);
     });
 
-    it("configures the migrated music menus without visualizer commands", () => {
+    it("configures the migrated music menus", () => {
         const renderer = renderController();
 
         expect(configureMenus).toHaveBeenCalledTimes(1);
@@ -91,7 +91,6 @@ describe("AppMenuController", () => {
             "playbackToggleShuffle",
             "playbackToggleRepeat",
         ]);
-        expect(itemIds).not.toContain("toggleVisualizer");
         expect(menus.find((menu) => menu.id === "playback")?.placement).toEqual({ before: "Window" });
 
         act(() => {

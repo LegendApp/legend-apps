@@ -34,7 +34,6 @@ export type PlaybackControlId =
     | "repeat"
     | "search"
     | "savePlaylist"
-    | "toggleVisualizer"
     | "toggleLibrary"
     | "spacer";
 
@@ -124,7 +123,6 @@ export const settings$ = createObservableFile<AppSettings>({
                     "spacer",
                     "search",
                     "savePlaylist",
-                    "toggleVisualizer",
                     "toggleLibrary",
                 ],
             },

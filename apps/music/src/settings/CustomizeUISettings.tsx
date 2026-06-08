@@ -76,13 +76,6 @@ const PLAYBACK_CONTROL_DEFINITIONS: ControlDefinition<PlaybackControlId>[] = [
         icon: "square.and.arrow.down",
     },
     {
-        id: "toggleVisualizer",
-        label: "Visualizer",
-        // description: "Show or hide the visualizer",
-        iconMarginTop: -4,
-        icon: "waveform",
-    },
-    {
         id: "toggleLibrary",
         label: "Library",
         // description: "Open or close the media library",
