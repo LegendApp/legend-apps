@@ -1,16 +1,16 @@
-import type { LocalPlaylist } from "@/systems/LocalMusicState";
 import type { PlaylistAICatalog } from "./libraryCatalog";
+import type { PlaylistAIContext } from "./playlistContext";
 
 export type BuildPlaylistExtensionPromptOptions = {
     catalog: PlaylistAICatalog;
-    playlist: LocalPlaylist;
+    playlist: PlaylistAIContext;
     targetCount: number;
     userPrompt?: string;
 };
 
 const maxPlaylistContextTracks = 80;
 
-function formatPlaylistTrackLines(playlist: LocalPlaylist): string {
+function formatPlaylistTrackLines(playlist: PlaylistAIContext): string {
     const entries = playlist.tracks ?? [];
     const lines =
         entries.length > 0

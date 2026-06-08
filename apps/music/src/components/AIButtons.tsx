@@ -1,10 +1,12 @@
-import { useCallback, useState } from "react";
+import { getAICommandAvailability } from "@legend-desktop/ai";
+import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import { Button } from "@/components/Button";
 import { showToast } from "@/components/Toast";
 import { generatePlaylistExtension } from "@/systems/ai/playlistGeneration";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import type { PlaylistAIContext } from "@/systems/ai/playlistContext";
+import type { LocalTrack } from "@/systems/LocalMusicState";
 
 export type AIButtonsAddResult = {
     addedCount: number;
@@ -16,20 +18,42 @@ export type AIButtonsProps = {
     canUseAI: boolean;
     libraryTracks: LocalTrack[];
     onAddTracks: (tracks: LocalTrack[]) => Promise<AIButtonsAddResult> | AIButtonsAddResult;
-    playlist: LocalPlaylist;
+    playlist: PlaylistAIContext;
 };
 
 export function AIButtons({ canUseAI, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
     const [isPromptOpen, setIsPromptOpen] = useState(false);
     const [prompt, setPrompt] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
+    const [hasAITool, setHasAITool] = useState(false);
     const trimmedPrompt = prompt.trim();
-    const canAutoGenerate = canUseAI && playlist.trackPaths.length > 0 && !isGenerating;
-    const canPromptGenerate = canUseAI && !isGenerating;
+    const canGenerate = canUseAI && hasAITool && !isGenerating;
+    const canAutoGenerate = canGenerate && playlist.trackPaths.length > 0;
+    const canPromptGenerate = canGenerate;
+
+    useEffect(() => {
+        let isMounted = true;
+
+        getAICommandAvailability()
+            .then((availability) => {
+                if (isMounted) {
+                    setHasAITool(Boolean(availability.preferredTool));
+                }
+            })
+            .catch(() => {
+                if (isMounted) {
+                    setHasAITool(false);
+                }
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     const handleGenerate = useCallback(
         async (userPrompt?: string) => {
-            if (!canUseAI || isGenerating) {
+            if (!canGenerate) {
                 return;
             }
 
@@ -64,7 +88,7 @@ export function AIButtons({ canUseAI, libraryTracks, onAddTracks, playlist }: AI
                 setIsGenerating(false);
             }
         },
-        [canUseAI, isGenerating, libraryTracks, onAddTracks, playlist],
+        [canGenerate, libraryTracks, onAddTracks, playlist],
     );
 
     const handleSubmitPrompt = useCallback(() => {

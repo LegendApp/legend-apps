@@ -4,15 +4,16 @@ import {
     type AIToolRunResult,
 } from "@legend-desktop/ai";
 import { commandRunner, type CommandRunner } from "@legend-desktop/command-runner";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "@/systems/LocalMusicState";
 import { buildPlaylistAICatalog } from "./libraryCatalog";
 import { parsePlaylistAISuggestions } from "./parser";
+import type { PlaylistAIContext } from "./playlistContext";
 import { buildPlaylistExtensionPrompt } from "./playlistPrompts";
 import { resolvePlaylistAISuggestions } from "./resolver";
 
 export type GeneratePlaylistExtensionOptions = {
     libraryTracks: LocalTrack[];
-    playlist: LocalPlaylist;
+    playlist: PlaylistAIContext;
     runner?: CommandRunner;
     targetCount?: number;
     timeoutMs?: number;

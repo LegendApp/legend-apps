@@ -16,9 +16,10 @@ import {
     type TrackDragEvent,
     TrackDragSource,
 } from "@legend-desktop/drag-drop";
+import type { PlaylistAIContext } from "@/systems/ai/playlistContext";
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "@/systems/audioFormats";
 import { DEBUG_PLAYLIST_LOGS } from "@/systems/constants";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "@/systems/LocalMusicState";
 import {
     createLocalTrackFromFile,
     DEFAULT_LOCAL_PLAYLIST_ID,
@@ -91,11 +92,9 @@ export function Playlist() {
     const hasConfiguredLibrary = libraryPaths.length > 0;
     const hasLibraryTracks = localMusicState.tracks.length > 0;
     const isDefaultPlaylistSelected = localMusicState.isLocalFilesSelected;
-    const queueAIPlaylist = useMemo<LocalPlaylist>(
+    const queueAIPlaylist = useMemo<PlaylistAIContext>(
         () => ({
-            id: "__queue__",
             name: "Queue",
-            filePath: "",
             trackPaths: queueTracks.map((track) => track.filePath),
             tracks: queueTracks.map((track) => ({
                 id: track.id,
@@ -105,7 +104,6 @@ export function Playlist() {
                 duration: -1,
             })),
             trackCount: queueTracks.length,
-            source: "cache",
         }),
         [queueTracks],
     );
