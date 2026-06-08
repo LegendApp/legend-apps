@@ -13,6 +13,7 @@ const manifest = {
     macos: [
       "@legend-desktop/app-exit",
       "@legend-desktop/auto-updater",
+      "@legend-desktop/command-runner",
       "@legend-desktop/audio-player",
       "@legend-desktop/appkit-split-view",
       "@legend-desktop/native-menu",

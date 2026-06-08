@@ -7,6 +7,10 @@ export type KitchenSinkTestConfig = KitchenSinkTest & {
 
 export const packages: KitchenSinkPackage[] = [
   {
+    id: "ai",
+    title: "AI",
+  },
+  {
     id: "app-exit",
     title: "App Exit",
   },
@@ -97,6 +101,16 @@ export const packages: KitchenSinkPackage[] = [
 ];
 
 export const tests: KitchenSinkTestConfig[] = [
+  {
+    id: "ai-command-runner",
+    packageId: "ai",
+    title: "Command Runner",
+  },
+  {
+    id: "ai-tool-runner",
+    packageId: "ai",
+    title: "AI Tool Runner",
+  },
   {
     id: "app-exit-events",
     packageId: "app-exit",
