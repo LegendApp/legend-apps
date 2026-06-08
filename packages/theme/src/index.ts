@@ -10,6 +10,9 @@ export {
 
 export type {
   LegendTheme,
+  LegendThemeBackground,
+  LegendThemeBackgroundSource,
+  LegendThemeBackgroundTint,
   LegendThemeColors,
   LegendThemeFile,
   LegendThemeName,
@@ -52,6 +55,38 @@ function isThemeColorValue(value: unknown, allowAuto = false): value is string {
   return typeof value === "string" && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value);
 }
 
+function isThemeBackgroundSource(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+
+  if (value.type === "none") {
+    return true;
+  }
+
+  if (value.type === "color") {
+    return isThemeColorValue(value.color);
+  }
+
+  if (value.type === "image") {
+    return typeof value.imagePath === "string";
+  }
+
+  return false;
+}
+
+function isThemeBackground(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const { glassEnabled, opacity, source, tint } = value;
+  const isOpacityValid = typeof opacity === "number" && opacity >= 0 && opacity <= 1;
+  const isTintValid = isRecord(tint) && typeof tint.enabled === "boolean" && isThemeColorValue(tint.color);
+
+  return typeof glassEnabled === "boolean" && isOpacityValid && isThemeBackgroundSource(source) && isTintValid;
+}
+
 export function isLegendThemeFile(value: unknown): value is LegendThemeFile {
   if (!isRecord(value) || typeof value.name !== "string" || value.name.length === 0 || !isRecord(value.colors)) {
     return false;
@@ -60,7 +95,7 @@ export function isLegendThemeFile(value: unknown): value is LegendThemeFile {
   const { colors } = value;
   return requiredColorNames.every((colorName) =>
     isThemeColorValue(colors[colorName], colorName === "selection"),
-  );
+  ) && (value.background === undefined || isThemeBackground(value.background));
 }
 
 function createLegendTheme(theme: LegendThemeFile): LegendTheme {
@@ -232,6 +267,66 @@ export function replaceUserLegendThemeFiles(themeFiles: readonly LegendThemeFile
 
 export function getLegendThemeFiles(): LegendThemeFile[] {
   return Array.from(legendThemeFileMap.values());
+}
+
+export type ThemeStorageEntry = {
+  name: string;
+};
+
+export type ThemeStorage = {
+  ensureDirectory(relativePath?: string): { name: string; uri: string };
+  list(relativePath?: string, options?: { extension?: string }): ThemeStorageEntry[];
+  read<T = unknown>(relativePath: string, options: { format: "json" }): T | undefined;
+};
+
+export type UserThemeLoadIssue = {
+  filename: string;
+  message: string;
+};
+
+export type UserThemeLoadResult = {
+  directoryUri: string;
+  issues: UserThemeLoadIssue[];
+  themes: LegendThemeFile[];
+};
+
+export type LoadUserThemeFilesOptions = {
+  directory?: string;
+  replaceRegisteredUserThemes?: boolean;
+  storage: ThemeStorage;
+};
+
+export function loadUserThemeFilesSync({
+  directory: directoryPath = "themes",
+  replaceRegisteredUserThemes = true,
+  storage,
+}: LoadUserThemeFilesOptions): UserThemeLoadResult {
+  const directory = storage.ensureDirectory(directoryPath);
+  const issues: UserThemeLoadIssue[] = [];
+  const themes: LegendThemeFile[] = [];
+
+  try {
+    for (const entry of storage.list(directoryPath, { extension: ".json" })) {
+      try {
+        const parsed = storage.read(`${directoryPath}/${entry.name}`, { format: "json" });
+        if (isLegendThemeFile(parsed)) {
+          themes.push(parsed);
+        } else {
+          issues.push({ filename: entry.name, message: "Theme file is missing required fields or valid colors." });
+        }
+      } catch (error) {
+        issues.push({ filename: entry.name, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  } catch (error) {
+    issues.push({ filename: directory.name, message: error instanceof Error ? error.message : String(error) });
+  }
+
+  if (replaceRegisteredUserThemes) {
+    replaceUserLegendThemeFiles(themes);
+  }
+
+  return { directoryUri: directory.uri, issues, themes };
 }
 
 export function getLegendTheme(themeName: string | null | undefined): LegendTheme {

@@ -2,9 +2,10 @@ import { PortalProvider } from "@gorhom/portal";
 import { useMount } from "@legendapp/state/react";
 import type React from "react";
 import { useRef } from "react";
-import { LogBox, StyleSheet, View } from "react-native";
+import { LogBox } from "react-native";
 import { DragDropProvider } from "@/components/dnd";
 import { MainContainer } from "@/components/MainContainer";
+import { MusicBackground } from "@/components/MusicBackground";
 import { TitleBar } from "@/components/TitleBar";
 import { ToastProvider } from "@/components/Toast";
 import { TooltipProvider } from "@/components/TooltipProvider";
@@ -76,7 +77,7 @@ function App(): React.JSX.Element {
                 <HookKeyboard />
                 <GlobalHotkeyManager />
                 <AppMenuController />
-                <View className="flex-1" style={styles.root} onLayout={handleFirstLayout}>
+                <MusicBackground onLayout={handleFirstLayout}>
                     <PortalProvider>
                         <ToastProvider />
                         <TooltipProvider>
@@ -85,7 +86,7 @@ function App(): React.JSX.Element {
                             </DragDropProvider>
                         </TooltipProvider>
                     </PortalProvider>
-                </View>
+                </MusicBackground>
                 <TitleBar />
                 <MediaLibraryWindowManager />
                 <SettingsWindowManager />
@@ -95,11 +96,5 @@ function App(): React.JSX.Element {
         </WindowProvider>
     );
 }
-
-const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-    },
-});
 
 export default App;

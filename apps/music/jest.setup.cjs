@@ -175,6 +175,7 @@ jest.mock("@legend-desktop/drag-drop", () => ({
 
 jest.mock("@legend-desktop/file-dialog", () => ({
     __esModule: true,
+    openFileDialog: jest.fn(async () => null),
     selectDirectory: jest.fn(async () => null),
     showInFinder: jest.fn(async () => false),
 }));

@@ -1,0 +1,16 @@
+{
+  "name": "@legend-desktop/appearance-settings",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "dependencies": {
+    "@legend-desktop/classnames": "0.0.0",
+    "@legend-desktop/settings-window": "0.0.0",
+    "@legend-desktop/theme": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

@@ -30,7 +30,7 @@ export function Table({ header, className, bodyClassName, children }: PropsWithC
     return (
         <View
             className={cn(
-                "flex-1 min-h-0 bg-background-secondary border border-border-primary rounded-md overflow-hidden",
+                "flex-1 min-h-0 bg-background-secondary/80 border border-border-primary rounded-md overflow-hidden",
                 className,
             )}
         >

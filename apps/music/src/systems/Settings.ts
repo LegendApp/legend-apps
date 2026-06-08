@@ -1,4 +1,5 @@
 import { createObservableFile } from "@legend-desktop/storage";
+import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-desktop/theme";
 import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
 import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
 
@@ -46,6 +47,13 @@ export interface UISettingsConfig {
     playback: UIControlLayout<PlaybackControlId>;
 }
 
+export type MusicThemeSetting = string;
+
+export interface MusicAppearanceSettings {
+    background: LegendThemeBackground;
+    theme: MusicThemeSetting;
+}
+
 export interface AppSettings {
     state: {
         sidebarWidth: number;
@@ -69,10 +77,85 @@ export interface AppSettings {
         registrationType?: "legendkit" | "standalone";
     };
     overlay: OverlaySettingsConfig;
+    appearance: MusicAppearanceSettings;
     playback: PlaybackSettingsConfig;
     ui: UISettingsConfig;
     uniqueId: string;
     isAuthed: boolean;
+}
+
+export const defaultMusicBackground: LegendThemeBackground = {
+    glassEnabled: false,
+    opacity: 1,
+    source: {
+        type: "none",
+    },
+    tint: {
+        color: "#00000044",
+        enabled: false,
+    },
+};
+
+export const defaultMusicAppearance: MusicAppearanceSettings = {
+    background: defaultMusicBackground,
+    theme: "dark",
+};
+
+function isColor(value: unknown): value is string {
+    return typeof value === "string" && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value);
+}
+
+function normalizeBackgroundSource(value: unknown): LegendThemeBackgroundSource {
+    if (!value || typeof value !== "object") {
+        return defaultMusicBackground.source;
+    }
+
+    const source = value as Partial<LegendThemeBackgroundSource>;
+    if (source.type === "color" && isColor(source.color)) {
+        return {
+            color: source.color,
+            type: "color",
+        };
+    }
+
+    if (source.type === "image" && typeof source.imagePath === "string") {
+        return {
+            imagePath: source.imagePath,
+            type: "image",
+        };
+    }
+
+    return {
+        type: "none",
+    };
+}
+
+export function normalizeMusicAppearanceSettings(value: unknown): MusicAppearanceSettings {
+    const settings = value && typeof value === "object" ? value as Partial<MusicAppearanceSettings> : {};
+    const background = settings.background && typeof settings.background === "object"
+        ? settings.background as Partial<LegendThemeBackground>
+        : {};
+    const tint = background.tint && typeof background.tint === "object"
+        ? background.tint as Partial<LegendThemeBackground["tint"]>
+        : {};
+    const opacity = typeof background.opacity === "number" ? Math.max(0, Math.min(1, background.opacity)) : 1;
+
+    return {
+        background: {
+            glassEnabled: typeof background.glassEnabled === "boolean"
+                ? background.glassEnabled
+                : defaultMusicBackground.glassEnabled,
+            opacity,
+            source: normalizeBackgroundSource(background.source),
+            tint: {
+                color: isColor(tint.color) ? tint.color : defaultMusicBackground.tint.color,
+                enabled: typeof tint.enabled === "boolean" ? tint.enabled : defaultMusicBackground.tint.enabled,
+            },
+        },
+        theme: typeof settings.theme === "string" && settings.theme.length > 0
+            ? settings.theme
+            : defaultMusicAppearance.theme,
+    };
 }
 
 export const settings$ = createObservableFile<AppSettings>({
@@ -109,6 +192,7 @@ export const settings$ = createObservableFile<AppSettings>({
                 horizontal: "center",
             },
         },
+        appearance: defaultMusicAppearance,
         playback: {
             shuffle: false,
             repeatMode: "off",
@@ -132,3 +216,12 @@ export const settings$ = createObservableFile<AppSettings>({
     },
     subfolder: "data",
 });
+
+export function ensureMusicAppearanceSettings() {
+    const current = settings$.appearance.get();
+    const normalized = normalizeMusicAppearanceSettings(current);
+    if (JSON.stringify(current) !== JSON.stringify(normalized)) {
+        settings$.appearance.set(normalized);
+    }
+    return normalized;
+}

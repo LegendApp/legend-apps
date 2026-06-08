@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@gorhom/portal": "^1.0.14",
+    "@legend-desktop/appearance-settings": "workspace:*",
     "@legend-desktop/app-exit": "0.0.0",
     "@legend-desktop/appkit-split-view": "0.0.0",
     "@legend-desktop/classnames": "0.0.0",

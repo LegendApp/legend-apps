@@ -1,7 +1,8 @@
+import { ThemeSelectorSection } from "@legend-desktop/appearance-settings";
 import { getLegendThemeFiles } from "@legend-desktop/theme";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
 import { useMemo, useSyncExternalStore } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import {
   getMarkdownContentWidthSetting,
   getMarkdownDocumentDensitySetting,
@@ -28,7 +29,10 @@ import { RadioOption } from "./RadioOption";
 
 export function AppearanceSettingsPage() {
   const userThemeLoadResult = useMemo(() => loadMarkdownUserThemesSync({ force: true }), []);
-  const themeOptions = useMemo(() => getLegendThemeFiles(), [userThemeLoadResult]);
+  const themeOptions = useMemo(
+    () => getLegendThemeFiles().map((theme) => ({ label: theme.name, value: theme.name })),
+    [userThemeLoadResult],
+  );
   const selectedTheme = useSyncExternalStore(
     subscribeToMarkdownSettings,
     getMarkdownThemeSetting,
@@ -62,28 +66,13 @@ export function AppearanceSettingsPage() {
 
   return (
     <SettingsPage>
-      <SettingsSection card={false} first title="Theme">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          {themeOptions.map((theme) => (
-            <RadioOption<MarkdownThemeSetting>
-              key={theme.name}
-              label={theme.name}
-              onSelect={setMarkdownThemeSetting}
-              selected={selectedTheme === theme.name}
-              value={theme.name}
-            />
-          ))}
-        </View>
-        {userThemeLoadResult.issues.length > 0 ? (
-          <View className="gap-1">
-            {userThemeLoadResult.issues.map((issue) => (
-              <Text className="text-sm text-text-secondary" key={`${issue.filename}-${issue.message}`}>
-                {issue.filename}: {issue.message}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-      </SettingsSection>
+      <ThemeSelectorSection
+        first
+        issues={userThemeLoadResult.issues}
+        onThemeChange={setMarkdownThemeSetting}
+        selectedTheme={selectedTheme}
+        themes={themeOptions}
+      />
       <SettingsSection card={false} title="Font">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownFontFamilySetting>

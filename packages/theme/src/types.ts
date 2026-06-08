@@ -25,7 +25,33 @@ export type LegendThemeColors = {
   windowBackground: string;
 };
 
+export type LegendThemeBackgroundSource =
+  | {
+    type: "none";
+  }
+  | {
+    color: string;
+    type: "color";
+  }
+  | {
+    imagePath: string;
+    type: "image";
+  };
+
+export type LegendThemeBackgroundTint = {
+  color: string;
+  enabled: boolean;
+};
+
+export type LegendThemeBackground = {
+  glassEnabled: boolean;
+  opacity: number;
+  source: LegendThemeBackgroundSource;
+  tint: LegendThemeBackgroundTint;
+};
+
 export type LegendThemeFile = {
+  background?: LegendThemeBackground;
   name: LegendThemeName;
   colors: LegendThemeColors;
 };

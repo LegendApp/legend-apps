@@ -25,6 +25,7 @@
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/app-exit": "0.0.0",
+        "@legend-desktop/appearance-settings": "workspace:*",
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/classnames": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
@@ -52,6 +53,7 @@
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/ai": "0.0.0",
         "@legend-desktop/app-exit": "0.0.0",
+        "@legend-desktop/appearance-settings": "workspace:*",
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/audio-player": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
@@ -132,6 +134,19 @@
     "packages/app-exit": {
       "name": "@legend-desktop/app-exit",
       "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/appearance-settings": {
+      "name": "@legend-desktop/appearance-settings",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/classnames": "0.0.0",
+        "@legend-desktop/settings-window": "0.0.0",
+        "@legend-desktop/theme": "workspace:*",
+      },
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
@@ -779,6 +794,8 @@
     "@legend-desktop/app-music": ["@legend-desktop/app-music@workspace:apps/music"],
 
     "@legend-desktop/app-test-kitchen-sink": ["@legend-desktop/app-test-kitchen-sink@workspace:apps/test-kitchen-sink"],
+
+    "@legend-desktop/appearance-settings": ["@legend-desktop/appearance-settings@workspace:packages/appearance-settings"],
 
     "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
 
