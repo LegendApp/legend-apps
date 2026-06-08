@@ -18,6 +18,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/command-runner",
+    root: path.join(packagesDir, "command-runner"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/appkit-split-view",
     root: path.join(packagesDir, "appkit-split-view"),
     platforms: ["macos", "ios", "android"],
