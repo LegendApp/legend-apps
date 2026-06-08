@@ -154,6 +154,14 @@
         "tailwind-merge": "^3.4.0",
       },
     },
+    "packages/command-runner": {
+      "name": "@legend-desktop/command-runner",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/context-menu": {
       "name": "@legend-desktop/context-menu",
       "version": "0.0.0",
@@ -762,6 +770,8 @@
     "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
 
     "@legend-desktop/classnames": ["@legend-desktop/classnames@workspace:packages/classnames"],
+
+    "@legend-desktop/command-runner": ["@legend-desktop/command-runner@workspace:packages/command-runner"],
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
 
