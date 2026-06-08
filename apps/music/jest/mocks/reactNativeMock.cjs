@@ -43,6 +43,10 @@ module.exports = {
     },
     Text: createComponent("Text"),
     TextInput: createComponent("TextInput"),
+    TurboModuleRegistry: {
+        get: jest.fn(() => null),
+        getEnforcing: jest.fn(() => ({})),
+    },
     UIManager: {
         measureInWindow: jest.fn(),
     },
