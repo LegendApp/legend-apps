@@ -1,0 +1,14 @@
+{
+  "name": "@legend-desktop/ai",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/command-runner": "0.0.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}
