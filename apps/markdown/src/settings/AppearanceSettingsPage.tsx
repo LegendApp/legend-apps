@@ -1,6 +1,7 @@
+import { getLegendThemeFiles } from "@legend-desktop/theme";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
-import { useSyncExternalStore } from "react";
-import { View } from "react-native";
+import { useMemo, useSyncExternalStore } from "react";
+import { Text, View } from "react-native";
 import {
   getMarkdownContentWidthSetting,
   getMarkdownDocumentDensitySetting,
@@ -22,9 +23,12 @@ import {
   type MarkdownLineHeightSetting,
   type MarkdownThemeSetting,
 } from "../markdownSettings";
+import { loadMarkdownUserThemesSync } from "../userThemes";
 import { RadioOption } from "./RadioOption";
 
 export function AppearanceSettingsPage() {
+  const userThemeLoadResult = useMemo(() => loadMarkdownUserThemesSync({ force: true }), []);
+  const themeOptions = useMemo(() => getLegendThemeFiles(), [userThemeLoadResult]);
   const selectedTheme = useSyncExternalStore(
     subscribeToMarkdownSettings,
     getMarkdownThemeSetting,
@@ -60,25 +64,25 @@ export function AppearanceSettingsPage() {
     <SettingsPage>
       <SettingsSection card={false} first title="Theme">
         <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownThemeSetting>
-            label="Light"
-            onSelect={setMarkdownThemeSetting}
-            selected={selectedTheme === "light"}
-            value="light"
-          />
-          <RadioOption<MarkdownThemeSetting>
-            label="Dark"
-            onSelect={setMarkdownThemeSetting}
-            selected={selectedTheme === "dark"}
-            value="dark"
-          />
-          <RadioOption<MarkdownThemeSetting>
-            label="Grey"
-            onSelect={setMarkdownThemeSetting}
-            selected={selectedTheme === "grey"}
-            value="grey"
-          />
+          {themeOptions.map((theme) => (
+            <RadioOption<MarkdownThemeSetting>
+              key={theme.name}
+              label={theme.name}
+              onSelect={setMarkdownThemeSetting}
+              selected={selectedTheme === theme.name}
+              value={theme.name}
+            />
+          ))}
         </View>
+        {userThemeLoadResult.issues.length > 0 ? (
+          <View className="gap-1">
+            {userThemeLoadResult.issues.map((issue) => (
+              <Text className="text-sm text-text-secondary" key={`${issue.filename}-${issue.message}`}>
+                {issue.filename}: {issue.message}
+              </Text>
+            ))}
+          </View>
+        ) : null}
       </SettingsSection>
       <SettingsSection card={false} title="Font">
         <View accessibilityRole="radiogroup" className="gap-2">
@@ -152,7 +156,7 @@ export function AppearanceSettingsPage() {
           />
         </View>
       </SettingsSection>
-      <SettingsSection card={false} title="Content Width">
+      <SettingsSection card={false} title="Maximum Document Width">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownContentWidthSetting>
             label="Narrow"

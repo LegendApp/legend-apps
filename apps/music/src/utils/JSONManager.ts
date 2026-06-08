@@ -1,15 +1,30 @@
 import {
-    createJSONManager as createSharedJSONManager,
+    createObservableFile,
+    createStorage,
     getPersistPlugin,
-    type CreateJSONManagerOptions,
-} from "@legend-desktop/app-settings";
+    type StorageRoot,
+} from "@legend-desktop/storage";
 import type { Observable } from "@legendapp/state";
 import type { SyncTransform } from "@legendapp/state/sync";
 
-import { type ExpoFSPersistPluginOptions, observablePersistExpoFS } from "@/utils/ExpoFSPersistPlugin";
+type StorageBasePath = "Cache";
+
+const storageByRoot = new Map<StorageRoot, ReturnType<typeof createStorage>>();
+
+function getMusicStorage(basePath?: StorageBasePath) {
+    const root: StorageRoot = basePath === "Cache" ? "cache" : "applicationSupport";
+    const cachedStorage = storageByRoot.get(root);
+    if (cachedStorage) {
+        return cachedStorage;
+    }
+
+    const storage = createStorage({ namespace: "data", root });
+    storageByRoot.set(root, storage);
+    return storage;
+}
 
 export function createJSONManager<T extends object>(params: {
-    basePath?: ExpoFSPersistPluginOptions["basePath"];
+    basePath?: StorageBasePath;
     filename: string;
     initialValue: T;
     saveDefaultToFile?: boolean;
@@ -28,18 +43,16 @@ export function createJSONManager<T extends object>(params: {
         saveTimeout = 300,
         transform,
     } = params;
-    return createSharedJSONManager<T>({
+    return createObservableFile<T>({
         filename,
         initialValue,
-        persistPlugin: observablePersistExpoFS({
-            basePath,
-            preload: preload === false ? undefined : Array.isArray(preload) ? preload : [filename],
-            saveTimeout,
-            format,
-        }),
+        preload,
         saveDefaultToFile,
+        saveTimeout,
+        storage: getMusicStorage(basePath),
         transform,
-    } satisfies CreateJSONManagerOptions<T>);
+        format,
+    });
 }
 
 export { getPersistPlugin };

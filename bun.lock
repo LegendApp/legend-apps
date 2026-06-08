@@ -37,6 +37,7 @@
         "@legend-desktop/recent-documents": "0.0.0",
         "@legend-desktop/reorder-controls": "0.0.0",
         "@legend-desktop/settings-window": "0.0.0",
+        "@legend-desktop/storage": "0.0.0",
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
@@ -71,6 +72,7 @@
         "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/sidebar": "0.0.0",
+        "@legend-desktop/storage": "0.0.0",
         "@legend-desktop/text-input-search": "0.0.0",
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/window-controls": "0.0.0",
@@ -360,6 +362,18 @@
     "packages/sidebar": {
       "name": "@legend-desktop/sidebar",
       "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/storage": {
+      "name": "@legend-desktop/storage",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legendapp/state": "^3.0.0-beta.42",
+        "expo-file-system": "~19.0.21",
+      },
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
@@ -804,6 +818,8 @@
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
 
     "@legend-desktop/sidebar": ["@legend-desktop/sidebar@workspace:packages/sidebar"],
+
+    "@legend-desktop/storage": ["@legend-desktop/storage@workspace:packages/storage"],
 
     "@legend-desktop/text-input-search": ["@legend-desktop/text-input-search@workspace:packages/text-input-search"],
 

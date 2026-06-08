@@ -1,6 +1,5 @@
-import { createNativeSettingsPersistPlugin } from "@legend-desktop/app-settings";
-import { observable } from "@legendapp/state";
-import { synced } from "@legendapp/state/sync";
+import { createObservableFile } from "@legend-desktop/storage";
+import { markdownStorage } from "./markdownStorage";
 
 const maxRecentFiles = 20;
 
@@ -14,17 +13,13 @@ type MarkdownAppMetadata = {
   recentFiles: RecentMarkdownFile[];
 };
 
-export const markdownAppMetadata$ = observable<MarkdownAppMetadata>(
-  synced({
-    initial: {
-      recentFiles: [],
-    },
-    persist: {
-      name: "app-metadata",
-      plugin: createNativeSettingsPersistPlugin({ prefix: "legend.markdown." }),
-    },
-  }),
-);
+export const markdownAppMetadata$ = createObservableFile<MarkdownAppMetadata>({
+  filename: "app-metadata",
+  initialValue: {
+    recentFiles: [],
+  },
+  storage: markdownStorage,
+});
 
 export function getMarkdownFileTitle(path: string) {
   return path.split("/").pop() ?? path;

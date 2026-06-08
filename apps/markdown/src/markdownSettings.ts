@@ -1,6 +1,6 @@
+import { getLegendUniwindThemeName } from "@legend-desktop/theme";
 import { parseHotkey, type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
-import { createNativeSettingsValue, createSettingsSubscription } from "@legend-desktop/app-settings";
-import { Settings } from "react-native";
+import { createObservableFile } from "@legend-desktop/storage";
 import { Uniwind, type ThemeName } from "uniwind";
 import {
   defaultMarkdownHotkeySettings,
@@ -13,22 +13,9 @@ import {
   type MarkdownToolbarLayout,
   type MarkdownToolbarLayoutId,
 } from "./markdownToolbarLayout";
+import { markdownStorage } from "./markdownStorage";
 
-const themeSettingsKey = "legend-markdown.settings.theme";
-const startupBehaviorSettingsKey = "legend-markdown.settings.startupBehavior";
-const autosaveSettingsKey = "legend-markdown.settings.autosave";
-const formattingToolbarModeSettingsKey = "legend-markdown.settings.formattingToolbarMode";
-const topToolbarLayoutSettingsKey = "legend-markdown.settings.toolbarLayout.top";
-const selectionToolbarLayoutSettingsKey = "legend-markdown.settings.toolbarLayout.selection";
-const lastDocumentPathSettingsKey = "legend-markdown.settings.lastDocumentPath";
-const fontFamilySettingsKey = "legend-markdown.settings.fontFamily";
-const fontSizeSettingsKey = "legend-markdown.settings.fontSize";
-const lineHeightSettingsKey = "legend-markdown.settings.lineHeight";
-const contentWidthSettingsKey = "legend-markdown.settings.contentWidth";
-const documentDensitySettingsKey = "legend-markdown.settings.documentDensity";
-const hotkeysSettingsKey = "legend-markdown.settings.hotkeys";
-
-export type MarkdownThemeSetting = "light" | "dark" | "grey";
+export type MarkdownThemeSetting = string;
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
 export type MarkdownAutosaveSetting = "enabled" | "disabled";
 export type MarkdownFormattingToolbarModeSetting = "selection" | "top" | "hidden";
@@ -54,11 +41,52 @@ export type {
 
 const fontSizeOrder: MarkdownFontSizeSetting[] = ["small", "default", "large", "xlarge"];
 
-const settingsSubscription = createSettingsSubscription();
-const notifyMarkdownSettingsChanged = settingsSubscription.notify;
+type MarkdownSettingsFile = {
+  autosave: MarkdownAutosaveSetting;
+  contentWidth: MarkdownContentWidthSetting;
+  density: MarkdownDocumentDensitySetting;
+  fontFamily: MarkdownFontFamilySetting;
+  fontSize: MarkdownFontSizeSetting;
+  formattingToolbarMode: MarkdownFormattingToolbarModeSetting;
+  hotkeys: Partial<HotkeyState<MarkdownHotkeyId>>;
+  lastDocumentPath: string | null;
+  lineHeight: MarkdownLineHeightSetting;
+  selectionToolbarLayout: MarkdownToolbarLayout;
+  startupBehavior: MarkdownStartupBehaviorSetting;
+  theme: MarkdownThemeSetting;
+  topToolbarLayout: MarkdownToolbarLayout;
+};
+
+const initialMarkdownSettings: MarkdownSettingsFile = {
+  autosave: "enabled",
+  contentWidth: "standard",
+  density: "comfortable",
+  fontFamily: "system",
+  fontSize: "default",
+  formattingToolbarMode: "selection",
+  hotkeys: {},
+  lastDocumentPath: null,
+  lineHeight: "normal",
+  selectionToolbarLayout: getDefaultMarkdownToolbarLayout("selection"),
+  startupBehavior: "newDocument",
+  theme: "light",
+  topToolbarLayout: getDefaultMarkdownToolbarLayout("top"),
+};
+
+const markdownSettings$ = createObservableFile<MarkdownSettingsFile>({
+  filename: "settings",
+  initialValue: initialMarkdownSettings,
+  storage: markdownStorage,
+});
+
+const settingsSubscribers = new Set<() => void>();
+
+function notifyMarkdownSettingsChanged() {
+  settingsSubscribers.forEach((listener) => listener());
+}
 
 function isMarkdownThemeSetting(value: unknown): value is MarkdownThemeSetting {
-  return value === "light" || value === "dark" || value === "grey";
+  return typeof value === "string" && value.length > 0;
 }
 
 function isMarkdownStartupBehaviorSetting(value: unknown): value is MarkdownStartupBehaviorSetting {
@@ -93,64 +121,6 @@ function isMarkdownDocumentDensitySetting(value: unknown): value is MarkdownDocu
   return value === "compact" || value === "comfortable" || value === "spacious";
 }
 
-const themeSetting = createNativeSettingsValue<MarkdownThemeSetting>({
-  afterSet: (theme) => {
-    Uniwind.setTheme(theme as ThemeName);
-  },
-  defaultValue: "light",
-  isValue: isMarkdownThemeSetting,
-  key: themeSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const startupBehaviorSetting = createNativeSettingsValue<MarkdownStartupBehaviorSetting>({
-  defaultValue: "newDocument",
-  isValue: isMarkdownStartupBehaviorSetting,
-  key: startupBehaviorSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const autosaveSetting = createNativeSettingsValue<MarkdownAutosaveSetting>({
-  defaultValue: "enabled",
-  isValue: isMarkdownAutosaveSetting,
-  key: autosaveSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const formattingToolbarModeSetting = createNativeSettingsValue<MarkdownFormattingToolbarModeSetting>({
-  defaultValue: "selection",
-  isValue: isMarkdownFormattingToolbarModeSetting,
-  key: formattingToolbarModeSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const fontFamilySetting = createNativeSettingsValue<MarkdownFontFamilySetting>({
-  defaultValue: "system",
-  isValue: isMarkdownFontFamilySetting,
-  key: fontFamilySettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const fontSizeSetting = createNativeSettingsValue<MarkdownFontSizeSetting>({
-  defaultValue: "default",
-  isValue: isMarkdownFontSizeSetting,
-  key: fontSizeSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const lineHeightSetting = createNativeSettingsValue<MarkdownLineHeightSetting>({
-  defaultValue: "normal",
-  isValue: isMarkdownLineHeightSetting,
-  key: lineHeightSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const contentWidthSetting = createNativeSettingsValue<MarkdownContentWidthSetting>({
-  defaultValue: "standard",
-  isValue: isMarkdownContentWidthSetting,
-  key: contentWidthSettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-const documentDensitySetting = createNativeSettingsValue<MarkdownDocumentDensitySetting>({
-  defaultValue: "comfortable",
-  isValue: isMarkdownDocumentDensitySetting,
-  key: documentDensitySettingsKey,
-  notify: notifyMarkdownSettingsChanged,
-});
-
 let cachedAppearanceSettings: MarkdownAppearanceSettings | null = null;
 let cachedHotkeySettings: HotkeyState<MarkdownHotkeyId> | null = null;
 let cachedHotkeySettingsSource: string | null = null;
@@ -158,39 +128,50 @@ let cachedToolbarLayoutSettings: Partial<Record<MarkdownToolbarLayoutId, Markdow
 let cachedToolbarLayoutSettingsSource: Partial<Record<MarkdownToolbarLayoutId, string>> = {};
 
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
-  return themeSetting.get();
+  const theme = markdownSettings$.theme.get();
+  return isMarkdownThemeSetting(theme) ? theme : initialMarkdownSettings.theme;
 }
 
 export function getMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
-  return startupBehaviorSetting.get();
+  const startupBehavior = markdownSettings$.startupBehavior.get();
+  return isMarkdownStartupBehaviorSetting(startupBehavior) ? startupBehavior : initialMarkdownSettings.startupBehavior;
 }
 
 export function getMarkdownAutosaveSetting(): MarkdownAutosaveSetting {
-  return autosaveSetting.get();
+  const autosave = markdownSettings$.autosave.get();
+  return isMarkdownAutosaveSetting(autosave) ? autosave : initialMarkdownSettings.autosave;
 }
 
 export function getMarkdownFormattingToolbarModeSetting(): MarkdownFormattingToolbarModeSetting {
-  return formattingToolbarModeSetting.get();
+  const formattingToolbarMode = markdownSettings$.formattingToolbarMode.get();
+  return isMarkdownFormattingToolbarModeSetting(formattingToolbarMode)
+    ? formattingToolbarMode
+    : initialMarkdownSettings.formattingToolbarMode;
 }
 
 export function getMarkdownFontFamilySetting(): MarkdownFontFamilySetting {
-  return fontFamilySetting.get();
+  const fontFamily = markdownSettings$.fontFamily.get();
+  return isMarkdownFontFamilySetting(fontFamily) ? fontFamily : initialMarkdownSettings.fontFamily;
 }
 
 export function getMarkdownFontSizeSetting(): MarkdownFontSizeSetting {
-  return fontSizeSetting.get();
+  const fontSize = markdownSettings$.fontSize.get();
+  return isMarkdownFontSizeSetting(fontSize) ? fontSize : initialMarkdownSettings.fontSize;
 }
 
 export function getMarkdownLineHeightSetting(): MarkdownLineHeightSetting {
-  return lineHeightSetting.get();
+  const lineHeight = markdownSettings$.lineHeight.get();
+  return isMarkdownLineHeightSetting(lineHeight) ? lineHeight : initialMarkdownSettings.lineHeight;
 }
 
 export function getMarkdownContentWidthSetting(): MarkdownContentWidthSetting {
-  return contentWidthSetting.get();
+  const contentWidth = markdownSettings$.contentWidth.get();
+  return isMarkdownContentWidthSetting(contentWidth) ? contentWidth : initialMarkdownSettings.contentWidth;
 }
 
 export function getMarkdownDocumentDensitySetting(): MarkdownDocumentDensitySetting {
-  return documentDensitySetting.get();
+  const density = markdownSettings$.density.get();
+  return isMarkdownDocumentDensitySetting(density) ? density : initialMarkdownSettings.density;
 }
 
 export function getMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
@@ -227,33 +208,10 @@ function isHotkeyValue(value: unknown): value is HotkeyValue | null {
   return parseHotkey(value as HotkeyValue).length > 0;
 }
 
-function readStoredMarkdownHotkeys() {
-  const value = Settings.get(hotkeysSettingsKey);
-  if (typeof value === "string" && value.length > 0) {
-    try {
-      return JSON.parse(value) as unknown;
-    } catch {
-      return undefined;
-    }
-  }
-  return value;
-}
-
-function getMarkdownToolbarLayoutSettingsKey(layoutId: MarkdownToolbarLayoutId) {
-  return layoutId === "top" ? topToolbarLayoutSettingsKey : selectionToolbarLayoutSettingsKey;
-}
-
 function readStoredMarkdownToolbarLayout(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout | undefined {
-  const value = Settings.get(getMarkdownToolbarLayoutSettingsKey(layoutId));
-  let parsedValue: unknown = value;
-
-  if (typeof value === "string" && value.length > 0) {
-    try {
-      parsedValue = JSON.parse(value) as unknown;
-    } catch {
-      parsedValue = undefined;
-    }
-  }
+  const parsedValue = layoutId === "top"
+    ? markdownSettings$.topToolbarLayout.get()
+    : markdownSettings$.selectionToolbarLayout.get();
 
   if (parsedValue && typeof parsedValue === "object" && Array.isArray((parsedValue as { shown?: unknown }).shown)) {
     return parsedValue as MarkdownToolbarLayout;
@@ -263,7 +221,7 @@ function readStoredMarkdownToolbarLayout(layoutId: MarkdownToolbarLayoutId): Mar
 }
 
 export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
-  const stored = readStoredMarkdownHotkeys();
+  const stored = markdownSettings$.hotkeys.get();
   const source = JSON.stringify(stored ?? null);
   if (cachedHotkeySettings && cachedHotkeySettingsSource === source) {
     return cachedHotkeySettings;
@@ -303,36 +261,46 @@ export function getMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutI
 }
 
 export function getLastMarkdownDocumentPath() {
-  const value = Settings.get(lastDocumentPathSettingsKey);
+  const value = markdownSettings$.lastDocumentPath.get();
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 export function subscribeToMarkdownSettings(listener: () => void) {
-  return settingsSubscription.subscribe(listener);
+  settingsSubscribers.add(listener);
+  return () => {
+    settingsSubscribers.delete(listener);
+  };
 }
 
 export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
-  themeSetting.set(theme);
+  markdownSettings$.theme.set(theme);
+  Uniwind.setTheme(getLegendUniwindThemeName(theme) as ThemeName);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
-  startupBehaviorSetting.set(startupBehavior);
+  markdownSettings$.startupBehavior.set(startupBehavior);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownAutosaveSetting(autosave: MarkdownAutosaveSetting) {
-  autosaveSetting.set(autosave);
+  markdownSettings$.autosave.set(autosave);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownFormattingToolbarModeSetting(formattingToolbarMode: MarkdownFormattingToolbarModeSetting) {
-  formattingToolbarModeSetting.set(formattingToolbarMode);
+  markdownSettings$.formattingToolbarMode.set(formattingToolbarMode);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownFontFamilySetting(fontFamily: MarkdownFontFamilySetting) {
-  fontFamilySetting.set(fontFamily);
+  markdownSettings$.fontFamily.set(fontFamily);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownFontSizeSetting(fontSize: MarkdownFontSizeSetting) {
-  fontSizeSetting.set(fontSize);
+  markdownSettings$.fontSize.set(fontSize);
+  notifyMarkdownSettingsChanged();
 }
 
 export function increaseMarkdownFontSizeSetting() {
@@ -352,15 +320,18 @@ export function resetMarkdownFontSizeSetting() {
 }
 
 export function setMarkdownLineHeightSetting(lineHeight: MarkdownLineHeightSetting) {
-  lineHeightSetting.set(lineHeight);
+  markdownSettings$.lineHeight.set(lineHeight);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownContentWidthSetting(contentWidth: MarkdownContentWidthSetting) {
-  contentWidthSetting.set(contentWidth);
+  markdownSettings$.contentWidth.set(contentWidth);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownDocumentDensitySetting(density: MarkdownDocumentDensitySetting) {
-  documentDensitySetting.set(density);
+  markdownSettings$.density.set(density);
+  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValue | null) {
@@ -370,7 +341,7 @@ export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValu
   };
   cachedHotkeySettings = nextSettings;
   cachedHotkeySettingsSource = JSON.stringify(nextSettings);
-  Settings.set({ [hotkeysSettingsKey]: cachedHotkeySettingsSource });
+  markdownSettings$.hotkeys.set(nextSettings);
   notifyMarkdownSettingsChanged();
 }
 
@@ -383,9 +354,11 @@ export function setMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutI
 
   cachedToolbarLayoutSettings[layoutId] = nextLayout;
   cachedToolbarLayoutSettingsSource[layoutId] = source;
-  Settings.set({
-    [getMarkdownToolbarLayoutSettingsKey(layoutId)]: source,
-  });
+  if (layoutId === "top") {
+    markdownSettings$.topToolbarLayout.set(nextLayout);
+  } else {
+    markdownSettings$.selectionToolbarLayout.set(nextLayout);
+  }
   notifyMarkdownSettingsChanged();
 }
 
@@ -394,16 +367,18 @@ export function resetMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayou
 }
 
 export function setLastMarkdownDocumentPath(path: string) {
-  Settings.set({ [lastDocumentPathSettingsKey]: path });
+  markdownSettings$.lastDocumentPath.set(path);
+  notifyMarkdownSettingsChanged();
 }
 
 export function clearLastMarkdownDocumentPath(path?: string) {
   const currentPath = getLastMarkdownDocumentPath();
   if (!path || currentPath === path) {
-    Settings.set({ [lastDocumentPathSettingsKey]: null });
+    markdownSettings$.lastDocumentPath.set(null);
+    notifyMarkdownSettingsChanged();
   }
 }
 
 export function applyMarkdownThemeSetting() {
-  Uniwind.setTheme(getMarkdownThemeSetting() as ThemeName);
+  Uniwind.setTheme(getLegendUniwindThemeName(getMarkdownThemeSetting()) as ThemeName);
 }

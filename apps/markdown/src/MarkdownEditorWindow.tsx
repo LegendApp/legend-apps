@@ -39,11 +39,13 @@ import {
   getMarkdownLayoutForAppearance,
   getMarkdownStyleForAppearance,
 } from "./markdownAppearance";
+import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
 };
 
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
+  loadMarkdownUserThemesSync();
   const session = useMarkdownDocumentSession();
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   const themeSetting = useSyncExternalStore(

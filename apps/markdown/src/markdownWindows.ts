@@ -14,6 +14,9 @@ import {
 } from "./appConstants";
 import { getMarkdownThemeSetting } from "./markdownSettings";
 import { SettingsWindow } from "./SettingsWindow";
+import { loadMarkdownUserThemesSync } from "./userThemes";
+
+loadMarkdownUserThemesSync();
 
 function createMarkdownEditorWindowStyle({
   backgroundColor,

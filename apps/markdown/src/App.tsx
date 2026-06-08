@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 import { applyMarkdownThemeSetting } from "./markdownSettings";
+import { loadMarkdownUserThemesSync } from "./userThemes";
 import {
   openMarkdownEditorWindow,
   registerMarkdownWindows,
 } from "./markdownWindows";
 
+loadMarkdownUserThemesSync();
 registerMarkdownWindows();
 
 type MarkdownAppProps = {

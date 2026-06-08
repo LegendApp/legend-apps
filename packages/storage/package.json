@@ -1,0 +1,28 @@
+{
+  "name": "@legend-desktop/storage",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNStorageSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.legenddesktop.storage"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeStorage": "RNStorage"
+      }
+    }
+  },
+  "dependencies": {
+    "@legendapp/state": "^3.0.0-beta.42",
+    "expo-file-system": "~19.0.21"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

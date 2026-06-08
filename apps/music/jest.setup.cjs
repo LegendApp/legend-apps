@@ -257,6 +257,37 @@ jest.mock("@legend-desktop/text-input-search", () => ({
     TextInputSearch: ReactNative.TextInput,
 }));
 
+jest.mock("@legend-desktop/storage", () => {
+    const { observable } = require("@legendapp/state");
+    const plugins = new WeakMap();
+
+    return {
+        __esModule: true,
+        createObservableFile: jest.fn(({ initialValue }) => {
+            const obs$ = observable(initialValue);
+            plugins.set(obs$, {
+                flush: jest.fn(async () => {}),
+            });
+            return obs$;
+        }),
+        createStorage: jest.fn(() => ({
+            delete: jest.fn(),
+            directory: jest.fn(),
+            ensureDirectory: jest.fn(),
+            file: jest.fn(),
+            list: jest.fn(() => []),
+            read: jest.fn(),
+            root: {},
+            write: jest.fn(),
+        })),
+        getApplicationSupportDirectory: jest.fn(() => ({})),
+        getPersistPlugin: jest.fn((obs$) => plugins.get(obs$)),
+        observablePersistStorage: jest.fn(() => ({
+            flush: jest.fn(async () => {}),
+        })),
+    };
+});
+
 jest.mock("@legendapp/motion", () => ({
     __esModule: true,
     AnimatePresence: ({ children }) => children,
@@ -310,24 +341,6 @@ jest.mock("@shopify/react-native-skia", () => ({
         XYWHRect: jest.fn(() => ({})),
     },
 }), { virtual: true });
-
-jest.mock("@/utils/ExpoFSPersistPlugin", () => {
-    const plugin = {
-        deleteMetadata: jest.fn(),
-        deleteTable: jest.fn(),
-        flush: jest.fn(async () => {}),
-        getMetadata: () => ({}),
-        getTable: (_table, init) => init ?? {},
-        initialize: jest.fn(),
-        set: jest.fn(async () => {}),
-        setMetadata: jest.fn(async () => {}),
-    };
-
-    return {
-        __esModule: true,
-        observablePersistExpoFS: jest.fn(() => plugin),
-    };
-});
 
 jest.mock("@/utils/cacheDirectories", () => {
     const FileSystem = require("expo-file-system/next");

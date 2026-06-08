@@ -188,32 +188,6 @@ jest.mock("@/utils/cacheDirectories", () => {
     };
 });
 
-jest.mock("@/utils/ExpoFSPersistPlugin", () => {
-    const tables: Record<string, any> = {};
-    const plugin = {
-        initialize: jest.fn(),
-        getTable: (table: string, init: object) => tables[table] ?? init ?? {},
-        getMetadata: (table: string) => tables[`${table}__m`] ?? {},
-        set: jest.fn(async (table: string) => {
-            tables[table] = tables[table] ?? {};
-        }),
-        setMetadata: jest.fn(async (table: string, value: any) => {
-            tables[`${table}__m`] = value;
-        }),
-        deleteTable: jest.fn((table: string) => {
-            delete tables[table];
-        }),
-        deleteMetadata: jest.fn((table: string) => {
-            delete tables[`${table}__m`];
-        }),
-    };
-
-    return {
-        __esModule: true,
-        observablePersistExpoFS: jest.fn(() => plugin),
-    };
-});
-
 jest.mock("@legend-desktop/media-library-scanner", () => ({
     __esModule: true,
     ...(() => {

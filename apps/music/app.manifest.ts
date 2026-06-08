@@ -26,6 +26,7 @@ const manifest = {
       "@legend-desktop/native-menu",
       "@legend-desktop/sf-symbol",
       "@legend-desktop/sidebar",
+      "@legend-desktop/storage",
       "@legend-desktop/appkit-split-view",
       "@legend-desktop/text-input-search",
       "@legend-desktop/window-controls",
