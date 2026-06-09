@@ -30,6 +30,33 @@ static inline NSAppearance *LegendDarkAppearance()
   return nil;
 }
 
+static NSAppearance *LegendAppearanceForName(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0 || [value isEqualToString:@"system"]) {
+    return nil;
+  }
+
+  if ([value isEqualToString:@"light"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  }
+
+  if ([value isEqualToString:@"dark"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua] ?: LegendDarkAppearance();
+  }
+
+  return nil;
+}
+
+static void LegendApplyWindowAppearance(NSWindow *window, NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return;
+  }
+
+  window.appearance = LegendAppearanceForName(value);
+  [window displayIfNeeded];
+}
+
 static void LegendApplyTitleVisibility(NSWindow *window, NSString *value)
 {
   if (![value isKindOfClass:NSString.class] || value.length == 0) {
@@ -285,10 +312,13 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
     return;
   }
 
+  BOOL hasTitle = LegendDictionaryHasKey(options, @"title");
   BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
   id representedURLValue = hasRepresentedURL ? options[@"representedURL"] : nil;
   NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
-  LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
+  if (hasTitle || hasRepresentedURL) {
+    LegendApplyWindowTitleAndRepresentedURL(window, title, hasRepresentedURL, representedURLValue, nil);
+  }
 
   NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
   NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
@@ -304,6 +334,9 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
     : nil;
   NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
     ? windowStyle[@"backgroundColor"]
+    : nil;
+  NSString *appearance = [windowStyle[@"appearance"] isKindOfClass:NSString.class]
+    ? windowStyle[@"appearance"]
     : nil;
   BOOL hasToolbarKey = LegendDictionaryHasKey(windowStyle, @"hasToolbar");
   BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
@@ -329,6 +362,7 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   }
   LegendApplyToolbarStyle(window, toolbarStyle);
   LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+  LegendApplyWindowAppearance(window, appearance);
   LegendApplyWindowBackgroundColor(window, backgroundColor);
 
   RCTUIView *rootView = LegendManagedRootView(window);
@@ -546,6 +580,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
       ? windowStyle[@"backgroundColor"]
       : nil;
+    NSString *appearance = [windowStyle[@"appearance"] isKindOfClass:NSString.class]
+      ? windowStyle[@"appearance"]
+      : nil;
     BOOL usesTitlebarBackground = transparentTitlebar.boolValue && backgroundColor.length > 0;
     NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
     BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
@@ -649,6 +686,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
       LegendApplyToolbarStyle(existingWindow, toolbarStyle);
       LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
+      LegendApplyWindowAppearance(existingWindow, appearance);
       LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
 
       if (levelNumber) {
@@ -674,7 +712,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
 
       LegendApplyWindowTitleAndRepresentedURL(existingWindow, title, hasRepresentedURL, representedURLValue, title);
-      if (darkAppearance) {
+      if (!appearance && darkAppearance) {
         existingWindow.appearance = darkAppearance;
       }
       existingWindow.delegate = self;
@@ -714,7 +752,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                                        defer:NO];
     LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
 
-    if (darkAppearance) {
+    if (appearance) {
+      LegendApplyWindowAppearance(window, appearance);
+    } else if (darkAppearance) {
       window.appearance = darkAppearance;
     }
     window.releasedWhenClosed = NO;
@@ -731,6 +771,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     LegendApplyToolbarStyle(window, toolbarStyle);
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+    LegendApplyWindowAppearance(window, appearance);
     LegendApplyWindowBackgroundColor(window, backgroundColor);
     if (levelNumber) {
       window.level = levelNumber.integerValue;
@@ -904,6 +945,30 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
 
     LegendApplyWindowOptions(mainWindow, [self parseObjectJSON:optionsJson]);
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setWindowOptions:(NSString *)identifier
+             optionsJson:(NSString *)optionsJson
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+
+    LegendApplyWindowOptions(window, [self parseObjectJSON:optionsJson]);
+    RCTUIView *rootView = self.rootViews[targetIdentifier];
+    LegendSizeRootViewToWindow(rootView, window);
     resolve([self successJson]);
   });
 #else

@@ -73,6 +73,7 @@ const windowLevelMap: Partial<Record<WindowLevel, number>> = {
 };
 
 export type WindowStyleOptions = {
+  appearance?: "system" | "light" | "dark";
   mask?: WindowStyleMask[];
   width?: number;
   height?: number;
@@ -129,6 +130,7 @@ export type WindowResult = {
 };
 
 export type MainWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
+export type TargetWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
 
 export type WindowClosedEvent = {
   identifier: string;
@@ -255,6 +257,15 @@ export function setMainWindowOptions(options: MainWindowOptions = {}): Promise<W
   );
 }
 
+export function setWindowOptions(identifier: string, options: TargetWindowOptions = {}): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.setWindowOptions(identifier, JSON.stringify(convertOptionsToNative(options))).then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function getMainWindowFrame(): Promise<WindowFrame> {
   if (Platform.OS !== "macos") {
     return Promise.resolve({ x: 0, y: 0, width: 0, height: 0 });
@@ -333,6 +344,7 @@ export function useWindowManager() {
     closeFrontmostWindow,
     showMainWindow,
     setMainWindowOptions,
+    setWindowOptions,
     getMainWindowFrame,
     setMainWindowFrame,
     setWindowBlur,

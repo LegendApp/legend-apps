@@ -5,6 +5,7 @@ import {
   type SidebarSplitViewResizeEvent,
 } from "@legend-desktop/appkit-split-view";
 import {
+  setWindowOptions,
   setWindowTitle,
   WindowStyleMask,
   type WindowOptions,
@@ -89,7 +90,7 @@ type SettingsWindowProps<PageId extends string = string> = {
 };
 
 function reportSettingsWindowError(error: unknown) {
-  console.error("Failed to update settings window title", error);
+  console.error("Failed to update settings window", error);
 }
 
 export function SettingsWindow<PageId extends string = string>({
@@ -116,6 +117,14 @@ export function SettingsWindow<PageId extends string = string>({
       setWindowTitle(windowIdentifier, selectedPageConfig.title).catch(reportSettingsWindowError);
     }
   }, [selectedPageConfig, windowIdentifier]);
+
+  useEffect(() => {
+    setWindowOptions(windowIdentifier, {
+      windowStyle: {
+        appearance,
+      },
+    }).catch(reportSettingsWindowError);
+  }, [appearance, windowIdentifier]);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
