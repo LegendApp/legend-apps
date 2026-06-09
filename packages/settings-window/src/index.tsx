@@ -2,7 +2,6 @@ import { cn } from "@legend-desktop/classnames";
 import {
   SidebarSplitView,
   type SidebarSplitViewAppearance,
-  type SidebarSplitViewResizeEvent,
 } from "@legend-desktop/appkit-split-view";
 import {
   setWindowOptions,
@@ -11,14 +10,13 @@ import {
   type WindowOptions,
 } from "@legend-desktop/window-manager";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  type NativeSyntheticEvent,
 } from "react-native";
 
 const SETTINGS_SIDEBAR_TOP_INSET = 52;
@@ -109,7 +107,6 @@ export function SettingsWindow<PageId extends string = string>({
     return pages.some((page) => page.id === initialPage) ? initialPage : fallback;
   }, [defaultPageId, initialPage, pages]);
   const [selectedPage, setSelectedPage] = useState<PageId | undefined>(initialSelectedPage);
-  const [paneMetrics, setPaneMetrics] = useState({ contentWidth: 0, height: 0, sidebarWidth: 0 });
   const selectedPageConfig = pages.find((page) => page.id === selectedPage) ?? pages[0];
 
   useEffect(() => {
@@ -126,27 +123,6 @@ export function SettingsWindow<PageId extends string = string>({
     }).catch(reportSettingsWindowError);
   }, [appearance, windowIdentifier]);
 
-  const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
-    const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
-    const nextHeight = Math.round(event.nativeEvent.height);
-    const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
-
-    if (nextContentWidth > 0 || nextHeight > 0 || nextSidebarWidth > 0) {
-      setPaneMetrics((current) => {
-        const next = {
-          contentWidth: nextContentWidth > 0 ? nextContentWidth : current.contentWidth,
-          height: nextHeight > 0 ? nextHeight : current.height,
-          sidebarWidth: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebarWidth,
-        };
-        return current.contentWidth === next.contentWidth &&
-          current.height === next.height &&
-          current.sidebarWidth === next.sidebarWidth
-          ? current
-          : next;
-      });
-    }
-  }, []);
-
   if (!selectedPageConfig || !selectedPage) {
     return null;
   }
@@ -156,21 +132,10 @@ export function SettingsWindow<PageId extends string = string>({
       appearance={appearance}
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
-      onSplitViewDidResize={handleSplitViewResize}
       sidebarMinWidth={sidebarMinWidth}
       style={styles.root}
     >
-      <View
-        className="flex-1"
-        style={[
-          styles.pane,
-          {
-            height: paneMetrics.height || undefined,
-            minHeight: paneMetrics.height || undefined,
-            width: paneMetrics.sidebarWidth || undefined,
-          },
-        ]}
-      >
+      <View className="flex-1" style={styles.pane}>
         <SettingsSidebar
           onSelectionChange={setSelectedPage}
           pages={pages}
@@ -178,15 +143,8 @@ export function SettingsWindow<PageId extends string = string>({
         />
       </View>
       <View
-        className={cn("flex-1", contentBackgroundClassName)}
-        style={[
-          styles.pane,
-          {
-            height: paneMetrics.height || undefined,
-            minHeight: paneMetrics.height || undefined,
-            width: paneMetrics.contentWidth || undefined,
-          },
-        ]}
+        className={cn("flex-1", 'bg-red-500')}
+        style={styles.pane}
       >
         {selectedPageConfig.render()}
       </View>
@@ -249,7 +207,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({ actions, children, contentClassName }: SettingsPageProps) {
   return (
-    <View className="flex-1 overflow-hidden" style={styles.page}>
+    <View className="flex-1 overflow-hidden bg-blue-500" style={styles.page}>
       {actions ? <View className="flex-row justify-end px-6 pt-4">{actions}</View> : null}
       <ScrollView
         className="flex-1"
@@ -365,8 +323,10 @@ export function SettingsRow({
 
 const styles = StyleSheet.create({
   page: {
+    alignSelf: "stretch",
     flex: 1,
     overflow: "hidden",
+    width: "100%",
   },
   pageContent: {
     alignSelf: "center",

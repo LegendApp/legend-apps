@@ -149,32 +149,41 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 
 - (void)syncReactSubviewFrames
 {
+  CGRect sidebarBounds = _sidebarContainer.bounds;
+  CGRect contentBounds = _contentContainer.bounds;
+
+  if (_splitViewController.splitView.subviews.count > 1) {
+    CGRect sidebarFrame = _splitViewController.splitView.subviews[0].frame;
+    CGRect contentFrame = _splitViewController.splitView.subviews[1].frame;
+    sidebarBounds = CGRectMake(0, 0, sidebarFrame.size.width, sidebarFrame.size.height);
+    contentBounds = CGRectMake(0, 0, contentFrame.size.width, contentFrame.size.height);
+  }
+
   [self syncReactSubview:_sidebarReactView
-             inContainer:_sidebarContainer
+             nativeBounds:sidebarBounds
     previousLayoutMetrics:&_sidebarReactLayoutMetrics];
   [self syncReactSubview:_contentReactView
-             inContainer:_contentContainer
+             nativeBounds:contentBounds
     previousLayoutMetrics:&_contentReactLayoutMetrics];
 }
 
 - (void)syncReactSubview:(nullable RCTUIView<RCTComponentViewProtocol> *)subview
-            inContainer:(NSView *)container
+            nativeBounds:(CGRect)nativeBounds
    previousLayoutMetrics:(LayoutMetrics *)previousLayoutMetrics
 {
   if (!subview) {
     return;
   }
 
-  CGRect bounds = container.bounds;
   subview.translatesAutoresizingMaskIntoConstraints = YES;
-  subview.frame = bounds;
+  subview.frame = nativeBounds;
   LayoutMetrics nextLayoutMetrics = _currentLayoutMetrics;
   if (nextLayoutMetrics == EmptyLayoutMetrics) {
     nextLayoutMetrics = LayoutMetrics{};
   }
   nextLayoutMetrics.frame = facebook::react::Rect{
     facebook::react::Point{0, 0},
-    facebook::react::Size{(Float)bounds.size.width, (Float)bounds.size.height},
+    facebook::react::Size{(Float)nativeBounds.size.width, (Float)nativeBounds.size.height},
   };
   nextLayoutMetrics.contentInsets = {};
   nextLayoutMetrics.borderWidth = {};
@@ -197,16 +206,22 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
     return;
   }
 
-  CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
-  CGFloat contentWidth = _contentContainer.bounds.size.width;
-  CGFloat height = MAX(_sidebarContainer.bounds.size.height, _contentContainer.bounds.size.height);
+  CGFloat sidebarWidth = 0;
+  CGFloat contentWidth = 0;
+  CGFloat height = 0;
 
-  if ((sidebarWidth <= 0 || contentWidth <= 0) && _splitViewController.splitView.subviews.count > 1) {
+  if (_splitViewController.splitView.subviews.count > 1) {
     sidebarWidth = _splitViewController.splitView.subviews[0].frame.size.width;
     contentWidth = _splitViewController.splitView.subviews[1].frame.size.width;
     height = MAX(
       _splitViewController.splitView.subviews[0].frame.size.height,
       _splitViewController.splitView.subviews[1].frame.size.height);
+  }
+
+  if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0) {
+    sidebarWidth = _sidebarContainer.bounds.size.width;
+    contentWidth = _contentContainer.bounds.size.width;
+    height = MAX(_sidebarContainer.bounds.size.height, _contentContainer.bounds.size.height);
   }
 
   if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0) {
@@ -274,7 +289,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
     _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
     [_sidebarContainer addSubview:childComponentView];
     [self syncReactSubview:_sidebarReactView
-               inContainer:_sidebarContainer
+               nativeBounds:_sidebarContainer.bounds
       previousLayoutMetrics:&_sidebarReactLayoutMetrics];
     dispatch_async(dispatch_get_main_queue(), ^{
       [self splitViewDidResize];
@@ -288,7 +303,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
     [_contentContainer addSubview:childComponentView];
     [self syncReactSubview:_contentReactView
-               inContainer:_contentContainer
+               nativeBounds:_contentContainer.bounds
       previousLayoutMetrics:&_contentReactLayoutMetrics];
     dispatch_async(dispatch_get_main_queue(), ^{
       [self splitViewDidResize];

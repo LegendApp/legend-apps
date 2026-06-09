@@ -1,8 +1,9 @@
-import { createElement, type ReactNode } from "react";
+import { Children, createElement, useCallback, useState, type ReactNode } from "react";
 import {
   NativeEventEmitter,
   Platform,
   StyleSheet,
+  View,
   type NativeSyntheticEvent,
   type ViewProps,
 } from "react-native";
@@ -33,26 +34,97 @@ export function SidebarSplitView({
   appearance = "system",
   children,
   contentMinWidth = 320,
+  onSplitViewDidResize,
   sidebarMinWidth = 180,
   style,
   ...props
 }: SidebarSplitViewProps) {
+  const [paneMetrics, setPaneMetrics] = useState({ contentWidth: 0, height: 0, sidebarWidth: 0 });
+  const panes = Children.toArray(children);
+
+  const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
+    const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
+    const nextHeight = Math.round(event.nativeEvent.height);
+    const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
+    console.log("[DEBUG-split-view] resize", JSON.stringify(event.nativeEvent));
+
+    if (nextContentWidth > 0 || nextHeight > 0 || nextSidebarWidth > 0) {
+      setPaneMetrics((current) => {
+        const next = {
+          contentWidth: nextContentWidth > 0 ? nextContentWidth : current.contentWidth,
+          height: nextHeight > 0 ? nextHeight : current.height,
+          sidebarWidth: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebarWidth,
+        };
+        return current.contentWidth === next.contentWidth &&
+          current.height === next.height &&
+          current.sidebarWidth === next.sidebarWidth
+          ? current
+          : next;
+      });
+    }
+
+    onSplitViewDidResize?.(event);
+  }, [onSplitViewDidResize]);
+
   return createElement(
     SidebarSplitViewNativeComponent,
     {
       appearance,
       contentMinWidth,
+      onSplitViewDidResize: handleSplitViewResize,
       sidebarMinWidth,
       style: [styles.root, style],
       ...props,
     },
-    children,
+    createElement(
+      View,
+      {
+        key: "sidebar",
+        onLayout: (event) => {
+          console.log("[DEBUG-split-view] sidebar layout", JSON.stringify(event.nativeEvent.layout));
+        },
+        style: [
+          styles.pane,
+          {
+            flex: paneMetrics.sidebarWidth ? 0 : 1,
+            height: paneMetrics.height || undefined,
+            minHeight: paneMetrics.height || undefined,
+            width: paneMetrics.sidebarWidth || undefined,
+          },
+        ],
+      },
+      panes[0],
+    ),
+    createElement(
+      View,
+      {
+        key: "content",
+        onLayout: (event) => {
+          console.log("[DEBUG-split-view] content layout", JSON.stringify(event.nativeEvent.layout));
+        },
+        style: [
+          styles.pane,
+          {
+            flex: paneMetrics.contentWidth ? 0 : 1,
+            height: paneMetrics.height || undefined,
+            minHeight: paneMetrics.height || undefined,
+            width: paneMetrics.contentWidth || undefined,
+          },
+        ],
+      },
+      panes[1],
+    ),
+    panes.slice(2),
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flexDirection: "row",
+  },
+  pane: {
+    flex: 1,
+    minWidth: 0,
   },
 });
 
