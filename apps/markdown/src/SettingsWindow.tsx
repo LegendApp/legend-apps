@@ -3,7 +3,10 @@ import {
   SettingsWindow as SharedSettingsWindow,
   type SettingsWindowPage,
 } from "@legend-desktop/settings-window";
+import { getLegendUniwindThemeName } from "@legend-desktop/theme";
+import { useSyncExternalStore } from "react";
 import { settingsWindowIdentifier } from "./appConstants";
+import { getMarkdownThemeSetting, subscribeToMarkdownSettings } from "./markdownSettings";
 import { AppearanceSettingsPage } from "./settings/AppearanceSettingsPage";
 import { GeneralSettingsPage } from "./settings/GeneralSettingsPage";
 import { HotkeysSettingsPage } from "./settings/HotkeysSettingsPage";
@@ -29,9 +32,17 @@ const pages: SettingsWindowPage<SettingsPage>[] = [
 
 export function SettingsWindow({ initialPage }: { initialPage?: string }) {
   const initialSettingsPage = initialPage && isSettingsPage(initialPage) ? initialPage : undefined;
+  const selectedTheme = useSyncExternalStore(
+    subscribeToMarkdownSettings,
+    getMarkdownThemeSetting,
+    getMarkdownThemeSetting,
+  );
+  const appearance = getLegendUniwindThemeName(selectedTheme) === "dark" ? "dark" : "light";
+
   return (
     <PortalProvider>
       <SharedSettingsWindow
+        appearance={appearance}
         initialPage={initialSettingsPage}
         pages={pages}
         windowIdentifier={settingsWindowIdentifier}

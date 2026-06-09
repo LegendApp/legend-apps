@@ -1,5 +1,9 @@
 import { cn } from "@legend-desktop/classnames";
-import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
+import {
+  SidebarSplitView,
+  type SidebarSplitViewAppearance,
+  type SidebarSplitViewResizeEvent,
+} from "@legend-desktop/appkit-split-view";
 import {
   setWindowTitle,
   WindowStyleMask,
@@ -73,6 +77,7 @@ export function createSettingsWindowOptions({
 }
 
 type SettingsWindowProps<PageId extends string = string> = {
+  appearance?: SidebarSplitViewAppearance;
   backgroundClassName?: string;
   contentBackgroundClassName?: string;
   contentMinWidth?: number;
@@ -88,6 +93,7 @@ function reportSettingsWindowError(error: unknown) {
 }
 
 export function SettingsWindow<PageId extends string = string>({
+  appearance = "system",
   backgroundClassName = "bg-background",
   contentBackgroundClassName = backgroundClassName,
   contentMinWidth = 360,
@@ -138,6 +144,7 @@ export function SettingsWindow<PageId extends string = string>({
 
   return (
     <SidebarSplitView
+      appearance={appearance}
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       onSplitViewDidResize={handleSplitViewResize}

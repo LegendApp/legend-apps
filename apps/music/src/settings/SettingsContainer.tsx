@@ -1,8 +1,10 @@
 import { PortalProvider } from "@gorhom/portal";
+import { useValue } from "@legendapp/state/react";
 import {
     SettingsWindow,
     type SettingsWindowPage,
 } from "@legend-desktop/settings-window";
+import { getLegendUniwindThemeName } from "@legend-desktop/theme";
 import { View } from "react-native";
 import { TooltipProvider } from "@/components/TooltipProvider";
 import { AccountSettings } from "@/settings/AccountSettings";
@@ -13,6 +15,7 @@ import { OpenSourceSettings } from "@/settings/OpenSourceSettings";
 import { OverlaySettings } from "@/settings/OverlaySettings";
 import { ThemeSettings } from "@/settings/ThemeSettings";
 import { SUPPORT_ACCOUNTS } from "@/systems/constants";
+import { normalizeMusicAppearanceSettings, settings$ } from "@/systems/Settings";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { ax } from "@/utils/ax";
 
@@ -35,6 +38,8 @@ function isSettingsPage(value: unknown): value is SettingsPage {
 
 export default function SettingsContainer({ initialPage }: { initialPage?: string }) {
     const initialSettingsPage = isSettingsPage(initialPage) ? initialPage : undefined;
+    const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
+    const splitViewAppearance = getLegendUniwindThemeName(appearanceSettings.theme) === "dark" ? "dark" : "light";
 
     return (
         <View className="flex-1" style={{ flex: 1 }}>
@@ -42,6 +47,7 @@ export default function SettingsContainer({ initialPage }: { initialPage?: strin
                 <PortalProvider>
                     <TooltipProvider>
                         <SettingsWindow
+                            appearance={splitViewAppearance}
                             backgroundClassName="bg-background-primary"
                             contentBackgroundClassName="bg-background-primary"
                             initialPage={initialSettingsPage}

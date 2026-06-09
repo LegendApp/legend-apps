@@ -8,6 +8,21 @@
 using namespace facebook::react;
 
 #if TARGET_OS_OSX
+static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceName)
+{
+  if ([appearanceName isEqualToString:@"light"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  }
+
+  if ([appearanceName isEqualToString:@"dark"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+  }
+
+  return nil;
+}
+#endif
+
+#if TARGET_OS_OSX
 @interface RNSidebarSplitViewComponent () <RCTSidebarSplitViewViewProtocol>
 @end
 #else
@@ -35,6 +50,7 @@ using namespace facebook::react;
   CGFloat _lastSidebarWidth;
   CGFloat _lastContentWidth;
   CGFloat _lastHeight;
+  NSString *_appearanceName;
 #else
   UIView *_sidebarContainer;
   UIView *_contentContainer;
@@ -55,6 +71,7 @@ using namespace facebook::react;
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
     _lastHeight = -1;
+    _appearanceName = @"system";
     _sidebarContainer = [NSView new];
     _contentContainer = [NSView new];
     _sidebarContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -82,6 +99,7 @@ using namespace facebook::react;
     _splitViewController.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [_splitViewController addSplitViewItem:_sidebarItem];
     [_splitViewController addSplitViewItem:_contentItem];
+    [self applyAppearance];
 
     _resizeObserver = [[NSNotificationCenter defaultCenter]
       addObserverForName:NSSplitViewDidResizeSubviewsNotification
@@ -113,6 +131,20 @@ using namespace facebook::react;
   _sidebarItem.minimumThickness = MAX(120, _sidebarMinWidth);
   _sidebarItem.preferredThicknessFraction = 0.26;
   _contentItem.minimumThickness = MAX(240, _contentMinWidth);
+}
+
+- (void)applyAppearance
+{
+  NSAppearance *appearance = RNSidebarSplitViewAppearanceForName(_appearanceName);
+  self.appearance = appearance;
+  _splitViewController.view.appearance = appearance;
+  _splitViewController.splitView.appearance = appearance;
+  _sidebarContainer.appearance = appearance;
+  _contentContainer.appearance = appearance;
+  [_splitViewController.view setNeedsDisplay:YES];
+  [_splitViewController.splitView setNeedsDisplay:YES];
+  [_sidebarContainer setNeedsDisplay:YES];
+  [_contentContainer setNeedsDisplay:YES];
 }
 
 - (void)syncReactSubviewFrames
@@ -310,8 +342,16 @@ using namespace facebook::react;
   const auto &newProps = *std::static_pointer_cast<SidebarSplitViewProps const>(props);
 
 #if TARGET_OS_OSX
+  NSString *nextAppearanceName = [NSString stringWithUTF8String:newProps.appearance.c_str()];
+  if (nextAppearanceName.length == 0) {
+    nextAppearanceName = @"system";
+  }
   _sidebarMinWidth = newProps.sidebarMinWidth;
   _contentMinWidth = newProps.contentMinWidth;
+  if (![_appearanceName isEqualToString:nextAppearanceName]) {
+    _appearanceName = nextAppearanceName;
+    [self applyAppearance];
+  }
   [self updateSplitItemSizing];
 #endif
 
@@ -395,6 +435,8 @@ using namespace facebook::react;
   _lastSidebarWidth = -1;
   _lastContentWidth = -1;
   _lastHeight = -1;
+  _appearanceName = @"system";
+  [self applyAppearance];
   [self updateSplitItemSizing];
 #else
   for (UIView *subview in _sidebarContainer.subviews) {

@@ -18,8 +18,10 @@ export type AppKitSplitViewMenuAction =
 export type KitchenSinkPackage = NativeMenuPackage;
 export type KitchenSinkTest = NativeMenuTest;
 export type { SidebarSplitViewResizeEvent };
+export type SidebarSplitViewAppearance = "system" | "light" | "dark";
 
 export interface SidebarSplitViewProps extends ViewProps {
+  appearance?: SidebarSplitViewAppearance;
   children?: ReactNode;
   className?: string;
   contentMinWidth?: number;
@@ -28,6 +30,7 @@ export interface SidebarSplitViewProps extends ViewProps {
 }
 
 export function SidebarSplitView({
+  appearance = "system",
   children,
   contentMinWidth = 320,
   sidebarMinWidth = 180,
@@ -37,6 +40,7 @@ export function SidebarSplitView({
   return createElement(
     SidebarSplitViewNativeComponent,
     {
+      appearance,
       contentMinWidth,
       sidebarMinWidth,
       style: [styles.root, style],
