@@ -46,7 +46,6 @@ export function SidebarSplitView({
     const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
     const nextHeight = Math.round(event.nativeEvent.height);
     const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
-    console.log("[DEBUG-split-view] resize", JSON.stringify(event.nativeEvent));
 
     if (nextContentWidth > 0 || nextHeight > 0 || nextSidebarWidth > 0) {
       setPaneMetrics((current) => {
@@ -80,9 +79,6 @@ export function SidebarSplitView({
       View,
       {
         key: "sidebar",
-        onLayout: (event) => {
-          console.log("[DEBUG-split-view] sidebar layout", JSON.stringify(event.nativeEvent.layout));
-        },
         style: [
           styles.pane,
           {
@@ -99,9 +95,6 @@ export function SidebarSplitView({
       View,
       {
         key: "content",
-        onLayout: (event) => {
-          console.log("[DEBUG-split-view] content layout", JSON.stringify(event.nativeEvent.layout));
-        },
         style: [
           styles.pane,
           {
@@ -119,12 +112,13 @@ export function SidebarSplitView({
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flexDirection: "row",
-  },
+  root: {},
   pane: {
     flex: 1,
+    left: 0,
     minWidth: 0,
+    position: "absolute",
+    top: 0,
   },
 });
 

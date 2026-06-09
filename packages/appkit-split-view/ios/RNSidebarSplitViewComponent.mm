@@ -152,13 +152,6 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   CGRect sidebarBounds = _sidebarContainer.bounds;
   CGRect contentBounds = _contentContainer.bounds;
 
-  if (_splitViewController.splitView.subviews.count > 1) {
-    CGRect sidebarFrame = _splitViewController.splitView.subviews[0].frame;
-    CGRect contentFrame = _splitViewController.splitView.subviews[1].frame;
-    sidebarBounds = CGRectMake(0, 0, sidebarFrame.size.width, sidebarFrame.size.height);
-    contentBounds = CGRectMake(0, 0, contentFrame.size.width, contentFrame.size.height);
-  }
-
   [self syncReactSubview:_sidebarReactView
              nativeBounds:sidebarBounds
     previousLayoutMetrics:&_sidebarReactLayoutMetrics];
@@ -210,19 +203,9 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   CGFloat contentWidth = 0;
   CGFloat height = 0;
 
-  if (_splitViewController.splitView.subviews.count > 1) {
-    sidebarWidth = _splitViewController.splitView.subviews[0].frame.size.width;
-    contentWidth = _splitViewController.splitView.subviews[1].frame.size.width;
-    height = MAX(
-      _splitViewController.splitView.subviews[0].frame.size.height,
-      _splitViewController.splitView.subviews[1].frame.size.height);
-  }
-
-  if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0) {
-    sidebarWidth = _sidebarContainer.bounds.size.width;
-    contentWidth = _contentContainer.bounds.size.width;
-    height = MAX(_sidebarContainer.bounds.size.height, _contentContainer.bounds.size.height);
-  }
+  sidebarWidth = _sidebarContainer.bounds.size.width;
+  contentWidth = _contentContainer.bounds.size.width;
+  height = MAX(_sidebarContainer.bounds.size.height, _contentContainer.bounds.size.height);
 
   if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0) {
     return;
@@ -259,11 +242,28 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   return bounds;
 }
 
+- (void)applyDividerPositionForBounds:(CGRect)bounds
+{
+  if (bounds.size.width <= 0 || _splitViewController.splitView.subviews.count < 2) {
+    return;
+  }
+
+  CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
+  CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness;
+  CGFloat sidebarWidth = MIN(_sidebarMinWidth, maxSidebarWidth);
+  if (sidebarWidth <= 0) {
+    return;
+  }
+
+  [_splitViewController.splitView setPosition:sidebarWidth ofDividerAtIndex:0];
+}
+
 - (void)layoutSplitView
 {
   CGRect bounds = [self currentLayoutBounds];
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
+  [self applyDividerPositionForBounds:bounds];
   [_splitViewController.splitView adjustSubviews];
   [_splitViewController.view layoutSubtreeIfNeeded];
   [self splitViewDidResize];
