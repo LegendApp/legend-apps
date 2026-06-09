@@ -221,7 +221,7 @@ export function SettingsSidebar<PageId extends string = string>({
               accessibilityState={{ selected: isSelected }}
               className={cn(
                 "h-7 justify-center rounded-md px-2",
-                isSelected ? "bg-white/10" : "hover:bg-white/10 active:bg-white/15",
+                isSelected ? "bg-surface-muted" : "hover:bg-surface-muted active:bg-surface-muted",
               )}
               key={page.id}
               onPress={() => onSelectionChange(page.id)}

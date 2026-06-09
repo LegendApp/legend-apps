@@ -31,18 +31,18 @@
       --color-table-header: #f3f4f6;
       --color-table-row-alt: #f9fafb;
       --color-window-background: #f5f6f8;
-      --color-background-primary: #111111;
-      --color-background-secondary: #17181a;
-      --color-background-tertiary: #212224;
+      --color-background-primary: #f5f6f8;
+      --color-background-secondary: #ffffff;
+      --color-background-tertiary: #f3f4f6;
       --color-background-destructive: #8b0000;
-      --color-background-inverse: #ffffff;
-      --color-text-primary: #ffffff;
-      --color-text-secondary: #aaaaaa;
-      --color-text-tertiary: #777777;
+      --color-background-inverse: #111827;
+      --color-text-primary: #111827;
+      --color-text-secondary: #6b7280;
+      --color-text-tertiary: #9ca3af;
       --color-accent-primary: #0088ff;
       --color-accent-secondary: #00aaff;
-      --color-border-primary: #252730;
-      --color-border-popup: #4f4e4f;
+      --color-border-primary: #d1d5db;
+      --color-border-popup: #cbd5e1;
     }
 
     @variant dark {
