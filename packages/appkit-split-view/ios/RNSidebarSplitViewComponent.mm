@@ -192,8 +192,6 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 
 - (void)splitViewDidResize
 {
-  [self syncReactSubviewFrames];
-
   const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
   if (!eventEmitter) {
     return;
@@ -201,15 +199,23 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 
   CGFloat sidebarWidth = 0;
   CGFloat contentWidth = 0;
+  CGFloat sidebarHeight = 0;
+  CGFloat contentHeight = 0;
   CGFloat height = 0;
 
   sidebarWidth = _sidebarContainer.bounds.size.width;
   contentWidth = _contentContainer.bounds.size.width;
-  height = MAX(_sidebarContainer.bounds.size.height, _contentContainer.bounds.size.height);
+  sidebarHeight = _sidebarContainer.bounds.size.height;
+  contentHeight = _contentContainer.bounds.size.height;
+  height = MAX(sidebarHeight, contentHeight);
+  CGRect bounds = [self currentLayoutBounds];
 
-  if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0) {
+  if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0 ||
+      fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
     return;
   }
+
+  [self syncReactSubviewFrames];
 
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
@@ -222,9 +228,11 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   _lastHeight = height;
 
   eventEmitter->onSplitViewDidResize(SidebarSplitViewEventEmitter::OnSplitViewDidResize{
+    .contentHeight = contentHeight,
     .contentWidth = contentWidth,
     .height = height,
     .isVertical = true,
+    .sidebarHeight = sidebarHeight,
     .sidebarWidth = sidebarWidth,
   });
 }

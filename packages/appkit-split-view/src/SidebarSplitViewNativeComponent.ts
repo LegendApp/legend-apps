@@ -3,9 +3,11 @@ import { codegenNativeComponent } from "react-native";
 import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
 
 export type SidebarSplitViewResizeEvent = Readonly<{
+  contentHeight: Double;
   contentWidth: Double;
   height: Double;
   isVertical: boolean;
+  sidebarHeight: Double;
   sidebarWidth: Double;
 }>;
 

@@ -39,23 +39,31 @@ export function SidebarSplitView({
   style,
   ...props
 }: SidebarSplitViewProps) {
-  const [paneMetrics, setPaneMetrics] = useState({ contentWidth: 0, height: 0, sidebarWidth: 0 });
+  const [paneMetrics, setPaneMetrics] = useState({
+    contentHeight: 0,
+    contentWidth: 0,
+    sidebarHeight: 0,
+    sidebarWidth: 0,
+  });
   const panes = Children.toArray(children);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
+    const nextContentHeight = Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height);
     const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
-    const nextHeight = Math.round(event.nativeEvent.height);
+    const nextSidebarHeight = Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height);
     const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
 
-    if (nextContentWidth > 0 || nextHeight > 0 || nextSidebarWidth > 0) {
+    if (nextContentHeight > 0 || nextContentWidth > 0 || nextSidebarHeight > 0 || nextSidebarWidth > 0) {
       setPaneMetrics((current) => {
         const next = {
+          contentHeight: nextContentHeight > 0 ? nextContentHeight : current.contentHeight,
           contentWidth: nextContentWidth > 0 ? nextContentWidth : current.contentWidth,
-          height: nextHeight > 0 ? nextHeight : current.height,
+          sidebarHeight: nextSidebarHeight > 0 ? nextSidebarHeight : current.sidebarHeight,
           sidebarWidth: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebarWidth,
         };
-        return current.contentWidth === next.contentWidth &&
-          current.height === next.height &&
+        return current.contentHeight === next.contentHeight &&
+          current.contentWidth === next.contentWidth &&
+          current.sidebarHeight === next.sidebarHeight &&
           current.sidebarWidth === next.sidebarWidth
           ? current
           : next;
@@ -83,8 +91,8 @@ export function SidebarSplitView({
           styles.pane,
           {
             flex: paneMetrics.sidebarWidth ? 0 : 1,
-            height: paneMetrics.height || undefined,
-            minHeight: paneMetrics.height || undefined,
+            height: paneMetrics.sidebarHeight || undefined,
+            minHeight: paneMetrics.sidebarHeight || undefined,
             width: paneMetrics.sidebarWidth || undefined,
           },
         ],
@@ -99,8 +107,8 @@ export function SidebarSplitView({
           styles.pane,
           {
             flex: paneMetrics.contentWidth ? 0 : 1,
-            height: paneMetrics.height || undefined,
-            minHeight: paneMetrics.height || undefined,
+            height: paneMetrics.contentHeight || undefined,
+            minHeight: paneMetrics.contentHeight || undefined,
             width: paneMetrics.contentWidth || undefined,
           },
         ],
