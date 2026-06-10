@@ -420,7 +420,45 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846f1a734cb 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -38,6 +38,8 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -31,13 +31,44 @@
+-
++
+ using namespace facebook::react;
+-
++
++#if TARGET_OS_OSX
++@interface ENRMForwardingTextInputScrollView : NSScrollView
++@property (nonatomic, assign) BOOL enrmScrollEnabled;
++@end
++
++@implementation ENRMForwardingTextInputScrollView
++
++- (void)scrollWheel:(NSEvent *)event
++{
++  if (self.enrmScrollEnabled) {
++    [super scrollWheel:event];
++    return;
++  }
++
++  NSView *ancestor = self.superview;
++  while (ancestor != nil) {
++    if ([ancestor isKindOfClass:NSScrollView.class]) {
++      [(NSScrollView *)ancestor scrollWheel:event];
++      return;
++    }
++    ancestor = ancestor.superview;
++  }
++
++  [self.nextResponder scrollWheel:event];
++}
++
++@end
++#endif
++
+ #if !TARGET_OS_OSX
+ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, UITextViewDelegate>
+ #else
+ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, RCTBackedTextInputDelegate>
  #endif
  - (void)setupTextView;
 +- (void)applyScrollEnabled:(BOOL)scrollEnabled;
@@ -429,6 +467,27 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
+@@ -70,7 +101,7 @@ @implementation EnrichedMarkdownTextInput {
+   std::optional<CGRect> _prevCaretRect;
+-
++
+ #if TARGET_OS_OSX
+-  NSScrollView *_scrollView;
++  ENRMForwardingTextInputScrollView *_scrollView;
+ #endif
+-
++
+   NSArray<NSString *> *_contextMenuItemTexts;
+@@ -161,7 +192,7 @@ - (void)setupTextView
+ #else
+   _textView.selectable = YES;
+-
++
+-  _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
++  _scrollView = [[ENRMForwardingTextInputScrollView alloc] initWithFrame:CGRectZero];
+   _scrollView.backgroundColor = [RCTUIColor clearColor];
+   _scrollView.drawsBackground = NO;
+   _scrollView.borderType = NSNoBorder;
 @@ -166,7 +168,9 @@ - (void)setupTextView
    _scrollView.drawsBackground = NO;
    _scrollView.borderType = NSNoBorder;
@@ -478,7 +537,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
  
-@@ -514,10 +522,83 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -514,10 +522,84 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  - (void)resetBaseTypingAttributes
  {
@@ -501,6 +560,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846
 +{
 +  _textView.scrollEnabled = scrollEnabled;
 +#if TARGET_OS_OSX
++  _scrollView.enrmScrollEnabled = scrollEnabled;
 +  if ([_scrollView.contentView respondsToSelector:@selector(setConstrainScrolling:)]) {
 +    ((void (*)(id, SEL, BOOL))[_scrollView.contentView methodForSelector:@selector(setConstrainScrolling:)])(
 +        _scrollView.contentView,
