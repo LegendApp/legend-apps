@@ -65,8 +65,8 @@ export function createSettingsWindowOptions({
       ],
       minHeight: 600,
       minWidth: 600,
-      titlebarAppearsTransparent: false,
-      titlebarSeparatorStyle: "line",
+      titlebarAppearsTransparent: true,
+      titlebarSeparatorStyle: "none",
       titleVisibility: "visible",
       toolbarStyle: "unified",
       width: 800,
@@ -135,20 +135,32 @@ export function SettingsWindow<PageId extends string = string>({
       sidebarMinWidth={sidebarMinWidth}
       style={styles.root}
     >
-      <View className="flex-1" style={styles.pane}>
+      <View className="flex-1 overflow-hidden" style={styles.pane}>
         <SettingsSidebar
           onSelectionChange={setSelectedPage}
           pages={pages}
           selectedPage={selectedPage}
         />
+        <SettingsToolbarBackground />
       </View>
       <View
-        className="flex-1"
+        className={cn("flex-1 overflow-hidden", contentBackgroundClassName)}
         style={styles.pane}
       >
         {selectedPageConfig.render()}
+        <SettingsToolbarBackground />
       </View>
     </SidebarSplitView>
+  );
+}
+
+function SettingsToolbarBackground() {
+  return (
+    <View
+      className="absolute left-0 right-0 top-0 bg-gradient-to-b from-background-primary from-60% to-background-primary/0"
+      pointerEvents="none"
+      style={styles.toolbarBackground}
+    />
   );
 }
 
@@ -356,5 +368,9 @@ const styles = StyleSheet.create({
   },
   sidebarItemText: {
     fontSize: 13,
+  },
+  toolbarBackground: {
+    height: SETTINGS_TITLEBAR_CONTENT_INSET,
+    zIndex: 1,
   },
 });
