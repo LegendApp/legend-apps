@@ -355,7 +355,10 @@ export function createObservableFile<T extends object>({
   );
 
   if (saveDefaultToFile) {
-    targetStorage.write(`${filename}.json`, initialValue, { format: "json" });
+    const defaultFile = targetStorage.file(`${filename}.json`);
+    if (!defaultFile.exists) {
+      targetStorage.write(`${filename}.json`, initialValue, { format: "json" });
+    }
   }
 
   observablePersistPlugins.set(data$ as unknown as Observable<unknown>, plugin);
