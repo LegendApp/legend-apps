@@ -1,9 +1,8 @@
-import { getLegendUniwindThemeName } from "@legend-desktop/theme";
+import { applyLegendThemeToUniwind } from "@legend-desktop/theme";
 import { type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
 import { createObservableFile } from "@legend-desktop/storage";
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
-import { Uniwind, type ThemeName } from "uniwind";
 import {
   defaultMarkdownHotkeySettings,
   type MarkdownHotkeyId,
@@ -289,7 +288,7 @@ export function useMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutI
 
 export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
   markdownSettings$.theme.set(theme);
-  Uniwind.setTheme(getLegendUniwindThemeName(theme) as ThemeName);
+  applyLegendThemeToUniwind(theme);
 }
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
@@ -377,5 +376,5 @@ export function clearLastMarkdownDocumentPath(path?: string) {
 }
 
 export function applyMarkdownThemeSetting() {
-  Uniwind.setTheme(getLegendUniwindThemeName(getMarkdownThemeSetting()) as ThemeName);
+  applyLegendThemeToUniwind(getMarkdownThemeSetting());
 }

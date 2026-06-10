@@ -33,6 +33,10 @@ function tailwindColorName(colorName: string) {
   return `--color-${colorName.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}`;
 }
 
+function resolveSelectionColor(color: string) {
+  return color === "auto" ? "Highlight" : color;
+}
+
 function readTheme(name: string): LegendThemeFile {
   return JSON.parse(fs.readFileSync(path.join(themeDir, `${name}.json`), "utf8")) as LegendThemeFile;
 }
@@ -77,19 +81,33 @@ function validateThemes(themes: LegendThemeFile[]) {
 }
 
 function renderThemeVariables(theme: LegendThemeFile) {
-  const variables = colorVariables
-    .map((colorName) => {
-      const colorValue = colorName === "selection" && theme.colors[colorName] === "auto"
-        ? "Highlight"
-        : theme.colors[colorName];
-      return `      ${tailwindColorName(colorName)}: ${colorValue};`;
-    })
+  const { colors } = theme;
+  const variables = [
+    ...colorVariables.map((colorName) => [
+      tailwindColorName(colorName),
+      colorName === "selection" ? resolveSelectionColor(colors[colorName]) : colors[colorName],
+    ]),
+    ["--color-background-primary", colors.background],
+    ["--color-background-secondary", colors.surface],
+    ["--color-background-tertiary", colors.surfaceMuted],
+    ["--color-background-destructive", "#8b0000"],
+    ["--color-background-inverse", colors.foreground],
+    ["--color-text-primary", colors.foreground],
+    ["--color-text-secondary", colors.muted],
+    ["--color-text-tertiary", colors.muted],
+    ["--color-accent-primary", colors.primary],
+    ["--color-accent-secondary", colors.link ?? colors.primary],
+    ["--color-border-primary", colors.border],
+    ["--color-border-popup", colors.border],
+  ]
+    .map(([name, value]) => `      ${name}: ${value};`)
     .join("\n");
 
   return `    @variant ${theme.name} {\n${variables}\n    }`;
 }
 
 const themes = readThemeNames().map(readTheme);
+const uniwindThemes = themes.filter((theme) => theme.name === "light" || theme.name === "dark");
 validateThemes(themes);
 
 if (!themes.some((theme) => theme.name === "light")) {
@@ -103,9 +121,16 @@ const css = `@import 'tailwindcss';
 @source "../../packages";
 @source "./";
 
+.inset-0 {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
 @layer theme {
   :root {
-${themes.map(renderThemeVariables).join("\n\n")}
+${uniwindThemes.map(renderThemeVariables).join("\n\n")}
   }
 }
 `;
@@ -119,5 +144,5 @@ export const generatedThemeFiles = ${JSON.stringify(themes, null, 2)} satisfies 
 
 fs.writeFileSync(generatedThemeRegistryPath, generatedThemeRegistry);
 
-console.log(`Generated ${path.relative(rootDir, cssPath)} from ${themes.length} themes.`);
+console.log(`Generated ${path.relative(rootDir, cssPath)} from ${uniwindThemes.length} UniWind theme buckets.`);
 console.log(`Generated ${path.relative(rootDir, generatedThemeRegistryPath)} from ${themes.length} themes.`);

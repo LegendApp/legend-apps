@@ -433,6 +433,7 @@
         "@legend-desktop/markdown-document": "workspace:*",
         "@legendapp/state": "^3.0.0-beta.42",
         "react-native-enriched-markdown": "0.5.0",
+        "uniwind": "^1.6.3",
       },
       "peerDependencies": {
         "react": "*",

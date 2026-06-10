@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { getLegendTheme, type LegendThemeBackground } from "@legend-desktop/theme";
+import { applyLegendThemeToUniwind, getLegendTheme, type LegendThemeBackground } from "@legend-desktop/theme";
 import { useEffect, type ReactNode } from "react";
 import { Image, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { GlassEffectView } from "@legend-desktop/glass-effect-view";
@@ -41,6 +41,10 @@ export function MusicBackground({ children, onLayout }: MusicBackgroundProps) {
     useEffect(() => {
         ensureMusicAppearanceSettings();
     }, []);
+
+    useEffect(() => {
+        applyLegendThemeToUniwind(themeName);
+    }, [themeName]);
 
     return (
         <View style={[styles.root, { backgroundColor: rootBackgroundColor }]} onLayout={onLayout}>

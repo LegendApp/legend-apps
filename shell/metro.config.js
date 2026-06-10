@@ -1,4 +1,3 @@
-const fs = require("fs");
 const path = require("path");
 const { getDefaultConfig } = require("@expo/metro-config");
 const { makeMetroConfig } = require("@rnx-kit/metro-config");
@@ -12,11 +11,6 @@ if (!appId) {
 
 const rootDir = path.resolve(__dirname, "..");
 const appSrc = path.join(rootDir, "apps", appId, "src");
-const themeDir = path.join(rootDir, "packages", "theme", "src", "themes");
-const extraThemes = fs.readdirSync(themeDir)
-  .filter((filename) => filename.endsWith(".json"))
-  .map((filename) => filename.slice(0, -".json".length))
-  .filter((themeName) => themeName !== "light" && themeName !== "dark");
 
 const config = makeMetroConfig(getDefaultConfig(__dirname));
 
@@ -58,5 +52,4 @@ delete config.watcher?.unstable_workerThreads;
 module.exports = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
   dtsFile: "./src/uniwind-types.d.ts",
-  extraThemes,
 });

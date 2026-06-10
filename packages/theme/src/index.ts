@@ -38,7 +38,6 @@ const requiredColorNames = [
   "windowBackground",
 ] as const;
 
-const generatedThemeNameSet = new Set<string>(generatedThemeFiles.map((themeFile) => themeFile.name));
 const generatedThemeFileMap = new Map<LegendThemeName, LegendThemeFile>(
   generatedThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
 );
@@ -351,10 +350,48 @@ export function getLegendThemeAppearance(themeName: string | null | undefined): 
   return theme.appearance ?? (getRelativeLuminance(theme.colors.background) < 0.5 ? "dark" : "light");
 }
 
-export function getLegendUniwindThemeName(themeName: string | null | undefined): LegendThemeName {
-  if (themeName && generatedThemeNameSet.has(themeName)) {
-    return themeName as LegendThemeName;
-  }
+function resolveSelectionColor(color: string) {
+  return color === "auto" ? "Highlight" : color;
+}
 
-  return getLegendThemeAppearance(themeName);
+export function getLegendThemeUniwindVariables(themeName: string | null | undefined): Record<string, string> {
+  const { colors } = getLegendTheme(themeName);
+
+  return {
+    "--color-accent-primary": colors.primary,
+    "--color-accent-secondary": colors.link ?? colors.primary,
+    "--color-background": colors.background,
+    "--color-background-destructive": "#8b0000",
+    "--color-background-inverse": colors.foreground,
+    "--color-background-primary": colors.background,
+    "--color-background-secondary": colors.surface,
+    "--color-background-tertiary": colors.surfaceMuted,
+    "--color-blockquote-background": colors.blockquoteBackground,
+    "--color-blockquote-border": colors.blockquoteBorder,
+    "--color-border": colors.border,
+    "--color-border-popup": colors.border,
+    "--color-border-primary": colors.border,
+    "--color-code": colors.code,
+    "--color-code-foreground": colors.codeForeground,
+    "--color-danger": colors.danger,
+    "--color-foreground": colors.foreground,
+    "--color-muted": colors.muted,
+    "--color-primary": colors.primary,
+    "--color-selection": resolveSelectionColor(colors.selection),
+    "--color-surface": colors.surface,
+    "--color-surface-muted": colors.surfaceMuted,
+    "--color-table-header": colors.tableHeader,
+    "--color-table-row-alt": colors.tableRowAlt,
+    "--color-text-primary": colors.foreground,
+    "--color-text-secondary": colors.muted,
+    "--color-text-tertiary": colors.muted,
+    "--color-window-background": colors.windowBackground,
+  };
+}
+
+export function applyLegendThemeToUniwind(themeName: string | null | undefined) {
+  const { Uniwind } = require("uniwind") as typeof import("uniwind");
+  const appearance = getLegendThemeAppearance(themeName);
+  Uniwind.updateCSSVariables(appearance, getLegendThemeUniwindVariables(themeName));
+  Uniwind.setTheme(appearance);
 }

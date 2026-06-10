@@ -1,5 +1,6 @@
 import {
     getLegendThemeAppearance,
+    getLegendThemeUniwindVariables,
     isLegendThemeFile,
     loadUserThemeFilesSync,
     type ThemeStorage,
@@ -31,6 +32,17 @@ const validColors = {
 describe("music appearance themes", () => {
     it("uses explicit theme appearance for native surfaces", () => {
         expect(getLegendThemeAppearance("grey")).toBe("dark");
+    });
+
+    it("maps selected theme colors into UniWind variables", () => {
+        expect(getLegendThemeUniwindVariables("grey")).toMatchObject({
+            "--color-background": "#191919",
+            "--color-background-primary": "#191919",
+            "--color-background-secondary": "#202020",
+            "--color-border-primary": "#3d3d3d",
+            "--color-foreground": "#d4d4d4",
+            "--color-text-primary": "#d4d4d4",
+        });
     });
 
     it("accepts theme files with transparent music backgrounds", () => {
