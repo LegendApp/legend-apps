@@ -1,6 +1,11 @@
 import type { MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
+import {
+  getMarkdownFloatingSurfaceFrame,
+  type MarkdownFloatingSurfaceCoordinateSpace,
+  type MarkdownFloatingSurfacePlacement,
+} from "./markdownFloatingSurfaceFrame";
 
 export function MarkdownFloatingSurface({
   anchor,
@@ -10,29 +15,21 @@ export function MarkdownFloatingSurface({
 }: {
   anchor: MarkdownSelectionAnchor;
   children: ReactNode;
-  coordinateSpace?: "content" | "item";
-  placement?: "above" | "below";
+  coordinateSpace?: MarkdownFloatingSurfaceCoordinateSpace;
+  placement?: MarkdownFloatingSurfacePlacement;
 }) {
-  const itemTop = anchor.itemY ?? anchor.y;
-  const anchorsToSelection = coordinateSpace === "content" && anchor.kind === "textSelection";
-  const surfaceLeft = anchorsToSelection ? anchor.x : coordinateSpace === "content" ? anchor.itemX ?? anchor.x : 0;
-  const surfaceWidth = anchorsToSelection ? anchor.width : anchor.itemWidth ?? anchor.width;
-  const selectionTop = anchor.y - itemTop;
-  const surfaceTop = coordinateSpace === "content" ? anchor.y : selectionTop;
-  const top = placement === "above"
-    ? Math.max(coordinateSpace === "content" ? 0 : -26, surfaceTop - 56)
-    : Math.max(0, surfaceTop + anchor.height + 6);
+  const frame = getMarkdownFloatingSurfaceFrame({
+    anchor,
+    coordinateSpace,
+    placement,
+  });
 
   return (
     <View
       pointerEvents="box-none"
       style={[
         styles.container,
-        {
-          left: surfaceLeft,
-          top,
-          width: surfaceWidth,
-        },
+        frame,
       ]}
     >
       <View style={styles.content}>{children}</View>
