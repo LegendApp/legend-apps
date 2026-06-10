@@ -57,13 +57,24 @@ static void LegendMakeViewTransparent(NSView *view)
   view.layer.masksToBounds = NO;
 }
 
-static NSView *LegendCreateMusicContentView(NSRect frame)
+static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView)
 {
   NSRect bounds = NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame));
   NSView *content = [[NSView alloc] initWithFrame:bounds];
   content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   LegendMakeViewTransparent(content);
-  return content;
+
+  NSView *hostView = content;
+  if (@available(macOS 26.0, *)) {
+    NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:bounds];
+    glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    glassView.contentView = content;
+    LegendMakeViewTransparent(glassView);
+    hostView = glassView;
+  }
+
+  *contentView = content;
+  return hostView;
 }
 
 @implementation AppDelegate
@@ -225,19 +236,20 @@ static NSView *LegendCreateMusicContentView(NSRect frame)
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 
   if (isMusic) {
-    NSView *musicContentView = LegendCreateMusicContentView(frame);
-    self.musicContentView = musicContentView;
+    NSView *glassContentView = nil;
+    NSView *glassHostView = LegendCreateMusicGlassHostView(frame, &glassContentView);
+    self.musicGlassContentView = glassContentView;
 
-    NSViewController *musicContentViewController = [NSViewController new];
-    musicContentViewController.view = musicContentView;
-    self.window.contentViewController = musicContentViewController;
+    NSViewController *glassViewController = [NSViewController new];
+    glassViewController.view = glassHostView;
+    self.window.contentViewController = glassViewController;
 
     self.musicRootViewController = [NSViewController new];
     self.musicRootViewController.view = rootView;
-    [musicContentViewController addChildViewController:self.musicRootViewController];
+    [glassViewController addChildViewController:self.musicRootViewController];
 
-    rootView.frame = musicContentView.bounds;
-    [musicContentView addSubview:rootView];
+    rootView.frame = glassContentView.bounds;
+    [glassContentView addSubview:rootView];
   } else {
     NSViewController *rootViewController = [NSViewController new];
     rootView.frame = self.window.contentView.bounds;
