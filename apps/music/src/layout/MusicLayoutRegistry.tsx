@@ -28,12 +28,12 @@ interface MusicLayoutLeafDefinition {
     render: (params: MusicLayoutLeafRenderParams) => ReactNode;
 }
 
-function PlaybackLeaf({ context }: MusicLayoutLeafRenderParams) {
-    return <PlaybackArea benchmarkElapsedSeconds={context.benchmarkElapsedSeconds} />;
+function PlaybackLeaf({ context, node }: MusicLayoutLeafRenderParams) {
+    return <PlaybackArea benchmarkElapsedSeconds={context.benchmarkElapsedSeconds} controls={node.controls} />;
 }
 
-function PlaybackControlsLeaf() {
-    return <PlaybackControls />;
+function PlaybackControlsLeaf({ node }: MusicLayoutLeafRenderParams) {
+    return <PlaybackControls controls={node.controls} />;
 }
 
 function QueueLeaf() {
@@ -68,7 +68,7 @@ const MUSIC_LAYOUT_LEAF_DEFINITIONS: Record<MusicLayoutLeafId, MusicLayoutLeafDe
         render: (params) => <PlaybackLeaf {...params} />,
     },
     playbackControls: {
-        render: () => <PlaybackControlsLeaf />,
+        render: (params) => <PlaybackControlsLeaf {...params} />,
     },
     queue: {
         render: () => <QueueLeaf />,

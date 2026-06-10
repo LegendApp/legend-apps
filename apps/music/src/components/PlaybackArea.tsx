@@ -8,7 +8,7 @@ import { PlaybackTimeline } from "@/components/PlaybackTimeline";
 import { Icon } from "@/systems/Icon";
 import { localMusicState$ } from "@/systems/LocalMusicState";
 import { setIsScrubbing } from "@/systems/PlaybackInteractionState";
-import { settings$ } from "@/systems/Settings";
+import { type PlaybackControlId, settings$ } from "@/systems/Settings";
 import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@/utils/perfLogger";
 
@@ -21,9 +21,15 @@ type PlaybackAreaProps = {
     showBorder?: boolean;
     overlayMode?: OverlayPlaybackMode;
     benchmarkElapsedSeconds?: number;
+    controls?: PlaybackControlId[];
 };
 
-export function PlaybackArea({ showBorder = true, overlayMode, benchmarkElapsedSeconds }: PlaybackAreaProps = {}) {
+export function PlaybackArea({
+    showBorder = true,
+    overlayMode,
+    benchmarkElapsedSeconds,
+    controls,
+}: PlaybackAreaProps = {}) {
     perfCount("PlaybackArea.render");
     const currentTrack = useValue(localPlayerState$.currentTrack);
     const isPlaying = useValue(localPlayerState$.isPlaying);
@@ -107,7 +113,7 @@ export function PlaybackArea({ showBorder = true, overlayMode, benchmarkElapsedS
                     </View>
                 </View>
             </View>
-            {showPlaybackControls ? <PlaybackControls className="pt-1 -mx-1 pb-1" /> : null}
+            {showPlaybackControls ? <PlaybackControls className="pt-1 -mx-1 pb-1" controls={controls} /> : null}
         </View>
     );
 }

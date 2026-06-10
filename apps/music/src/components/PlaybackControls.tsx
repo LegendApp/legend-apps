@@ -34,9 +34,10 @@ const DEFAULT_PLAYBACK_BUTTONS: PlaybackControlId[] = [
 
 type PlaybackControlsProps = {
     className?: string;
+    controls?: PlaybackControlId[];
 };
 
-export function PlaybackControls({ className }: PlaybackControlsProps = {}) {
+export function PlaybackControls({ className, controls: controlsOverride }: PlaybackControlsProps = {}) {
     const isPlaying = useValue(localPlayerState$.isPlaying);
     const shuffleEnabled = useValue(settings$.playback.shuffle);
     const repeatMode = useValue(settings$.playback.repeatMode);
@@ -58,11 +59,12 @@ export function PlaybackControls({ className }: PlaybackControlsProps = {}) {
     });
     const { handleSavePlaylist } = useQueueExporter({ queueTracks: queue.tracks });
 
-    const controls = (
-        (playbackControlsLayout?.shown?.length
-            ? playbackControlsLayout.shown
-            : DEFAULT_PLAYBACK_BUTTONS) as PlaybackControlId[]
-    ).filter((controlId, index, array) => array.indexOf(controlId) === index);
+    const configuredControls = controlsOverride?.length
+        ? controlsOverride
+        : playbackControlsLayout?.shown?.length
+          ? playbackControlsLayout.shown
+          : DEFAULT_PLAYBACK_BUTTONS;
+    const controls = configuredControls.filter((controlId, index, array) => array.indexOf(controlId) === index);
 
     const hasSearchControl = controls.includes("search");
 
