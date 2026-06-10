@@ -3,13 +3,20 @@ import type { MarkdownBlockSnapshot } from "./types";
 
 export function findBlockIdAtWindowY({
   blockIds,
+  containerWindowY,
+  direction,
   layoutsByBlockId,
-  y,
+  scrollOffsetY,
+  windowY,
 }: {
   blockIds: string[];
+  containerWindowY: number;
+  direction?: "down" | "up";
   layoutsByBlockId: Map<string, BlockLayout>;
-  y: number;
+  scrollOffsetY: number;
+  windowY: number;
 }) {
+  const y = windowY - containerWindowY + scrollOffsetY;
   const layouts = blockIds
     .map((blockId) => {
       const layout = layoutsByBlockId.get(blockId);
@@ -28,12 +35,18 @@ export function findBlockIdAtWindowY({
     const nextEntry = layouts[index + 1];
     const blockTop = entry.layout.y;
     const blockBottom = entry.layout.y + entry.layout.height;
-    const hitTop = previousEntry
-      ? (previousEntry.layout.y + previousEntry.layout.height + blockTop) / 2
-      : Number.NEGATIVE_INFINITY;
-    const hitBottom = nextEntry
-      ? (blockBottom + nextEntry.layout.y) / 2
-      : Number.POSITIVE_INFINITY;
+    const previousBottom = previousEntry ? previousEntry.layout.y + previousEntry.layout.height : Number.NEGATIVE_INFINITY;
+    const nextTop = nextEntry ? nextEntry.layout.y : Number.POSITIVE_INFINITY;
+    const hitTop = direction === "up"
+      ? previousBottom
+      : previousEntry
+        ? (previousBottom + blockTop) / 2
+        : Number.NEGATIVE_INFINITY;
+    const hitBottom = direction === "down"
+      ? nextTop
+      : nextEntry
+        ? (blockBottom + nextTop) / 2
+        : Number.POSITIVE_INFINITY;
 
     if (y >= hitTop && y < hitBottom) {
       return entry.blockId;
@@ -46,12 +59,10 @@ export function findBlockIdAtWindowY({
 export function getBlockSelectionRects({
   blockIds,
   blockSelection,
-  containerWindowY,
   layoutsByBlockId,
 }: {
   blockIds: string[];
   blockSelection: BlockSelectionState | null;
-  containerWindowY: number;
   layoutsByBlockId: Map<string, BlockLayout>;
 }) {
   const rects: { blockId: string; height: number; y: number }[] = [];
@@ -74,7 +85,7 @@ export function getBlockSelectionRects({
       rects.push({
         blockId,
         height: layout.height,
-        y: layout.y - containerWindowY,
+        y: layout.y,
       });
     }
   }

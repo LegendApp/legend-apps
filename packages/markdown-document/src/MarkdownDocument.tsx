@@ -141,7 +141,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
-    const blockWindowLayoutsRef = useRef(new Map<string, BlockLayout>());
+    const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -588,22 +588,29 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [setNextBlockSelection],
     );
 
-    const blockIdAtWindowY = useCallback((y: number) => {
+    const blockIdAtWindowY = useCallback((y: number, direction: "down" | "up") => {
       return findBlockIdAtWindowY({
         blockIds,
-        layoutsByBlockId: blockWindowLayoutsRef.current,
-        y,
+        containerWindowY,
+        direction,
+        layoutsByBlockId: blockContentLayoutsRef.current,
+        scrollOffsetY: scrollOffsetYRef.current,
+        windowY: y,
       });
-    }, [blockIds]);
+    }, [blockIds, containerWindowY]);
 
-    const handleBlockWindowLayout = useCallback((blockId: string, layout: BlockLayout) => {
-      const previousLayout = blockWindowLayoutsRef.current.get(blockId);
+    const handleBlockWindowLayout = useCallback((blockId: string, windowLayout: BlockLayout) => {
+      const layout = {
+        height: windowLayout.height,
+        y: windowLayout.y - containerWindowY + scrollOffsetYRef.current,
+      };
+      const previousLayout = blockContentLayoutsRef.current.get(blockId);
       if (previousLayout?.y === layout.y && previousLayout.height === layout.height) {
         return;
       }
-      blockWindowLayoutsRef.current.set(blockId, layout);
+      blockContentLayoutsRef.current.set(blockId, layout);
       setLayoutVersion((version) => version + 1);
-    }, []);
+    }, [containerWindowY]);
 
     const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
       if (event) {
@@ -636,7 +643,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        const targetBlockId = typeof event.windowY === "number" ? blockIdAtWindowY(event.windowY) : undefined;
+        const targetBlockId = typeof event.windowY === "number" ? blockIdAtWindowY(event.windowY, event.direction === "up" ? "up" : "down") : undefined;
         if (targetBlockId && targetBlockId !== blockId) {
           if (blockSelectionGestureRef.current) {
             updateBlockSelectionGesture(blockId, targetBlockId);
@@ -1391,7 +1398,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearEditTimer();
       clearAutosaveTimer();
       activeBlockIdRef.current = null;
-      blockWindowLayoutsRef.current.clear();
+      blockContentLayoutsRef.current.clear();
       draftMarkdownRef.current = "";
       committedMarkdownRef.current = "";
       currentRevisionRef.current = 0;
@@ -1902,10 +1909,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return getBlockSelectionRects({
         blockIds,
         blockSelection,
-        containerWindowY,
-        layoutsByBlockId: blockWindowLayoutsRef.current,
+        layoutsByBlockId: blockContentLayoutsRef.current,
       });
-    }, [blockIds, blockSelection, containerWindowY, layoutVersion]);
+    }, [blockIds, blockSelection, layoutVersion]);
     const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
       if (blockSelectionRects.length === 0) {
         return null;
