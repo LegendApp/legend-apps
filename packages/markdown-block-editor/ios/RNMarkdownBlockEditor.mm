@@ -49,6 +49,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
 @implementation RNMarkdownEditorHost {
   RCTUIView<RCTComponentViewProtocol> *_overlayInput;
+  __weak NSView *_overlayInputHomeSuperview;
   NSMapTable<NSString *, RNMarkdownBlockActivationView *> *_activationViews;
   NSString *_activeBlockId;
   NSString *_lastLoadedBlockId;
@@ -74,6 +75,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   if (isEnrichedMarkdownInput(childComponentView)) {
     _overlayInput = childComponentView;
+    _overlayInputHomeSuperview = childComponentView.superview;
     _overlayInput.hidden = YES;
     [_overlayInput setPostsFrameChangedNotifications:YES];
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -91,6 +93,7 @@ static BOOL isEnrichedMarkdownInput(id view)
                                                     name:NSViewFrameDidChangeNotification
                                                   object:_overlayInput];
     _overlayInput = nil;
+    _overlayInputHomeSuperview = nil;
   }
 
   [super unmountChildComponentView:childComponentView index:index];
@@ -234,28 +237,45 @@ static BOOL isEnrichedMarkdownInput(id view)
   [self setBlockView:[self activeBlockView] contentsHidden:NO];
 }
 
-- (NSRect)overlayFrameForBlockView:(RNMarkdownBlockActivationView *)view
+- (nullable NSView *)overlaySuperviewForBlockView:(RNMarkdownBlockActivationView *)view
 {
-  if (_overlayInput == nil || _overlayInput.superview == nil || view.window == nil) {
+  if (view.superview != nil) {
+    return view.superview;
+  }
+  if (_overlayInputHomeSuperview != nil) {
+    return _overlayInputHomeSuperview;
+  }
+  return _overlayInput.superview;
+}
+
+- (NSRect)overlayFrameForBlockView:(RNMarkdownBlockActivationView *)view
+                       inSuperview:(NSView *)overlaySuperview
+{
+  if (_overlayInput == nil || overlaySuperview == nil || view.window == nil) {
     return NSZeroRect;
   }
 
-  NSRect frame = [view convertRect:view.bounds toView:_overlayInput.superview];
+  NSRect frame = [view convertRect:view.bounds toView:overlaySuperview];
   return frame;
 }
 
 - (void)positionOverlayForBlockView:(RNMarkdownBlockActivationView *)view
 {
-  if (_overlayInput == nil || _overlayInput.superview == nil || view.window == nil) {
+  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
+  if (_overlayInput == nil || overlaySuperview == nil || view.window == nil) {
     return;
   }
 
-  NSRect frame = [self overlayFrameForBlockView:view];
-  if (NSEqualRects(_overlayInput.frame, frame)) {
+  NSRect frame = [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
+  if (_overlayInput.superview == overlaySuperview && NSEqualRects(_overlayInput.frame, frame)) {
     return;
   }
 
   _isPositioningOverlay = YES;
+  if (_overlayInput.superview != overlaySuperview) {
+    [_overlayInput removeFromSuperview];
+  }
+  [overlaySuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:view];
   _overlayInput.frame = frame;
   _isPositioningOverlay = NO;
 }
@@ -271,7 +291,12 @@ static BOOL isEnrichedMarkdownInput(id view)
     return;
   }
 
-  NSRect targetFrame = [self overlayFrameForBlockView:view];
+  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
+  if (overlaySuperview == nil) {
+    return;
+  }
+
+  NSRect targetFrame = [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
   if (NSEqualRects(_overlayInput.frame, targetFrame)) {
     return;
   }
@@ -305,7 +330,8 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
   if (eventEmitter) {
-    NSRect frame = [self overlayFrameForBlockView:view];
+    NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
+    NSRect frame = overlaySuperview == nil ? NSZeroRect : [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
     eventEmitter->onBeginEditing({
       .blockId = std::string([view.blockId UTF8String] ?: ""),
       .height = frame.size.height,
@@ -327,15 +353,15 @@ static BOOL isEnrichedMarkdownInput(id view)
     return;
   }
 
-  NSView *overlaySuperview = _overlayInput.superview;
-  NSRect frame = [self overlayFrameForBlockView:view];
+  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
+  if (overlaySuperview == nil) {
+    return;
+  }
+
   [self setBlockView:view contentsHidden:YES];
-  _isPositioningOverlay = YES;
-  _overlayInput.frame = frame;
+  [self positionOverlayForBlockView:view];
   _overlayInput.hidden = NO;
-  _isPositioningOverlay = NO;
-  [_overlayInput removeFromSuperview];
-  [overlaySuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:nil];
+  [overlaySuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:view];
 
   if (loadValue) {
     callSetValue(_overlayInput, markdown ?: @"");
@@ -352,6 +378,10 @@ static BOOL isEnrichedMarkdownInput(id view)
 - (void)hideOverlay
 {
   _overlayInput.hidden = YES;
+  if (_overlayInput != nil && _overlayInputHomeSuperview != nil && _overlayInput.superview != _overlayInputHomeSuperview) {
+    [_overlayInput removeFromSuperview];
+    [_overlayInputHomeSuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:nil];
+  }
   [self stopObservingScrollView];
   _lastLoadedBlockId = nil;
   _activeBlockId = nil;
@@ -408,6 +438,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   [_activationViews removeAllObjects];
   [self stopObservingScrollView];
   _overlayInput = nil;
+  _overlayInputHomeSuperview = nil;
   _activeBlockId = nil;
   _lastLoadedBlockId = nil;
   _isPositioningOverlay = NO;
