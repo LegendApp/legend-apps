@@ -1,37 +1,23 @@
 import { RadioOption } from "@legend-desktop/design-system";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
-import { useSyncExternalStore } from "react";
 import { View } from "react-native";
 import {
-  getMarkdownStartupBehaviorSetting,
-  getMarkdownAutosaveSetting,
-  getMarkdownFormattingToolbarModeSetting,
   setMarkdownAutosaveSetting,
   setMarkdownStartupBehaviorSetting,
   setMarkdownFormattingToolbarModeSetting,
-  subscribeToMarkdownSettings,
   type MarkdownAutosaveSetting,
   type MarkdownFormattingToolbarModeSetting,
   type MarkdownStartupBehaviorSetting,
+  useMarkdownAutosaveSetting,
+  useMarkdownFormattingToolbarModeSetting,
+  useMarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
 import { ToolbarLayoutEditor } from "./ToolbarLayoutEditor";
 
 export function GeneralSettingsPage() {
-  const startupBehavior = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownStartupBehaviorSetting,
-    getMarkdownStartupBehaviorSetting,
-  );
-  const autosave = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownAutosaveSetting,
-    getMarkdownAutosaveSetting,
-  );
-  const formattingToolbarMode = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownFormattingToolbarModeSetting,
-    getMarkdownFormattingToolbarModeSetting,
-  );
+  const startupBehavior = useMarkdownStartupBehaviorSetting();
+  const autosave = useMarkdownAutosaveSetting();
+  const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
 
   return (
     <SettingsPage>

@@ -4,9 +4,8 @@ import {
   type SettingsWindowPage,
 } from "@legend-desktop/settings-window";
 import { getLegendThemeAppearance } from "@legend-desktop/theme";
-import { useSyncExternalStore } from "react";
 import { settingsWindowIdentifier } from "./appConstants";
-import { getMarkdownThemeSetting, subscribeToMarkdownSettings } from "./markdownSettings";
+import { useMarkdownThemeSetting } from "./markdownSettings";
 import { AppearanceSettingsPage } from "./settings/AppearanceSettingsPage";
 import { GeneralSettingsPage } from "./settings/GeneralSettingsPage";
 import { HotkeysSettingsPage } from "./settings/HotkeysSettingsPage";
@@ -32,11 +31,7 @@ const pages: SettingsWindowPage<SettingsPage>[] = [
 
 export function SettingsWindow({ initialPage }: { initialPage?: string }) {
   const initialSettingsPage = initialPage && isSettingsPage(initialPage) ? initialPage : undefined;
-  const selectedTheme = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownThemeSetting,
-    getMarkdownThemeSetting,
-  );
+  const selectedTheme = useMarkdownThemeSetting();
   const appearance = getLegendThemeAppearance(selectedTheme);
 
   return (

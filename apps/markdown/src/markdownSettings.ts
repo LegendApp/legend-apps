@@ -1,10 +1,11 @@
 import { getLegendUniwindThemeName } from "@legend-desktop/theme";
-import { parseHotkey, type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
+import { type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
 import { createObservableFile } from "@legend-desktop/storage";
+import { useValue } from "@legendapp/state/react";
+import { useMemo } from "react";
 import { Uniwind, type ThemeName } from "uniwind";
 import {
   defaultMarkdownHotkeySettings,
-  markdownHotkeyDefinitions,
   type MarkdownHotkeyId,
 } from "./markdownHotkeys";
 import {
@@ -47,7 +48,7 @@ type MarkdownSettingsFile = {
   fontFamily: MarkdownFontFamilySetting;
   fontSize: MarkdownFontSizeSetting;
   formattingToolbarMode: MarkdownFormattingToolbarModeSetting;
-  hotkeys: Partial<HotkeyState<MarkdownHotkeyId>>;
+  hotkeys: HotkeyState<MarkdownHotkeyId>;
   lastDocumentPath: string | null;
   lineHeight: MarkdownLineHeightSetting;
   selectionToolbarLayout: MarkdownToolbarLayout;
@@ -63,7 +64,7 @@ const initialMarkdownSettings: MarkdownSettingsFile = {
   fontFamily: "system",
   fontSize: "default",
   formattingToolbarMode: "selection",
-  hotkeys: {},
+  hotkeys: { ...defaultMarkdownHotkeySettings },
   lastDocumentPath: null,
   lineHeight: "normal",
   selectionToolbarLayout: getDefaultMarkdownToolbarLayout("selection"),
@@ -76,12 +77,6 @@ const markdownSettings$ = createObservableFile<MarkdownSettingsFile>({
   filename: "settings",
   initialValue: initialMarkdownSettings,
 });
-
-const settingsSubscribers = new Set<() => void>();
-
-function notifyMarkdownSettingsChanged() {
-  settingsSubscribers.forEach((listener) => listener());
-}
 
 function isMarkdownThemeSetting(value: unknown): value is MarkdownThemeSetting {
   return typeof value === "string" && value.length > 0;
@@ -118,12 +113,6 @@ function isMarkdownContentWidthSetting(value: unknown): value is MarkdownContent
 function isMarkdownDocumentDensitySetting(value: unknown): value is MarkdownDocumentDensitySetting {
   return value === "compact" || value === "comfortable" || value === "spacious";
 }
-
-let cachedAppearanceSettings: MarkdownAppearanceSettings | null = null;
-let cachedHotkeySettings: HotkeyState<MarkdownHotkeyId> | null = null;
-let cachedHotkeySettingsSource: string | null = null;
-let cachedToolbarLayoutSettings: Partial<Record<MarkdownToolbarLayoutId, MarkdownToolbarLayout>> = {};
-let cachedToolbarLayoutSettingsSource: Partial<Record<MarkdownToolbarLayoutId, string>> = {};
 
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
   const theme = markdownSettings$.theme.get();
@@ -173,37 +162,13 @@ export function getMarkdownDocumentDensitySetting(): MarkdownDocumentDensitySett
 }
 
 export function getMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
-  const nextSettings = {
+  return {
     contentWidth: getMarkdownContentWidthSetting(),
     density: getMarkdownDocumentDensitySetting(),
     fontFamily: getMarkdownFontFamilySetting(),
     fontSize: getMarkdownFontSizeSetting(),
     lineHeight: getMarkdownLineHeightSetting(),
   };
-
-  if (
-    cachedAppearanceSettings &&
-    cachedAppearanceSettings.contentWidth === nextSettings.contentWidth &&
-    cachedAppearanceSettings.density === nextSettings.density &&
-    cachedAppearanceSettings.fontFamily === nextSettings.fontFamily &&
-    cachedAppearanceSettings.fontSize === nextSettings.fontSize &&
-    cachedAppearanceSettings.lineHeight === nextSettings.lineHeight
-  ) {
-    return cachedAppearanceSettings;
-  }
-
-  cachedAppearanceSettings = nextSettings;
-  return nextSettings;
-}
-
-function isHotkeyValue(value: unknown): value is HotkeyValue | null {
-  if (value === null) {
-    return true;
-  }
-  if (typeof value !== "number" && typeof value !== "string") {
-    return false;
-  }
-  return parseHotkey(value as HotkeyValue).length > 0;
 }
 
 function readStoredMarkdownToolbarLayout(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout | undefined {
@@ -219,43 +184,23 @@ function readStoredMarkdownToolbarLayout(layoutId: MarkdownToolbarLayoutId): Mar
 }
 
 export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
-  const stored = markdownSettings$.hotkeys.get();
-  const source = JSON.stringify(stored ?? null);
-  if (cachedHotkeySettings && cachedHotkeySettingsSource === source) {
-    return cachedHotkeySettings;
-  }
-
-  const nextSettings: HotkeyState<MarkdownHotkeyId> = { ...defaultMarkdownHotkeySettings };
-  if (stored && typeof stored === "object") {
-    for (const definition of markdownHotkeyDefinitions) {
-      const value = (stored as Record<string, unknown>)[definition.id];
-      if (isHotkeyValue(value)) {
-        nextSettings[definition.id] = value;
-      }
-    }
-  }
-
-  cachedHotkeySettings = nextSettings;
-  cachedHotkeySettingsSource = source;
-  return nextSettings;
+  const hotkeys = markdownSettings$.hotkeys.get();
+  return hotkeys && typeof hotkeys === "object" ? hotkeys : initialMarkdownSettings.hotkeys;
 }
 
 export function getMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout {
   const stored = readStoredMarkdownToolbarLayout(layoutId);
-  const source = JSON.stringify(stored ?? null);
-  const cached = cachedToolbarLayoutSettings[layoutId];
-  if (cached && cachedToolbarLayoutSettingsSource[layoutId] === source) {
-    return cached;
-  }
+  return getNormalizedMarkdownToolbarLayout(stored, layoutId);
+}
 
+function getNormalizedMarkdownToolbarLayout(
+  stored: MarkdownToolbarLayout | undefined,
+  layoutId: MarkdownToolbarLayoutId,
+): MarkdownToolbarLayout {
   const normalized = normalizeMarkdownToolbarLayout(stored, layoutId);
-  const nextLayout = {
+  return {
     shown: normalized.shown,
   };
-
-  cachedToolbarLayoutSettings[layoutId] = nextLayout;
-  cachedToolbarLayoutSettingsSource[layoutId] = source;
-  return nextLayout;
 }
 
 export function getLastMarkdownDocumentPath() {
@@ -263,42 +208,108 @@ export function getLastMarkdownDocumentPath() {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-export function subscribeToMarkdownSettings(listener: () => void) {
-  settingsSubscribers.add(listener);
-  return () => {
-    settingsSubscribers.delete(listener);
-  };
+export function useMarkdownThemeSetting(): MarkdownThemeSetting {
+  const theme = useValue(markdownSettings$.theme);
+  return isMarkdownThemeSetting(theme) ? theme : initialMarkdownSettings.theme;
+}
+
+export function useMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
+  const startupBehavior = useValue(markdownSettings$.startupBehavior);
+  return isMarkdownStartupBehaviorSetting(startupBehavior) ? startupBehavior : initialMarkdownSettings.startupBehavior;
+}
+
+export function useMarkdownAutosaveSetting(): MarkdownAutosaveSetting {
+  const autosave = useValue(markdownSettings$.autosave);
+  return isMarkdownAutosaveSetting(autosave) ? autosave : initialMarkdownSettings.autosave;
+}
+
+export function useMarkdownFormattingToolbarModeSetting(): MarkdownFormattingToolbarModeSetting {
+  const formattingToolbarMode = useValue(markdownSettings$.formattingToolbarMode);
+  return isMarkdownFormattingToolbarModeSetting(formattingToolbarMode)
+    ? formattingToolbarMode
+    : initialMarkdownSettings.formattingToolbarMode;
+}
+
+export function useMarkdownFontFamilySetting(): MarkdownFontFamilySetting {
+  const fontFamily = useValue(markdownSettings$.fontFamily);
+  return isMarkdownFontFamilySetting(fontFamily) ? fontFamily : initialMarkdownSettings.fontFamily;
+}
+
+export function useMarkdownFontSizeSetting(): MarkdownFontSizeSetting {
+  const fontSize = useValue(markdownSettings$.fontSize);
+  return isMarkdownFontSizeSetting(fontSize) ? fontSize : initialMarkdownSettings.fontSize;
+}
+
+export function useMarkdownLineHeightSetting(): MarkdownLineHeightSetting {
+  const lineHeight = useValue(markdownSettings$.lineHeight);
+  return isMarkdownLineHeightSetting(lineHeight) ? lineHeight : initialMarkdownSettings.lineHeight;
+}
+
+export function useMarkdownContentWidthSetting(): MarkdownContentWidthSetting {
+  const contentWidth = useValue(markdownSettings$.contentWidth);
+  return isMarkdownContentWidthSetting(contentWidth) ? contentWidth : initialMarkdownSettings.contentWidth;
+}
+
+export function useMarkdownDocumentDensitySetting(): MarkdownDocumentDensitySetting {
+  const density = useValue(markdownSettings$.density);
+  return isMarkdownDocumentDensitySetting(density) ? density : initialMarkdownSettings.density;
+}
+
+export function useMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
+  const contentWidth = useMarkdownContentWidthSetting();
+  const density = useMarkdownDocumentDensitySetting();
+  const fontFamily = useMarkdownFontFamilySetting();
+  const fontSize = useMarkdownFontSizeSetting();
+  const lineHeight = useMarkdownLineHeightSetting();
+
+  return useMemo(
+    () => ({
+      contentWidth,
+      density,
+      fontFamily,
+      fontSize,
+      lineHeight,
+    }),
+    [contentWidth, density, fontFamily, fontSize, lineHeight],
+  );
+}
+
+export function useMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
+  return useValue(markdownSettings$.hotkeys);
+}
+
+export function useMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId): MarkdownToolbarLayout {
+  const layout$ = layoutId === "top" ? markdownSettings$.topToolbarLayout : markdownSettings$.selectionToolbarLayout;
+  const stored = useValue(layout$);
+  return useMemo(
+    () => getNormalizedMarkdownToolbarLayout(stored, layoutId),
+    [layoutId, stored],
+  );
 }
 
 export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
   markdownSettings$.theme.set(theme);
   Uniwind.setTheme(getLegendUniwindThemeName(theme) as ThemeName);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
   markdownSettings$.startupBehavior.set(startupBehavior);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownAutosaveSetting(autosave: MarkdownAutosaveSetting) {
   markdownSettings$.autosave.set(autosave);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownFormattingToolbarModeSetting(formattingToolbarMode: MarkdownFormattingToolbarModeSetting) {
   markdownSettings$.formattingToolbarMode.set(formattingToolbarMode);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownFontFamilySetting(fontFamily: MarkdownFontFamilySetting) {
   markdownSettings$.fontFamily.set(fontFamily);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownFontSizeSetting(fontSize: MarkdownFontSizeSetting) {
   markdownSettings$.fontSize.set(fontSize);
-  notifyMarkdownSettingsChanged();
 }
 
 export function increaseMarkdownFontSizeSetting() {
@@ -319,17 +330,14 @@ export function resetMarkdownFontSizeSetting() {
 
 export function setMarkdownLineHeightSetting(lineHeight: MarkdownLineHeightSetting) {
   markdownSettings$.lineHeight.set(lineHeight);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownContentWidthSetting(contentWidth: MarkdownContentWidthSetting) {
   markdownSettings$.contentWidth.set(contentWidth);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownDocumentDensitySetting(density: MarkdownDocumentDensitySetting) {
   markdownSettings$.density.set(density);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValue | null) {
@@ -337,10 +345,7 @@ export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValu
     ...getMarkdownHotkeySettings(),
     [id]: value,
   };
-  cachedHotkeySettings = nextSettings;
-  cachedHotkeySettingsSource = JSON.stringify(nextSettings);
   markdownSettings$.hotkeys.set(nextSettings);
-  notifyMarkdownSettingsChanged();
 }
 
 export function setMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId, layout: MarkdownToolbarLayout) {
@@ -348,16 +353,12 @@ export function setMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutI
   const nextLayout = {
     shown: normalized.shown,
   };
-  const source = JSON.stringify(nextLayout);
 
-  cachedToolbarLayoutSettings[layoutId] = nextLayout;
-  cachedToolbarLayoutSettingsSource[layoutId] = source;
   if (layoutId === "top") {
     markdownSettings$.topToolbarLayout.set(nextLayout);
   } else {
     markdownSettings$.selectionToolbarLayout.set(nextLayout);
   }
-  notifyMarkdownSettingsChanged();
 }
 
 export function resetMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutId) {
@@ -366,14 +367,12 @@ export function resetMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayou
 
 export function setLastMarkdownDocumentPath(path: string) {
   markdownSettings$.lastDocumentPath.set(path);
-  notifyMarkdownSettingsChanged();
 }
 
 export function clearLastMarkdownDocumentPath(path?: string) {
   const currentPath = getLastMarkdownDocumentPath();
   if (!path || currentPath === path) {
     markdownSettings$.lastDocumentPath.set(null);
-    notifyMarkdownSettingsChanged();
   }
 }
 

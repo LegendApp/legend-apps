@@ -1,14 +1,13 @@
 import { cn } from "@legend-desktop/classnames";
 import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-desktop/reorder-controls";
-import { Fragment, useCallback, useMemo, useSyncExternalStore } from "react";
+import { Fragment, useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
 import {
-  getMarkdownToolbarLayoutSetting,
   setMarkdownToolbarLayoutSetting,
-  subscribeToMarkdownSettings,
   type MarkdownToolbarControlGroup,
   type MarkdownToolbarLayoutId,
+  useMarkdownToolbarLayoutSetting,
 } from "../markdownSettings";
 import {
   moveMarkdownToolbarItem,
@@ -40,11 +39,7 @@ type MoveToolbarItemParams = {
 const toolbarLayoutZonePrefix = "markdown-toolbar-layout";
 
 export function ToolbarLayoutEditor({ description, layoutId, title }: ToolbarLayoutEditorProps) {
-  const layout = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    () => getMarkdownToolbarLayoutSetting(layoutId),
-    () => getMarkdownToolbarLayoutSetting(layoutId),
-  );
+  const layout = useMarkdownToolbarLayoutSetting(layoutId);
   const normalizedLayout = useMemo(() => normalizeMarkdownToolbarLayout(layout, layoutId), [layout, layoutId]);
 
   const handleMove = useCallback(

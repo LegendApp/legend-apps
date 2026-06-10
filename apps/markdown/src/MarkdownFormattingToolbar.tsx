@@ -1,12 +1,11 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import type { RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useResolveClassNames } from "uniwind";
 import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
 import {
-  getMarkdownToolbarLayoutSetting,
-  subscribeToMarkdownSettings,
   type MarkdownToolbarLayoutId,
+  useMarkdownToolbarLayoutSetting,
 } from "./markdownSettings";
 import { markdownToolbarItemMap } from "./markdownToolbarItems";
 
@@ -23,11 +22,7 @@ export function MarkdownFormattingToolbar({
 }) {
   const toolbarStyle = useResolveClassNames("border-border bg-surface");
   const buttonStyle = useResolveClassNames("border-border bg-surface-muted");
-  const toolbarLayout = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    () => getMarkdownToolbarLayoutSetting(layoutId),
-    () => getMarkdownToolbarLayoutSetting(layoutId),
-  );
+  const toolbarLayout = useMarkdownToolbarLayoutSetting(layoutId);
   const toolbarItems = useMemo(
     () => toolbarLayout.shown.map((itemId) => markdownToolbarItemMap[itemId]).filter(Boolean),
     [toolbarLayout],

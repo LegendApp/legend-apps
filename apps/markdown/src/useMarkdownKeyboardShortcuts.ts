@@ -1,23 +1,16 @@
 import { useHotkeys } from "@legend-desktop/hotkeys";
 import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
 import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
-import { useEffect, useMemo, useSyncExternalStore, type RefObject } from "react";
+import { useEffect, useMemo, type RefObject } from "react";
 import { markdownHotkeyDefinitions } from "./markdownHotkeys";
-import {
-  getMarkdownHotkeySettings,
-  subscribeToMarkdownSettings,
-} from "./markdownSettings";
+import { useMarkdownHotkeySettings } from "./markdownSettings";
 
 type MarkdownKeyboardShortcutsOptions = {
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
 };
 
 export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKeyboardShortcutsOptions) {
-  const hotkeys = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownHotkeySettings,
-    getMarkdownHotkeySettings,
-  );
+  const hotkeys = useMarkdownHotkeySettings();
   const hotkeyHandlers = useMemo(() => ({
     extendBlockSelectionDown: () => documentCommandsRef.current?.extendBlockSelectionDown() ?? false,
     extendBlockSelectionUp: () => documentCommandsRef.current?.extendBlockSelectionUp() ?? false,

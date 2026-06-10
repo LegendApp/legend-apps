@@ -1,18 +1,12 @@
 import { HotkeysSettingsPage as SharedHotkeysSettingsPage } from "@legend-desktop/hotkeys";
-import { useSyncExternalStore } from "react";
 import { markdownHotkeyDefinitions } from "../markdownHotkeys";
 import {
-  getMarkdownHotkeySettings,
   setMarkdownHotkeySetting,
-  subscribeToMarkdownSettings,
+  useMarkdownHotkeySettings,
 } from "../markdownSettings";
 
 export function HotkeysSettingsPage() {
-  const hotkeys = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownHotkeySettings,
-    getMarkdownHotkeySettings,
-  );
+  const hotkeys = useMarkdownHotkeySettings();
 
   return (
     <SharedHotkeysSettingsPage

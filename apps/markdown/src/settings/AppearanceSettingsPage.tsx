@@ -2,28 +2,27 @@ import { ThemeSelectorSection } from "@legend-desktop/appearance-settings";
 import { RadioOption } from "@legend-desktop/design-system";
 import { getLegendThemeFiles } from "@legend-desktop/theme";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 import {
-  getMarkdownContentWidthSetting,
-  getMarkdownDocumentDensitySetting,
-  getMarkdownFontFamilySetting,
-  getMarkdownFontSizeSetting,
-  getMarkdownLineHeightSetting,
-  getMarkdownThemeSetting,
   setMarkdownContentWidthSetting,
   setMarkdownDocumentDensitySetting,
   setMarkdownFontFamilySetting,
   setMarkdownFontSizeSetting,
   setMarkdownLineHeightSetting,
   setMarkdownThemeSetting,
-  subscribeToMarkdownSettings,
   type MarkdownContentWidthSetting,
   type MarkdownDocumentDensitySetting,
   type MarkdownFontFamilySetting,
   type MarkdownFontSizeSetting,
   type MarkdownLineHeightSetting,
   type MarkdownThemeSetting,
+  useMarkdownContentWidthSetting,
+  useMarkdownDocumentDensitySetting,
+  useMarkdownFontFamilySetting,
+  useMarkdownFontSizeSetting,
+  useMarkdownLineHeightSetting,
+  useMarkdownThemeSetting,
 } from "../markdownSettings";
 import { loadMarkdownUserThemesSync } from "../userThemes";
 
@@ -33,36 +32,12 @@ export function AppearanceSettingsPage() {
     () => getLegendThemeFiles().map((theme) => ({ label: theme.name, value: theme.name })),
     [userThemeLoadResult],
   );
-  const selectedTheme = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownThemeSetting,
-    getMarkdownThemeSetting,
-  );
-  const selectedFontFamily = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownFontFamilySetting,
-    getMarkdownFontFamilySetting,
-  );
-  const selectedFontSize = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownFontSizeSetting,
-    getMarkdownFontSizeSetting,
-  );
-  const selectedLineHeight = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownLineHeightSetting,
-    getMarkdownLineHeightSetting,
-  );
-  const selectedContentWidth = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownContentWidthSetting,
-    getMarkdownContentWidthSetting,
-  );
-  const selectedDensity = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownDocumentDensitySetting,
-    getMarkdownDocumentDensitySetting,
-  );
+  const selectedTheme = useMarkdownThemeSetting();
+  const selectedFontFamily = useMarkdownFontFamilySetting();
+  const selectedFontSize = useMarkdownFontSizeSetting();
+  const selectedLineHeight = useMarkdownLineHeightSetting();
+  const selectedContentWidth = useMarkdownContentWidthSetting();
+  const selectedDensity = useMarkdownDocumentDensitySetting();
 
   return (
     <SettingsPage>

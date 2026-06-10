@@ -4,7 +4,7 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { getLegendTheme, getLegendThemeAppearance } from "@legend-desktop/theme";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
 import {
@@ -29,11 +29,10 @@ import {
 } from "./useMarkdownWindows";
 import {
   applyMarkdownThemeSetting,
-  getMarkdownAppearanceSettings,
-  getMarkdownAutosaveSetting,
-  getMarkdownFormattingToolbarModeSetting,
-  getMarkdownThemeSetting,
-  subscribeToMarkdownSettings,
+  useMarkdownAppearanceSettings,
+  useMarkdownAutosaveSetting,
+  useMarkdownFormattingToolbarModeSetting,
+  useMarkdownThemeSetting,
 } from "./markdownSettings";
 import {
   getMarkdownLayoutForAppearance,
@@ -48,29 +47,13 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   loadMarkdownUserThemesSync();
   const session = useMarkdownDocumentSession();
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
-  const themeSetting = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownThemeSetting,
-    getMarkdownThemeSetting,
-  );
+  const themeSetting = useMarkdownThemeSetting();
   const theme = getLegendTheme(themeSetting);
   const nativeWindowAppearance = getLegendThemeAppearance(themeSetting);
   const backgroundStyle = useMemo(() => ({ backgroundColor: theme.colors.background }), [theme.colors.background]);
-  const formattingToolbarMode = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownFormattingToolbarModeSetting,
-    getMarkdownFormattingToolbarModeSetting,
-  );
-  const autosave = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownAutosaveSetting,
-    getMarkdownAutosaveSetting,
-  );
-  const appearanceSettings = useSyncExternalStore(
-    subscribeToMarkdownSettings,
-    getMarkdownAppearanceSettings,
-    getMarkdownAppearanceSettings,
-  );
+  const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
+  const autosave = useMarkdownAutosaveSetting();
+  const appearanceSettings = useMarkdownAppearanceSettings();
   const markdownStyle = useMemo(
     () => getMarkdownStyleForAppearance(theme, appearanceSettings),
     [appearanceSettings, theme],
