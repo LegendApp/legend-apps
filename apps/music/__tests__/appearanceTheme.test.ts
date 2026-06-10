@@ -1,156 +1,105 @@
 import {
-    getLegendThemeAppearance,
-    getLegendThemeUniwindVariables,
-    isLegendThemeFile,
-    loadUserThemeFilesSync,
-    type ThemeStorage,
-} from "@legend-desktop/theme";
-import {
     defaultMusicBackground,
     normalizeMusicAppearanceSettings,
 } from "@/systems/Settings";
-
-const validColors = {
-    background: "#101014",
-    blockquoteBackground: "#15151a",
-    blockquoteBorder: "#444455",
-    border: "#ffffff22",
-    code: "#08080a",
-    codeForeground: "#f5f5f5",
-    danger: "#ff5555",
-    foreground: "#f5f5f5",
-    muted: "#999999",
-    primary: "#7ab7ff",
-    selection: "auto",
-    surface: "#181820cc",
-    surfaceMuted: "#242436aa",
-    tableHeader: "#22222a",
-    tableRowAlt: "#15151a",
-    windowBackground: "#090b10",
-};
+import {
+    getMusicTheme,
+    getMusicThemeAppearance,
+    isMusicThemeName,
+    musicThemeOptions,
+} from "@/theme/musicThemes";
 
 describe("music appearance themes", () => {
-    it("uses explicit theme appearance for native surfaces", () => {
-        expect(getLegendThemeAppearance("grey")).toBe("dark");
+    it("uses local light and dark theme options", () => {
+        expect(musicThemeOptions).toEqual([
+            { label: "Dark", value: "dark" },
+            { label: "Light", value: "light" },
+        ]);
+        expect(getMusicThemeAppearance("dark")).toBe("dark");
+        expect(getMusicThemeAppearance("light")).toBe("light");
     });
 
-    it("maps selected theme colors into UniWind variables", () => {
-        expect(getLegendThemeUniwindVariables("grey")).toMatchObject({
-            "--color-background": "#191919",
-            "--color-background-primary": "#191919",
-            "--color-background-secondary": "#202020",
-            "--color-border-primary": "#3d3d3d",
-            "--color-foreground": "#d4d4d4",
-            "--color-text-primary": "#d4d4d4",
+    it("falls back to the dark theme for invalid theme names", () => {
+        expect(isMusicThemeName("grey")).toBe(false);
+        expect(getMusicTheme("grey").name).toBe("dark");
+    });
+
+    it("normalizes missing music appearance settings", () => {
+        expect(normalizeMusicAppearanceSettings({ theme: "" })).toEqual({
+            background: defaultMusicBackground,
+            theme: "dark",
         });
     });
 
-    it("accepts theme files with transparent music backgrounds", () => {
-        expect(
-            isLegendThemeFile({
-                appearance: "dark",
-                background: {
-                    glassEnabled: true,
-                    opacity: 0.8,
-                    source: {
-                        color: "#090b10cc",
-                        type: "color",
-                    },
-                    tint: {
-                        color: "#00000044",
-                        enabled: true,
-                    },
-                },
-                colors: validColors,
-                name: "Midnight Album",
-            }),
-        ).toBe(true);
-    });
-
-    it("rejects invalid theme appearance values", () => {
-        expect(
-            isLegendThemeFile({
-                appearance: "dim",
-                colors: validColors,
-                name: "Invalid Appearance",
-            }),
-        ).toBe(false);
-    });
-
-    it("rejects invalid theme background colors", () => {
-        expect(
-            isLegendThemeFile({
-                background: {
-                    glassEnabled: true,
-                    opacity: 0.8,
-                    source: {
-                        color: "black",
-                        type: "color",
-                    },
-                    tint: {
-                        color: "#00000044",
-                        enabled: true,
-                    },
-                },
-                colors: validColors,
-                name: "Invalid",
-            }),
-        ).toBe(false);
-    });
-
-    it("normalizes missing or out-of-range music appearance settings", () => {
+    it("accepts alpha in hex or rgba background colors", () => {
         expect(
             normalizeMusicAppearanceSettings({
                 background: {
-                    glassEnabled: true,
-                    opacity: 2,
-                    source: {
-                        type: "none",
-                    },
-                    tint: {
-                        color: "transparent",
-                        enabled: true,
-                    },
+                    color: "rgba(0, 0, 0, 0.27)",
+                    glassEnabled: false,
                 },
-                theme: "",
+                theme: "light",
             }),
         ).toEqual({
             background: {
-                ...defaultMusicBackground,
-                glassEnabled: true,
-                opacity: 1,
-                tint: {
-                    color: defaultMusicBackground.tint.color,
-                    enabled: true,
+                color: "rgba(0, 0, 0, 0.27)",
+                glassEnabled: false,
+            },
+            theme: "light",
+        });
+
+        expect(
+            normalizeMusicAppearanceSettings({
+                background: {
+                    color: "#00000044",
+                    glassEnabled: true,
                 },
+                theme: "dark",
+            }),
+        ).toEqual({
+            background: {
+                color: "#00000044",
+                glassEnabled: true,
             },
             theme: "dark",
         });
     });
 
-    it("loads valid user themes and reports invalid files", () => {
-        const storage: ThemeStorage = {
-            ensureDirectory: jest.fn(() => ({ name: "themes", uri: "file:///themes" })),
-            list: jest.fn(() => [{ name: "valid.json" }, { name: "invalid.json" }]),
-            read<T = unknown>(path: string): T | undefined {
-                if (path.endsWith("/valid.json")) {
-                    return {
-                        colors: validColors,
-                        name: "Valid",
-                    } as T;
-                }
-                return { name: "Invalid" } as T;
+    it("migrates old color-source or tint settings into one background color", () => {
+        expect(
+            normalizeMusicAppearanceSettings({
+                background: {
+                    glassEnabled: true,
+                    opacity: 0.8,
+                    source: {
+                        color: "#101014cc",
+                        type: "color",
+                    },
+                    tint: {
+                        color: "#00000044",
+                        enabled: true,
+                    },
+                },
+                theme: "dark",
+            }),
+        ).toEqual({
+            background: {
+                color: "#101014cc",
+                glassEnabled: true,
             },
-        };
-
-        const result = loadUserThemeFilesSync({
-            replaceRegisteredUserThemes: false,
-            storage,
+            theme: "dark",
         });
+    });
 
-        expect(result.themes.map((theme) => theme.name)).toEqual(["Valid"]);
-        expect(result.issues).toEqual([
-            { filename: "invalid.json", message: "Theme file is missing required fields or valid colors." },
-        ]);
+    it("falls back to the default background color for invalid colors", () => {
+        expect(
+            normalizeMusicAppearanceSettings({
+                background: {
+                    color: "transparent",
+                    glassEnabled: true,
+                },
+                theme: "dark",
+            }).background.color,
+        ).toBe(defaultMusicBackground.color);
     });
 });

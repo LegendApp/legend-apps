@@ -6,7 +6,6 @@
   "dependencies": {
     "@gorhom/portal": "^1.0.14",
     "@legend-desktop/ai": "0.0.0",
-    "@legend-desktop/appearance-settings": "workspace:*",
     "@legend-desktop/app-exit": "0.0.0",
     "@legend-desktop/appkit-split-view": "0.0.0",
     "@legend-desktop/audio-player": "0.0.0",

@@ -1,6 +1,5 @@
 import { PortalProvider } from "@gorhom/portal";
 import { useValue } from "@legendapp/state/react";
-import { getLegendThemeAppearance } from "@legend-desktop/theme";
 import { useCallback, useState } from "react";
 import type { LayoutChangeEvent, NativeSyntheticEvent } from "react-native";
 import { Platform, View } from "react-native";
@@ -14,6 +13,7 @@ import { HiddenTextInput } from "@/systems/keyboard/HookKeyboard";
 import { normalizeMusicAppearanceSettings, settings$ } from "@/systems/Settings";
 import { stateSaved$ } from "@/systems/State";
 import { ThemeProvider } from "@/theme/ThemeProvider";
+import { getMusicThemeAppearance } from "@/theme/musicThemes";
 import { WindowProvider } from "@/windows";
 
 const MEDIA_LIBRARY_WINDOW_ID = "media-library";
@@ -21,7 +21,7 @@ const MEDIA_LIBRARY_WINDOW_ID = "media-library";
 export default function MediaLibraryWindow() {
     const isMacOS = Platform.OS === "macos";
     const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const splitViewAppearance = getLegendThemeAppearance(appearanceSettings.theme);
+    const splitViewAppearance = getMusicThemeAppearance(appearanceSettings.theme);
     const [paneWidths, setPaneWidths] = useState({ content: 0, sidebar: 0 });
     const [height, setHeight] = useState(0);
     const handleLayout = useCallback((event: LayoutChangeEvent) => {

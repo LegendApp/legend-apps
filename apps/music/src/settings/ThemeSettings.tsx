@@ -1,41 +1,31 @@
-import { BackgroundSettingsSection, ThemeSelectorSection } from "@legend-desktop/appearance-settings";
 import { useValue } from "@legendapp/state/react";
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { getLegendTheme, getLegendThemeFiles } from "@legend-desktop/theme";
-import { useEffect, useMemo } from "react";
-import { Text } from "react-native";
+import { useEffect } from "react";
+import { Text, TextInput, View } from "react-native";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { ColorPicker } from "@/components/ColorPicker";
-import { SettingsPage, SettingsSection } from "@/settings/components";
+import { SettingsPage, SettingsRow, SettingsSection } from "@/settings/components";
 import {
     defaultMusicAppearance,
-    defaultMusicBackground,
     ensureMusicAppearanceSettings,
     normalizeMusicAppearanceSettings,
     settings$,
 } from "@/systems/Settings";
 import { themeState$, useTheme } from "@/theme/ThemeProvider";
-import { loadMusicUserThemesSync } from "@/userThemes";
+import { getMusicTheme, musicThemeOptions, type MusicThemeName } from "@/theme/musicThemes";
+import { cn } from "@legend-desktop/classnames";
 
-function setMusicTheme(themeName: string) {
-    const theme = getLegendTheme(themeName);
-    settings$.appearance.set({
-        background: theme.background ?? defaultMusicBackground,
-        theme: themeName,
-    });
+function applyMusicTheme(themeName: MusicThemeName) {
+    const theme = getMusicTheme(themeName);
+    settings$.appearance.theme.set(theme.name);
+    themeState$.customColors.dark.set(JSON.parse(JSON.stringify(theme.colors)));
 }
 
 export const ThemeSettings = () => {
     const { resetTheme } = useTheme();
-    const userThemeLoadResult = useMemo(() => loadMusicUserThemesSync({ force: true }), []);
-    const themeOptions = useMemo(
-        () => getLegendThemeFiles().map((theme) => ({ label: theme.name, value: theme.name })),
-        [userThemeLoadResult],
-    );
     const appearance = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
     const colors$ = themeState$.customColors.dark;
     const selectedTheme = appearance.theme;
-    const selectedLegendTheme = getLegendTheme(selectedTheme);
     const background = appearance.background;
 
     useEffect(() => {
@@ -45,16 +35,9 @@ export const ThemeSettings = () => {
     const handleReset = () => {
         resetTheme();
         settings$.appearance.set(defaultMusicAppearance);
-    };
-
-    const handleChooseImage = async () => {
-        const paths = await openFileDialog({
-            allowedFileTypes: ["png", "jpg", "jpeg", "heic", "webp"],
-            allowsMultipleSelection: false,
-            canChooseFiles: true,
-        });
-        const [path] = paths ?? [];
-        return path ?? null;
+        themeState$.customColors.dark.set(
+            JSON.parse(JSON.stringify(getMusicTheme(defaultMusicAppearance.theme).colors)),
+        );
     };
 
     return (
@@ -66,20 +49,58 @@ export const ThemeSettings = () => {
             }
             contentClassName="p-4"
         >
-            <ThemeSelectorSection
-                first
-                issues={userThemeLoadResult.issues}
-                onThemeChange={setMusicTheme}
-                selectedTheme={selectedTheme}
-                themes={themeOptions}
-            />
+            <SettingsSection card={false} contentClassName="gap-3" first title="Theme">
+                <View accessibilityRole="radiogroup" className="gap-2">
+                    {musicThemeOptions.map((theme) => {
+                        const isSelected = selectedTheme === theme.value;
+                        return (
+                            <Button
+                                key={theme.value}
+                                className={cn(
+                                    "h-9 justify-center rounded-md border px-3",
+                                    isSelected
+                                        ? "border-accent-primary bg-background-tertiary"
+                                        : "border-border-primary bg-background-secondary",
+                                )}
+                                onClick={() => applyMusicTheme(theme.value)}
+                            >
+                                <Text className="text-sm font-medium text-text-primary">{theme.label}</Text>
+                            </Button>
+                        );
+                    })}
+                </View>
+            </SettingsSection>
 
-            <BackgroundSettingsSection
-                background={background}
-                fallbackColor={selectedLegendTheme.colors.windowBackground}
-                onBackgroundChange={(nextBackground) => settings$.appearance.background.set(nextBackground)}
-                onChooseImage={handleChooseImage}
-            />
+            <SettingsSection card={false} className="mt-6" contentClassName="gap-3" title="Background">
+                <SettingsRow
+                    title="Liquid Glass"
+                    description="Use the native translucent glass background."
+                    control={<Checkbox $checked={settings$.appearance.background.glassEnabled} />}
+                />
+                <SettingsRow
+                    title="Background Color"
+                    description="Supports alpha, for example #00000044 or rgba(0, 0, 0, 0.27)."
+                    align="center"
+                    control={
+                        <View className="w-44">
+                            <View className="mb-2 flex-row items-center justify-end gap-2">
+                                <View
+                                    className="h-5 w-5 rounded border border-border-primary"
+                                    style={{ backgroundColor: background.color || "transparent" }}
+                                />
+                            </View>
+                            <TextInput
+                                value={background.color}
+                                onChangeText={(value) => settings$.appearance.background.color.set(value.trim())}
+                                placeholder="#00000044"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                className="h-9 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-text-primary"
+                            />
+                        </View>
+                    }
+                />
+            </SettingsSection>
 
             <SettingsSection title="Interface Colors" card={false} className="mt-6" contentClassName="gap-3">
                 <ColorPicker label="Background Primary" $color={colors$.background.primary} />

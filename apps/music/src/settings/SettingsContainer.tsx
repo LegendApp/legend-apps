@@ -4,7 +4,6 @@ import {
     SettingsWindow,
     type SettingsWindowPage,
 } from "@legend-desktop/settings-window";
-import { getLegendThemeAppearance } from "@legend-desktop/theme";
 import { View } from "react-native";
 import { TooltipProvider } from "@/components/TooltipProvider";
 import { AccountSettings } from "@/settings/AccountSettings";
@@ -17,6 +16,7 @@ import { ThemeSettings } from "@/settings/ThemeSettings";
 import { SUPPORT_ACCOUNTS } from "@/systems/constants";
 import { normalizeMusicAppearanceSettings, settings$ } from "@/systems/Settings";
 import { ThemeProvider } from "@/theme/ThemeProvider";
+import { getMusicThemeAppearance } from "@/theme/musicThemes";
 import { ax } from "@/utils/ax";
 
 export type SettingsPage = "general" | "library" | "overlay" | "theme" | "ui-customize" | "account" | "open-source";
@@ -39,7 +39,7 @@ function isSettingsPage(value: unknown): value is SettingsPage {
 export default function SettingsContainer({ initialPage }: { initialPage?: string }) {
     const initialSettingsPage = isSettingsPage(initialPage) ? initialPage : undefined;
     const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const splitViewAppearance = getLegendThemeAppearance(appearanceSettings.theme);
+    const splitViewAppearance = getMusicThemeAppearance(appearanceSettings.theme);
 
     return (
         <View className="flex-1" style={{ flex: 1 }}>
