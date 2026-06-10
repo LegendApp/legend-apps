@@ -1,3 +1,4 @@
+import { RadioOption } from "@legend-desktop/design-system";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
 import { useSyncExternalStore } from "react";
 import { View } from "react-native";
@@ -13,7 +14,6 @@ import {
   type MarkdownFormattingToolbarModeSetting,
   type MarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
-import { RadioOption } from "./RadioOption";
 import { ToolbarLayoutEditor } from "./ToolbarLayoutEditor";
 
 export function GeneralSettingsPage() {

@@ -28,6 +28,7 @@
         "@legend-desktop/appearance-settings": "workspace:*",
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/classnames": "0.0.0",
+        "@legend-desktop/design-system": "workspace:*",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/hotkeys": "workspace:*",
         "@legend-desktop/keyboard-manager": "0.0.0",
@@ -143,7 +144,7 @@
       "name": "@legend-desktop/appearance-settings",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/classnames": "0.0.0",
+        "@legend-desktop/design-system": "workspace:*",
         "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/theme": "workspace:*",
       },
@@ -195,6 +196,18 @@
     "packages/context-menu": {
       "name": "@legend-desktop/context-menu",
       "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/design-system": {
+      "name": "@legend-desktop/design-system",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/classnames": "0.0.0",
+        "uniwind": "^1.6.3",
+      },
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
@@ -808,6 +821,8 @@
     "@legend-desktop/command-runner": ["@legend-desktop/command-runner@workspace:packages/command-runner"],
 
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
+
+    "@legend-desktop/design-system": ["@legend-desktop/design-system@workspace:packages/design-system"],
 
     "@legend-desktop/document-scanner": ["@legend-desktop/document-scanner@workspace:packages/document-scanner"],
 

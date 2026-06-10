@@ -1,4 +1,9 @@
-import { cn } from "@legend-desktop/classnames";
+import {
+  ColorValueInput,
+  RadioOption,
+  SegmentedOptions,
+  SwitchControl,
+} from "@legend-desktop/design-system";
 import { SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
 import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-desktop/theme";
 import { Text, TextInput, Pressable, View } from "react-native";
@@ -293,114 +298,6 @@ export function BackgroundSettingsSection({
         />
       ) : null}
     </SettingsSection>
-  );
-}
-
-function RadioOption({
-  label,
-  onSelect,
-  selected,
-  value,
-}: {
-  label: string;
-  onSelect: (value: string) => void;
-  selected: boolean;
-  value: string;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      className={cn(
-        "flex-row items-center gap-3 rounded-lg border border-border-primary px-4 py-3",
-        selected ? "bg-background-tertiary" : "bg-background-secondary",
-      )}
-      onPress={() => onSelect(value)}
-    >
-      <View className={cn("size-4 rounded-full border", selected ? "border-accent-primary" : "border-border-primary")}>
-        {selected ? <View className="m-1 size-2 rounded-full bg-accent-primary" /> : null}
-      </View>
-      <Text className="text-sm font-medium text-text-primary">{label}</Text>
-    </Pressable>
-  );
-}
-
-function SegmentedOptions<T extends string>({
-  onChange,
-  options,
-  value,
-}: {
-  onChange: (value: T) => void;
-  options: readonly { label: string; value: T }[];
-  value: T;
-}) {
-  return (
-    <View className="flex-row overflow-hidden rounded-md border border-border-primary bg-background-secondary">
-      {options.map((option) => (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected: option.value === value }}
-          className={cn(
-            "h-8 justify-center px-3",
-            option.value === value ? "bg-background-tertiary" : "hover:bg-background-tertiary",
-          )}
-          key={option.value}
-          onPress={() => onChange(option.value)}
-        >
-          <Text className="text-sm text-text-primary">{option.label}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function SwitchControl({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <Pressable
-      accessibilityRole="switch"
-      accessibilityState={{ checked }}
-      className="flex-row items-center gap-2"
-      onPress={() => onChange(!checked)}
-    >
-      <View
-        className={cn(
-          "size-5 items-center justify-center rounded-md border",
-          checked ? "border-accent-primary bg-accent-primary" : "border-border-primary bg-background-secondary",
-        )}
-      >
-        {checked ? <View className="size-2 rounded-sm bg-text-primary" /> : null}
-      </View>
-    </Pressable>
-  );
-}
-
-export function ColorValueInput({
-  label,
-  onChange,
-  value,
-}: {
-  label?: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <View className="w-44">
-      <View className="mb-2 flex-row items-center justify-end gap-2">
-        {label ? <Text className="text-sm font-medium text-text-secondary">{label}</Text> : null}
-        <View
-          className="h-5 w-5 rounded border border-border-primary"
-          style={{ backgroundColor: value || "transparent" }}
-        />
-      </View>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        placeholder="#101014cc"
-        autoCapitalize="none"
-        autoCorrect={false}
-        className="h-9 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-text-primary"
-      />
-    </View>
   );
 }
 

@@ -1,4 +1,5 @@
 import { ThemeSelectorSection } from "@legend-desktop/appearance-settings";
+import { RadioOption } from "@legend-desktop/design-system";
 import { getLegendThemeFiles } from "@legend-desktop/theme";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
 import { useMemo, useSyncExternalStore } from "react";
@@ -25,7 +26,6 @@ import {
   type MarkdownThemeSetting,
 } from "../markdownSettings";
 import { loadMarkdownUserThemesSync } from "../userThemes";
-import { RadioOption } from "./RadioOption";
 
 export function AppearanceSettingsPage() {
   const userThemeLoadResult = useMemo(() => loadMarkdownUserThemesSync({ force: true }), []);
