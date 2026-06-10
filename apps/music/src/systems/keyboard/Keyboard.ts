@@ -26,7 +26,6 @@ const nativeHotkeyMap = {
     ForwardDelete: [KeyCodes.KEY_FORWARD_DELETE],
     Backspace: [KeyCodes.KEY_DELETE],
     SelectAll: [KeyCodes.MODIFIER_COMMAND, KeyCodes.KEY_A],
-    CloseWindow: [KeyCodes.MODIFIER_COMMAND, KeyCodes.KEY_W],
 } as const;
 
 // Updated KeyInfo to only require the action function

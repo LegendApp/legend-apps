@@ -2,22 +2,13 @@ import { useMount } from "@legendapp/state/react";
 import { useRef } from "react";
 import { AppState, type AppStateStatus, TextInput } from "react-native";
 import { useWindowManager } from "@legend-desktop/window-manager";
-import { activeWindowId$, useHookKeyboard, useOnHotkeys } from "@/systems/keyboard/Keyboard";
+import { activeWindowId$, useHookKeyboard } from "@/systems/keyboard/Keyboard";
 import { perfCount, perfLog } from "@/utils/perfLogger";
 
 export function HookKeyboard() {
     perfCount("HookKeyboard.render");
     useHookKeyboard();
     const windowManagerRef = useRef(useWindowManager());
-
-    useOnHotkeys(
-        {
-            CloseWindow: () => {
-                void windowManagerRef.current.closeFrontmostWindow();
-            },
-        },
-        { global: true },
-    );
 
     useMount(() => {
         activeWindowId$.set("main");
