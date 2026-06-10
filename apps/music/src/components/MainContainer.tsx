@@ -1,8 +1,10 @@
+import { useValue } from "@legendapp/state/react";
+import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { initializeLocalAudioPlayer, localAudioControls } from "@/components/LocalAudioPlayer";
-import { PlaybackArea } from "@/components/PlaybackArea";
-import { Playlist } from "@/components/Playlist";
 import { Unregistered } from "@/components/Unregistered";
+import { MusicLayoutRenderer } from "@/layout/MusicLayoutRenderer";
+import { mainLayout$, normalizeMusicLayoutFile } from "@/layout/MusicLayoutState";
 import { SUPPORT_ACCOUNTS } from "@/systems/constants";
 import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
 import { perfCount, perfLog } from "@/utils/perfLogger";
@@ -18,6 +20,8 @@ type MainContainerProps = {
 export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     perfCount("MainContainer.render");
     // const _playlistNavigation = useValue(playlistNavigationState$);
+    const layoutFile = useValue(mainLayout$);
+    const layout = useMemo(() => normalizeMusicLayoutFile(layoutFile), [layoutFile]);
 
     useOnHotkeys({
         // These are handled by native media keys, don't need to handle them here
@@ -37,8 +41,7 @@ export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     return (
         <View className="flex-1 flex-row items-stretch" style={styles.root}>
             <View className="flex-1" style={styles.root}>
-                <PlaybackArea benchmarkElapsedSeconds={benchmarkElapsedSeconds} />
-                <Playlist />
+                <MusicLayoutRenderer node={layout.main} context={{ benchmarkElapsedSeconds }} />
                 {SUPPORT_ACCOUNTS && <Unregistered />}
             </View>
         </View>
