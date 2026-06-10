@@ -12,7 +12,8 @@ type MarkdownE2ERunnerProps = {
   seed?: number;
 };
 
-export type MarkdownE2ELaunchScenario = MarkdownDocumentE2EScenarioName | "editor-ui-smoke";
+export type MarkdownEditorE2EScenarioName = "editor-selection-smoke" | "editor-ui-smoke";
+export type MarkdownE2ELaunchScenario = MarkdownDocumentE2EScenarioName | MarkdownEditorE2EScenarioName;
 
 export function isMarkdownDocumentE2EScenario(
   scenario: string,
@@ -21,7 +22,7 @@ export function isMarkdownDocumentE2EScenario(
 }
 
 function isMarkdownE2ELaunchScenario(scenario: string): scenario is MarkdownE2ELaunchScenario {
-  return scenario === "editor-ui-smoke" || isMarkdownDocumentE2EScenario(scenario);
+  return scenario === "editor-ui-smoke" || scenario === "editor-selection-smoke" || isMarkdownDocumentE2EScenario(scenario);
 }
 
 type MarkdownE2ERunnerState =

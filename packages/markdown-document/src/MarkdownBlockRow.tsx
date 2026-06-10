@@ -6,7 +6,7 @@ import {
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
 } from "react-native-enriched-markdown";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { usesNativeEditorOverlay } from "./constants";
 import type {
@@ -173,6 +173,7 @@ export function MarkdownBlockRow({
   hasPreviousBlock,
   initialSelection,
   isActive,
+  isBlockSelected,
   onActivate,
   onBlurRef,
   onChangeMarkdownRef,
@@ -186,6 +187,7 @@ export function MarkdownBlockRow({
   renderCommentBubble,
   renderSelectionToolbar,
   selectionToolbarAnchor,
+  selectionOverlayStyle,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   block?: MarkdownBlockSnapshot;
@@ -195,6 +197,7 @@ export function MarkdownBlockRow({
   hasPreviousBlock: boolean;
   initialSelection: number;
   isActive: boolean;
+  isBlockSelected: boolean;
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
@@ -207,6 +210,7 @@ export function MarkdownBlockRow({
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionToolbarAnchor?: MarkdownSelectionAnchor | null;
+  selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
   const rowRef = useRef<View>(null);
@@ -218,6 +222,9 @@ export function MarkdownBlockRow({
   const rowStyle = blockRowSpacingStyle(block, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
   const selectionToolbar = selectionToolbarAnchor && renderSelectionToolbar ? renderSelectionToolbar(selectionToolbarAnchor) : null;
+  const selectionOverlay = isBlockSelected ? (
+    <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
+  ) : null;
 
   const measureWindowLayout = () => {
     requestAnimationFrame(() => {
@@ -285,8 +292,9 @@ export function MarkdownBlockRow({
             setRowWidth(event.nativeEvent.layout.width);
             measureWindowLayout();
           }}
-          style={rowStyle}
+          style={[rowStyle, styles.blockRow]}
         >
+          {selectionOverlay}
           {renderedMarkdown}
         </MarkdownBlockActivationView>
         {selectionToolbar}
@@ -304,6 +312,7 @@ export function MarkdownBlockRow({
       }}
       style={[rowStyle, styles.blockRow]}
     >
+      {selectionOverlay}
       <Pressable
         delayHoverIn={0}
         delayHoverOut={0}

@@ -1,16 +1,18 @@
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,
+  type MarkdownDocumentCommands,
   type MarkdownDocumentAdapter,
 } from "@legend-desktop/markdown-document";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 const smokeFilename = "e2e-editor-smoke.md";
-const smokeMarkdown = "Smoke paragraph";
+const smokeMarkdown = "Smoke first paragraph\n\nSmoke second paragraph\n\nSmoke third paragraph";
 
-export function MarkdownE2EEditorSmoke() {
-  const [status, setStatus] = useState<"ready" | "dirty">("ready");
+export function MarkdownE2EEditorSmoke({ autoSelectBlocks = false }: { autoSelectBlocks?: boolean }) {
+  const commandsRef = useRef<MarkdownDocumentCommands | null>(null);
+  const [status, setStatus] = useState<"dirty" | "ready" | "selected">("ready");
   const adapter = useMemo<MarkdownDocumentAdapter>(() => ({
     applyTransaction: nativeMarkdownDocumentAdapter.applyTransaction,
     close: nativeMarkdownDocumentAdapter.close,
@@ -27,16 +29,44 @@ export function MarkdownE2EEditorSmoke() {
       setStatus("dirty");
     }
   }, []);
+  useEffect(() => {
+    if (!autoSelectBlocks) {
+      return undefined;
+    }
+
+    let selectTimer: ReturnType<typeof setTimeout> | undefined;
+    const focusTimer = setTimeout(() => {
+      commandsRef.current?.focusNextBlock();
+      selectTimer = setTimeout(() => {
+        const didSelect = commandsRef.current?.extendBlockSelectionUp() ?? false;
+        if (didSelect) {
+          setStatus("selected");
+        }
+      }, 300);
+    }, 500);
+
+    return () => {
+      clearTimeout(focusTimer);
+      if (selectTimer) {
+        clearTimeout(selectTimer);
+      }
+    };
+  }, [autoSelectBlocks]);
 
   return (
     <View style={styles.root}>
       <Text style={styles.status}>
-        {status === "dirty" ? "E2E UI smoke dirty" : "E2E UI smoke ready"}
+        {status === "dirty"
+          ? "E2E UI smoke dirty"
+          : status === "selected"
+            ? "E2E selection smoke selected"
+            : "E2E UI smoke ready"}
       </Text>
       <View style={styles.documentFrame}>
         <MarkdownDocument
           adapter={adapter}
           autoFocusFirstBlock
+          commandsRef={commandsRef}
           filename={smokeFilename}
           onDirtyChange={handleDirtyChange}
         />

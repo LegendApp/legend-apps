@@ -574,6 +574,21 @@ function blockSelectionInput(renderer: TestRenderer.ReactTestRenderer) {
   return input;
 }
 
+function blockSelectionOverlays(root: TestRenderer.ReactTestRenderer | TestRenderer.ReactTestInstance) {
+  const testRoot = "root" in root ? root.root : root;
+  return testRoot.findAll((node) => (
+    String(node.type) === "View" &&
+    typeof node.props.testID === "string" &&
+    node.props.testID.startsWith("markdown-block-selection-overlay-")
+  ));
+}
+
+function expectBlockSelectionOverlays(renderer: TestRenderer.ReactTestRenderer, blockIds: string[]) {
+  expect(blockSelectionOverlays(renderer).map((node) => node.props.testID)).toEqual(
+    blockIds.map((blockId) => `markdown-block-selection-overlay-${blockId}`),
+  );
+}
+
 async function changeText(input: TestRenderer.ReactTestInstance, markdown: string) {
   await act(async () => {
     input.props.onChangeText(markdown);
@@ -3176,6 +3191,76 @@ describe("MarkdownDocument mounted editing", () => {
     ]);
     expect(adapter.blockIds).toEqual(["d1:b3", "d1:b0", "d1:b1", "d1:b2"]);
     expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("renders block selection highlights inside the selected block rows", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "First".length);
+    await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
+
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("expands block selection highlights as the selection range grows", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "First".length);
+    await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1"]);
+
+    await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
+
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1", "d1:b2"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("renders upward block selection highlights in document order", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "Third");
+    await changeSelection(editorInput(renderer), 0);
+    await expect(extendBlockSelectionUp(commandsRef)).resolves.toBe(true);
+
+    expectBlockSelectionOverlays(renderer, ["d1:b1", "d1:b2"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("clears block selection highlights when another block is activated", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "First".length);
+    await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1"]);
+
+    await pressRenderedMarkdown(renderer, "Third");
+
+    expectBlockSelectionOverlays(renderer, []);
+    expect(editorInput(renderer).props.defaultValue).toBe("Third");
     expect(onError).not.toHaveBeenCalled();
   });
 

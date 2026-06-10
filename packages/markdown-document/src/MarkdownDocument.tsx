@@ -1916,6 +1916,27 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         y: firstRect.y,
       };
     }, [blockSelectionRects, contentOffsetX, inactiveOverlayWidth]);
+    const selectedBlockIds = useMemo(() => {
+      const selectedIds = new Set<string>();
+      if (!blockSelection) {
+        return selectedIds;
+      }
+
+      const anchorIndex = blockIds.indexOf(blockSelection.anchorBlockId);
+      const focusIndex = blockIds.indexOf(blockSelection.focusBlockId);
+      if (anchorIndex >= 0 && focusIndex >= 0) {
+        const startIndex = Math.min(anchorIndex, focusIndex);
+        const endIndex = Math.max(anchorIndex, focusIndex);
+        for (let index = startIndex; index <= endIndex; index += 1) {
+          const blockId = blockIds[index];
+          if (blockId) {
+            selectedIds.add(blockId);
+          }
+        }
+      }
+
+      return selectedIds;
+    }, [blockIds, blockSelection]);
     const selectionAnchor = blockSelectionAnchor ?? textSelectionAnchor;
     useEffect(() => {
       onSelectionAnchorChange?.(selectionAnchor);
@@ -1934,9 +1955,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         renderSelectionToolbar,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
+        selectedBlockIds,
         selectionToolbarAnchor,
       }),
-      [activeBlockId, activeSelection, blockIds, blocksById, commentAnchor, renderCommentBubble, renderSelectionToolbar, resolvedMarkdownLayout, resolvedMarkdownStyle, selectionToolbarAnchor],
+      [activeBlockId, activeSelection, blockIds, blocksById, commentAnchor, renderCommentBubble, renderSelectionToolbar, resolvedMarkdownLayout, resolvedMarkdownStyle, selectedBlockIds, selectionToolbarAnchor],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -1969,6 +1991,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           hasPreviousBlock={props.index > 0}
           initialSelection={activeSelection}
           isActive={activeBlockId === props.item}
+          isBlockSelected={selectedBlockIds.has(props.item)}
           commentAnchor={commentAnchor?.blockId === props.item ? commentAnchor : null}
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
@@ -1981,6 +2004,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
           renderCommentBubble={renderCommentBubble}
           renderSelectionToolbar={renderSelectionToolbar}
+          selectionOverlayStyle={blockSelectionOverlayStyle}
           selectionToolbarAnchor={selectionToolbarAnchor?.blockId === props.item ? selectionToolbarAnchor : null}
         />
       ),
@@ -2001,6 +2025,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         renderSelectionToolbar,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
+        selectedBlockIds,
+        blockSelectionOverlayStyle,
         selectionToolbarAnchor,
       ],
     );
@@ -2054,19 +2080,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           style={styles.blockSelectionInput}
           value={blockSelectionInputText}
         />
-        {blockSelectionRects.map((rect) => (
-          <View
-            key={rect.blockId}
-            pointerEvents="none"
-            style={[
-              blockSelectionOverlayStyle,
-              {
-                height: rect.height,
-                top: rect.y,
-              },
-            ]}
-          />
-        ))}
         <LegendList
           alwaysRender={alwaysRenderActiveBlock}
           contentContainerStyle={contentStyle}
