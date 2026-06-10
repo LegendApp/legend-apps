@@ -420,14 +420,46 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846f1a734cb 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -38,6 +38,7 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -38,6 +38,8 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  #endif
  - (void)setupTextView;
++- (void)applyScrollEnabled:(BOOL)scrollEnabled;
  - (void)applyFormatting;
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown;
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
+@@ -166,7 +168,9 @@ - (void)setupTextView
+   _scrollView.drawsBackground = NO;
+   _scrollView.borderType = NSNoBorder;
+   _scrollView.hasHorizontalRuler = NO;
+   _scrollView.hasVerticalRuler = NO;
+   _scrollView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+-
++
++  _scrollView.contentView = [[RCTClipView alloc] initWithFrame:CGRectZero];
++
+   _textView.verticallyResizable = YES;
+@@ -178,5 +181,8 @@ - (void)setupTextView
+   _scrollView.documentView = _textView;
+   self.contentView = _scrollView;
+ #endif
+-
++
++  const auto &viewProps = *std::static_pointer_cast<EnrichedMarkdownTextInputProps const>(_props);
++  [self applyScrollEnabled:viewProps.scrollEnabled];
++
+   _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
+@@ -255,6 +261,6 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+-#if !TARGET_OS_OSX
+   if (newViewProps.scrollEnabled != oldViewProps.scrollEnabled) {
+-    _textView.scrollEnabled = newViewProps.scrollEnabled;
++    [self applyScrollEnabled:newViewProps.scrollEnabled];
+   }
+-
++
++#if !TARGET_OS_OSX
+   if (newViewProps.autoCapitalize != oldViewProps.autoCapitalize) {
 @@ -331,7 +332,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  
      [self resetBaseTypingAttributes];
@@ -446,7 +478,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
  
-@@ -514,10 +517,66 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -514,10 +522,83 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  - (void)resetBaseTypingAttributes
  {
@@ -463,6 +495,23 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846
 +    attrs[NSParagraphStyleAttributeName] = paragraphStyle;
 +  }
 +  ENRMSetDefaultTypingAttributes(_textView, attrs);
++}
++
++- (void)applyScrollEnabled:(BOOL)scrollEnabled
++{
++  _textView.scrollEnabled = scrollEnabled;
++#if TARGET_OS_OSX
++  if ([_scrollView.contentView respondsToSelector:@selector(setConstrainScrolling:)]) {
++    ((void (*)(id, SEL, BOOL))[_scrollView.contentView methodForSelector:@selector(setConstrainScrolling:)])(
++        _scrollView.contentView,
++        @selector(setConstrainScrolling:),
++        !scrollEnabled);
++  }
++  _scrollView.hasVerticalScroller = NO;
++  _scrollView.hasHorizontalScroller = NO;
++  _scrollView.verticalScrollElasticity = scrollEnabled ? NSScrollElasticityAutomatic : NSScrollElasticityNone;
++  _scrollView.horizontalScrollElasticity = scrollEnabled ? NSScrollElasticityAutomatic : NSScrollElasticityNone;
++#endif
 +}
 +
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown
