@@ -903,7 +903,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 {
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
-    NSWindow *window = NSApp.keyWindow ?: NSApp.mainWindow;
+    NSWindow *window = [self frontmostClosableWindow] ?: NSApp.keyWindow ?: NSApp.mainWindow;
     if (!window) {
       resolve([self failureJson:@"No window to close"]);
       return;
@@ -1108,6 +1108,18 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 }
 
 #if TARGET_OS_OSX
+- (NSWindow *)frontmostClosableWindow
+{
+  for (NSWindow *window in NSApp.orderedWindows) {
+    NSString *identifier = [self identifierForWindow:window];
+    BOOL isMainAppWindow = window == NSApp.keyWindow || window == NSApp.mainWindow;
+    if ((identifier || isMainAppWindow) && window.isVisible) {
+      return window;
+    }
+  }
+  return nil;
+}
+
 + (NSWindow *)getMainWindow
 {
   for (NSWindow *window in NSApplication.sharedApplication.windows) {
