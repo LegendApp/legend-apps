@@ -4,7 +4,7 @@ import {
   closeWindow,
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
-import { getLegendTheme } from "@legend-desktop/theme";
+import { getLegendTheme, getLegendThemeAppearance } from "@legend-desktop/theme";
 import { getMarkdownFileTitle } from "./appMetadata";
 import {
   editorWindowIdentifier,
@@ -19,15 +19,19 @@ import { loadMarkdownUserThemesSync } from "./userThemes";
 loadMarkdownUserThemesSync();
 
 function createMarkdownEditorWindowStyle({
+  appearance,
   backgroundColor,
   includeFrame,
 }: {
+  appearance?: "dark" | "light";
   backgroundColor?: string;
   includeFrame: boolean;
 }) {
-  const theme = getLegendTheme(getMarkdownThemeSetting());
+  const themeSetting = getMarkdownThemeSetting();
+  const theme = getLegendTheme(themeSetting);
 
   return {
+    appearance: appearance ?? getLegendThemeAppearance(themeSetting),
     backgroundColor: backgroundColor ?? theme.colors.windowBackground,
     ...(includeFrame
       ? {
@@ -92,11 +96,13 @@ export function closeMarkdownEditorWindow() {
 }
 
 export function setMarkdownEditorWindowOptions({
+  appearance,
   backgroundColor,
   filename,
   isDirty,
   isUntitledDocument,
 }: {
+  appearance: "dark" | "light";
   backgroundColor: string;
   filename: string;
   isDirty: boolean;
@@ -106,6 +112,6 @@ export function setMarkdownEditorWindowOptions({
   return MarkdownWindowsNavigator.open(editorWindowModuleName as MarkdownWindow, {
     interceptClose: true,
     title: isDirty ? `• ${title}` : title,
-    windowStyle: createMarkdownEditorWindowStyle({ backgroundColor, includeFrame: false }),
+    windowStyle: createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame: false }),
   });
 }

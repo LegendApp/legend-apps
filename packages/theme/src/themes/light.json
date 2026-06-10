@@ -1,5 +1,6 @@
 {
   "name": "light",
+  "appearance": "light",
   "colors": {
     "background": "#f5f6f8",
     "foreground": "#111827",

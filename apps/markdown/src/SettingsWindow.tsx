@@ -3,7 +3,7 @@ import {
   SettingsWindow as SharedSettingsWindow,
   type SettingsWindowPage,
 } from "@legend-desktop/settings-window";
-import { getLegendUniwindThemeName } from "@legend-desktop/theme";
+import { getLegendThemeAppearance } from "@legend-desktop/theme";
 import { useSyncExternalStore } from "react";
 import { settingsWindowIdentifier } from "./appConstants";
 import { getMarkdownThemeSetting, subscribeToMarkdownSettings } from "./markdownSettings";
@@ -37,7 +37,7 @@ export function SettingsWindow({ initialPage }: { initialPage?: string }) {
     getMarkdownThemeSetting,
     getMarkdownThemeSetting,
   );
-  const appearance = getLegendUniwindThemeName(selectedTheme) === "dark" ? "dark" : "light";
+  const appearance = getLegendThemeAppearance(selectedTheme);
 
   return (
     <PortalProvider>

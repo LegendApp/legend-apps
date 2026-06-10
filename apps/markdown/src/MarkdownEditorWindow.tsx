@@ -3,7 +3,7 @@ import {
   type MarkdownDocumentCommandState,
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
-import { getLegendTheme } from "@legend-desktop/theme";
+import { getLegendTheme, getLegendThemeAppearance } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
@@ -54,6 +54,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     getMarkdownThemeSetting,
   );
   const theme = getLegendTheme(themeSetting);
+  const nativeWindowAppearance = getLegendThemeAppearance(themeSetting);
   const backgroundStyle = useMemo(() => ({ backgroundColor: theme.colors.background }), [theme.colors.background]);
   const formattingToolbarMode = useSyncExternalStore(
     subscribeToMarkdownSettings,
@@ -149,6 +150,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   useMarkdownEditorWindowOptions({
+    appearance: nativeWindowAppearance,
     backgroundColor: theme.colors.windowBackground,
     filename: session.filename,
     isDirty: session.isDirty,

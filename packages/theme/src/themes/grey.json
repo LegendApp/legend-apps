@@ -1,5 +1,6 @@
 {
   "name": "grey",
+  "appearance": "dark",
   "colors": {
     "background": "#191919",
     "foreground": "#d4d4d4",

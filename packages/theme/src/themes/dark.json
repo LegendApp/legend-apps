@@ -1,5 +1,6 @@
 {
   "name": "dark",
+  "appearance": "dark",
   "colors": {
     "background": "#191A1B",
     "foreground": "#f5f5f5",

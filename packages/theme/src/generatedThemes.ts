@@ -3,6 +3,7 @@ import type { LegendThemeFile } from "./types";
 export const generatedThemeFiles = [
   {
     "name": "light",
+    "appearance": "light",
     "colors": {
       "background": "#f5f6f8",
       "foreground": "#111827",
@@ -24,6 +25,7 @@ export const generatedThemeFiles = [
   },
   {
     "name": "dark",
+    "appearance": "dark",
     "colors": {
       "background": "#191A1B",
       "foreground": "#f5f5f5",
@@ -45,6 +47,7 @@ export const generatedThemeFiles = [
   },
   {
     "name": "grey",
+    "appearance": "dark",
     "colors": {
       "background": "#191919",
       "foreground": "#d4d4d4",

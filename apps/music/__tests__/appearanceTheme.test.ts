@@ -1,4 +1,5 @@
 import {
+    getLegendThemeAppearance,
     isLegendThemeFile,
     loadUserThemeFilesSync,
     type ThemeStorage,
@@ -28,9 +29,14 @@ const validColors = {
 };
 
 describe("music appearance themes", () => {
+    it("uses explicit theme appearance for native surfaces", () => {
+        expect(getLegendThemeAppearance("grey")).toBe("dark");
+    });
+
     it("accepts theme files with transparent music backgrounds", () => {
         expect(
             isLegendThemeFile({
+                appearance: "dark",
                 background: {
                     glassEnabled: true,
                     opacity: 0.8,
@@ -47,6 +53,16 @@ describe("music appearance themes", () => {
                 name: "Midnight Album",
             }),
         ).toBe(true);
+    });
+
+    it("rejects invalid theme appearance values", () => {
+        expect(
+            isLegendThemeFile({
+                appearance: "dim",
+                colors: validColors,
+                name: "Invalid Appearance",
+            }),
+        ).toBe(false);
     });
 
     it("rejects invalid theme background colors", () => {

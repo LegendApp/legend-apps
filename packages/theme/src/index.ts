@@ -1,6 +1,6 @@
 import { defaultMarkdownLayout } from "@legend-desktop/markdown-document";
 import { generatedThemeFiles } from "./generatedThemes";
-import type { LegendTheme, LegendThemeFile, LegendThemeName } from "./types";
+import type { LegendTheme, LegendThemeAppearance, LegendThemeFile, LegendThemeName } from "./types";
 
 export {
   createAppTheme,
@@ -10,6 +10,7 @@ export {
 
 export type {
   LegendTheme,
+  LegendThemeAppearance,
   LegendThemeBackground,
   LegendThemeBackgroundSource,
   LegendThemeBackgroundTint,
@@ -95,7 +96,9 @@ export function isLegendThemeFile(value: unknown): value is LegendThemeFile {
   const { colors } = value;
   return requiredColorNames.every((colorName) =>
     isThemeColorValue(colors[colorName], colorName === "selection"),
-  ) && (value.background === undefined || isThemeBackground(value.background));
+  ) &&
+    (value.appearance === undefined || value.appearance === "light" || value.appearance === "dark") &&
+    (value.background === undefined || isThemeBackground(value.background));
 }
 
 function createLegendTheme(theme: LegendThemeFile): LegendTheme {
@@ -343,11 +346,15 @@ function getRelativeLuminance(hexColor: string) {
   return 0.2126 * (channels[0] ?? 0) + 0.7152 * (channels[1] ?? 0) + 0.0722 * (channels[2] ?? 0);
 }
 
+export function getLegendThemeAppearance(themeName: string | null | undefined): LegendThemeAppearance {
+  const theme = getLegendTheme(themeName);
+  return theme.appearance ?? (getRelativeLuminance(theme.colors.background) < 0.5 ? "dark" : "light");
+}
+
 export function getLegendUniwindThemeName(themeName: string | null | undefined): LegendThemeName {
   if (themeName && generatedThemeNameSet.has(themeName)) {
     return themeName as LegendThemeName;
   }
 
-  const theme = getLegendTheme(themeName);
-  return getRelativeLuminance(theme.colors.background) < 0.5 ? "dark" : "light";
+  return getLegendThemeAppearance(themeName);
 }

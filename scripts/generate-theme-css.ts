@@ -64,6 +64,10 @@ function validateThemes(themes: LegendThemeFile[]) {
       throw new Error(`Theme ${JSON.stringify(theme)} is missing name or colors.`);
     }
 
+    if (theme.appearance !== undefined && theme.appearance !== "light" && theme.appearance !== "dark") {
+      throw new Error(`Theme ${theme.name} has invalid appearance ${JSON.stringify(theme.appearance)}.`);
+    }
+
     for (const colorName of colorVariables) {
       if (!theme.colors[colorName]) {
         throw new Error(`Theme ${theme.name} is missing colors.${colorName}.`);
