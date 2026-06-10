@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
-import { ColorPicker } from "@/components/ColorPicker";
 import { SettingsPage, SettingsRow, SettingsSection } from "@/settings/components";
 import {
     defaultMusicAppearance,
@@ -24,7 +23,6 @@ function applyMusicTheme(themeName: MusicThemeName) {
 export const ThemeSettings = () => {
     const { resetTheme } = useTheme();
     const appearance = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const colors$ = themeState$.customColors.dark;
     const selectedTheme = appearance.theme;
     const background = appearance.background;
 
@@ -102,14 +100,6 @@ export const ThemeSettings = () => {
                 />
             </SettingsSection>
 
-            <SettingsSection title="Interface Colors" card={false} className="mt-6" contentClassName="gap-3">
-                <ColorPicker label="Background Primary" $color={colors$.background.primary} />
-                <ColorPicker label="Background Secondary" $color={colors$.background.secondary} />
-                <ColorPicker label="Text Primary" $color={colors$.text.primary} />
-                <ColorPicker label="Text Secondary" $color={colors$.text.secondary} />
-                <ColorPicker label="Accent" $color={colors$.accent.primary} />
-                <ColorPicker label="Border" $color={colors$.border.primary} />
-            </SettingsSection>
         </SettingsPage>
     );
 };
