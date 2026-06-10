@@ -515,6 +515,19 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..9f357b45319c31a386577dd60717b846
  }
  
  - (void)applyFormatting
+@@ -825,7 +884,11 @@ - (CGRect)computeCaretRect
+ #else
+   NSRange selection = _textView.selectedRange;
+   if (selection.location != NSNotFound) {
+-    NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selection.location, 0)
++    NSUInteger textLength = _textView.string.length;
++    NSUInteger location = MIN(selection.location, textLength);
++    NSUInteger length = MIN(selection.length, textLength - location);
++    NSRange characterRange = length > 0 ? NSMakeRange(location, length) : NSMakeRange(location, 0);
++    NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:characterRange
+                                                          actualCharacterRange:NULL];
+     caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
+     caretRect.origin.x += _textView.textContainerInset.left;
 @@ -884,6 +943,21 @@ - (void)emitOnChangeSelection
    });
  }

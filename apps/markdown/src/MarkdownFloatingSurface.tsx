@@ -5,18 +5,23 @@ import { StyleSheet, View } from "react-native";
 export function MarkdownFloatingSurface({
   anchor,
   children,
+  coordinateSpace = "item",
   placement = "above",
 }: {
   anchor: MarkdownSelectionAnchor;
   children: ReactNode;
+  coordinateSpace?: "content" | "item";
   placement?: "above" | "below";
 }) {
   const itemTop = anchor.itemY ?? anchor.y;
-  const itemWidth = anchor.itemWidth ?? anchor.width;
+  const anchorsToSelection = coordinateSpace === "content" && anchor.kind === "textSelection";
+  const surfaceLeft = anchorsToSelection ? anchor.x : coordinateSpace === "content" ? anchor.itemX ?? anchor.x : 0;
+  const surfaceWidth = anchorsToSelection ? anchor.width : anchor.itemWidth ?? anchor.width;
   const selectionTop = anchor.y - itemTop;
+  const surfaceTop = coordinateSpace === "content" ? anchor.y : selectionTop;
   const top = placement === "above"
-    ? Math.max(-26, selectionTop - 56)
-    : Math.max(0, selectionTop + anchor.height + 6);
+    ? Math.max(coordinateSpace === "content" ? 0 : -26, surfaceTop - 56)
+    : Math.max(0, surfaceTop + anchor.height + 6);
 
   return (
     <View
@@ -24,9 +29,9 @@ export function MarkdownFloatingSurface({
       style={[
         styles.container,
         {
-          left: 0,
+          left: surfaceLeft,
           top,
-          width: itemWidth,
+          width: surfaceWidth,
         },
       ]}
     >
@@ -41,7 +46,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     zIndex: 10,
   },
-  content: {
-    maxWidth: "100%",
-  },
+  content: {},
 });

@@ -36,16 +36,28 @@ jest.mock("react-native", () => {
 jest.mock("@legendapp/list/react-native", () => {
   const React = require("react");
   const { View } = require("react-native");
+  const getComponent = (Component) => (
+    React.isValidElement(Component) ? Component : React.createElement(Component)
+  );
 
   return {
-    LegendList({ data, renderItem, onLoad, style, contentContainerStyle }) {
+    LegendList({
+      data,
+      renderItem,
+      onLoad,
+      style,
+      contentContainerStyle,
+      ListFooterComponent,
+      ListFooterComponentStyle,
+      onScroll,
+    }) {
       React.useEffect(() => {
         onLoad?.();
       }, [onLoad]);
 
       return React.createElement(
         View,
-        { style },
+        { onScroll, style },
         React.createElement(
           View,
           { style: contentContainerStyle },
@@ -54,6 +66,11 @@ jest.mock("@legendapp/list/react-native", () => {
             { key: item },
             renderItem({ item, index }),
           )),
+          ListFooterComponent ? React.createElement(
+            View,
+            { style: ListFooterComponentStyle, testID: "legend-list-footer" },
+            getComponent(ListFooterComponent),
+          ) : null,
         ),
       );
     },

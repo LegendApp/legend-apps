@@ -3,16 +3,25 @@ import {
   nativeMarkdownDocumentAdapter,
   type MarkdownDocumentCommands,
   type MarkdownDocumentAdapter,
+  type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
+import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 
 const smokeFilename = "e2e-editor-smoke.md";
-const smokeMarkdown = "Smoke first paragraph\n\nSmoke second paragraph\n\nSmoke third paragraph";
+const softWrapSelectionParagraph = "Smoke first paragraphasd flaskdjf alskdjf alskdjf alksdfj alksdfj alksdfj alksdjf alksdjf alksdjf alkdfj alksdfj alsdjf alsdjf laksdjf alsdjf";
+const smokeMarkdown = `${softWrapSelectionParagraph}\n\n\`\`\`ts\nconst selected = true;\n\`\`\`\n\nSmoke third paragraph`;
 
-export function MarkdownE2EEditorSmoke({ autoSelectBlocks = false }: { autoSelectBlocks?: boolean }) {
+export function MarkdownE2EEditorSmoke({
+  autoSelectBlocks = false,
+}: {
+  autoSelectBlocks?: boolean;
+}) {
   const commandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const [status, setStatus] = useState<"dirty" | "ready" | "selected">("ready");
+  const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
   const adapter = useMemo<MarkdownDocumentAdapter>(() => ({
     applyTransaction: nativeMarkdownDocumentAdapter.applyTransaction,
     close: nativeMarkdownDocumentAdapter.close,
@@ -29,6 +38,14 @@ export function MarkdownE2EEditorSmoke({ autoSelectBlocks = false }: { autoSelec
       setStatus("dirty");
     }
   }, []);
+  const renderSelectionToolbar = useCallback(
+    (anchor: MarkdownSelectionAnchor) => (
+      <MarkdownFloatingSurface anchor={anchor} coordinateSpace="content">
+        <MarkdownFormattingToolbar commandsRef={commandsRef} floating />
+      </MarkdownFloatingSurface>
+    ),
+    [],
+  );
   useEffect(() => {
     if (!autoSelectBlocks) {
       return undefined;
@@ -53,6 +70,10 @@ export function MarkdownE2EEditorSmoke({ autoSelectBlocks = false }: { autoSelec
     };
   }, [autoSelectBlocks]);
 
+  const handleSelectionAnchorChange = useCallback((anchor: MarkdownSelectionAnchor | null) => {
+    setSelectionAnchor(anchor);
+  }, []);
+
   return (
     <View style={styles.root}>
       <Text style={styles.status}>
@@ -65,10 +86,13 @@ export function MarkdownE2EEditorSmoke({ autoSelectBlocks = false }: { autoSelec
       <View style={styles.documentFrame}>
         <MarkdownDocument
           adapter={adapter}
-          autoFocusFirstBlock
+          autoFocusFirstBlock={autoSelectBlocks}
           commandsRef={commandsRef}
           filename={smokeFilename}
           onDirtyChange={handleDirtyChange}
+          onSelectionAnchorChange={handleSelectionAnchorChange}
+          renderSelectionToolbar={renderSelectionToolbar}
+          selectionToolbarAnchor={selectionAnchor}
         />
       </View>
     </View>

@@ -185,8 +185,6 @@ export function MarkdownBlockRow({
   markdownStyle,
   previousBlock,
   renderCommentBubble,
-  renderSelectionToolbar,
-  selectionToolbarAnchor,
   selectionOverlayStyle,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
@@ -208,8 +206,6 @@ export function MarkdownBlockRow({
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
   previousBlock?: MarkdownBlockSnapshot;
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
-  renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
-  selectionToolbarAnchor?: MarkdownSelectionAnchor | null;
   selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
@@ -221,7 +217,6 @@ export function MarkdownBlockRow({
 
   const rowStyle = blockRowSpacingStyle(block, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
-  const selectionToolbar = selectionToolbarAnchor && renderSelectionToolbar ? renderSelectionToolbar(selectionToolbarAnchor) : null;
   const selectionOverlay = isBlockSelected ? (
     <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
   ) : null;
@@ -256,7 +251,6 @@ export function MarkdownBlockRow({
           onSelectionDragOutsideRef={onSelectionDragOutsideRef}
           rowWidth={rowWidth}
         />
-        {selectionToolbar}
         {commentBubble}
       </View>
     );
@@ -294,10 +288,9 @@ export function MarkdownBlockRow({
           }}
           style={[rowStyle, styles.blockRow]}
         >
-          {selectionOverlay}
           {renderedMarkdown}
+          {selectionOverlay}
         </MarkdownBlockActivationView>
-        {selectionToolbar}
         {commentBubble}
       </Fragment>
     );
@@ -312,7 +305,6 @@ export function MarkdownBlockRow({
       }}
       style={[rowStyle, styles.blockRow]}
     >
-      {selectionOverlay}
       <Pressable
         delayHoverIn={0}
         delayHoverOut={0}
@@ -323,7 +315,7 @@ export function MarkdownBlockRow({
       >
         {renderedMarkdown}
       </Pressable>
-      {selectionToolbar}
+      {selectionOverlay}
       {commentBubble}
     </View>
   );

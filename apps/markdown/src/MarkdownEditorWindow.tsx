@@ -79,7 +79,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
 
   const renderSelectionToolbar = useCallback(
     (anchor: MarkdownSelectionAnchor) => (
-      <MarkdownFloatingSurface anchor={anchor}>
+      <MarkdownFloatingSurface anchor={anchor} coordinateSpace="content">
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating />
       </MarkdownFloatingSurface>
     ),
@@ -142,8 +142,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   if (e2eRun) {
-    if (e2eRun.scenario === "editor-selection-smoke" || e2eRun.scenario === "editor-ui-smoke") {
-      return <MarkdownE2EEditorSmoke autoSelectBlocks={e2eRun.scenario === "editor-selection-smoke"} />;
+    if (e2eRun.scenario === "editor-selection-smoke" || e2eRun.scenario === "editor-soft-wrap-selection" || e2eRun.scenario === "editor-ui-smoke") {
+      return (
+        <MarkdownE2EEditorSmoke
+          autoSelectBlocks={e2eRun.scenario === "editor-selection-smoke"}
+        />
+      );
     }
     if (isMarkdownDocumentE2EScenario(e2eRun.scenario)) {
       return (

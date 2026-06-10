@@ -1,5 +1,6 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { View } from "react-native";
 import { MarkdownDocument } from "../MarkdownDocument";
 import type {
   MarkdownBlockSnapshot,
@@ -499,9 +500,11 @@ async function renderDocument({
   onError = jest.fn(),
   onSaveStateChange = jest.fn(),
   savePolicy = { autosave: false },
+  documentProps = {},
 }: {
   adapter: MountedEditorAdapter;
   autoFocusFirstBlock?: boolean;
+  documentProps?: Partial<MarkdownDocumentProps>;
   onCommandStateChange?: jest.Mock;
   onDirtyChange?: jest.Mock;
   onError?: jest.Mock;
@@ -523,6 +526,7 @@ async function renderDocument({
         onError={onError}
         onSaveStateChange={onSaveStateChange}
         savePolicy={savePolicy}
+        {...documentProps}
       />,
     );
     await Promise.resolve();
@@ -587,6 +591,10 @@ function expectBlockSelectionOverlays(renderer: TestRenderer.ReactTestRenderer, 
   expect(blockSelectionOverlays(renderer).map((node) => node.props.testID)).toEqual(
     blockIds.map((blockId) => `markdown-block-selection-overlay-${blockId}`),
   );
+}
+
+function renderedNodeIndex(renderer: TestRenderer.ReactTestRenderer, predicate: (node: TestRenderer.ReactTestInstance) => boolean) {
+  return renderer.root.findAll(() => true).findIndex(predicate);
 }
 
 async function changeText(input: TestRenderer.ReactTestInstance, markdown: string) {
@@ -3206,6 +3214,67 @@ describe("MarkdownDocument mounted editing", () => {
     await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
 
     expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("renders block selection highlights above opaque rendered block backgrounds", async () => {
+    const codeMarkdown = "```ts\nconst selected = true;\n```";
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      codeBlock("d1:b1", 1, codeMarkdown),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "First".length);
+    await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
+
+    const renderedCodeIndex = renderedNodeIndex(renderer, (node) => node.props.markdown === codeMarkdown);
+    const codeOverlayIndex = renderedNodeIndex(
+      renderer,
+      (node) => String(node.type) === "View" && node.props.testID === "markdown-block-selection-overlay-d1:b1",
+    );
+    expect(renderedCodeIndex).toBeGreaterThanOrEqual(0);
+    expect(codeOverlayIndex).toBeGreaterThan(renderedCodeIndex);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("renders the selection toolbar from the list footer instead of the anchor row", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const selectionToolbarAnchor = {
+      blockId: "d1:recycled",
+      height: 25,
+      itemHeight: 25,
+      itemWidth: 640,
+      itemX: 32,
+      itemY: 96,
+      kind: "blockSelection" as const,
+      width: 640,
+      x: 32,
+      y: 96,
+    };
+    const renderSelectionToolbar = jest.fn(() => (
+      <View testID="markdown-selection-toolbar" />
+    ));
+    const { onError, renderer } = await renderDocument({
+      adapter,
+      documentProps: {
+        renderSelectionToolbar,
+        selectionToolbarAnchor,
+      },
+    });
+
+    expect(renderSelectionToolbar).toHaveBeenCalledWith(selectionToolbarAnchor);
+    expect(renderer.root.findAll((node) => (
+      String(node.type) === "View" && node.props.testID === "markdown-selection-toolbar"
+    ))).toHaveLength(1);
+    expect(renderer.root.findByProps({ testID: "legend-list-footer" }).props.style).toEqual(
+      expect.objectContaining({ position: "absolute" }),
+    );
     expect(onError).not.toHaveBeenCalled();
   });
 

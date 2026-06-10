@@ -37,6 +37,15 @@ Do not run release builds by default while iterating. Use `bun run typecheck`, t
 
 There is no dedicated test runner configured yet. Treat `bun run typecheck` and targeted app verification as the baseline before submitting changes. For native package work, run `bun run <app> verify <platform>` against an app that consumes the package, and prefer `test-kitchen-sink` for integration coverage.
 
+## UI Verification With Agent Device
+
+Use `agent-device` for app UI inspection and verification whenever it fits the task better than manual OS interaction. For macOS app screenshots, prefer an app-scoped session and `agent-device screenshot`, which captures the app window without foregrounding the app or disrupting the user's desktop:
+
+- Open or bind a macOS app session with `agent-device open <app> --platform macos --surface app`.
+- Capture app-window screenshots with `agent-device --session <name> screenshot <path>`.
+- Use `--fullscreen` only when the whole desktop is intentionally needed.
+- Prefer `agent-device snapshot`, `screenshot`, `diff`, `metro reload`, and session management over manual `open -a`, AppleScript foregrounding, raw screen captures, or ad hoc UI poking.
+
 ## Commit & Pull Request Guidelines
 
 Commit history uses concise Conventional Commit subjects, for example `feat: add window manager package` and `fix: render appkit split view`. Do not use scopes; write `type: subject`, not `type(scope): subject`. Do not add `Co-authored-by: Codex <noreply@openai.com>`.

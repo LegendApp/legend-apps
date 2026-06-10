@@ -27,6 +27,32 @@ export function MarkdownFormattingToolbar({
     () => toolbarLayout.shown.map((itemId) => markdownToolbarItemMap[itemId]).filter(Boolean),
     [toolbarLayout],
   );
+  const toolbarButtons = toolbarItems.map((item) => (
+    <Pressable
+      accessibilityLabel={item.accessibilityLabel}
+      accessibilityRole="button"
+      className="border"
+      key={item.id}
+      onPressIn={() => {
+        const commands = commandsRef.current;
+        if (commands) {
+          item.run(commands);
+        }
+      }}
+      style={[styles.button, buttonStyle]}
+    >
+      <Text
+        className="text-foreground"
+        style={[styles.buttonText, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}
+      >
+        {item.label}
+      </Text>
+    </Pressable>
+  ));
+
+  if (toolbarItems.length === 0) {
+    return null;
+  }
 
   return (
     <View
@@ -38,34 +64,17 @@ export function MarkdownFormattingToolbar({
         style,
       ]}
     >
-      <ScrollView
-        contentContainerStyle={styles.toolbarContent}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        {toolbarItems.map((item) => (
-          <Pressable
-            accessibilityLabel={item.accessibilityLabel}
-            accessibilityRole="button"
-            className="border"
-            key={item.id}
-            onPressIn={() => {
-              const commands = commandsRef.current;
-              if (commands) {
-                item.run(commands);
-              }
-            }}
-            style={[styles.button, buttonStyle]}
-          >
-            <Text
-              className="text-foreground"
-              style={[styles.buttonText, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}
-            >
-              {item.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      {floating ? (
+        <View style={styles.toolbarContent}>{toolbarButtons}</View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.toolbarContent}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {toolbarButtons}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -105,6 +114,7 @@ const styles = StyleSheet.create({
   },
   toolbarContent: {
     alignItems: "center",
+    flexDirection: "row",
     gap: 6,
     minHeight: 40,
     paddingHorizontal: 8,

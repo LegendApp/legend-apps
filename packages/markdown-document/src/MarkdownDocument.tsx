@@ -9,6 +9,8 @@ import {
   TextInput,
   View,
   type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown } from "./blockSelection";
@@ -33,6 +35,7 @@ import {
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
+import { resolveTextSelectionAnchor } from "./selectionAnchor";
 import {
   getSplitContinuationMarkdown,
   setHeadingMarkdown,
@@ -155,6 +158,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       updatedAt: number;
     } | undefined>(undefined);
     const selectionAnchorRequestRef = useRef(0);
+    const scrollOffsetYRef = useRef(0);
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
     const blockStateRef = useRef(blockState);
@@ -167,7 +171,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [layoutVersion, setLayoutVersion] = useState(0);
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
-    const [contentOffsetX, setContentOffsetX] = useState(contentHorizontalPadding);
+    const [contentContainerOffsetX, setContentContainerOffsetX] = useState(0);
     const [textSelectionAnchor, setTextSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
     const [inactiveOverlayWidth, setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
@@ -306,6 +310,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const requestId = selectionAnchorRequestRef.current + 1;
       selectionAnchorRequestRef.current = requestId;
       const selectedLength = Math.abs(selection.end - selection.start);
+      const selectionStart = Math.min(selection.start, selection.end);
+      const selectionEnd = Math.max(selection.start, selection.end);
 
       if (selection.start === selection.end) {
         setTextSelectionAnchor(null);
@@ -330,25 +336,34 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               }
               const itemX = inputX - containerX;
               const itemY = inputY - containerY;
-
-              setTextSelectionAnchor({
+              const contentItemX = itemX - contentContainerOffsetX;
+              const activeMarkdown = draftMarkdownRef.current;
+              const paragraphStyle = resolvedMarkdownStyle.paragraph;
+              const paragraphFontSize = typeof paragraphStyle?.fontSize === "number" ? paragraphStyle.fontSize : 16;
+              const paragraphLineHeight = typeof paragraphStyle?.lineHeight === "number"
+                ? paragraphStyle.lineHeight
+                : Math.ceil(paragraphFontSize * 1.5);
+              const anchor = resolveTextSelectionAnchor({
                 blockId: activeBlockIdRef.current ?? undefined,
-                height: Math.max(caretRect.height, 1),
+                caretRect,
+                contentItemX,
                 itemHeight: inputHeight,
                 itemWidth: inputWidth,
-                itemX,
                 itemY,
-                kind: "textSelection",
+                markdown: activeMarkdown,
+                paragraphFontSize,
+                paragraphLineHeight,
+                scrollOffsetY: scrollOffsetYRef.current,
                 selectedLength,
-                width: Math.max(caretRect.width, 1),
-                x: itemX + caretRect.x,
-                y: itemY + caretRect.y,
+                selectionEnd,
+                selectionStart,
               });
+              setTextSelectionAnchor(anchor);
             });
           });
         }).catch(reportAsyncError);
       });
-    }, [reportAsyncError]);
+    }, [contentContainerOffsetX, reportAsyncError, resolvedMarkdownStyle]);
     const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
 
     const cancelHydration = useCallback(() => {
@@ -595,7 +610,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const containerWidth = event.nativeEvent.layout.width;
         const constrainedContentWidth = Math.min(containerWidth, resolvedContentMaxWidth);
         const nextContentWidth = Math.max(1, constrainedContentWidth - resolvedContentHorizontalPadding * 2);
-        setContentOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2) + resolvedContentHorizontalPadding);
+        setContentContainerOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2));
         setInactiveOverlayWidth(nextContentWidth);
       }
       requestAnimationFrame(() => {
@@ -1908,14 +1923,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         height: firstRect.height,
         itemHeight: firstRect.height,
         itemWidth: inactiveOverlayWidth,
-        itemX: contentOffsetX,
-        itemY: firstRect.y,
+        itemX: resolvedContentHorizontalPadding,
+        itemY: firstRect.y + scrollOffsetYRef.current,
         kind: "blockSelection",
         width: inactiveOverlayWidth,
-        x: contentOffsetX,
-        y: firstRect.y,
+        x: resolvedContentHorizontalPadding,
+        y: firstRect.y + scrollOffsetYRef.current,
       };
-    }, [blockSelectionRects, contentOffsetX, inactiveOverlayWidth]);
+    }, [blockSelectionRects, inactiveOverlayWidth, resolvedContentHorizontalPadding]);
     const selectedBlockIds = useMemo(() => {
       const selectedIds = new Set<string>();
       if (!blockSelection) {
@@ -1952,13 +1967,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blocksById,
         commentAnchor,
         renderCommentBubble,
-        renderSelectionToolbar,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
         selectedBlockIds,
-        selectionToolbarAnchor,
       }),
-      [activeBlockId, activeSelection, blockIds, blocksById, commentAnchor, renderCommentBubble, renderSelectionToolbar, resolvedMarkdownLayout, resolvedMarkdownStyle, selectedBlockIds, selectionToolbarAnchor],
+      [activeBlockId, activeSelection, blockIds, blocksById, commentAnchor, renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle, selectedBlockIds],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -2003,9 +2016,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
           previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
           renderCommentBubble={renderCommentBubble}
-          renderSelectionToolbar={renderSelectionToolbar}
           selectionOverlayStyle={blockSelectionOverlayStyle}
-          selectionToolbarAnchor={selectionToolbarAnchor?.blockId === props.item ? selectionToolbarAnchor : null}
         />
       ),
       [
@@ -2022,14 +2033,22 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         handleChangeSelectionRef,
         handleSelectionDragOutsideRef,
         renderCommentBubble,
-        renderSelectionToolbar,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
         selectedBlockIds,
         blockSelectionOverlayStyle,
-        selectionToolbarAnchor,
       ],
     );
+    const selectionToolbarFooter = useMemo(() => {
+      return selectionToolbarAnchor && renderSelectionToolbar ? (
+        <View pointerEvents="box-none" style={styles.selectionToolbarFooterContent}>
+          {renderSelectionToolbar(selectionToolbarAnchor)}
+        </View>
+      ) : null;
+    }, [renderSelectionToolbar, selectionToolbarAnchor]);
+    const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
+    }, []);
     const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
     const handleNativeBeginEditing = useCallback(
       (event: { nativeEvent: { blockId: string; height: number; width: number; x: number; y: number } }) => {
@@ -2087,9 +2106,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           estimatedItemSize={estimatedItemSize}
           extraData={listExtraData}
           keyExtractor={(item) => item}
+          ListFooterComponent={selectionToolbarFooter}
+          ListFooterComponentStyle={styles.selectionToolbarFooter}
           onLoad={() => {
             hydrateRemainingBlocks(documentState.snapshot, loadVersionRef.current);
           }}
+          onScroll={handleListScroll}
           recycleItems
           renderItem={renderMarkdownBlockRow}
           style={styles.list}

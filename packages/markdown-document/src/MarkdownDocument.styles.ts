@@ -17,9 +17,11 @@ export const markdownDocumentStyles = StyleSheet.create({
   blockSelectionOverlay: {
     bottom: 0,
     left: 0,
+    opacity: 0.38,
     position: "absolute",
     right: 0,
     top: 0,
+    zIndex: 1,
   },
   centered: {
     alignItems: "center",
@@ -34,6 +36,7 @@ export const markdownDocumentStyles = StyleSheet.create({
     maxWidth: contentMaxWidth,
     paddingHorizontal: contentHorizontalPadding,
     paddingVertical: 48,
+    position: "relative",
     width: "100%",
   },
   errorText: {
@@ -68,6 +71,20 @@ export const markdownDocumentStyles = StyleSheet.create({
   },
   rowContent: {
     width: "100%",
+  },
+  selectionToolbarFooter: {
+    height: 0,
+    left: 0,
+    overflow: "visible",
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 20,
+  },
+  selectionToolbarFooterContent: {
+    height: 0,
+    overflow: "visible",
+    position: "relative",
   },
   statusText: {
     color: "#6b7280",
