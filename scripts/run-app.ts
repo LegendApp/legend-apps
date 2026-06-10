@@ -11,7 +11,9 @@ import {
   shellDir,
 } from "./lib/apps";
 import {
-  getMacOSDevWorkspaceDir,
+  ensureMacOSDevWorkspace,
+  getMacOSAppDevProjectPath,
+  getMacOSEnv,
   installMacOSPods,
 } from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
@@ -43,10 +45,11 @@ async function installPods(appId: string, platform: Platform) {
     throw new Error("CocoaPods install only supports macos and ios.");
   }
 
-  const { generated } = await prepare(appId, platform);
+  const { generated, manifest } = await prepare(appId, platform);
 
   if (platform === "macos") {
-    installMacOSPods(getMacOSDevWorkspaceDir(), generated.configPath, appId);
+    const workspaceDir = ensureMacOSDevWorkspace(manifest);
+    installMacOSPods(workspaceDir, generated.configPath, appId);
     return;
   }
 
@@ -59,6 +62,11 @@ async function installPods(appId: string, platform: Platform) {
       LEGEND_NATIVE_CONFIG: generated.configPath,
     },
   });
+}
+
+function withMacOSDevProjectPath(appId: string, args: string[]) {
+  const hasProjectPath = args.includes("--project-path") || args.some((arg) => arg.startsWith("--project-path="));
+  return hasProjectPath ? args : [...args, "--project-path", getMacOSAppDevProjectPath(appId)];
 }
 
 async function main() {
@@ -120,8 +128,25 @@ async function main() {
     return;
   }
 
-  const { generated } = await prepare(command.appId, command.platform);
+  const { generated, manifest } = await prepare(command.appId, command.platform);
   await ensurePrebuild(command.appId, command.platform);
+
+  if (command.platform === "macos") {
+    const workspaceDir = ensureMacOSDevWorkspace(manifest);
+    installMacOSPods(workspaceDir, generated.configPath, command.appId);
+    runPlatformCommand(
+      command.appId,
+      command.platform,
+      "dev",
+      withMacOSDevProjectPath(command.appId, command.extraArgs),
+      {
+        ...getMacOSEnv(command.appId, generated.configPath),
+        LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
+      },
+    );
+    return;
+  }
+
   runPlatformCommand(command.appId, command.platform, "dev", command.extraArgs, {
     LEGEND_APP_CONFIG: generated.configPath,
     LEGEND_NATIVE_CONFIG: generated.configPath,

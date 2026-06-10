@@ -19,8 +19,12 @@ const macosTemplateEntries = [
   "legendapp-shell-macos.xcworkspace",
 ];
 
-export function getMacOSDevWorkspaceDir() {
-  return macosSourceDir;
+export function getMacOSAppDevWorkspaceDir(appId: string) {
+  return path.join(workspaceRoot, "dev", appId, "macos");
+}
+
+export function getMacOSAppDevProjectPath(appId: string) {
+  return path.relative(shellDir, getMacOSAppDevWorkspaceDir(appId));
 }
 
 export function getMacOSReleaseWorkspaceDir(appId: string) {
@@ -38,28 +42,49 @@ export function getMacOSReleaseProjectPath(appId: string) {
 export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: string) {
   const workspaceDir = getMacOSReleaseWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
-  ensureReleaseNodeModulesLink();
+  ensureReleaseWorkspaceLinks();
   ensureReleaseAppRoot(manifest, configPath);
-
-  for (const entry of macosTemplateEntries) {
-    copyTemplateEntry(entry, workspaceDir);
-  }
-
+  copyMacOSTemplate(workspaceDir);
   patchMacOSProjectForApp(workspaceDir, manifest);
   return workspaceDir;
 }
 
-function ensureReleaseNodeModulesLink() {
-  const linkPath = path.join(workspaceRoot, "release", "node_modules");
-  const targetPath = path.join(rootDir, "node_modules");
+export function ensureMacOSDevWorkspace(manifest: AppManifest) {
+  const workspaceDir = getMacOSAppDevWorkspaceDir(manifest.id);
+  fs.mkdirSync(workspaceDir, { recursive: true });
+  ensureDevWorkspaceLinks();
+  copyMacOSTemplate(workspaceDir);
+  patchMacOSProjectForApp(workspaceDir, manifest);
+  return workspaceDir;
+}
 
+function copyMacOSTemplate(workspaceDir: string) {
+  for (const entry of macosTemplateEntries) {
+    copyTemplateEntry(entry, workspaceDir);
+  }
+}
+
+function ensureReleaseWorkspaceLinks() {
+  ensureWorkspaceLinks(path.join(workspaceRoot, "release"));
+}
+
+function ensureDevWorkspaceLinks() {
+  ensureWorkspaceLinks(path.join(workspaceRoot, "dev"));
+}
+
+function ensureWorkspaceLinks(root: string) {
+  ensureSymlink(path.join(rootDir, "node_modules"), path.join(root, "node_modules"), "dir");
+  ensureSymlink(path.join(rootDir, "packages"), path.join(root, "packages"), "dir");
+}
+
+function ensureSymlink(targetPath: string, linkPath: string, type: fs.symlink.Type) {
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
 
   if (fs.existsSync(linkPath)) {
     return;
   }
 
-  fs.symlinkSync(targetPath, linkPath, "dir");
+  fs.symlinkSync(targetPath, linkPath, type);
 }
 
 function ensureReleaseAppRoot(manifest: AppManifest, configPath: string) {
@@ -69,14 +94,6 @@ function ensureReleaseAppRoot(manifest: AppManifest, configPath: string) {
   ensureSymlink(path.join(shellDir, "app.config.ts"), path.join(appRoot, "app.config.ts"), "file");
   ensureSymlink(path.join(shellDir, "react-native.config.js"), path.join(appRoot, "react-native.config.js"), "file");
   writeReleasePackageJson(manifest, configPath, appRoot);
-}
-
-function ensureSymlink(targetPath: string, linkPath: string, type: fs.symlink.Type) {
-  if (fs.existsSync(linkPath)) {
-    return;
-  }
-
-  fs.symlinkSync(targetPath, linkPath, type);
 }
 
 export function installMacOSPods(

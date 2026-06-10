@@ -5,7 +5,7 @@ import path from "node:path";
 import { assertSupportedPlatform, loadAppManifest, shellDir } from "./lib/apps";
 import { parseAppCommand } from "./lib/apps";
 import { splitLaunchArgs, type OptionSpecs } from "./lib/launchArgs";
-import { getMacOSDevWorkspaceDir, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
+import { ensureMacOSDevWorkspace, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -92,8 +92,9 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
   assertSupportedPlatform(manifest, platform);
 
   const mode = readMode(runnerArgs);
-  const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : getMacOSDevWorkspaceDir();
-  writeGeneratedConfig(manifest, platform, mode === "Release" ? "release" : "dev");
+  const graphMode = mode === "Release" ? "release" : "dev";
+  writeGeneratedConfig(manifest, platform, graphMode);
+  const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : ensureMacOSDevWorkspace(manifest);
 
   const appPath = getBuiltMacAppPath(workspaceDir, mode);
 
