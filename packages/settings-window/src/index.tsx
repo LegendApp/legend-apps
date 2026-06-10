@@ -143,7 +143,7 @@ export function SettingsWindow<PageId extends string = string>({
         />
       </View>
       <View
-        className={cn("flex-1", 'bg-red-500')}
+        className="flex-1"
         style={styles.pane}
       >
         {selectedPageConfig.render()}
@@ -207,7 +207,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({ actions, children, contentClassName }: SettingsPageProps) {
   return (
-    <View className="flex-1 overflow-hidden bg-blue-500" style={styles.page}>
+    <View className="flex-1 overflow-hidden" style={styles.page}>
       {actions ? <View className="flex-row justify-end px-6 pt-4">{actions}</View> : null}
       <ScrollView
         className="flex-1"
