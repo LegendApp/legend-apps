@@ -39,12 +39,45 @@ There is no dedicated test runner configured yet. Treat `bun run typecheck` and 
 
 ## UI Verification With Agent Device
 
-Use `agent-device` for app UI inspection and verification whenever it fits the task better than manual OS interaction. For macOS app screenshots, prefer an app-scoped session and `agent-device screenshot`, which captures the app window without foregrounding the app or disrupting the user's desktop:
+Use `agent-device` as the default runtime debugging and UI automation surface for React Native macOS apps in this repo. Prefer it for app UI inspection, action injection, screenshots, logs, Metro reloads, React DevTools checks, and repeatable verification flows before reaching for manual OS interaction or raw platform tools.
+
+For macOS app screenshots and interaction, prefer an app-scoped session, which captures and targets the app window without foregrounding the app or disrupting the user's desktop:
 
 - Open or bind a macOS app session with `agent-device open <app> --platform macos --surface app`.
 - Capture app-window screenshots with `agent-device --session <name> screenshot <path>`.
 - Use `--fullscreen` only when the whole desktop is intentionally needed.
-- Prefer `agent-device snapshot`, `screenshot`, `diff`, `metro reload`, and session management over manual `open -a`, AppleScript foregrounding, raw screen captures, or ad hoc UI poking.
+- Prefer `agent-device snapshot`, `screenshot`, `diff`, `logs`, `network dump`, `perf`, `metro reload`, `react-native dismiss-overlay`, `react-devtools`, and session management over manual `open -a`, AppleScript foregrounding, raw screen captures, or ad hoc UI poking.
+- For JS-only changes with Metro connected, prefer `agent-device metro reload --session <name>` instead of restarting the app.
+- For LogBox or RedBox overlays, use `agent-device react-native dismiss-overlay --session <name>` before interacting with the covered UI.
+- For debugging, keep evidence windows small: `agent-device logs clear --restart --session <name>`, `agent-device logs mark "before repro" --session <name>`, reproduce with `press`/`fill`/`type`/`scroll`/`wait`, then `agent-device logs mark "after repro" --session <name>` and `agent-device logs path --session <name>`.
+- For first-time exploration, use one-at-a-time `agent-device snapshot -i --session <name>` and targeted commands so refs and UI state stay grounded after each mutation.
+- When a repro or verification path is known, prefer an `agent-device batch --steps-file <path> --session <name>` flow over one-off commands. Keep batch steps stable with selectors, visible text waits, and app-defined e2e launch arguments rather than session-specific refs whenever possible.
+
+### macOS Dev App Pitfalls
+
+For current-code testing, launch the app with the repo scripts before binding `agent-device`:
+
+- `bun music run` for Music.
+- `bun markdown run` for Markdown.
+
+Do not rely on `agent-device open <bundle-id>` as the primary way to launch current code. For generated macOS apps it can bind to a stale release build under `shell/.legend/workspaces/release/...`, which will not contain current JS/native changes. After launching, verify the running process when behavior or logs look stale:
+
+- `ps -axo pid,lstart,command | rg "legendapp-shell-macos|Legend Markdown|Legend Music|app.legend.(music|markdown)"`
+- Debug/current builds should run from Xcode `DerivedData/.../Build/Products/Debug/legendapp-shell-macos.app/...`.
+- Stale release builds usually run from `shell/.legend/workspaces/release/<app>/macos/.../<Display Name>.app/...`.
+
+The app-specific Metro ports are defined in `scripts/lib/apps.ts`; do not assume `8081`:
+
+- Music: `19091`.
+- Markdown: `19092`.
+- Test Kitchen Sink: `19093`.
+
+Before reloading JS, confirm the active port with `curl http://localhost:<port>/status` or `lsof -nP -iTCP -sTCP:LISTEN | rg "node|bun|metro|19091|19092|19093"`. Use the explicit port with agent-device:
+
+- `agent-device metro reload --session <name> --platform macos --metro-port 19091` for Music.
+- `agent-device metro reload --session <name> --platform macos --metro-port 19092` for Markdown.
+
+If `agent-device logs path` returns an `app.log` that only contains the filter banner or stays tiny after a repro, do not conclude that runtime logs are absent. First verify the process path is the debug app, the log stream is active, and the session is bound to the correct running app. A sparse macOS snapshot with `0 nodes` is also not enough evidence by itself; use process path, screenshots, Metro status, and logs together.
 
 ## Commit & Pull Request Guidelines
 
