@@ -2,9 +2,23 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, rootDir, shellDir } from "./lib/apps";
+import {
+  appIds,
+  assertSupportedPlatform,
+  getDefaultDevServerPort,
+  loadAppManifest,
+  parseAppCommand,
+  rootDir,
+  shellDir,
+} from "./lib/apps";
+import {
+  getMacOSAppWrapperName,
+  macOSSchemeFileName,
+  macOSXcodeProjectName,
+} from "./lib/macosShell";
+import { ensureMacOSReleaseWorkspace } from "./lib/macosWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages, writeGeneratedConfig } from "./lib/nativeModules";
-import type { Platform } from "./lib/types";
+import type { AppManifest, Platform } from "./lib/types";
 
 function runCapture(command: string, args: string[], env: Record<string, string>) {
   const result = spawnSync(command, args, {
@@ -34,6 +48,85 @@ function assertNotContains(output: string, needle: string, message: string) {
   }
 }
 
+function assertUniqueValue(label: string, owner: string, value: string, seen: Map<string, string>) {
+  const existingOwner = seen.get(value);
+  if (existingOwner) {
+    throw new Error(`${label} "${value}" is used by both ${existingOwner} and ${owner}`);
+  }
+  seen.set(value, owner);
+}
+
+async function verifyManifestUniqueness() {
+  const manifests = await Promise.all(appIds.map((appId) => loadAppManifest(appId)));
+  const checks: Array<{
+    label: string;
+    value: (manifest: AppManifest) => string;
+  }> = [
+    { label: "app id", value: (manifest) => manifest.id },
+    { label: "display name", value: (manifest) => manifest.displayName },
+    { label: "iOS bundle id", value: (manifest) => manifest.bundleIds.ios },
+    { label: "macOS bundle id", value: (manifest) => manifest.bundleIds.macos },
+    { label: "Android package", value: (manifest) => manifest.androidPackage },
+    { label: "Metro port", value: (manifest) => String(getDefaultDevServerPort(manifest.id)) },
+  ];
+
+  for (const check of checks) {
+    const seen = new Map<string, string>();
+    for (const manifest of manifests) {
+      assertUniqueValue(check.label, manifest.id, check.value(manifest), seen);
+    }
+  }
+}
+
+function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof writeGeneratedConfig>) {
+  const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
+  const infoPlistPath = generated.macosInfoPlistPath;
+
+  if (!infoPlistPath) {
+    throw new Error(`${manifest.id}/macos did not generate an Info.plist`);
+  }
+
+  const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
+  const infoPlist = fs.readFileSync(infoPlistPath, "utf8");
+  const project = fs.readFileSync(path.join(workspaceDir, macOSXcodeProjectName, "project.pbxproj"), "utf8");
+  const scheme = fs.readFileSync(
+    path.join(workspaceDir, macOSXcodeProjectName, "xcshareddata", "xcschemes", macOSSchemeFileName),
+    "utf8",
+  );
+
+  assertContains(infoPlist, "<key>CFBundleDisplayName</key>", `${manifest.id}/macos Info.plist has no display name`);
+  assertContains(infoPlist, "<string>$(PRODUCT_NAME)</string>", `${manifest.id}/macos Info.plist display name should follow PRODUCT_NAME`);
+  assertContains(infoPlist, "<key>LegendAppId</key>", `${manifest.id}/macos Info.plist has no LegendAppId`);
+  assertContains(infoPlist, `<string>${manifest.id}</string>`, `${manifest.id}/macos Info.plist has wrong app id`);
+  assertContains(infoPlist, "<key>LegendAppDisplayName</key>", `${manifest.id}/macos Info.plist has no app display name metadata`);
+  assertContains(infoPlist, `<string>${manifest.displayName}</string>`, `${manifest.id}/macos Info.plist has wrong app display name metadata`);
+  assertContains(
+    project,
+    `PRODUCT_BUNDLE_IDENTIFIER = "${manifest.bundleIds.macos}";`,
+    `${manifest.id}/macos project has wrong bundle id`,
+  );
+  assertContains(
+    project,
+    `PRODUCT_NAME = "${manifest.displayName}";`,
+    `${manifest.id}/macos project has wrong product name`,
+  );
+  assertContains(
+    project,
+    `path = "${appWrapperName}";`,
+    `${manifest.id}/macos project has wrong app wrapper path`,
+  );
+  assertContains(
+    project,
+    `productName = "${manifest.displayName}";`,
+    `${manifest.id}/macos project has wrong product reference name`,
+  );
+  assertContains(
+    scheme,
+    `BuildableName = "${appWrapperName}"`,
+    `${manifest.id}/macos scheme has wrong app wrapper name`,
+  );
+}
+
 async function verifyOne(appId: string, platform: Platform) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
@@ -53,6 +146,10 @@ async function verifyOne(appId: string, platform: Platform) {
 
   const appSource = fs.readFileSync(path.join(rootDir, "apps", appId, "src", "App.tsx"), "utf8");
   assertNotContains(appSource, "@legend-desktop/music-test", `${appId} app source imports removed music-test package`);
+
+  if (platform === "macos") {
+    verifyMacOSIdentity(manifest, generated);
+  }
 
   const rnConfig = runCapture("bun", ["x", "react-native", "config"], {
     LEGEND_APP: appId,
@@ -88,10 +185,12 @@ async function verifyOne(appId: string, platform: Platform) {
 
 async function main() {
   const command = parseAppCommand(process.argv.slice(2));
+  await verifyManifestUniqueness();
 
   if (command.all) {
     for (const appId of appIds) {
-      for (const platform of ["macos", "ios", "android"] as Platform[]) {
+      const manifest = await loadAppManifest(appId);
+      for (const platform of manifest.platforms) {
         await verifyOne(appId, platform);
       }
     }

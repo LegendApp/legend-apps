@@ -6,6 +6,7 @@ import {
   getMacOSEnv,
   installMacOSPods,
 } from "./lib/macosWorkspaces";
+import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -44,9 +45,9 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
       "xcodebuild",
       [
         "-workspace",
-        `${workspaceDir}/legendapp-shell-macos.xcworkspace`,
+        `${workspaceDir}/${macOSWorkspaceName}`,
         "-scheme",
-        "legendapp-shell-macos",
+        macOSSchemeName,
         "-configuration",
         "Release",
         "-derivedDataPath",

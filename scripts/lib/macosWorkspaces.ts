@@ -2,6 +2,14 @@ import { createHash, type Hash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { appsDir, rootDir, shellDir } from "./apps";
+import {
+  getMacOSAppWrapperName,
+  macOSAppTemplateDir,
+  macOSProjectName,
+  macOSSchemeFileName,
+  macOSWorkspaceName,
+  macOSXcodeProjectName,
+} from "./macosShell";
 import { runCommand } from "./run";
 import type { AppManifest } from "./types";
 
@@ -14,9 +22,9 @@ const macosTemplateEntries = [
   ".xcode.env",
   "Podfile",
   "PrivacyInfo.xcprivacy",
-  "legendapp-shell-macos",
-  "legendapp-shell-macos.xcodeproj",
-  "legendapp-shell-macos.xcworkspace",
+  macOSAppTemplateDir,
+  macOSXcodeProjectName,
+  macOSWorkspaceName,
 ];
 
 export function getMacOSAppDevWorkspaceDir(appId: string) {
@@ -203,9 +211,33 @@ function copyTemplateEntry(entry: string, workspaceDir: string) {
 }
 
 function patchMacOSProjectForApp(workspaceDir: string, manifest: AppManifest) {
-  const projectPath = path.join(workspaceDir, "legendapp-shell-macos.xcodeproj", "project.pbxproj");
+  const projectPath = path.join(workspaceDir, macOSXcodeProjectName, "project.pbxproj");
+  const schemePath = path.join(
+    workspaceDir,
+    macOSXcodeProjectName,
+    "xcshareddata",
+    "xcschemes",
+    macOSSchemeFileName,
+  );
+  const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
   let project = fs.readFileSync(projectPath, "utf8");
+  const appReferencePattern = new RegExp(`/\\* ${escapeRegExp(macOSProjectName)}\\.app \\*/`, "g");
+  const appPathPattern = new RegExp(`path = "${escapeRegExp(macOSProjectName)}\\.app";`, "g");
+  const productNamePattern = new RegExp(`productName = "${escapeRegExp(macOSProjectName)}";`, "g");
+  const schemeBuildablePattern = new RegExp(`BuildableName = "${escapeRegExp(macOSProjectName)}\\.app"`, "g");
 
+  project = project.replace(
+    appReferencePattern,
+    `/* ${appWrapperName} */`,
+  );
+  project = project.replace(
+    appPathPattern,
+    `path = ${quotePBX(appWrapperName)};`,
+  );
+  project = project.replace(
+    productNamePattern,
+    `productName = ${quotePBX(manifest.displayName)};`,
+  );
   project = project.replace(
     /PRODUCT_BUNDLE_IDENTIFIER = .*?;/g,
     `PRODUCT_BUNDLE_IDENTIFIER = ${quotePBX(manifest.bundleIds.macos)};`,
@@ -216,6 +248,15 @@ function patchMacOSProjectForApp(workspaceDir: string, manifest: AppManifest) {
   );
 
   fs.writeFileSync(projectPath, project);
+
+  if (fs.existsSync(schemePath)) {
+    let scheme = fs.readFileSync(schemePath, "utf8");
+    scheme = scheme.replace(
+      schemeBuildablePattern,
+      `BuildableName = ${quoteXMLAttribute(appWrapperName)}`,
+    );
+    fs.writeFileSync(schemePath, scheme);
+  }
 }
 
 function getNativeGraphHash(workspaceDir: string, configPath: string) {
@@ -317,4 +358,16 @@ function addCodegenSpecFiles(hash: Hash, dirPath: string) {
 
 function quotePBX(value: string) {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function quoteXMLAttribute(value: string) {
+  return `"${value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")}"`;
 }

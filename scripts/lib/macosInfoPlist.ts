@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { shellDir } from "./apps";
+import { macOSDefaultInfoPlistPath } from "./macosShell";
 import type { AppManifest, MacOSDocumentType } from "./types";
 
-const baseInfoPlistPath = path.join(shellDir, "macos", "legendapp-shell-macos", "Info.plist");
+const baseInfoPlistPath = path.join(shellDir, "macos", macOSDefaultInfoPlistPath);
 
 function escapePlistString(value: string) {
   return value

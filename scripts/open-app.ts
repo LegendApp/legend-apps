@@ -5,12 +5,12 @@ import path from "node:path";
 import { assertSupportedPlatform, loadAppManifest, shellDir } from "./lib/apps";
 import { parseAppCommand } from "./lib/apps";
 import { splitLaunchArgs, type OptionSpecs } from "./lib/launchArgs";
-import { ensureMacOSDevWorkspace, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
+import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
+import { ensureMacOSDevWorkspace, getMacOSEnv, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
-const macosScheme = "legendapp-shell-macos";
 const openOptionSpecs: OptionSpecs = {
   "--configuration": "value",
   "--mode": "value",
@@ -44,14 +44,14 @@ function parseBuildSettings(output: string) {
 }
 
 function getBuiltMacAppPath(workspaceDir: string, mode: string) {
-  const macosWorkspace = path.join(workspaceDir, "legendapp-shell-macos.xcworkspace");
+  const macosWorkspace = path.join(workspaceDir, macOSWorkspaceName);
   const result = spawnSync(
     "xcodebuild",
     [
       "-workspace",
       macosWorkspace,
       "-scheme",
-      macosScheme,
+      macOSSchemeName,
       "-configuration",
       mode,
       "-showBuildSettings",
@@ -82,6 +82,17 @@ function getBuiltMacAppPath(workspaceDir: string, mode: string) {
   return path.join(productsDir, wrapperName);
 }
 
+function getOpenEnvironmentArgs(appId: string, generated: ReturnType<typeof writeGeneratedConfig>) {
+  const env = {
+    ...getMacOSEnv(appId, generated.configPath),
+    LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
+  };
+
+  return Object.entries(env)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+    .flatMap(([key, value]) => ["--env", `${key}=${value}`]);
+}
+
 async function openOne(appId: string, platform: Platform, args: string[]) {
   if (platform !== "macos") {
     throw new Error("Opening an already built app is currently implemented for macos only.");
@@ -93,7 +104,7 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
 
   const mode = readMode(runnerArgs);
   const graphMode = mode === "Release" ? "release" : "dev";
-  writeGeneratedConfig(manifest, platform, graphMode);
+  const generated = writeGeneratedConfig(manifest, platform, graphMode);
   const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : ensureMacOSDevWorkspace(manifest);
 
   const appPath = getBuiltMacAppPath(workspaceDir, mode);
@@ -107,7 +118,8 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
     return;
   }
 
-  runCommand("open", launchArgs.length > 0 ? ["-n", appPath, "--args", ...launchArgs] : [appPath]);
+  const envArgs = getOpenEnvironmentArgs(appId, generated);
+  runCommand("open", launchArgs.length > 0 ? ["-n", ...envArgs, appPath, "--args", ...launchArgs] : [...envArgs, appPath]);
 }
 
 async function main() {

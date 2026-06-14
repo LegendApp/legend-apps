@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDefaultDevServerPort, resolveDevServerPort, rootDir, shellDir, withDefaultPortArg } from "./apps";
 import { splitLaunchArgs, type OptionSpecs } from "./launchArgs";
+import { macOSSchemeName, macOSWorkspaceName, macOSXcodeProjectName } from "./macosShell";
 import type { Platform } from "./types";
 
-const macosScheme = "legendapp-shell-macos";
 const macosRunOptionSpecs: OptionSpecs = {
   "--configuration": "value",
   "--mode": "value",
@@ -54,11 +54,11 @@ function readStringArg(args: string[], names: string[], defaultValue: string) {
 function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string | undefined>) {
   const mode = readStringArg(args, ["--mode", "--configuration"], "Debug");
   const projectPath = readStringArg(args, ["--project-path"], "macos");
-  const scheme = readStringArg(args, ["--scheme"], macosScheme);
+  const scheme = readStringArg(args, ["--scheme"], macOSSchemeName);
   const terminal = readStringArg(args, ["--terminal"], "ghostty");
   const projectDir = path.join(shellDir, projectPath);
-  const workspacePath = path.join(projectDir, `${macosScheme}.xcworkspace`);
-  const xcodeProjectPath = path.join(projectDir, `${macosScheme}.xcodeproj`);
+  const workspacePath = path.join(projectDir, macOSWorkspaceName);
+  const xcodeProjectPath = path.join(projectDir, macOSXcodeProjectName);
   const containerArgs = fs.existsSync(workspacePath)
     ? ["-workspace", workspacePath]
     : ["-project", xcodeProjectPath];
@@ -135,13 +135,13 @@ export function runPlatformCommand(
     runCommand(
       "bun",
       mode === "release"
-        ? ["x", "react-native", "build-macos", "--mode", "Release", "--scheme", "legendapp-shell-macos"]
+        ? ["x", "react-native", "build-macos", "--mode", "Release", "--scheme", macOSSchemeName]
         : [
             "x",
             "react-native",
             "run-macos",
             "--scheme",
-            "legendapp-shell-macos",
+            macOSSchemeName,
             ...withDefaultPortArg(runnerArgs, devServerPort ?? getDefaultDevServerPort(appId)),
           ],
       { cwd: shellDir, env },

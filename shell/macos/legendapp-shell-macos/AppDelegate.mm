@@ -40,6 +40,69 @@ static NSString *LegendCurrentAppId(void)
   return NSProcessInfo.processInfo.environment[@"LEGEND_APP"] ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
 }
 
+static NSString *LegendCurrentDisplayName(void)
+{
+  NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+  NSString *bundleDisplayName = [info[@"CFBundleDisplayName"] isKindOfClass:NSString.class] ? info[@"CFBundleDisplayName"] : nil;
+  NSString *legendDisplayName = [info[@"LegendAppDisplayName"] isKindOfClass:NSString.class] ? info[@"LegendAppDisplayName"] : nil;
+  NSString *bundleName = [info[@"CFBundleName"] isKindOfClass:NSString.class] ? info[@"CFBundleName"] : nil;
+  NSString *displayName = NSProcessInfo.processInfo.processName;
+
+  if (bundleName.length > 0) {
+    displayName = bundleName;
+  }
+  if (legendDisplayName.length > 0) {
+    displayName = legendDisplayName;
+  }
+  if (bundleDisplayName.length > 0) {
+    displayName = bundleDisplayName;
+  }
+
+  return displayName;
+}
+
+static void LegendRetitleMenuItemsWithPrefix(NSMenu *menu, NSString *prefix, NSString *displayName)
+{
+  for (NSMenuItem *item in menu.itemArray) {
+    if ([item.title hasPrefix:prefix]) {
+      item.title = [prefix stringByAppendingString:displayName];
+    }
+  }
+}
+
+static void LegendRetitleMenuItemsWithSuffix(NSMenu *menu, NSString *suffix, NSString *displayName)
+{
+  for (NSMenuItem *item in menu.itemArray) {
+    if ([item.title hasSuffix:suffix]) {
+      item.title = [displayName stringByAppendingString:suffix];
+    }
+  }
+}
+
+static void LegendConfigureApplicationMenuTitles(void)
+{
+  NSString *displayName = LegendCurrentDisplayName();
+  NSMenu *mainMenu = NSApp.mainMenu;
+
+  if (displayName.length > 0 && mainMenu.numberOfItems > 0) {
+    NSMenuItem *appMenuItem = [mainMenu itemAtIndex:0];
+    appMenuItem.title = displayName;
+    appMenuItem.submenu.title = displayName;
+
+    if (appMenuItem.submenu) {
+      LegendRetitleMenuItemsWithPrefix(appMenuItem.submenu, @"About ", displayName);
+      LegendRetitleMenuItemsWithPrefix(appMenuItem.submenu, @"Hide ", displayName);
+      LegendRetitleMenuItemsWithPrefix(appMenuItem.submenu, @"Quit ", displayName);
+    }
+
+    for (NSMenuItem *rootItem in mainMenu.itemArray) {
+      if ([rootItem.title isEqualToString:@"Help"] && rootItem.submenu) {
+        LegendRetitleMenuItemsWithSuffix(rootItem.submenu, @" Help", displayName);
+      }
+    }
+  }
+}
+
 static void LegendConfigureMusicWindow(NSWindow *window)
 {
   [window setTitleVisibility:NSWindowTitleHidden];
@@ -81,6 +144,8 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
+  LegendConfigureApplicationMenuTitles();
+
   Class documentControllerClass = NSClassFromString(@"RNRecentDocumentController");
   if (documentControllerClass && [documentControllerClass isSubclassOfClass:[NSDocumentController class]]) {
     (void)[[documentControllerClass alloc] init];
@@ -144,6 +209,8 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 {
   NSString *appId = LegendCurrentAppId();
   BOOL isMusic = [appId isEqualToString:@"music"];
+  BOOL isMarkdown = [appId isEqualToString:@"markdown"];
+  BOOL shouldHandleReopen = YES;
 
   if (isMusic) {
     if (self.window == nil) {
@@ -154,9 +221,26 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
       [self.window makeKeyAndOrderFront:self];
     }
     [NSApp activateIgnoringOtherApps:YES];
+  } else if (isMarkdown) {
+    NSWindow *targetWindow = nil;
+    for (NSWindow *window in NSApp.windows) {
+      BOOL canFocusWindow = window != self.window && window.isVisible && !window.sheet && ![window isKindOfClass:NSPanel.class];
+      if (canFocusWindow) {
+        targetWindow = window;
+        break;
+      }
+    }
+
+    if (targetWindow) {
+      [targetWindow makeKeyAndOrderFront:self];
+    } else {
+      [self.window orderOut:self];
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+    shouldHandleReopen = NO;
   }
 
-  return YES;
+  return shouldHandleReopen;
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)sender
