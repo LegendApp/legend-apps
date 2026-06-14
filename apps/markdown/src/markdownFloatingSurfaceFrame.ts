@@ -5,15 +5,6 @@ export type MarkdownFloatingSurfacePlacement = "above" | "below";
 
 const floatingToolbarEstimatedHeight = 40;
 const floatingToolbarGap = 6;
-const toolbarGeometryDebugId = "markdown-toolbar-geometry-v1";
-let toolbarGeometryDebugSeq = 0;
-
-function logToolbarGeometryDebug(event: string, data: Record<string, unknown>) {
-  console.info(`${Date.now()} [debug-log markdown-toolbar ${toolbarGeometryDebugId}] ${event}`, {
-    seq: ++toolbarGeometryDebugSeq,
-    ...data,
-  });
-}
 
 export function getMarkdownFloatingSurfaceFrame({
   anchor,
@@ -38,26 +29,6 @@ export function getMarkdownFloatingSurfaceFrame({
     top,
     width: surfaceWidth,
   };
-  logToolbarGeometryDebug("surface-frame", {
-    anchor: {
-      blockId: anchor.blockId,
-      height: anchor.height,
-      itemHeight: anchor.itemHeight,
-      itemWidth: anchor.itemWidth,
-      itemX: anchor.itemX,
-      itemY: anchor.itemY,
-      kind: anchor.kind,
-      width: anchor.width,
-      x: anchor.x,
-      y: anchor.y,
-    },
-    coordinateSpace,
-    frame,
-    itemTop,
-    placement,
-    selectionTop,
-    surfaceTop,
-  });
 
   return frame;
 }

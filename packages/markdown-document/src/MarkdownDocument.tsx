@@ -65,15 +65,6 @@ const typingHistoryGroupTimeoutMs = 1000;
 const markdownLineBreakPattern = /\r\n|\r|\n/g;
 const markdownListLinePattern = /^\s*(?:[-*+]|\d+[.)])(?:\s|$)/;
 const markdownFenceStartPattern = /^\s*(?:```|~~~)/;
-const toolbarGeometryDebugId = "markdown-toolbar-geometry-v1";
-let toolbarGeometryDebugSeq = 0;
-
-function logToolbarGeometryDebug(event: string, data: Record<string, unknown>) {
-  console.info(`${Date.now()} [debug-log markdown-toolbar ${toolbarGeometryDebugId}] ${event}`, {
-    seq: ++toolbarGeometryDebugSeq,
-    ...data,
-  });
-}
 
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
   if (__DEV__) {
@@ -380,36 +371,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 selectedLength,
                 selectionEnd,
                 selectionStart,
-              });
-              logToolbarGeometryDebug("text-selection-anchor", {
-                activeBlockId,
-                activeBlockLayout,
-                anchor,
-                caretRect,
-                contentContainerOffsetX,
-                inputFrame: {
-                  height: inputHeight,
-                  width: inputWidth,
-                  x: inputX,
-                  y: inputY,
-                },
-                itemFrame: {
-                  height: itemHeight,
-                  width: itemWidth,
-                  x: itemX,
-                  y: itemY,
-                },
-                measuredItemFrame: {
-                  x: measuredItemX,
-                  y: measuredItemY,
-                },
-                nativeOverlayFrame,
-                scrollOffsetY: scrollOffsetYRef.current,
-                selection: {
-                  end: selectionEnd,
-                  length: selectedLength,
-                  start: selectionStart,
-                },
               });
               setTextSelectionAnchor(anchor);
             });
@@ -2119,13 +2080,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const { blockId, height, width, x, y } = event.nativeEvent;
         const block = blocksById.get(blockId);
         nativeEditingBlockIdRef.current = blockId;
-        logToolbarGeometryDebug("native-begin-editing", {
-          blockId,
-          hasBlock: Boolean(block),
-          nativeEvent: { height, width, x, y },
-          scrollOffsetY: scrollOffsetYRef.current,
-          storedBlockLayout: blockContentLayoutsRef.current.get(blockId),
-        });
         if (block) {
           const nextOverlayFrame = {
             height,
