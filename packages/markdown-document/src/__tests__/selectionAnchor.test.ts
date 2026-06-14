@@ -78,4 +78,30 @@ describe("resolveTextSelectionAnchor", () => {
       y: 137,
     }));
   });
+
+  it("keeps native overlay selection anchors in visible coordinates when no scroll offset is applied", () => {
+    const anchor = resolveTextSelectionAnchor({
+      caretRect: { height: 18, width: 88, x: 220, y: 0 },
+      contentItemX: 40,
+      itemHeight: 36,
+      itemWidth: 640,
+      itemY: 680,
+      markdown: "calculateItemsInView",
+      paragraphFontSize: 16,
+      paragraphLineHeight: 25,
+      scrollOffsetY: 0,
+      selectedLength: 20,
+      selectionEnd: 20,
+      selectionStart: 0,
+    });
+
+    expect(anchor).toEqual(expect.objectContaining({
+      height: 25,
+      itemHeight: 36,
+      itemWidth: 640,
+      itemY: 680,
+      kind: "textSelection",
+      y: 680,
+    }));
+  });
 });

@@ -65,6 +65,15 @@ const typingHistoryGroupTimeoutMs = 1000;
 const markdownLineBreakPattern = /\r\n|\r|\n/g;
 const markdownListLinePattern = /^\s*(?:[-*+]|\d+[.)])(?:\s|$)/;
 const markdownFenceStartPattern = /^\s*(?:```|~~~)/;
+const toolbarGeometryDebugId = "markdown-toolbar-geometry-v1";
+let toolbarGeometryDebugSeq = 0;
+
+function logToolbarGeometryDebug(event: string, data: Record<string, unknown>) {
+  console.info(`${Date.now()} [debug-log markdown-toolbar ${toolbarGeometryDebugId}] ${event}`, {
+    seq: ++toolbarGeometryDebugSeq,
+    ...data,
+  });
+}
 
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
   if (__DEV__) {
@@ -142,6 +151,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
+    const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -334,8 +344,21 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               if (requestId !== selectionAnchorRequestRef.current) {
                 return;
               }
-              const itemX = inputX - containerX;
-              const itemY = inputY - containerY;
+              const measuredItemX = inputX - containerX;
+              const measuredItemY = inputY - containerY;
+              const activeBlockId = activeBlockIdRef.current ?? undefined;
+              const activeBlockLayout = activeBlockId ? blockContentLayoutsRef.current.get(activeBlockId) : undefined;
+              const nativeOverlayFrame = usesNativeEditorOverlay ? overlayFrameRef.current : undefined;
+              const itemX = activeBlockLayout
+                ? contentContainerOffsetX + resolvedContentHorizontalPadding
+                : nativeOverlayFrame?.left ?? measuredItemX;
+              const itemY = activeBlockLayout
+                ? activeBlockLayout.y
+                : nativeOverlayFrame?.top ?? measuredItemY;
+              const itemWidth = activeBlockLayout
+                ? inactiveOverlayWidth
+                : nativeOverlayFrame?.width ?? inputWidth;
+              const itemHeight = activeBlockLayout?.height ?? nativeOverlayFrame?.height ?? inputHeight;
               const contentItemX = itemX - contentContainerOffsetX;
               const activeMarkdown = draftMarkdownRef.current;
               const paragraphStyle = resolvedMarkdownStyle.paragraph;
@@ -344,19 +367,49 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 ? paragraphStyle.lineHeight
                 : Math.ceil(paragraphFontSize * 1.5);
               const anchor = resolveTextSelectionAnchor({
-                blockId: activeBlockIdRef.current ?? undefined,
+                blockId: activeBlockId,
                 caretRect,
                 contentItemX,
-                itemHeight: inputHeight,
-                itemWidth: inputWidth,
+                itemHeight,
+                itemWidth,
                 itemY,
                 markdown: activeMarkdown,
                 paragraphFontSize,
                 paragraphLineHeight,
-                scrollOffsetY: scrollOffsetYRef.current,
+                scrollOffsetY: nativeOverlayFrame ? 0 : scrollOffsetYRef.current,
                 selectedLength,
                 selectionEnd,
                 selectionStart,
+              });
+              logToolbarGeometryDebug("text-selection-anchor", {
+                activeBlockId,
+                activeBlockLayout,
+                anchor,
+                caretRect,
+                contentContainerOffsetX,
+                inputFrame: {
+                  height: inputHeight,
+                  width: inputWidth,
+                  x: inputX,
+                  y: inputY,
+                },
+                itemFrame: {
+                  height: itemHeight,
+                  width: itemWidth,
+                  x: itemX,
+                  y: itemY,
+                },
+                measuredItemFrame: {
+                  x: measuredItemX,
+                  y: measuredItemY,
+                },
+                nativeOverlayFrame,
+                scrollOffsetY: scrollOffsetYRef.current,
+                selection: {
+                  end: selectionEnd,
+                  length: selectedLength,
+                  start: selectionStart,
+                },
               });
               setTextSelectionAnchor(anchor);
             });
@@ -565,6 +618,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (activeBlockIdValue && activeBlockIdValue !== anchorBlockId) {
           activeInputRef.current?.blur();
           nativeEditingBlockIdRef.current = null;
+          overlayFrameRef.current = undefined;
           activeBlockIdRef.current = null;
           setActiveBlockId(null);
           setActiveSelection(0);
@@ -795,6 +849,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
         nativeEditingBlockIdRef.current = null;
+        overlayFrameRef.current = undefined;
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
@@ -816,6 +871,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
         activeInputRef.current?.blur();
         nativeEditingBlockIdRef.current = null;
+        overlayFrameRef.current = undefined;
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
@@ -1226,6 +1282,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
       activeInputRef.current?.blur?.();
       nativeEditingBlockIdRef.current = null;
+      overlayFrameRef.current = undefined;
       activeBlockIdRef.current = null;
       blockSelectionGestureRef.current = null;
       clearTextSelectionAnchor();
@@ -1415,6 +1472,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       activeInputSelectionRef.current = { start: 0, end: 0 };
       selectionAnchorRequestRef.current += 1;
       nativeEditingBlockIdRef.current = null;
+      overlayFrameRef.current = undefined;
       setDocumentState({ status: "loading" });
       setBlockState(createMarkdownDocumentBlockState([]));
       setActiveBlockId(null);
@@ -2061,13 +2119,22 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const { blockId, height, width, x, y } = event.nativeEvent;
         const block = blocksById.get(blockId);
         nativeEditingBlockIdRef.current = blockId;
+        logToolbarGeometryDebug("native-begin-editing", {
+          blockId,
+          hasBlock: Boolean(block),
+          nativeEvent: { height, width, x, y },
+          scrollOffsetY: scrollOffsetYRef.current,
+          storedBlockLayout: blockContentLayoutsRef.current.get(blockId),
+        });
         if (block) {
-          setOverlayFrame({
+          const nextOverlayFrame = {
             height,
             left: x,
             top: y,
             width,
-          });
+          };
+          overlayFrameRef.current = nextOverlayFrame;
+          setOverlayFrame(nextOverlayFrame);
           activateBlock(block, 0);
         }
       },
