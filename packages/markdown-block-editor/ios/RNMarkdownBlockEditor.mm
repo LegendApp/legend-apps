@@ -162,8 +162,14 @@ static BOOL isEnrichedMarkdownInput(id view)
 
 - (nullable RNMarkdownBlockActivationView *)activationViewForBlockId:(NSString *)blockId
 {
+  if (blockId.length == 0) {
+    return nil;
+  }
+
   RNMarkdownBlockActivationView *view = [_activationViews objectForKey:blockId];
   if (view == nil) {
+    // Activation views can mount before their blockId prop is applied, so registration
+    // may be missing until a programmatic focus change asks for the target block.
     view = [self findActivationViewWithBlockId:blockId inView:self];
     if (view != nil) {
       [_activationViews setObject:view forKey:blockId];
