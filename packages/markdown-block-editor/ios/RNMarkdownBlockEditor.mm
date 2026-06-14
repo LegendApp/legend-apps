@@ -137,12 +137,47 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 }
 
+- (nullable RNMarkdownBlockActivationView *)findActivationViewWithBlockId:(NSString *)blockId
+                                                                    inView:(NSView *)view
+{
+  RNMarkdownBlockActivationView *matchedView = nil;
+  if ([view isKindOfClass:RNMarkdownBlockActivationView.class]) {
+    RNMarkdownBlockActivationView *activationView = (RNMarkdownBlockActivationView *)view;
+    if ([activationView.blockId isEqualToString:blockId]) {
+      matchedView = activationView;
+    }
+  }
+
+  if (matchedView == nil) {
+    for (NSView *subview in view.subviews) {
+      matchedView = [self findActivationViewWithBlockId:blockId inView:subview];
+      if (matchedView != nil) {
+        break;
+      }
+    }
+  }
+
+  return matchedView;
+}
+
+- (nullable RNMarkdownBlockActivationView *)activationViewForBlockId:(NSString *)blockId
+{
+  RNMarkdownBlockActivationView *view = [_activationViews objectForKey:blockId];
+  if (view == nil) {
+    view = [self findActivationViewWithBlockId:blockId inView:self];
+    if (view != nil) {
+      [_activationViews setObject:view forKey:blockId];
+    }
+  }
+  return view;
+}
+
 - (nullable RNMarkdownBlockActivationView *)activeBlockView
 {
   if (_activeBlockId.length == 0) {
     return nil;
   }
-  return [_activationViews objectForKey:_activeBlockId];
+  return [self activationViewForBlockId:_activeBlockId];
 }
 
 - (nullable NSScrollView *)scrollViewForBlockView:(RNMarkdownBlockActivationView *)view
@@ -280,6 +315,24 @@ static BOOL isEnrichedMarkdownInput(id view)
   _isPositioningOverlay = NO;
 }
 
+- (void)emitBeginEditingForBlockView:(RNMarkdownBlockActivationView *)view
+{
+  auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
+  if (!eventEmitter) {
+    return;
+  }
+
+  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
+  NSRect frame = overlaySuperview == nil ? NSZeroRect : [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
+  eventEmitter->onBeginEditing({
+    .blockId = std::string([view.blockId UTF8String] ?: ""),
+    .height = frame.size.height,
+    .width = frame.size.width,
+    .x = frame.origin.x,
+    .y = frame.origin.y,
+  });
+}
+
 - (void)overlayInputFrameDidChange:(NSNotification *)notification
 {
   if (_isPositioningOverlay || _overlayInput == nil || _overlayInput.hidden || _activeBlockId.length == 0) {
@@ -327,19 +380,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   _activeBlockId = [view.blockId copy];
   [self setBlockView:view contentsHidden:YES];
   [self observeScrollViewForBlockView:view];
-
-  auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
-  if (eventEmitter) {
-    NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
-    NSRect frame = overlaySuperview == nil ? NSZeroRect : [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
-    eventEmitter->onBeginEditing({
-      .blockId = std::string([view.blockId UTF8String] ?: ""),
-      .height = frame.size.height,
-      .width = frame.size.width,
-      .x = frame.origin.x,
-      .y = frame.origin.y,
-    });
-  }
+  [self emitBeginEditingForBlockView:view];
 
   [self showOverlayForBlockView:view markdown:view.markdown event:event loadValue:YES];
 }
@@ -398,7 +439,7 @@ static BOOL isEnrichedMarkdownInput(id view)
       [self hideOverlay];
     }
   } else if (_activeBlockId == nil || ![_activeBlockId isEqualToString:nextActiveBlockId]) {
-    RNMarkdownBlockActivationView *view = [_activationViews objectForKey:nextActiveBlockId];
+    RNMarkdownBlockActivationView *view = [self activationViewForBlockId:nextActiveBlockId];
     if (view != nil) {
       NSString *markdown = [NSString stringWithUTF8String:newViewProps.activeMarkdown.c_str()];
       [self showActiveBlockContents];
@@ -406,6 +447,7 @@ static BOOL isEnrichedMarkdownInput(id view)
       [self setBlockView:view contentsHidden:YES];
       [self observeScrollViewForBlockView:view];
       [self showOverlayForBlockView:view markdown:markdown event:nil loadValue:YES];
+      [self emitBeginEditingForBlockView:view];
     }
   }
 

@@ -2089,7 +2089,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           };
           overlayFrameRef.current = nextOverlayFrame;
           setOverlayFrame(nextOverlayFrame);
-          activateBlock(block, 0);
+          if (activeBlockIdRef.current !== blockId) {
+            activateBlock(block, 0);
+          }
         }
       },
       [activateBlock, blocksById],
