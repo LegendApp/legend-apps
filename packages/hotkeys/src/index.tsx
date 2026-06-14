@@ -50,6 +50,16 @@ const menuModifierCodes = [
 
 const modifierSet = new Set<number>(modifierCodes);
 const menuModifierSet = new Set<number>(menuModifierCodes);
+const implicitFunctionModifierKeyCodes = new Set<number>([
+  KeyCodes.KEY_UP,
+  KeyCodes.KEY_DOWN,
+  KeyCodes.KEY_LEFT,
+  KeyCodes.KEY_RIGHT,
+  KeyCodes.KEY_HOME,
+  KeyCodes.KEY_END,
+  KeyCodes.KEY_PAGE_UP,
+  KeyCodes.KEY_PAGE_DOWN,
+]);
 
 export const KeyText: Record<number, string> = (() => {
   const keyText: Record<number, string> = {};
@@ -156,8 +166,15 @@ export function createDefaultHotkeyState<HotkeyId extends string>(
   return Object.fromEntries(definitions.map((definition) => [definition.id, definition.defaultValue])) as HotkeyState<HotkeyId>;
 }
 
-function eventModifierCodes(event: KeyboardEvent) {
-  return modifierCodes.filter((modifier) => hasModifier(event, modifier));
+function eventModifierCodes(event: KeyboardEvent, configuredModifiers: readonly number[] = []) {
+  return modifierCodes.filter((modifier) => {
+    const ignoreImplicitFunctionModifier =
+      modifier === KeyCodes.MODIFIER_FUNCTION &&
+      implicitFunctionModifierKeyCodes.has(event.keyCode) &&
+      !configuredModifiers.includes(KeyCodes.MODIFIER_FUNCTION);
+
+    return !ignoreImplicitFunctionModifier && hasModifier(event, modifier);
+  });
 }
 
 export function matchesHotkey(event: KeyboardEvent, value: HotkeyValue | null | undefined) {
@@ -168,7 +185,7 @@ export function matchesHotkey(event: KeyboardEvent, value: HotkeyValue | null | 
 
   const configuredModifiers = keyCodes.filter(isModifierKeyCode);
   const configuredKeyCode = keyCodes.find((keyCode) => !isModifierKeyCode(keyCode));
-  const activeModifiers = eventModifierCodes(event);
+  const activeModifiers = eventModifierCodes(event, configuredModifiers);
   const modifierMask = createModifierMask(...configuredModifiers);
   const activeMask = createModifierMask(...activeModifiers);
 
