@@ -295,6 +295,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const focusAdjacentBlockQueueRef = useRef<FocusAdjacentBlockRequest[]>([]);
     const focusAdjacentBlockInFlightRef = useRef(false);
     const pendingVerticalNavigationSelectionRef = useRef<PendingVerticalNavigationSelection | null>(null);
+    const pendingVerticalNavigationFrameRef = useRef<number | undefined>(undefined);
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const draftMarkdownRef = useRef("");
@@ -326,12 +327,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
     const blockSelectionRef = useRef<BlockSelectionState | null>(null);
     const blockSelectionInputText$ = useObservable("");
+    const overlayFrame$ = useObservable<OverlayFrame | undefined>(undefined);
     const layoutMetrics$ = useObservable({
       containerWindowY: 0,
       contentContainerOffsetX: 0,
     });
     const [draftMarkdown, setDraftMarkdown] = useState("");
-    const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
     const textSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const inactiveOverlayWidth$ = useObservable(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
@@ -374,6 +375,33 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         autosaveTimerRef.current = undefined;
       }
     }, []);
+
+    const clearOverlayFrame = useCallback(() => {
+      overlayFrameRef.current = undefined;
+      overlayFrame$.set(undefined);
+    }, [overlayFrame$]);
+
+    const cancelPendingVerticalNavigationFrame = useCallback(() => {
+      if (pendingVerticalNavigationFrameRef.current !== undefined) {
+        cancelAnimationFrame(pendingVerticalNavigationFrameRef.current);
+        pendingVerticalNavigationFrameRef.current = undefined;
+      }
+    }, []);
+
+    const schedulePendingVerticalNavigationSelection = useCallback(() => {
+      const pending = pendingVerticalNavigationSelectionRef.current;
+      if (pending && pending.blockId === activeBlockIdRef.current) {
+        cancelPendingVerticalNavigationFrame();
+        pendingVerticalNavigationFrameRef.current = requestAnimationFrame(() => {
+          pendingVerticalNavigationFrameRef.current = undefined;
+          const latestPending = pendingVerticalNavigationSelectionRef.current;
+          if (latestPending && latestPending.blockId === activeBlockIdRef.current) {
+            activeInputRef.current?.setSelectionForVerticalNavigation(latestPending.direction, latestPending.preferredX);
+            pendingVerticalNavigationSelectionRef.current = null;
+          }
+        });
+      }
+    }, [cancelPendingVerticalNavigationFrame]);
 
     const autosaveEnabled = savePolicy?.autosave ?? true;
     const autosaveDebounceMs = Math.min(Math.max(savePolicy?.debounceMs ?? 2000, 0), 2000);
@@ -743,21 +771,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     useEffect(() => {
-      const pending = pendingVerticalNavigationSelectionRef.current;
-      if (pending && pending.blockId === activeBlockId) {
-        const frame = requestAnimationFrame(() => {
-          const latestPending = pendingVerticalNavigationSelectionRef.current;
-          if (latestPending && latestPending.blockId === activeBlockIdRef.current) {
-            activeInputRef.current?.setSelectionForVerticalNavigation(latestPending.direction, latestPending.preferredX);
-            pendingVerticalNavigationSelectionRef.current = null;
-          }
-        });
-
-        return () => cancelAnimationFrame(frame);
-      }
-
-      return undefined;
-    }, [activeBlockId, draftMarkdown, overlayFrame]);
+      schedulePendingVerticalNavigationSelection();
+      return cancelPendingVerticalNavigationFrame;
+    }, [activeBlockId, cancelPendingVerticalNavigationFrame, draftMarkdown, schedulePendingVerticalNavigationSelection]);
 
     const beginBlockSelection = useCallback(
       (anchorBlockId: string, focusBlockId: string) => {
@@ -767,7 +783,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (activeBlockIdValue && activeBlockIdValue !== anchorBlockId) {
           activeInputRef.current?.blur();
           nativeEditingBlockIdRef.current = null;
-          overlayFrameRef.current = undefined;
+          clearOverlayFrame();
           activeBlockIdRef.current = null;
           setActiveBlockId(null);
           setActiveSelection(0);
@@ -776,7 +792,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelectionGestureRef.current = nextBlockSelection;
         setNextBlockSelection(nextBlockSelection);
       },
-      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setNextBlockSelection],
+      [clearOverlayFrame, clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setNextBlockSelection],
     );
 
     const updateBlockSelectionGesture = useCallback(
@@ -1061,14 +1077,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
         nativeEditingBlockIdRef.current = null;
-        overlayFrameRef.current = undefined;
+        clearOverlayFrame();
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
         clearTextSelectionAnchor();
         clearTypingHistoryGroup();
       }).catch(reportAsyncError);
-    }, [clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
+    }, [clearOverlayFrame, clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 
     const commitAndBlurActiveBlock = useCallback(() => {
@@ -1083,7 +1099,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
         activeInputRef.current?.blur();
         nativeEditingBlockIdRef.current = null;
-        overlayFrameRef.current = undefined;
+        clearOverlayFrame();
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
@@ -1092,7 +1108,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }).catch(reportAsyncError);
 
       return true;
-    }, [clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
+    }, [clearOverlayFrame, clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError]);
 
     const replaceBlockSelection = useCallback(
       async (markdown: string) => {
@@ -1535,14 +1551,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
       activeInputRef.current?.blur?.();
       nativeEditingBlockIdRef.current = null;
-      overlayFrameRef.current = undefined;
+      clearOverlayFrame();
       activeBlockIdRef.current = null;
       blockSelectionGestureRef.current = null;
       clearTextSelectionAnchor();
       setActiveBlockId(null);
       setActiveSelection(0);
       setNextBlockSelection({ anchorBlockId, focusBlockId });
-    }, [clearTextSelectionAnchor, setNextBlockSelection]);
+    }, [clearOverlayFrame, clearTextSelectionAnchor, setNextBlockSelection]);
 
     const extendBlockSelection = useCallback(
       (direction: "up" | "down") => {
@@ -1705,6 +1721,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       let isCanceled = false;
 
       cancelHydration();
+      cancelPendingVerticalNavigationFrame();
       clearEditTimer();
       clearAutosaveTimer();
       activeBlockIdRef.current = null;
@@ -1725,7 +1742,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       activeInputSelectionRef.current = { start: 0, end: 0 };
       selectionAnchorRequestRef.current += 1;
       nativeEditingBlockIdRef.current = null;
-      overlayFrameRef.current = undefined;
+      pendingVerticalNavigationSelectionRef.current = null;
+      clearOverlayFrame();
       setDocumentState({ status: "loading" });
       setBlockState(createMarkdownDocumentBlockState([]));
       setActiveBlockId(null);
@@ -1733,7 +1751,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setNextBlockSelection(null);
       blockSelectionInputText$.set("");
       setDraftMarkdown("");
-      setOverlayFrame(undefined);
       publishTextSelectionAnchor(null);
       setNextSaveState("idle");
       onDirtyChangeRef.current?.(false);
@@ -1789,14 +1806,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return () => {
         isCanceled = true;
         cancelHydration();
+        cancelPendingVerticalNavigationFrame();
         clearEditTimer();
         clearAutosaveTimer();
       };
     }, [
       adapter,
       cancelHydration,
+      cancelPendingVerticalNavigationFrame,
       clearAutosaveTimer,
       clearEditTimer,
+      clearOverlayFrame,
       autoFocusFirstBlock,
       filename,
       onDirtyChangeRef,
@@ -2371,13 +2391,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             width,
           };
           overlayFrameRef.current = nextOverlayFrame;
-          setOverlayFrame(nextOverlayFrame);
+          overlayFrame$.set(nextOverlayFrame);
+          schedulePendingVerticalNavigationSelection();
           if (activeBlockIdRef.current !== blockId) {
             activateBlock(block, 0);
           }
         }
       },
-      [activateBlock, blocksById],
+      [activateBlock, blocksById, overlayFrame$, schedulePendingVerticalNavigationSelection],
     );
 
     if (documentState.status === "error") {
@@ -2459,7 +2480,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             onChangeSelectionRef={handleChangeSelectionRef}
             onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
             onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
-            overlayFrame={overlayFrame}
+            overlayFrame$={overlayFrame$}
             sourceBlockIdRef={nativeEditingBlockIdRef}
           />
         </MarkdownEditorHost>

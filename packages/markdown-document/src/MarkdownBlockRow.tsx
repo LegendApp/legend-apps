@@ -114,7 +114,7 @@ export const MarkdownOverlayEditorInput = memo(
     inactiveOverlayWidth$,
     onSelectionDragOutsideRef,
     onVerticalNavigationOutsideRef,
-    overlayFrame,
+    overlayFrame$,
     sourceBlockIdRef,
   }: {
     activeBlock?: MarkdownBlockSnapshot;
@@ -126,11 +126,12 @@ export const MarkdownOverlayEditorInput = memo(
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
     onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
-    overlayFrame?: OverlayFrame;
+    overlayFrame$: Observable<OverlayFrame | undefined>;
     sourceBlockIdRef: RefObject<string | null>;
   }) {
     const activeBlockRef = useLatestRef(activeBlock);
     const inactiveOverlayWidth = useValue(inactiveOverlayWidth$);
+    const overlayFrame = useValue(overlayFrame$);
 
     return (
       <EnrichedMarkdownTextInput
@@ -178,10 +179,7 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
     previousProps.onVerticalNavigationOutsideRef === nextProps.onVerticalNavigationOutsideRef &&
-    previousProps.overlayFrame?.height === nextProps.overlayFrame?.height &&
-    previousProps.overlayFrame?.left === nextProps.overlayFrame?.left &&
-    previousProps.overlayFrame?.top === nextProps.overlayFrame?.top &&
-    previousProps.overlayFrame?.width === nextProps.overlayFrame?.width &&
+    previousProps.overlayFrame$ === nextProps.overlayFrame$ &&
     previousProps.sourceBlockIdRef === nextProps.sourceBlockIdRef,
 );
 
