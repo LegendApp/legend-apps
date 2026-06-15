@@ -11,6 +11,7 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type TextStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown } from "./blockSelection";
@@ -32,6 +33,7 @@ import type {
   UpdateBlockHistoryEntry,
 } from "./internalTypes";
 import {
+  estimateMarkdownSelectionVerticalRange,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -561,6 +563,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const setActiveBlock = useCallback((block: MarkdownBlockSnapshot, selection: number) => {
       nativeEditingBlockIdRef.current = block.id;
       activeBlockIdRef.current = block.id;
+      activeInputSelectionRef.current = { start: selection, end: selection };
       draftMarkdownRef.current = block.markdown;
       committedMarkdownRef.current = block.markdown;
       setDraftMarkdown(block.markdown);
@@ -635,8 +638,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setLayoutVersion((version) => version + 1);
     }, [containerWindowY]);
 
-    const scrollBlockIntoView = useCallback((blockId: string) => {
-      const blockLayout = blockContentLayoutsRef.current.get(blockId);
+    const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot, selection?: number) => {
+      const blockLayout = blockContentLayoutsRef.current.get(block.id);
       const viewportHeight = scrollViewportHeightRef.current;
       const currentScrollOffset = scrollOffsetYRef.current;
 
@@ -644,14 +647,24 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const scrollMargin = 12;
         const blockTop = blockLayout.y;
         const blockBottom = blockLayout.y + blockLayout.height;
+        const selectionRange = selection === undefined
+          ? undefined
+          : estimateMarkdownSelectionVerticalRange(
+            block.markdown,
+            selection,
+            inactiveOverlayWidth,
+            block.type === "codeBlock" ? resolvedMarkdownStyle.codeBlock as TextStyle | undefined : resolvedMarkdownStyle.paragraph as TextStyle | undefined,
+          );
+        const targetTop = selectionRange ? blockTop + selectionRange.top : blockTop;
+        const targetBottom = selectionRange ? blockTop + selectionRange.bottom : blockBottom;
         const visibleTop = currentScrollOffset;
         const visibleBottom = currentScrollOffset + viewportHeight;
         let nextScrollOffset: number | undefined;
 
-        if (blockTop < visibleTop + scrollMargin) {
-          nextScrollOffset = Math.max(0, blockTop - scrollMargin);
-        } else if (blockBottom > visibleBottom - scrollMargin) {
-          nextScrollOffset = Math.max(0, blockBottom - viewportHeight + scrollMargin);
+        if (targetTop < visibleTop + scrollMargin) {
+          nextScrollOffset = Math.max(0, targetTop - scrollMargin);
+        } else if (targetBottom > visibleBottom - scrollMargin) {
+          nextScrollOffset = Math.max(0, targetBottom - viewportHeight + scrollMargin);
         }
 
         if (nextScrollOffset !== undefined && nextScrollOffset !== currentScrollOffset) {
@@ -659,7 +672,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           listRef.current?.scrollToOffset({ animated: true, offset: nextScrollOffset }).catch(reportAsyncError);
         }
       }
-    }, [reportAsyncError]);
+    }, [inactiveOverlayWidth, reportAsyncError, resolvedMarkdownStyle.codeBlock, resolvedMarkdownStyle.paragraph]);
 
     const prepareBlockIndexForKeyboardFocus = useCallback(async (index: number, direction: "up" | "down") => {
       const list = listRef.current;
@@ -1266,14 +1279,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                   const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
                   if (targetBlock) {
                     await prepareBlockIndexForKeyboardFocus(targetBlockIndex, nextDirection);
+                    const targetSelection = Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length);
                     blockSelectionGestureRef.current = null;
                     setNextBlockSelection(null);
                     clearTextSelectionAnchor();
-                    setActiveBlock(
-                      targetBlock,
-                      Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
-                    );
-                    scrollBlockIntoView(targetBlock.id);
+                    setActiveBlock(targetBlock, targetSelection);
+                    scrollBlockIntoView(targetBlock, targetSelection);
                   }
                 }
               }
@@ -1308,14 +1319,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             : currentBlockState.blockIds[currentBlockState.blockIds.length - 1];
           const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
           if (targetBlock) {
+            const targetSelection = Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length);
             blockSelectionGestureRef.current = null;
             setNextBlockSelection(null);
             clearTextSelectionAnchor();
-            setActiveBlock(
-              targetBlock,
-              Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
-            );
-            scrollBlockIntoView(targetBlock.id);
+            setActiveBlock(targetBlock, targetSelection);
+            scrollBlockIntoView(targetBlock, targetSelection);
           }
         }
 

@@ -147,6 +147,56 @@ export function estimateMarkdownSelection(markdown: string, event: GestureRespon
   return markdown.length;
 }
 
+function numberFromStyleValue(value: unknown) {
+  return typeof value === "number" ? value : 0;
+}
+
+function textStyleLineHeight(textStyle: TextStyle | undefined) {
+  if (typeof textStyle?.lineHeight === "number") {
+    return textStyle.lineHeight;
+  }
+  if (typeof textStyle?.fontSize === "number") {
+    return Math.ceil(textStyle.fontSize * 1.5);
+  }
+  return 25;
+}
+
+export function estimateMarkdownSelectionVerticalRange(
+  markdown: string,
+  selection: number,
+  width: number,
+  textStyle: TextStyle | undefined,
+) {
+  const lineHeight = textStyleLineHeight(textStyle);
+  const fontSize = typeof textStyle?.fontSize === "number" ? textStyle.fontSize : 16;
+  const padding = numberFromStyleValue(textStyle?.padding);
+  const paddingTop = typeof textStyle?.paddingTop === "number" ? textStyle.paddingTop : padding;
+  const paddingLeft = typeof textStyle?.paddingLeft === "number" ? textStyle.paddingLeft : padding;
+  const paddingRight = typeof textStyle?.paddingRight === "number" ? textStyle.paddingRight : padding;
+  const averageCharacterWidth = Math.max(1, fontSize * 0.62);
+  const textWidth = Math.max(1, width - paddingLeft - paddingRight);
+  const charactersPerLine = Math.max(1, Math.floor(textWidth / averageCharacterWidth));
+  const selectionStart = Math.max(0, Math.min(selection, markdown.length));
+  const lines = markdown.split("\n");
+  let offset = 0;
+  let visualLine = 0;
+
+  for (const line of lines) {
+    const lineEnd = offset + line.length;
+    if (selectionStart <= lineEnd) {
+      const column = Math.max(0, selectionStart - offset);
+      const top = paddingTop + (visualLine + Math.floor(column / charactersPerLine)) * lineHeight;
+      return { bottom: top + lineHeight, top };
+    }
+
+    offset = lineEnd + 1;
+    visualLine += Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine));
+  }
+
+  const top = paddingTop + visualLine * lineHeight;
+  return { bottom: top + lineHeight, top };
+}
+
 export function estimateMarkdownEditorHeight(markdown: string, width: number) {
   const lineHeight = 25;
   const averageCharacterWidth = 8;
