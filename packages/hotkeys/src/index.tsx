@@ -8,7 +8,7 @@ import {
 } from "@legend-desktop/keyboard-manager";
 import { cn } from "@legend-desktop/classnames";
 import type { NativeMenuShortcut } from "@legend-desktop/native-menu";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export type HotkeyValue =
@@ -273,6 +273,54 @@ type HotkeyCaptureProps = {
   value: HotkeyValue | null;
 };
 
+type HotkeyCaptureId = symbol;
+
+let activeHotkeyCaptureId: HotkeyCaptureId | null = null;
+const activeHotkeyCaptureListeners = new Set<() => void>();
+const activeHotkeyCaptureCancelHandlers = new Map<HotkeyCaptureId, () => void>();
+
+function getActiveHotkeyCaptureId() {
+  return activeHotkeyCaptureId;
+}
+
+function subscribeActiveHotkeyCapture(listener: () => void) {
+  activeHotkeyCaptureListeners.add(listener);
+  return () => {
+    activeHotkeyCaptureListeners.delete(listener);
+  };
+}
+
+function registerHotkeyCaptureCancelHandler(id: HotkeyCaptureId, cancelHandler: () => void) {
+  activeHotkeyCaptureCancelHandlers.set(id, cancelHandler);
+  return () => {
+    activeHotkeyCaptureCancelHandlers.delete(id);
+  };
+}
+
+function emitActiveHotkeyCaptureChange() {
+  for (const listener of activeHotkeyCaptureListeners) {
+    listener();
+  }
+}
+
+function setActiveHotkeyCaptureId(nextId: HotkeyCaptureId | null) {
+  if (activeHotkeyCaptureId !== nextId) {
+    const previousId = activeHotkeyCaptureId;
+    activeHotkeyCaptureId = nextId;
+    if (previousId && previousId !== nextId) {
+      activeHotkeyCaptureCancelHandlers.get(previousId)?.();
+    }
+    emitActiveHotkeyCaptureChange();
+  }
+}
+
+function clearActiveHotkeyCaptureId(id: HotkeyCaptureId) {
+  if (activeHotkeyCaptureId === id) {
+    activeHotkeyCaptureId = null;
+    emitActiveHotkeyCaptureChange();
+  }
+}
+
 function pressedCodesFromSet(pressedCodes: Set<number>) {
   return [...pressedCodes].filter((keyCode) => Number.isFinite(keyCode));
 }
@@ -285,22 +333,40 @@ export function HotkeyCapture({
   placeholder = "Click to record",
   value,
 }: HotkeyCaptureProps) {
-  const [isCapturing, setIsCapturing] = useState(false);
+  const captureIdRef = useRef<HotkeyCaptureId>(Symbol("HotkeyCapture"));
+  const activeCaptureId = useSyncExternalStore(
+    subscribeActiveHotkeyCapture,
+    getActiveHotkeyCaptureId,
+    getActiveHotkeyCaptureId,
+  );
+  const isCapturing = activeCaptureId === captureIdRef.current;
   const [pressedDisplay, setPressedDisplay] = useState<string | null>(null);
   const lastValidCapture = useRef<number[] | null>(null);
+  const lastStartTimeRef = useRef(0);
+  const wasCapturingRef = useRef(false);
   const pressedCodesRef = useRef(new Set<number>());
 
-  const setNextCapturing = useCallback((nextCapturing: boolean) => {
-    setIsCapturing(nextCapturing);
-    onCaptureChange?.(nextCapturing);
+  const notifyCaptureChange = useCallback((nextCapturing: boolean) => {
+    if (wasCapturingRef.current !== nextCapturing) {
+      wasCapturingRef.current = nextCapturing;
+      onCaptureChange?.(nextCapturing);
+    }
   }, [onCaptureChange]);
 
-  const handleCancel = useCallback(() => {
+  const resetCaptureState = useCallback(() => {
     pressedCodesRef.current.clear();
     lastValidCapture.current = null;
     setPressedDisplay(null);
-    setNextCapturing(false);
-  }, [setNextCapturing]);
+  }, []);
+
+  const handleCancel = useCallback(() => {
+    if (getActiveHotkeyCaptureId() === captureIdRef.current) {
+      setActiveHotkeyCaptureId(null);
+    } else {
+      resetCaptureState();
+      notifyCaptureChange(false);
+    }
+  }, [notifyCaptureChange, resetCaptureState]);
 
   const handleCommit = useCallback(() => {
     const nextValue = lastValidCapture.current ? serializeHotkey(lastValidCapture.current) : null;
@@ -312,18 +378,36 @@ export function HotkeyCapture({
 
   const handleStart = useCallback(() => {
     if (!disabled) {
-      lastValidCapture.current = null;
-      pressedCodesRef.current.clear();
-      setPressedDisplay(null);
-      setNextCapturing(true);
+      lastStartTimeRef.current = Date.now();
+      resetCaptureState();
+      setActiveHotkeyCaptureId(captureIdRef.current);
+      notifyCaptureChange(true);
     }
-  }, [disabled, setNextCapturing]);
+  }, [disabled, notifyCaptureChange, resetCaptureState]);
+
+  const handlePress = useCallback(() => {
+    if (getActiveHotkeyCaptureId() !== captureIdRef.current) {
+      handleStart();
+    }
+  }, [handleStart]);
 
   useEffect(() => {
-    if (!isCapturing) {
-      return undefined;
+    if (wasCapturingRef.current !== isCapturing) {
+      if (!isCapturing) {
+        resetCaptureState();
+      }
+      notifyCaptureChange(isCapturing);
     }
+  }, [isCapturing, notifyCaptureChange, resetCaptureState]);
 
+  useEffect(() => {
+    return registerHotkeyCaptureCancelHandler(captureIdRef.current, () => {
+      resetCaptureState();
+      notifyCaptureChange(false);
+    });
+  }, [notifyCaptureChange, resetCaptureState]);
+
+  useEffect(() => {
     const updateCapture = () => {
       const pressedCodes = pressedCodesFromSet(pressedCodesRef.current);
       if (pressedCodes.includes(KeyCodes.KEY_ESCAPE)) {
@@ -341,6 +425,9 @@ export function HotkeyCapture({
     };
 
     const removeDown = addKeyDownListener((event) => {
+      if (getActiveHotkeyCaptureId() !== captureIdRef.current) {
+        return false;
+      }
       pressedCodesRef.current.add(event.keyCode);
       for (const modifier of modifierCodes) {
         if (hasModifier(event, modifier)) {
@@ -353,6 +440,9 @@ export function HotkeyCapture({
       return true;
     });
     const removeUp = addKeyUpListener((event) => {
+      if (getActiveHotkeyCaptureId() !== captureIdRef.current) {
+        return false;
+      }
       pressedCodesRef.current.delete(event.keyCode);
       for (const modifier of modifierCodes) {
         if (!hasModifier(event, modifier)) {
@@ -367,7 +457,13 @@ export function HotkeyCapture({
       removeDown();
       removeUp();
     };
-  }, [handleCancel, handleCommit, isCapturing]);
+  }, [handleCancel, handleCommit]);
+
+  useEffect(() => {
+    return () => {
+      clearActiveHotkeyCaptureId(captureIdRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (disabled && isCapturing) {
@@ -394,11 +490,12 @@ export function HotkeyCapture({
       disabled={disabled}
       focusable
       onBlur={() => {
-        if (isCapturing) {
+        if (isCapturing && Date.now() - lastStartTimeRef.current > 100) {
           handleCancel();
         }
       }}
-      onPress={handleStart}
+      onPressIn={handleStart}
+      onPress={handlePress}
     >
       <View className="flex-row items-center">
         <Text className={cn("text-sm text-text-primary", !value && !isCapturing && "text-text-tertiary")}>

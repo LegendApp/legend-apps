@@ -118,6 +118,7 @@ const keyUpListeners = new Set<KeyboardEventListener>();
 const emitter = new NativeEventEmitter(NativeKeyboardManager);
 let nativeSubscriptions: { remove: () => void }[] = [];
 let isMonitoring = false;
+let startMonitoringPromise: Promise<boolean> | null = null;
 
 function notifyListeners(listeners: Set<KeyboardEventListener>, event: KeyboardEvent) {
   let handled = false;
@@ -143,13 +144,37 @@ async function startMonitoring() {
   if (Platform.OS !== "macos" || isMonitoring) {
     return false;
   }
+  if (startMonitoringPromise) {
+    return startMonitoringPromise;
+  }
   ensureNativeSubscriptions();
-  isMonitoring = await NativeKeyboardManager.startMonitoringKeyboard();
-  return isMonitoring;
+  const nextStart = NativeKeyboardManager.startMonitoringKeyboard().then((result) => {
+    if (startMonitoringPromise === nextStart) {
+      isMonitoring = result;
+      startMonitoringPromise = null;
+    }
+    return result;
+  }, (error) => {
+    if (startMonitoringPromise === nextStart) {
+      startMonitoringPromise = null;
+    }
+    throw error;
+  });
+  startMonitoringPromise = nextStart;
+  return startMonitoringPromise;
 }
 
 async function stopMonitoringIfIdle() {
-  if (Platform.OS !== "macos" || !isMonitoring || keyDownListeners.size > 0 || keyUpListeners.size > 0) {
+  if (Platform.OS !== "macos" || keyDownListeners.size > 0 || keyUpListeners.size > 0) {
+    return false;
+  }
+  if (startMonitoringPromise) {
+    await startMonitoringPromise;
+  }
+  if (keyDownListeners.size > 0 || keyUpListeners.size > 0) {
+    return false;
+  }
+  if (!isMonitoring) {
     return false;
   }
   isMonitoring = false;
@@ -190,6 +215,7 @@ export function stopKeyboardMonitoring() {
   keyDownListeners.clear();
   keyUpListeners.clear();
   isMonitoring = false;
+  startMonitoringPromise = null;
   if (Platform.OS === "macos") {
     return NativeKeyboardManager.stopMonitoringKeyboard();
   }
