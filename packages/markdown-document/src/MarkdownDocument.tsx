@@ -329,7 +329,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
     const [contentContainerOffsetX, setContentContainerOffsetX] = useState(0);
-    const [textSelectionAnchor, setTextSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
+    const textSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const [inactiveOverlayWidth, setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
@@ -457,11 +457,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [publishCommandState],
     );
 
+    const publishTextSelectionAnchor = useCallback((anchor: MarkdownSelectionAnchor | null) => {
+      textSelectionAnchor$.set(anchor);
+      if (!blockSelectionRef.current && selectionToolbarAnchor === undefined) {
+        selectionAnchor$.set(anchor);
+        onSelectionAnchorChangeRef.current?.(anchor);
+      }
+    }, [onSelectionAnchorChangeRef, selectionAnchor$, selectionToolbarAnchor, textSelectionAnchor$]);
+
     const clearTextSelectionAnchor = useCallback(() => {
       selectionAnchorRequestRef.current += 1;
       activeInputSelectionRef.current = { start: 0, end: 0 };
-      setTextSelectionAnchor(null);
-    }, []);
+      publishTextSelectionAnchor(null);
+    }, [publishTextSelectionAnchor]);
 
     const updateTextSelectionAnchor = useCallback((selection: { start: number; end: number }) => {
       activeInputSelectionRef.current = selection;
@@ -472,7 +480,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const selectionEnd = Math.max(selection.start, selection.end);
 
       if (selection.start === selection.end) {
-        setTextSelectionAnchor(null);
+        publishTextSelectionAnchor(null);
         return;
       }
 
@@ -529,12 +537,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 selectionEnd,
                 selectionStart,
               });
-              setTextSelectionAnchor(anchor);
+              publishTextSelectionAnchor(anchor);
             });
           });
         }).catch(reportAsyncError);
       });
-    }, [contentContainerOffsetX, reportAsyncError, resolvedMarkdownStyle]);
+    }, [contentContainerOffsetX, publishTextSelectionAnchor, reportAsyncError, resolvedMarkdownStyle]);
     const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
 
     const cancelHydration = useCallback(() => {
@@ -1720,7 +1728,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockSelectionInputText$.set("");
       setDraftMarkdown("");
       setOverlayFrame(undefined);
-      setTextSelectionAnchor(null);
+      publishTextSelectionAnchor(null);
       setNextSaveState("idle");
       onDirtyChangeRef.current?.(false);
 
@@ -2247,15 +2255,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       });
       documentRenderState$.selectedBlocksById.set(selectedBlocksById);
     }, [documentRenderState$, selectedBlockIds]);
-    const internalSelectionAnchor = blockSelection ? null : textSelectionAnchor;
-    const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? internalSelectionAnchor : selectionToolbarAnchor;
+    const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? null : selectionToolbarAnchor;
     const isSelectionToolbarEnabled = selectionToolbarEnabled ?? selectionToolbarAnchor !== undefined;
     useEffect(() => {
-      if (selectionToolbarAnchor !== undefined || !blockSelection) {
+      if (selectionToolbarAnchor !== undefined) {
         selectionAnchor$.set(selectionToolbarAnchorValue);
         onSelectionAnchorChange?.(selectionToolbarAnchorValue);
       }
-    }, [blockSelection, onSelectionAnchorChange, selectionAnchor$, selectionToolbarAnchor, selectionToolbarAnchorValue]);
+    }, [onSelectionAnchorChange, selectionAnchor$, selectionToolbarAnchor, selectionToolbarAnchorValue]);
     useEffect(() => {
       return () => {
         selectionAnchor$.set(null);
