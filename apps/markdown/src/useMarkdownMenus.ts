@@ -1,7 +1,5 @@
 import type {
   MarkdownDocumentCommands,
-  MarkdownDocumentCommandState,
-  MarkdownSaveState,
 } from "@legend-desktop/markdown-document";
 import { revealInFinder } from "@legend-desktop/file-dialog";
 import {
@@ -9,7 +7,8 @@ import {
   useNativeMenu,
   type NativeMenuActionHandlers,
 } from "@legend-desktop/native-menu";
-import { useEffect, useMemo, type RefObject } from "react";
+import { useObserveEffect } from "@legendapp/state/react";
+import { useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";
 import { markdownMenuConfig } from "./markdownMenus";
 import {
@@ -17,35 +16,32 @@ import {
   increaseMarkdownFontSizeSetting,
   resetMarkdownFontSizeSetting,
 } from "./markdownSettings";
+import type { MarkdownDocumentSessionState, MarkdownDocumentSessionState$ } from "./useMarkdownDocumentSession";
 
 type MarkdownMenuOptions = {
-  currentFilePath: string | null;
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
-  documentCommandState: MarkdownDocumentCommandState;
-  hasDocument: boolean;
-  isDirty: boolean;
   onError: (error: unknown) => void;
   onNewDocument: () => Promise<void>;
   onOpenDocument: () => Promise<void>;
   onOpenSettings: () => void;
   onSaveDocument: () => Promise<boolean>;
   onSaveDocumentAs: () => Promise<boolean>;
-  saveState: MarkdownSaveState;
+  sessionState$: MarkdownDocumentSessionState$;
 };
 
+function getCurrentFilePath(state: MarkdownDocumentSessionState) {
+  return state.documentSource === "untitled" ? null : state.filename;
+}
+
 export function useMarkdownMenus({
-  currentFilePath,
   documentCommandsRef,
-  documentCommandState,
-  hasDocument,
-  isDirty,
   onError,
   onNewDocument,
   onOpenDocument,
   onOpenSettings,
   onSaveDocument,
   onSaveDocumentAs,
-  saveState,
+  sessionState$,
 }: MarkdownMenuOptions) {
   const menuHandlers = useMemo<NativeMenuActionHandlers>(() => ({
     bold: () => documentCommandsRef.current?.toggleBold(),
@@ -61,6 +57,7 @@ export function useMarkdownMenus({
     },
     redo: () => documentCommandsRef.current?.redo(),
     revealInFinder: () => {
+      const currentFilePath = getCurrentFilePath(sessionState$.peek());
       if (currentFilePath) {
         revealInFinder(currentFilePath)
           .then((didReveal) => {
@@ -85,13 +82,13 @@ export function useMarkdownMenus({
     undo: () => documentCommandsRef.current?.undo(),
   }), [
     documentCommandsRef,
-    currentFilePath,
     onError,
     onNewDocument,
     onOpenDocument,
     onOpenSettings,
     onSaveDocument,
     onSaveDocumentAs,
+    sessionState$,
   ]);
 
   useNativeMenu({
@@ -100,14 +97,18 @@ export function useMarkdownMenus({
     ownerId: markdownMenuOwnerId,
   });
 
-  useEffect(() => {
+  useObserveEffect(() => {
+    const state = sessionState$.get();
+    const hasDocument = state.filename !== null;
+    const currentFilePath = getCurrentFilePath(state);
+
     updateMenuItems(markdownMenuOwnerId, [
-      { id: "save", enabled: hasDocument && isDirty && saveState !== "saving" },
-      { id: "saveAs", enabled: hasDocument && saveState !== "saving" },
+      { id: "save", enabled: hasDocument && state.isDirty && state.saveState !== "saving" },
+      { id: "saveAs", enabled: hasDocument && state.saveState !== "saving" },
       { id: "revealInFinder", enabled: currentFilePath !== null },
       { id: "settings", enabled: true },
-      { id: "undo", enabled: hasDocument && documentCommandState.canUndo },
-      { id: "redo", enabled: hasDocument && documentCommandState.canRedo },
+      { id: "undo", enabled: hasDocument && state.commandState.canUndo },
+      { id: "redo", enabled: hasDocument && state.commandState.canRedo },
       { id: "bold", enabled: hasDocument },
       { id: "italic", enabled: hasDocument },
       { id: "underline", enabled: hasDocument },
@@ -115,5 +116,5 @@ export function useMarkdownMenus({
       { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
     ]);
-  }, [currentFilePath, documentCommandState, hasDocument, isDirty, saveState]);
+  }, [sessionState$]);
 }

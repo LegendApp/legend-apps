@@ -1,10 +1,9 @@
 import {
   MarkdownDocument,
-  type MarkdownDocumentCommandState,
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { getLegendTheme, getLegendThemeAppearance } from "@legend-desktop/theme";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
 import {
@@ -62,11 +61,6 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownLayoutForAppearance(theme, appearanceSettings),
     [appearanceSettings, theme],
   );
-  const [documentCommandState, setDocumentCommandState] = useState<MarkdownDocumentCommandState>({
-    canRedo: false,
-    canUndo: false,
-  });
-  const currentFilePath = session.isUntitledDocument ? null : session.filename;
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: theme.colors.windowBackground,
     onError: session.handleError,
@@ -113,27 +107,21 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   useMarkdownMenus({
-    currentFilePath,
     documentCommandsRef: session.documentCommandsRef,
-    documentCommandState,
-    hasDocument: session.hasDocument,
-    isDirty: session.isDirty,
     onError: session.handleError,
     onNewDocument: session.newMarkdownDocument,
     onOpenDocument: session.openMarkdownDialog,
     onOpenSettings: openSettingsWindow,
     onSaveDocument: session.saveCurrentDocument,
     onSaveDocumentAs: session.saveCurrentDocumentAs,
-    saveState: session.saveState,
+    sessionState$: session.sessionState$,
   });
 
   useMarkdownEditorWindowOptions({
     appearance: nativeWindowAppearance,
     backgroundColor: theme.colors.windowBackground,
-    filename: session.filename,
-    isDirty: session.isDirty,
-    isUntitledDocument: session.isUntitledDocument,
     onError: session.handleError,
+    sessionState$: session.sessionState$,
   });
 
   if (e2eRun) {
@@ -175,7 +163,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
           filename={session.filename}
           markdownLayout={markdownLayout}
           markdownStyle={markdownStyle}
-          onCommandStateChange={setDocumentCommandState}
+          onCommandStateChange={session.setCommandState}
           onDirtyChange={session.setIsDirty}
           onError={session.handleError}
           onLoadError={session.handleDocumentLoadError}

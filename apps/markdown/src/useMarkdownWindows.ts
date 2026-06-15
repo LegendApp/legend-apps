@@ -1,8 +1,10 @@
-import { useCallback, useEffect } from "react";
+import { useObserveEffect } from "@legendapp/state/react";
+import { useCallback } from "react";
 import {
   setMarkdownEditorWindowOptions,
   openMarkdownSettingsWindow,
 } from "./markdownWindows";
+import type { MarkdownDocumentSessionState$ } from "./useMarkdownDocumentSession";
 
 export function useMarkdownSettingsWindow({
   onError,
@@ -18,29 +20,26 @@ export function useMarkdownSettingsWindow({
 export function useMarkdownEditorWindowOptions({
   appearance,
   backgroundColor,
-  filename,
-  isDirty,
-  isUntitledDocument,
   onError,
+  sessionState$,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
-  filename: string | null;
-  isDirty: boolean;
-  isUntitledDocument: boolean;
   onError: (error: unknown) => void;
+  sessionState$: MarkdownDocumentSessionState$;
 }) {
-  useEffect(() => {
-    if (!filename) {
+  useObserveEffect(() => {
+    const state = sessionState$.get();
+    if (!state.filename) {
       return;
     }
 
     setMarkdownEditorWindowOptions({
       appearance,
       backgroundColor,
-      filename,
-      isDirty,
-      isUntitledDocument,
+      filename: state.filename,
+      isDirty: state.isDirty,
+      isUntitledDocument: state.documentSource === "untitled",
     }).catch(onError);
-  }, [appearance, backgroundColor, filename, isDirty, isUntitledDocument, onError]);
+  }, [appearance, backgroundColor, onError, sessionState$]);
 }

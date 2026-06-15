@@ -1,11 +1,14 @@
 import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
 import {
   nativeMarkdownDocumentAdapter,
+  type MarkdownDocumentCommandState,
   type MarkdownDocumentCommands,
   type MarkdownSaveState,
 } from "@legend-desktop/markdown-document";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
-import { useCallback, useRef, useState } from "react";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
+import { useCallback, useRef } from "react";
 import { markdownFileTypes } from "./appConstants";
 import { addRecentMarkdownFile, removeRecentMarkdownFile } from "./appMetadata";
 import { confirmDirtyDocumentTransition } from "./confirmDirtyDocumentTransition";
@@ -15,16 +18,33 @@ import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAda
 
 export type DocumentSource = "file" | "untitled";
 
+export type MarkdownDocumentSessionState = {
+  commandState: MarkdownDocumentCommandState;
+  documentSource: DocumentSource;
+  filename: string | null;
+  isDirty: boolean;
+  lastError: string | null;
+  saveState: MarkdownSaveState;
+};
+
+export type MarkdownDocumentSessionState$ = Observable<MarkdownDocumentSessionState>;
+
 type OpenUntitledDocumentOptions = {
   preserveError?: boolean;
 };
 
 export function useMarkdownDocumentSession() {
-  const [filename, setFilename] = useState<string | null>(null);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
-  const [documentSource, setDocumentSource] = useState<DocumentSource>("untitled");
+  const sessionState$ = useObservable<MarkdownDocumentSessionState>({
+    commandState: { canRedo: false, canUndo: false },
+    documentSource: "untitled",
+    filename: null,
+    isDirty: false,
+    lastError: null,
+    saveState: "idle",
+  });
+  const filename = useValue(sessionState$.filename);
+  const lastError = useValue(sessionState$.lastError);
+  const documentSource = useValue(sessionState$.documentSource);
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
   const preserveNextLoadedError = useRef(false);
@@ -34,21 +54,33 @@ export function useMarkdownDocumentSession() {
   const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
 
   const clearDocumentError = useCallback(() => {
-    setLastError(null);
-  }, []);
+    sessionState$.lastError.set(null);
+  }, [sessionState$]);
 
   const handleDocumentLoaded = useCallback(() => {
     if (preserveNextLoadedError.current) {
       preserveNextLoadedError.current = false;
     } else {
-      setLastError(null);
+      sessionState$.lastError.set(null);
     }
-  }, []);
+  }, [sessionState$]);
 
   const handleError = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    setLastError(message);
-  }, []);
+    sessionState$.lastError.set(message);
+  }, [sessionState$]);
+
+  const setCommandState = useCallback((commandState: MarkdownDocumentCommandState) => {
+    sessionState$.commandState.set(commandState);
+  }, [sessionState$]);
+
+  const setIsDirty = useCallback((isDirty: boolean) => {
+    sessionState$.isDirty.set(isDirty);
+  }, [sessionState$]);
+
+  const setSaveState = useCallback((saveState: MarkdownSaveState) => {
+    sessionState$.saveState.set(saveState);
+  }, [sessionState$]);
 
   const markOpenedFile = useCallback((path: string) => {
     addRecentMarkdownFile(path);
@@ -57,54 +89,60 @@ export function useMarkdownDocumentSession() {
   }, []);
 
   const openSelectedFile = useCallback((path: string) => {
-    setDocumentSource("file");
-    setFilename(path);
-    setIsDirty(false);
-    setSaveState("idle");
-    setLastError(null);
+    sessionState$.assign({
+      documentSource: "file",
+      filename: path,
+      isDirty: false,
+      lastError: null,
+      saveState: "idle",
+    });
     markOpenedFile(path);
-  }, [markOpenedFile]);
+  }, [markOpenedFile, sessionState$]);
 
   const openUntitledDocument = useCallback((options: OpenUntitledDocumentOptions = {}) => {
-    setDocumentSource("untitled");
-    setFilename(untitledFilename);
-    setIsDirty(false);
-    setSaveState("idle");
-    if (!options.preserveError) {
-      setLastError(null);
-    }
-  }, []);
+    sessionState$.assign({
+      documentSource: "untitled",
+      filename: untitledFilename,
+      isDirty: false,
+      lastError: options.preserveError ? sessionState$.lastError.peek() : null,
+      saveState: "idle",
+    });
+  }, [sessionState$]);
 
   const handleDocumentLoadError = useCallback((error: Error) => {
     handleError(error);
+    const state = sessionState$.peek();
 
-    if (documentSource === "file" && filename) {
-      removeRecentMarkdownFile(filename);
-      clearLastMarkdownDocumentPath(filename);
+    if (state.documentSource === "file" && state.filename) {
+      removeRecentMarkdownFile(state.filename);
+      clearLastMarkdownDocumentPath(state.filename);
       preserveNextLoadedError.current = true;
       openUntitledDocument({ preserveError: true });
     }
-  }, [documentSource, filename, handleError, openUntitledDocument]);
+  }, [handleError, openUntitledDocument, sessionState$]);
 
   const completeSaveAs = useCallback((path: string) => {
-    setDocumentSource("file");
-    setFilename(path);
-    setIsDirty(false);
-    setSaveState("idle");
-    setLastError(null);
+    sessionState$.assign({
+      documentSource: "file",
+      filename: path,
+      isDirty: false,
+      lastError: null,
+      saveState: "idle",
+    });
     markOpenedFile(path);
-  }, [markOpenedFile]);
+  }, [markOpenedFile, sessionState$]);
 
   const saveCurrentDocumentAs = useCallback(async () => {
-    if (!filename || !documentCommandsRef.current) {
+    const state = sessionState$.peek();
+    if (!state.filename || !documentCommandsRef.current) {
       return false;
     }
 
     try {
       const path = await saveFileDialog({
         allowedFileTypes: markdownFileTypes,
-        defaultName: isUntitledDocument ? untitledFilename : getFilename(filename),
-        directory: isUntitledDocument ? undefined : getDirectory(filename),
+        defaultName: state.documentSource === "untitled" ? untitledFilename : getFilename(state.filename),
+        directory: state.documentSource === "untitled" ? undefined : getDirectory(state.filename),
       });
 
       if (!path) {
@@ -118,14 +156,14 @@ export function useMarkdownDocumentSession() {
       handleError(error);
       return false;
     }
-  }, [completeSaveAs, filename, handleError, isUntitledDocument]);
+  }, [completeSaveAs, handleError, sessionState$]);
 
   const saveCurrentDocument = useCallback(async () => {
     if (!documentCommandsRef.current) {
       return false;
     }
 
-    if (isUntitledDocument) {
+    if (sessionState$.documentSource.peek() === "untitled") {
       return saveCurrentDocumentAs();
     }
 
@@ -136,15 +174,16 @@ export function useMarkdownDocumentSession() {
       handleError(error);
       return false;
     }
-  }, [handleError, isUntitledDocument, saveCurrentDocumentAs]);
+  }, [handleError, saveCurrentDocumentAs, sessionState$]);
 
   const flushCurrentDocumentBeforeTransition = useCallback(async (reason: "new" | "open" | "quit" = "open") => {
-    if (!hasDocument || !isDirty) {
+    const state = sessionState$.peek();
+    if (!state.filename || !state.isDirty) {
       return true;
     }
 
     const action = await confirmDirtyDocumentTransition({
-      filename: filename ? getFilename(filename) : untitledFilename,
+      filename: getFilename(state.filename),
       reason,
     });
 
@@ -157,19 +196,20 @@ export function useMarkdownDocumentSession() {
     }
 
     return false;
-  }, [filename, hasDocument, isDirty, saveCurrentDocument]);
+  }, [saveCurrentDocument, sessionState$]);
 
   const prepareCurrentDocumentForClose = useCallback(async ({ autosaveEnabled }: { autosaveEnabled: boolean }) => {
-    if (!hasDocument || !isDirty) {
+    const state = sessionState$.peek();
+    if (!state.filename || !state.isDirty) {
       return true;
     }
 
-    if (!isUntitledDocument && autosaveEnabled) {
+    if (state.documentSource !== "untitled" && autosaveEnabled) {
       return saveCurrentDocument();
     }
 
     const action = await confirmDirtyDocumentTransition({
-      filename: filename ? getFilename(filename) : untitledFilename,
+      filename: getFilename(state.filename),
       reason: "close",
     });
 
@@ -182,7 +222,7 @@ export function useMarkdownDocumentSession() {
     }
 
     return false;
-  }, [filename, hasDocument, isDirty, isUntitledDocument, saveCurrentDocument]);
+  }, [saveCurrentDocument, sessionState$]);
 
   const newMarkdownDocument = useCallback(async () => {
     const didFlush = await flushCurrentDocumentBeforeTransition("new");
@@ -225,7 +265,6 @@ export function useMarkdownDocumentSession() {
     handleDocumentLoaded,
     hasDocument,
     handleDocumentLoadError,
-    isDirty,
     isUntitledDocument,
     lastError,
     newMarkdownDocument,
@@ -235,7 +274,8 @@ export function useMarkdownDocumentSession() {
     prepareCurrentDocumentForClose,
     saveCurrentDocument,
     saveCurrentDocumentAs,
-    saveState,
+    sessionState$,
+    setCommandState,
     setIsDirty,
     setSaveState,
   };
