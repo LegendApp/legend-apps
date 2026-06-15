@@ -120,31 +120,13 @@ export function runPlatformCommand(
       { cwd: shellDir, env },
     );
   } else {
-    if (launchArgs.length > 0) {
-      const argsWithPort = withDefaultPortArg(runnerArgs, devServerPort ?? getDefaultDevServerPort(appId));
-      const openMode = readStringArg(argsWithPort, ["--mode", "--configuration"], "Debug");
-      const openArgs = openMode === "Release" ? ["--mode", "Release"] : [];
-      runMacOSBuildForLaunchArgs(argsWithPort, env);
-      runCommand("bun", ["scripts/open-app.ts", appId, platform, ...openArgs, ...launchArgs], {
-        cwd: rootDir,
-        env,
-      });
-      return;
-    }
-
-    runCommand(
-      "bun",
-      mode === "release"
-        ? ["x", "react-native", "build-macos", "--mode", "Release", "--scheme", macOSSchemeName]
-        : [
-            "x",
-            "react-native",
-            "run-macos",
-            "--scheme",
-            macOSSchemeName,
-            ...withDefaultPortArg(runnerArgs, devServerPort ?? getDefaultDevServerPort(appId)),
-          ],
-      { cwd: shellDir, env },
-    );
+    const argsWithPort = withDefaultPortArg(runnerArgs, devServerPort ?? getDefaultDevServerPort(appId));
+    const openMode = readStringArg(argsWithPort, ["--mode", "--configuration"], "Debug");
+    const openArgs = openMode === "Release" ? ["--mode", "Release"] : [];
+    runMacOSBuildForLaunchArgs(argsWithPort, env);
+    runCommand("bun", ["scripts/open-app.ts", appId, platform, ...openArgs, ...launchArgs], {
+      cwd: rootDir,
+      env,
+    });
   }
 }

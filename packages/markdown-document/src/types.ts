@@ -92,7 +92,9 @@ export type MarkdownDocumentCommands = {
   focusFirstBlock(): void;
   focusLastBlock(): void;
   focusNextBlock(): void;
+  focusNextBlockFromEditor(): boolean;
   focusPreviousBlock(): void;
+  focusPreviousBlockFromEditor(): boolean;
   moveActiveBlockDown(): void;
   moveActiveBlockUp(): void;
   setParagraph(): void;

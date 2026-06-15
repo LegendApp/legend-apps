@@ -16,8 +16,8 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKe
     extendBlockSelectionUp: () => documentCommandsRef.current?.extendBlockSelectionUp() ?? false,
     focusFirstBlock: () => documentCommandsRef.current?.focusFirstBlock(),
     focusLastBlock: () => documentCommandsRef.current?.focusLastBlock(),
-    focusNextBlock: () => documentCommandsRef.current?.focusNextBlock(),
-    focusPreviousBlock: () => documentCommandsRef.current?.focusPreviousBlock(),
+    focusNextBlock: () => documentCommandsRef.current?.focusNextBlockFromEditor() ?? false,
+    focusPreviousBlock: () => documentCommandsRef.current?.focusPreviousBlockFromEditor() ?? false,
     moveBlockDown: () => documentCommandsRef.current?.moveActiveBlockDown(),
     moveBlockUp: () => documentCommandsRef.current?.moveActiveBlockUp(),
   }), [documentCommandsRef]);

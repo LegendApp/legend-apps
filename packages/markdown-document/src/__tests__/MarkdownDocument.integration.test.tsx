@@ -689,6 +689,24 @@ async function focusNextBlock(commandsRef: React.RefObject<MarkdownDocumentComma
   await flushPromises();
 }
 
+async function focusPreviousBlockFromEditor(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  let didHandle = false;
+  await act(async () => {
+    didHandle = commandsRef.current?.focusPreviousBlockFromEditor() ?? false;
+  });
+  await flushPromises();
+  return didHandle;
+}
+
+async function focusNextBlockFromEditor(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
+  let didHandle = false;
+  await act(async () => {
+    didHandle = commandsRef.current?.focusNextBlockFromEditor() ?? false;
+  });
+  await flushPromises();
+  return didHandle;
+}
+
 async function focusFirstBlock(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
   await act(async () => {
     commandsRef.current?.focusFirstBlock();
@@ -3106,6 +3124,47 @@ describe("MarkdownDocument mounted editing", () => {
     await pressRenderedMarkdown(renderer, "Second");
     await focusNextBlock(commandsRef);
     expect(editorInput(renderer).props.defaultValue).toBe("Second");
+
+    expect(adapter.applyTransactions).toEqual([]);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("lets editor up and down keys pass through away from line boundaries", async () => {
+    const markdown = "First line\nSecond line\nThird line";
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, markdown),
+      block("d1:b1", 1, "Next"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), "First line\nSec".length);
+    await expect(focusPreviousBlockFromEditor(commandsRef)).resolves.toBe(false);
+    await expect(focusNextBlockFromEditor(commandsRef)).resolves.toBe(false);
+
+    expect(adapter.applyTransactions).toEqual([]);
+    expect(editorInput(renderer).props.defaultValue).toBe(markdown);
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("focuses adjacent blocks from editor arrow keys only at line boundaries", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "Previous"),
+      block("d1:b1", 1, "First line\nSecond line"),
+      block("d1:b2", 2, "Next"),
+    ]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "First line\nSecond line");
+    await changeSelection(editorInput(renderer), "First".length);
+    await expect(focusPreviousBlockFromEditor(commandsRef)).resolves.toBe(true);
+    expect(editorInput(renderer).props.defaultValue).toBe("Previous");
+
+    await pressRenderedMarkdown(renderer, "First line\nSecond line");
+    await changeSelection(editorInput(renderer), "First line\nSecond".length);
+    await expect(focusNextBlockFromEditor(commandsRef)).resolves.toBe(true);
+    expect(editorInput(renderer).props.defaultValue).toBe("Next");
 
     expect(adapter.applyTransactions).toEqual([]);
     await expectStableEditingState(renderer, adapter);

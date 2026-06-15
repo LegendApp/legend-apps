@@ -34,6 +34,8 @@ import type {
 } from "./internalTypes";
 import {
   estimateMarkdownSelectionVerticalRange,
+  isMarkdownSelectionOnFirstLine,
+  isMarkdownSelectionOnLastLine,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -1333,6 +1335,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
     );
 
+    const focusAdjacentBlockFromEditor = useCallback(
+      (direction: "up" | "down") => {
+        const activeBlockIdValue = activeBlockIdRef.current;
+        const activeMarkdown = draftMarkdownRef.current;
+        const activeSelection = activeInputSelectionRef.current;
+        const shouldNavigate = direction === "up"
+          ? isMarkdownSelectionOnFirstLine(activeMarkdown, activeSelection)
+          : isMarkdownSelectionOnLastLine(activeMarkdown, activeSelection);
+
+        if (activeBlockIdValue && shouldNavigate) {
+          focusAdjacentBlock(direction);
+          return true;
+        }
+
+        return false;
+      },
+      [focusAdjacentBlock],
+    );
+
     const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
       activeInputRef.current?.blur?.();
       nativeEditingBlockIdRef.current = null;
@@ -1948,8 +1969,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         focusNextBlock() {
           focusAdjacentBlock("down");
         },
+        focusNextBlockFromEditor() {
+          return focusAdjacentBlockFromEditor("down");
+        },
         focusPreviousBlock() {
           focusAdjacentBlock("up");
+        },
+        focusPreviousBlockFromEditor() {
+          return focusAdjacentBlockFromEditor("up");
         },
         redo,
         save,
@@ -2003,6 +2030,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         commitAndBlurActiveBlock,
         extendBlockSelection,
         focusAdjacentBlock,
+        focusAdjacentBlockFromEditor,
         focusBoundaryBlock,
         formatCurrentBlockRange,
         moveActiveBlock,
