@@ -1,8 +1,8 @@
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
-import { useValue } from "@legendapp/state/react";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownBlockActivationView } from "@legend-desktop/markdown-block-editor";
-import { Fragment, memo, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
@@ -44,7 +44,7 @@ export const MarkdownEditorInput = memo(
     onChangeSelectionRef,
     onSelectionDragOutsideRef,
     onVerticalNavigationOutsideRef,
-    rowWidth,
+    rowWidth$,
   }: {
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
     block: MarkdownBlockSnapshot;
@@ -56,8 +56,10 @@ export const MarkdownEditorInput = memo(
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
     onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
-    rowWidth: number;
+    rowWidth$: Observable<number>;
   }) {
+    const rowWidth = useValue(rowWidth$);
+
     useEffect(() => {
       const timeout = setTimeout(() => {
         activeInputRef.current?.focus();
@@ -98,7 +100,7 @@ export const MarkdownEditorInput = memo(
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
     previousProps.onVerticalNavigationOutsideRef === nextProps.onVerticalNavigationOutsideRef &&
-    previousProps.rowWidth === nextProps.rowWidth,
+    previousProps.rowWidth$ === nextProps.rowWidth$,
 );
 
 export const MarkdownOverlayEditorInput = memo(
@@ -227,7 +229,7 @@ export function MarkdownBlockRow({
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;
   const isActive = activeBlock !== undefined;
-  const [rowWidth, setRowWidth] = useState(700);
+  const rowWidth$ = useObservable(700);
   const rowRef = useRef<View>(null);
 
   if (!block) {
@@ -253,7 +255,7 @@ export function MarkdownBlockRow({
       <View
         ref={rowRef}
         onLayout={(event) => {
-          setRowWidth(event.nativeEvent.layout.width);
+          rowWidth$.set(event.nativeEvent.layout.width);
           measureWindowLayout();
         }}
         style={[rowStyle, styles.blockRow]}
@@ -269,7 +271,7 @@ export function MarkdownBlockRow({
           onChangeSelectionRef={onChangeSelectionRef}
           onSelectionDragOutsideRef={onSelectionDragOutsideRef}
           onVerticalNavigationOutsideRef={onVerticalNavigationOutsideRef}
-          rowWidth={rowWidth}
+          rowWidth$={rowWidth$}
         />
         {commentBubble}
       </View>
@@ -303,7 +305,7 @@ export function MarkdownBlockRow({
           contentsHidden={isActive}
           markdown={block.markdown}
           onLayout={(event) => {
-            setRowWidth(event.nativeEvent.layout.width);
+            rowWidth$.set(event.nativeEvent.layout.width);
             measureWindowLayout();
           }}
           style={[rowStyle, styles.blockRow]}
@@ -320,7 +322,7 @@ export function MarkdownBlockRow({
     <View
       ref={rowRef}
       onLayout={(event) => {
-        setRowWidth(event.nativeEvent.layout.width);
+        rowWidth$.set(event.nativeEvent.layout.width);
         measureWindowLayout();
       }}
       style={[rowStyle, styles.blockRow]}
@@ -329,7 +331,7 @@ export function MarkdownBlockRow({
         delayHoverIn={0}
         delayHoverOut={0}
         onPress={(event) => {
-          onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth));
+          onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth$.peek()));
         }}
         style={styles.rowContent}
       >
