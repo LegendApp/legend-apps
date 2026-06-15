@@ -4,7 +4,7 @@ import {
   closeWindow,
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
-import { getLegendTheme, getLegendThemeAppearance } from "@legend-desktop/theme";
+import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
 import { getMarkdownFileTitle } from "./appMetadata";
 import {
   editorWindowIdentifier,
@@ -12,7 +12,7 @@ import {
   settingsWindowIdentifier,
   settingsWindowModuleName,
 } from "./appConstants";
-import { getMarkdownThemeSetting } from "./markdownSettings";
+import { getMarkdownDisplayThemeSetting } from "./markdownSettings";
 import { SettingsWindow } from "./SettingsWindow";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 
@@ -27,12 +27,12 @@ function createMarkdownEditorWindowStyle({
   backgroundColor?: string;
   includeFrame: boolean;
 }) {
-  const themeSetting = getMarkdownThemeSetting();
-  const theme = getLegendTheme(themeSetting);
+  const displayThemeSetting = getMarkdownDisplayThemeSetting();
+  const displayTheme = getLegendDisplayTheme(displayThemeSetting);
 
   return {
-    appearance: appearance ?? getLegendThemeAppearance(themeSetting),
-    backgroundColor: backgroundColor ?? theme.colors.windowBackground,
+    appearance: appearance ?? getLegendDisplayThemeAppearance(displayThemeSetting),
+    backgroundColor: backgroundColor ?? displayTheme.colors.windowBackground,
     ...(includeFrame
       ? {
           width: 900,

@@ -23,6 +23,7 @@ export type ThemeSelectorSectionProps = {
   issues?: AppearanceThemeIssue[];
   onThemeChange: (theme: string) => void;
   selectedTheme: string;
+  title?: string;
   themes: AppearanceThemeOption[];
 };
 
@@ -148,10 +149,11 @@ export function ThemeSelectorSection({
   issues = [],
   onThemeChange,
   selectedTheme,
+  title = "Theme",
   themes,
 }: ThemeSelectorSectionProps) {
   return (
-    <SettingsSection card={false} contentClassName="gap-3" first={first} title="Theme">
+    <SettingsSection card={false} contentClassName="gap-3" first={first} title={title}>
       <View accessibilityRole="radiogroup" className="gap-2">
         {themes.map((theme) => (
           <RadioOption

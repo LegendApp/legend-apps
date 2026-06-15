@@ -1,0 +1,93 @@
+{
+  "name": "technical",
+  "content": {
+    "horizontalPadding": 40,
+    "maxWidth": 980,
+    "verticalPadding": 40
+  },
+  "typography": {
+    "blockquoteFontSizeOffset": -1,
+    "bodyFontSize": 15,
+    "codeFontFamily": "Menlo",
+    "codeFontSizeOffset": -1,
+    "headingLineHeightScale": 1.38,
+    "headingScale": {
+      "1": 1.7,
+      "2": 1.42,
+      "3": 1.22,
+      "4": 1.1,
+      "5": 1,
+      "6": 0.94
+    },
+    "headingWeight": "700",
+    "lineHeightScale": 1.5,
+    "tableFontSizeOffset": -1
+  },
+  "spacing": {
+    "blockquote": {
+      "marginBottom": 20,
+      "marginTop": 20
+    },
+    "codeBlock": {
+      "marginBottom": 36,
+      "marginTop": 18
+    },
+    "fallback": {
+      "marginBottom": 16,
+      "marginTop": 16
+    },
+    "heading": {
+      "1": {
+        "marginBottom": 18,
+        "marginTop": 38
+      },
+      "2": {
+        "marginBottom": 16,
+        "marginTop": 32
+      },
+      "3": {
+        "marginBottom": 14,
+        "marginTop": 26
+      },
+      "4": {
+        "marginBottom": 12,
+        "marginTop": 22
+      },
+      "5": {
+        "marginBottom": 10,
+        "marginTop": 20
+      },
+      "6": {
+        "marginBottom": 10,
+        "marginTop": 20
+      }
+    },
+    "list": {
+      "marginBottom": 16,
+      "marginTop": 16
+    },
+    "paragraph": {
+      "marginBottom": 16,
+      "marginTop": 16
+    },
+    "table": {
+      "marginBottom": 20,
+      "marginTop": 20
+    },
+    "thematicBreak": {
+      "marginBottom": 38,
+      "marginTop": 38
+    }
+  },
+  "blocks": {
+    "blockquoteBorderWidth": 2,
+    "codeBlockBorderRadius": 4,
+    "codeBlockBorderWidth": 1,
+    "codeBlockPadding": 16,
+    "listGapWidth": 7,
+    "tableBorderRadius": 4,
+    "tableBorderWidth": 1,
+    "tableCellPaddingHorizontal": 7,
+    "tableCellPaddingVertical": 5
+  }
+}

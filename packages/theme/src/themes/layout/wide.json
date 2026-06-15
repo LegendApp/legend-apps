@@ -1,0 +1,93 @@
+{
+  "name": "wide",
+  "content": {
+    "horizontalPadding": 56,
+    "maxWidth": 1080,
+    "verticalPadding": 48
+  },
+  "typography": {
+    "blockquoteFontSizeOffset": -1,
+    "bodyFontSize": 16,
+    "codeFontFamily": "Menlo",
+    "codeFontSizeOffset": -2,
+    "headingLineHeightScale": 1.42,
+    "headingScale": {
+      "1": 1.82,
+      "2": 1.48,
+      "3": 1.24,
+      "4": 1.12,
+      "5": 1,
+      "6": 0.94
+    },
+    "headingWeight": "700",
+    "lineHeightScale": 1.56,
+    "tableFontSizeOffset": -2
+  },
+  "spacing": {
+    "blockquote": {
+      "marginBottom": 24,
+      "marginTop": 24
+    },
+    "codeBlock": {
+      "marginBottom": 48,
+      "marginTop": 20
+    },
+    "fallback": {
+      "marginBottom": 18,
+      "marginTop": 18
+    },
+    "heading": {
+      "1": {
+        "marginBottom": 22,
+        "marginTop": 46
+      },
+      "2": {
+        "marginBottom": 18,
+        "marginTop": 38
+      },
+      "3": {
+        "marginBottom": 16,
+        "marginTop": 30
+      },
+      "4": {
+        "marginBottom": 12,
+        "marginTop": 26
+      },
+      "5": {
+        "marginBottom": 10,
+        "marginTop": 22
+      },
+      "6": {
+        "marginBottom": 10,
+        "marginTop": 22
+      }
+    },
+    "list": {
+      "marginBottom": 18,
+      "marginTop": 18
+    },
+    "paragraph": {
+      "marginBottom": 18,
+      "marginTop": 18
+    },
+    "table": {
+      "marginBottom": 24,
+      "marginTop": 24
+    },
+    "thematicBreak": {
+      "marginBottom": 48,
+      "marginTop": 48
+    }
+  },
+  "blocks": {
+    "blockquoteBorderWidth": 3,
+    "codeBlockBorderRadius": 6,
+    "codeBlockBorderWidth": 1,
+    "codeBlockPadding": 20,
+    "listGapWidth": 8,
+    "tableBorderRadius": 6,
+    "tableBorderWidth": 1,
+    "tableCellPaddingHorizontal": 8,
+    "tableCellPaddingVertical": 6
+  }
+}

@@ -1,38 +1,52 @@
 import { ThemeSelectorSection } from "@legend-desktop/appearance-settings";
 import { RadioOption } from "@legend-desktop/design-system";
-import { getLegendThemeFiles } from "@legend-desktop/theme";
+import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-desktop/theme";
 import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
 import { useMemo } from "react";
 import { View } from "react-native";
 import {
   setMarkdownContentWidthSetting,
   setMarkdownDocumentDensitySetting,
+  setMarkdownDisplayThemeSetting,
   setMarkdownFontFamilySetting,
   setMarkdownFontSizeSetting,
+  setMarkdownLayoutThemeSetting,
   setMarkdownLineHeightSetting,
-  setMarkdownThemeSetting,
   type MarkdownContentWidthSetting,
   type MarkdownDocumentDensitySetting,
   type MarkdownFontFamilySetting,
   type MarkdownFontSizeSetting,
   type MarkdownLineHeightSetting,
-  type MarkdownThemeSetting,
   useMarkdownContentWidthSetting,
   useMarkdownDocumentDensitySetting,
+  useMarkdownDisplayThemeSetting,
   useMarkdownFontFamilySetting,
   useMarkdownFontSizeSetting,
+  useMarkdownLayoutThemeSetting,
   useMarkdownLineHeightSetting,
-  useMarkdownThemeSetting,
 } from "../markdownSettings";
 import { loadMarkdownUserThemesSync } from "../userThemes";
 
+function formatThemeLabel(name: string) {
+  return name
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function AppearanceSettingsPage() {
   const userThemeLoadResult = useMemo(() => loadMarkdownUserThemesSync({ force: true }), []);
-  const themeOptions = useMemo(
-    () => getLegendThemeFiles().map((theme) => ({ label: theme.name, value: theme.name })),
+  const displayThemeOptions = useMemo(
+    () => getLegendDisplayThemeFiles().map((theme) => ({ label: formatThemeLabel(theme.name), value: theme.name })),
     [userThemeLoadResult],
   );
-  const selectedTheme = useMarkdownThemeSetting();
+  const layoutThemeOptions = useMemo(
+    () => getMarkdownLayoutThemeFiles().map((theme) => ({ label: formatThemeLabel(theme.name), value: theme.name })),
+    [userThemeLoadResult],
+  );
+  const selectedDisplayTheme = useMarkdownDisplayThemeSetting();
+  const selectedLayoutTheme = useMarkdownLayoutThemeSetting();
   const selectedFontFamily = useMarkdownFontFamilySetting();
   const selectedFontSize = useMarkdownFontSizeSetting();
   const selectedLineHeight = useMarkdownLineHeightSetting();
@@ -43,15 +57,23 @@ export function AppearanceSettingsPage() {
     <SettingsPage>
       <ThemeSelectorSection
         first
-        issues={userThemeLoadResult.issues}
-        onThemeChange={setMarkdownThemeSetting}
-        selectedTheme={selectedTheme}
-        themes={themeOptions}
+        issues={userThemeLoadResult.displayThemes.issues}
+        onThemeChange={setMarkdownDisplayThemeSetting}
+        selectedTheme={selectedDisplayTheme}
+        themes={displayThemeOptions}
+        title="Display Theme"
+      />
+      <ThemeSelectorSection
+        issues={userThemeLoadResult.layoutThemes.issues}
+        onThemeChange={setMarkdownLayoutThemeSetting}
+        selectedTheme={selectedLayoutTheme}
+        themes={layoutThemeOptions}
+        title="Layout Theme"
       />
       <SettingsSection card={false} title="Font">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownFontFamilySetting>
-            label="System"
+            label="Layout Default"
             onSelect={setMarkdownFontFamilySetting}
             selected={selectedFontFamily === "system"}
             value="system"

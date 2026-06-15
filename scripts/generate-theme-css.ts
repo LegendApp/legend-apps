@@ -2,11 +2,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { LegendThemeFile } from "../packages/theme/src/types";
+import type { LegendDisplayThemeFile, MarkdownLayoutThemeFile } from "../packages/theme/src/types";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, "..");
-const themeDir = path.join(rootDir, "packages/theme/src/themes");
+const displayThemeDir = path.join(rootDir, "packages/theme/src/themes/display");
+const layoutThemeDir = path.join(rootDir, "packages/theme/src/themes/layout");
 const cssPath = path.join(rootDir, "shell/src/global.css");
 const generatedThemeRegistryPath = path.join(rootDir, "packages/theme/src/generatedThemes.ts");
 
@@ -37,11 +38,15 @@ function resolveSelectionColor(color: string) {
   return color === "auto" ? "Highlight" : color;
 }
 
-function readTheme(name: string): LegendThemeFile {
-  return JSON.parse(fs.readFileSync(path.join(themeDir, `${name}.json`), "utf8")) as LegendThemeFile;
+function readDisplayTheme(name: string): LegendDisplayThemeFile {
+  return JSON.parse(fs.readFileSync(path.join(displayThemeDir, `${name}.json`), "utf8")) as LegendDisplayThemeFile;
 }
 
-function readThemeNames() {
+function readLayoutTheme(name: string): MarkdownLayoutThemeFile {
+  return JSON.parse(fs.readFileSync(path.join(layoutThemeDir, `${name}.json`), "utf8")) as MarkdownLayoutThemeFile;
+}
+
+function readThemeNames(themeDir: string) {
   return fs.readdirSync(themeDir)
     .filter((filename) => filename.endsWith(".json"))
     .map((filename) => filename.slice(0, -".json".length))
@@ -58,29 +63,73 @@ function readThemeNames() {
       if (b === "dark") {
         return 1;
       }
+      if (a === "default") {
+        return -1;
+      }
+      if (b === "default") {
+        return 1;
+      }
       return a.localeCompare(b);
     });
 }
 
-function validateThemes(themes: LegendThemeFile[]) {
+function validateDisplayThemes(themes: LegendDisplayThemeFile[]) {
   for (const theme of themes) {
     if (theme.name === undefined || theme.colors === undefined) {
-      throw new Error(`Theme ${JSON.stringify(theme)} is missing name or colors.`);
+      throw new Error(`Display theme ${JSON.stringify(theme)} is missing name or colors.`);
     }
 
     if (theme.appearance !== undefined && theme.appearance !== "light" && theme.appearance !== "dark") {
-      throw new Error(`Theme ${theme.name} has invalid appearance ${JSON.stringify(theme.appearance)}.`);
+      throw new Error(`Display theme ${theme.name} has invalid appearance ${JSON.stringify(theme.appearance)}.`);
     }
 
     for (const colorName of colorVariables) {
       if (!theme.colors[colorName]) {
-        throw new Error(`Theme ${theme.name} is missing colors.${colorName}.`);
+        throw new Error(`Display theme ${theme.name} is missing colors.${colorName}.`);
       }
     }
   }
 }
 
-function renderThemeVariables(theme: LegendThemeFile) {
+function isNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function validateLayoutThemes(themes: MarkdownLayoutThemeFile[]) {
+  for (const theme of themes) {
+    if (!theme.name) {
+      throw new Error(`Layout theme ${JSON.stringify(theme)} is missing name.`);
+    }
+
+    if (!theme.content || !isNumber(theme.content.horizontalPadding) || !isNumber(theme.content.maxWidth) || !isNumber(theme.content.verticalPadding)) {
+      throw new Error(`Layout theme ${theme.name} has invalid content metrics.`);
+    }
+
+    if (
+      !theme.typography ||
+      !isNumber(theme.typography.bodyFontSize) ||
+      !isNumber(theme.typography.lineHeightScale) ||
+      !isNumber(theme.typography.headingLineHeightScale) ||
+      !isNumber(theme.typography.codeFontSizeOffset) ||
+      typeof theme.typography.codeFontFamily !== "string" ||
+      typeof theme.typography.headingWeight !== "string"
+    ) {
+      throw new Error(`Layout theme ${theme.name} has invalid typography.`);
+    }
+
+    for (const level of [1, 2, 3, 4, 5, 6] as const) {
+      if (!isNumber(theme.typography.headingScale[level])) {
+        throw new Error(`Layout theme ${theme.name} is missing typography.headingScale.${level}.`);
+      }
+    }
+
+    if (!theme.spacing || !theme.spacing.heading || !theme.blocks) {
+      throw new Error(`Layout theme ${theme.name} is missing spacing or block metrics.`);
+    }
+  }
+}
+
+function renderThemeVariables(theme: LegendDisplayThemeFile) {
   const { colors } = theme;
   const variables = [
     ...colorVariables.map((colorName) => [
@@ -106,12 +155,18 @@ function renderThemeVariables(theme: LegendThemeFile) {
   return `    @variant ${theme.name} {\n${variables}\n    }`;
 }
 
-const themes = readThemeNames().map(readTheme);
-const uniwindThemes = themes.filter((theme) => theme.name === "light" || theme.name === "dark");
-validateThemes(themes);
+const displayThemes = readThemeNames(displayThemeDir).map(readDisplayTheme);
+const layoutThemes = readThemeNames(layoutThemeDir).map(readLayoutTheme);
+const uniwindThemes = displayThemes.filter((theme) => theme.name === "light" || theme.name === "dark");
+validateDisplayThemes(displayThemes);
+validateLayoutThemes(layoutThemes);
 
-if (!themes.some((theme) => theme.name === "light")) {
-  throw new Error("Theme files must include light.json.");
+if (!displayThemes.some((theme) => theme.name === "light")) {
+  throw new Error("Display theme files must include light.json.");
+}
+
+if (!layoutThemes.some((theme) => theme.name === "default")) {
+  throw new Error("Layout theme files must include default.json.");
 }
 
 const css = `@import 'tailwindcss';
@@ -137,12 +192,16 @@ ${uniwindThemes.map(renderThemeVariables).join("\n\n")}
 
 fs.writeFileSync(cssPath, css);
 
-const generatedThemeRegistry = `import type { LegendThemeFile } from "./types";
+const generatedThemeRegistry = `import type { LegendDisplayThemeFile, MarkdownLayoutThemeFile } from "./types";
 
-export const generatedThemeFiles = ${JSON.stringify(themes, null, 2)} satisfies LegendThemeFile[];
+export const generatedDisplayThemeFiles = ${JSON.stringify(displayThemes, null, 2)} satisfies LegendDisplayThemeFile[];
+
+export const generatedMarkdownLayoutThemeFiles = ${JSON.stringify(layoutThemes, null, 2)} satisfies MarkdownLayoutThemeFile[];
+
+export const generatedThemeFiles = generatedDisplayThemeFiles;
 `;
 
 fs.writeFileSync(generatedThemeRegistryPath, generatedThemeRegistry);
 
 console.log(`Generated ${path.relative(rootDir, cssPath)} from ${uniwindThemes.length} UniWind theme buckets.`);
-console.log(`Generated ${path.relative(rootDir, generatedThemeRegistryPath)} from ${themes.length} themes.`);
+console.log(`Generated ${path.relative(rootDir, generatedThemeRegistryPath)} from ${displayThemes.length} display themes and ${layoutThemes.length} layout themes.`);

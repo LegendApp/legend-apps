@@ -1,10 +1,10 @@
 import type { MarkdownDocumentLayout, MarkdownDocumentTheme } from "@legend-desktop/markdown-document";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 
-export type LegendThemeName = "light" | "dark" | (string & {});
-export type LegendThemeAppearance = "light" | "dark";
+export type LegendDisplayThemeName = "light" | "dark" | (string & {});
+export type LegendDisplayThemeAppearance = "light" | "dark";
 
-export type LegendThemeColors = {
+export type LegendDisplayThemeColors = {
   background: string;
   foreground: string;
   muted: string;
@@ -26,7 +26,7 @@ export type LegendThemeColors = {
   windowBackground: string;
 };
 
-export type LegendThemeBackgroundSource =
+export type LegendDisplayThemeBackgroundSource =
   | {
     type: "none";
   }
@@ -39,27 +39,74 @@ export type LegendThemeBackgroundSource =
     type: "image";
   };
 
-export type LegendThemeBackgroundTint = {
+export type LegendDisplayThemeBackgroundTint = {
   color: string;
   enabled: boolean;
 };
 
-export type LegendThemeBackground = {
+export type LegendDisplayThemeBackground = {
   glassEnabled: boolean;
   opacity: number;
-  source: LegendThemeBackgroundSource;
-  tint: LegendThemeBackgroundTint;
+  source: LegendDisplayThemeBackgroundSource;
+  tint: LegendDisplayThemeBackgroundTint;
 };
 
-export type LegendThemeFile = {
-  appearance?: LegendThemeAppearance;
-  background?: LegendThemeBackground;
-  name: LegendThemeName;
-  colors: LegendThemeColors;
+export type LegendDisplayThemeFile = {
+  appearance?: LegendDisplayThemeAppearance;
+  background?: LegendDisplayThemeBackground;
+  name: LegendDisplayThemeName;
+  colors: LegendDisplayThemeColors;
 };
 
-export type LegendTheme = LegendThemeFile & {
+export type LegendDisplayTheme = LegendDisplayThemeFile & {
   markdownDocument: MarkdownDocumentTheme;
-  markdownLayout: MarkdownDocumentLayout;
   markdownStyle: MarkdownStyle;
 };
+
+export type MarkdownLayoutThemeName = "default" | (string & {});
+
+export type MarkdownLayoutThemeTypography = {
+  blockquoteFontSizeOffset: number;
+  bodyFontFamily?: string;
+  bodyFontSize: number;
+  codeFontFamily: string;
+  codeFontSizeOffset: number;
+  headingLineHeightScale: number;
+  headingScale: Record<1 | 2 | 3 | 4 | 5 | 6, number>;
+  headingWeight: string;
+  lineHeightScale: number;
+  tableFontSizeOffset: number;
+};
+
+export type MarkdownLayoutThemeBlocks = {
+  blockquoteBorderWidth: number;
+  codeBlockBorderRadius: number;
+  codeBlockBorderWidth: number;
+  codeBlockPadding: number;
+  listGapWidth: number;
+  tableBorderRadius: number;
+  tableBorderWidth: number;
+  tableCellPaddingHorizontal: number;
+  tableCellPaddingVertical: number;
+};
+
+export type MarkdownLayoutThemeFile = {
+  name: MarkdownLayoutThemeName;
+  content: NonNullable<MarkdownDocumentLayout["content"]>;
+  spacing: MarkdownDocumentLayout["blockSpacing"];
+  typography: MarkdownLayoutThemeTypography;
+  blocks: MarkdownLayoutThemeBlocks;
+};
+
+export type MarkdownLayoutTheme = MarkdownLayoutThemeFile & {
+  markdownLayout: MarkdownDocumentLayout;
+};
+
+export type LegendThemeName = LegendDisplayThemeName;
+export type LegendThemeAppearance = LegendDisplayThemeAppearance;
+export type LegendThemeColors = LegendDisplayThemeColors;
+export type LegendThemeBackgroundSource = LegendDisplayThemeBackgroundSource;
+export type LegendThemeBackgroundTint = LegendDisplayThemeBackgroundTint;
+export type LegendThemeBackground = LegendDisplayThemeBackground;
+export type LegendThemeFile = LegendDisplayThemeFile;
+export type LegendTheme = LegendDisplayTheme;

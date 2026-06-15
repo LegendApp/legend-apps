@@ -1,6 +1,13 @@
-import { defaultMarkdownLayout } from "@legend-desktop/markdown-document";
-import { generatedThemeFiles } from "./generatedThemes";
-import type { LegendTheme, LegendThemeAppearance, LegendThemeFile, LegendThemeName } from "./types";
+import { generatedDisplayThemeFiles, generatedMarkdownLayoutThemeFiles } from "./generatedThemes";
+import type {
+  LegendDisplayTheme,
+  LegendDisplayThemeAppearance,
+  LegendDisplayThemeFile,
+  LegendDisplayThemeName,
+  MarkdownLayoutTheme,
+  MarkdownLayoutThemeFile,
+  MarkdownLayoutThemeName,
+} from "./types";
 
 export {
   createAppTheme,
@@ -9,6 +16,14 @@ export {
 } from "./appTheme";
 
 export type {
+  LegendDisplayTheme,
+  LegendDisplayThemeAppearance,
+  LegendDisplayThemeBackground,
+  LegendDisplayThemeBackgroundSource,
+  LegendDisplayThemeBackgroundTint,
+  LegendDisplayThemeColors,
+  LegendDisplayThemeFile,
+  LegendDisplayThemeName,
   LegendTheme,
   LegendThemeAppearance,
   LegendThemeBackground,
@@ -17,6 +32,11 @@ export type {
   LegendThemeColors,
   LegendThemeFile,
   LegendThemeName,
+  MarkdownLayoutTheme,
+  MarkdownLayoutThemeBlocks,
+  MarkdownLayoutThemeFile,
+  MarkdownLayoutThemeName,
+  MarkdownLayoutThemeTypography,
 } from "./types";
 
 const requiredColorNames = [
@@ -38,10 +58,14 @@ const requiredColorNames = [
   "windowBackground",
 ] as const;
 
-const generatedThemeFileMap = new Map<LegendThemeName, LegendThemeFile>(
-  generatedThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
+const generatedDisplayThemeFileMap = new Map<LegendDisplayThemeName, LegendDisplayThemeFile>(
+  generatedDisplayThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
 );
-const userThemeNameSet = new Set<LegendThemeName>();
+const generatedMarkdownLayoutThemeFileMap = new Map<MarkdownLayoutThemeName, MarkdownLayoutThemeFile>(
+  generatedMarkdownLayoutThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
+);
+const userDisplayThemeNameSet = new Set<LegendDisplayThemeName>();
+const userMarkdownLayoutThemeNameSet = new Set<MarkdownLayoutThemeName>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object");
@@ -87,7 +111,7 @@ function isThemeBackground(value: unknown): boolean {
   return typeof glassEnabled === "boolean" && isOpacityValid && isThemeBackgroundSource(source) && isTintValid;
 }
 
-export function isLegendThemeFile(value: unknown): value is LegendThemeFile {
+export function isLegendDisplayThemeFile(value: unknown): value is LegendDisplayThemeFile {
   if (!isRecord(value) || typeof value.name !== "string" || value.name.length === 0 || !isRecord(value.colors)) {
     return false;
   }
@@ -100,7 +124,86 @@ export function isLegendThemeFile(value: unknown): value is LegendThemeFile {
     (value.background === undefined || isThemeBackground(value.background));
 }
 
-function createLegendTheme(theme: LegendThemeFile): LegendTheme {
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isBlockSpacing(value: unknown) {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const isSpacing = (spacing: unknown) =>
+    isRecord(spacing) &&
+    (spacing.marginTop === undefined || isNumber(spacing.marginTop)) &&
+    (spacing.marginBottom === undefined || isNumber(spacing.marginBottom));
+
+  const heading = value.heading;
+  if (
+    !isSpacing(value.blockquote) ||
+    !isSpacing(value.codeBlock) ||
+    !isSpacing(value.fallback) ||
+    !isSpacing(value.list) ||
+    !isSpacing(value.paragraph) ||
+    !isSpacing(value.table) ||
+    !isSpacing(value.thematicBreak) ||
+    !isRecord(heading)
+  ) {
+    return false;
+  }
+
+  return ([1, 2, 3, 4, 5, 6] as const).every((level) => isSpacing(heading[level]));
+}
+
+export function isMarkdownLayoutThemeFile(value: unknown): value is MarkdownLayoutThemeFile {
+  if (!isRecord(value) || typeof value.name !== "string" || value.name.length === 0) {
+    return false;
+  }
+
+  const { blocks, content, spacing, typography } = value;
+  if (
+    !isRecord(content) ||
+    !isNumber(content.horizontalPadding) ||
+    !isNumber(content.maxWidth) ||
+    !isNumber(content.verticalPadding) ||
+    !isBlockSpacing(spacing) ||
+    !isRecord(typography) ||
+    !isNumber(typography.blockquoteFontSizeOffset) ||
+    !isNumber(typography.bodyFontSize) ||
+    !isNumber(typography.codeFontSizeOffset) ||
+    !isNumber(typography.headingLineHeightScale) ||
+    !isNumber(typography.lineHeightScale) ||
+    !isNumber(typography.tableFontSizeOffset) ||
+    (typography.bodyFontFamily !== undefined && typeof typography.bodyFontFamily !== "string") ||
+    typeof typography.codeFontFamily !== "string" ||
+    typeof typography.headingWeight !== "string" ||
+    !isRecord(typography.headingScale) ||
+    !isRecord(blocks)
+  ) {
+    return false;
+  }
+
+  const headingScale = typography.headingScale;
+  if (!isRecord(headingScale)) {
+    return false;
+  }
+
+  const hasHeadingScale = ([1, 2, 3, 4, 5, 6] as const).every((level) => isNumber(headingScale[level]));
+  return hasHeadingScale &&
+    isNumber(blocks.blockquoteBorderWidth) &&
+    isNumber(blocks.codeBlockBorderRadius) &&
+    isNumber(blocks.codeBlockBorderWidth) &&
+    isNumber(blocks.codeBlockPadding) &&
+    isNumber(blocks.listGapWidth) &&
+    isNumber(blocks.tableBorderRadius) &&
+    isNumber(blocks.tableBorderWidth) &&
+    isNumber(blocks.tableCellPaddingHorizontal) &&
+    isNumber(blocks.tableCellPaddingVertical);
+}
+
+export const isLegendThemeFile = isLegendDisplayThemeFile;
+
+function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayTheme {
   const { colors } = theme;
 
   return {
@@ -112,7 +215,6 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
       mutedForegroundColor: colors.muted,
       selectionColor: colors.selection,
     },
-    markdownLayout: defaultMarkdownLayout,
     markdownStyle: {
       blockquote: {
         backgroundColor: colors.blockquoteBackground,
@@ -219,57 +321,125 @@ function createLegendTheme(theme: LegendThemeFile): LegendTheme {
   };
 }
 
-export const legendThemeFiles = [
-  ...generatedThemeFiles,
+function createMarkdownLayoutTheme(theme: MarkdownLayoutThemeFile): MarkdownLayoutTheme {
+  return {
+    ...theme,
+    markdownLayout: {
+      blockSpacing: theme.spacing,
+      content: theme.content,
+    },
+  };
+}
+
+export const legendDisplayThemeFiles = [
+  ...generatedDisplayThemeFiles,
 ];
 
-const legendThemeFileMap = new Map<LegendThemeName, LegendThemeFile>(
-  legendThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
+export const markdownLayoutThemeFiles = [
+  ...generatedMarkdownLayoutThemeFiles,
+];
+
+const legendDisplayThemeFileMap = new Map<LegendDisplayThemeName, LegendDisplayThemeFile>(
+  legendDisplayThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
 );
-const legendThemeMap = new Map<LegendThemeName, LegendTheme>(
-  legendThemeFiles.map((themeFile) => [themeFile.name, createLegendTheme(themeFile)]),
+const legendDisplayThemeMap = new Map<LegendDisplayThemeName, LegendDisplayTheme>(
+  legendDisplayThemeFiles.map((themeFile) => [themeFile.name, createLegendDisplayTheme(themeFile)]),
+);
+const markdownLayoutThemeFileMap = new Map<MarkdownLayoutThemeName, MarkdownLayoutThemeFile>(
+  markdownLayoutThemeFiles.map((themeFile) => [themeFile.name, themeFile]),
+);
+const markdownLayoutThemeMap = new Map<MarkdownLayoutThemeName, MarkdownLayoutTheme>(
+  markdownLayoutThemeFiles.map((themeFile) => [themeFile.name, createMarkdownLayoutTheme(themeFile)]),
 );
 
-export const legendThemes = Object.fromEntries(legendThemeMap) as Record<LegendThemeName, LegendTheme>;
+export const legendDisplayThemes = Object.fromEntries(legendDisplayThemeMap) as Record<LegendDisplayThemeName, LegendDisplayTheme>;
+export const markdownLayoutThemes = Object.fromEntries(markdownLayoutThemeMap) as Record<MarkdownLayoutThemeName, MarkdownLayoutTheme>;
+export const legendThemeFiles = legendDisplayThemeFiles;
+export const legendThemes = legendDisplayThemes;
 
-export function registerLegendThemeFiles(themeFiles: readonly LegendThemeFile[]) {
+export function registerLegendDisplayThemeFiles(themeFiles: readonly LegendDisplayThemeFile[]) {
   for (const themeFile of themeFiles) {
-    if (isLegendThemeFile(themeFile)) {
-      legendThemeFileMap.set(themeFile.name, themeFile);
-      legendThemeMap.set(themeFile.name, createLegendTheme(themeFile));
-      legendThemes[themeFile.name] = legendThemeMap.get(themeFile.name) as LegendTheme;
+    if (isLegendDisplayThemeFile(themeFile)) {
+      legendDisplayThemeFileMap.set(themeFile.name, themeFile);
+      legendDisplayThemeMap.set(themeFile.name, createLegendDisplayTheme(themeFile));
+      legendDisplayThemes[themeFile.name] = legendDisplayThemeMap.get(themeFile.name) as LegendDisplayTheme;
     }
   }
 }
 
-export function replaceUserLegendThemeFiles(themeFiles: readonly LegendThemeFile[]) {
-  for (const themeName of userThemeNameSet) {
-    const generatedThemeFile = generatedThemeFileMap.get(themeName);
+export function registerMarkdownLayoutThemeFiles(themeFiles: readonly MarkdownLayoutThemeFile[]) {
+  for (const themeFile of themeFiles) {
+    if (isMarkdownLayoutThemeFile(themeFile)) {
+      markdownLayoutThemeFileMap.set(themeFile.name, themeFile);
+      markdownLayoutThemeMap.set(themeFile.name, createMarkdownLayoutTheme(themeFile));
+      markdownLayoutThemes[themeFile.name] = markdownLayoutThemeMap.get(themeFile.name) as MarkdownLayoutTheme;
+    }
+  }
+}
+
+export const registerLegendThemeFiles = registerLegendDisplayThemeFiles;
+
+export function replaceUserLegendDisplayThemeFiles(themeFiles: readonly LegendDisplayThemeFile[]) {
+  for (const themeName of userDisplayThemeNameSet) {
+    const generatedThemeFile = generatedDisplayThemeFileMap.get(themeName);
     if (generatedThemeFile) {
-      legendThemeFileMap.set(themeName, generatedThemeFile);
-      legendThemeMap.set(themeName, createLegendTheme(generatedThemeFile));
-      legendThemes[themeName] = legendThemeMap.get(themeName) as LegendTheme;
+      legendDisplayThemeFileMap.set(themeName, generatedThemeFile);
+      legendDisplayThemeMap.set(themeName, createLegendDisplayTheme(generatedThemeFile));
+      legendDisplayThemes[themeName] = legendDisplayThemeMap.get(themeName) as LegendDisplayTheme;
     } else {
-      legendThemeFileMap.delete(themeName);
-      legendThemeMap.delete(themeName);
-      delete legendThemes[themeName];
+      legendDisplayThemeFileMap.delete(themeName);
+      legendDisplayThemeMap.delete(themeName);
+      delete legendDisplayThemes[themeName];
     }
   }
 
-  userThemeNameSet.clear();
+  userDisplayThemeNameSet.clear();
 
   for (const themeFile of themeFiles) {
-    if (isLegendThemeFile(themeFile)) {
-      userThemeNameSet.add(themeFile.name);
+    if (isLegendDisplayThemeFile(themeFile)) {
+      userDisplayThemeNameSet.add(themeFile.name);
     }
   }
 
-  registerLegendThemeFiles(themeFiles);
+  registerLegendDisplayThemeFiles(themeFiles);
 }
 
-export function getLegendThemeFiles(): LegendThemeFile[] {
-  return Array.from(legendThemeFileMap.values());
+export function replaceUserMarkdownLayoutThemeFiles(themeFiles: readonly MarkdownLayoutThemeFile[]) {
+  for (const themeName of userMarkdownLayoutThemeNameSet) {
+    const generatedThemeFile = generatedMarkdownLayoutThemeFileMap.get(themeName);
+    if (generatedThemeFile) {
+      markdownLayoutThemeFileMap.set(themeName, generatedThemeFile);
+      markdownLayoutThemeMap.set(themeName, createMarkdownLayoutTheme(generatedThemeFile));
+      markdownLayoutThemes[themeName] = markdownLayoutThemeMap.get(themeName) as MarkdownLayoutTheme;
+    } else {
+      markdownLayoutThemeFileMap.delete(themeName);
+      markdownLayoutThemeMap.delete(themeName);
+      delete markdownLayoutThemes[themeName];
+    }
+  }
+
+  userMarkdownLayoutThemeNameSet.clear();
+
+  for (const themeFile of themeFiles) {
+    if (isMarkdownLayoutThemeFile(themeFile)) {
+      userMarkdownLayoutThemeNameSet.add(themeFile.name);
+    }
+  }
+
+  registerMarkdownLayoutThemeFiles(themeFiles);
 }
+
+export const replaceUserLegendThemeFiles = replaceUserLegendDisplayThemeFiles;
+
+export function getLegendDisplayThemeFiles(): LegendDisplayThemeFile[] {
+  return Array.from(legendDisplayThemeFileMap.values());
+}
+
+export function getMarkdownLayoutThemeFiles(): MarkdownLayoutThemeFile[] {
+  return Array.from(markdownLayoutThemeFileMap.values());
+}
+
+export const getLegendThemeFiles = getLegendDisplayThemeFiles;
 
 export type ThemeStorageEntry = {
   name: string;
@@ -289,7 +459,7 @@ export type UserThemeLoadIssue = {
 export type UserThemeLoadResult = {
   directoryUri: string;
   issues: UserThemeLoadIssue[];
-  themes: LegendThemeFile[];
+  themes: LegendDisplayThemeFile[];
 };
 
 export type LoadUserThemeFilesOptions = {
@@ -303,18 +473,28 @@ export function loadUserThemeFilesSync({
   replaceRegisteredUserThemes = true,
   storage,
 }: LoadUserThemeFilesOptions): UserThemeLoadResult {
+  return loadUserDisplayThemeFilesSync({ directory: directoryPath, replaceRegisteredUserThemes, storage });
+}
+
+export type UserDisplayThemeLoadResult = UserThemeLoadResult;
+
+export function loadUserDisplayThemeFilesSync({
+  directory: directoryPath = "themes/display",
+  replaceRegisteredUserThemes = true,
+  storage,
+}: LoadUserThemeFilesOptions): UserDisplayThemeLoadResult {
   const directory = storage.ensureDirectory(directoryPath);
   const issues: UserThemeLoadIssue[] = [];
-  const themes: LegendThemeFile[] = [];
+  const themes: LegendDisplayThemeFile[] = [];
 
   try {
     for (const entry of storage.list(directoryPath, { extension: ".json" })) {
       try {
         const parsed = storage.read(`${directoryPath}/${entry.name}`, { format: "json" });
-        if (isLegendThemeFile(parsed)) {
+        if (isLegendDisplayThemeFile(parsed)) {
           themes.push(parsed);
         } else {
-          issues.push({ filename: entry.name, message: "Theme file is missing required fields or valid colors." });
+          issues.push({ filename: entry.name, message: "Display theme file is missing required fields or valid colors." });
         }
       } catch (error) {
         issues.push({ filename: entry.name, message: error instanceof Error ? error.message : String(error) });
@@ -325,15 +505,60 @@ export function loadUserThemeFilesSync({
   }
 
   if (replaceRegisteredUserThemes) {
-    replaceUserLegendThemeFiles(themes);
+    replaceUserLegendDisplayThemeFiles(themes);
   }
 
   return { directoryUri: directory.uri, issues, themes };
 }
 
-export function getLegendTheme(themeName: string | null | undefined): LegendTheme {
-  return legendThemeMap.get((themeName ?? "") as LegendThemeName) ?? legendThemeMap.get("light") as LegendTheme;
+export type UserMarkdownLayoutThemeLoadResult = {
+  directoryUri: string;
+  issues: UserThemeLoadIssue[];
+  themes: MarkdownLayoutThemeFile[];
+};
+
+export function loadUserMarkdownLayoutThemeFilesSync({
+  directory: directoryPath = "themes/layout",
+  replaceRegisteredUserThemes = true,
+  storage,
+}: LoadUserThemeFilesOptions): UserMarkdownLayoutThemeLoadResult {
+  const directory = storage.ensureDirectory(directoryPath);
+  const issues: UserThemeLoadIssue[] = [];
+  const themes: MarkdownLayoutThemeFile[] = [];
+
+  try {
+    for (const entry of storage.list(directoryPath, { extension: ".json" })) {
+      try {
+        const parsed = storage.read(`${directoryPath}/${entry.name}`, { format: "json" });
+        if (isMarkdownLayoutThemeFile(parsed)) {
+          themes.push(parsed);
+        } else {
+          issues.push({ filename: entry.name, message: "Layout theme file is missing required metrics." });
+        }
+      } catch (error) {
+        issues.push({ filename: entry.name, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  } catch (error) {
+    issues.push({ filename: directory.name, message: error instanceof Error ? error.message : String(error) });
+  }
+
+  if (replaceRegisteredUserThemes) {
+    replaceUserMarkdownLayoutThemeFiles(themes);
+  }
+
+  return { directoryUri: directory.uri, issues, themes };
 }
+
+export function getLegendDisplayTheme(themeName: string | null | undefined): LegendDisplayTheme {
+  return legendDisplayThemeMap.get((themeName ?? "") as LegendDisplayThemeName) ?? legendDisplayThemeMap.get("light") as LegendDisplayTheme;
+}
+
+export function getMarkdownLayoutTheme(themeName: string | null | undefined): MarkdownLayoutTheme {
+  return markdownLayoutThemeMap.get((themeName ?? "") as MarkdownLayoutThemeName) ?? markdownLayoutThemeMap.get("default") as MarkdownLayoutTheme;
+}
+
+export const getLegendTheme = getLegendDisplayTheme;
 
 function getRelativeLuminance(hexColor: string) {
   const hex = hexColor.slice(1, 7);
@@ -345,17 +570,19 @@ function getRelativeLuminance(hexColor: string) {
   return 0.2126 * (channels[0] ?? 0) + 0.7152 * (channels[1] ?? 0) + 0.0722 * (channels[2] ?? 0);
 }
 
-export function getLegendThemeAppearance(themeName: string | null | undefined): LegendThemeAppearance {
-  const theme = getLegendTheme(themeName);
+export function getLegendDisplayThemeAppearance(themeName: string | null | undefined): LegendDisplayThemeAppearance {
+  const theme = getLegendDisplayTheme(themeName);
   return theme.appearance ?? (getRelativeLuminance(theme.colors.background) < 0.5 ? "dark" : "light");
 }
+
+export const getLegendThemeAppearance = getLegendDisplayThemeAppearance;
 
 function resolveSelectionColor(color: string) {
   return color === "auto" ? "Highlight" : color;
 }
 
-export function getLegendThemeUniwindVariables(themeName: string | null | undefined): Record<string, string> {
-  const { colors } = getLegendTheme(themeName);
+export function getLegendDisplayThemeUniwindVariables(themeName: string | null | undefined): Record<string, string> {
+  const { colors } = getLegendDisplayTheme(themeName);
 
   return {
     "--color-accent-primary": colors.primary,
@@ -389,9 +616,13 @@ export function getLegendThemeUniwindVariables(themeName: string | null | undefi
   };
 }
 
-export function applyLegendThemeToUniwind(themeName: string | null | undefined) {
+export const getLegendThemeUniwindVariables = getLegendDisplayThemeUniwindVariables;
+
+export function applyLegendDisplayThemeToUniwind(themeName: string | null | undefined) {
   const { Uniwind } = require("uniwind") as typeof import("uniwind");
-  const appearance = getLegendThemeAppearance(themeName);
-  Uniwind.updateCSSVariables(appearance, getLegendThemeUniwindVariables(themeName));
+  const appearance = getLegendDisplayThemeAppearance(themeName);
+  Uniwind.updateCSSVariables(appearance, getLegendDisplayThemeUniwindVariables(themeName));
   Uniwind.setTheme(appearance);
 }
+
+export const applyLegendThemeToUniwind = applyLegendDisplayThemeToUniwind;

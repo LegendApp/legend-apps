@@ -1,4 +1,4 @@
-import type { LegendTheme } from "@legend-desktop/theme";
+import type { LegendDisplayTheme, MarkdownLayoutTheme } from "@legend-desktop/theme";
 import type { MarkdownDocumentLayout } from "@legend-desktop/markdown-document";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 import type {
@@ -16,36 +16,36 @@ const fontFamilyBySetting: Record<MarkdownFontFamilySetting, string | undefined>
   system: undefined,
 };
 
-const bodyFontSizeBySetting: Record<MarkdownFontSizeSetting, number> = {
-  default: 16,
-  large: 18,
-  small: 14,
-  xlarge: 20,
+const fontSizeOffsetBySetting: Record<MarkdownFontSizeSetting, number> = {
+  default: 0,
+  large: 2,
+  small: -2,
+  xlarge: 4,
 };
 
 const lineHeightScaleBySetting: Record<MarkdownLineHeightSetting, number> = {
-  compact: 1.45,
-  normal: 1.58,
-  relaxed: 1.75,
+  compact: 1.45 / 1.58,
+  normal: 1,
+  relaxed: 1.75 / 1.58,
 };
 
-const contentWidthBySetting: Record<MarkdownContentWidthSetting, number> = {
+const contentWidthOverrideBySetting: Record<MarkdownContentWidthSetting, number | undefined> = {
   full: 2000,
   narrow: 680,
-  standard: 820,
+  standard: undefined,
   wide: 980,
 };
 
-const horizontalPaddingByDensity: Record<MarkdownDocumentDensitySetting, number> = {
-  comfortable: 40,
-  compact: 28,
-  spacious: 56,
+const horizontalPaddingScaleByDensity: Record<MarkdownDocumentDensitySetting, number> = {
+  comfortable: 1,
+  compact: 0.7,
+  spacious: 1.4,
 };
 
-const verticalPaddingByDensity: Record<MarkdownDocumentDensitySetting, number> = {
-  comfortable: 48,
-  compact: 32,
-  spacious: 64,
+const verticalPaddingScaleByDensity: Record<MarkdownDocumentDensitySetting, number> = {
+  comfortable: 1,
+  compact: 2 / 3,
+  spacious: 4 / 3,
 };
 
 const spacingScaleByDensity: Record<MarkdownDocumentDensitySetting, number> = {
@@ -54,8 +54,8 @@ const spacingScaleByDensity: Record<MarkdownDocumentDensitySetting, number> = {
   spacious: 1.22,
 };
 
-function roundedLineHeight(fontSize: number, lineHeight: MarkdownLineHeightSetting) {
-  return Math.round(fontSize * lineHeightScaleBySetting[lineHeight]);
+function roundedLineHeight(fontSize: number, lineHeightScale: number) {
+  return Math.round(fontSize * lineHeightScale);
 }
 
 function scaled(value: number | undefined, scale: number) {
@@ -90,99 +90,123 @@ function scaleBlockSpacing(layout: MarkdownDocumentLayout, density: MarkdownDocu
 }
 
 export function getMarkdownStyleForAppearance(
-  theme: LegendTheme,
+  displayTheme: LegendDisplayTheme,
+  layoutTheme: MarkdownLayoutTheme,
   settings: MarkdownAppearanceSettings,
 ): MarkdownStyle {
-  const bodyFontSize = bodyFontSizeBySetting[settings.fontSize];
-  const bodyLineHeight = roundedLineHeight(bodyFontSize, settings.lineHeight);
-  const bodyFontFamily = fontFamilyBySetting[settings.fontFamily];
-  const codeFontSize = Math.max(12, bodyFontSize - 2);
-  const codeLineHeight = roundedLineHeight(codeFontSize, settings.lineHeight);
+  const { blocks, typography } = layoutTheme;
+  const bodyFontSize = Math.max(12, typography.bodyFontSize + fontSizeOffsetBySetting[settings.fontSize]);
+  const bodyLineHeightScale = typography.lineHeightScale * lineHeightScaleBySetting[settings.lineHeight];
+  const bodyLineHeight = roundedLineHeight(bodyFontSize, bodyLineHeightScale);
+  const bodyFontFamily = fontFamilyBySetting[settings.fontFamily] ?? typography.bodyFontFamily;
+  const codeFontSize = Math.max(12, bodyFontSize + typography.codeFontSizeOffset);
+  const codeLineHeight = roundedLineHeight(codeFontSize, bodyLineHeightScale);
+  const blockquoteFontSize = Math.max(12, bodyFontSize + typography.blockquoteFontSizeOffset);
+  const tableFontSize = Math.max(12, bodyFontSize + typography.tableFontSizeOffset);
 
   return {
-    ...theme.markdownStyle,
+    ...displayTheme.markdownStyle,
     blockquote: {
-      ...theme.markdownStyle.blockquote,
+      ...displayTheme.markdownStyle.blockquote,
+      borderWidth: blocks.blockquoteBorderWidth,
       fontFamily: bodyFontFamily,
-      fontSize: bodyFontSize - 1,
-      lineHeight: roundedLineHeight(bodyFontSize - 1, settings.lineHeight),
+      fontSize: blockquoteFontSize,
+      lineHeight: roundedLineHeight(blockquoteFontSize, bodyLineHeightScale),
     },
     code: {
-      ...theme.markdownStyle.code,
+      ...displayTheme.markdownStyle.code,
+      fontFamily: typography.codeFontFamily,
       fontSize: codeFontSize,
     },
     codeBlock: {
-      ...theme.markdownStyle.codeBlock,
+      ...displayTheme.markdownStyle.codeBlock,
+      borderRadius: blocks.codeBlockBorderRadius,
+      borderWidth: blocks.codeBlockBorderWidth,
+      fontFamily: typography.codeFontFamily,
       fontSize: codeFontSize,
       lineHeight: codeLineHeight,
+      padding: blocks.codeBlockPadding,
     },
     h1: {
-      ...theme.markdownStyle.h1,
+      ...displayTheme.markdownStyle.h1,
       fontFamily: bodyFontFamily,
-      fontSize: Math.round(bodyFontSize * 1.875),
-      lineHeight: roundedLineHeight(Math.round(bodyFontSize * 1.875), "compact"),
+      fontSize: Math.round(bodyFontSize * typography.headingScale[1]),
+      fontWeight: typography.headingWeight,
+      lineHeight: roundedLineHeight(Math.round(bodyFontSize * typography.headingScale[1]), typography.headingLineHeightScale),
     },
     h2: {
-      ...theme.markdownStyle.h2,
+      ...displayTheme.markdownStyle.h2,
       fontFamily: bodyFontFamily,
-      fontSize: Math.round(bodyFontSize * 1.5),
-      lineHeight: roundedLineHeight(Math.round(bodyFontSize * 1.5), "compact"),
+      fontSize: Math.round(bodyFontSize * typography.headingScale[2]),
+      fontWeight: typography.headingWeight,
+      lineHeight: roundedLineHeight(Math.round(bodyFontSize * typography.headingScale[2]), typography.headingLineHeightScale),
     },
     h3: {
-      ...theme.markdownStyle.h3,
+      ...displayTheme.markdownStyle.h3,
       fontFamily: bodyFontFamily,
-      fontSize: Math.round(bodyFontSize * 1.25),
-      lineHeight: roundedLineHeight(Math.round(bodyFontSize * 1.25), "compact"),
+      fontSize: Math.round(bodyFontSize * typography.headingScale[3]),
+      fontWeight: typography.headingWeight,
+      lineHeight: roundedLineHeight(Math.round(bodyFontSize * typography.headingScale[3]), typography.headingLineHeightScale),
     },
     h4: {
-      ...theme.markdownStyle.h4,
+      ...displayTheme.markdownStyle.h4,
       fontFamily: bodyFontFamily,
-      fontSize: Math.round(bodyFontSize * 1.125),
-      lineHeight: roundedLineHeight(Math.round(bodyFontSize * 1.125), "normal"),
+      fontSize: Math.round(bodyFontSize * typography.headingScale[4]),
+      fontWeight: typography.headingWeight,
+      lineHeight: roundedLineHeight(Math.round(bodyFontSize * typography.headingScale[4]), typography.headingLineHeightScale),
     },
     h5: {
-      ...theme.markdownStyle.h5,
+      ...displayTheme.markdownStyle.h5,
       fontFamily: bodyFontFamily,
-      fontSize: bodyFontSize,
+      fontSize: Math.round(bodyFontSize * typography.headingScale[5]),
+      fontWeight: typography.headingWeight,
       lineHeight: bodyLineHeight,
     },
     h6: {
-      ...theme.markdownStyle.h6,
+      ...displayTheme.markdownStyle.h6,
       fontFamily: bodyFontFamily,
-      fontSize: Math.max(12, bodyFontSize - 1),
-      lineHeight: roundedLineHeight(Math.max(12, bodyFontSize - 1), settings.lineHeight),
+      fontSize: Math.max(12, Math.round(bodyFontSize * typography.headingScale[6])),
+      fontWeight: typography.headingWeight,
+      lineHeight: roundedLineHeight(Math.max(12, Math.round(bodyFontSize * typography.headingScale[6])), bodyLineHeightScale),
     },
     list: {
-      ...theme.markdownStyle.list,
+      ...displayTheme.markdownStyle.list,
       fontFamily: bodyFontFamily,
       fontSize: bodyFontSize,
+      gapWidth: blocks.listGapWidth,
       lineHeight: bodyLineHeight,
     },
     paragraph: {
-      ...theme.markdownStyle.paragraph,
+      ...displayTheme.markdownStyle.paragraph,
       fontFamily: bodyFontFamily,
       fontSize: bodyFontSize,
       lineHeight: bodyLineHeight,
     },
     table: {
-      ...theme.markdownStyle.table,
+      ...displayTheme.markdownStyle.table,
+      borderRadius: blocks.tableBorderRadius,
+      borderWidth: blocks.tableBorderWidth,
+      cellPaddingHorizontal: blocks.tableCellPaddingHorizontal,
+      cellPaddingVertical: blocks.tableCellPaddingVertical,
       fontFamily: bodyFontFamily,
-      fontSize: Math.max(12, bodyFontSize - 2),
+      fontSize: tableFontSize,
     },
   };
 }
 
 export function getMarkdownLayoutForAppearance(
-  theme: LegendTheme,
+  layoutTheme: MarkdownLayoutTheme,
   settings: MarkdownAppearanceSettings,
 ): MarkdownDocumentLayout {
+  const contentWidthOverride = contentWidthOverrideBySetting[settings.contentWidth];
+
   return {
-    ...theme.markdownLayout,
-    blockSpacing: scaleBlockSpacing(theme.markdownLayout, settings.density),
+    ...layoutTheme.markdownLayout,
+    blockSpacing: scaleBlockSpacing(layoutTheme.markdownLayout, settings.density),
     content: {
-      horizontalPadding: horizontalPaddingByDensity[settings.density],
-      maxWidth: contentWidthBySetting[settings.contentWidth],
-      verticalPadding: verticalPaddingByDensity[settings.density],
+      horizontalPadding: scaled(layoutTheme.content.horizontalPadding, horizontalPaddingScaleByDensity[settings.density]),
+      maxWidth: contentWidthOverride ?? layoutTheme.content.maxWidth,
+      verticalPadding: scaled(layoutTheme.content.verticalPadding, verticalPaddingScaleByDensity[settings.density]),
     },
   };
 }

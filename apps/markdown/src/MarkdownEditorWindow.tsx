@@ -2,7 +2,7 @@ import {
   MarkdownDocument,
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
-import { getLegendTheme, getLegendThemeAppearance } from "@legend-desktop/theme";
+import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
@@ -30,8 +30,9 @@ import {
   applyMarkdownThemeSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
+  useMarkdownDisplayThemeSetting,
   useMarkdownFormattingToolbarModeSetting,
-  useMarkdownThemeSetting,
+  useMarkdownLayoutThemeSetting,
 } from "./markdownSettings";
 import {
   getMarkdownLayoutForAppearance,
@@ -46,23 +47,25 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   loadMarkdownUserThemesSync();
   const session = useMarkdownDocumentSession();
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
-  const themeSetting = useMarkdownThemeSetting();
-  const theme = getLegendTheme(themeSetting);
-  const nativeWindowAppearance = getLegendThemeAppearance(themeSetting);
-  const backgroundStyle = useMemo(() => ({ backgroundColor: theme.colors.background }), [theme.colors.background]);
+  const displayThemeSetting = useMarkdownDisplayThemeSetting();
+  const layoutThemeSetting = useMarkdownLayoutThemeSetting();
+  const displayTheme = getLegendDisplayTheme(displayThemeSetting);
+  const layoutTheme = getMarkdownLayoutTheme(layoutThemeSetting);
+  const nativeWindowAppearance = getLegendDisplayThemeAppearance(displayThemeSetting);
+  const backgroundStyle = useMemo(() => ({ backgroundColor: displayTheme.colors.background }), [displayTheme.colors.background]);
   const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
   const autosave = useMarkdownAutosaveSetting();
   const appearanceSettings = useMarkdownAppearanceSettings();
   const markdownStyle = useMemo(
-    () => getMarkdownStyleForAppearance(theme, appearanceSettings),
-    [appearanceSettings, theme],
+    () => getMarkdownStyleForAppearance(displayTheme, layoutTheme, appearanceSettings),
+    [appearanceSettings, displayTheme, layoutTheme],
   );
   const markdownLayout = useMemo(
-    () => getMarkdownLayoutForAppearance(theme, appearanceSettings),
-    [appearanceSettings, theme],
+    () => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings),
+    [appearanceSettings, layoutTheme],
   );
   const openSettingsWindow = useMarkdownSettingsWindow({
-    backgroundColor: theme.colors.windowBackground,
+    backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
   });
 
@@ -119,7 +122,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
 
   useMarkdownEditorWindowOptions({
     appearance: nativeWindowAppearance,
-    backgroundColor: theme.colors.windowBackground,
+    backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
     sessionState$: session.sessionState$,
   });
@@ -150,7 +153,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   return (
     <View style={[styles.root, backgroundStyle]}>
       {session.lastError ? (
-        <Text style={[styles.error, { color: theme.colors.danger }]}>{session.lastError}</Text>
+        <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{session.lastError}</Text>
       ) : null}
       {formattingToolbarMode === "top" ? (
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} />
@@ -173,7 +176,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
           savePolicy={{ autosave: !session.isUntitledDocument && autosave === "enabled" }}
           selectionToolbarEnabled={formattingToolbarMode === "selection"}
           style={[styles.document, backgroundStyle]}
-          theme={theme.markdownDocument}
+          theme={displayTheme.markdownDocument}
         />
       </View>
       {formattingToolbarMode === "bottom" ? (

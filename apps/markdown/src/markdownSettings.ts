@@ -1,4 +1,4 @@
-import { applyLegendThemeToUniwind } from "@legend-desktop/theme";
+import { applyLegendDisplayThemeToUniwind } from "@legend-desktop/theme";
 import { type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
 import { createObservableFile } from "@legend-desktop/storage";
 import { useValue } from "@legendapp/state/react";
@@ -14,7 +14,9 @@ import {
   type MarkdownToolbarLayoutId,
 } from "./markdownToolbarLayout";
 
-export type MarkdownThemeSetting = string;
+export type MarkdownDisplayThemeSetting = string;
+export type MarkdownLayoutThemeSetting = string;
+export type MarkdownThemeSetting = MarkdownDisplayThemeSetting;
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
 export type MarkdownAutosaveSetting = "enabled" | "disabled";
 export type MarkdownFormattingToolbarModeSetting = "selection" | "top" | "bottom" | "hidden";
@@ -44,15 +46,17 @@ type MarkdownSettingsFile = {
   autosave: MarkdownAutosaveSetting;
   contentWidth: MarkdownContentWidthSetting;
   density: MarkdownDocumentDensitySetting;
+  displayTheme: MarkdownDisplayThemeSetting;
   fontFamily: MarkdownFontFamilySetting;
   fontSize: MarkdownFontSizeSetting;
   formattingToolbarMode: MarkdownFormattingToolbarModeSetting;
   hotkeys: HotkeyState<MarkdownHotkeyId>;
   lastDocumentPath: string | null;
+  layoutTheme: MarkdownLayoutThemeSetting;
   lineHeight: MarkdownLineHeightSetting;
   selectionToolbarLayout: MarkdownToolbarLayout;
   startupBehavior: MarkdownStartupBehaviorSetting;
-  theme: MarkdownThemeSetting;
+  theme?: MarkdownDisplayThemeSetting;
   topToolbarLayout: MarkdownToolbarLayout;
 };
 
@@ -60,15 +64,16 @@ const initialMarkdownSettings: MarkdownSettingsFile = {
   autosave: "enabled",
   contentWidth: "standard",
   density: "comfortable",
+  displayTheme: "light",
   fontFamily: "system",
   fontSize: "default",
   formattingToolbarMode: "selection",
   hotkeys: { ...defaultMarkdownHotkeySettings },
   lastDocumentPath: null,
+  layoutTheme: "default",
   lineHeight: "normal",
   selectionToolbarLayout: getDefaultMarkdownToolbarLayout("selection"),
   startupBehavior: "newDocument",
-  theme: "light",
   topToolbarLayout: getDefaultMarkdownToolbarLayout("top"),
 };
 
@@ -77,7 +82,7 @@ const markdownSettings$ = createObservableFile<MarkdownSettingsFile>({
   initialValue: initialMarkdownSettings,
 });
 
-function isMarkdownThemeSetting(value: unknown): value is MarkdownThemeSetting {
+function isMarkdownThemeSetting(value: unknown): value is MarkdownDisplayThemeSetting {
   return typeof value === "string" && value.length > 0;
 }
 
@@ -113,9 +118,23 @@ function isMarkdownDocumentDensitySetting(value: unknown): value is MarkdownDocu
   return value === "compact" || value === "comfortable" || value === "spacious";
 }
 
+export function getMarkdownDisplayThemeSetting(): MarkdownDisplayThemeSetting {
+  const displayTheme = markdownSettings$.displayTheme.get();
+  if (isMarkdownThemeSetting(displayTheme)) {
+    return displayTheme;
+  }
+
+  const legacyTheme = markdownSettings$.theme.get();
+  return isMarkdownThemeSetting(legacyTheme) ? legacyTheme : initialMarkdownSettings.displayTheme;
+}
+
 export function getMarkdownThemeSetting(): MarkdownThemeSetting {
-  const theme = markdownSettings$.theme.get();
-  return isMarkdownThemeSetting(theme) ? theme : initialMarkdownSettings.theme;
+  return getMarkdownDisplayThemeSetting();
+}
+
+export function getMarkdownLayoutThemeSetting(): MarkdownLayoutThemeSetting {
+  const layoutTheme = markdownSettings$.layoutTheme.get();
+  return isMarkdownThemeSetting(layoutTheme) ? layoutTheme : initialMarkdownSettings.layoutTheme;
 }
 
 export function getMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
@@ -207,9 +226,23 @@ export function getLastMarkdownDocumentPath() {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+export function useMarkdownDisplayThemeSetting(): MarkdownDisplayThemeSetting {
+  const displayTheme = useValue(markdownSettings$.displayTheme);
+  const legacyTheme = useValue(markdownSettings$.theme);
+  if (isMarkdownThemeSetting(displayTheme)) {
+    return displayTheme;
+  }
+
+  return isMarkdownThemeSetting(legacyTheme) ? legacyTheme : initialMarkdownSettings.displayTheme;
+}
+
 export function useMarkdownThemeSetting(): MarkdownThemeSetting {
-  const theme = useValue(markdownSettings$.theme);
-  return isMarkdownThemeSetting(theme) ? theme : initialMarkdownSettings.theme;
+  return useMarkdownDisplayThemeSetting();
+}
+
+export function useMarkdownLayoutThemeSetting(): MarkdownLayoutThemeSetting {
+  const layoutTheme = useValue(markdownSettings$.layoutTheme);
+  return isMarkdownThemeSetting(layoutTheme) ? layoutTheme : initialMarkdownSettings.layoutTheme;
 }
 
 export function useMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
@@ -286,9 +319,17 @@ export function useMarkdownToolbarLayoutSetting(layoutId: MarkdownToolbarLayoutI
   );
 }
 
+export function setMarkdownDisplayThemeSetting(displayTheme: MarkdownDisplayThemeSetting) {
+  markdownSettings$.displayTheme.set(displayTheme);
+  applyLegendDisplayThemeToUniwind(displayTheme);
+}
+
 export function setMarkdownThemeSetting(theme: MarkdownThemeSetting) {
-  markdownSettings$.theme.set(theme);
-  applyLegendThemeToUniwind(theme);
+  setMarkdownDisplayThemeSetting(theme);
+}
+
+export function setMarkdownLayoutThemeSetting(layoutTheme: MarkdownLayoutThemeSetting) {
+  markdownSettings$.layoutTheme.set(layoutTheme);
 }
 
 export function setMarkdownStartupBehaviorSetting(startupBehavior: MarkdownStartupBehaviorSetting) {
@@ -376,5 +417,5 @@ export function clearLastMarkdownDocumentPath(path?: string) {
 }
 
 export function applyMarkdownThemeSetting() {
-  applyLegendThemeToUniwind(getMarkdownThemeSetting());
+  applyLegendDisplayThemeToUniwind(getMarkdownDisplayThemeSetting());
 }

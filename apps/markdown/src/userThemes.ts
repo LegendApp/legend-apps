@@ -1,23 +1,39 @@
 import {
-  loadUserThemeFilesSync,
+  loadUserDisplayThemeFilesSync,
+  loadUserMarkdownLayoutThemeFilesSync,
   type UserThemeLoadIssue,
-  type UserThemeLoadResult,
+  type UserDisplayThemeLoadResult,
+  type UserMarkdownLayoutThemeLoadResult,
 } from "@legend-desktop/theme";
 import { markdownStorage } from "./markdownStorage";
 
-export type { UserThemeLoadIssue, UserThemeLoadResult };
+export type { UserThemeLoadIssue, UserDisplayThemeLoadResult, UserMarkdownLayoutThemeLoadResult };
 
-let cachedUserThemeLoadResult: UserThemeLoadResult | null = null;
+export type MarkdownUserThemeLoadResult = {
+  displayThemes: UserDisplayThemeLoadResult;
+  layoutThemes: UserMarkdownLayoutThemeLoadResult;
+};
 
-export function getMarkdownUserThemesDirectory() {
-  return markdownStorage.directory("themes");
+let cachedUserThemeLoadResult: MarkdownUserThemeLoadResult | null = null;
+
+export function getMarkdownUserThemesDirectory(kind: "display" | "layout") {
+  return markdownStorage.directory(`themes/${kind}`);
 }
 
-export function loadMarkdownUserThemesSync({ force = false }: { force?: boolean } = {}): UserThemeLoadResult {
+export function loadMarkdownUserThemesSync({ force = false }: { force?: boolean } = {}): MarkdownUserThemeLoadResult {
   if (cachedUserThemeLoadResult && !force) {
     return cachedUserThemeLoadResult;
   }
 
-  cachedUserThemeLoadResult = loadUserThemeFilesSync({ storage: markdownStorage });
+  cachedUserThemeLoadResult = {
+    displayThemes: loadUserDisplayThemeFilesSync({
+      directory: "themes/display",
+      storage: markdownStorage,
+    }),
+    layoutThemes: loadUserMarkdownLayoutThemeFilesSync({
+      directory: "themes/layout",
+      storage: markdownStorage,
+    }),
+  };
   return cachedUserThemeLoadResult;
 }
