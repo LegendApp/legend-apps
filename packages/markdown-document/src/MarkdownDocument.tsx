@@ -181,6 +181,34 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
   return null;
 });
 
+type MarkdownBlockSelectionInputProps = {
+  inputRef: RefObject<TextInput | null>;
+  inputText$: Observable<string>;
+  onChangeText: (text: string) => void;
+  onKeyPress: (event: { nativeEvent: { key: string } }) => void;
+};
+
+const MarkdownBlockSelectionInput = memo(function MarkdownBlockSelectionInput({
+  inputRef,
+  inputText$,
+  onChangeText,
+  onKeyPress,
+}: MarkdownBlockSelectionInputProps) {
+  const inputText = useValue(inputText$);
+
+  return (
+    <TextInput
+      ref={inputRef}
+      autoCorrect={false}
+      multiline={false}
+      onChangeText={onChangeText}
+      onKeyPress={onKeyPress}
+      style={styles.blockSelectionInput}
+      value={inputText}
+    />
+  );
+});
+
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
   if (__DEV__) {
     console.info(`[MarkdownDocument] ${event}`, data);
@@ -296,7 +324,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [activeSelection, setActiveSelection] = useState(0);
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
     const blockSelectionRef = useRef<BlockSelectionState | null>(null);
-    const [blockSelectionInputText, setBlockSelectionInputText] = useState("");
+    const blockSelectionInputText$ = useObservable("");
     const [containerWindowY, setContainerWindowY] = useState(0);
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
@@ -1591,12 +1619,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const handleBlockSelectionInputChange = useCallback(
       (text: string) => {
-        setBlockSelectionInputText("");
+        blockSelectionInputText$.set("");
         if (blockSelection && text.length > 0) {
           replaceBlockSelection(text).catch(reportAsyncError);
         }
       },
-      [blockSelection, replaceBlockSelection, reportAsyncError],
+      [blockSelection, blockSelectionInputText$, replaceBlockSelection, reportAsyncError],
     );
 
     const hydrateRemainingBlocks = useCallback(
@@ -1689,7 +1717,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setActiveBlockId(null);
       setActiveSelection(0);
       setNextBlockSelection(null);
-      setBlockSelectionInputText("");
+      blockSelectionInputText$.set("");
       setDraftMarkdown("");
       setOverlayFrame(undefined);
       setTextSelectionAnchor(null);
@@ -2369,14 +2397,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           resolvedContentHorizontalPadding={resolvedContentHorizontalPadding}
           selectionAnchor$={selectionAnchor$}
         />
-        <TextInput
-          ref={blockSelectionInputRef}
-          autoCorrect={false}
-          multiline={false}
+        <MarkdownBlockSelectionInput
+          inputRef={blockSelectionInputRef}
+          inputText$={blockSelectionInputText$}
           onChangeText={handleBlockSelectionInputChange}
           onKeyPress={handleBlockSelectionKeyPress}
-          style={styles.blockSelectionInput}
-          value={blockSelectionInputText}
         />
         <LegendList
           ref={listRef}
