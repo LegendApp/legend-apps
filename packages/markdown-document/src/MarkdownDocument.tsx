@@ -118,7 +118,7 @@ const MarkdownSelectionToolbarFooter = memo(function MarkdownSelectionToolbarFoo
 type MarkdownBlockSelectionAnchorPublisherProps = {
   enabled: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
-  inactiveOverlayWidth: number;
+  inactiveOverlayWidth$: Observable<number>;
   onSelectionAnchorChangeRef: RefObject<((anchor: MarkdownSelectionAnchor | null) => void) | undefined>;
   resolvedContentHorizontalPadding: number;
   selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
@@ -127,7 +127,7 @@ type MarkdownBlockSelectionAnchorPublisherProps = {
 const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelectionAnchorPublisher({
   enabled,
   documentRenderState$,
-  inactiveOverlayWidth,
+  inactiveOverlayWidth$,
   onSelectionAnchorChangeRef,
   resolvedContentHorizontalPadding,
   selectionAnchor$,
@@ -135,6 +135,7 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
   const blockIds = useValue(documentRenderState$.blockIds);
   const blockSelection = useValue(documentRenderState$.blockSelection);
   const blockLayoutsById = useValue(documentRenderState$.blockLayoutsById);
+  const inactiveOverlayWidth = useValue(inactiveOverlayWidth$);
   const scrollOffsetY = useValue(documentRenderState$.scrollOffsetY);
   const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
     if (!blockSelection) {
@@ -332,7 +333,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
     const textSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
-    const [inactiveOverlayWidth, setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2);
+    const inactiveOverlayWidth$ = useObservable(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
     const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
@@ -514,6 +515,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const itemY = activeBlockLayout
                 ? activeBlockLayout.y
                 : nativeOverlayFrame?.top ?? measuredItemY;
+              const inactiveOverlayWidth = inactiveOverlayWidth$.peek();
               const itemWidth = activeBlockLayout
                 ? inactiveOverlayWidth
                 : nativeOverlayFrame?.width ?? inputWidth;
@@ -545,7 +547,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
         }).catch(reportAsyncError);
       });
-    }, [layoutMetrics$, publishTextSelectionAnchor, reportAsyncError, resolvedMarkdownStyle]);
+    }, [inactiveOverlayWidth$, layoutMetrics$, publishTextSelectionAnchor, reportAsyncError, resolvedMarkdownStyle]);
     const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
 
     const cancelHydration = useCallback(() => {
@@ -828,7 +830,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           : estimateMarkdownSelectionVerticalRange(
             block.markdown,
             selection,
-            inactiveOverlayWidth,
+            inactiveOverlayWidth$.peek(),
             block.type === "codeBlock" ? resolvedMarkdownStyle.codeBlock as TextStyle | undefined : resolvedMarkdownStyle.paragraph as TextStyle | undefined,
           );
         const targetTop = selectionRange ? blockTop + selectionRange.top : blockTop;
@@ -848,7 +850,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           listRef.current?.scrollToOffset({ animated: true, offset: nextScrollOffset }).catch(reportAsyncError);
         }
       }
-    }, [inactiveOverlayWidth, reportAsyncError, resolvedMarkdownStyle.codeBlock, resolvedMarkdownStyle.paragraph]);
+    }, [inactiveOverlayWidth$, reportAsyncError, resolvedMarkdownStyle.codeBlock, resolvedMarkdownStyle.paragraph]);
 
     const prepareBlockIndexForKeyboardFocus = useCallback(async (index: number, direction: "up" | "down") => {
       const list = listRef.current;
@@ -882,14 +884,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const constrainedContentWidth = Math.min(containerWidth, resolvedContentMaxWidth);
         const nextContentWidth = Math.max(1, constrainedContentWidth - resolvedContentHorizontalPadding * 2);
         layoutMetrics$.contentContainerOffsetX.set(Math.max(0, (containerWidth - constrainedContentWidth) / 2));
-        setInactiveOverlayWidth(nextContentWidth);
+        inactiveOverlayWidth$.set(nextContentWidth);
       }
       requestAnimationFrame(() => {
         containerRef.current?.measureInWindow((_x, y) => {
           layoutMetrics$.containerWindowY.set(y);
         });
       });
-    }, [layoutMetrics$, resolvedContentHorizontalPadding, resolvedContentMaxWidth]);
+    }, [inactiveOverlayWidth$, layoutMetrics$, resolvedContentHorizontalPadding, resolvedContentMaxWidth]);
 
     const handleSelectionDragOutside = useCallback(
       (blockId: string, event: SelectionDragOutsideEvent) => {
@@ -2403,7 +2405,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         <MarkdownBlockSelectionAnchorPublisher
           documentRenderState$={documentRenderState$}
           enabled={selectionToolbarAnchor === undefined && blockSelection !== null}
-          inactiveOverlayWidth={inactiveOverlayWidth}
+          inactiveOverlayWidth$={inactiveOverlayWidth$}
           onSelectionAnchorChangeRef={onSelectionAnchorChangeRef}
           resolvedContentHorizontalPadding={resolvedContentHorizontalPadding}
           selectionAnchor$={selectionAnchor$}
@@ -2450,7 +2452,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           <MarkdownOverlayEditorInput
             activeBlock={activeBlock}
             activeInputRef={activeInputRef}
-            inactiveOverlayWidth={inactiveOverlayWidth}
+            inactiveOverlayWidth$={inactiveOverlayWidth$}
             markdownStyle={resolvedMarkdownStyle}
             onBlurRef={handleEditorBlurRef}
             onChangeMarkdownRef={handleChangeMarkdownRef}
