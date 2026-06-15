@@ -80,11 +80,11 @@ export const DroppableZone = ({
         updateRectFromWindow();
     };
 
-    // useEffect(() => {
-    //     if (draggedItem) {
-    //         requestAnimationFrame(updateRectFromWindow);
-    //     }
-    // }, [draggedItem]);
+    useEffect(() => {
+        if (draggedItem) {
+            requestAnimationFrame(updateRectFromWindow);
+        }
+    }, [draggedItem]);
 
     // Determine if this zone is active (has a dragged item over it)
     const isActive = draggedItem !== null && activeDropZone === id;

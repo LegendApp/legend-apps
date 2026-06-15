@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { useDragDrop } from "./DragDropContext";
+import { resolveDragStartMetrics, type DragStartMetrics } from "./dragCoordinates";
 
 type DragDataResolver<T> = T | (() => T);
 
@@ -43,6 +44,7 @@ export const DraggableItem = <T,>({
     // State for tracking position and dimensions
     const [_layout, setLayout] = useState<LayoutRectangle | null>(null);
     const initialPositionRef = useRef({ pageX: 0, pageY: 0 });
+    const dragStartMetricsRef = useRef<DragStartMetrics | null>(null);
     const dragActivatedRef = useRef(false);
     const dragStartTimeRef = useRef(0);
     const childMeasurementsRef = useRef<LayoutRectangle | null>(null);
@@ -87,6 +89,13 @@ export const DraggableItem = <T,>({
         return typeof data === "function" ? (data as () => T)() : data;
     };
 
+    const eventCoordinates = (event: GestureResponderEvent) => ({
+        locationX: event.nativeEvent.locationX,
+        locationY: event.nativeEvent.locationY,
+        pageX: event.nativeEvent.pageX,
+        pageY: event.nativeEvent.pageY,
+    });
+
     const originalPanResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => !disabled,
@@ -105,16 +114,21 @@ export const DraggableItem = <T,>({
                 pan.setOffset({ x: 0, y: 0 });
                 pan.setValue({ x: 0, y: 0 });
                 globalPositionRef.current = { x: 0, y: 0 };
+                dragStartMetricsRef.current = null;
                 // Reset position ready state
                 setPositionReady(false);
                 dragActivatedRef.current = false;
                 dragStartTimeRef.current = Date.now();
 
-                // Save initial touch position
+                const coordinates = eventCoordinates(e);
                 initialPositionRef.current = {
-                    pageX: e.nativeEvent.pageX,
-                    pageY: e.nativeEvent.pageY,
+                    pageX: coordinates.pageX,
+                    pageY: coordinates.pageY,
                 };
+
+                viewRef.current?.measureInWindow((x, y, width, height) => {
+                    dragStartMetricsRef.current = resolveDragStartMetrics(coordinates, { x, y, width, height });
+                });
             },
 
             onPanResponderMove: (_e: GestureResponderEvent, gestureState) => {
@@ -138,18 +152,32 @@ export const DraggableItem = <T,>({
                         sourceZoneId: zoneId,
                     });
 
-                    // Find absolute position of the item for portal positioning
-                    if (viewRef.current && childMeasurementsRef.current) {
-                        // More reliable positioning using element bounds and touch position
-                        viewRef.current.measure((_x, _y, _width, _height, pageX, pageY) => {
+                    if (viewRef.current) {
+                        const coordinates = eventCoordinates(_e);
+                        viewRef.current.measureInWindow((x, y, width, height) => {
+                            const metrics = resolveDragStartMetrics(coordinates, { x, y, width, height });
+                            dragStartMetricsRef.current = metrics;
+                            initialPositionRef.current = {
+                                pageX: metrics.pointerWindowX,
+                                pageY: metrics.pointerWindowY,
+                            };
                             setPortalPosition({
-                                left: pageX,
-                                top: pageY,
+                                left: metrics.itemWindowX,
+                                top: metrics.itemWindowY,
                             });
-                            // Mark position as ready
                             setPositionReady(true);
                         });
                     } else {
+                        const metrics = resolveDragStartMetrics(_e.nativeEvent);
+                        dragStartMetricsRef.current = metrics;
+                        initialPositionRef.current = {
+                            pageX: metrics.pointerWindowX,
+                            pageY: metrics.pointerWindowY,
+                        };
+                        setPortalPosition({
+                            left: metrics.itemWindowX,
+                            top: metrics.itemWindowY,
+                        });
                         setPositionReady(true);
                     }
 
@@ -157,6 +185,10 @@ export const DraggableItem = <T,>({
                 }
 
                 if (!dragActivatedRef.current) {
+                    return;
+                }
+
+                if (!dragStartMetricsRef.current) {
                     return;
                 }
 
@@ -173,8 +205,9 @@ export const DraggableItem = <T,>({
                 };
 
                 // Calculate current absolute position of the dragged item
-                const currentX = initialPositionRef.current.pageX + gestureState.dx;
-                const currentY = initialPositionRef.current.pageY + gestureState.dy;
+                const metrics = dragStartMetricsRef.current;
+                const currentX = (metrics?.pointerWindowX ?? initialPositionRef.current.pageX) + gestureState.dx;
+                const currentY = (metrics?.pointerWindowY ?? initialPositionRef.current.pageY) + gestureState.dy;
 
                 // Check if the item is over any drop zones
                 checkDropZones(currentX, currentY);
