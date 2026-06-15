@@ -325,10 +325,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
     const blockSelectionRef = useRef<BlockSelectionState | null>(null);
     const blockSelectionInputText$ = useObservable("");
-    const [containerWindowY, setContainerWindowY] = useState(0);
+    const layoutMetrics$ = useObservable({
+      containerWindowY: 0,
+      contentContainerOffsetX: 0,
+    });
     const [draftMarkdown, setDraftMarkdown] = useState("");
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
-    const [contentContainerOffsetX, setContentContainerOffsetX] = useState(0);
     const textSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const [inactiveOverlayWidth, setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
@@ -505,6 +507,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const activeBlockId = activeBlockIdRef.current ?? undefined;
               const activeBlockLayout = activeBlockId ? blockContentLayoutsRef.current.get(activeBlockId) : undefined;
               const nativeOverlayFrame = usesNativeEditorOverlay ? overlayFrameRef.current : undefined;
+              const contentContainerOffsetX = layoutMetrics$.contentContainerOffsetX.peek();
               const itemX = activeBlockLayout
                 ? contentContainerOffsetX + resolvedContentHorizontalPadding
                 : nativeOverlayFrame?.left ?? measuredItemX;
@@ -542,7 +545,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
         }).catch(reportAsyncError);
       });
-    }, [contentContainerOffsetX, publishTextSelectionAnchor, reportAsyncError, resolvedMarkdownStyle]);
+    }, [layoutMetrics$, publishTextSelectionAnchor, reportAsyncError, resolvedMarkdownStyle]);
     const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
 
     const cancelHydration = useCallback(() => {
@@ -789,15 +792,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockIdAtWindowY = useCallback((y: number, direction: "down" | "up") => {
       return findBlockIdAtWindowY({
         blockIds,
-        containerWindowY,
+        containerWindowY: layoutMetrics$.containerWindowY.peek(),
         direction,
         layoutsByBlockId: blockContentLayoutsRef.current,
         scrollOffsetY: scrollOffsetYRef.current,
         windowY: y,
       });
-    }, [blockIds, containerWindowY]);
+    }, [blockIds, layoutMetrics$]);
 
     const handleBlockWindowLayout = useCallback((blockId: string, windowLayout: BlockLayout) => {
+      const containerWindowY = layoutMetrics$.containerWindowY.peek();
       const layout = {
         height: windowLayout.height,
         y: windowLayout.y - containerWindowY + scrollOffsetYRef.current,
@@ -808,7 +812,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
       blockContentLayoutsRef.current.set(blockId, layout);
       documentRenderState$.blockLayoutsById.set(new Map(blockContentLayoutsRef.current));
-    }, [containerWindowY, documentRenderState$]);
+    }, [documentRenderState$, layoutMetrics$]);
 
     const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot, selection?: number) => {
       const blockLayout = blockContentLayoutsRef.current.get(block.id);
@@ -877,15 +881,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         scrollViewportHeightRef.current = event.nativeEvent.layout.height;
         const constrainedContentWidth = Math.min(containerWidth, resolvedContentMaxWidth);
         const nextContentWidth = Math.max(1, constrainedContentWidth - resolvedContentHorizontalPadding * 2);
-        setContentContainerOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2));
+        layoutMetrics$.contentContainerOffsetX.set(Math.max(0, (containerWidth - constrainedContentWidth) / 2));
         setInactiveOverlayWidth(nextContentWidth);
       }
       requestAnimationFrame(() => {
         containerRef.current?.measureInWindow((_x, y) => {
-          setContainerWindowY(y);
+          layoutMetrics$.containerWindowY.set(y);
         });
       });
-    }, [resolvedContentHorizontalPadding, resolvedContentMaxWidth]);
+    }, [layoutMetrics$, resolvedContentHorizontalPadding, resolvedContentMaxWidth]);
 
     const handleSelectionDragOutside = useCallback(
       (blockId: string, event: SelectionDragOutsideEvent) => {
