@@ -1,4 +1,4 @@
-import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { MarkdownEditorHost } from "@legend-desktop/markdown-block-editor";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
@@ -131,6 +131,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const loadVersionRef = useRef(0);
     const hydrateFrameRef = useRef<number | undefined>(undefined);
     const containerRef = useRef<View>(null);
+    const listRef = useRef<LegendListRef | null>(null);
     const activeInputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
     const editTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -160,6 +161,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     } | undefined>(undefined);
     const selectionAnchorRequestRef = useRef(0);
     const scrollOffsetYRef = useRef(0);
+    const scrollViewportHeightRef = useRef(0);
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
     const blockStateRef = useRef(blockState);
@@ -627,9 +629,36 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setLayoutVersion((version) => version + 1);
     }, [containerWindowY]);
 
+    const scrollBlockIntoView = useCallback((blockId: string) => {
+      const blockLayout = blockContentLayoutsRef.current.get(blockId);
+      const viewportHeight = scrollViewportHeightRef.current;
+      const currentScrollOffset = scrollOffsetYRef.current;
+
+      if (blockLayout && viewportHeight > 0) {
+        const scrollMargin = 12;
+        const blockTop = blockLayout.y;
+        const blockBottom = blockLayout.y + blockLayout.height;
+        const visibleTop = currentScrollOffset;
+        const visibleBottom = currentScrollOffset + viewportHeight;
+        let nextScrollOffset: number | undefined;
+
+        if (blockTop < visibleTop + scrollMargin) {
+          nextScrollOffset = Math.max(0, blockTop - scrollMargin);
+        } else if (blockBottom > visibleBottom - scrollMargin) {
+          nextScrollOffset = Math.max(0, blockBottom - viewportHeight + scrollMargin);
+        }
+
+        if (nextScrollOffset !== undefined && nextScrollOffset !== currentScrollOffset) {
+          scrollOffsetYRef.current = nextScrollOffset;
+          listRef.current?.scrollToOffset({ animated: true, offset: nextScrollOffset }).catch(reportAsyncError);
+        }
+      }
+    }, [reportAsyncError]);
+
     const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
       if (event) {
         const containerWidth = event.nativeEvent.layout.width;
+        scrollViewportHeightRef.current = event.nativeEvent.layout.height;
         const constrainedContentWidth = Math.min(containerWidth, resolvedContentMaxWidth);
         const nextContentWidth = Math.max(1, constrainedContentWidth - resolvedContentHorizontalPadding * 2);
         setContentContainerOffsetX(Math.max(0, (containerWidth - constrainedContentWidth) / 2));
@@ -1206,13 +1235,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 targetBlock,
                 Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
               );
+              scrollBlockIntoView(targetBlock.id);
             }
           }
         }
 
         runFocus().catch(reportAsyncError);
       },
-      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
     );
 
     const focusBoundaryBlock = useCallback(
@@ -1232,12 +1262,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               targetBlock,
               Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
             );
+            scrollBlockIntoView(targetBlock.id);
           }
         }
 
         runFocus().catch(reportAsyncError);
       },
-      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
+      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
     );
 
     const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
@@ -2073,6 +2104,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [renderSelectionToolbar, selectionToolbarAnchor]);
     const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
+      scrollViewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
     }, []);
     const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
     const handleNativeBeginEditing = useCallback(
@@ -2129,6 +2161,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           value={blockSelectionInputText}
         />
         <LegendList
+          ref={listRef}
           alwaysRender={alwaysRenderActiveBlock}
           contentContainerStyle={contentStyle}
           data={blockIds}
