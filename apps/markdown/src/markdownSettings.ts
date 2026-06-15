@@ -17,7 +17,7 @@ import {
 export type MarkdownThemeSetting = string;
 export type MarkdownStartupBehaviorSetting = "newDocument" | "lastDocument";
 export type MarkdownAutosaveSetting = "enabled" | "disabled";
-export type MarkdownFormattingToolbarModeSetting = "selection" | "top" | "hidden";
+export type MarkdownFormattingToolbarModeSetting = "selection" | "top" | "bottom" | "hidden";
 export type MarkdownFontFamilySetting = "system" | "serif" | "mono";
 export type MarkdownFontSizeSetting = "small" | "default" | "large" | "xlarge";
 export type MarkdownLineHeightSetting = "compact" | "normal" | "relaxed";
@@ -90,7 +90,7 @@ function isMarkdownAutosaveSetting(value: unknown): value is MarkdownAutosaveSet
 }
 
 function isMarkdownFormattingToolbarModeSetting(value: unknown): value is MarkdownFormattingToolbarModeSetting {
-  return value === "selection" || value === "top" || value === "hidden";
+  return value === "selection" || value === "top" || value === "bottom" || value === "hidden";
 }
 
 function isMarkdownFontFamilySetting(value: unknown): value is MarkdownFontFamilySetting {

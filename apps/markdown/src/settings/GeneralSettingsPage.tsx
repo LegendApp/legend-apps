@@ -68,6 +68,12 @@ export function GeneralSettingsPage() {
             value="top"
           />
           <RadioOption<MarkdownFormattingToolbarModeSetting>
+            label="Bottom Toolbar"
+            onSelect={setMarkdownFormattingToolbarModeSetting}
+            selected={formattingToolbarMode === "bottom"}
+            value="bottom"
+          />
+          <RadioOption<MarkdownFormattingToolbarModeSetting>
             label="Hidden"
             onSelect={setMarkdownFormattingToolbarModeSetting}
             selected={formattingToolbarMode === "hidden"}
@@ -75,9 +81,9 @@ export function GeneralSettingsPage() {
           />
         </View>
         <ToolbarLayoutEditor
-          description="Choose the controls and order used by the top toolbar."
+          description="Choose the controls and order used by the top and bottom toolbars."
           layoutId="top"
-          title="Top Toolbar"
+          title="Top and Bottom Toolbars"
         />
         <ToolbarLayoutEditor
           description="Choose the controls and order used by the floating toolbar above selected text."

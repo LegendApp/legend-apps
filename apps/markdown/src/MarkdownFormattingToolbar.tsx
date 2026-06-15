@@ -9,15 +9,19 @@ import {
 } from "./markdownSettings";
 import { markdownToolbarItemMap } from "./markdownToolbarItems";
 
+type MarkdownFormattingToolbarPlacement = "top" | "bottom";
+
 export function MarkdownFormattingToolbar({
   commandsRef,
   floating,
   layoutId = floating ? "selection" : "top",
+  placement = "top",
   style,
 }: {
   commandsRef: RefObject<MarkdownDocumentCommands | null>;
   floating?: boolean;
   layoutId?: MarkdownToolbarLayoutId;
+  placement?: MarkdownFormattingToolbarPlacement;
   style?: StyleProp<ViewStyle>;
 }) {
   const toolbarStyle = useResolveClassNames("border-border bg-surface");
@@ -59,7 +63,7 @@ export function MarkdownFormattingToolbar({
       className="border"
       style={[
         styles.toolbar,
-        floating ? styles.floatingToolbar : styles.topToolbar,
+        floating ? styles.floatingToolbar : placement === "bottom" ? styles.bottomToolbar : styles.topToolbar,
         toolbarStyle,
         style,
       ]}
@@ -68,7 +72,7 @@ export function MarkdownFormattingToolbar({
         <View style={styles.toolbarContent}>{toolbarButtons}</View>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.toolbarContent}
+          contentContainerStyle={[styles.toolbarContent, styles.dockedToolbarContent]}
           horizontal
           showsHorizontalScrollIndicator={false}
         >
@@ -119,6 +123,16 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 8,
     paddingVertical: 5,
+  },
+  dockedToolbarContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+  bottomToolbar: {
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderRadius: 0,
+    borderRightWidth: 0,
   },
   topToolbar: {
     borderLeftWidth: 0,

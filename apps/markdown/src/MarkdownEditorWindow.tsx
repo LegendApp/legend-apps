@@ -188,6 +188,13 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
           theme={theme.markdownDocument}
         />
       </View>
+      {formattingToolbarMode === "bottom" ? (
+        <MarkdownFormattingToolbar
+          commandsRef={session.documentCommandsRef}
+          placement="bottom"
+          style={styles.bottomToolbar}
+        />
+      ) : null}
     </View>
   );
 }
@@ -201,6 +208,13 @@ const styles = StyleSheet.create({
   documentFrame: {
     flex: 1,
   },
+  bottomToolbar: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    zIndex: 1,
+  },
   error: {
     fontSize: 13,
     paddingHorizontal: 24,
@@ -209,5 +223,6 @@ const styles = StyleSheet.create({
   },
   root: {
     flex: 1,
+    position: "relative",
   },
 });
