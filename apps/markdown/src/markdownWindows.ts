@@ -2,6 +2,7 @@ import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import {
   closeWindow,
+  setWindowOptions,
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
@@ -109,8 +110,7 @@ export function setMarkdownEditorWindowOptions({
   isUntitledDocument: boolean;
 }) {
   const title = isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename);
-  return MarkdownWindowsNavigator.open(editorWindowModuleName as MarkdownWindow, {
-    interceptClose: true,
+  return setWindowOptions(editorWindowIdentifier, {
     title: isDirty ? `• ${title}` : title,
     windowStyle: createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame: false }),
   });
