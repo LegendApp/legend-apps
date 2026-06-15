@@ -71,6 +71,11 @@ export type SelectionDragOutsideEvent = {
   windowY?: number;
 };
 
+export type VerticalNavigationOutsideEvent = {
+  direction: string;
+  preferredX: number;
+};
+
 export type NativeSelectionDragOutsideEvent = {
   nativeEvent?: SelectionDragOutsideEvent;
 } & SelectionDragOutsideEvent;
@@ -90,3 +95,4 @@ export type OverlayFrame = {
 export type ChangeMarkdownHandler = (block: MarkdownBlockSnapshot, markdown: string) => void;
 export type ChangeSelectionHandler = (selection: { start: number; end: number }) => void;
 export type SelectionDragOutsideHandler = (blockId: string, event: SelectionDragOutsideEvent) => void;
+export type VerticalNavigationOutsideHandler = (blockId: string, event: VerticalNavigationOutsideEvent) => void;

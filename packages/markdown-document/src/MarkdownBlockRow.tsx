@@ -15,6 +15,7 @@ import type {
   ChangeMarkdownHandler,
   OverlayFrame,
   SelectionDragOutsideHandler,
+  VerticalNavigationOutsideHandler,
 } from "./internalTypes";
 import {
   blockRowSpacingStyle,
@@ -39,6 +40,7 @@ export const MarkdownEditorInput = memo(
     onChangeMarkdownRef,
     onChangeSelectionRef,
     onSelectionDragOutsideRef,
+    onVerticalNavigationOutsideRef,
     rowWidth,
   }: {
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
@@ -50,6 +52,7 @@ export const MarkdownEditorInput = memo(
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
+    onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
     rowWidth: number;
   }) {
     useEffect(() => {
@@ -72,6 +75,7 @@ export const MarkdownEditorInput = memo(
         onChangeMarkdown={(markdown) => onChangeMarkdownRef.current(block, markdown)}
         onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
         onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
+        onVerticalNavigationOutside={(event) => onVerticalNavigationOutsideRef.current(block.id, event)}
         scrollEnabled={false}
         style={StyleSheet.flatten([
           editableTextStyleForBlock(block, markdownStyle),
@@ -90,6 +94,7 @@ export const MarkdownEditorInput = memo(
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
+    previousProps.onVerticalNavigationOutsideRef === nextProps.onVerticalNavigationOutsideRef &&
     previousProps.rowWidth === nextProps.rowWidth,
 );
 
@@ -103,6 +108,7 @@ export const MarkdownOverlayEditorInput = memo(
     onChangeSelectionRef,
     inactiveOverlayWidth,
     onSelectionDragOutsideRef,
+    onVerticalNavigationOutsideRef,
     overlayFrame,
     sourceBlockIdRef,
   }: {
@@ -114,6 +120,7 @@ export const MarkdownOverlayEditorInput = memo(
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
+    onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
     overlayFrame?: OverlayFrame;
     sourceBlockIdRef: RefObject<string | null>;
   }) {
@@ -139,6 +146,12 @@ export const MarkdownOverlayEditorInput = memo(
             onSelectionDragOutsideRef.current(blockId, normalizeSelectionDragOutsideEvent(event));
           }
         }}
+        onVerticalNavigationOutside={(event) => {
+          const blockId = sourceBlockIdRef.current ?? activeBlockRef.current?.id;
+          if (blockId) {
+            onVerticalNavigationOutsideRef.current(blockId, event);
+          }
+        }}
         scrollEnabled={false}
         style={StyleSheet.flatten([
           styles.editorInput,
@@ -158,6 +171,7 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
+    previousProps.onVerticalNavigationOutsideRef === nextProps.onVerticalNavigationOutsideRef &&
     previousProps.overlayFrame?.height === nextProps.overlayFrame?.height &&
     previousProps.overlayFrame?.left === nextProps.overlayFrame?.left &&
     previousProps.overlayFrame?.top === nextProps.overlayFrame?.top &&
@@ -180,6 +194,7 @@ export function MarkdownBlockRow({
   onChangeSelectionRef,
   onBlockWindowLayout,
   onSelectionDragOutsideRef,
+  onVerticalNavigationOutsideRef,
   block,
   markdownLayout,
   markdownStyle,
@@ -204,6 +219,7 @@ export function MarkdownBlockRow({
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
+  onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
   previousBlock?: MarkdownBlockSnapshot;
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionOverlayStyle: StyleProp<ViewStyle>;
@@ -249,6 +265,7 @@ export function MarkdownBlockRow({
           onChangeMarkdownRef={onChangeMarkdownRef}
           onChangeSelectionRef={onChangeSelectionRef}
           onSelectionDragOutsideRef={onSelectionDragOutsideRef}
+          onVerticalNavigationOutsideRef={onVerticalNavigationOutsideRef}
           rowWidth={rowWidth}
         />
         {commentBubble}

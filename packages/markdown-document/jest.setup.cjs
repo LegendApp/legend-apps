@@ -117,6 +117,7 @@ jest.mock("react-native-enriched-markdown", () => {
         getCaretRect: jest.fn(async () => ({ height: 18, width: 1, x: 0, y: 0 })),
         measureInWindow: jest.fn((callback) => callback(0, 0, 700, 18)),
         setSelection: jest.fn(),
+        setSelectionForVerticalNavigation: jest.fn(),
         setValue: jest.fn(),
       }));
 

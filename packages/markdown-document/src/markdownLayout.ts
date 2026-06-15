@@ -147,20 +147,6 @@ export function estimateMarkdownSelection(markdown: string, event: GestureRespon
   return markdown.length;
 }
 
-export function isMarkdownSelectionOnFirstLine(markdown: string, selection: { start: number; end: number }) {
-  const selectionStart = Math.min(selection.start, selection.end);
-  const selectionEnd = Math.max(selection.start, selection.end);
-  const firstLineBreak = /\r\n|\r|\n/.exec(markdown);
-  return selectionStart === selectionEnd && (!firstLineBreak || selectionStart <= firstLineBreak.index);
-}
-
-export function isMarkdownSelectionOnLastLine(markdown: string, selection: { start: number; end: number }) {
-  const selectionStart = Math.min(selection.start, selection.end);
-  const selectionEnd = Math.max(selection.start, selection.end);
-  const lastLineBreakIndex = Math.max(markdown.lastIndexOf("\n"), markdown.lastIndexOf("\r"));
-  return selectionStart === selectionEnd && (lastLineBreakIndex < 0 || selectionStart > lastLineBreakIndex);
-}
-
 function numberFromStyleValue(value: unknown) {
   return typeof value === "number" ? value : 0;
 }

@@ -1,7 +1,5 @@
 import {
   estimateMarkdownSelectionVerticalRange,
-  isMarkdownSelectionOnFirstLine,
-  isMarkdownSelectionOnLastLine,
 } from "../markdownLayout";
 
 describe("estimateMarkdownSelectionVerticalRange", () => {
@@ -29,25 +27,5 @@ describe("estimateMarkdownSelectionVerticalRange", () => {
 
     expect(range.top).toBe(40);
     expect(range.bottom).toBe(60);
-  });
-});
-
-describe("markdown selection line boundaries", () => {
-  it("detects whether a collapsed selection is on the first line", () => {
-    const markdown = "first\nsecond\nthird";
-
-    expect(isMarkdownSelectionOnFirstLine(markdown, { start: 2, end: 2 })).toBe(true);
-    expect(isMarkdownSelectionOnFirstLine(markdown, { start: "first".length, end: "first".length })).toBe(true);
-    expect(isMarkdownSelectionOnFirstLine(markdown, { start: "first\ns".length, end: "first\ns".length })).toBe(false);
-    expect(isMarkdownSelectionOnFirstLine(markdown, { start: 0, end: 5 })).toBe(false);
-  });
-
-  it("detects whether a collapsed selection is on the last line", () => {
-    const markdown = "first\nsecond\nthird";
-
-    expect(isMarkdownSelectionOnLastLine(markdown, { start: "first\nsecond\nth".length, end: "first\nsecond\nth".length })).toBe(true);
-    expect(isMarkdownSelectionOnLastLine(markdown, { start: "first".length, end: "first".length })).toBe(false);
-    expect(isMarkdownSelectionOnLastLine(markdown, { start: "first\nsecond".length, end: "first\nsecond".length })).toBe(false);
-    expect(isMarkdownSelectionOnLastLine(markdown, { start: markdown.length - 2, end: markdown.length })).toBe(false);
   });
 });

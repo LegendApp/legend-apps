@@ -31,11 +31,10 @@ import type {
   OverlayFrame,
   SelectionDragOutsideEvent,
   UpdateBlockHistoryEntry,
+  VerticalNavigationOutsideEvent,
 } from "./internalTypes";
 import {
   estimateMarkdownSelectionVerticalRange,
-  isMarkdownSelectionOnFirstLine,
-  isMarkdownSelectionOnLastLine,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -69,6 +68,17 @@ const typingHistoryGroupTimeoutMs = 1000;
 const markdownLineBreakPattern = /\r\n|\r|\n/g;
 const markdownListLinePattern = /^\s*(?:[-*+]|\d+[.)])(?:\s|$)/;
 const markdownFenceStartPattern = /^\s*(?:```|~~~)/;
+
+type FocusAdjacentBlockRequest = {
+  direction: "up" | "down";
+  preferredX?: number;
+};
+
+type PendingVerticalNavigationSelection = {
+  blockId: string;
+  direction: "up" | "down";
+  preferredX: number;
+};
 
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
   if (__DEV__) {
@@ -150,8 +160,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
-    const focusAdjacentBlockQueueRef = useRef<Array<"up" | "down">>([]);
+    const focusAdjacentBlockQueueRef = useRef<FocusAdjacentBlockRequest[]>([]);
     const focusAdjacentBlockInFlightRef = useRef(false);
+    const pendingVerticalNavigationSelectionRef = useRef<PendingVerticalNavigationSelection | null>(null);
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const draftMarkdownRef = useRef("");
@@ -583,6 +594,23 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       },
       [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, setActiveBlock, setNextBlockSelection],
     );
+
+    useEffect(() => {
+      const pending = pendingVerticalNavigationSelectionRef.current;
+      if (pending && pending.blockId === activeBlockId) {
+        const frame = requestAnimationFrame(() => {
+          const latestPending = pendingVerticalNavigationSelectionRef.current;
+          if (latestPending && latestPending.blockId === activeBlockIdRef.current) {
+            activeInputRef.current?.setSelectionForVerticalNavigation(latestPending.direction, latestPending.preferredX);
+            pendingVerticalNavigationSelectionRef.current = null;
+          }
+        });
+
+        return () => cancelAnimationFrame(frame);
+      }
+
+      return undefined;
+    }, [activeBlockId, draftMarkdown, overlayFrame]);
 
     const beginBlockSelection = useCallback(
       (anchorBlockId: string, focusBlockId: string) => {
@@ -1262,29 +1290,40 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const focusAdjacentBlock = useCallback(
-      (direction: "up" | "down") => {
-        focusAdjacentBlockQueueRef.current.push(direction);
+      (direction: "up" | "down", options?: { preferredX?: number }) => {
+        focusAdjacentBlockQueueRef.current.push({ direction, preferredX: options?.preferredX });
         if (!focusAdjacentBlockInFlightRef.current) {
           focusAdjacentBlockInFlightRef.current = true;
 
           async function runQueuedFocus() {
             while (focusAdjacentBlockQueueRef.current.length > 0) {
-              const nextDirection = focusAdjacentBlockQueueRef.current.shift();
-              if (nextDirection) {
+              const request = focusAdjacentBlockQueueRef.current.shift();
+              if (request) {
                 await commitActiveBlock({ updateReactState: true });
                 const activeBlockIdValue = activeBlockIdRef.current;
                 if (activeBlockIdValue) {
                   const currentBlockState = blockStateRef.current;
                   const activeBlockIndex = currentBlockState.blockIds.indexOf(activeBlockIdValue);
-                  const targetBlockIndex = nextDirection === "up" ? activeBlockIndex - 1 : activeBlockIndex + 1;
+                  const targetBlockIndex = request.direction === "up" ? activeBlockIndex - 1 : activeBlockIndex + 1;
                   const targetBlockId = currentBlockState.blockIds[targetBlockIndex];
                   const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
                   if (targetBlock) {
-                    await prepareBlockIndexForKeyboardFocus(targetBlockIndex, nextDirection);
-                    const targetSelection = Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length);
+                    await prepareBlockIndexForKeyboardFocus(targetBlockIndex, request.direction);
+                    const targetSelection = request.preferredX === undefined
+                      ? Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length)
+                      : request.direction === "up"
+                        ? targetBlock.markdown.length
+                        : 0;
                     blockSelectionGestureRef.current = null;
                     setNextBlockSelection(null);
                     clearTextSelectionAnchor();
+                    if (request.preferredX !== undefined) {
+                      pendingVerticalNavigationSelectionRef.current = {
+                        blockId: targetBlock.id,
+                        direction: request.direction,
+                        preferredX: request.preferredX,
+                      };
+                    }
                     setActiveBlock(targetBlock, targetSelection);
                     scrollBlockIntoView(targetBlock, targetSelection);
                   }
@@ -1311,6 +1350,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       ],
     );
 
+    const handleVerticalNavigationOutside = useCallback(
+      (_blockId: string, event: VerticalNavigationOutsideEvent) => {
+        if ((event.direction === "up" || event.direction === "down") && Number.isFinite(event.preferredX)) {
+          focusAdjacentBlock(event.direction, { preferredX: event.preferredX });
+        }
+      },
+      [focusAdjacentBlock],
+    );
+    const handleVerticalNavigationOutsideRef = useLatestRef(handleVerticalNavigationOutside);
+
     const focusBoundaryBlock = useCallback(
       (direction: "up" | "down") => {
         async function runFocus() {
@@ -1333,25 +1382,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         runFocus().catch(reportAsyncError);
       },
       [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
-    );
-
-    const focusAdjacentBlockFromEditor = useCallback(
-      (direction: "up" | "down") => {
-        const activeBlockIdValue = activeBlockIdRef.current;
-        const activeMarkdown = draftMarkdownRef.current;
-        const activeSelection = activeInputSelectionRef.current;
-        const shouldNavigate = direction === "up"
-          ? isMarkdownSelectionOnFirstLine(activeMarkdown, activeSelection)
-          : isMarkdownSelectionOnLastLine(activeMarkdown, activeSelection);
-
-        if (activeBlockIdValue && shouldNavigate) {
-          focusAdjacentBlock(direction);
-          return true;
-        }
-
-        return false;
-      },
-      [focusAdjacentBlock],
     );
 
     const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
@@ -1969,14 +1999,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         focusNextBlock() {
           focusAdjacentBlock("down");
         },
-        focusNextBlockFromEditor() {
-          return focusAdjacentBlockFromEditor("down");
-        },
         focusPreviousBlock() {
           focusAdjacentBlock("up");
-        },
-        focusPreviousBlockFromEditor() {
-          return focusAdjacentBlockFromEditor("up");
         },
         redo,
         save,
@@ -2030,7 +2054,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         commitAndBlurActiveBlock,
         extendBlockSelection,
         focusAdjacentBlock,
-        focusAdjacentBlockFromEditor,
         focusBoundaryBlock,
         formatCurrentBlockRange,
         moveActiveBlock,
@@ -2160,6 +2183,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onChangeMarkdownRef={handleChangeMarkdownRef}
           onChangeSelectionRef={handleChangeSelectionRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
+          onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
           previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
           renderCommentBubble={renderCommentBubble}
           selectionOverlayStyle={blockSelectionOverlayStyle}
@@ -2178,6 +2202,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         handleChangeMarkdownRef,
         handleChangeSelectionRef,
         handleSelectionDragOutsideRef,
+        handleVerticalNavigationOutsideRef,
         renderCommentBubble,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
@@ -2292,6 +2317,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             onChangeMarkdownRef={handleChangeMarkdownRef}
             onChangeSelectionRef={handleChangeSelectionRef}
             onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
+            onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
             overlayFrame={overlayFrame}
             sourceBlockIdRef={nativeEditingBlockIdRef}
           />
