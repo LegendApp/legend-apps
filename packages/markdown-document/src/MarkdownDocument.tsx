@@ -336,7 +336,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const textSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const inactiveOverlayWidth$ = useObservable(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
-    const [saveState, setSaveState] = useState<MarkdownSaveState>("idle");
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
     const onCommandStateChangeRef = useLatestRef(onCommandStateChange);
     const onErrorRef = useLatestRef(onError);
@@ -429,7 +428,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const setNextSaveState = useCallback(
       (nextSaveState: MarkdownSaveState) => {
-        setSaveState(nextSaveState);
         onSaveStateChangeRef.current?.(nextSaveState);
       },
       [onSaveStateChangeRef],
