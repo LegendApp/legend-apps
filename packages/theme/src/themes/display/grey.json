@@ -21,5 +21,8 @@
     "tableHeader": "#303030",
     "tableRowAlt": "#1e1e1e",
     "windowBackground": "#191919"
+  },
+  "fonts": {
+    "codeFontFamily": "Menlo"
   }
 }

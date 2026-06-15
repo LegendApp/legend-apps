@@ -51,11 +51,17 @@ export type LegendDisplayThemeBackground = {
   tint: LegendDisplayThemeBackgroundTint;
 };
 
+export type LegendDisplayThemeFonts = {
+  bodyFontFamily?: string;
+  codeFontFamily?: string;
+};
+
 export type LegendDisplayThemeFile = {
   appearance?: LegendDisplayThemeAppearance;
   background?: LegendDisplayThemeBackground;
   name: LegendDisplayThemeName;
   colors: LegendDisplayThemeColors;
+  fonts?: LegendDisplayThemeFonts;
 };
 
 export type LegendDisplayTheme = LegendDisplayThemeFile & {
@@ -67,9 +73,7 @@ export type MarkdownLayoutThemeName = "default" | (string & {});
 
 export type MarkdownLayoutThemeTypography = {
   blockquoteFontSizeOffset: number;
-  bodyFontFamily?: string;
   bodyFontSize: number;
-  codeFontFamily: string;
   codeFontSizeOffset: number;
   headingLineHeightScale: number;
   headingScale: Record<1 | 2 | 3 | 4 | 5 | 6, number>;

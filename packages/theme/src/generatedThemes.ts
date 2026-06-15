@@ -21,6 +21,9 @@ export const generatedDisplayThemeFiles = [
       "tableHeader": "#f3f4f6",
       "tableRowAlt": "#f9fafb",
       "windowBackground": "#f5f6f8"
+    },
+    "fonts": {
+      "codeFontFamily": "Menlo"
     }
   },
   {
@@ -43,6 +46,9 @@ export const generatedDisplayThemeFiles = [
       "tableHeader": "#2a2b2d",
       "tableRowAlt": "#1f2021",
       "windowBackground": "#191A1B"
+    },
+    "fonts": {
+      "codeFontFamily": "Menlo"
     }
   },
   {
@@ -68,6 +74,9 @@ export const generatedDisplayThemeFiles = [
       "tableHeader": "#303030",
       "tableRowAlt": "#1e1e1e",
       "windowBackground": "#191919"
+    },
+    "fonts": {
+      "codeFontFamily": "Menlo"
     }
   }
 ] satisfies LegendDisplayThemeFile[];
@@ -83,7 +92,6 @@ export const generatedMarkdownLayoutThemeFiles = [
     "typography": {
       "blockquoteFontSizeOffset": -1,
       "bodyFontSize": 16,
-      "codeFontFamily": "Menlo",
       "codeFontSizeOffset": -2,
       "headingLineHeightScale": 1.45,
       "headingScale": {
@@ -176,7 +184,6 @@ export const generatedMarkdownLayoutThemeFiles = [
     "typography": {
       "blockquoteFontSizeOffset": -1,
       "bodyFontSize": 15,
-      "codeFontFamily": "Menlo",
       "codeFontSizeOffset": -2,
       "headingLineHeightScale": 1.36,
       "headingScale": {
@@ -268,9 +275,7 @@ export const generatedMarkdownLayoutThemeFiles = [
     },
     "typography": {
       "blockquoteFontSizeOffset": 0,
-      "bodyFontFamily": "Georgia",
       "bodyFontSize": 17,
-      "codeFontFamily": "Menlo",
       "codeFontSizeOffset": -3,
       "headingLineHeightScale": 1.35,
       "headingScale": {
@@ -363,7 +368,6 @@ export const generatedMarkdownLayoutThemeFiles = [
     "typography": {
       "blockquoteFontSizeOffset": -1,
       "bodyFontSize": 15,
-      "codeFontFamily": "Menlo",
       "codeFontSizeOffset": -1,
       "headingLineHeightScale": 1.38,
       "headingScale": {
@@ -456,7 +460,6 @@ export const generatedMarkdownLayoutThemeFiles = [
     "typography": {
       "blockquoteFontSizeOffset": -1,
       "bodyFontSize": 16,
-      "codeFontFamily": "Menlo",
       "codeFontSizeOffset": -2,
       "headingLineHeightScale": 1.42,
       "headingScale": {

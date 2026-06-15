@@ -18,5 +18,8 @@
     "tableHeader": "#2a2b2d",
     "tableRowAlt": "#1f2021",
     "windowBackground": "#191A1B"
+  },
+  "fonts": {
+    "codeFontFamily": "Menlo"
   }
 }

@@ -88,6 +88,14 @@ function validateDisplayThemes(themes: LegendDisplayThemeFile[]) {
         throw new Error(`Display theme ${theme.name} is missing colors.${colorName}.`);
       }
     }
+
+    if (
+      theme.fonts &&
+      ((theme.fonts.bodyFontFamily !== undefined && typeof theme.fonts.bodyFontFamily !== "string") ||
+        (theme.fonts.codeFontFamily !== undefined && typeof theme.fonts.codeFontFamily !== "string"))
+    ) {
+      throw new Error(`Display theme ${theme.name} has invalid fonts.`);
+    }
   }
 }
 
@@ -111,7 +119,6 @@ function validateLayoutThemes(themes: MarkdownLayoutThemeFile[]) {
       !isNumber(theme.typography.lineHeightScale) ||
       !isNumber(theme.typography.headingLineHeightScale) ||
       !isNumber(theme.typography.codeFontSizeOffset) ||
-      typeof theme.typography.codeFontFamily !== "string" ||
       typeof theme.typography.headingWeight !== "string"
     ) {
       throw new Error(`Layout theme ${theme.name} has invalid typography.`);

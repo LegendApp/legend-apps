@@ -98,7 +98,8 @@ export function getMarkdownStyleForAppearance(
   const bodyFontSize = Math.max(12, typography.bodyFontSize + fontSizeOffsetBySetting[settings.fontSize]);
   const bodyLineHeightScale = typography.lineHeightScale * lineHeightScaleBySetting[settings.lineHeight];
   const bodyLineHeight = roundedLineHeight(bodyFontSize, bodyLineHeightScale);
-  const bodyFontFamily = fontFamilyBySetting[settings.fontFamily] ?? typography.bodyFontFamily;
+  const bodyFontFamily = fontFamilyBySetting[settings.fontFamily] ?? displayTheme.fonts?.bodyFontFamily;
+  const codeFontFamily = displayTheme.fonts?.codeFontFamily ?? "Menlo";
   const codeFontSize = Math.max(12, bodyFontSize + typography.codeFontSizeOffset);
   const codeLineHeight = roundedLineHeight(codeFontSize, bodyLineHeightScale);
   const blockquoteFontSize = Math.max(12, bodyFontSize + typography.blockquoteFontSizeOffset);
@@ -115,14 +116,14 @@ export function getMarkdownStyleForAppearance(
     },
     code: {
       ...displayTheme.markdownStyle.code,
-      fontFamily: typography.codeFontFamily,
+      fontFamily: codeFontFamily,
       fontSize: codeFontSize,
     },
     codeBlock: {
       ...displayTheme.markdownStyle.codeBlock,
       borderRadius: blocks.codeBlockBorderRadius,
       borderWidth: blocks.codeBlockBorderWidth,
-      fontFamily: typography.codeFontFamily,
+      fontFamily: codeFontFamily,
       fontSize: codeFontSize,
       lineHeight: codeLineHeight,
       padding: blocks.codeBlockPadding,

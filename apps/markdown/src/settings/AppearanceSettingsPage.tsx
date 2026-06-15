@@ -73,7 +73,7 @@ export function AppearanceSettingsPage() {
       <SettingsSection card={false} title="Font">
         <View accessibilityRole="radiogroup" className="gap-2">
           <RadioOption<MarkdownFontFamilySetting>
-            label="Layout Default"
+            label="Display Theme"
             onSelect={setMarkdownFontFamilySetting}
             selected={selectedFontFamily === "system"}
             value="system"

@@ -2,6 +2,7 @@ import { generatedDisplayThemeFiles, generatedMarkdownLayoutThemeFiles } from ".
 import type {
   LegendDisplayTheme,
   LegendDisplayThemeAppearance,
+  LegendDisplayThemeFonts,
   LegendDisplayThemeFile,
   LegendDisplayThemeName,
   MarkdownLayoutTheme,
@@ -22,6 +23,7 @@ export type {
   LegendDisplayThemeBackgroundSource,
   LegendDisplayThemeBackgroundTint,
   LegendDisplayThemeColors,
+  LegendDisplayThemeFonts,
   LegendDisplayThemeFile,
   LegendDisplayThemeName,
   LegendTheme,
@@ -111,6 +113,12 @@ function isThemeBackground(value: unknown): boolean {
   return typeof glassEnabled === "boolean" && isOpacityValid && isThemeBackgroundSource(source) && isTintValid;
 }
 
+function isThemeFonts(value: unknown): value is LegendDisplayThemeFonts {
+  return isRecord(value) &&
+    (value.bodyFontFamily === undefined || typeof value.bodyFontFamily === "string") &&
+    (value.codeFontFamily === undefined || typeof value.codeFontFamily === "string");
+}
+
 export function isLegendDisplayThemeFile(value: unknown): value is LegendDisplayThemeFile {
   if (!isRecord(value) || typeof value.name !== "string" || value.name.length === 0 || !isRecord(value.colors)) {
     return false;
@@ -121,7 +129,8 @@ export function isLegendDisplayThemeFile(value: unknown): value is LegendDisplay
     isThemeColorValue(colors[colorName], colorName === "selection"),
   ) &&
     (value.appearance === undefined || value.appearance === "light" || value.appearance === "dark") &&
-    (value.background === undefined || isThemeBackground(value.background));
+    (value.background === undefined || isThemeBackground(value.background)) &&
+    (value.fonts === undefined || isThemeFonts(value.fonts));
 }
 
 function isNumber(value: unknown): value is number {
@@ -174,8 +183,6 @@ export function isMarkdownLayoutThemeFile(value: unknown): value is MarkdownLayo
     !isNumber(typography.headingLineHeightScale) ||
     !isNumber(typography.lineHeightScale) ||
     !isNumber(typography.tableFontSizeOffset) ||
-    (typography.bodyFontFamily !== undefined && typeof typography.bodyFontFamily !== "string") ||
-    typeof typography.codeFontFamily !== "string" ||
     typeof typography.headingWeight !== "string" ||
     !isRecord(typography.headingScale) ||
     !isRecord(blocks)
@@ -205,6 +212,8 @@ export const isLegendThemeFile = isLegendDisplayThemeFile;
 
 function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayTheme {
   const { colors } = theme;
+  const bodyFontFamily = theme.fonts?.bodyFontFamily;
+  const codeFontFamily = theme.fonts?.codeFontFamily ?? "Menlo";
 
   return {
     ...theme,
@@ -221,13 +230,14 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
         borderColor: colors.blockquoteBorder,
         borderWidth: 3,
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 15,
         lineHeight: 23,
       },
       code: {
         backgroundColor: colors.inlineCodeBackground ?? colors.surfaceMuted,
         color: colors.inlineCodeForeground ?? colors.foreground,
-        fontFamily: "Menlo",
+        fontFamily: codeFontFamily,
         fontSize: 14,
       },
       codeBlock: {
@@ -236,13 +246,14 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
         borderRadius: 6,
         borderWidth: 1,
         color: colors.codeForeground,
-        fontFamily: "Menlo",
+        fontFamily: codeFontFamily,
         fontSize: 13,
         lineHeight: 21.45,
         padding: 20,
       },
       h1: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 30,
         fontWeight: "700",
         lineHeight: 38,
@@ -250,6 +261,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       h2: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 24,
         fontWeight: "700",
         lineHeight: 32,
@@ -257,6 +269,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       h3: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 20,
         fontWeight: "700",
         lineHeight: 28,
@@ -264,6 +277,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       h4: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 18,
         fontWeight: "700",
         lineHeight: 26,
@@ -271,6 +285,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       h5: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 16,
         fontWeight: "700",
         lineHeight: 24,
@@ -278,6 +293,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       h6: {
         color: colors.muted,
+        fontFamily: bodyFontFamily,
         fontSize: 14,
         fontWeight: "700",
         lineHeight: 22,
@@ -289,6 +305,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       list: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 16,
         gapWidth: 8,
         lineHeight: 25,
@@ -296,6 +313,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       paragraph: {
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 16,
         lineHeight: 25,
       },
@@ -306,6 +324,7 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
         cellPaddingHorizontal: 8,
         cellPaddingVertical: 6,
         color: colors.foreground,
+        fontFamily: bodyFontFamily,
         fontSize: 14,
         headerBackgroundColor: colors.tableHeader,
         headerTextColor: colors.foreground,

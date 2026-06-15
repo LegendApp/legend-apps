@@ -7,9 +7,7 @@
   },
   "typography": {
     "blockquoteFontSizeOffset": 0,
-    "bodyFontFamily": "Georgia",
     "bodyFontSize": 17,
-    "codeFontFamily": "Menlo",
     "codeFontSizeOffset": -3,
     "headingLineHeightScale": 1.35,
     "headingScale": {
