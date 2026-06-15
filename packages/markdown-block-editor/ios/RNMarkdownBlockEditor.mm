@@ -122,6 +122,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (_activeBlockId != nil && [_activeBlockId isEqualToString:view.blockId]) {
     [self observeScrollViewForBlockView:view];
     [self showOverlayForBlockView:view markdown:view.markdown event:nil loadValue:_lastLoadedBlockId == nil || ![_lastLoadedBlockId isEqualToString:view.blockId]];
+    [self emitBeginEditingForBlockView:view];
   }
 }
 
@@ -454,6 +455,10 @@ static BOOL isEnrichedMarkdownInput(id view)
       [self observeScrollViewForBlockView:view];
       [self showOverlayForBlockView:view markdown:markdown event:nil loadValue:YES];
       [self emitBeginEditingForBlockView:view];
+    } else {
+      _activeBlockId = [nextActiveBlockId copy];
+      _lastLoadedBlockId = nil;
+      [self stopObservingScrollView];
     }
   }
 

@@ -76,6 +76,10 @@ function countMarkdownLineBreaks(markdown: string) {
   return markdown.match(markdownLineBreakPattern)?.length ?? 0;
 }
 
+function waitForAnimationFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 function isTwoLineMarkdownPasteFromEmptyBlock(markdown: string) {
   const lines = markdown.split(markdownLineBreakPattern);
   return lines.length === 2 && (
@@ -142,6 +146,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
+    const focusAdjacentBlockQueueRef = useRef<Array<"up" | "down">>([]);
+    const focusAdjacentBlockInFlightRef = useRef(false);
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const draftMarkdownRef = useRef("");
@@ -654,6 +660,31 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
       }
     }, [reportAsyncError]);
+
+    const prepareBlockIndexForKeyboardFocus = useCallback(async (index: number, direction: "up" | "down") => {
+      const list = listRef.current;
+      const state = list?.getState();
+      if (!list || !state) {
+        return;
+      }
+
+      const targetIsVisible = index >= state.start && index <= state.end;
+      const targetIsMounted = state.elementAtIndex(index) !== undefined;
+      if (!targetIsVisible || !targetIsMounted) {
+        await list.scrollToIndex({
+          animated: false,
+          index,
+          viewPosition: direction === "up" ? 0 : 1,
+        });
+
+        for (let frame = 0; frame < 4; frame += 1) {
+          if (list.getState().elementAtIndex(index) !== undefined) {
+            break;
+          }
+          await waitForAnimationFrame();
+        }
+      }
+    }, []);
 
     const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
       if (event) {
@@ -1217,32 +1248,54 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const focusAdjacentBlock = useCallback(
       (direction: "up" | "down") => {
-        async function runFocus() {
-          await commitActiveBlock({ updateReactState: true });
-          const activeBlockIdValue = activeBlockIdRef.current;
-          if (activeBlockIdValue) {
-            const currentBlockState = blockStateRef.current;
-            const activeBlockIndex = currentBlockState.blockIds.indexOf(activeBlockIdValue);
-            const targetBlockId = direction === "up"
-              ? currentBlockState.blockIds[activeBlockIndex - 1]
-              : currentBlockState.blockIds[activeBlockIndex + 1];
-            const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
-            if (targetBlock) {
-              blockSelectionGestureRef.current = null;
-              setNextBlockSelection(null);
-              clearTextSelectionAnchor();
-              setActiveBlock(
-                targetBlock,
-                Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
-              );
-              scrollBlockIntoView(targetBlock.id);
+        focusAdjacentBlockQueueRef.current.push(direction);
+        if (!focusAdjacentBlockInFlightRef.current) {
+          focusAdjacentBlockInFlightRef.current = true;
+
+          async function runQueuedFocus() {
+            while (focusAdjacentBlockQueueRef.current.length > 0) {
+              const nextDirection = focusAdjacentBlockQueueRef.current.shift();
+              if (nextDirection) {
+                await commitActiveBlock({ updateReactState: true });
+                const activeBlockIdValue = activeBlockIdRef.current;
+                if (activeBlockIdValue) {
+                  const currentBlockState = blockStateRef.current;
+                  const activeBlockIndex = currentBlockState.blockIds.indexOf(activeBlockIdValue);
+                  const targetBlockIndex = nextDirection === "up" ? activeBlockIndex - 1 : activeBlockIndex + 1;
+                  const targetBlockId = currentBlockState.blockIds[targetBlockIndex];
+                  const targetBlock = targetBlockId ? currentBlockState.blocksById.get(targetBlockId) : undefined;
+                  if (targetBlock) {
+                    await prepareBlockIndexForKeyboardFocus(targetBlockIndex, nextDirection);
+                    blockSelectionGestureRef.current = null;
+                    setNextBlockSelection(null);
+                    clearTextSelectionAnchor();
+                    setActiveBlock(
+                      targetBlock,
+                      Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length),
+                    );
+                    scrollBlockIntoView(targetBlock.id);
+                  }
+                }
+              }
             }
           }
-        }
 
-        runFocus().catch(reportAsyncError);
+          runQueuedFocus()
+            .catch(reportAsyncError)
+            .finally(() => {
+              focusAdjacentBlockInFlightRef.current = false;
+            });
+        }
       },
-      [clearTextSelectionAnchor, commitActiveBlock, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
+      [
+        clearTextSelectionAnchor,
+        commitActiveBlock,
+        prepareBlockIndexForKeyboardFocus,
+        reportAsyncError,
+        scrollBlockIntoView,
+        setActiveBlock,
+        setNextBlockSelection,
+      ],
     );
 
     const focusBoundaryBlock = useCallback(

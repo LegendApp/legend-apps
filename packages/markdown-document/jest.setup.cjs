@@ -41,7 +41,7 @@ jest.mock("@legendapp/list/react-native", () => {
   );
 
   return {
-    LegendList({
+    LegendList: React.forwardRef(function LegendList({
       data,
       renderItem,
       onLoad,
@@ -50,7 +50,19 @@ jest.mock("@legendapp/list/react-native", () => {
       ListFooterComponent,
       ListFooterComponentStyle,
       onScroll,
-    }) {
+    }, ref) {
+      React.useImperativeHandle(ref, () => ({
+        getState: () => ({
+          elementAtIndex: (index) => (index >= 0 && index < data.length ? {} : undefined),
+          end: data.length - 1,
+          endBuffered: data.length - 1,
+          start: 0,
+          startBuffered: 0,
+        }),
+        scrollToIndex: jest.fn(async () => undefined),
+        scrollToOffset: jest.fn(async () => undefined),
+      }), [data]);
+
       React.useEffect(() => {
         onLoad?.();
       }, [onLoad]);
@@ -73,7 +85,7 @@ jest.mock("@legendapp/list/react-native", () => {
           ) : null,
         ),
       );
-    },
+    }),
   };
 });
 
