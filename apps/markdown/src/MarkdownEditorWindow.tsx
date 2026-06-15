@@ -62,7 +62,6 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownLayoutForAppearance(theme, appearanceSettings),
     [appearanceSettings, theme],
   );
-  const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
   const [documentCommandState, setDocumentCommandState] = useState<MarkdownDocumentCommandState>({
     canRedo: false,
     canUndo: false,
@@ -72,10 +71,6 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     backgroundColor: theme.colors.windowBackground,
     onError: session.handleError,
   });
-
-  const handleSelectionAnchorChange = useCallback((anchor: MarkdownSelectionAnchor | null) => {
-    setSelectionAnchor(anchor);
-  }, []);
 
   const renderSelectionToolbar = useCallback(
     (anchor: MarkdownSelectionAnchor) => (
@@ -186,10 +181,9 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
           onLoadError={session.handleDocumentLoadError}
           onLoaded={session.handleDocumentLoaded}
           onSaveStateChange={session.setSaveState}
-          onSelectionAnchorChange={handleSelectionAnchorChange}
           renderSelectionToolbar={renderSelectionToolbar}
           savePolicy={{ autosave: !session.isUntitledDocument && autosave === "enabled" }}
-          selectionToolbarAnchor={formattingToolbarMode === "selection" ? selectionAnchor : null}
+          selectionToolbarEnabled={formattingToolbarMode === "selection"}
           style={[styles.document, backgroundStyle]}
           theme={theme.markdownDocument}
         />

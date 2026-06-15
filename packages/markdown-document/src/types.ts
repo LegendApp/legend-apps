@@ -1,3 +1,4 @@
+import type { Observable } from "@legendapp/state";
 import type { ReactNode, Ref } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
@@ -192,8 +193,10 @@ export type MarkdownDocumentProps = {
   onDirtyChange?: (isDirty: boolean) => void;
   onSaveStateChange?: (state: MarkdownSaveState) => void;
   onSelectionAnchorChange?: (anchor: MarkdownSelectionAnchor | null) => void;
+  selectionAnchor$?: Observable<MarkdownSelectionAnchor | null>;
   commentAnchor?: MarkdownSelectionAnchor | null;
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
+  selectionToolbarEnabled?: boolean;
   selectionToolbarAnchor?: MarkdownSelectionAnchor | null;
   renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   onError?: (error: Error) => void;

@@ -1,6 +1,8 @@
 import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownEditorHost } from "@legend-desktop/markdown-block-editor";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
 } from "react-native-enriched-markdown";
@@ -80,6 +82,26 @@ type PendingVerticalNavigationSelection = {
   preferredX: number;
 };
 
+type MarkdownSelectionToolbarFooterProps = {
+  enabled: boolean;
+  renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
+  selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
+};
+
+const MarkdownSelectionToolbarFooter = memo(function MarkdownSelectionToolbarFooter({
+  enabled,
+  renderSelectionToolbar,
+  selectionAnchor$,
+}: MarkdownSelectionToolbarFooterProps) {
+  const anchor = useValue(selectionAnchor$);
+
+  return enabled && anchor && renderSelectionToolbar ? (
+    <View pointerEvents="box-none" style={styles.selectionToolbarFooterContent}>
+      {renderSelectionToolbar(anchor)}
+    </View>
+  ) : null;
+});
+
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
   if (__DEV__) {
     console.info(`[MarkdownDocument] ${event}`, data);
@@ -140,6 +162,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       renderCommentBubble,
       renderSelectionToolbar,
       savePolicy,
+      selectionAnchor$: selectionAnchorProp$,
+      selectionToolbarEnabled,
       selectionToolbarAnchor,
       style,
       theme,
@@ -183,6 +207,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const selectionAnchorRequestRef = useRef(0);
     const scrollOffsetYRef = useRef(0);
     const scrollViewportHeightRef = useRef(0);
+    const internalSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
+    const selectionAnchor$ = selectionAnchorProp$ ?? internalSelectionAnchor$;
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
     const blockStateRef = useRef(blockState);
@@ -2121,13 +2147,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       return selectedIds;
     }, [blockIds, blockSelection]);
-    const selectionAnchor = blockSelectionAnchor ?? textSelectionAnchor;
+    const internalSelectionAnchor = blockSelectionAnchor ?? textSelectionAnchor;
+    const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? internalSelectionAnchor : selectionToolbarAnchor;
+    const isSelectionToolbarEnabled = selectionToolbarEnabled ?? selectionToolbarAnchor !== undefined;
     useEffect(() => {
-      onSelectionAnchorChange?.(selectionAnchor);
-    }, [onSelectionAnchorChange, selectionAnchor]);
+      selectionAnchor$.set(selectionToolbarAnchorValue);
+      onSelectionAnchorChange?.(internalSelectionAnchor);
+    }, [internalSelectionAnchor, onSelectionAnchorChange, selectionAnchor$, selectionToolbarAnchorValue]);
     useEffect(() => {
-      return () => onSelectionAnchorChange?.(null);
-    }, [onSelectionAnchorChange]);
+      return () => {
+        selectionAnchor$.set(null);
+        onSelectionAnchorChange?.(null);
+      };
+    }, [onSelectionAnchorChange, selectionAnchor$]);
     const listExtraData = useMemo(
       () => ({
         activeBlockId,
@@ -2210,13 +2242,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelectionOverlayStyle,
       ],
     );
-    const selectionToolbarFooter = useMemo(() => {
-      return selectionToolbarAnchor && renderSelectionToolbar ? (
-        <View pointerEvents="box-none" style={styles.selectionToolbarFooterContent}>
-          {renderSelectionToolbar(selectionToolbarAnchor)}
-        </View>
-      ) : null;
-    }, [renderSelectionToolbar, selectionToolbarAnchor]);
+    const selectionToolbarFooter = useMemo(() => (
+      <MarkdownSelectionToolbarFooter
+        enabled={isSelectionToolbarEnabled}
+        renderSelectionToolbar={renderSelectionToolbar}
+        selectionAnchor$={selectionAnchor$}
+      />
+    ), [isSelectionToolbarEnabled, renderSelectionToolbar, selectionAnchor$]);
     const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
       scrollViewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
