@@ -36,11 +36,15 @@ jest.mock("react-native", () => {
 jest.mock("@legendapp/list/react-native", () => {
   const React = require("react");
   const { View } = require("react-native");
+  const clearCaches = jest.fn();
   const getComponent = (Component) => (
     React.isValidElement(Component) ? Component : React.createElement(Component)
   );
 
   return {
+    __legendListTestHooks: {
+      clearCaches,
+    },
     LegendList: React.forwardRef(function LegendList({
       data,
       renderItem,
@@ -52,6 +56,7 @@ jest.mock("@legendapp/list/react-native", () => {
       onScroll,
     }, ref) {
       React.useImperativeHandle(ref, () => ({
+        clearCaches,
         getState: () => ({
           elementAtIndex: (index) => (index >= 0 && index < data.length ? {} : undefined),
           end: data.length - 1,

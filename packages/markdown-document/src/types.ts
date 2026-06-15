@@ -94,6 +94,7 @@ export type MarkdownDocumentCommands = {
   focusLastBlock(): void;
   focusNextBlock(): void;
   focusPreviousBlock(): void;
+  invalidateLayoutMeasurements(): void;
   moveActiveBlockDown(): void;
   moveActiveBlockUp(): void;
   setParagraph(): void;

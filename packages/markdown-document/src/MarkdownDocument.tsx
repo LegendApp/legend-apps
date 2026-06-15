@@ -2147,6 +2147,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         insertLink() {
           runActiveInputCommand(() => activeInputRef.current?.insertLink("link", "https://"));
         },
+        invalidateLayoutMeasurements() {
+          listRef.current?.clearCaches({ mode: "sizes" });
+        },
         insertThematicBreak() {
           formatCurrentBlockRange(thematicBreakMarkdown);
         },

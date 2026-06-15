@@ -3,7 +3,8 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
-import { useCallback, useEffect, useMemo } from "react";
+import { useObserveEffect } from "@legendapp/state/react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
 import {
@@ -28,6 +29,9 @@ import {
 } from "./useMarkdownWindows";
 import {
   applyMarkdownThemeSetting,
+  getMarkdownAppearanceSettings,
+  getMarkdownDisplayThemeSetting,
+  getMarkdownLayoutThemeSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
   useMarkdownDisplayThemeSetting,
@@ -46,6 +50,7 @@ type MarkdownEditorWindowProps = {
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
   const session = useMarkdownDocumentSession();
+  const hasObservedLayoutInputsRef = useRef(false);
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   const displayThemeSetting = useMarkdownDisplayThemeSetting();
   const layoutThemeSetting = useMarkdownLayoutThemeSetting();
@@ -77,6 +82,20 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     ),
     [session.documentCommandsRef],
   );
+
+  useObserveEffect(() => {
+    return {
+      appearanceSettings: getMarkdownAppearanceSettings(),
+      displayThemeSetting: getMarkdownDisplayThemeSetting(),
+      layoutThemeSetting: getMarkdownLayoutThemeSetting(),
+    };
+  }, () => {
+    if (hasObservedLayoutInputsRef.current) {
+      session.documentCommandsRef.current?.invalidateLayoutMeasurements();
+    } else {
+      hasObservedLayoutInputsRef.current = true;
+    }
+  });
 
   useEffect(() => {
     applyMarkdownThemeSetting();

@@ -3307,6 +3307,26 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("exposes a command to invalidate LegendList layout measurements", async () => {
+    const { __legendListTestHooks } = jest.requireMock("@legendapp/list/react-native") as {
+      __legendListTestHooks: {
+        clearCaches: jest.Mock;
+      };
+    };
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const { commandsRef, onError } = await renderDocument({ adapter });
+    __legendListTestHooks.clearCaches.mockClear();
+
+    commandsRef.current?.invalidateLayoutMeasurements();
+
+    expect(__legendListTestHooks.clearCaches).toHaveBeenCalledTimes(1);
+    expect(__legendListTestHooks.clearCaches).toHaveBeenCalledWith({ mode: "sizes" });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("expands block selection highlights as the selection range grows", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
