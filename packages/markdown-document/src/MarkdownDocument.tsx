@@ -2,7 +2,7 @@ import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownEditorHost } from "@legend-desktop/markdown-block-editor";
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
 } from "react-native-enriched-markdown";
@@ -92,7 +92,11 @@ type MarkdownSelectionToolbarFooterProps = {
 function createMarkdownDocumentRenderState(): MarkdownDocumentRenderState {
   return {
     activeBlocksById: new Map(),
+    blockIds: [],
+    blockLayoutsById: new Map(),
+    blockSelection: null,
     blocksById: new Map(),
+    scrollOffsetY: 0,
     selectedBlocksById: new Map(),
   };
 }
@@ -109,6 +113,72 @@ const MarkdownSelectionToolbarFooter = memo(function MarkdownSelectionToolbarFoo
       {renderSelectionToolbar(anchor)}
     </View>
   ) : null;
+});
+
+type MarkdownBlockSelectionAnchorPublisherProps = {
+  enabled: boolean;
+  documentRenderState$: Observable<MarkdownDocumentRenderState>;
+  inactiveOverlayWidth: number;
+  onSelectionAnchorChangeRef: RefObject<((anchor: MarkdownSelectionAnchor | null) => void) | undefined>;
+  resolvedContentHorizontalPadding: number;
+  selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
+};
+
+const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelectionAnchorPublisher({
+  enabled,
+  documentRenderState$,
+  inactiveOverlayWidth,
+  onSelectionAnchorChangeRef,
+  resolvedContentHorizontalPadding,
+  selectionAnchor$,
+}: MarkdownBlockSelectionAnchorPublisherProps) {
+  const blockIds = useValue(documentRenderState$.blockIds);
+  const blockSelection = useValue(documentRenderState$.blockSelection);
+  const blockLayoutsById = useValue(documentRenderState$.blockLayoutsById);
+  const scrollOffsetY = useValue(documentRenderState$.scrollOffsetY);
+  const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
+    if (!blockSelection) {
+      return null;
+    }
+
+    const blockSelectionRects = getBlockSelectionRects({
+      blockIds,
+      blockSelection,
+      layoutsByBlockId: blockLayoutsById,
+    });
+    if (blockSelectionRects.length === 0) {
+      return null;
+    }
+
+    const firstRect = blockSelectionRects.reduce((closestRect, rect) => (
+      rect.y < closestRect.y ? rect : closestRect
+    ), blockSelectionRects[0]);
+    if (!firstRect) {
+      return null;
+    }
+
+    return {
+      blockId: firstRect.blockId,
+      height: firstRect.height,
+      itemHeight: firstRect.height,
+      itemWidth: inactiveOverlayWidth,
+      itemX: resolvedContentHorizontalPadding,
+      itemY: firstRect.y + scrollOffsetY,
+      kind: "blockSelection",
+      width: inactiveOverlayWidth,
+      x: resolvedContentHorizontalPadding,
+      y: firstRect.y + scrollOffsetY,
+    };
+  }, [blockIds, blockLayoutsById, blockSelection, inactiveOverlayWidth, resolvedContentHorizontalPadding, scrollOffsetY]);
+
+  useEffect(() => {
+    if (enabled) {
+      selectionAnchor$.set(blockSelectionAnchor);
+      onSelectionAnchorChangeRef.current?.(blockSelectionAnchor);
+    }
+  }, [blockSelectionAnchor, enabled, onSelectionAnchorChangeRef, selectionAnchor$]);
+
+  return null;
 });
 
 function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
@@ -229,7 +299,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockSelectionInputText, setBlockSelectionInputText] = useState("");
     const [containerWindowY, setContainerWindowY] = useState(0);
     const [draftMarkdown, setDraftMarkdown] = useState("");
-    const [layoutVersion, setLayoutVersion] = useState(0);
     const [overlayFrame, setOverlayFrame] = useState<OverlayFrame | undefined>(undefined);
     const [contentContainerOffsetX, setContentContainerOffsetX] = useState(0);
     const [textSelectionAnchor, setTextSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
@@ -242,6 +311,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onLoadErrorRef = useLatestRef(onLoadError);
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
+    const onSelectionAnchorChangeRef = useLatestRef(onSelectionAnchorChange);
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
     const resolvedContentMaxWidth = resolvedMarkdownLayout.content?.maxWidth ?? contentMaxWidth;
@@ -701,8 +771,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
       blockContentLayoutsRef.current.set(blockId, layout);
-      setLayoutVersion((version) => version + 1);
-    }, [containerWindowY]);
+      documentRenderState$.blockLayoutsById.set(new Map(blockContentLayoutsRef.current));
+    }, [containerWindowY, documentRenderState$]);
 
     const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot, selection?: number) => {
       const blockLayout = blockContentLayoutsRef.current.get(block.id);
@@ -2104,38 +2174,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useImperativeHandle(ref, () => commands, [commands]);
     useImperativeHandle(commandsRef, () => commands, [commands]);
 
-    const blockSelectionRects = useMemo(() => {
-      return getBlockSelectionRects({
-        blockIds,
-        blockSelection,
-        layoutsByBlockId: blockContentLayoutsRef.current,
-      });
-    }, [blockIds, blockSelection, layoutVersion]);
-    const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
-      if (blockSelectionRects.length === 0) {
-        return null;
-      }
-
-      const firstRect = blockSelectionRects.reduce((closestRect, rect) => (
-        rect.y < closestRect.y ? rect : closestRect
-      ), blockSelectionRects[0]);
-      if (!firstRect) {
-        return null;
-      }
-
-      return {
-        blockId: firstRect.blockId,
-        height: firstRect.height,
-        itemHeight: firstRect.height,
-        itemWidth: inactiveOverlayWidth,
-        itemX: resolvedContentHorizontalPadding,
-        itemY: firstRect.y + scrollOffsetYRef.current,
-        kind: "blockSelection",
-        width: inactiveOverlayWidth,
-        x: resolvedContentHorizontalPadding,
-        y: firstRect.y + scrollOffsetYRef.current,
-      };
-    }, [blockSelectionRects, inactiveOverlayWidth, resolvedContentHorizontalPadding]);
     const selectedBlockIds = useMemo(() => {
       const selectedIds = new Set<string>();
       if (!blockSelection) {
@@ -2158,8 +2196,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return selectedIds;
     }, [blockIds, blockSelection]);
     useEffect(() => {
+      documentRenderState$.blockIds.set(blockIds);
       documentRenderState$.blocksById.set(blocksById);
-    }, [blocksById, documentRenderState$]);
+    }, [blockIds, blocksById, documentRenderState$]);
+    useEffect(() => {
+      documentRenderState$.blockSelection.set(blockSelection);
+    }, [blockSelection, documentRenderState$]);
     useEffect(() => {
       const activeBlocksById = new Map<string, { draftMarkdown: string; selection: number }>();
       if (activeBlockId) {
@@ -2177,13 +2219,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       });
       documentRenderState$.selectedBlocksById.set(selectedBlocksById);
     }, [documentRenderState$, selectedBlockIds]);
-    const internalSelectionAnchor = blockSelectionAnchor ?? textSelectionAnchor;
+    const internalSelectionAnchor = blockSelection ? null : textSelectionAnchor;
     const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? internalSelectionAnchor : selectionToolbarAnchor;
     const isSelectionToolbarEnabled = selectionToolbarEnabled ?? selectionToolbarAnchor !== undefined;
     useEffect(() => {
-      selectionAnchor$.set(selectionToolbarAnchorValue);
-      onSelectionAnchorChange?.(internalSelectionAnchor);
-    }, [internalSelectionAnchor, onSelectionAnchorChange, selectionAnchor$, selectionToolbarAnchorValue]);
+      if (selectionToolbarAnchor !== undefined || !blockSelection) {
+        selectionAnchor$.set(selectionToolbarAnchorValue);
+        onSelectionAnchorChange?.(selectionToolbarAnchorValue);
+      }
+    }, [blockSelection, onSelectionAnchorChange, selectionAnchor$, selectionToolbarAnchor, selectionToolbarAnchorValue]);
     useEffect(() => {
       return () => {
         selectionAnchor$.set(null);
@@ -2270,7 +2314,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
       scrollViewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
-    }, []);
+      documentRenderState$.scrollOffsetY.set(event.nativeEvent.contentOffset.y);
+    }, [documentRenderState$]);
     const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
     const handleNativeBeginEditing = useCallback(
       (event: { nativeEvent: { blockId: string; height: number; width: number; x: number; y: number } }) => {
@@ -2316,6 +2361,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const documentContent = (
       <>
+        <MarkdownBlockSelectionAnchorPublisher
+          documentRenderState$={documentRenderState$}
+          enabled={selectionToolbarAnchor === undefined && blockSelection !== null}
+          inactiveOverlayWidth={inactiveOverlayWidth}
+          onSelectionAnchorChangeRef={onSelectionAnchorChangeRef}
+          resolvedContentHorizontalPadding={resolvedContentHorizontalPadding}
+          selectionAnchor$={selectionAnchor$}
+        />
         <TextInput
           ref={blockSelectionInputRef}
           autoCorrect={false}

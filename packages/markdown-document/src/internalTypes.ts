@@ -99,7 +99,11 @@ export type ActiveBlockRenderState = {
 
 export type MarkdownDocumentRenderState = {
   activeBlocksById: Map<string, ActiveBlockRenderState>;
+  blockIds: string[];
+  blockLayoutsById: Map<string, BlockLayout>;
+  blockSelection: BlockSelectionState | null;
   blocksById: Map<string, MarkdownBlockSnapshot>;
+  scrollOffsetY: number;
   selectedBlocksById: Map<string, boolean>;
 };
 
