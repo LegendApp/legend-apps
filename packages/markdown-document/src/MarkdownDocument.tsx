@@ -30,6 +30,7 @@ import type {
   BlockSelectionState,
   DocumentState,
   HistoryEntry,
+  MarkdownDocumentRenderState,
   OverlayFrame,
   SelectionDragOutsideEvent,
   UpdateBlockHistoryEntry,
@@ -87,6 +88,14 @@ type MarkdownSelectionToolbarFooterProps = {
   renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
 };
+
+function createMarkdownDocumentRenderState(): MarkdownDocumentRenderState {
+  return {
+    activeBlocksById: new Map(),
+    blocksById: new Map(),
+    selectedBlocksById: new Map(),
+  };
+}
 
 const MarkdownSelectionToolbarFooter = memo(function MarkdownSelectionToolbarFooter({
   enabled,
@@ -209,6 +218,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const scrollViewportHeightRef = useRef(0);
     const internalSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const selectionAnchor$ = selectionAnchorProp$ ?? internalSelectionAnchor$;
+    const documentRenderState$ = useObservable(createMarkdownDocumentRenderState);
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
     const blockStateRef = useRef(blockState);
@@ -2147,6 +2157,26 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       return selectedIds;
     }, [blockIds, blockSelection]);
+    useEffect(() => {
+      documentRenderState$.blocksById.set(blocksById);
+    }, [blocksById, documentRenderState$]);
+    useEffect(() => {
+      const activeBlocksById = new Map<string, { draftMarkdown: string; selection: number }>();
+      if (activeBlockId) {
+        activeBlocksById.set(activeBlockId, {
+          draftMarkdown,
+          selection: activeSelection,
+        });
+      }
+      documentRenderState$.activeBlocksById.set(activeBlocksById);
+    }, [activeBlockId, activeSelection, documentRenderState$, draftMarkdown]);
+    useEffect(() => {
+      const selectedBlocksById = new Map<string, boolean>();
+      selectedBlockIds.forEach((blockId) => {
+        selectedBlocksById.set(blockId, true);
+      });
+      documentRenderState$.selectedBlocksById.set(selectedBlocksById);
+    }, [documentRenderState$, selectedBlockIds]);
     const internalSelectionAnchor = blockSelectionAnchor ?? textSelectionAnchor;
     const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? internalSelectionAnchor : selectionToolbarAnchor;
     const isSelectionToolbarEnabled = selectionToolbarEnabled ?? selectionToolbarAnchor !== undefined;
@@ -2162,17 +2192,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [onSelectionAnchorChange, selectionAnchor$]);
     const listExtraData = useMemo(
       () => ({
-        activeBlockId,
-        activeSelection,
         blockIds,
-        blocksById,
         commentAnchor,
         renderCommentBubble,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
-        selectedBlockIds,
       }),
-      [activeBlockId, activeSelection, blockIds, blocksById, commentAnchor, renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle, selectedBlockIds],
+      [blockIds, commentAnchor, renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -2199,13 +2225,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         <MarkdownBlockRow
           {...props}
           activeInputRef={activeInputRef}
-          block={blocksById.get(props.item)}
-          draftMarkdown={activeBlockId === props.item ? draftMarkdown : ""}
+          documentRenderState$={documentRenderState$}
           hasNextBlock={props.index + 1 < blockIds.length}
           hasPreviousBlock={props.index > 0}
-          initialSelection={activeSelection}
-          isActive={activeBlockId === props.item}
-          isBlockSelected={selectedBlockIds.has(props.item)}
           commentAnchor={commentAnchor?.blockId === props.item ? commentAnchor : null}
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
@@ -2216,19 +2238,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onChangeSelectionRef={handleChangeSelectionRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
           onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
-          previousBlock={blocksById.get(blockIds[props.index - 1] ?? "")}
+          previousBlockId={blockIds[props.index - 1]}
           renderCommentBubble={renderCommentBubble}
           selectionOverlayStyle={blockSelectionOverlayStyle}
         />
       ),
       [
         activateBlock,
-        activeBlockId,
-        activeSelection,
         blockIds,
-        blocksById,
         commentAnchor,
-        draftMarkdown,
+        documentRenderState$,
         handleBlockWindowLayout,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
@@ -2238,7 +2257,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         renderCommentBubble,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
-        selectedBlockIds,
         blockSelectionOverlayStyle,
       ],
     );

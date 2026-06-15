@@ -92,6 +92,17 @@ export type OverlayFrame = {
   width: number;
 };
 
+export type ActiveBlockRenderState = {
+  draftMarkdown: string;
+  selection: number;
+};
+
+export type MarkdownDocumentRenderState = {
+  activeBlocksById: Map<string, ActiveBlockRenderState>;
+  blocksById: Map<string, MarkdownBlockSnapshot>;
+  selectedBlocksById: Map<string, boolean>;
+};
+
 export type ChangeMarkdownHandler = (block: MarkdownBlockSnapshot, markdown: string) => void;
 export type ChangeSelectionHandler = (selection: { start: number; end: number }) => void;
 export type SelectionDragOutsideHandler = (blockId: string, event: SelectionDragOutsideEvent) => void;

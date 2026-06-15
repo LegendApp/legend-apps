@@ -1,4 +1,6 @@
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
+import type { Observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
 import { MarkdownBlockActivationView } from "@legend-desktop/markdown-block-editor";
 import { Fragment, memo, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
@@ -13,6 +15,7 @@ import type {
   BlockLayout,
   ChangeSelectionHandler,
   ChangeMarkdownHandler,
+  MarkdownDocumentRenderState,
   OverlayFrame,
   SelectionDragOutsideHandler,
   VerticalNavigationOutsideHandler,
@@ -182,12 +185,8 @@ export const MarkdownOverlayEditorInput = memo(
 export function MarkdownBlockRow({
   activeInputRef,
   commentAnchor,
-  draftMarkdown,
   hasNextBlock,
   hasPreviousBlock,
-  initialSelection,
-  isActive,
-  isBlockSelected,
   onActivate,
   onBlurRef,
   onChangeMarkdownRef,
@@ -195,22 +194,19 @@ export function MarkdownBlockRow({
   onBlockWindowLayout,
   onSelectionDragOutsideRef,
   onVerticalNavigationOutsideRef,
-  block,
+  documentRenderState$,
   markdownLayout,
   markdownStyle,
-  previousBlock,
+  previousBlockId,
   renderCommentBubble,
   selectionOverlayStyle,
+  item: blockId,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
-  block?: MarkdownBlockSnapshot;
   commentAnchor?: MarkdownSelectionAnchor | null;
-  draftMarkdown: string;
   hasNextBlock: boolean;
   hasPreviousBlock: boolean;
-  initialSelection: number;
-  isActive: boolean;
-  isBlockSelected: boolean;
+  documentRenderState$: Observable<MarkdownDocumentRenderState>;
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
@@ -220,10 +216,17 @@ export function MarkdownBlockRow({
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
   onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
-  previousBlock?: MarkdownBlockSnapshot;
+  previousBlockId?: string;
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
+  const block = useValue(documentRenderState$.blocksById.get(blockId));
+  const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
+  const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
+  const previousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
+  const draftMarkdown = activeBlock?.draftMarkdown ?? "";
+  const initialSelection = activeBlock?.selection ?? 0;
+  const isActive = activeBlock !== undefined;
   const [rowWidth, setRowWidth] = useState(700);
   const rowRef = useRef<View>(null);
 
