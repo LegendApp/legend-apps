@@ -409,6 +409,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const pendingVerticalNavigationFrameRef = useRef<number | undefined>(undefined);
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
+    const overlayFrameBlockIdRef = useRef<string | undefined>(undefined);
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -482,6 +483,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const clearOverlayFrame = useCallback(() => {
       overlayFrameRef.current = undefined;
+      overlayFrameBlockIdRef.current = undefined;
       overlayFrame$.set(undefined);
     }, [overlayFrame$]);
 
@@ -2401,13 +2403,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
       if (activeBlockId && activeBlock) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
+        const cachedOverlayFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
         activeBlocksById.set(activeBlockId, {
           block: {
             ...activeBlock,
             markdown: draftMarkdown,
           },
           draftMarkdown,
-          editorFrame: activeBlockState?.editorFrame ?? overlayFrameRef.current,
+          editorFrame: activeBlockState?.editorFrame ?? cachedOverlayFrame,
           selection: activeSelection,
         });
       }
@@ -2530,6 +2533,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             width,
           };
           overlayFrameRef.current = nextOverlayFrame;
+          overlayFrameBlockIdRef.current = blockId;
           overlayFrame$.set(nextOverlayFrame);
           const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
           if (activeBlockState) {

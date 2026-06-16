@@ -8,6 +8,39 @@ type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 const systemBlockSelectionBackgroundColor = Platform.OS === "macos" ? PlatformColor("selectedTextBackgroundColor") : "#bfdbfe";
 
+function textInputStyleFromMarkdownBlockStyle(markdownTextStyle: TextStyle | undefined): TextStyle | undefined {
+  if (!markdownTextStyle) {
+    return undefined;
+  }
+
+  const {
+    backgroundColor: _backgroundColor,
+    borderBottomColor: _borderBottomColor,
+    borderBottomLeftRadius: _borderBottomLeftRadius,
+    borderBottomRightRadius: _borderBottomRightRadius,
+    borderBottomWidth: _borderBottomWidth,
+    borderColor: _borderColor,
+    borderLeftColor: _borderLeftColor,
+    borderLeftWidth: _borderLeftWidth,
+    borderRadius: _borderRadius,
+    borderRightColor: _borderRightColor,
+    borderRightWidth: _borderRightWidth,
+    borderTopColor: _borderTopColor,
+    borderTopLeftRadius: _borderTopLeftRadius,
+    borderTopRightRadius: _borderTopRightRadius,
+    borderTopWidth: _borderTopWidth,
+    borderWidth: _borderWidth,
+    padding: _padding,
+    paddingBottom: _paddingBottom,
+    paddingLeft: _paddingLeft,
+    paddingRight: _paddingRight,
+    paddingTop: _paddingTop,
+    ...textInputStyle
+  } = markdownTextStyle;
+
+  return textInputStyle;
+}
+
 export function inputStyleFromMarkdownStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
   return markdownStyle as MarkdownTextInputStyle;
 }
@@ -38,7 +71,10 @@ export function editableTextStyleForBlock(
                   ? markdownStyle.codeBlock
                   : markdownStyle.paragraph;
 
-  return [markdownDocumentStyles.editorInput, markdownTextStyle as TextStyle | undefined];
+  return [
+    markdownDocumentStyles.editorInput,
+    textInputStyleFromMarkdownBlockStyle(markdownTextStyle as TextStyle | undefined),
+  ];
 }
 
 export function emptyParagraphPlaceholderStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
