@@ -5,6 +5,8 @@
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/Props.h>
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/RCTComponentViewHelpers.h>
 
+#include <cmath>
+
 using namespace facebook::react;
 
 static SEL setValueSelector()
@@ -20,6 +22,11 @@ static SEL setValuePreservingSelectionSelector()
 static SEL focusSelector()
 {
   return NSSelectorFromString(@"focus");
+}
+
+static SEL measureSizeSelector()
+{
+  return NSSelectorFromString(@"measureSize:");
 }
 
 static NSString *blockStyleKeyForMarkdown(NSString *markdown)
@@ -76,6 +83,18 @@ static void callFocus(id target)
 
   void (*send)(id, SEL) = (void (*)(id, SEL))[target methodForSelector:selector];
   send(target, selector);
+}
+
+static CGFloat measuredInputHeight(id target, CGFloat width)
+{
+  SEL selector = measureSizeSelector();
+  if (![target respondsToSelector:selector] || width <= 0) {
+    return 0;
+  }
+
+  CGSize (*send)(id, SEL, CGFloat) = (CGSize (*)(id, SEL, CGFloat))[target methodForSelector:selector];
+  CGSize measuredSize = send(target, selector, width);
+  return std::isfinite(measuredSize.height) && measuredSize.height > 0 ? ceil(measuredSize.height) : 0;
 }
 
 static BOOL isEnrichedMarkdownInput(id view)
@@ -337,6 +356,10 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 
   NSRect frame = [view convertRect:view.bounds toView:overlaySuperview];
+  if (_lastLoadedBlockId != nil && [_lastLoadedBlockId isEqualToString:view.blockId]) {
+    CGFloat measuredHeight = measuredInputHeight(_overlayInput, frame.size.width);
+    frame.size.height = MAX(frame.size.height, measuredHeight);
+  }
   return frame;
 }
 
@@ -506,6 +529,11 @@ static BOOL isEnrichedMarkdownInput(id view)
     if (![oldStyleKey isEqualToString:newStyleKey]) {
       callSetValuePreservingSelection(_overlayInput, nextActiveMarkdown ?: @"");
       _lastLoadedBlockId = [nextActiveBlockId copy];
+      RNMarkdownBlockActivationView *view = [self activeBlockView];
+      if (view != nil) {
+        [self positionOverlayForBlockView:view];
+        [self emitBeginEditingForBlockView:view];
+      }
     }
   }
 
