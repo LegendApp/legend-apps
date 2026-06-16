@@ -26,6 +26,7 @@ import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { contentHorizontalPadding, contentMaxWidth, editDebounceMs, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
 import type {
+  ActiveBlockRenderState,
   BlockLayout,
   BlockSelectionState,
   DocumentState,
@@ -2266,15 +2267,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       documentRenderState$.blockSelection.set(blockSelection);
     }, [blockSelection, documentRenderState$]);
     useEffect(() => {
-      const activeBlocksById = new Map<string, { draftMarkdown: string; selection: number }>();
-      if (activeBlockId) {
+      const activeBlocksById = new Map<string, ActiveBlockRenderState>();
+      const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
+      if (activeBlockId && activeBlock) {
         activeBlocksById.set(activeBlockId, {
+          block: {
+            ...activeBlock,
+            markdown: draftMarkdown,
+          },
           draftMarkdown,
           selection: activeSelection,
         });
       }
       documentRenderState$.activeBlocksById.set(activeBlocksById);
-    }, [activeBlockId, activeSelection, documentRenderState$, draftMarkdown]);
+    }, [activeBlockId, activeSelection, blocksById, documentRenderState$, draftMarkdown]);
     useEffect(() => {
       const selectedBlocksById = new Map<string, boolean>();
       selectedBlockIds.forEach((blockId) => {

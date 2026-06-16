@@ -592,7 +592,7 @@ index f02ae612dc15fb369eaef4d3bedda31049517e21..ce8ce1bc8e8c79132359c3e54c8accbd
 
  @end
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..6c1110ca5484ba52b2976128d88cd1b9904ab6d5 100644
+index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e21131550 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -38,6 +38,7 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
@@ -690,7 +690,31 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..6c1110ca5484ba52b2976128d88cd1b9
  }
 
  - (void)applyFormatting
-@@ -575,6 +634,56 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -565,6 +624,23 @@ - (void)setValue:(NSString *)markdown
+   [self requestHeightUpdate];
+ }
+
++- (void)setValuePreservingSelection:(NSString *)markdown
++{
++  NSRange selection = _textView.selectedRange;
++  [self importMarkdown:markdown];
++
++  NSUInteger textLength = ENRMGetPlainText(_textView).length;
++  NSUInteger selectionStart = MIN(selection.location, textLength);
++  NSUInteger selectionEnd = MIN(NSMaxRange(selection), textLength);
++  _textView.selectedRange = NSMakeRange(selectionStart, selectionEnd - selectionStart);
++  _lastSelectedRange = _textView.selectedRange;
++
++  [self emitOnChangeText];
++  [self emitOnChangeSelection];
++  [self emitOnChangeState];
++  [self requestHeightUpdate];
++}
++
+ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+ {
+   NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
+@@ -575,6 +651,56 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [self emitOnChangeState];
  }
 
@@ -747,7 +771,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..6c1110ca5484ba52b2976128d88cd1b9
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -884,6 +993,33 @@ - (void)emitOnChangeSelection
+@@ -884,6 +1010,33 @@ - (void)emitOnChangeSelection
    });
  }
 
@@ -781,7 +805,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..6c1110ca5484ba52b2976128d88cd1b9
  - (void)emitOnChangeState
  {
    auto emitter = [self getEventEmitter];
-@@ -914,12 +1050,12 @@ - (void)emitOnChangeState
+@@ -914,12 +1067,12 @@ - (void)emitOnChangeState
    _prevState.initialized = YES;
 
    emitter->onChangeState({
@@ -800,7 +824,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..6c1110ca5484ba52b2976128d88cd1b9
    });
  }
 
-@@ -988,12 +1124,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
+@@ -988,12 +1141,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
        .selectionEnd = static_cast<int>(NSMaxRange(selectedRange)),
        .styleState =
            {
@@ -819,7 +843,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..6c1110ca5484ba52b2976128d88cd1b9
            },
    });
  }
-@@ -1149,6 +1285,12 @@ - (void)manageSelectionBasedChanges
+@@ -1149,6 +1302,12 @@ - (void)manageSelectionBasedChanges
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;

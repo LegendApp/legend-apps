@@ -93,6 +93,7 @@ export type OverlayFrame = {
 };
 
 export type ActiveBlockRenderState = {
+  block: MarkdownBlockSnapshot;
   draftMarkdown: string;
   selection: number;
 };

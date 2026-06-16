@@ -92,6 +92,8 @@ export const MarkdownEditorInput = memo(
   (previousProps, nextProps) =>
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.block.id === nextProps.block.id &&
+    previousProps.block.type === nextProps.block.type &&
+    previousProps.block.headingLevel === nextProps.block.headingLevel &&
     previousProps.initialMarkdown === nextProps.initialMarkdown &&
     previousProps.initialSelection === nextProps.initialSelection &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
@@ -161,7 +163,7 @@ export const MarkdownOverlayEditorInput = memo(
         }}
         scrollEnabled={false}
         style={StyleSheet.flatten([
-          styles.editorInput,
+          activeBlock ? editableTextStyleForBlock(activeBlock, markdownStyle) : styles.editorInput,
           styles.overlayEditorInput,
           { width: inactiveOverlayWidth },
           overlayFrame,
@@ -171,6 +173,8 @@ export const MarkdownOverlayEditorInput = memo(
   },
   (previousProps, nextProps) =>
     previousProps.activeBlock?.id === nextProps.activeBlock?.id &&
+    previousProps.activeBlock?.type === nextProps.activeBlock?.type &&
+    previousProps.activeBlock?.headingLevel === nextProps.activeBlock?.headingLevel &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.inactiveOverlayWidth$ === nextProps.inactiveOverlayWidth$ &&
@@ -225,6 +229,7 @@ export function MarkdownBlockRow({
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
   const previousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
+  const activeEditorBlock = activeBlock?.block ?? block;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;
   const isActive = activeBlock !== undefined;
@@ -261,7 +266,7 @@ export function MarkdownBlockRow({
       >
         <MarkdownEditorInput
           activeInputRef={activeInputRef}
-          block={block}
+          block={activeEditorBlock}
           initialMarkdown={draftMarkdown}
           initialSelection={initialSelection}
           markdownStyle={markdownStyle}

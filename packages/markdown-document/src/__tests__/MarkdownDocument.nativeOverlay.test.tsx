@@ -2,9 +2,11 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { View } from "react-native";
 import { MarkdownDocument } from "../MarkdownDocument";
+import { defaultMarkdownStyle } from "../styles";
 import type {
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
+  MarkdownDocumentCommands,
   MarkdownDocumentSnapshot,
   MarkdownTransaction,
   MarkdownTransactionResult,
@@ -31,6 +33,19 @@ function block(id: string, index: number, markdown: string): MarkdownBlockSnapsh
   };
 }
 
+function headingBlock(id: string, index: number, markdown: string, headingLevel: MarkdownBlockSnapshot["headingLevel"]): MarkdownBlockSnapshot {
+  return {
+    ...block(id, index, markdown),
+    headingLevel,
+    type: "heading",
+  };
+}
+
+function headingLevelFromMarkdown(markdown: string) {
+  const match = /^(#{1,6})\s/.exec(markdown);
+  return match ? match[1]!.length : 0;
+}
+
 function snapshot(initialBlocks: MarkdownBlockSnapshot[]): MarkdownDocumentSnapshot {
   return {
     blockCount: initialBlocks.length,
@@ -48,6 +63,7 @@ function snapshot(initialBlocks: MarkdownBlockSnapshot[]): MarkdownDocumentSnaps
 
 class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   private blocks: MarkdownBlockSnapshot[] = [];
+  private revision = 0;
 
   constructor(private documentSnapshot: MarkdownDocumentSnapshot) {}
 
@@ -68,8 +84,41 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
     return this.blocks.slice(startIndex, startIndex + count);
   }
 
-  async applyTransaction(_documentId: string, _transaction: MarkdownTransaction): Promise<MarkdownTransactionResult> {
-    throw new Error("Unexpected transaction in native overlay placement test");
+  async applyTransaction(_documentId: string, transaction: MarkdownTransaction): Promise<MarkdownTransactionResult> {
+    if (transaction.type !== "updateBlockMarkdown") {
+      throw new Error(`Unexpected native overlay transaction: ${transaction.type}`);
+    }
+
+    const index = this.blocks.findIndex((candidate) => candidate.id === transaction.blockId);
+    if (index < 0) {
+      throw new Error(`Missing test block: ${transaction.blockId}`);
+    }
+
+    this.revision += 1;
+    const nextHeadingLevel = headingLevelFromMarkdown(transaction.markdown);
+    const nextBlock = {
+      ...this.blocks[index]!,
+      contentEndByte: transaction.markdown.length,
+      contentStartByte: 0,
+      headingLevel: nextHeadingLevel,
+      markdown: transaction.markdown,
+      sourceEndByte: transaction.markdown.length,
+      textRevision: this.blocks[index]!.textRevision + 1,
+      type: nextHeadingLevel > 0 ? "heading" : "paragraph",
+    } satisfies MarkdownBlockSnapshot;
+    this.blocks[index] = nextBlock;
+
+    return {
+      changedBlocks: [nextBlock],
+      changedRange: {
+        blockIds: [nextBlock.id],
+        deleteCount: 1,
+        startBlockIndex: index,
+      },
+      retiredBlockIds: [],
+      revision: this.revision,
+      sourceLength: transaction.markdown.length,
+    };
   }
 
   async save() {}
@@ -90,6 +139,31 @@ function editorInput(root: TestRenderer.ReactTestRenderer | TestRenderer.ReactTe
     throw new Error("Missing markdown editor input");
   }
   return input;
+}
+
+function flattenStyle(style: unknown) {
+  const flattened: Record<string, unknown> = {};
+
+  const appendStyle = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(appendStyle);
+    } else if (value && typeof value === "object") {
+      const styleObject = value as Record<string, unknown>;
+      Object.keys(styleObject)
+        .filter((key) => /^\d+$/.test(key))
+        .sort((left, right) => Number(left) - Number(right))
+        .forEach((key) => appendStyle(styleObject[key]));
+
+      Object.keys(styleObject)
+        .filter((key) => !/^\d+$/.test(key))
+        .forEach((key) => {
+          flattened[key] = styleObject[key];
+        });
+    }
+  };
+
+  appendStyle(style);
+  return flattened;
 }
 
 describe("MarkdownDocument native editor overlay", () => {
@@ -160,6 +234,58 @@ describe("MarkdownDocument native editor overlay", () => {
       top: 80,
       width: 640,
     }));
+  });
+
+  it("updates the overlay editor style when heading level changes", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "### Heading", 3),
+    ]));
+    const commandsRef = React.createRef<MarkdownDocumentCommands>();
+    const markdownStyle = {
+      ...defaultMarkdownStyle,
+      h2: { ...defaultMarkdownStyle.h2, fontSize: 22 },
+      h3: { ...defaultMarkdownStyle.h3, fontSize: 18 },
+      paragraph: { ...defaultMarkdownStyle.paragraph, fontSize: 12 },
+    };
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          ref={commandsRef}
+          adapter={adapter}
+          filename="test.md"
+          markdownStyle={markdownStyle}
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = renderer!.root.find((node) => typeof node.props.onBeginEditing === "function");
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 18 }));
+
+    await act(async () => {
+      commandsRef.current?.setHeading(2);
+      await Promise.resolve();
+    });
+
+    expect(host.props.activeBlockId).toBe("d1:b0");
+    expect(host.props.activeMarkdown).toBe("## Heading");
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
   });
 
 });

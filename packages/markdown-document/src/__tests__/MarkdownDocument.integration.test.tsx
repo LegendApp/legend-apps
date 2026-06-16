@@ -2,6 +2,7 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { View } from "react-native";
 import { MarkdownDocument } from "../MarkdownDocument";
+import { defaultMarkdownStyle } from "../styles";
 import type {
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
@@ -106,10 +107,17 @@ function markdownBlockType(markdown: string) {
   return type;
 }
 
+function markdownHeadingLevel(markdown: string) {
+  const firstLine = splitMarkdownLines(markdown)[0] ?? "";
+  const match = /^(#{1,6})\s/.exec(firstLine);
+  return match ? match[1]!.length : 0;
+}
+
 function markdownBlock(id: string, index: number, markdown: string): MarkdownBlockSnapshot {
   return {
     ...block(id, index, markdown),
     depth: markdownDepth(markdown),
+    headingLevel: markdownHeadingLevel(markdown),
     type: markdownBlockType(markdown),
   };
 }
@@ -552,6 +560,31 @@ function editorInput(renderer: TestRenderer.ReactTestRenderer, index = 0) {
     throw new Error(`Missing markdown editor input ${index}`);
   }
   return input;
+}
+
+function flattenStyle(style: unknown) {
+  const flattened: Record<string, unknown> = {};
+
+  const appendStyle = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(appendStyle);
+    } else if (value && typeof value === "object") {
+      const styleObject = value as Record<string, unknown>;
+      Object.keys(styleObject)
+        .filter((key) => /^\d+$/.test(key))
+        .sort((left, right) => Number(left) - Number(right))
+        .forEach((key) => appendStyle(styleObject[key]));
+
+      Object.keys(styleObject)
+        .filter((key) => !/^\d+$/.test(key))
+        .forEach((key) => {
+          flattened[key] = styleObject[key];
+        });
+    }
+  };
+
+  appendStyle(style);
+  return flattened;
 }
 
 function expectUniqueBlockIds(adapter: MountedEditorAdapter) {
@@ -3743,6 +3776,36 @@ describe("MarkdownDocument mounted editing", () => {
         type: "updateBlockMarkdown",
       },
     ]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates the active editor style when heading level changes", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([markdownBlock("d1:b0", 0, "### Heading")]));
+    const markdownStyle = {
+      ...defaultMarkdownStyle,
+      h2: { ...defaultMarkdownStyle.h2, fontSize: 22 },
+      h3: { ...defaultMarkdownStyle.h3, fontSize: 18 },
+      paragraph: { ...defaultMarkdownStyle.paragraph, fontSize: 12 },
+    };
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, documentProps: { markdownStyle } });
+
+    expect(flattenStyle(editorInput(renderer).props.style)).toEqual(expect.objectContaining({ fontSize: 18 }));
+
+    await act(async () => {
+      commandsRef.current?.setHeading(2);
+    });
+    await flushPromises();
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "## Heading",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockTypes).toEqual(["heading"]);
+    expect(adapter.blockSnapshots[0]?.headingLevel).toBe(2);
+    expect(flattenStyle(editorInput(renderer).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
     expect(onError).not.toHaveBeenCalled();
   });
 

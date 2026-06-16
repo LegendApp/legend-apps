@@ -12,15 +12,54 @@ static SEL setValueSelector()
   return NSSelectorFromString(@"setValue:");
 }
 
+static SEL setValuePreservingSelectionSelector()
+{
+  return NSSelectorFromString(@"setValuePreservingSelection:");
+}
+
 static SEL focusSelector()
 {
   return NSSelectorFromString(@"focus");
+}
+
+static NSString *blockStyleKeyForMarkdown(NSString *markdown)
+{
+  NSString *trimmedMarkdown = [markdown stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  if ([trimmedMarkdown hasPrefix:@"```"] || [trimmedMarkdown hasPrefix:@"~~~"]) {
+    return @"codeBlock";
+  }
+
+  NSUInteger headingLevel = 0;
+  while (headingLevel < trimmedMarkdown.length && headingLevel < 6 && [trimmedMarkdown characterAtIndex:headingLevel] == '#') {
+    headingLevel += 1;
+  }
+  if (
+    headingLevel > 0 &&
+    headingLevel < trimmedMarkdown.length &&
+    [[NSCharacterSet whitespaceCharacterSet] characterIsMember:[trimmedMarkdown characterAtIndex:headingLevel]]
+  ) {
+    return [NSString stringWithFormat:@"h%lu", (unsigned long)headingLevel];
+  }
+
+  return @"paragraph";
 }
 
 static void callSetValue(id target, NSString *markdown)
 {
   SEL selector = setValueSelector();
   if (![target respondsToSelector:selector]) {
+    return;
+  }
+
+  void (*send)(id, SEL, NSString *) = (void (*)(id, SEL, NSString *))[target methodForSelector:selector];
+  send(target, selector, markdown);
+}
+
+static void callSetValuePreservingSelection(id target, NSString *markdown)
+{
+  SEL selector = setValuePreservingSelectionSelector();
+  if (![target respondsToSelector:selector]) {
+    callSetValue(target, markdown);
     return;
   }
 
@@ -441,6 +480,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   const auto &newViewProps = *std::static_pointer_cast<MarkdownEditorHostProps const>(props);
 
   NSString *nextActiveBlockId = [NSString stringWithUTF8String:newViewProps.activeBlockId.c_str()];
+  NSString *nextActiveMarkdown = [NSString stringWithUTF8String:newViewProps.activeMarkdown.c_str()];
   if (nextActiveBlockId.length == 0) {
     if (_activeBlockId != nil) {
       [self hideOverlay];
@@ -448,7 +488,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   } else if (_activeBlockId == nil || ![_activeBlockId isEqualToString:nextActiveBlockId]) {
     RNMarkdownBlockActivationView *view = [self activationViewForBlockId:nextActiveBlockId];
     if (view != nil) {
-      NSString *markdown = [NSString stringWithUTF8String:newViewProps.activeMarkdown.c_str()];
+      NSString *markdown = nextActiveMarkdown;
       [self showActiveBlockContents];
       _activeBlockId = [nextActiveBlockId copy];
       [self setBlockView:view contentsHidden:YES];
@@ -459,6 +499,13 @@ static BOOL isEnrichedMarkdownInput(id view)
       _activeBlockId = [nextActiveBlockId copy];
       _lastLoadedBlockId = nil;
       [self stopObservingScrollView];
+    }
+  } else {
+    NSString *oldStyleKey = blockStyleKeyForMarkdown([NSString stringWithUTF8String:oldViewProps.activeMarkdown.c_str()]);
+    NSString *newStyleKey = blockStyleKeyForMarkdown(nextActiveMarkdown);
+    if (![oldStyleKey isEqualToString:newStyleKey]) {
+      callSetValuePreservingSelection(_overlayInput, nextActiveMarkdown ?: @"");
+      _lastLoadedBlockId = [nextActiveBlockId copy];
     }
   }
 
