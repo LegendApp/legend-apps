@@ -1,6 +1,7 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { View } from "react-native";
+import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
 import { defaultMarkdownStyle } from "../styles";
 import type {
@@ -62,6 +63,8 @@ function snapshot(initialBlocks: MarkdownBlockSnapshot[]): MarkdownDocumentSnaps
 }
 
 class NativeOverlayAdapter implements MarkdownDocumentAdapter {
+  applyTransactions: MarkdownTransaction[] = [];
+  pendingTransactionGate: Promise<void> | undefined;
   private blocks: MarkdownBlockSnapshot[] = [];
   private revision = 0;
 
@@ -85,6 +88,11 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   }
 
   async applyTransaction(_documentId: string, transaction: MarkdownTransaction): Promise<MarkdownTransactionResult> {
+    this.applyTransactions.push(transaction);
+    if (this.pendingTransactionGate) {
+      await this.pendingTransactionGate;
+      this.pendingTransactionGate = undefined;
+    }
     if (transaction.type !== "updateBlockMarkdown") {
       throw new Error(`Unexpected native overlay transaction: ${transaction.type}`);
     }
@@ -139,6 +147,24 @@ function editorInput(root: TestRenderer.ReactTestRenderer | TestRenderer.ReactTe
     throw new Error("Missing markdown editor input");
   }
   return input;
+}
+
+function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.find((node) => (
+    typeof node.props.onBeginEditing === "function" &&
+    Object.prototype.hasOwnProperty.call(node.props, "activeMarkdown")
+  ));
+}
+
+function activationView(renderer: TestRenderer.ReactTestRenderer, blockId: string) {
+  return renderer.root.find((node) => node.props.blockId === blockId);
+}
+
+async function changeText(input: TestRenderer.ReactTestInstance, markdown: string) {
+  await act(async () => {
+    input.props.onChangeText(markdown);
+  });
+  await Promise.resolve();
 }
 
 function flattenStyle(style: unknown) {
@@ -202,7 +228,7 @@ describe("MarkdownDocument native editor overlay", () => {
       await Promise.resolve();
     });
 
-    const host = renderer!.root.find((node) => typeof node.props.onBeginEditing === "function");
+    const host = nativeHost(renderer!);
     const list = renderer!.root.find((node) => typeof node.props.onScroll === "function");
 
     await act(async () => {
@@ -262,7 +288,7 @@ describe("MarkdownDocument native editor overlay", () => {
       await Promise.resolve();
     });
 
-    const host = renderer!.root.find((node) => typeof node.props.onBeginEditing === "function");
+    const host = nativeHost(renderer!);
 
     await act(async () => {
       host.props.onBeginEditing({
@@ -286,6 +312,138 @@ describe("MarkdownDocument native editor overlay", () => {
     expect(host.props.activeBlockId).toBe("d1:b0");
     expect(host.props.activeMarkdown).toBe("## Heading");
     expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+  });
+
+  it("updates native host markdown optimistically while typed heading changes are still committing", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "### Heading", 3),
+    ]));
+    let resolveTransaction!: () => void;
+    adapter.pendingTransactionGate = new Promise<void>((resolve) => {
+      resolveTransaction = resolve;
+    });
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    await changeText(editorInput(renderer!), "## Heading");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "## Heading",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(nativeHost(renderer!).props.activeMarkdown).toBe("## Heading");
+
+    resolveTransaction();
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+
+  it("sizes the active native row from the native editor frame", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "### Heading", 3),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      nativeHost(renderer!).props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 28 }));
+
+    await act(async () => {
+      nativeHost(renderer!).props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 44,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 44 }));
+  });
+
+  it("does not render enriched markdown text inside the active native row", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "### Heading", 3),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(activationView(renderer!, "d1:b0").findAllByType(EnrichedMarkdownText)).toHaveLength(1);
+
+    await act(async () => {
+      nativeHost(renderer!).props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    expect(activationView(renderer!, "d1:b0").findAllByType(EnrichedMarkdownText)).toHaveLength(0);
   });
 
 });

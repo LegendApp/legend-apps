@@ -235,12 +235,19 @@ export function MarkdownBlockRow({
   const isActive = activeBlock !== undefined;
   const rowWidth$ = useObservable(700);
   const rowRef = useRef<View>(null);
+  const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
+    ? { height: activeBlock.editorFrame.height }
+    : null;
+  const nativeEditorSpacer = activeNativeEditorRowStyle ? (
+    <View style={[styles.nativeEditorSpacer, activeNativeEditorRowStyle]} />
+  ) : null;
 
   if (!block) {
     return null;
   }
 
-  const rowStyle = blockRowSpacingStyle(block, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
+  const layoutBlock = isActive ? activeEditorBlock : block;
+  const rowStyle = blockRowSpacingStyle(layoutBlock, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
   const selectionOverlay = isBlockSelected ? (
     <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
@@ -312,9 +319,9 @@ export function MarkdownBlockRow({
             rowWidth$.set(event.nativeEvent.layout.width);
             measureWindowLayout();
           }}
-          style={[rowStyle, styles.blockRow]}
+          style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
         >
-          {renderedMarkdown}
+          {isActive && nativeEditorSpacer ? nativeEditorSpacer : renderedMarkdown}
           {selectionOverlay}
         </MarkdownBlockActivationView>
         {commentBubble}

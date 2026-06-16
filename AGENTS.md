@@ -53,12 +53,26 @@ For macOS app screenshots and interaction, prefer an app-scoped session, which c
 - For first-time exploration, use one-at-a-time `agent-device snapshot -i --session <name>` and targeted commands so refs and UI state stay grounded after each mutation.
 - When a repro or verification path is known, prefer an `agent-device batch --steps-file <path> --session <name>` flow over one-off commands. Keep batch steps stable with selectors, visible text waits, and app-defined e2e launch arguments rather than session-specific refs whenever possible.
 
+### Runtime Logs With Agent Device
+
+For React Native macOS app debugging, do not rely on Metro output for runtime logs. Metro often only shows bundling status, and JS `console.info` may be routed to React Native DevTools instead of the app log.
+
+Use the normal `agent-device logs clear --restart` / `mark before` / repro / `mark after` / `logs path` loop above, with these extra checks when logs are empty or confusing:
+
+- Verify there is exactly one current debug app process, and that it comes from `DerivedData/.../Build/Products/Debug/...`, not `shell/.legend/workspaces/release/...`.
+- Prefer binding to the already-running frontmost app with `agent-device open --session <name> --platform macos --surface frontmost-app`; if binding by bundle id, re-check that it did not launch a duplicate instance.
+- If `app.log` only contains `agent-device` markers, confirm `logs path` reports `active=true`, the debug prefix was emitted after `logs clear --restart`, and the session is bound to the correct app.
+- For temporary instrumentation that must be visible in `agent-device logs` on macOS, prefer native unified logging with the app bundle id subsystem, for example `os_log_create("app.legend.markdown.macos", "debug-category")`. Plain `NSLog` can be missed by the app-scoped filter.
+- If JS-side timing is required and app logs do not include it, try `agent-device react-devtools ...` before falling back to file-backed logging.
+
 ### macOS Dev App Pitfalls
 
 For current-code testing, launch the app with the repo scripts before binding `agent-device`:
 
 - `bun music run` for Music.
 - `bun markdown run` for Markdown.
+
+Before a native rebuild/relaunch, close the running app first. If the app is already running, the build/run script may only focus the old process, so the rebuilt native code will not be loaded.
 
 Do not rely on `agent-device open <bundle-id>` as the primary way to launch current code. For generated macOS apps it can bind to a stale release build under `shell/.legend/workspaces/release/...`, which will not contain current JS/native changes. After launching, verify the running process when behavior or logs look stale:
 

@@ -29,6 +29,9 @@ static SEL measureSizeSelector()
   return NSSelectorFromString(@"measureSize:");
 }
 
+static NSString *const ENRMMarkdownTextInputContentSizeDidChangeNotification =
+  @"ENRMMarkdownTextInputContentSizeDidChangeNotification";
+
 static NSString *blockStyleKeyForMarkdown(NSString *markdown)
 {
   NSString *trimmedMarkdown = [markdown stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -140,6 +143,10 @@ static BOOL isEnrichedMarkdownInput(id view)
                                              selector:@selector(overlayInputFrameDidChange:)
                                                  name:NSViewFrameDidChangeNotification
                                                object:_overlayInput];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(overlayInputContentSizeDidChange:)
+                                                 name:ENRMMarkdownTextInputContentSizeDidChangeNotification
+                                               object:_overlayInput];
   }
 }
 
@@ -149,6 +156,9 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (childComponentView == _overlayInput) {
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:NSViewFrameDidChangeNotification
+                                                  object:_overlayInput];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:ENRMMarkdownTextInputContentSizeDidChangeNotification
                                                   object:_overlayInput];
     _overlayInput = nil;
     _overlayInputHomeSuperview = nil;
@@ -162,6 +172,9 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (_overlayInput != nil) {
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:NSViewFrameDidChangeNotification
+                                                  object:_overlayInput];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:ENRMMarkdownTextInputContentSizeDidChangeNotification
                                                   object:_overlayInput];
   }
   [self stopObservingScrollView];
@@ -358,7 +371,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   NSRect frame = [view convertRect:view.bounds toView:overlaySuperview];
   if (_lastLoadedBlockId != nil && [_lastLoadedBlockId isEqualToString:view.blockId]) {
     CGFloat measuredHeight = measuredInputHeight(_overlayInput, frame.size.width);
-    frame.size.height = MAX(frame.size.height, measuredHeight);
+    frame.size.height = measuredHeight > 0 ? measuredHeight : frame.size.height;
   }
   return frame;
 }
@@ -424,6 +437,19 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
 
   [self positionOverlayForBlockView:view];
+}
+
+- (void)overlayInputContentSizeDidChange:(NSNotification *)notification
+{
+  if (notification.object != _overlayInput || _overlayInput == nil || _overlayInput.hidden || _activeBlockId.length == 0) {
+    return;
+  }
+
+  RNMarkdownBlockActivationView *view = [self activeBlockView];
+  if (view != nil) {
+    [self positionOverlayForBlockView:view];
+    [self emitBeginEditingForBlockView:view];
+  }
 }
 
 - (void)activeScrollViewBoundsDidChange:(NSNotification *)notification
@@ -674,13 +700,14 @@ static BOOL isEnrichedMarkdownInput(id view)
   const auto &newViewProps = *std::static_pointer_cast<MarkdownBlockActivationViewProps const>(props);
 
   NSString *nextBlockId = [NSString stringWithUTF8String:newViewProps.blockId.c_str()];
+  NSString *nextMarkdown = [NSString stringWithUTF8String:newViewProps.markdown.c_str()];
   if (![_blockId isEqualToString:nextBlockId]) {
     [self setContentsHidden:NO];
     [self unregisterFromHost];
     _blockId = [nextBlockId copy];
     [self registerWithHostIfNeeded];
   }
-  _markdown = [[NSString stringWithUTF8String:newViewProps.markdown.c_str()] copy];
+  _markdown = [nextMarkdown copy];
   [self setContentsHidden:newViewProps.contentsHidden];
 
   [super updateProps:props oldProps:oldProps];

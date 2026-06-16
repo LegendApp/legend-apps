@@ -60,6 +60,9 @@ export const markdownDocumentStyles = StyleSheet.create({
   list: {
     flex: 1,
   },
+  nativeEditorSpacer: {
+    width: "100%",
+  },
   overlayEditorInput: {
     left: -10000,
     minHeight: 25,

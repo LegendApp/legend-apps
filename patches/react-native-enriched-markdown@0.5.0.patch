@@ -612,6 +612,14 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
        [self applyFormatting];
      }
 
+@@ -390,6 +391,7 @@ - (void)_performRelayout
+
+     CGSize measuredSize = [self measureSize:self->_textView.frame.size.width];
+     ENRMSetContentSize(self->_textView, measuredSize);
++    [[NSNotificationCenter defaultCenter] postNotificationName:@"ENRMMarkdownTextInputContentSizeDidChangeNotification" object:self];
+   });
+ }
+
 @@ -453,6 +454,8 @@ - (void)updatePlaceholderVisibility
 
  - (void)importMarkdown:(NSString *)markdown
@@ -843,7 +851,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
            },
    });
  }
-@@ -1149,6 +1302,12 @@ - (void)manageSelectionBasedChanges
+@@ -1056,6 +1209,9 @@ - (void)handleTextChanged
+     [self resetBaseTypingAttributes];
+   }
+
++  NSString *markdown = [ENRMMarkdownSerializer serializePlainText:ENRMGetPlainText(_textView)
++                                                           ranges:_formattingStore.allRanges];
++  [self applyBlockStyleForMarkdown:markdown];
+  [self applyFormatting];
+
+  [_detectorPipeline processTextChange:ENRMGetPlainText(_textView)
+@@ -1149,6 +1305,12 @@ - (void)manageSelectionBasedChanges
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;

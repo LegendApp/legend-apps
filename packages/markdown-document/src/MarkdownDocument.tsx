@@ -10,10 +10,13 @@ import {
   Text,
   TextInput,
   View,
+  StyleSheet,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type StyleProp,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
 import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown } from "./blockSelection";
@@ -24,7 +27,7 @@ import {
 } from "./documentStateModel";
 import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
-import { contentHorizontalPadding, contentMaxWidth, editDebounceMs, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
+import { contentHorizontalPadding, contentMaxWidth, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
 import type {
   ActiveBlockRenderState,
   BlockLayout,
@@ -38,6 +41,7 @@ import type {
   VerticalNavigationOutsideEvent,
 } from "./internalTypes";
 import {
+  editableTextStyleForBlock,
   estimateMarkdownSelectionVerticalRange,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
@@ -55,6 +59,7 @@ import {
   toggleUnorderedListMarkdown,
   type HeadingLevel,
 } from "./markdownFormatting";
+import { resolveOptimisticBlockPresentation } from "./optimisticBlockPresentation";
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 import type {
   MarkdownBlockSnapshot,
@@ -190,6 +195,44 @@ type MarkdownBlockSelectionInputProps = {
   onKeyPress: (event: { nativeEvent: { key: string } }) => void;
 };
 
+type MarkdownNativeEditorHostProps = {
+  activeBlockId: string | null;
+  children: ReactNode;
+  containerRef: RefObject<View | null>;
+  documentRenderState$: Observable<MarkdownDocumentRenderState>;
+  fallbackActiveMarkdown: string;
+  onBeginEditing: (event: { nativeEvent: { blockId: string; height: number; width: number; x: number; y: number } }) => void;
+  onLayout: () => void;
+  style: StyleProp<ViewStyle>;
+};
+
+const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
+  activeBlockId,
+  children,
+  containerRef,
+  documentRenderState$,
+  fallbackActiveMarkdown,
+  onBeginEditing,
+  onLayout,
+  style,
+}: MarkdownNativeEditorHostProps) {
+  const activeBlockState = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
+  const activeMarkdown = activeBlockId ? activeBlockState?.draftMarkdown ?? fallbackActiveMarkdown : "";
+
+  return (
+    <MarkdownEditorHost
+      ref={containerRef}
+      activeBlockId={activeBlockId ?? ""}
+      activeMarkdown={activeMarkdown}
+      onBeginEditing={onBeginEditing}
+      onLayout={onLayout}
+      style={style}
+    >
+      {children}
+    </MarkdownEditorHost>
+  );
+});
+
 const MarkdownBlockSelectionInput = memo(function MarkdownBlockSelectionInput({
   inputRef,
   inputText$,
@@ -225,12 +268,78 @@ function waitForAnimationFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function numberFromStyleValue(value: unknown) {
+  return typeof value === "number" ? value : 0;
+}
+
+function textStyleLineHeight(textStyle: TextStyle | undefined) {
+  if (typeof textStyle?.lineHeight === "number") {
+    return textStyle.lineHeight;
+  }
+  if (typeof textStyle?.fontSize === "number") {
+    return Math.ceil(textStyle.fontSize * 1.5);
+  }
+  return 25;
+}
+
+function estimateVisualLineCount(markdown: string, width: number, textStyle: TextStyle | undefined) {
+  const fontSize = typeof textStyle?.fontSize === "number" ? textStyle.fontSize : 16;
+  const padding = numberFromStyleValue(textStyle?.padding);
+  const paddingLeft = typeof textStyle?.paddingLeft === "number" ? textStyle.paddingLeft : padding;
+  const paddingRight = typeof textStyle?.paddingRight === "number" ? textStyle.paddingRight : padding;
+  const averageCharacterWidth = Math.max(1, fontSize * 0.62);
+  const textWidth = Math.max(1, width - paddingLeft - paddingRight);
+  const charactersPerLine = Math.max(1, Math.floor(textWidth / averageCharacterWidth));
+
+  return markdown
+    .split(markdownLineBreakPattern)
+    .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
+}
+
+function estimateEditorFrameHeight(
+  block: MarkdownBlockSnapshot,
+  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
+  width: number,
+) {
+  const textStyle = StyleSheet.flatten(editableTextStyleForBlock(block, markdownStyle)) as TextStyle | undefined;
+  const lineHeight = textStyleLineHeight(textStyle);
+  const padding = numberFromStyleValue(textStyle?.padding);
+  const paddingTop = typeof textStyle?.paddingTop === "number" ? textStyle.paddingTop : padding;
+  const paddingBottom = typeof textStyle?.paddingBottom === "number" ? textStyle.paddingBottom : padding;
+  const marginBottom = numberFromStyleValue(textStyle?.marginBottom);
+  const minHeight = numberFromStyleValue(textStyle?.minHeight);
+  const visualLineCount = estimateVisualLineCount(block.markdown, width, textStyle);
+  const paragraphHeight = visualLineCount * lineHeight + paddingTop + paddingBottom;
+  const nativeHeadingAdjustment = marginBottom > 0 ? 3 : 0;
+
+  return Math.max(minHeight, Math.ceil(paragraphHeight + marginBottom - nativeHeadingAdjustment));
+}
+
+function estimateOptimisticEditorFrame(
+  previousFrame: OverlayFrame | undefined,
+  nextBlock: MarkdownBlockSnapshot,
+  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
+) {
+  if (!previousFrame) {
+    return previousFrame;
+  }
+
+  const nextHeight = estimateEditorFrameHeight(nextBlock, markdownStyle, previousFrame.width);
+  const height = Math.max(1, Math.ceil(nextHeight));
+
+  return height === previousFrame.height ? previousFrame : { ...previousFrame, height };
+}
+
 function isTwoLineMarkdownPasteFromEmptyBlock(markdown: string) {
   const lines = markdown.split(markdownLineBreakPattern);
   return lines.length === 2 && (
     (markdownFenceStartPattern.test(lines[0] ?? "") && (lines[1] ?? "").length > 0) ||
     (markdownListLinePattern.test(lines[0] ?? "") && markdownListLinePattern.test(lines[1] ?? ""))
   );
+}
+
+function isFencedCodeMarkdown(markdown: string) {
+  return markdownFenceStartPattern.test(markdown.split(markdownLineBreakPattern)[0] ?? "");
 }
 
 function getStructuralSplitMarkdown(
@@ -284,8 +393,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const containerRef = useRef<View>(null);
     const listRef = useRef<LegendListRef | null>(null);
     const activeInputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
-    const editTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const commitQueueRef = useRef(Promise.resolve());
     const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
     const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
     const activeBlockIdRef = useRef<string | null>(null);
@@ -323,6 +432,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
     const blockStateRef = useRef(blockState);
+    const skipNextBlocksByIdPublishRef = useRef<Map<string, MarkdownBlockSnapshot> | undefined>(undefined);
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
     const [activeSelection, setActiveSelection] = useState(0);
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
@@ -361,13 +471,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useEffect(() => {
       blockStateRef.current = blockState;
     }, [blockState]);
-
-    const clearEditTimer = useCallback(() => {
-      if (editTimerRef.current !== undefined) {
-        clearTimeout(editTimerRef.current);
-        editTimerRef.current = undefined;
-      }
-    }, []);
 
     const clearAutosaveTimer = useCallback(() => {
       if (autosaveTimerRef.current !== undefined) {
@@ -627,30 +730,43 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
-      setBlockState((previousBlockState) => {
-        const block = previousBlockState.blocksById.get(blockId);
-        if (!block || block.markdown === markdown) {
-          return previousBlockState;
-        }
+      const previousBlockState = blockStateRef.current;
+      const block = previousBlockState.blocksById.get(blockId);
+      if (!block || block.markdown === markdown) {
+        return;
+      }
 
-        const blocksById = new Map(previousBlockState.blocksById);
-        blocksById.set(blockId, {
-          ...block,
-          contentEndByte: block.contentStartByte !== undefined ? block.contentStartByte + markdown.length : block.contentEndByte,
-          markdown,
-          sourceEndByte: block.sourceStartByte + markdown.length,
-          textRevision: block.textRevision + 1,
+      const nextBlock = {
+        ...block,
+        ...resolveOptimisticBlockPresentation(markdown),
+        contentEndByte: block.contentStartByte !== undefined ? block.contentStartByte + markdown.length : block.contentEndByte,
+        markdown,
+        sourceEndByte: block.sourceStartByte + markdown.length,
+        textRevision: block.textRevision + 1,
+      };
+      const blocksById = new Map(previousBlockState.blocksById);
+      blocksById.set(blockId, nextBlock);
+      const nextBlockState = {
+        ...previousBlockState,
+        blocksById,
+      };
+      blockStateRef.current = nextBlockState;
+      documentRenderState$.blocksById.get(blockId).set(nextBlock);
+      if (activeBlockIdRef.current === blockId) {
+        const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
+        const editorFrame = estimateOptimisticEditorFrame(activeBlockState?.editorFrame, nextBlock, resolvedMarkdownStyle);
+        documentRenderState$.activeBlocksById.get(blockId).set({
+          block: nextBlock,
+          draftMarkdown: markdown,
+          editorFrame,
+          selection: activeInputSelectionRef.current.start,
         });
-        return {
-          ...previousBlockState,
-          blocksById,
-        };
-      });
-    }, []);
+      }
+      skipNextBlocksByIdPublishRef.current = blocksById;
+      setBlockState(nextBlockState);
+    }, [documentRenderState$, resolvedMarkdownStyle]);
 
-    const commitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
-      clearEditTimer();
-
+    const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
       const updateReactState = options.updateReactState ?? true;
       const activeBlockIdValue = activeBlockIdRef.current;
       const markdown = draftMarkdownRef.current;
@@ -737,7 +853,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [
       adapter,
       applyTransactionResult,
-      clearEditTimer,
       clearTypingHistoryGroup,
       documentState,
       onErrorRef,
@@ -746,6 +861,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       updateRenderedBlockMarkdown,
       validateTransactionResult,
     ]);
+
+    const commitActiveBlock = useCallback((options: { updateReactState?: boolean } = {}) => {
+      const commitPromise = commitQueueRef.current
+        .catch(() => {})
+        .then(() => runCommitActiveBlock(options));
+      commitQueueRef.current = commitPromise.catch(() => {});
+      return commitPromise;
+    }, [runCommitActiveBlock]);
 
     const setActiveBlock = useCallback((block: MarkdownBlockSnapshot, selection: number) => {
       nativeEditingBlockIdRef.current = block.id;
@@ -951,8 +1074,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const splitActiveBlock = useCallback(
       async (block: MarkdownBlockSnapshot, beforeMarkdown: string, afterMarkdown: string) => {
-        clearEditTimer();
-
         if (documentState.status !== "loaded" || !adapter.applyTransaction) {
           return;
         }
@@ -1006,7 +1127,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [
         adapter,
         applyTransactionResult,
-        clearEditTimer,
         clearTypingHistoryGroup,
         documentState,
         markDirty,
@@ -1041,7 +1161,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         }
 
-        if (block.type !== "codeBlock") {
+        if (block.type !== "codeBlock" && !isFencedCodeMarkdown(markdown)) {
           const splitMarkdown = getStructuralSplitMarkdown(markdown, committedMarkdownRef.current, activeInputSelectionRef.current);
           if (splitMarkdown) {
             const continuationMarkdown = getSplitContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
@@ -1056,16 +1176,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         draftMarkdownRef.current = markdown;
         setDraftMarkdown(markdown);
-        if (usesNativeEditorOverlay) {
-          updateRenderedBlockMarkdown(block.id, markdown);
-        }
+        updateRenderedBlockMarkdown(block.id, markdown);
         markDirty();
-        clearEditTimer();
-        editTimerRef.current = setTimeout(() => {
-          commitActiveBlock({ updateReactState: false }).catch(reportAsyncError);
-        }, editDebounceMs);
+        commitActiveBlock({ updateReactState: false }).catch(reportAsyncError);
       },
-      [clearEditTimer, commitActiveBlock, markDirty, reportAsyncError, splitActiveBlock, updateRenderedBlockMarkdown],
+      [commitActiveBlock, markDirty, reportAsyncError, splitActiveBlock, updateRenderedBlockMarkdown],
     );
     const handleChangeMarkdownRef = useLatestRef(handleChangeMarkdown);
 
@@ -1120,7 +1235,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        clearEditTimer();
         try {
           clearTypingHistoryGroup();
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
@@ -1199,7 +1313,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockIds,
         blockSelection,
         blocksById,
-        clearEditTimer,
         clearTypingHistoryGroup,
         documentState,
         markDirty,
@@ -1216,7 +1329,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        clearEditTimer();
         try {
           const beforeMarkdown = draftMarkdownRef.current;
           if (markdown === beforeMarkdown) {
@@ -1265,7 +1377,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         adapter,
         applyTransactionResult,
         blocksById,
-        clearEditTimer,
         documentState,
         markDirty,
         onErrorRef,
@@ -1341,7 +1452,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        clearEditTimer();
         try {
           clearTypingHistoryGroup();
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
@@ -1391,7 +1501,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [
         adapter,
         applyTransactionResult,
-        clearEditTimer,
         clearTypingHistoryGroup,
         documentState,
         markDirty,
@@ -1721,8 +1830,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       cancelHydration();
       cancelPendingVerticalNavigationFrame();
-      clearEditTimer();
       clearAutosaveTimer();
+      commitQueueRef.current = Promise.resolve();
       activeBlockIdRef.current = null;
       blockContentLayoutsRef.current.clear();
       draftMarkdownRef.current = "";
@@ -1806,7 +1915,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         isCanceled = true;
         cancelHydration();
         cancelPendingVerticalNavigationFrame();
-        clearEditTimer();
         clearAutosaveTimer();
       };
     }, [
@@ -1814,7 +1922,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       cancelHydration,
       cancelPendingVerticalNavigationFrame,
       clearAutosaveTimer,
-      clearEditTimer,
       clearOverlayFrame,
       autoFocusFirstBlock,
       filename,
@@ -2260,8 +2367,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return selectedIds;
     }, [blockIds, blockSelection]);
     useEffect(() => {
+      const shouldSkipBlocksByIdPublish = skipNextBlocksByIdPublishRef.current === blocksById;
       documentRenderState$.blockIds.set(blockIds);
-      documentRenderState$.blocksById.set(blocksById);
+      if (shouldSkipBlocksByIdPublish) {
+        skipNextBlocksByIdPublishRef.current = undefined;
+      } else {
+        documentRenderState$.blocksById.set(blocksById);
+      }
     }, [blockIds, blocksById, documentRenderState$]);
     useEffect(() => {
       documentRenderState$.blockSelection.set(blockSelection);
@@ -2270,12 +2382,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const activeBlocksById = new Map<string, ActiveBlockRenderState>();
       const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
       if (activeBlockId && activeBlock) {
+        const activeBlockState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
         activeBlocksById.set(activeBlockId, {
           block: {
             ...activeBlock,
             markdown: draftMarkdown,
           },
           draftMarkdown,
+          editorFrame: activeBlockState?.editorFrame ?? overlayFrameRef.current,
           selection: activeSelection,
         });
       }
@@ -2399,13 +2513,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           };
           overlayFrameRef.current = nextOverlayFrame;
           overlayFrame$.set(nextOverlayFrame);
+          const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
+          if (activeBlockState) {
+            documentRenderState$.activeBlocksById.get(blockId).set({
+              ...activeBlockState,
+              editorFrame: nextOverlayFrame,
+            });
+          }
           schedulePendingVerticalNavigationSelection();
           if (activeBlockIdRef.current !== blockId) {
             activateBlock(block, 0);
           }
         }
       },
-      [activateBlock, blocksById, overlayFrame$, schedulePendingVerticalNavigationSelection],
+      [activateBlock, blocksById, documentRenderState$, overlayFrame$, schedulePendingVerticalNavigationSelection],
     );
 
     if (documentState.status === "error") {
@@ -2468,10 +2589,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     if (usesNativeEditorOverlay) {
       return (
-        <MarkdownEditorHost
-          ref={containerRef}
+        <MarkdownNativeEditorHost
           activeBlockId={activeBlockId ?? ""}
-          activeMarkdown={activeBlockId ? draftMarkdown : ""}
+          containerRef={containerRef}
+          documentRenderState$={documentRenderState$}
+          fallbackActiveMarkdown={draftMarkdown}
           onBeginEditing={handleNativeBeginEditing}
           onLayout={measureContainerWindowLayout}
           style={containerStyle}
@@ -2490,7 +2612,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             overlayFrame$={overlayFrame$}
             sourceBlockIdRef={nativeEditingBlockIdRef}
           />
-        </MarkdownEditorHost>
+        </MarkdownNativeEditorHost>
       );
     }
 

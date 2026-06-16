@@ -804,17 +804,21 @@ describe("MarkdownDocument mounted editing", () => {
     jest.useRealTimers();
   });
 
-  it("debounces plain text edits into one update transaction", async () => {
+  it("applies plain text edits immediately while debouncing autosave", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
-    const { onDirtyChange, onError, renderer } = await renderDocument({ adapter });
+    const { onDirtyChange, onError, renderer } = await renderDocument({
+      adapter,
+      savePolicy: { autosave: true, debounceMs: 300 },
+    });
 
     await changeText(editorInput(renderer), "Edited once");
     await changeText(editorInput(renderer), "Edited twice");
-    expect(adapter.applyTransactions).toEqual([]);
-
-    await runPendingTimers();
-
     expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Edited once",
+        type: "updateBlockMarkdown",
+      },
       {
         blockId: "d1:b0",
         markdown: "Edited twice",
@@ -822,6 +826,12 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.markdownById.get("d1:b0")).toBe("Edited twice");
+    expect(adapter.saveCount).toBe(0);
+
+    await runPendingTimers();
+
+    expect(adapter.saveCount).toBe(1);
+    expect(adapter.saveRevisions).toEqual([2]);
     expect(onDirtyChange).toHaveBeenCalledWith(true);
     expect(onError).not.toHaveBeenCalled();
   });
@@ -2338,12 +2348,43 @@ describe("MarkdownDocument mounted editing", () => {
     await changeText(editorInput(renderer), "```");
     await changeText(editorInput(renderer), "```js");
     await changeText(editorInput(renderer), "```js\nconst value = 1;");
-    expect(adapter.applyTransactions).toEqual([]);
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "```",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
+        markdown: "```js",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
+        markdown: "```js\nconst value = 1;",
+        type: "updateBlockMarkdown",
+      },
+    ]);
 
     await changeText(editorInput(renderer), finalMarkdown);
     await runPendingTimers();
 
     expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "```",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
+        markdown: "```js",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
+        markdown: "```js\nconst value = 1;",
+        type: "updateBlockMarkdown",
+      },
       {
         blockId: "d1:b0",
         markdown: finalMarkdown,
@@ -3772,6 +3813,11 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.applyTransactions).toEqual([
       {
         blockId: "d1:b0",
+        markdown: "Draft edit",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
         markdown: "# Draft edit",
         type: "updateBlockMarkdown",
       },
@@ -3806,6 +3852,38 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.blockTypes).toEqual(["heading"]);
     expect(adapter.blockSnapshots[0]?.headingLevel).toBe(2);
     expect(flattenStyle(editorInput(renderer).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("updates the active editor style optimistically while typed heading changes are still committing", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([markdownBlock("d1:b0", 0, "### Heading")]));
+    const transactionGate = adapter.deferNextTransaction();
+    const markdownStyle = {
+      ...defaultMarkdownStyle,
+      h2: { ...defaultMarkdownStyle.h2, fontSize: 22 },
+      h3: { ...defaultMarkdownStyle.h3, fontSize: 18 },
+      paragraph: { ...defaultMarkdownStyle.paragraph, fontSize: 12 },
+    };
+    const { onError, renderer } = await renderDocument({ adapter, documentProps: { markdownStyle } });
+
+    expect(flattenStyle(editorInput(renderer).props.style)).toEqual(expect.objectContaining({ fontSize: 18 }));
+
+    await changeText(editorInput(renderer), "## Heading");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "## Heading",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.blockSnapshots[0]?.headingLevel).toBe(3);
+    expect(flattenStyle(editorInput(renderer).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+
+    transactionGate.resolve();
+    await flushPromises();
+
+    expect(adapter.blockSnapshots[0]?.headingLevel).toBe(2);
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -4518,6 +4596,11 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.applyTransactions).toEqual([
       {
         blockId: "d1:b0",
+        markdown: "Original extended",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
         markdown: "Original extended again",
         type: "updateBlockMarkdown",
       },
@@ -4536,6 +4619,11 @@ describe("MarkdownDocument mounted editing", () => {
     await runPendingTimers();
 
     expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Original extended",
+        type: "updateBlockMarkdown",
+      },
       {
         blockId: "d1:b0",
         markdown: "Original extended final",
@@ -4704,7 +4792,7 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it("cancels a debounced edit when unmounted before the timer fires", async () => {
+  it("keeps an immediate edit transaction when unmounted after text changes", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const { onError, renderer } = await renderDocument({ adapter });
 
@@ -4717,8 +4805,14 @@ describe("MarkdownDocument mounted editing", () => {
     });
     await flushPromises();
 
-    expect(adapter.applyTransactions).toEqual([]);
-    expect(adapter.markdownById.get("d1:b0")).toBe("Original");
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Uncommitted",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.markdownById.get("d1:b0")).toBe("Uncommitted");
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -4852,7 +4946,7 @@ describe("MarkdownDocument mounted editing", () => {
     }));
   });
 
-  it("coalesces rapid sequential text events from the same block", async () => {
+  it("applies rapid sequential text events from the same block immediately", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const { onError, renderer } = await renderDocument({ adapter });
 
@@ -4862,6 +4956,16 @@ describe("MarkdownDocument mounted editing", () => {
     await runPendingTimers();
 
     expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "Edit 1",
+        type: "updateBlockMarkdown",
+      },
+      {
+        blockId: "d1:b0",
+        markdown: "Edit 2",
+        type: "updateBlockMarkdown",
+      },
       {
         blockId: "d1:b0",
         markdown: "Edit 3",
