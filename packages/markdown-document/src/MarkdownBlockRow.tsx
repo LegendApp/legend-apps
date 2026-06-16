@@ -238,9 +238,6 @@ export function MarkdownBlockRow({
   const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
     ? { height: activeBlock.editorFrame.height }
     : null;
-  const nativeEditorSpacer = activeNativeEditorRowStyle ? (
-    <View style={[styles.nativeEditorSpacer, activeNativeEditorRowStyle]} />
-  ) : null;
 
   if (!block) {
     return null;
@@ -321,7 +318,7 @@ export function MarkdownBlockRow({
           }}
           style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
         >
-          {isActive && nativeEditorSpacer ? nativeEditorSpacer : renderedMarkdown}
+          {renderedMarkdown}
           {selectionOverlay}
         </MarkdownBlockActivationView>
         {commentBubble}

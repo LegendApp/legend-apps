@@ -423,7 +423,7 @@ describe("MarkdownDocument native editor overlay", () => {
     expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 44 }));
   });
 
-  it("does not render enriched markdown text inside the active native row", async () => {
+  it("keeps rendered markdown mounted inside the active native row", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -454,7 +454,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(activationView(renderer!, "d1:b0").findAllByType(EnrichedMarkdownText)).toHaveLength(0);
+    expect(activationView(renderer!, "d1:b0").findAllByType(EnrichedMarkdownText)).toHaveLength(1);
   });
 
 });
