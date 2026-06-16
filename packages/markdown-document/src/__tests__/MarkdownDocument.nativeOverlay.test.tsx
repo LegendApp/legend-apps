@@ -13,6 +13,12 @@ import type {
   MarkdownTransactionResult,
 } from "../types";
 
+const { __legendListTestHooks } = jest.requireMock("@legendapp/list/react-native") as {
+  __legendListTestHooks: {
+    updateItemSize: jest.Mock;
+  };
+};
+
 jest.mock("../constants", () => ({
   ...jest.requireActual("../constants"),
   usesNativeEditorOverlay: true,
@@ -349,6 +355,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
+    __legendListTestHooks.updateItemSize.mockClear();
     await changeText(editorInput(renderer!), "## Heading");
 
     expect(adapter.applyTransactions).toEqual([
@@ -359,6 +366,10 @@ describe("MarkdownDocument native editor overlay", () => {
       },
     ]);
     expect(nativeHost(renderer!).props.activeMarkdown).toBe("## Heading");
+    expect(__legendListTestHooks.updateItemSize).toHaveBeenCalledWith("d1:b0", {
+      height: 54.2,
+      width: 640,
+    });
 
     resolveTransaction();
     await act(async () => {

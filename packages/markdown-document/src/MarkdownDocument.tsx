@@ -41,6 +41,7 @@ import type {
   VerticalNavigationOutsideEvent,
 } from "./internalTypes";
 import {
+  blockRowSpacingStyle,
   editableTextStyleForBlock,
   estimateMarkdownSelectionVerticalRange,
   resolveSelectionColor,
@@ -755,6 +756,23 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       if (activeBlockIdRef.current === blockId) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
         const editorFrame = estimateOptimisticEditorFrame(activeBlockState?.editorFrame, nextBlock, resolvedMarkdownStyle);
+        const blockIndex = previousBlockState.blockIds.indexOf(blockId);
+        const previousBlock = blockIndex > 0 ? previousBlockState.blocksById.get(previousBlockState.blockIds[blockIndex - 1] ?? "") : undefined;
+        const rowSpacing = blockIndex === -1
+          ? undefined
+          : blockRowSpacingStyle(
+            nextBlock,
+            previousBlock,
+            blockIndex > 0,
+            blockIndex < previousBlockState.blockIds.length - 1,
+            resolvedMarkdownLayout,
+          );
+        if (editorFrame) {
+          const rowMarginTop = numberFromStyleValue(rowSpacing?.marginTop);
+          const rowMarginBottom = numberFromStyleValue(rowSpacing?.marginBottom);
+          const rowHeight = editorFrame.height + rowMarginTop + rowMarginBottom;
+          listRef.current?.updateItemSize?.(blockId, { height: rowHeight, width: editorFrame.width });
+        }
         documentRenderState$.activeBlocksById.get(blockId).set({
           block: nextBlock,
           draftMarkdown: markdown,
@@ -764,7 +782,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
       skipNextBlocksByIdPublishRef.current = blocksById;
       setBlockState(nextBlockState);
-    }, [documentRenderState$, resolvedMarkdownStyle]);
+    }, [documentRenderState$, resolvedMarkdownLayout, resolvedMarkdownStyle]);
 
     const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
       const updateReactState = options.updateReactState ?? true;
