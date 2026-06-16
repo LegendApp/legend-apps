@@ -2,7 +2,7 @@ import type { HostComponent, ViewProps } from "react-native";
 import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
 import { codegenNativeComponent } from "react-native";
 
-type BeginEditingEvent = Readonly<{
+type EditorFrameEvent = Readonly<{
   blockId: string;
   height: Double;
   width: Double;
@@ -13,7 +13,8 @@ type BeginEditingEvent = Readonly<{
 export interface NativeProps extends ViewProps {
   activeBlockId?: string;
   activeMarkdown?: string;
-  onBeginEditing?: DirectEventHandler<BeginEditingEvent>;
+  onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
+  onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }
 
 export default codegenNativeComponent<NativeProps>("MarkdownEditorHost") as HostComponent<NativeProps>;

@@ -10,7 +10,6 @@ import {
   Text,
   TextInput,
   View,
-  StyleSheet,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -42,7 +41,6 @@ import type {
 } from "./internalTypes";
 import {
   blockRowSpacingStyle,
-  editableTextStyleForBlock,
   estimateMarkdownSelectionVerticalRange,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
@@ -196,13 +194,26 @@ type MarkdownBlockSelectionInputProps = {
   onKeyPress: (event: { nativeEvent: { key: string } }) => void;
 };
 
+type NativeEditorFramePayload = {
+  blockId: string;
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+type NativeEditorFrameEvent = {
+  nativeEvent: NativeEditorFramePayload;
+};
+
 type MarkdownNativeEditorHostProps = {
   activeBlockId: string | null;
   children: ReactNode;
   containerRef: RefObject<View | null>;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
   fallbackActiveMarkdown: string;
-  onBeginEditing: (event: { nativeEvent: { blockId: string; height: number; width: number; x: number; y: number } }) => void;
+  onBeginEditing: (event: NativeEditorFrameEvent) => void;
+  onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
   style: StyleProp<ViewStyle>;
 };
@@ -214,6 +225,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   documentRenderState$,
   fallbackActiveMarkdown,
   onBeginEditing,
+  onEditorFrameChange,
   onLayout,
   style,
 }: MarkdownNativeEditorHostProps) {
@@ -226,6 +238,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
       activeBlockId={activeBlockId ?? ""}
       activeMarkdown={activeMarkdown}
       onBeginEditing={onBeginEditing}
+      onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
       style={style}
     >
@@ -271,64 +284,6 @@ function waitForAnimationFrame() {
 
 function numberFromStyleValue(value: unknown) {
   return typeof value === "number" ? value : 0;
-}
-
-function textStyleLineHeight(textStyle: TextStyle | undefined) {
-  if (typeof textStyle?.lineHeight === "number") {
-    return textStyle.lineHeight;
-  }
-  if (typeof textStyle?.fontSize === "number") {
-    return Math.ceil(textStyle.fontSize * 1.5);
-  }
-  return 25;
-}
-
-function estimateVisualLineCount(markdown: string, width: number, textStyle: TextStyle | undefined) {
-  const fontSize = typeof textStyle?.fontSize === "number" ? textStyle.fontSize : 16;
-  const padding = numberFromStyleValue(textStyle?.padding);
-  const paddingLeft = typeof textStyle?.paddingLeft === "number" ? textStyle.paddingLeft : padding;
-  const paddingRight = typeof textStyle?.paddingRight === "number" ? textStyle.paddingRight : padding;
-  const averageCharacterWidth = Math.max(1, fontSize * 0.62);
-  const textWidth = Math.max(1, width - paddingLeft - paddingRight);
-  const charactersPerLine = Math.max(1, Math.floor(textWidth / averageCharacterWidth));
-
-  return markdown
-    .split(markdownLineBreakPattern)
-    .reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine)), 0);
-}
-
-function estimateEditorFrameHeight(
-  block: MarkdownBlockSnapshot,
-  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
-  width: number,
-) {
-  const textStyle = StyleSheet.flatten(editableTextStyleForBlock(block, markdownStyle)) as TextStyle | undefined;
-  const lineHeight = textStyleLineHeight(textStyle);
-  const padding = numberFromStyleValue(textStyle?.padding);
-  const paddingTop = typeof textStyle?.paddingTop === "number" ? textStyle.paddingTop : padding;
-  const paddingBottom = typeof textStyle?.paddingBottom === "number" ? textStyle.paddingBottom : padding;
-  const marginBottom = numberFromStyleValue(textStyle?.marginBottom);
-  const minHeight = numberFromStyleValue(textStyle?.minHeight);
-  const visualLineCount = estimateVisualLineCount(block.markdown, width, textStyle);
-  const paragraphHeight = visualLineCount * lineHeight + paddingTop + paddingBottom;
-  const nativeHeadingAdjustment = marginBottom > 0 ? 3 : 0;
-
-  return Math.max(minHeight, Math.ceil(paragraphHeight + marginBottom - nativeHeadingAdjustment));
-}
-
-function estimateOptimisticEditorFrame(
-  previousFrame: OverlayFrame | undefined,
-  nextBlock: MarkdownBlockSnapshot,
-  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
-) {
-  if (!previousFrame) {
-    return previousFrame;
-  }
-
-  const nextHeight = estimateEditorFrameHeight(nextBlock, markdownStyle, previousFrame.width);
-  const height = Math.max(1, Math.ceil(nextHeight));
-
-  return height === previousFrame.height ? previousFrame : { ...previousFrame, height };
 }
 
 function isTwoLineMarkdownPasteFromEmptyBlock(markdown: string) {
@@ -410,6 +365,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const overlayFrameBlockIdRef = useRef<string | undefined>(undefined);
+    const nativeEditorRowSizeRef = useRef(new Map<string, { height: number; width: number }>());
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -484,6 +440,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const clearOverlayFrame = useCallback(() => {
       overlayFrameRef.current = undefined;
       overlayFrameBlockIdRef.current = undefined;
+      nativeEditorRowSizeRef.current.clear();
       overlayFrame$.set(undefined);
     }, [overlayFrame$]);
 
@@ -757,34 +714,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       documentRenderState$.blocksById.get(blockId).set(nextBlock);
       if (activeBlockIdRef.current === blockId) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
-        const editorFrame = estimateOptimisticEditorFrame(activeBlockState?.editorFrame, nextBlock, resolvedMarkdownStyle);
-        const blockIndex = previousBlockState.blockIds.indexOf(blockId);
-        const previousBlock = blockIndex > 0 ? previousBlockState.blocksById.get(previousBlockState.blockIds[blockIndex - 1] ?? "") : undefined;
-        const rowSpacing = blockIndex === -1
-          ? undefined
-          : blockRowSpacingStyle(
-            nextBlock,
-            previousBlock,
-            blockIndex > 0,
-            blockIndex < previousBlockState.blockIds.length - 1,
-            resolvedMarkdownLayout,
-          );
-        if (editorFrame) {
-          const rowMarginTop = numberFromStyleValue(rowSpacing?.marginTop);
-          const rowMarginBottom = numberFromStyleValue(rowSpacing?.marginBottom);
-          const rowHeight = editorFrame.height + rowMarginTop + rowMarginBottom;
-          listRef.current?.updateItemSize?.(blockId, { height: rowHeight, width: editorFrame.width });
-        }
         documentRenderState$.activeBlocksById.get(blockId).set({
           block: nextBlock,
           draftMarkdown: markdown,
-          editorFrame,
+          editorFrame: activeBlockState?.editorFrame,
           selection: activeInputSelectionRef.current.start,
         });
       }
       skipNextBlocksByIdPublishRef.current = blocksById;
       setBlockState(nextBlockState);
-    }, [documentRenderState$, resolvedMarkdownLayout, resolvedMarkdownStyle]);
+    }, [documentRenderState$]);
 
     const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
       const updateReactState = options.updateReactState ?? true;
@@ -2520,35 +2459,74 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       documentRenderState$.scrollOffsetY.set(event.nativeEvent.contentOffset.y);
     }, [documentRenderState$]);
     const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
+    const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
+      const { blockId, height, width, x, y } = frame;
+      const currentBlockState = blockStateRef.current;
+      const block = currentBlockState.blocksById.get(blockId);
+      if (!block) {
+        return undefined;
+      }
+
+      nativeEditingBlockIdRef.current = blockId;
+      const nextOverlayFrame = {
+        height,
+        left: x,
+        top: y,
+        width,
+      };
+      overlayFrameRef.current = nextOverlayFrame;
+      overlayFrameBlockIdRef.current = blockId;
+      overlayFrame$.set(nextOverlayFrame);
+      const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
+      if (activeBlockState) {
+        documentRenderState$.activeBlocksById.get(blockId).set({
+          ...activeBlockState,
+          editorFrame: nextOverlayFrame,
+        });
+      }
+
+      const blockIndex = currentBlockState.blockIds.indexOf(blockId);
+      const previousBlock = blockIndex > 0 ? currentBlockState.blocksById.get(currentBlockState.blockIds[blockIndex - 1] ?? "") : undefined;
+      const rowSpacing = blockIndex === -1
+        ? undefined
+        : blockRowSpacingStyle(
+          block,
+          previousBlock,
+          blockIndex > 0,
+          blockIndex < currentBlockState.blockIds.length - 1,
+          resolvedMarkdownLayout,
+        );
+      const rowMarginTop = numberFromStyleValue(rowSpacing?.marginTop);
+      const rowMarginBottom = numberFromStyleValue(rowSpacing?.marginBottom);
+      const rowHeight = height + rowMarginTop + rowMarginBottom;
+      const previousRowSize = nativeEditorRowSizeRef.current.get(blockId);
+      if (!previousRowSize || previousRowSize.height !== rowHeight || previousRowSize.width !== width) {
+        nativeEditorRowSizeRef.current.set(blockId, { height: rowHeight, width });
+        listRef.current?.updateItemSize?.(blockId, { height: rowHeight, width });
+      }
+
+      return block;
+    }, [documentRenderState$, overlayFrame$, resolvedMarkdownLayout]);
     const handleNativeBeginEditing = useCallback(
-      (event: { nativeEvent: { blockId: string; height: number; width: number; x: number; y: number } }) => {
-        const { blockId, height, width, x, y } = event.nativeEvent;
-        const block = blocksById.get(blockId);
-        nativeEditingBlockIdRef.current = blockId;
+      (event: NativeEditorFrameEvent) => {
+        const block = applyNativeEditorFrame(event.nativeEvent);
         if (block) {
-          const nextOverlayFrame = {
-            height,
-            left: x,
-            top: y,
-            width,
-          };
-          overlayFrameRef.current = nextOverlayFrame;
-          overlayFrameBlockIdRef.current = blockId;
-          overlayFrame$.set(nextOverlayFrame);
-          const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
-          if (activeBlockState) {
-            documentRenderState$.activeBlocksById.get(blockId).set({
-              ...activeBlockState,
-              editorFrame: nextOverlayFrame,
-            });
-          }
           schedulePendingVerticalNavigationSelection();
-          if (activeBlockIdRef.current !== blockId) {
+          if (activeBlockIdRef.current !== block.id) {
             activateBlock(block, 0);
           }
         }
       },
-      [activateBlock, blocksById, documentRenderState$, overlayFrame$, schedulePendingVerticalNavigationSelection],
+      [activateBlock, applyNativeEditorFrame, schedulePendingVerticalNavigationSelection],
+    );
+    const handleNativeEditorFrameChange = useCallback(
+      (event: NativeEditorFrameEvent) => {
+        const block = applyNativeEditorFrame(event.nativeEvent);
+        if (block) {
+          schedulePendingVerticalNavigationSelection();
+        }
+      },
+      [applyNativeEditorFrame, schedulePendingVerticalNavigationSelection],
     );
 
     if (documentState.status === "error") {
@@ -2617,6 +2595,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           documentRenderState$={documentRenderState$}
           fallbackActiveMarkdown={draftMarkdown}
           onBeginEditing={handleNativeBeginEditing}
+          onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}
           style={containerStyle}
         >
