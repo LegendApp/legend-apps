@@ -13,6 +13,14 @@ import type {
   MarkdownTransactionResult,
 } from "../types";
 
+const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-markdown") as {
+  __enrichedMarkdownTestHooks: {
+    clearRenderCounts: () => void;
+    inputRenderCount: (value: string) => number;
+    textRenderCount: (markdown: string) => number;
+  };
+};
+
 function block(id: string, index: number, markdown = `Block ${index}`): MarkdownBlockSnapshot {
   return {
     contentEndByte: markdown.length,
@@ -630,6 +638,21 @@ function renderedNodeIndex(renderer: TestRenderer.ReactTestRenderer, predicate: 
   return renderer.root.findAll(() => true).findIndex(predicate);
 }
 
+function nearestAncestorWithProp(
+  node: TestRenderer.ReactTestInstance,
+  propName: string,
+  predicate: (value: unknown) => boolean,
+) {
+  let current: TestRenderer.ReactTestInstance | null = node;
+  while (current) {
+    if (predicate(current.props[propName])) {
+      return current;
+    }
+    current = current.parent;
+  }
+  throw new Error(`Missing ancestor with prop: ${propName}`);
+}
+
 async function changeText(input: TestRenderer.ReactTestInstance, markdown: string) {
   await act(async () => {
     input.props.onChangeText(markdown);
@@ -790,6 +813,7 @@ describe("MarkdownDocument mounted editing", () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
+    __enrichedMarkdownTestHooks.clearRenderCounts();
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       const [message] = args;
       if (typeof message === "string" && message.includes("react-test-renderer is deprecated")) {
@@ -833,6 +857,73 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.saveCount).toBe(1);
     expect(adapter.saveRevisions).toEqual([2]);
     expect(onDirtyChange).toHaveBeenCalledWith(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not rerender unrelated rendered rows after editing a block", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    __enrichedMarkdownTestHooks.clearRenderCounts();
+    await changeText(editorInput(renderer), "First edited");
+
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Third")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Fourth")).toBe(0);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not rerender unrelated rendered rows when block selection changes", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    __enrichedMarkdownTestHooks.clearRenderCounts();
+    await dragSelectionOutside(renderer, "First", "down");
+
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1"]);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Third")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Fourth")).toBe(0);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not rerender rendered rows when a block layout measurement changes", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+    const renderedNode = renderedMarkdownNodes(renderer, "Second")[0];
+    if (!renderedNode) {
+      throw new Error("Missing rendered row for layout fanout test");
+    }
+    const rowNode = nearestAncestorWithProp(renderedNode, "onLayout", (value) => typeof value === "function");
+
+    __enrichedMarkdownTestHooks.clearRenderCounts();
+    await act(async () => {
+      rowNode.props.onLayout({
+        nativeEvent: {
+          layout: {
+            height: 48,
+            width: 700,
+          },
+        },
+      });
+    });
+    await runPendingTimers();
+
+    expect(__enrichedMarkdownTestHooks.textRenderCount("First")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Second")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Third")).toBe(0);
     expect(onError).not.toHaveBeenCalled();
   });
 

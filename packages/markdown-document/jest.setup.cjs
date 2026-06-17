@@ -114,12 +114,28 @@ jest.mock("@legend-desktop/markdown-block-editor", () => {
 jest.mock("react-native-enriched-markdown", () => {
   const React = require("react");
   const { Text, TextInput } = require("react-native");
+  const textRenderCounts = new Map();
+  const inputRenderCounts = new Map();
+
+  const increment = (map, key) => {
+    map.set(key, (map.get(key) ?? 0) + 1);
+  };
 
   return {
+    __enrichedMarkdownTestHooks: {
+      clearRenderCounts: () => {
+        textRenderCounts.clear();
+        inputRenderCounts.clear();
+      },
+      inputRenderCount: (value) => inputRenderCounts.get(value) ?? 0,
+      textRenderCount: (markdown) => textRenderCounts.get(markdown) ?? 0,
+    },
     EnrichedMarkdownText({ markdown, ...props }) {
+      increment(textRenderCounts, markdown);
       return React.createElement(Text, props, markdown);
     },
     EnrichedMarkdownTextInput: React.forwardRef((props, ref) => {
+      increment(inputRenderCounts, props.defaultValue);
       React.useImperativeHandle(ref, () => ({
         focus: jest.fn(),
         getCaretRect: jest.fn(async () => ({ height: 18, width: 1, x: 0, y: 0 })),

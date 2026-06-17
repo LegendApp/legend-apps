@@ -181,7 +181,7 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.sourceBlockIdRef === nextProps.sourceBlockIdRef,
 );
 
-export function MarkdownBlockRow({
+export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   activeInputRef,
   commentAnchor,
   hasNextBlock,
@@ -343,4 +343,4 @@ export function MarkdownBlockRow({
       {commentBubble}
     </View>
   );
-}
+});
