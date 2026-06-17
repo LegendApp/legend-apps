@@ -63,6 +63,16 @@ describe("getMarkdownE2ERunFromLaunchArguments", () => {
     });
   });
 
+  it("accepts editor navigation smoke launches", () => {
+    expect(getMarkdownE2ERunFromLaunchArguments([
+      "--markdown-e2e=editor-navigation-smoke",
+    ])).toEqual({
+      blockCount: undefined,
+      scenario: "editor-navigation-smoke",
+      seed: undefined,
+    });
+  });
+
   it("ignores invalid scenarios and production launches", () => {
     expect(getMarkdownE2ERunFromLaunchArguments(["--markdown-e2e=missing"])).toBeNull();
 

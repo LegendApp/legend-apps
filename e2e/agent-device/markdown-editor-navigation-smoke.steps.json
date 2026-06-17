@@ -1,0 +1,33 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "app.legend.markdown.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E navigation smoke passed",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "E2E navigation smoke passed"
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/markdown-e2e/editor-navigation-smoke.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]

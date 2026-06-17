@@ -5,10 +5,14 @@ import {
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
+import {
+  MarkdownE2EEditorSmoke,
+  type MarkdownE2EEditorSmokeVariant,
+} from "./MarkdownE2EEditorSmoke";
 import {
   getMarkdownE2ERunFromLaunchArguments,
   isMarkdownDocumentE2EScenario,
+  type MarkdownE2ELaunchScenario,
   MarkdownE2ERunner,
 } from "./MarkdownE2ERunner";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
@@ -43,6 +47,25 @@ import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
 };
+
+function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): MarkdownE2EEditorSmokeVariant | null {
+  if (scenario === "editor-selection-smoke") {
+    return "selection";
+  }
+  if (scenario === "editor-soft-wrap-selection") {
+    return "softWrap";
+  }
+  if (scenario === "editor-code-block-smoke") {
+    return "codeBlock";
+  }
+  if (scenario === "editor-navigation-smoke") {
+    return "navigation";
+  }
+  if (scenario === "editor-ui-smoke") {
+    return "ui";
+  }
+  return null;
+}
 
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
@@ -142,20 +165,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   if (e2eRun) {
-    if (e2eRun.scenario === "editor-selection-smoke" ||
-      e2eRun.scenario === "editor-soft-wrap-selection" ||
-      e2eRun.scenario === "editor-code-block-smoke" ||
-      e2eRun.scenario === "editor-ui-smoke") {
+    const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
+    if (editorSmokeVariant) {
       return (
         <MarkdownE2EEditorSmoke
           autoSelectBlocks={e2eRun.scenario === "editor-selection-smoke"}
-          variant={e2eRun.scenario === "editor-selection-smoke"
-            ? "selection"
-            : e2eRun.scenario === "editor-soft-wrap-selection"
-              ? "softWrap"
-              : e2eRun.scenario === "editor-code-block-smoke"
-                ? "codeBlock"
-                : "ui"}
+          variant={editorSmokeVariant}
         />
       );
     }

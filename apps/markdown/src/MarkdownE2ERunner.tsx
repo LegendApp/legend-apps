@@ -14,6 +14,7 @@ type MarkdownE2ERunnerProps = {
 
 export type MarkdownEditorE2EScenarioName =
   | "editor-code-block-smoke"
+  | "editor-navigation-smoke"
   | "editor-selection-smoke"
   | "editor-soft-wrap-selection"
   | "editor-ui-smoke";
@@ -30,6 +31,7 @@ function isMarkdownE2ELaunchScenario(scenario: string): scenario is MarkdownE2EL
     scenario === "editor-selection-smoke" ||
     scenario === "editor-soft-wrap-selection" ||
     scenario === "editor-code-block-smoke" ||
+    scenario === "editor-navigation-smoke" ||
     isMarkdownDocumentE2EScenario(scenario);
 }
 
