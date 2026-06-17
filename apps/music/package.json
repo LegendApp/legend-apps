@@ -33,7 +33,7 @@
     "@legend-desktop/window-controls": "0.0.0",
     "@legend-desktop/window-manager": "0.0.0",
     "@legend-desktop/windows": "0.0.0",
-    "@legendapp/list": "^3.0.0-beta.56",
+    "@legendapp/list": "^3.0.6",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
     "expo-file-system": "~19.0.21",

@@ -1,8 +1,8 @@
 diff --git a/react-native.d.ts b/react-native.d.ts
-index fb125b22699f163292e7f6ec72ad0cb7ad0e0218..071780e1a7b676fde71487abf4024d0c1e5a89be 100644
+index cce0d42..741d245 100644
 --- a/react-native.d.ts
 +++ b/react-native.d.ts
-@@ -522,6 +522,10 @@ type LegendListRef$1 = {
+@@ -516,6 +516,10 @@ type LegendListRef$1 = {
       * Returns the internal state of the scroll virtualization.
       */
      getState(): LegendListState$1;
@@ -14,10 +14,10 @@ index fb125b22699f163292e7f6ec72ad0cb7ad0e0218..071780e1a7b676fde71487abf4024d0c
       * Scrolls a specific index into view.
       * @param params - Parameters for scrolling.
 diff --git a/react-native.js b/react-native.js
-index acd7b0a632a8de3d246e57434a26ae2b68f71a0a..b6c63cc92b113fb1a590396919bc1e581c4ddbd3 100644
+index 8e6c503..2397600 100644
 --- a/react-native.js
 +++ b/react-native.js
-@@ -5563,6 +5563,7 @@ function createImperativeHandle(ctx) {
+@@ -5882,6 +5882,7 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
      getNativeScrollRef: () => refScroller.current,
      getScrollableNode: () => refScroller.current.getScrollableNode(),
      getScrollResponder: () => refScroller.current.getScrollResponder(),
@@ -26,10 +26,10 @@ index acd7b0a632a8de3d246e57434a26ae2b68f71a0a..b6c63cc92b113fb1a590396919bc1e58
        activeStickyIndex: peek$(ctx, "activeStickyIndex"),
        contentLength: getContentSize(ctx),
 diff --git a/react-native.mjs b/react-native.mjs
-index 82829f3dd4a934d5c7a3b91c5ce3f091bb6a4b96..df0eec19b388a3518fdc6d089be593ae8502db16 100644
+index 6e57ebb..6c12e36 100644
 --- a/react-native.mjs
 +++ b/react-native.mjs
-@@ -5542,6 +5542,7 @@ function createImperativeHandle(ctx) {
+@@ -5861,6 +5861,7 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
      getNativeScrollRef: () => refScroller.current,
      getScrollableNode: () => refScroller.current.getScrollableNode(),
      getScrollResponder: () => refScroller.current.getScrollResponder(),

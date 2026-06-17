@@ -80,7 +80,7 @@
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
-        "@legendapp/list": "^3.0.0-beta.56",
+        "@legendapp/list": "^3.0.6",
         "@legendapp/motion": "^2.5.3",
         "@legendapp/state": "^3.0.0-beta.42",
         "expo-file-system": "~19.0.21",
@@ -116,7 +116,7 @@
         "@legend-desktop/text-input-search": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
-        "@legendapp/list": "^3.0.0-beta.56",
+        "@legendapp/list": "^3.0.6",
         "react-native-enriched-markdown": "^0.5.0",
       },
     },
@@ -307,7 +307,7 @@
       "dependencies": {
         "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-parser": "0.0.0",
-        "@legendapp/list": "3.0.0-beta.56",
+        "@legendapp/list": "3.0.6",
         "@legendapp/state": "^3.0.0-beta.42",
         "react-native-enriched-markdown": "0.5.0",
       },
@@ -496,10 +496,10 @@
     },
   },
   "patchedDependencies": {
-    "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
     "react-native-enriched-markdown@0.5.0": "patches/react-native-enriched-markdown@0.5.0.patch",
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
-    "@legendapp/list@3.0.0-beta.56": "patches/@legendapp%2Flist@3.0.0-beta.56.patch",
+    "@legendapp/list@3.0.6": "patches/@legendapp%2Flist@3.0.6.patch",
+    "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
   },
   "packages": {
     "@0no-co/graphql.web": ["@0no-co/graphql.web@1.2.0", "", { "peerDependencies": { "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0" }, "optionalPeers": ["graphql"] }, "sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw=="],
@@ -878,7 +878,7 @@
 
     "@legend-desktop/windows": ["@legend-desktop/windows@workspace:packages/windows"],
 
-    "@legendapp/list": ["@legendapp/list@3.0.0-beta.56", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*", "react-dom": "*", "react-native": "*" }, "optionalPeers": ["react-dom", "react-native"] }, "sha512-FcaZLq5n818/2D0VkZCmc4Y/V18/EKLLiYLRZxHgYrgaP+NtHvJ7fp+ZXpo6ae/bWLom0kCK2cM7FiIaWQLEcQ=="],
+    "@legendapp/list": ["@legendapp/list@3.0.6", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*", "react-dom": "*", "react-native": "*" }, "optionalPeers": ["react-dom", "react-native"] }, "sha512-umEkE+WQpw61Ep1lLQC6f/UzXl19Jxqysg+WUP5VnvfA9TxCCj0VsxU8n2ukEFTovSIrY3ab4aFNKgJt9P1Ngg=="],
 
     "@legendapp/motion": ["@legendapp/motion@2.5.3", "", { "dependencies": { "@legendapp/tools": "2.0.1" }, "peerDependencies": { "nativewind": ">=4.0.0", "react": ">=16", "react-native": "*" } }, "sha512-IcNiStiK3qG5LaIPLC8fVV0BHIrkf7EY5HfOv3xbuMH0z4D945yaaEDafP5bboHf/uj9XRjTQHVTtZgwpMNlHw=="],
 
