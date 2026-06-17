@@ -58,8 +58,14 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
   if (scenario === "editor-code-block-smoke") {
     return "codeBlock";
   }
+  if (scenario === "editor-edit-navigation-smoke") {
+    return "editNavigation";
+  }
   if (scenario === "editor-navigation-smoke") {
     return "navigation";
+  }
+  if (scenario === "editor-theme-reflow-smoke") {
+    return "themeReflow";
   }
   if (scenario === "editor-ui-smoke") {
     return "ui";

@@ -122,7 +122,9 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     ["editor-selection-smoke", "selection", true],
     ["editor-soft-wrap-selection", "softWrap", false],
     ["editor-code-block-smoke", "codeBlock", false],
+    ["editor-edit-navigation-smoke", "editNavigation", false],
     ["editor-navigation-smoke", "navigation", false],
+    ["editor-theme-reflow-smoke", "themeReflow", false],
   ])("routes %s to the editor smoke harness", async (scenario, variant, autoSelectBlocks) => {
     const view = await render(<MarkdownEditorWindow launchArguments={[`--markdown-e2e=${scenario}`]} />);
 

@@ -73,6 +73,26 @@ describe("getMarkdownE2ERunFromLaunchArguments", () => {
     });
   });
 
+  it("accepts editor edit navigation smoke launches", () => {
+    expect(getMarkdownE2ERunFromLaunchArguments([
+      "--markdown-e2e=editor-edit-navigation-smoke",
+    ])).toEqual({
+      blockCount: undefined,
+      scenario: "editor-edit-navigation-smoke",
+      seed: undefined,
+    });
+  });
+
+  it("accepts editor theme reflow smoke launches", () => {
+    expect(getMarkdownE2ERunFromLaunchArguments([
+      "--markdown-e2e=editor-theme-reflow-smoke",
+    ])).toEqual({
+      blockCount: undefined,
+      scenario: "editor-theme-reflow-smoke",
+      seed: undefined,
+    });
+  });
+
   it("ignores invalid scenarios and production launches", () => {
     expect(getMarkdownE2ERunFromLaunchArguments(["--markdown-e2e=missing"])).toBeNull();
 

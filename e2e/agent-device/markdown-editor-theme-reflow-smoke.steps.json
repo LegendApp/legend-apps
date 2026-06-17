@@ -1,0 +1,33 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "app.legend.markdown.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E theme reflow smoke passed",
+      "timeoutMs": 30000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "E2E theme reflow smoke passed"
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/markdown-e2e/editor-theme-reflow-smoke.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]
