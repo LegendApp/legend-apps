@@ -38,35 +38,11 @@ import {
   getMarkdownLayoutForAppearance,
   getMarkdownStyleForAppearance,
 } from "./markdownAppearance";
+import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
 };
-
-function measurementStyle(style: unknown) {
-  const value = style as Record<string, unknown> | undefined;
-  return {
-    borderWidth: value?.borderWidth,
-    cellPaddingHorizontal: value?.cellPaddingHorizontal,
-    cellPaddingVertical: value?.cellPaddingVertical,
-    fontFamily: value?.fontFamily,
-    fontSize: value?.fontSize,
-    fontStyle: value?.fontStyle,
-    fontWeight: value?.fontWeight,
-    gapWidth: value?.gapWidth,
-    letterSpacing: value?.letterSpacing,
-    lineHeight: value?.lineHeight,
-    marginBottom: value?.marginBottom,
-    marginTop: value?.marginTop,
-    padding: value?.padding,
-    paddingBottom: value?.paddingBottom,
-    paddingHorizontal: value?.paddingHorizontal,
-    paddingLeft: value?.paddingLeft,
-    paddingRight: value?.paddingRight,
-    paddingTop: value?.paddingTop,
-    paddingVertical: value?.paddingVertical,
-  };
-}
 
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
@@ -91,24 +67,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     [appearanceSettings, layoutTheme],
   );
   const measurementSignature = useMemo(
-    () => JSON.stringify({
-      blockSpacing: markdownLayout.blockSpacing,
-      content: markdownLayout.content,
-      markdownStyle: {
-        blockquote: measurementStyle(markdownStyle.blockquote),
-        code: measurementStyle(markdownStyle.code),
-        codeBlock: measurementStyle(markdownStyle.codeBlock),
-        h1: measurementStyle(markdownStyle.h1),
-        h2: measurementStyle(markdownStyle.h2),
-        h3: measurementStyle(markdownStyle.h3),
-        h4: measurementStyle(markdownStyle.h4),
-        h5: measurementStyle(markdownStyle.h5),
-        h6: measurementStyle(markdownStyle.h6),
-        list: measurementStyle(markdownStyle.list),
-        paragraph: measurementStyle(markdownStyle.paragraph),
-        table: measurementStyle(markdownStyle.table),
-      },
-    }),
+    () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
   );
   const openSettingsWindow = useMarkdownSettingsWindow({
