@@ -3,7 +3,6 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
-import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownE2EEditorSmoke } from "./MarkdownE2EEditorSmoke";
@@ -29,9 +28,6 @@ import {
 } from "./useMarkdownWindows";
 import {
   applyMarkdownThemeSetting,
-  getMarkdownAppearanceSettings,
-  getMarkdownDisplayThemeSetting,
-  getMarkdownLayoutThemeSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
   useMarkdownDisplayThemeSetting,
@@ -46,6 +42,31 @@ import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
 };
+
+function measurementStyle(style: unknown) {
+  const value = style as Record<string, unknown> | undefined;
+  return {
+    borderWidth: value?.borderWidth,
+    cellPaddingHorizontal: value?.cellPaddingHorizontal,
+    cellPaddingVertical: value?.cellPaddingVertical,
+    fontFamily: value?.fontFamily,
+    fontSize: value?.fontSize,
+    fontStyle: value?.fontStyle,
+    fontWeight: value?.fontWeight,
+    gapWidth: value?.gapWidth,
+    letterSpacing: value?.letterSpacing,
+    lineHeight: value?.lineHeight,
+    marginBottom: value?.marginBottom,
+    marginTop: value?.marginTop,
+    padding: value?.padding,
+    paddingBottom: value?.paddingBottom,
+    paddingHorizontal: value?.paddingHorizontal,
+    paddingLeft: value?.paddingLeft,
+    paddingRight: value?.paddingRight,
+    paddingTop: value?.paddingTop,
+    paddingVertical: value?.paddingVertical,
+  };
+}
 
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
@@ -69,6 +90,27 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings),
     [appearanceSettings, layoutTheme],
   );
+  const measurementSignature = useMemo(
+    () => JSON.stringify({
+      blockSpacing: markdownLayout.blockSpacing,
+      content: markdownLayout.content,
+      markdownStyle: {
+        blockquote: measurementStyle(markdownStyle.blockquote),
+        code: measurementStyle(markdownStyle.code),
+        codeBlock: measurementStyle(markdownStyle.codeBlock),
+        h1: measurementStyle(markdownStyle.h1),
+        h2: measurementStyle(markdownStyle.h2),
+        h3: measurementStyle(markdownStyle.h3),
+        h4: measurementStyle(markdownStyle.h4),
+        h5: measurementStyle(markdownStyle.h5),
+        h6: measurementStyle(markdownStyle.h6),
+        list: measurementStyle(markdownStyle.list),
+        paragraph: measurementStyle(markdownStyle.paragraph),
+        table: measurementStyle(markdownStyle.table),
+      },
+    }),
+    [markdownLayout, markdownStyle],
+  );
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
@@ -83,19 +125,13 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     [session.documentCommandsRef],
   );
 
-  useObserveEffect(() => {
-    return {
-      appearanceSettings: getMarkdownAppearanceSettings(),
-      displayThemeSetting: getMarkdownDisplayThemeSetting(),
-      layoutThemeSetting: getMarkdownLayoutThemeSetting(),
-    };
-  }, () => {
+  useEffect(() => {
     if (hasObservedLayoutInputsRef.current) {
       session.documentCommandsRef.current?.invalidateLayoutMeasurements();
     } else {
       hasObservedLayoutInputsRef.current = true;
     }
-  });
+  }, [measurementSignature, session.documentCommandsRef]);
 
   useEffect(() => {
     applyMarkdownThemeSetting();
