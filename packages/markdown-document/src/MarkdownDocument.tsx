@@ -363,6 +363,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const pendingVerticalNavigationSelectionRef = useRef<PendingVerticalNavigationSelection | null>(null);
     const pendingVerticalNavigationFrameRef = useRef<number | undefined>(undefined);
     const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
+    const activeRenderBlockIdRef = useRef<string | null>(null);
+    const selectedRenderBlockIdsRef = useRef(new Set<string>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const overlayFrameBlockIdRef = useRef<string | undefined>(undefined);
     const nativeEditorRowSizeRef = useRef(new Map<string, { height: number; width: number }>());
@@ -917,7 +919,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
       blockContentLayoutsRef.current.set(blockId, layout);
-      documentRenderState$.blockLayoutsById.set(new Map(blockContentLayoutsRef.current));
+      documentRenderState$.blockLayoutsById.get(blockId).set(layout);
     }, [documentRenderState$, layoutMetrics$]);
 
     const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot, selection?: number) => {
@@ -1799,7 +1801,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearAutosaveTimer();
       commitQueueRef.current = Promise.resolve();
       activeBlockIdRef.current = null;
+      blockContentLayoutsRef.current.forEach((_layout, blockId) => {
+        documentRenderState$.blockLayoutsById.get(blockId).delete();
+      });
       blockContentLayoutsRef.current.clear();
+      if (activeRenderBlockIdRef.current) {
+        documentRenderState$.activeBlocksById.get(activeRenderBlockIdRef.current).delete();
+        activeRenderBlockIdRef.current = null;
+      }
+      selectedRenderBlockIdsRef.current.forEach((blockId) => {
+        documentRenderState$.selectedBlocksById.get(blockId).delete();
+      });
+      selectedRenderBlockIdsRef.current = new Set();
       draftMarkdownRef.current = "";
       committedMarkdownRef.current = "";
       currentRevisionRef.current = 0;
@@ -2348,12 +2361,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       documentRenderState$.blockSelection.set(blockSelection);
     }, [blockSelection, documentRenderState$]);
     useEffect(() => {
-      const activeBlocksById = new Map<string, ActiveBlockRenderState>();
+      const previousActiveBlockId = activeRenderBlockIdRef.current;
+      if (previousActiveBlockId && previousActiveBlockId !== activeBlockId) {
+        documentRenderState$.activeBlocksById.get(previousActiveBlockId).delete();
+      }
       const activeBlock = activeBlockId ? blocksById.get(activeBlockId) : undefined;
       if (activeBlockId && activeBlock) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
         const cachedOverlayFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
-        activeBlocksById.set(activeBlockId, {
+        documentRenderState$.activeBlocksById.get(activeBlockId).set({
           block: {
             ...activeBlock,
             markdown: draftMarkdown,
@@ -2362,15 +2378,24 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           editorFrame: activeBlockState?.editorFrame ?? cachedOverlayFrame,
           selection: activeSelection,
         });
+        activeRenderBlockIdRef.current = activeBlockId;
+      } else {
+        activeRenderBlockIdRef.current = null;
       }
-      documentRenderState$.activeBlocksById.set(activeBlocksById);
     }, [activeBlockId, activeSelection, blocksById, documentRenderState$, draftMarkdown]);
     useEffect(() => {
-      const selectedBlocksById = new Map<string, boolean>();
-      selectedBlockIds.forEach((blockId) => {
-        selectedBlocksById.set(blockId, true);
+      const previousSelectedBlockIds = selectedRenderBlockIdsRef.current;
+      previousSelectedBlockIds.forEach((blockId) => {
+        if (!selectedBlockIds.has(blockId)) {
+          documentRenderState$.selectedBlocksById.get(blockId).delete();
+        }
       });
-      documentRenderState$.selectedBlocksById.set(selectedBlocksById);
+      selectedBlockIds.forEach((blockId) => {
+        if (!previousSelectedBlockIds.has(blockId)) {
+          documentRenderState$.selectedBlocksById.get(blockId).set(true);
+        }
+      });
+      selectedRenderBlockIdsRef.current = selectedBlockIds;
     }, [documentRenderState$, selectedBlockIds]);
     const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? null : selectionToolbarAnchor;
     const isSelectionToolbarEnabled = selectionToolbarEnabled ?? selectionToolbarAnchor !== undefined;
