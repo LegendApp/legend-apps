@@ -895,6 +895,44 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("clears selected row state without rerendering unrelated rendered rows", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await dragSelectionOutside(renderer, "First", "down");
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1"]);
+
+    __enrichedMarkdownTestHooks.clearRenderCounts();
+    await pressRenderedMarkdown(renderer, "Third");
+
+    expectBlockSelectionOverlays(renderer, []);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Fourth")).toBe(0);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not rerender unrelated rendered rows when the active block changes", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    __enrichedMarkdownTestHooks.clearRenderCounts();
+    await pressRenderedMarkdown(renderer, "Second");
+
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Third")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Fourth")).toBe(0);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("does not rerender rendered rows when a block layout measurement changes", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
@@ -3333,6 +3371,8 @@ describe("MarkdownDocument mounted editing", () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
       block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
     ]));
     const transactionGate = adapter.deferNextTransaction();
     const { onError, renderer } = await renderDocument({ adapter });
@@ -3346,11 +3386,14 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
 
+    __enrichedMarkdownTestHooks.clearRenderCounts();
     await act(async () => {
       editorInput(renderer).props.onVerticalNavigationOutside({ direction: "down", preferredX: 320 });
     });
 
     expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Third")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Fourth")).toBe(0);
 
     transactionGate.resolve();
     await flushPromises();
