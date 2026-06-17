@@ -22,6 +22,7 @@ import { findBlockIdAtWindowY, getBlockSelectionRects, getSelectedBlockMarkdown 
 import {
   createMarkdownDocumentBlockState,
   mergeHydratedMarkdownBlocksForRevision,
+  type MarkdownDocumentBlockState,
   validateMarkdownTransactionResultToBlockState,
 } from "./documentStateModel";
 import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow";
@@ -662,38 +663,43 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       });
     }, [documentRenderState$]);
 
+    const commitBlockState = useCallback((nextBlockState: MarkdownDocumentBlockState, changes: {
+      changedBlocks?: MarkdownBlockSnapshot[];
+      retiredBlockIds?: string[];
+    } = {}) => {
+      const previousBlockIds = blockStateRef.current.blockIds;
+      blockStateRef.current = nextBlockState;
+      publishBlocksByIdChanges(changes.changedBlocks ?? [], changes.retiredBlockIds);
+      if (!areStringArraysEqual(previousBlockIds, nextBlockState.blockIds)) {
+        setBlockIds(nextBlockState.blockIds);
+      }
+    }, [publishBlocksByIdChanges]);
+
     const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[], requestRevision: number) => {
       if (blocks.length === 0 || requestRevision !== currentRevisionRef.current) {
         return;
       }
 
-      publishBlocksByIdChanges(blocks);
-      const previousBlockState = blockStateRef.current;
       const nextBlockState = mergeHydratedMarkdownBlocksForRevision({
         blocks,
         currentRevision: currentRevisionRef.current,
-        previousState: previousBlockState,
+        previousState: blockStateRef.current,
         requestRevision,
       });
-      blockStateRef.current = nextBlockState;
-      if (!areStringArraysEqual(previousBlockState.blockIds, nextBlockState.blockIds)) {
-        setBlockIds(nextBlockState.blockIds);
-      }
-    }, [publishBlocksByIdChanges]);
+      commitBlockState(nextBlockState, { changedBlocks: blocks });
+    }, [commitBlockState]);
 
     const validateTransactionResult = useCallback((result: MarkdownTransactionResult) => {
       return validateMarkdownTransactionResultToBlockState(blockStateRef.current, result);
     }, []);
 
     const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
-      const previousBlockState = blockStateRef.current;
       const nextBlockState = validateTransactionResult(result);
-      blockStateRef.current = nextBlockState;
       currentRevisionRef.current = result.revision;
-      publishBlocksByIdChanges(result.changedBlocks, result.retiredBlockIds);
-      if (!areStringArraysEqual(previousBlockState.blockIds, nextBlockState.blockIds)) {
-        setBlockIds(nextBlockState.blockIds);
-      }
+      commitBlockState(nextBlockState, {
+        changedBlocks: result.changedBlocks,
+        retiredBlockIds: result.retiredBlockIds,
+      });
 
       setDocumentState((previousDocumentState) => {
         if (previousDocumentState.status !== "loaded") {
@@ -712,7 +718,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           },
         };
       });
-    }, [publishBlocksByIdChanges, validateTransactionResult]);
+    }, [commitBlockState, validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
       const previousBlockState = blockStateRef.current;
@@ -735,8 +741,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         ...previousBlockState,
         blocksById,
       };
-      blockStateRef.current = nextBlockState;
-      documentRenderState$.blocksById.get(blockId).set(nextBlock);
+      commitBlockState(nextBlockState, { changedBlocks: [nextBlock] });
       if (activeBlockIdRef.current === blockId) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
         documentRenderState$.activeBlocksById.get(blockId).set({
@@ -746,7 +751,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           selection: activeInputSelectionRef.current.start,
         });
       }
-    }, [documentRenderState$]);
+    }, [commitBlockState, documentRenderState$]);
 
     const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
       const updateReactState = options.updateReactState ?? true;
@@ -1851,11 +1856,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       pendingVerticalNavigationSelectionRef.current = null;
       clearOverlayFrame();
       setDocumentState({ status: "loading" });
-      publishBlocksByIdChanges([], blockStateRef.current.blockIds);
+      const retiredBlockIds = blockStateRef.current.blockIds;
       documentRenderState$.blockIds.set([]);
       const emptyBlockState = createMarkdownDocumentBlockState([]);
-      blockStateRef.current = emptyBlockState;
-      setBlockIds(emptyBlockState.blockIds);
+      commitBlockState(emptyBlockState, { retiredBlockIds });
       setActiveBlockId(null);
       setActiveSelection(0);
       setNextBlockSelection(null);
@@ -1874,9 +1878,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
 
           const nextBlockState = createMarkdownDocumentBlockState(snapshot.initialBlocks);
-          blockStateRef.current = nextBlockState;
-          publishBlocksByIdChanges(snapshot.initialBlocks);
-          setBlockIds(nextBlockState.blockIds);
+          commitBlockState(nextBlockState, { changedBlocks: snapshot.initialBlocks });
           setDocumentState({ status: "loaded", snapshot });
           logMarkdownDocumentDiagnostics("loaded", {
             blockCount: snapshot.blockCount,
@@ -1935,7 +1937,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onErrorRef,
       onLoadErrorRef,
       onLoadedRef,
-      publishBlocksByIdChanges,
+      commitBlockState,
       publishCommandState,
       reportAsyncError,
       setNextSaveState,
