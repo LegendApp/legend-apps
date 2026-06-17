@@ -3238,6 +3238,37 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("does not wait for a pending edit transaction before vertical navigation", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    const transactionGate = adapter.deferNextTransaction();
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await changeText(editorInput(renderer), "First edited");
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b0",
+        markdown: "First edited",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+
+    await act(async () => {
+      editorInput(renderer).props.onVerticalNavigationOutside({ direction: "down", preferredX: 320 });
+    });
+
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+
+    transactionGate.resolve();
+    await flushPromises();
+
+    expect(adapter.markdownById.get("d1:b0")).toBe("First edited");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("focuses the first and last markdown blocks with boundary navigation commands", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),

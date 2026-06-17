@@ -88,6 +88,10 @@ type PendingVerticalNavigationSelection = {
   preferredX: number;
 };
 
+type ApplyTransactionResultOptions = {
+  publishChangedBlocksOnly?: boolean;
+};
+
 type MarkdownSelectionToolbarFooterProps = {
   enabled: boolean;
   renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
@@ -662,10 +666,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return validateMarkdownTransactionResultToBlockState(blockStateRef.current, result);
     }, []);
 
-    const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
+    const applyTransactionResult = useCallback((result: MarkdownTransactionResult, options: ApplyTransactionResultOptions = {}) => {
       const nextBlockState = validateTransactionResult(result);
       blockStateRef.current = nextBlockState;
       currentRevisionRef.current = result.revision;
+      if (options.publishChangedBlocksOnly) {
+        result.changedBlocks.forEach((block) => {
+          documentRenderState$.blocksById.get(block.id).set(block);
+        });
+        skipNextBlocksByIdPublishRef.current = nextBlockState.blocksById;
+      }
       setBlockState(nextBlockState);
 
       setDocumentState((previousDocumentState) => {
@@ -685,7 +695,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           },
         };
       });
-    }, [validateTransactionResult]);
+    }, [documentRenderState$, validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
       const previousBlockState = blockStateRef.current;
@@ -734,7 +744,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markdown === committedMarkdownRef.current
       ) {
         if (updateReactState && pendingRenderTransactionRef.current) {
-          applyTransactionResult(pendingRenderTransactionRef.current);
+          const pendingRenderTransaction = pendingRenderTransactionRef.current;
+          const canPublishPendingBlocksIncrementally =
+            pendingRenderTransaction.changedBlocks.length === 1 &&
+            pendingRenderTransaction.changedRange.blockIds.length === 1 &&
+            pendingRenderTransaction.changedBlocks[0]?.id === pendingRenderTransaction.changedRange.blockIds[0];
+          applyTransactionResult(pendingRenderTransaction, {
+            publishChangedBlocksOnly: canPublishPendingBlocksIncrementally,
+          });
           pendingRenderTransactionRef.current = undefined;
         }
         return;
@@ -1528,7 +1545,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             while (focusAdjacentBlockQueueRef.current.length > 0) {
               const request = focusAdjacentBlockQueueRef.current.shift();
               if (request) {
-                await commitActiveBlock({ updateReactState: true });
+                commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
                 const activeBlockIdValue = activeBlockIdRef.current;
                 if (activeBlockIdValue) {
                   const currentBlockState = blockStateRef.current;
