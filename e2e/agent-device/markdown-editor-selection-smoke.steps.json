@@ -1,0 +1,33 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "app.legend.markdown.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E selection smoke selected",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "E2E selection smoke selected"
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/markdown-e2e/editor-selection-smoke.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]

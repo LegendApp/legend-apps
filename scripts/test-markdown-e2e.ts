@@ -9,14 +9,14 @@ const seed = process.env.MARKDOWN_E2E_SEED ?? "12345";
 const blockCount = process.env.MARKDOWN_E2E_BLOCK_COUNT ?? "2000";
 const session = process.env.AGENT_DEVICE_SESSION ?? "markdown-e2e";
 const artifactsDir = path.join(rootDir, ".artifacts", "markdown-e2e");
-const stepsFile = path.join(
-  rootDir,
-  "e2e",
-  "agent-device",
-  scenario === "editor-ui-smoke"
-    ? "markdown-editor-ui-smoke.steps.json"
-    : "markdown-far-down.steps.json",
-);
+const stepsFileByScenario: Record<string, string> = {
+  "editor-selection-smoke": "markdown-editor-selection-smoke.steps.json",
+  "editor-ui-smoke": "markdown-editor-ui-smoke.steps.json",
+  "far-down-structural-edits": "markdown-far-down.steps.json",
+  "hydrate-while-editing": "markdown-far-down.steps.json",
+};
+const stepsFileName = stepsFileByScenario[scenario] ?? "markdown-far-down.steps.json";
+const stepsFile = path.join(rootDir, "e2e", "agent-device", stepsFileName);
 const skipBuild = process.env.MARKDOWN_E2E_SKIP_BUILD === "1";
 
 function run(command: string, args: string[]) {

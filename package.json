@@ -25,9 +25,10 @@
     "test:music": "jest --config apps/music/jest.config.cjs",
     "test:markdown-document": "jest --config packages/markdown-document/jest.config.cjs",
     "test:markdown-e2e": "bun scripts/test-markdown-e2e.ts",
+    "test:markdown-e2e:selection-smoke": "MARKDOWN_E2E_SCENARIO=editor-selection-smoke bun scripts/test-markdown-e2e.ts",
     "test:markdown-e2e:ui-smoke": "MARKDOWN_E2E_SCENARIO=editor-ui-smoke bun scripts/test-markdown-e2e.ts",
     "test:markdown-editing": "bun run test:markdown-parser && bun run test:markdown-document && bun run test:markdown-toolbar",
-    "test:markdown-editing:all": "bun run test:markdown-editing && bun run test:markdown-e2e && bun run test:markdown-e2e:ui-smoke",
+    "test:markdown-editing:all": "bun run test:markdown-editing && bun run test:markdown-e2e && bun run test:markdown-e2e:ui-smoke && bun run test:markdown-e2e:selection-smoke",
     "test:markdown-parser": "bash packages/markdown-parser/tests/run.sh",
     "test:markdown-toolbar": "jest --config apps/markdown/jest.config.cjs",
     "typecheck": "tsc --noEmit"
