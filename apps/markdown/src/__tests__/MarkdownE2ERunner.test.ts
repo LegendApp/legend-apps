@@ -43,6 +43,16 @@ describe("getMarkdownE2ERunFromLaunchArguments", () => {
     });
   });
 
+  it("accepts editor soft-wrap selection launches", () => {
+    expect(getMarkdownE2ERunFromLaunchArguments([
+      "--markdown-e2e=editor-soft-wrap-selection",
+    ])).toEqual({
+      blockCount: undefined,
+      scenario: "editor-soft-wrap-selection",
+      seed: undefined,
+    });
+  });
+
   it("ignores invalid scenarios and production launches", () => {
     expect(getMarkdownE2ERunFromLaunchArguments(["--markdown-e2e=missing"])).toBeNull();
 

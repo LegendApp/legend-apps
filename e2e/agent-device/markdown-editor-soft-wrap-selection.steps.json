@@ -1,0 +1,47 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "app.legend.markdown.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E UI smoke ready",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "type",
+    "input": {
+      "text": " edited"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E UI smoke dirty",
+      "timeoutMs": 10000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "E2E UI smoke dirty"
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/markdown-e2e/editor-soft-wrap-selection.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]
