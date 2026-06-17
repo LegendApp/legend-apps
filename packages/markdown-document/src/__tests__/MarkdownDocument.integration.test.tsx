@@ -15,7 +15,11 @@ import type {
 
 const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-markdown") as {
   __enrichedMarkdownTestHooks: {
+    clearInputInstances: () => void;
     clearRenderCounts: () => void;
+    inputInstances: () => Array<{
+      setSelectionForVerticalNavigation: jest.Mock;
+    }>;
     inputRenderCount: (value: string) => number;
     textRenderCount: (markdown: string) => number;
   };
@@ -813,6 +817,7 @@ describe("MarkdownDocument mounted editing", () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
+    __enrichedMarkdownTestHooks.clearInputInstances();
     __enrichedMarkdownTestHooks.clearRenderCounts();
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       const [message] = args;
@@ -3399,6 +3404,61 @@ describe("MarkdownDocument mounted editing", () => {
     await flushPromises();
 
     expect(adapter.markdownById.get("d1:b0")).toBe("First edited");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("does not wait for a pending edit transaction before upward vertical navigation", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+      block("d1:b3", 3, "Fourth"),
+    ]));
+    const transactionGate = adapter.deferNextTransaction();
+    const { onError, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+
+    await pressRenderedMarkdown(renderer, "Third");
+    await changeText(editorInput(renderer), "Third edited");
+    expect(adapter.applyTransactions).toEqual([
+      {
+        blockId: "d1:b2",
+        markdown: "Third edited",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+
+    __enrichedMarkdownTestHooks.clearRenderCounts();
+    await act(async () => {
+      editorInput(renderer).props.onVerticalNavigationOutside({ direction: "up", preferredX: 280 });
+    });
+
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    expect(__enrichedMarkdownTestHooks.textRenderCount("First")).toBe(0);
+    expect(__enrichedMarkdownTestHooks.textRenderCount("Fourth")).toBe(0);
+
+    transactionGate.resolve();
+    await flushPromises();
+
+    expect(adapter.markdownById.get("d1:b2")).toBe("Third edited");
+    await expectStableEditingState(renderer, adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("passes preferred horizontal position to the target native editor during vertical navigation", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { onError, renderer } = await renderDocument({ adapter });
+
+    await navigateVerticallyOutside(renderer, "down", 348);
+    const targetInputInstance = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+
+    expect(editorInput(renderer).props.defaultValue).toBe("Second");
+    await runPendingTimers();
+    expect(targetInputInstance?.setSelectionForVerticalNavigation).toHaveBeenCalledWith("down", 348);
     await expectStableEditingState(renderer, adapter);
     expect(onError).not.toHaveBeenCalled();
   });

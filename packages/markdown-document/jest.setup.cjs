@@ -116,6 +116,7 @@ jest.mock("react-native-enriched-markdown", () => {
   const { Text, TextInput } = require("react-native");
   const textRenderCounts = new Map();
   const inputRenderCounts = new Map();
+  const inputInstances = [];
 
   const increment = (map, key) => {
     map.set(key, (map.get(key) ?? 0) + 1);
@@ -127,6 +128,10 @@ jest.mock("react-native-enriched-markdown", () => {
         textRenderCounts.clear();
         inputRenderCounts.clear();
       },
+      clearInputInstances: () => {
+        inputInstances.length = 0;
+      },
+      inputInstances: () => inputInstances,
       inputRenderCount: (value) => inputRenderCounts.get(value) ?? 0,
       textRenderCount: (markdown) => textRenderCounts.get(markdown) ?? 0,
     },
@@ -136,14 +141,24 @@ jest.mock("react-native-enriched-markdown", () => {
     },
     EnrichedMarkdownTextInput: React.forwardRef((props, ref) => {
       increment(inputRenderCounts, props.defaultValue);
-      React.useImperativeHandle(ref, () => ({
+      const inputInstance = React.useMemo(() => ({
         focus: jest.fn(),
         getCaretRect: jest.fn(async () => ({ height: 18, width: 1, x: 0, y: 0 })),
         measureInWindow: jest.fn((callback) => callback(0, 0, 700, 18)),
         setSelection: jest.fn(),
         setSelectionForVerticalNavigation: jest.fn(),
         setValue: jest.fn(),
-      }));
+      }), []);
+      React.useEffect(() => {
+        inputInstances.push(inputInstance);
+        return () => {
+          const index = inputInstances.indexOf(inputInstance);
+          if (index >= 0) {
+            inputInstances.splice(index, 1);
+          }
+        };
+      }, [inputInstance]);
+      React.useImperativeHandle(ref, () => inputInstance);
 
       return React.createElement(TextInput, {
         ...props,
