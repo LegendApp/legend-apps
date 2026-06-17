@@ -160,8 +160,8 @@ export const MarkdownOverlayEditorInput = memo(
         scrollEnabled={false}
         style={StyleSheet.flatten([
           activeBlock ? editableTextStyleForBlock(activeBlock, markdownStyle) : styles.editorInput,
+          styles.overlayEditorInput,
           { width: inactiveOverlayWidth },
-          activeBlock ? null : styles.overlayEditorInput,
         ])}
       />
     );

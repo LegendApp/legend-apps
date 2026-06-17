@@ -262,12 +262,13 @@ describe("MarkdownDocument native editor overlay", () => {
     ))).toHaveLength(1);
     expect(inputIndex).toBeGreaterThan(footerIndex);
     expect(flattenStyle(input.props.style)).toEqual(expect.objectContaining({
+      left: -10000,
+      position: "absolute",
+      top: -10000,
       width: expect.any(Number),
     }));
     expect(flattenStyle(input.props.style)).toEqual(expect.not.objectContaining({
       height: 25,
-      left: 40,
-      top: 80,
       width: 640,
     }));
   });

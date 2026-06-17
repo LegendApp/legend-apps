@@ -595,7 +595,12 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e21131550 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -38,6 +38,7 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -33,16 +33,17 @@
+
+ #if !TARGET_OS_OSX
+ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, UITextViewDelegate>
+ #else
+ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, RCTBackedTextInputDelegate>
  #endif
  - (void)setupTextView;
  - (void)applyFormatting;
@@ -603,7 +608,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
-@@ -331,7 +332,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+ @end
+
+ @implementation EnrichedMarkdownTextInput {
+   ENRMPlatformTextView *_textView;
+   ENRMInputLayoutManager *_layoutManager;
+@@ -326,54 +327,60 @@
+     }
+   }
+
+   if (styleChanged) {
+     _placeholderLabel.font = _formatterStyle.baseFont;
 
      [self resetBaseTypingAttributes];
 
@@ -612,15 +627,72 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
        [self applyFormatting];
      }
 
-@@ -390,6 +391,7 @@ - (void)_performRelayout
+     [self requestHeightUpdate];
+   }
 
-     CGSize measuredSize = [self measureSize:self->_textView.frame.size.width];
-     ENRMSetContentSize(self->_textView, measuredSize);
-+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ENRMMarkdownTextInputContentSizeDidChangeNotification" object:self];
-   });
+   [super updateProps:props oldProps:oldProps];
  }
 
-@@ -453,6 +454,8 @@ - (void)updatePlaceholderVisibility
+ #pragma mark - Relayout
+
+ - (void)scheduleRelayoutIfNeeded
+ {
+   [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
+-  [self performSelector:@selector(_performRelayout) withObject:nil afterDelay:0];
++  [self _performRelayout];
+ }
+
+ - (void)_performRelayout
+ {
+   if (!_textView) {
+     return;
+   }
+
+-  dispatch_async(dispatch_get_main_queue(), ^{
++  void (^relayout)(void) = ^{
+     NSUInteger textLength = self->_textView.textStorage.length;
+-    if (textLength == 0) {
+-      return;
++    if (textLength > 0) {
++      NSRange wholeRange = NSMakeRange(0, textLength);
++      NSRange actualRange = NSMakeRange(0, 0);
++      [self->_textView.layoutManager invalidateLayoutForCharacterRange:wholeRange actualCharacterRange:&actualRange];
++      [self->_textView.layoutManager ensureLayoutForCharacterRange:actualRange];
++      [self->_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
++
++      CGSize measuredSize = [self measureSize:self->_textView.frame.size.width];
++      ENRMSetContentSize(self->_textView, measuredSize);
++      [[NSNotificationCenter defaultCenter] postNotificationName:@"ENRMMarkdownTextInputContentSizeDidChangeNotification" object:self];
+     }
+-    NSRange wholeRange = NSMakeRange(0, textLength);
+-    NSRange actualRange = NSMakeRange(0, 0);
+-    [self->_textView.layoutManager invalidateLayoutForCharacterRange:wholeRange actualCharacterRange:&actualRange];
+-    [self->_textView.layoutManager ensureLayoutForCharacterRange:actualRange];
+-    [self->_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
++  };
+
+-    CGSize measuredSize = [self measureSize:self->_textView.frame.size.width];
+-    ENRMSetContentSize(self->_textView, measuredSize);
+-  });
++  if ([NSThread isMainThread]) {
++    relayout();
++  } else {
++    dispatch_async(dispatch_get_main_queue(), relayout);
++  }
+ }
+
+ #pragma mark - Window attachment
+
+ - (void)didMoveToWindow
+ {
+   [super didMoveToWindow];
+
+@@ -448,16 +455,18 @@
+ {
+   _placeholderLabel.hidden = (ENRMGetPlainText(_textView).length > 0);
+ }
+
+ #pragma mark - Markdown import
 
  - (void)importMarkdown:(NSString *)markdown
  {
@@ -629,7 +701,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
 
-@@ -514,10 +517,66 @@ - (void)pasteMarkdown:(NSString *)markdown
+   _blockEmitting = YES;
+
+   _isApplyingFormatting = YES;
+   ENRMSetPlainText(_textView, parsed.plainText);
+   _isApplyingFormatting = NO;
+@@ -509,22 +518,78 @@
+   ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
+   [self replaceSelectedTextWith:parsed.plainText formattingRanges:parsed.formattingRanges];
+ }
+
+ #pragma mark - Formatting
 
  - (void)resetBaseTypingAttributes
  {
@@ -646,8 +728,8 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +    attrs[NSParagraphStyleAttributeName] = paragraphStyle;
 +  }
 +  ENRMSetDefaultTypingAttributes(_textView, attrs);
-+}
-+
+ }
+
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown
 +{
 +  const auto &viewProps = *std::static_pointer_cast<EnrichedMarkdownTextInputProps const>(_props);
@@ -695,13 +777,32 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +    _placeholderLabel.font = _formatterStyle.baseFont;
 +    [self resetBaseTypingAttributes];
 +  }
- }
-
++}
++
  - (void)applyFormatting
-@@ -565,6 +624,23 @@ - (void)setValue:(NSString *)markdown
-   [self requestHeightUpdate];
+ {
+   if (_isApplyingFormatting) {
+     return;
+   }
+   if (ENRMHasMarkedText(_textView)) {
+     return;
+   }
+@@ -553,33 +618,100 @@
+ - (void)blur
+ {
+   ENRMBlurTextView(_textView);
  }
 
+ - (void)setValue:(NSString *)markdown
+ {
+   [self importMarkdown:markdown];
++  _lastSelectedRange = _textView.selectedRange;
++  [self emitOnChangeText];
++  [self emitOnChangeSelection];
++  [self emitOnChangeState];
++  [self requestHeightUpdate];
++}
++
 +- (void)setValuePreservingSelection:(NSString *)markdown
 +{
 +  NSRange selection = _textView.selectedRange;
@@ -711,18 +812,21 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +  NSUInteger selectionStart = MIN(selection.location, textLength);
 +  NSUInteger selectionEnd = MIN(NSMaxRange(selection), textLength);
 +  _textView.selectedRange = NSMakeRange(selectionStart, selectionEnd - selectionStart);
-+  _lastSelectedRange = _textView.selectedRange;
+   _lastSelectedRange = _textView.selectedRange;
 +
-+  [self emitOnChangeText];
-+  [self emitOnChangeSelection];
-+  [self emitOnChangeState];
-+  [self requestHeightUpdate];
-+}
-+
+   [self emitOnChangeText];
+   [self emitOnChangeSelection];
+   [self emitOnChangeState];
+   [self requestHeightUpdate];
+ }
+
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -575,6 +651,56 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+   NSInteger clampedStart = MIN(MAX(start, 0), textLen);
+   NSInteger clampedEnd = MIN(MAX(end, clampedStart), textLen);
+   _textView.selectedRange = NSMakeRange((NSUInteger)clampedStart, (NSUInteger)(clampedEnd - clampedStart));
+   [self emitOnChangeSelection];
    [self emitOnChangeState];
  }
 
@@ -779,7 +883,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -884,6 +1010,33 @@ - (void)emitOnChangeSelection
+ }
+
+ - (void)toggleItalic
+ {
+   [self toggleInlineStyle:ENRMInputStyleTypeEmphasis];
+@@ -879,16 +1011,43 @@
+   }
+   NSRange selection = _textView.selectedRange;
+   emitter->onChangeSelection({
+       .start = static_cast<int>(selection.location),
+       .end = static_cast<int>(NSMaxRange(selection)),
    });
  }
 
@@ -813,7 +927,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  - (void)emitOnChangeState
  {
    auto emitter = [self getEventEmitter];
-@@ -914,12 +1067,12 @@ - (void)emitOnChangeState
+   if (emitter == nullptr) {
+     return;
+   }
+
+   NSUInteger cursor = _textView.selectedRange.location;
+@@ -909,22 +1068,22 @@
+   _prevState.italic = italicActive;
+   _prevState.underline = underlineActive;
+   _prevState.strikethrough = strikethroughActive;
+   _prevState.spoiler = spoilerActive;
+   _prevState.link = linkActive;
    _prevState.initialized = YES;
 
    emitter->onChangeState({
@@ -832,7 +956,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
    });
  }
 
-@@ -988,12 +1141,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
+ - (void)emitCaretRectChangeIfNeeded
+ {
+   auto emitter = [self getEventEmitter];
+   if (emitter == nullptr) {
+     return;
+@@ -983,22 +1142,22 @@
+
+   eventEmitter->onContextMenuItemPress({
+       .itemText = std::string(itemText.UTF8String),
+       .selectedText = std::string(selectedText.UTF8String),
+       .selectionStart = static_cast<int>(selectedRange.location),
        .selectionEnd = static_cast<int>(NSMaxRange(selectedRange)),
        .styleState =
            {
@@ -851,17 +985,37 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
            },
    });
  }
-@@ -1056,6 +1209,9 @@ - (void)handleTextChanged
+
+ - (void)emitOnFocus
+ {
+   auto emitter = [self getEventEmitter];
+   if (emitter == nullptr) {
+@@ -1085,16 +1244,19 @@
+   _lastTextLength = newLength;
+
+ #if !TARGET_OS_OSX
+   if (newLength == 0) {
      [self resetBaseTypingAttributes];
    }
+ #endif
 
 +  NSString *markdown = [ENRMMarkdownSerializer serializePlainText:ENRMGetPlainText(_textView)
 +                                                           ranges:_formattingStore.allRanges];
 +  [self applyBlockStyleForMarkdown:markdown];
-  [self applyFormatting];
+   [self applyFormatting];
 
-  [_detectorPipeline processTextChange:ENRMGetPlainText(_textView)
-@@ -1149,6 +1305,12 @@ - (void)manageSelectionBasedChanges
+   [_detectorPipeline processTextChange:ENRMGetPlainText(_textView)
+                      modificationRange:NSMakeRange(editLocation, insertedLength)];
+
+   [self updatePlaceholderVisibility];
+   [self emitOnChangeText];
+   [self emitOnChangeSelection];
+@@ -1144,16 +1306,22 @@
+     if (text.length > 0) {
+       NSRange paragraphRange = [text paragraphRangeForRange:_textView.selectedRange];
+       NSString *paragraphText = [text substringWithRange:paragraphRange];
+       BOOL isEmpty = paragraphText.length == 0 || [paragraphText isEqualToString:@"\n"];
+       if (isEmpty) {
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -874,6 +1028,11 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
          _textView.typingAttributes = attrs;
        }
      }
+   }
+ }
+
+ - (BOOL)textView:(UITextView *)textView shouldChangeTextInRange:(NSRange)range replacementText:(NSString *)text
+ {
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
 index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..064aa2c13dde399e7d2ff1137848d40f20e2aaf3 100644
 --- a/ios/input/InputStylePropsUtils.h
