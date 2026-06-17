@@ -53,6 +53,16 @@ describe("getMarkdownE2ERunFromLaunchArguments", () => {
     });
   });
 
+  it("accepts editor code block smoke launches", () => {
+    expect(getMarkdownE2ERunFromLaunchArguments([
+      "--markdown-e2e=editor-code-block-smoke",
+    ])).toEqual({
+      blockCount: undefined,
+      scenario: "editor-code-block-smoke",
+      seed: undefined,
+    });
+  });
+
   it("ignores invalid scenarios and production launches", () => {
     expect(getMarkdownE2ERunFromLaunchArguments(["--markdown-e2e=missing"])).toBeNull();
 

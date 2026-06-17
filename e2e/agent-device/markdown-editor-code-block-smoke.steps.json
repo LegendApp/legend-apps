@@ -9,21 +9,22 @@
     "command": "wait",
     "input": {
       "kind": "text",
-      "text": "E2E soft-wrap selection ready",
+      "text": "E2E code block smoke ready",
       "timeoutMs": 60000
     }
   },
   {
     "command": "type",
     "input": {
-      "text": " edited"
+      "text": "\nconst edited = true;",
+      "delayMs": 20
     }
   },
   {
     "command": "wait",
     "input": {
       "kind": "text",
-      "text": "E2E soft-wrap selection dirty",
+      "text": "E2E code block smoke dirty",
       "timeoutMs": 10000
     }
   },
@@ -31,13 +32,13 @@
     "command": "is",
     "input": {
       "predicate": "visible",
-      "selector": "E2E soft-wrap selection dirty"
+      "selector": "E2E code block smoke dirty"
     }
   },
   {
     "command": "screenshot",
     "input": {
-      "path": ".artifacts/markdown-e2e/editor-soft-wrap-selection.png"
+      "path": ".artifacts/markdown-e2e/editor-code-block-smoke.png"
     }
   },
   {

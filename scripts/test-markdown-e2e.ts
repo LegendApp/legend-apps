@@ -10,6 +10,7 @@ const blockCount = process.env.MARKDOWN_E2E_BLOCK_COUNT ?? "2000";
 const session = process.env.AGENT_DEVICE_SESSION ?? "markdown-e2e";
 const artifactsDir = path.join(rootDir, ".artifacts", "markdown-e2e");
 const stepsFileByScenario: Record<string, string> = {
+  "editor-code-block-smoke": "markdown-editor-code-block-smoke.steps.json",
   "editor-selection-smoke": "markdown-editor-selection-smoke.steps.json",
   "editor-soft-wrap-selection": "markdown-editor-soft-wrap-selection.steps.json",
   "editor-ui-smoke": "markdown-editor-ui-smoke.steps.json",

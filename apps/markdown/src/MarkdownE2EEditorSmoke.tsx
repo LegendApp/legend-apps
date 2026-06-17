@@ -10,29 +10,65 @@ import { StyleSheet, Text, View } from "react-native";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 
+export type MarkdownE2EEditorSmokeVariant = "codeBlock" | "selection" | "softWrap" | "ui";
+
 const smokeFilename = "e2e-editor-smoke.md";
 const softWrapSelectionParagraph = "Smoke first paragraphasd flaskdjf alskdjf alskdjf alksdfj alksdfj alksdfj alksdjf alksdjf alksdjf alkdfj alksdfj alsdjf alsdjf laksdjf alsdjf";
 const smokeMarkdown = `${softWrapSelectionParagraph}\n\n\`\`\`ts\nconst selected = true;\n\`\`\`\n\nSmoke third paragraph`;
+const codeBlockSmokeMarkdown = "```ts\nconst selected = true;\n```\n\nSmoke paragraph after code block";
+
+const smokeMarkdownByVariant = {
+  codeBlock: codeBlockSmokeMarkdown,
+  selection: smokeMarkdown,
+  softWrap: smokeMarkdown,
+  ui: smokeMarkdown,
+} satisfies Record<MarkdownE2EEditorSmokeVariant, string>;
+
+const statusTextByVariant = {
+  codeBlock: {
+    dirty: "E2E code block smoke dirty",
+    ready: "E2E code block smoke ready",
+    selected: "E2E code block smoke selected",
+  },
+  selection: {
+    dirty: "E2E UI smoke dirty",
+    ready: "E2E UI smoke ready",
+    selected: "E2E selection smoke selected",
+  },
+  softWrap: {
+    dirty: "E2E soft-wrap selection dirty",
+    ready: "E2E soft-wrap selection ready",
+    selected: "E2E soft-wrap selection selected",
+  },
+  ui: {
+    dirty: "E2E UI smoke dirty",
+    ready: "E2E UI smoke ready",
+    selected: "E2E UI smoke selected",
+  },
+} satisfies Record<MarkdownE2EEditorSmokeVariant, Record<"dirty" | "ready" | "selected", string>>;
 
 export function MarkdownE2EEditorSmoke({
   autoSelectBlocks = false,
+  variant = "ui",
 }: {
   autoSelectBlocks?: boolean;
+  variant?: MarkdownE2EEditorSmokeVariant;
 }) {
   const commandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const [status, setStatus] = useState<"dirty" | "ready" | "selected">("ready");
   const [selectionAnchor, setSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null);
+  const statusText = statusTextByVariant[variant][status];
   const adapter = useMemo<MarkdownDocumentAdapter>(() => ({
     applyTransaction: nativeMarkdownDocumentAdapter.applyTransaction,
     close: nativeMarkdownDocumentAdapter.close,
     getBlock: nativeMarkdownDocumentAdapter.getBlock,
     getBlocks: nativeMarkdownDocumentAdapter.getBlocks,
     load(filename) {
-      return nativeMarkdownDocumentAdapter.loadMarkdown(filename, smokeMarkdown);
+      return nativeMarkdownDocumentAdapter.loadMarkdown(filename, smokeMarkdownByVariant[variant]);
     },
     save: nativeMarkdownDocumentAdapter.save,
     saveAs: nativeMarkdownDocumentAdapter.saveAs,
-  }), []);
+  }), [variant]);
   const handleDirtyChange = useCallback((isDirty: boolean) => {
     if (isDirty) {
       setStatus("dirty");
@@ -77,16 +113,12 @@ export function MarkdownE2EEditorSmoke({
   return (
     <View style={styles.root}>
       <Text style={styles.status}>
-        {status === "dirty"
-          ? "E2E UI smoke dirty"
-          : status === "selected"
-            ? "E2E selection smoke selected"
-            : "E2E UI smoke ready"}
+        {statusText}
       </Text>
       <View style={styles.documentFrame}>
         <MarkdownDocument
           adapter={adapter}
-          autoFocusFirstBlock={autoSelectBlocks}
+          autoFocusFirstBlock={autoSelectBlocks || variant === "codeBlock"}
           commandsRef={commandsRef}
           filename={smokeFilename}
           onDirtyChange={handleDirtyChange}

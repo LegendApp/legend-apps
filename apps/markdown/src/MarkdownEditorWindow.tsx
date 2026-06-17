@@ -142,10 +142,20 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   if (e2eRun) {
-    if (e2eRun.scenario === "editor-selection-smoke" || e2eRun.scenario === "editor-soft-wrap-selection" || e2eRun.scenario === "editor-ui-smoke") {
+    if (e2eRun.scenario === "editor-selection-smoke" ||
+      e2eRun.scenario === "editor-soft-wrap-selection" ||
+      e2eRun.scenario === "editor-code-block-smoke" ||
+      e2eRun.scenario === "editor-ui-smoke") {
       return (
         <MarkdownE2EEditorSmoke
           autoSelectBlocks={e2eRun.scenario === "editor-selection-smoke"}
+          variant={e2eRun.scenario === "editor-selection-smoke"
+            ? "selection"
+            : e2eRun.scenario === "editor-soft-wrap-selection"
+              ? "softWrap"
+              : e2eRun.scenario === "editor-code-block-smoke"
+                ? "codeBlock"
+                : "ui"}
         />
       );
     }
