@@ -88,10 +88,6 @@ type PendingVerticalNavigationSelection = {
   preferredX: number;
 };
 
-type ApplyTransactionResultOptions = {
-  publishChangedBlocksOnly?: boolean;
-};
-
 type MarkdownSelectionToolbarFooterProps = {
   enabled: boolean;
   renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
@@ -394,7 +390,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockState, setBlockState] = useState(() => createMarkdownDocumentBlockState([]));
     const { blockIds, blocksById } = blockState;
     const blockStateRef = useRef(blockState);
-    const skipNextBlocksByIdPublishRef = useRef<Map<string, MarkdownBlockSnapshot> | undefined>(undefined);
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
     const [activeSelection, setActiveSelection] = useState(0);
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
@@ -649,33 +644,38 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, []);
 
+    const publishBlocksByIdChanges = useCallback((changedBlocks: MarkdownBlockSnapshot[], retiredBlockIds: string[] = []) => {
+      retiredBlockIds.forEach((blockId) => {
+        documentRenderState$.blocksById.get(blockId).delete();
+      });
+      changedBlocks.forEach((block) => {
+        documentRenderState$.blocksById.get(block.id).set(block);
+      });
+    }, [documentRenderState$]);
+
     const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[], requestRevision: number) => {
-      if (blocks.length === 0) {
+      if (blocks.length === 0 || requestRevision !== currentRevisionRef.current) {
         return;
       }
 
+      publishBlocksByIdChanges(blocks);
       setBlockState((previousBlockState) => mergeHydratedMarkdownBlocksForRevision({
         blocks,
         currentRevision: currentRevisionRef.current,
         previousState: previousBlockState,
         requestRevision,
       }));
-    }, []);
+    }, [publishBlocksByIdChanges]);
 
     const validateTransactionResult = useCallback((result: MarkdownTransactionResult) => {
       return validateMarkdownTransactionResultToBlockState(blockStateRef.current, result);
     }, []);
 
-    const applyTransactionResult = useCallback((result: MarkdownTransactionResult, options: ApplyTransactionResultOptions = {}) => {
+    const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
       const nextBlockState = validateTransactionResult(result);
       blockStateRef.current = nextBlockState;
       currentRevisionRef.current = result.revision;
-      if (options.publishChangedBlocksOnly) {
-        result.changedBlocks.forEach((block) => {
-          documentRenderState$.blocksById.get(block.id).set(block);
-        });
-        skipNextBlocksByIdPublishRef.current = nextBlockState.blocksById;
-      }
+      publishBlocksByIdChanges(result.changedBlocks, result.retiredBlockIds);
       setBlockState(nextBlockState);
 
       setDocumentState((previousDocumentState) => {
@@ -695,7 +695,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           },
         };
       });
-    }, [documentRenderState$, validateTransactionResult]);
+    }, [publishBlocksByIdChanges, validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
       const previousBlockState = blockStateRef.current;
@@ -729,7 +729,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           selection: activeInputSelectionRef.current.start,
         });
       }
-      skipNextBlocksByIdPublishRef.current = blocksById;
       setBlockState(nextBlockState);
     }, [documentRenderState$]);
 
@@ -744,14 +743,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markdown === committedMarkdownRef.current
       ) {
         if (updateReactState && pendingRenderTransactionRef.current) {
-          const pendingRenderTransaction = pendingRenderTransactionRef.current;
-          const canPublishPendingBlocksIncrementally =
-            pendingRenderTransaction.changedBlocks.length === 1 &&
-            pendingRenderTransaction.changedRange.blockIds.length === 1 &&
-            pendingRenderTransaction.changedBlocks[0]?.id === pendingRenderTransaction.changedRange.blockIds[0];
-          applyTransactionResult(pendingRenderTransaction, {
-            publishChangedBlocksOnly: canPublishPendingBlocksIncrementally,
-          });
+          applyTransactionResult(pendingRenderTransactionRef.current);
           pendingRenderTransactionRef.current = undefined;
         }
         return;
@@ -1827,7 +1819,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       pendingVerticalNavigationSelectionRef.current = null;
       clearOverlayFrame();
       setDocumentState({ status: "loading" });
-      setBlockState(createMarkdownDocumentBlockState([]));
+      publishBlocksByIdChanges([], blockStateRef.current.blockIds);
+      documentRenderState$.blockIds.set([]);
+      const emptyBlockState = createMarkdownDocumentBlockState([]);
+      blockStateRef.current = emptyBlockState;
+      setBlockState(emptyBlockState);
       setActiveBlockId(null);
       setActiveSelection(0);
       setNextBlockSelection(null);
@@ -1845,7 +1841,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             return;
           }
 
-          setBlockState(createMarkdownDocumentBlockState(snapshot.initialBlocks));
+          const nextBlockState = createMarkdownDocumentBlockState(snapshot.initialBlocks);
+          blockStateRef.current = nextBlockState;
+          publishBlocksByIdChanges(snapshot.initialBlocks);
+          setBlockState(nextBlockState);
           setDocumentState({ status: "loaded", snapshot });
           logMarkdownDocumentDiagnostics("loaded", {
             blockCount: snapshot.blockCount,
@@ -1898,11 +1897,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearAutosaveTimer,
       clearOverlayFrame,
       autoFocusFirstBlock,
+      documentRenderState$,
       filename,
       onDirtyChangeRef,
       onErrorRef,
       onLoadErrorRef,
       onLoadedRef,
+      publishBlocksByIdChanges,
       publishCommandState,
       reportAsyncError,
       setNextSaveState,
@@ -2341,14 +2342,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return selectedIds;
     }, [blockIds, blockSelection]);
     useEffect(() => {
-      const shouldSkipBlocksByIdPublish = skipNextBlocksByIdPublishRef.current === blocksById;
       documentRenderState$.blockIds.set(blockIds);
-      if (shouldSkipBlocksByIdPublish) {
-        skipNextBlocksByIdPublishRef.current = undefined;
-      } else {
-        documentRenderState$.blocksById.set(blocksById);
-      }
-    }, [blockIds, blocksById, documentRenderState$]);
+    }, [blockIds, documentRenderState$]);
     useEffect(() => {
       documentRenderState$.blockSelection.set(blockSelection);
     }, [blockSelection, documentRenderState$]);
