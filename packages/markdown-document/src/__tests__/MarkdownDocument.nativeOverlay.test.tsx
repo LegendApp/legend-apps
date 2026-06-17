@@ -261,7 +261,10 @@ describe("MarkdownDocument native editor overlay", () => {
       String(node.type) === "View" && node.props.testID === "markdown-selection-toolbar"
     ))).toHaveLength(1);
     expect(inputIndex).toBeGreaterThan(footerIndex);
-    expect(input.props.style).toEqual(expect.objectContaining({
+    expect(flattenStyle(input.props.style)).toEqual(expect.objectContaining({
+      width: expect.any(Number),
+    }));
+    expect(flattenStyle(input.props.style)).toEqual(expect.not.objectContaining({
       height: 25,
       left: 40,
       top: 80,

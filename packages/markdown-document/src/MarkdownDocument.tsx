@@ -396,7 +396,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
     const blockSelectionRef = useRef<BlockSelectionState | null>(null);
     const blockSelectionInputText$ = useObservable("");
-    const overlayFrame$ = useObservable<OverlayFrame | undefined>(undefined);
     const layoutMetrics$ = useObservable({
       containerWindowY: 0,
       contentContainerOffsetX: 0,
@@ -441,8 +440,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       overlayFrameRef.current = undefined;
       overlayFrameBlockIdRef.current = undefined;
       nativeEditorRowSizeRef.current.clear();
-      overlayFrame$.set(undefined);
-    }, [overlayFrame$]);
+    }, []);
 
     const cancelPendingVerticalNavigationFrame = useCallback(() => {
       if (pendingVerticalNavigationFrameRef.current !== undefined) {
@@ -2476,7 +2474,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       };
       overlayFrameRef.current = nextOverlayFrame;
       overlayFrameBlockIdRef.current = blockId;
-      overlayFrame$.set(nextOverlayFrame);
       const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
       if (activeBlockState) {
         documentRenderState$.activeBlocksById.get(blockId).set({
@@ -2506,7 +2503,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       return block;
-    }, [documentRenderState$, overlayFrame$, resolvedMarkdownLayout]);
+    }, [documentRenderState$, resolvedMarkdownLayout]);
     const handleNativeBeginEditing = useCallback(
       (event: NativeEditorFrameEvent) => {
         const block = applyNativeEditorFrame(event.nativeEvent);
@@ -2610,7 +2607,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             onChangeSelectionRef={handleChangeSelectionRef}
             onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
             onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
-            overlayFrame$={overlayFrame$}
             sourceBlockIdRef={nativeEditingBlockIdRef}
           />
         </MarkdownNativeEditorHost>
