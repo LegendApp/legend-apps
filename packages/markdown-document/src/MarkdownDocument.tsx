@@ -14,7 +14,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
-  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
@@ -42,7 +41,6 @@ import type {
 } from "./internalTypes";
 import {
   blockRowSpacingStyle,
-  estimateMarkdownSelectionVerticalRange,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -936,7 +934,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       documentRenderState$.blockLayoutsById.get(blockId).set(layout);
     }, [documentRenderState$, layoutMetrics$]);
 
-    const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot, selection?: number) => {
+    const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot) => {
       const blockLayout = blockContentLayoutsRef.current.get(block.id);
       const viewportHeight = scrollViewportHeightRef.current;
       const currentScrollOffset = scrollOffsetYRef.current;
@@ -945,24 +943,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const scrollMargin = 12;
         const blockTop = blockLayout.y;
         const blockBottom = blockLayout.y + blockLayout.height;
-        const selectionRange = selection === undefined
-          ? undefined
-          : estimateMarkdownSelectionVerticalRange(
-            block.markdown,
-            selection,
-            inactiveOverlayWidth$.peek(),
-            block.type === "codeBlock" ? resolvedMarkdownStyle.codeBlock as TextStyle | undefined : resolvedMarkdownStyle.paragraph as TextStyle | undefined,
-          );
-        const targetTop = selectionRange ? blockTop + selectionRange.top : blockTop;
-        const targetBottom = selectionRange ? blockTop + selectionRange.bottom : blockBottom;
         const visibleTop = currentScrollOffset;
         const visibleBottom = currentScrollOffset + viewportHeight;
         let nextScrollOffset: number | undefined;
 
-        if (targetTop < visibleTop + scrollMargin) {
-          nextScrollOffset = Math.max(0, targetTop - scrollMargin);
-        } else if (targetBottom > visibleBottom - scrollMargin) {
-          nextScrollOffset = Math.max(0, targetBottom - viewportHeight + scrollMargin);
+        if (blockTop < visibleTop + scrollMargin) {
+          nextScrollOffset = Math.max(0, blockTop - scrollMargin);
+        } else if (blockBottom > visibleBottom - scrollMargin) {
+          nextScrollOffset = Math.max(0, blockBottom - viewportHeight + scrollMargin);
         }
 
         if (nextScrollOffset !== undefined && nextScrollOffset !== currentScrollOffset) {
@@ -970,7 +958,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           listRef.current?.scrollToOffset({ animated: true, offset: nextScrollOffset }).catch(reportAsyncError);
         }
       }
-    }, [inactiveOverlayWidth$, reportAsyncError, resolvedMarkdownStyle.codeBlock, resolvedMarkdownStyle.paragraph]);
+    }, [reportAsyncError]);
 
     const prepareBlockIndexForKeyboardFocus = useCallback(async (index: number, direction: "up" | "down") => {
       const list = listRef.current;
@@ -1584,7 +1572,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                       };
                     }
                     setActiveBlock(targetBlock, targetSelection);
-                    scrollBlockIntoView(targetBlock, targetSelection);
+                    scrollBlockIntoView(targetBlock);
                   }
                 }
               }
@@ -1634,7 +1622,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             setNextBlockSelection(null);
             clearTextSelectionAnchor();
             setActiveBlock(targetBlock, targetSelection);
-            scrollBlockIntoView(targetBlock, targetSelection);
+            scrollBlockIntoView(targetBlock);
           }
         }
 
