@@ -7,19 +7,24 @@ import {
 import { markdownToolbarItemIds } from "../markdownToolbarItems";
 
 describe("markdown toolbar layout", () => {
-  it("defaults the top toolbar to every toolbar item in registry order", () => {
-    expect(defaultTopToolbarLayout.shown).toEqual(markdownToolbarItemIds);
+  it("defaults the top toolbar to the core formatting controls", () => {
+    expect(defaultTopToolbarLayout.shown).toEqual([
+      "paragraph",
+      "heading-1",
+      "heading-2",
+      "heading-3",
+      "bold",
+      "italic",
+      "link",
+      "blockquote",
+      "unordered-list",
+      "ordered-list",
+      "code-block",
+    ]);
   });
 
   it("defaults the selection toolbar to the minimal inline-focused controls", () => {
-    expect(defaultSelectionToolbarLayout.shown).toEqual([
-      "bold",
-      "italic",
-      "underline",
-      "strikethrough",
-      "link",
-      "code-block",
-    ]);
+    expect(defaultSelectionToolbarLayout.shown).toEqual(["bold", "italic", "link", "code-block"]);
   });
 
   it("normalizes missing layouts to the layout default", () => {

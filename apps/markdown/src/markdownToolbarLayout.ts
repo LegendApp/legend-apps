@@ -25,11 +25,23 @@ export type MoveMarkdownToolbarItemParams = {
 };
 
 export const defaultTopToolbarLayout: MarkdownToolbarLayout = {
-  shown: [...markdownToolbarItemIds],
+  shown: [
+    "paragraph",
+    "heading-1",
+    "heading-2",
+    "heading-3",
+    "bold",
+    "italic",
+    "link",
+    "blockquote",
+    "unordered-list",
+    "ordered-list",
+    "code-block",
+  ],
 };
 
 export const defaultSelectionToolbarLayout: MarkdownToolbarLayout = {
-  shown: ["bold", "italic", "underline", "strikethrough", "link", "code-block"],
+  shown: ["bold", "italic", "link", "code-block"],
 };
 
 const defaultToolbarLayouts: Record<MarkdownToolbarLayoutId, MarkdownToolbarLayout> = {
