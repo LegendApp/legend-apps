@@ -1,9 +1,30 @@
 import {
   editableTextStyleForBlock,
+  estimateMarkdownSelection,
 } from "../markdownLayout";
 import { defaultMarkdownStyle } from "../styles";
 import type { MarkdownBlockSnapshot } from "../types";
 
+function pressEvent(locationX: number, locationY = 0) {
+  return { nativeEvent: { locationX, locationY } } as never;
+}
+
+describe("estimateMarkdownSelection", () => {
+  it("maps rendered heading text clicks after the hidden markdown prefix", () => {
+    expect(estimateMarkdownSelection("### Heading", pressEvent(0), 700)).toBe("### ".length);
+    expect(estimateMarkdownSelection("### Heading", pressEvent(16), 700)).toBe("### He".length);
+  });
+
+  it("keeps paragraph selection offsets unchanged", () => {
+    expect(estimateMarkdownSelection("Paragraph", pressEvent(16), 700)).toBe("Pa".length);
+  });
+
+  it("uses rendered heading text length for wrapped selection", () => {
+    const markdown = "### 1234567890abcdefghijk";
+
+    expect(estimateMarkdownSelection(markdown, pressEvent(0, 25), 80)).toBe("### 1234567890abcdefghij".length);
+  });
+});
 
 describe("editableTextStyleForBlock", () => {
   it("keeps code editor text metrics without rendered code block decoration", () => {

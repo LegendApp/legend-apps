@@ -158,6 +158,11 @@ export function splitMarkdownAtFirstLineBreak(markdown: string) {
   return { beforeMarkdown, afterMarkdown };
 }
 
+function hiddenLeadingMarkdownSyntaxLength(line: string) {
+  const headingMatch = /^(\s{0,3}#{1,6}\s+)/.exec(line);
+  return headingMatch?.[1]?.length ?? 0;
+}
+
 export function estimateMarkdownSelection(markdown: string, event: GestureResponderEvent, width: number) {
   const lineHeight = 25;
   const averageCharacterWidth = 8;
@@ -171,10 +176,13 @@ export function estimateMarkdownSelection(markdown: string, event: GestureRespon
   let currentVisualLine = 0;
 
   for (const line of lines) {
-    const wrappedLineCount = Math.max(1, Math.ceil(Math.max(1, line.length) / charactersPerLine));
+    const hiddenPrefixLength = hiddenLeadingMarkdownSyntaxLength(line);
+    const renderedLineLength = Math.max(0, line.length - hiddenPrefixLength);
+    const wrappedLineCount = Math.max(1, Math.ceil(Math.max(1, renderedLineLength) / charactersPerLine));
     if (visualLine < currentVisualLine + wrappedLineCount) {
       const wrappedLine = visualLine - currentVisualLine;
-      return Math.min(markdown.length, offset + Math.min(line.length, wrappedLine * charactersPerLine + characterInVisualLine));
+      const renderedSelection = Math.min(renderedLineLength, wrappedLine * charactersPerLine + characterInVisualLine);
+      return Math.min(markdown.length, offset + hiddenPrefixLength + renderedSelection);
     }
     offset += line.length + 1;
     currentVisualLine += wrappedLineCount;
