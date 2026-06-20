@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { ToolbarLayoutEditor } from "../settings/ToolbarLayoutEditor";
 
@@ -34,14 +34,24 @@ jest.mock("@legend-desktop/reorder-controls", () => {
   };
 });
 
+jest.mock("@legend-desktop/sf-symbol", () => ({
+  SFSymbol: () => null,
+}));
+
 jest.mock("../markdownSettings", () => ({
+  resetMarkdownToolbarLayoutSetting: jest.fn(),
   setMarkdownToolbarLayoutSetting: (layoutId: string, layout: unknown) => mockSetMarkdownToolbarLayoutSetting(layoutId, layout),
   useMarkdownToolbarLayoutSetting: () => mockToolbarLayout,
 }));
 
+const { resetMarkdownToolbarLayoutSetting: mockResetMarkdownToolbarLayoutSetting } = jest.requireMock("../markdownSettings") as {
+  resetMarkdownToolbarLayoutSetting: jest.Mock;
+};
+
 describe("ToolbarLayoutEditor", () => {
   beforeEach(() => {
     mockSetMarkdownToolbarLayoutSetting.mockClear();
+    mockResetMarkdownToolbarLayoutSetting.mockClear();
   });
 
   it("updates the stored layout when a shown toolbar item is dropped into hidden controls", async () => {
@@ -84,6 +94,21 @@ describe("ToolbarLayoutEditor", () => {
       group: "shown",
       itemId: "bold",
     });
+    await view.unmount();
+  });
+
+  it("resets the stored toolbar layout", async () => {
+    const view = await render(
+      <ToolbarLayoutEditor
+        description="Customize toolbar"
+        layoutId="top"
+        title="Top and Bottom Toolbars"
+      />,
+    );
+
+    await fireEvent.press(view.getByText("Reset"));
+
+    expect(mockResetMarkdownToolbarLayoutSetting).toHaveBeenCalledWith("top");
     await view.unmount();
   });
 });
