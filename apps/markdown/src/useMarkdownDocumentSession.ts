@@ -43,8 +43,10 @@ export function useMarkdownDocumentSession() {
     saveState: "idle",
   });
   const filename = useValue(sessionState$.filename);
+  const isDirty = useValue(sessionState$.isDirty);
   const lastError = useValue(sessionState$.lastError);
   const documentSource = useValue(sessionState$.documentSource);
+  const saveState = useValue(sessionState$.saveState);
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
   const preserveNextLoadedError = useRef(false);
@@ -270,6 +272,7 @@ export function useMarkdownDocumentSession() {
     handleDocumentLoaded,
     hasDocument,
     handleDocumentLoadError,
+    isDirty,
     isUntitledDocument,
     lastError,
     newMarkdownDocument,
@@ -279,6 +282,7 @@ export function useMarkdownDocumentSession() {
     prepareCurrentDocumentForClose,
     saveCurrentDocument,
     saveCurrentDocumentAs,
+    saveState,
     sessionState$,
     setCommandState,
     setIsDirty,

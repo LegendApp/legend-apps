@@ -43,6 +43,7 @@ import {
   getMarkdownStyleForAppearance,
 } from "./markdownAppearance";
 import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature";
+import { markdownSaveStatusText } from "./markdownSaveStatus";
 import { promptMarkdownLink } from "./promptMarkdownLink";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
@@ -96,6 +97,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings),
     [appearanceSettings, layoutTheme],
   );
+  const saveStatusText = markdownSaveStatusText({
+    autosaveEnabled: autosave === "enabled",
+    isDirty: session.isDirty,
+    isUntitledDocument: session.isUntitledDocument,
+    saveState: session.saveState,
+  });
   const measurementSignature = useMemo(
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
@@ -243,6 +250,21 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
           style={styles.bottomToolbar}
         />
       ) : null}
+      {saveStatusText ? (
+        <Text
+          style={[
+            styles.saveStatus,
+            formattingToolbarMode === "bottom" ? styles.saveStatusAboveBottomToolbar : null,
+            {
+              backgroundColor: displayTheme.colors.surface,
+              borderColor: displayTheme.colors.border,
+              color: displayTheme.colors.muted,
+            },
+          ]}
+        >
+          {saveStatusText}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -272,5 +294,19 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     position: "relative",
+  },
+  saveStatus: {
+    borderRadius: 6,
+    borderWidth: 1,
+    bottom: 10,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: "absolute",
+    right: 12,
+  },
+  saveStatusAboveBottomToolbar: {
+    bottom: 52,
   },
 });
