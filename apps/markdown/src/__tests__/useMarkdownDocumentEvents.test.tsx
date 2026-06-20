@@ -1,10 +1,17 @@
 import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
 import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
-import { useMarkdownAppExit } from "../useMarkdownDocumentEvents";
+import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
+import {
+  getLastMarkdownDocumentPath,
+  getMarkdownStartupBehaviorSetting,
+} from "../markdownSettings";
+import { useMarkdownAppExit, useMarkdownStartupDocument } from "../useMarkdownDocumentEvents";
 
 const mockAddAppExitListener = addAppExitListener as jest.MockedFunction<typeof addAppExitListener>;
 const mockCompleteAppExit = completeAppExit as jest.MockedFunction<typeof completeAppExit>;
+const mockGetLastMarkdownDocumentPath = getLastMarkdownDocumentPath as jest.MockedFunction<typeof getLastMarkdownDocumentPath>;
+const mockGetMarkdownStartupBehaviorSetting = getMarkdownStartupBehaviorSetting as jest.MockedFunction<typeof getMarkdownStartupBehaviorSetting>;
 
 jest.mock("@legend-desktop/app-exit", () => ({
   addAppExitListener: jest.fn(),
@@ -24,8 +31,8 @@ jest.mock("../appMetadata", () => ({
 }));
 
 jest.mock("../markdownSettings", () => ({
-  getLastMarkdownDocumentPath: jest.fn(() => null),
-  getMarkdownStartupBehaviorSetting: jest.fn(() => "newDocument"),
+  getLastMarkdownDocumentPath: jest.fn(),
+  getMarkdownStartupBehaviorSetting: jest.fn(),
 }));
 
 jest.mock("../markdownWindows", () => ({
@@ -50,11 +57,31 @@ function AppExitHarness({
   return null;
 }
 
+function StartupHarness({
+  launchArguments,
+  openSelectedFile,
+  openUntitledDocument,
+}: {
+  launchArguments?: string[];
+  openSelectedFile: (path: string) => void;
+  openUntitledDocument: () => void;
+}) {
+  useMarkdownStartupDocument({
+    launchArguments,
+    openSelectedFile,
+    openUntitledDocument,
+  });
+
+  return null;
+}
+
 describe("useMarkdownAppExit", () => {
   beforeEach(() => {
     mockAddAppExitListener.mockReset();
     mockCompleteAppExit.mockReset();
     mockAddAppExitListener.mockReturnValue({ remove: jest.fn() });
+    mockGetLastMarkdownDocumentPath.mockReturnValue(null);
+    mockGetMarkdownStartupBehaviorSetting.mockReturnValue("newDocument");
   });
 
   it("prepares the document for quit before completing a requested app exit", async () => {
@@ -78,5 +105,25 @@ describe("useMarkdownAppExit", () => {
       expect(mockCompleteAppExit).toHaveBeenCalledWith(true);
     });
     expect(handleError).not.toHaveBeenCalled();
+  });
+
+  it("opens an untitled document when the new-document launch hint is present", async () => {
+    const openSelectedFile = jest.fn();
+    const openUntitledDocument = jest.fn();
+    mockGetMarkdownStartupBehaviorSetting.mockReturnValue("lastDocument");
+    mockGetLastMarkdownDocumentPath.mockReturnValue("/tmp/recent.md");
+
+    render(
+      <StartupHarness
+        launchArguments={[newMarkdownDocumentLaunchArgument]}
+        openSelectedFile={openSelectedFile}
+        openUntitledDocument={openUntitledDocument}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(openUntitledDocument).toHaveBeenCalledTimes(1);
+    });
+    expect(openSelectedFile).not.toHaveBeenCalled();
   });
 });

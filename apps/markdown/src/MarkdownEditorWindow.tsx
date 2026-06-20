@@ -143,7 +143,6 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
 
   useRecentMarkdownDocumentOpener({
     flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
-    handleError: session.handleError,
     openSelectedFile: session.openSelectedFile,
   });
 

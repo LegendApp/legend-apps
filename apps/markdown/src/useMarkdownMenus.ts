@@ -4,13 +4,12 @@ import type {
 import { revealInFinder } from "@legend-desktop/file-dialog";
 import {
   updateMenuItems,
-  useNativeMenu,
   type NativeMenuActionHandlers,
 } from "@legend-desktop/native-menu";
 import { useObserveEffect } from "@legendapp/state/react";
-import { useMemo, type RefObject } from "react";
+import { useEffect, useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";
-import { markdownMenuConfig } from "./markdownMenus";
+import { registerMarkdownEditorMenuHandlers } from "./markdownEditorActions";
 import {
   decreaseMarkdownFontSizeSetting,
   increaseMarkdownFontSizeSetting,
@@ -32,6 +31,24 @@ type MarkdownMenuOptions = {
 
 function getCurrentFilePath(state: MarkdownDocumentSessionState) {
   return state.documentSource === "untitled" ? null : state.filename;
+}
+
+const disabledDocumentMenuItems = [
+  "save",
+  "saveAs",
+  "revealInFinder",
+  "undo",
+  "redo",
+  "bold",
+  "italic",
+  "underline",
+  "strikethrough",
+  "spoiler",
+  "link",
+];
+
+function disableDocumentMenuItems() {
+  updateMenuItems(markdownMenuOwnerId, disabledDocumentMenuItems.map((id) => ({ id, enabled: false })));
 }
 
 export function useMarkdownMenus({
@@ -94,11 +111,14 @@ export function useMarkdownMenus({
     sessionState$,
   ]);
 
-  useNativeMenu({
-    handlers: menuHandlers,
-    menus: markdownMenuConfig,
-    ownerId: markdownMenuOwnerId,
-  });
+  useEffect(() => {
+    const unregister = registerMarkdownEditorMenuHandlers(menuHandlers);
+
+    return () => {
+      unregister();
+      disableDocumentMenuItems();
+    };
+  }, [menuHandlers]);
 
   useObserveEffect(() => {
     const state = sessionState$.get();

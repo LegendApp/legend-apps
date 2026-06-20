@@ -1,8 +1,14 @@
 import { markdownFileTypes } from "./appConstants";
 
+export const newMarkdownDocumentLaunchArgument = "--markdown-new-document";
+
 export function isMarkdownPath(path: string) {
   const extension = path.split(".").pop()?.toLowerCase();
   return extension !== undefined && markdownFileTypes.includes(extension);
+}
+
+export function shouldLaunchNewMarkdownDocument(launchArguments: string[] | undefined) {
+  return launchArguments?.includes(newMarkdownDocumentLaunchArgument) ?? false;
 }
 
 export function getLaunchMarkdownFile(launchArguments: string[] | undefined) {

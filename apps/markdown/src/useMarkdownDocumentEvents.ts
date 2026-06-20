@@ -1,10 +1,10 @@
 import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
-import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
 import { addWindowCloseRequestedListener } from "@legend-desktop/window-manager";
 import { useEffect, useRef } from "react";
 import { editorWindowIdentifier } from "./appConstants";
 import { getRecentMarkdownFiles } from "./appMetadata";
-import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import { getLaunchMarkdownFile, isMarkdownPath, shouldLaunchNewMarkdownDocument } from "./markdownFiles";
+import { registerMarkdownEditorRecentDocumentHandler } from "./markdownEditorActions";
 import { closeMarkdownEditorWindow } from "./markdownWindows";
 import {
   getLastMarkdownDocumentPath,
@@ -21,6 +21,10 @@ type DocumentEventsOptions = {
 };
 
 function getStartupMarkdownPath(launchArguments: string[] | undefined) {
+  if (shouldLaunchNewMarkdownDocument(launchArguments)) {
+    return null;
+  }
+
   const launchFile = getLaunchMarkdownFile(launchArguments);
   if (launchFile) {
     return launchFile;
@@ -59,11 +63,10 @@ export function useMarkdownStartupDocument({
 
 export function useRecentMarkdownDocumentOpener({
   flushCurrentDocumentBeforeTransition,
-  handleError,
   openSelectedFile,
-}: Pick<DocumentEventsOptions, "flushCurrentDocumentBeforeTransition" | "handleError" | "openSelectedFile">) {
+}: Pick<DocumentEventsOptions, "flushCurrentDocumentBeforeTransition" | "openSelectedFile">) {
   useEffect(() => {
-    async function openRecentDocument(path: string) {
+    const unregister = registerMarkdownEditorRecentDocumentHandler(async (path: string) => {
       if (!isMarkdownPath(path)) {
         return;
       }
@@ -72,16 +75,12 @@ export function useRecentMarkdownDocumentOpener({
       if (didFlush) {
         openSelectedFile(path);
       }
-    }
-
-    const subscription = addRecentDocumentOpenListener(({ path }) => {
-      openRecentDocument(path).catch(handleError);
     });
 
     return () => {
-      subscription.remove();
+      unregister();
     };
-  }, [flushCurrentDocumentBeforeTransition, handleError, openSelectedFile]);
+  }, [flushCurrentDocumentBeforeTransition, openSelectedFile]);
 }
 
 export function useMarkdownAppExit({
