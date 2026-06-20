@@ -34,6 +34,11 @@ static SEL measureSizeSelector()
   return NSSelectorFromString(@"measureSize:");
 }
 
+static SEL mouseDownSelector()
+{
+  return @selector(mouseDown:);
+}
+
 static NSString *const ENRMMarkdownTextInputContentSizeDidChangeNotification =
   @"ENRMMarkdownTextInputContentSizeDidChangeNotification";
 
@@ -116,40 +121,19 @@ static CGFloat measuredInputHeight(id target, CGFloat width)
   return std::isfinite(measuredSize.height) && measuredSize.height > 0 ? ceil(measuredSize.height) : 0;
 }
 
-static NSInteger estimateSelectionForMarkdownPoint(NSString *markdown, NSPoint point, CGFloat width)
+static void callMouseDown(id target, NSEvent *event)
 {
-  if (markdown.length == 0) {
-    return 0;
+  SEL selector = mouseDownSelector();
+  if (![target respondsToSelector:selector]) {
+    return;
   }
-
-  CGFloat lineHeight = 25;
-  CGFloat averageCharacterWidth = 8;
-  NSInteger visualLine = MAX(0, (NSInteger)floor(MAX((CGFloat)0, point.y) / lineHeight));
-  NSInteger characterInVisualLine = MAX(0, (NSInteger)floor(MAX((CGFloat)0, point.x) / averageCharacterWidth));
-  NSInteger charactersPerLine = MAX(20, (NSInteger)floor(MAX((CGFloat)1, width) / averageCharacterWidth));
-  NSArray<NSString *> *lines = [markdown componentsSeparatedByString:@"\n"];
-  NSInteger offset = 0;
-  NSInteger currentVisualLine = 0;
-
-  for (NSString *line in lines) {
-    NSInteger lineLength = (NSInteger)line.length;
-    NSInteger wrappedLineCount = MAX(1, (NSInteger)ceil((CGFloat)MAX(1, lineLength) / (CGFloat)charactersPerLine));
-    if (visualLine < currentVisualLine + wrappedLineCount) {
-      NSInteger wrappedLine = visualLine - currentVisualLine;
-      NSInteger selection = offset + MIN(lineLength, wrappedLine * charactersPerLine + characterInVisualLine);
-      return MIN((NSInteger)markdown.length, MAX(0, selection));
-    }
-
-    offset += lineLength + 1;
-    currentVisualLine += wrappedLineCount;
-  }
-
-  return (NSInteger)markdown.length;
+  void (*send)(id, SEL, NSEvent *) = (void (*)(id, SEL, NSEvent *))[target methodForSelector:selector];
+  send(target, selector, event);
 }
 
 static BOOL isEnrichedMarkdownInput(id view)
 {
-  return [view respondsToSelector:setValueSelector()] && [view respondsToSelector:@selector(mouseDown:)];
+  return [view respondsToSelector:setValueSelector()] && [view respondsToSelector:mouseDownSelector()];
 }
 
 @interface RNMarkdownEditorHost () <RCTMarkdownEditorHostViewProtocol>
@@ -573,12 +557,7 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   callFocus(_overlayInput);
   if (event != nil) {
-    NSPoint point = [view convertPoint:event.locationInWindow fromView:nil];
-    if (!view.isFlipped) {
-      point.y = NSHeight(view.bounds) - point.y;
-    }
-    NSInteger selection = estimateSelectionForMarkdownPoint(markdown ?: @"", point, _overlayInput.frame.size.width);
-    callSetSelection(_overlayInput, selection, selection);
+    callMouseDown(_overlayInput, event);
   }
 }
 
