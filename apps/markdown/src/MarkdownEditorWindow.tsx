@@ -3,7 +3,7 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
@@ -43,7 +43,7 @@ import {
   getMarkdownStyleForAppearance,
 } from "./markdownAppearance";
 import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature";
-import { promptMarkdownLink } from "./promptMarkdownLink";
+import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
@@ -77,6 +77,7 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
   const session = useMarkdownDocumentSession();
+  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
   const hasObservedLayoutInputsRef = useRef(false);
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   const displayThemeSetting = useMarkdownDisplayThemeSetting();
@@ -106,14 +107,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     onError: session.handleError,
   });
   const insertLink = useCallback(() => {
-    promptMarkdownLink()
-      .then((url) => {
-        if (url) {
-          session.documentCommandsRef.current?.insertLink({ url });
-        }
-      })
-      .catch(session.handleError);
-  }, [session.documentCommandsRef, session.handleError]);
+    setIsLinkPopoverOpen(true);
+  }, []);
+  const applyLink = useCallback((url: string) => {
+    session.documentCommandsRef.current?.insertLink({ url });
+    setIsLinkPopoverOpen(false);
+  }, [session.documentCommandsRef]);
 
   const renderSelectionToolbar = useCallback(
     (anchor: MarkdownSelectionAnchor) => (
@@ -216,6 +215,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={insertLink} />
       ) : null}
       <View style={styles.documentFrame}>
+        {isLinkPopoverOpen ? (
+          <MarkdownLinkPopover
+            onCancel={() => setIsLinkPopoverOpen(false)}
+            onSubmit={applyLink}
+          />
+        ) : null}
         {showUntitledPlaceholder ? (
           <View pointerEvents="none" style={styles.placeholder}>
             <Text style={[styles.placeholderTitle, { color: displayTheme.colors.foreground }]}>Untitled</Text>
