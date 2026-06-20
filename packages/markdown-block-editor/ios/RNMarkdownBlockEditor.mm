@@ -34,14 +34,14 @@ static SEL setSelectionForWindowPointSelector()
   return NSSelectorFromString(@"setSelectionForWindowPointX:y:");
 }
 
+static SEL setHangingMarkdownPrefixLengthSelector()
+{
+  return NSSelectorFromString(@"setHangingMarkdownPrefixLength:");
+}
+
 static SEL measureSizeSelector()
 {
   return NSSelectorFromString(@"measureSize:");
-}
-
-static SEL markdownPrefixWidthSelector()
-{
-  return NSSelectorFromString(@"markdownPrefixWidthForLength:");
 }
 
 static SEL mouseDownSelector()
@@ -74,6 +74,12 @@ static NSRange hangingPrefixRangeForMarkdown(NSString *markdown)
   }
 
   return prefixRange;
+}
+
+static NSInteger hangingPrefixLengthForMarkdown(NSString *markdown)
+{
+  NSRange prefixRange = hangingPrefixRangeForMarkdown(markdown);
+  return prefixRange.location != NSNotFound ? (NSInteger)NSMaxRange(prefixRange) : 0;
 }
 
 static NSString *blockStyleKeyForMarkdown(NSString *markdown)
@@ -152,6 +158,15 @@ static void callSetSelectionForWindowPoint(id target, NSPoint windowPoint)
   }
 }
 
+static void callSetHangingMarkdownPrefixLength(id target, NSInteger prefixLength)
+{
+  SEL selector = setHangingMarkdownPrefixLengthSelector();
+  if ([target respondsToSelector:selector]) {
+    void (*send)(id, SEL, NSInteger) = (void (*)(id, SEL, NSInteger))[target methodForSelector:selector];
+    send(target, selector, prefixLength);
+  }
+}
+
 static CGFloat measuredInputHeight(id target, CGFloat width)
 {
   SEL selector = measureSizeSelector();
@@ -162,20 +177,6 @@ static CGFloat measuredInputHeight(id target, CGFloat width)
   CGSize (*send)(id, SEL, CGFloat) = (CGSize (*)(id, SEL, CGFloat))[target methodForSelector:selector];
   CGSize measuredSize = send(target, selector, width);
   return std::isfinite(measuredSize.height) && measuredSize.height > 0 ? ceil(measuredSize.height) : 0;
-}
-
-static CGFloat measuredHangingPrefixWidth(id target, NSString *markdown)
-{
-  CGFloat measuredWidth = 0;
-  NSRange prefixRange = hangingPrefixRangeForMarkdown(markdown);
-  SEL selector = markdownPrefixWidthSelector();
-
-  if (prefixRange.location != NSNotFound && prefixRange.length > 0 && [target respondsToSelector:selector]) {
-    CGFloat (*send)(id, SEL, NSInteger) = (CGFloat (*)(id, SEL, NSInteger))[target methodForSelector:selector];
-    measuredWidth = send(target, selector, (NSInteger)NSMaxRange(prefixRange));
-  }
-
-  return std::isfinite(measuredWidth) && measuredWidth > 0 ? ceil(measuredWidth) : 0;
 }
 
 static BOOL isEnrichedMarkdownInput(id view)
@@ -604,16 +605,12 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   [self setBlockView:view contentsHidden:YES];
   [self positionOverlayForBlockView:view];
+  callSetHangingMarkdownPrefixLength(_overlayInput, hangingPrefixLengthForMarkdown(markdown ?: @""));
   _overlayInput.hidden = NO;
 
   callFocus(_overlayInput);
   if (event != nil) {
-    NSPoint selectionPoint = event.locationInWindow;
-    CGFloat hangingPrefixWidth = measuredHangingPrefixWidth(_overlayInput, markdown ?: @"");
-    if (hangingPrefixWidth > 0) {
-      selectionPoint.x += hangingPrefixWidth;
-    }
-    callSetSelectionForWindowPoint(_overlayInput, selectionPoint);
+    callSetSelectionForWindowPoint(_overlayInput, event.locationInWindow);
   }
 }
 

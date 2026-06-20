@@ -282,7 +282,7 @@ index c9e19844506517f35bd95fd73fc3933c406845ac..91b8ee562e77d631ad6a00410eba5333
    if (tmp_strong != map.end()) {
      fromRawValue(context, tmp_strong->second, result.strong);
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
-index 016b9fb46138e0a2afc2e728375d8e06b2a405fc..5f16ed7fd3f3afd58734f08801ab3b5782e93075 100644
+index 016b9fb46138e0a2afc2e728375d8e06b2a405fc..c6094a13699521a7a22a18f292068c1f4d1d3020 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 @@ -22,6 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
@@ -376,7 +376,7 @@ index b81743b7c47f467a70738238dd0ad967ef938f84..f211ab0067bb97029116dacbb054a82c
    [textStorage removeAttribute:NSStrikethroughStyleAttributeName range:fullTextRange];
    [textStorage removeAttribute:NSBackgroundColorAttributeName range:fullTextRange];
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
-index 187cf5b49638c1fe8e35cb70bcd64ab22cb1bab1..6b37e2478e4879d40cb3809a2280bd8a0f81e276 100644
+index 187cf5b49638c1fe8e35cb70bcd64ab22cb1bab1..340d25afe38bfb453a051cd28c33293c018287a2 100644
 --- a/ios/input/ENRMInputTextView.mm
 +++ b/ios/input/ENRMInputTextView.mm
 @@ -83,6 +83,12 @@ - (void)layoutSubviews
@@ -592,30 +592,55 @@ index f02ae612dc15fb369eaef4d3bedda31049517e21..ce8ce1bc8e8c79132359c3e54c8accbd
 
  @end
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e21131550 100644
+index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..a8de429968e847a8c686a1187da109b8987abb63 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -33,16 +33,19 @@
-
- #if !TARGET_OS_OSX
- @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, UITextViewDelegate>
- #else
- @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, RCTBackedTextInputDelegate>
+@@ -38,6 +38,10 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  #endif
  - (void)setupTextView;
  - (void)applyFormatting;
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown;
 +- (CGFloat)markdownPrefixWidthForLength:(NSInteger)prefixLength;
++- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength;
 +- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y;
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
- @end
+@@ -70,7 +74,10 @@ @implementation EnrichedMarkdownTextInput {
+   std::optional<CGRect> _prevCaretRect;
 
- @implementation EnrichedMarkdownTextInput {
-   ENRMPlatformTextView *_textView;
-   ENRMInputLayoutManager *_layoutManager;
-@@ -214,3 +216,37 @@
+ #if TARGET_OS_OSX
++  NSView *_scrollContainerView;
+   NSScrollView *_scrollView;
++  NSInteger _hangingPrefixLength;
++  CGFloat _hangingPrefixWidth;
+ #endif
+
+   NSArray<NSString *> *_contextMenuItemTexts;
+@@ -161,6 +168,9 @@ - (void)setupTextView
+ #else
+   _textView.selectable = YES;
+
++  _scrollContainerView = [[NSView alloc] initWithFrame:CGRectZero];
++  _scrollContainerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++
+   _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
+   _scrollView.backgroundColor = [RCTUIColor clearColor];
+   _scrollView.drawsBackground = NO;
+@@ -175,7 +185,8 @@ - (void)setupTextView
+   _textView.textContainer.widthTracksTextView = YES;
+
+   _scrollView.documentView = _textView;
+-  self.contentView = _scrollView;
++  [_scrollContainerView addSubview:_scrollView];
++  self.contentView = _scrollContainerView;
+ #endif
+
+   _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
+@@ -211,6 +222,148 @@ - (void)requestHeightUpdate
+
+ #pragma mark - Measurement
+
 +- (CGFloat)markdownPrefixWidthForLength:(NSInteger)prefixLength
 +{
 +  CGFloat prefixWidth = 0;
@@ -658,15 +683,126 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +  return MAX(0, ceil(prefixWidth));
 +}
 +
++#if TARGET_OS_OSX
++- (void)applyHangingPrefixParagraphStyle
++{
++  NSUInteger textLength = _textView.textStorage.length;
++  if (textLength == 0) {
++    return;
++  }
++
++  NSRange range = NSMakeRange(0, textLength);
++  [_textView.textStorage beginEditing];
++  NSParagraphStyle *existingStyle = [_textView.textStorage attribute:NSParagraphStyleAttributeName
++                                                             atIndex:0
++                                                      effectiveRange:NULL];
++  NSMutableParagraphStyle *paragraphStyle = existingStyle != nil
++    ? [existingStyle mutableCopy]
++    : [[NSMutableParagraphStyle alloc] init];
++  paragraphStyle.firstLineHeadIndent = 0;
++  paragraphStyle.headIndent = _hangingPrefixWidth;
++  [_textView.textStorage addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:range];
++  [_textView.textStorage endEditing];
++}
++
++- (void)applyHangingPrefixLayout
++{
++  if (_scrollContainerView == nil || _scrollView == nil || _textView == nil) {
++    return;
++  }
++
++  CGFloat prefixWidth = MAX(0, _hangingPrefixWidth);
++  NSRect bounds = self.bounds;
++  CGFloat width = MAX(0, NSWidth(bounds) + prefixWidth);
++  CGFloat height = MAX(0, NSHeight(bounds));
++  _scrollContainerView.frame = bounds;
++  _scrollView.frame = NSMakeRect(-prefixWidth, 0, width, height);
++
++  NSRect textFrame = _textView.frame;
++  textFrame.origin.x = 0;
++  textFrame.origin.y = 0;
++  textFrame.size.width = width;
++  textFrame.size.height = height;
++  _textView.frame = textFrame;
++  _textView.textContainer.size = CGSizeMake(width, CGFLOAT_MAX);
++  ENRMRefreshTextViewLayout(_textView);
++}
++
++- (NSInteger)hangingMarkdownPrefixLengthForMarkdown:(NSString *)markdown
++{
++  NSInteger prefixLength = 0;
++
++  if (markdown.length > 0) {
++    static NSRegularExpression *headingPrefixRegex = nil;
++    static dispatch_once_t onceToken;
++    dispatch_once(&onceToken, ^{
++      headingPrefixRegex = [NSRegularExpression regularExpressionWithPattern:@"^[ \\t]{0,3}#{1,6}[ \\t]+"
++                                                                      options:0
++                                                                        error:nil];
++    });
++
++    NSTextCheckingResult *match = [headingPrefixRegex firstMatchInString:markdown
++                                                                 options:0
++                                                                   range:NSMakeRange(0, markdown.length)];
++    if (match != nil) {
++      prefixLength = (NSInteger)NSMaxRange(match.range);
++    }
++  }
++
++  return prefixLength;
++}
++
++- (void)refreshHangingMarkdownPrefixForMarkdown:(NSString *)markdown
++{
++  [self setHangingMarkdownPrefixLength:[self hangingMarkdownPrefixLengthForMarkdown:markdown]];
++}
++
++- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength
++{
++  NSInteger clampedPrefixLength = MAX(0, prefixLength);
++  CGFloat prefixWidth = clampedPrefixLength > 0 ? [self markdownPrefixWidthForLength:clampedPrefixLength] : 0;
++  if (_hangingPrefixLength == clampedPrefixLength && _hangingPrefixWidth == prefixWidth) {
++    return;
++  }
++
++  _hangingPrefixLength = clampedPrefixLength;
++  _hangingPrefixWidth = prefixWidth;
++  [self applyHangingPrefixLayout];
++  [self applyHangingPrefixParagraphStyle];
++  [self requestHeightUpdate];
++}
++
++- (void)layout
++{
++  [super layout];
++  [self applyHangingPrefixLayout];
++}
++#else
++- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength
++{
++}
++#endif
++
  - (CGSize)measureSize:(CGFloat)maxWidth
  {
    NSMutableAttributedString *measuredText =
-@@ -326,54 +327,60 @@
+@@ -233,8 +386,14 @@ - (CGSize)measureSize:(CGFloat)maxWidth
      }
    }
 
-   if (styleChanged) {
-     _placeholderLabel.font = _formatterStyle.baseFont;
++#if TARGET_OS_OSX
++  CGFloat measurementWidth = maxWidth + MAX(0, _hangingPrefixWidth);
++#else
++  CGFloat measurementWidth = maxWidth;
++#endif
++
+   CGRect boundingBox =
+-      [measuredText boundingRectWithSize:CGSizeMake(maxWidth, CGFLOAT_MAX)
++      [measuredText boundingRectWithSize:CGSizeMake(measurementWidth, CGFLOAT_MAX)
+                                  options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                  context:nil];
+
+@@ -331,7 +490,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
 
      [self resetBaseTypingAttributes];
 
@@ -675,14 +811,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
        [self applyFormatting];
      }
 
-     [self requestHeightUpdate];
-   }
-
-   [super updateProps:props oldProps:oldProps];
- }
-
- #pragma mark - Relayout
-
+@@ -346,7 +505,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -691,8 +820,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  }
 
  - (void)_performRelayout
- {
-   if (!_textView) {
+@@ -355,20 +514,30 @@ - (void)_performRelayout
      return;
    }
 
@@ -708,7 +836,11 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +      [self->_textView.layoutManager ensureLayoutForCharacterRange:actualRange];
 +      [self->_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
 +
-+      CGSize measuredSize = [self measureSize:self->_textView.frame.size.width];
++      CGFloat measurementWidth = self.bounds.size.width;
++#if TARGET_OS_OSX
++      measurementWidth = measurementWidth > 0 ? measurementWidth : self->_textView.frame.size.width - self->_hangingPrefixWidth;
++#endif
++      CGSize measuredSize = [self measureSize:measurementWidth];
 +      ENRMSetContentSize(self->_textView, measuredSize);
 +      [[NSNotificationCenter defaultCenter] postNotificationName:@"ENRMMarkdownTextInputContentSizeDidChangeNotification" object:self];
      }
@@ -717,11 +849,12 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 -    [self->_textView.layoutManager invalidateLayoutForCharacterRange:wholeRange actualCharacterRange:&actualRange];
 -    [self->_textView.layoutManager ensureLayoutForCharacterRange:actualRange];
 -    [self->_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
-+  };
-
+-
 -    CGSize measuredSize = [self measureSize:self->_textView.frame.size.width];
 -    ENRMSetContentSize(self->_textView, measuredSize);
 -  });
++  };
++
 +  if ([NSThread isMainThread]) {
 +    relayout();
 +  } else {
@@ -730,17 +863,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  }
 
  #pragma mark - Window attachment
+@@ -379,6 +548,9 @@ - (void)didMoveToWindow
 
- - (void)didMoveToWindow
- {
-   [super didMoveToWindow];
+   if (self.window) {
+     // Don't override the contentView frame set by RCTViewComponentView.
++#if TARGET_OS_OSX
++    [self applyHangingPrefixLayout];
++#endif
+     ENRMRefreshTextViewLayout(_textView);
 
-@@ -448,16 +455,18 @@
- {
-   _placeholderLabel.hidden = (ENRMGetPlainText(_textView).length > 0);
- }
-
- #pragma mark - Markdown import
+     [self applyFormatting];
+@@ -453,6 +625,8 @@ - (void)updatePlaceholderVisibility
 
  - (void)importMarkdown:(NSString *)markdown
  {
@@ -749,17 +882,17 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
 
-   _blockEmitting = YES;
+@@ -466,6 +640,9 @@ - (void)importMarkdown:(NSString *)markdown
+   _lastTextLength = parsed.plainText.length;
+   _lastSelectedRange = _textView.selectedRange;
+   [self applyFormatting];
++#if TARGET_OS_OSX
++  [self refreshHangingMarkdownPrefixForMarkdown:markdown ?: @""];
++#endif
+   [self updatePlaceholderVisibility];
 
-   _isApplyingFormatting = YES;
-   ENRMSetPlainText(_textView, parsed.plainText);
-   _isApplyingFormatting = NO;
-@@ -509,22 +518,78 @@
-   ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
-   [self replaceSelectedTextWith:parsed.plainText formattingRanges:parsed.formattingRanges];
- }
-
- #pragma mark - Formatting
+   _blockEmitting = NO;
+@@ -514,10 +691,66 @@ - (void)pasteMarkdown:(NSString *)markdown
 
  - (void)resetBaseTypingAttributes
  {
@@ -776,8 +909,8 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +    attrs[NSParagraphStyleAttributeName] = paragraphStyle;
 +  }
 +  ENRMSetDefaultTypingAttributes(_textView, attrs);
- }
-
++}
++
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown
 +{
 +  const auto &viewProps = *std::static_pointer_cast<EnrichedMarkdownTextInputProps const>(_props);
@@ -825,32 +958,23 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +    _placeholderLabel.font = _formatterStyle.baseFont;
 +    [self resetBaseTypingAttributes];
 +  }
-+}
-+
- - (void)applyFormatting
- {
-   if (_isApplyingFormatting) {
-     return;
-   }
-   if (ENRMHasMarkedText(_textView)) {
-     return;
-   }
-@@ -553,33 +618,138 @@
- - (void)blur
- {
-   ENRMBlurTextView(_textView);
  }
 
- - (void)setValue:(NSString *)markdown
- {
-   [self importMarkdown:markdown];
-+  _lastSelectedRange = _textView.selectedRange;
-+  [self emitOnChangeText];
-+  [self emitOnChangeSelection];
-+  [self emitOnChangeState];
-+  [self requestHeightUpdate];
-+}
-+
+ - (void)applyFormatting
+@@ -534,6 +767,9 @@ - (void)applyFormatting
+
+   [_formatter applyFormattingRanges:_formattingStore.allRanges toTextView:_textView style:_formatterStyle];
+   [_detectorPipeline refreshAllStyling];
++#if TARGET_OS_OSX
++  [self applyHangingPrefixParagraphStyle];
++#endif
+
+   NSUInteger textLen = ENRMGetPlainText(_textView).length;
+   if (savedSelection.location + savedSelection.length <= textLen) {
+@@ -565,6 +801,23 @@ - (void)setValue:(NSString *)markdown
+   [self requestHeightUpdate];
+ }
+
 +- (void)setValuePreservingSelection:(NSString *)markdown
 +{
 +  NSRange selection = _textView.selectedRange;
@@ -860,21 +984,18 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +  NSUInteger selectionStart = MIN(selection.location, textLength);
 +  NSUInteger selectionEnd = MIN(NSMaxRange(selection), textLength);
 +  _textView.selectedRange = NSMakeRange(selectionStart, selectionEnd - selectionStart);
-   _lastSelectedRange = _textView.selectedRange;
++  _lastSelectedRange = _textView.selectedRange;
 +
-   [self emitOnChangeText];
-   [self emitOnChangeSelection];
-   [self emitOnChangeState];
-   [self requestHeightUpdate];
- }
-
++  [self emitOnChangeText];
++  [self emitOnChangeSelection];
++  [self emitOnChangeState];
++  [self requestHeightUpdate];
++}
++
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-   NSInteger clampedStart = MIN(MAX(start, 0), textLen);
-   NSInteger clampedEnd = MIN(MAX(end, clampedStart), textLen);
-   _textView.selectedRange = NSMakeRange((NSUInteger)clampedStart, (NSUInteger)(clampedEnd - clampedStart));
-   [self emitOnChangeSelection];
+@@ -575,6 +828,90 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [self emitOnChangeState];
  }
 
@@ -965,17 +1086,35 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
- }
-
- - (void)toggleItalic
- {
-   [self toggleInlineStyle:ENRMInputStyleTypeEmphasis];
-@@ -879,16 +1011,43 @@
-   }
+@@ -774,11 +1111,22 @@ - (CGRect)computeCaretRect
+ #else
    NSRange selection = _textView.selectedRange;
-   emitter->onChangeSelection({
-       .start = static_cast<int>(selection.location),
-       .end = static_cast<int>(NSMaxRange(selection)),
+   if (selection.location != NSNotFound) {
+-    NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selection.location, 0)
+-                                                         actualCharacterRange:NULL];
+-    caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
+-    caretRect.origin.x += _textView.textContainerInset.left;
+-    caretRect.origin.y += _textView.textContainerInset.top;
++    NSUInteger selectionLocation = MIN(selection.location, _textView.string.length);
++    if (_textView.window != nil) {
++      NSRect screenRect = [_textView firstRectForCharacterRange:NSMakeRange(selectionLocation, 0) actualRange:NULL];
++      if (!NSEqualRects(screenRect, NSZeroRect)) {
++        NSRect windowRect = [_textView.window convertRectFromScreen:screenRect];
++        caretRect = [_textView convertRect:windowRect fromView:nil];
++      }
++    }
++
++    if (CGRectEqualToRect(caretRect, CGRectZero)) {
++      NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selectionLocation, 0)
++                                                           actualCharacterRange:NULL];
++      caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
++      caretRect.origin.x += _textView.textContainerInset.left;
++      caretRect.origin.y += _textView.textContainerInset.top;
++    }
+   }
+ #endif
+   return caretRect;
+@@ -884,6 +1232,33 @@ - (void)emitOnChangeSelection
    });
  }
 
@@ -1009,17 +1148,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  - (void)emitOnChangeState
  {
    auto emitter = [self getEventEmitter];
-   if (emitter == nullptr) {
-     return;
-   }
-
-   NSUInteger cursor = _textView.selectedRange.location;
-@@ -909,22 +1068,22 @@
-   _prevState.italic = italicActive;
-   _prevState.underline = underlineActive;
-   _prevState.strikethrough = strikethroughActive;
-   _prevState.spoiler = spoilerActive;
-   _prevState.link = linkActive;
+@@ -914,12 +1289,12 @@ - (void)emitOnChangeState
    _prevState.initialized = YES;
 
    emitter->onChangeState({
@@ -1038,17 +1167,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
    });
  }
 
- - (void)emitCaretRectChangeIfNeeded
- {
-   auto emitter = [self getEventEmitter];
-   if (emitter == nullptr) {
-     return;
-@@ -983,22 +1142,22 @@
-
-   eventEmitter->onContextMenuItemPress({
-       .itemText = std::string(itemText.UTF8String),
-       .selectedText = std::string(selectedText.UTF8String),
-       .selectionStart = static_cast<int>(selectedRange.location),
+@@ -988,12 +1363,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
        .selectionEnd = static_cast<int>(NSMaxRange(selectedRange)),
        .styleState =
            {
@@ -1067,17 +1186,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
            },
    });
  }
-
- - (void)emitOnFocus
- {
-   auto emitter = [self getEventEmitter];
-   if (emitter == nullptr) {
-@@ -1085,16 +1244,19 @@
-   _lastTextLength = newLength;
-
- #if !TARGET_OS_OSX
-   if (newLength == 0) {
-     [self resetBaseTypingAttributes];
+@@ -1090,7 +1465,13 @@ - (void)handleTextChanged
    }
  #endif
 
@@ -1085,19 +1194,13 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +                                                           ranges:_formattingStore.allRanges];
 +  [self applyBlockStyleForMarkdown:markdown];
    [self applyFormatting];
++#if TARGET_OS_OSX
++  [self refreshHangingMarkdownPrefixForMarkdown:markdown ?: @""];
++#endif
 
    [_detectorPipeline processTextChange:ENRMGetPlainText(_textView)
                       modificationRange:NSMakeRange(editLocation, insertedLength)];
-
-   [self updatePlaceholderVisibility];
-   [self emitOnChangeText];
-   [self emitOnChangeSelection];
-@@ -1144,16 +1306,22 @@
-     if (text.length > 0) {
-       NSRange paragraphRange = [text paragraphRangeForRange:_textView.selectedRange];
-       NSString *paragraphText = [text substringWithRange:paragraphRange];
-       BOOL isEmpty = paragraphText.length == 0 || [paragraphText isEqualToString:@"\n"];
-       if (isEmpty) {
+@@ -1149,6 +1530,12 @@ - (void)manageSelectionBasedChanges
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -1110,40 +1213,6 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
          _textView.typingAttributes = attrs;
        }
      }
-   }
- }
-
- - (BOOL)textView:(UITextView *)textView shouldChangeTextInRange:(NSRange)range replacementText:(NSString *)text
- {
-@@ -930,16 +1089,28 @@
- #else
-   NSRange selection = _textView.selectedRange;
-   if (selection.location != NSNotFound) {
--    NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selection.location, 0)
--                                                         actualCharacterRange:NULL];
--    caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
--    caretRect.origin.x += _textView.textContainerInset.left;
--    caretRect.origin.y += _textView.textContainerInset.top;
-+    NSUInteger selectionLocation = MIN(selection.location, _textView.string.length);
-+    if (_textView.window != nil) {
-+      NSRect screenRect = [_textView firstRectForCharacterRange:NSMakeRange(selectionLocation, 0) actualRange:NULL];
-+      if (!NSEqualRects(screenRect, NSZeroRect)) {
-+        NSRect windowRect = [_textView.window convertRectFromScreen:screenRect];
-+        caretRect = [_textView convertRect:windowRect fromView:nil];
-+      }
-+    }
-+
-+    if (CGRectEqualToRect(caretRect, CGRectZero)) {
-+      NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selectionLocation, 0)
-+                                                           actualCharacterRange:NULL];
-+      caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
-+      caretRect.origin.x += _textView.textContainerInset.left;
-+      caretRect.origin.y += _textView.textContainerInset.top;
-+    }
-   }
- #endif
-   return caretRect;
- }
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
 index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..064aa2c13dde399e7d2ff1137848d40f20e2aaf3 100644
 --- a/ios/input/InputStylePropsUtils.h
@@ -1427,7 +1496,7 @@ index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858b
 
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
 diff --git a/lib/module/EnrichedMarkdownTextInput.js b/lib/module/EnrichedMarkdownTextInput.js
-index 4b01cfc89e57bd956eb897f3924aa00dd470e1bc..ae7b4f05398a9b48a6bf1b9518ea01d0a76b8ed1 100644
+index 4b01cfc89e57bd956eb897f3924aa00dd470e1bc..7e14896610e57f729fb034ac9cbaf04ccd969132 100644
 --- a/lib/module/EnrichedMarkdownTextInput.js
 +++ b/lib/module/EnrichedMarkdownTextInput.js
 @@ -28,6 +28,8 @@ export const EnrichedMarkdownTextInput = ({
@@ -1665,7 +1734,7 @@ index 0bafc38eb77802d975f09b92045721f2ef967192..32d998f5c14d34277c9eb6e003e6122c
        color: normalizeColor(style.strong?.color)
      },
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
-index fb360242782f2b1acfc242c87fba0c332c1251ef..a7384d969ff15cc6ae1660990092f99ef835b033 100644
+index fb360242782f2b1acfc242c87fba0c332c1251ef..da1485c1af61a6bfca18578351e9ca30747a2037 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 @@ -2,7 +2,8 @@ import { type OnLinkDetected } from './EnrichedMarkdownTextInputNativeComponent'
@@ -1719,8 +1788,9 @@ index fb360242782f2b1acfc242c87fba0c332c1251ef..a7384d969ff15cc6ae1660990092f99e
 +export declare const EnrichedMarkdownTextInput: ({ ref, markdownStyle, style, defaultValue, placeholder, placeholderTextColor, editable, autoFocus, scrollEnabled, autoCapitalize, multiline, cursorColor, selectionColor, onChangeText, onChangeMarkdown, onChangeSelection, onSelectionDragOutside, onVerticalNavigationOutside, onChangeState, onCaretRectChange, onLinkDetected, onFocus, onBlur, contextMenuItems, linkRegex: _linkRegex, }: EnrichedMarkdownTextInputProps) => import("react/jsx-runtime").JSX.Element;
  export default EnrichedMarkdownTextInput;
  //# sourceMappingURL=EnrichedMarkdownTextInput.d.ts.map
+\ No newline at end of file
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..a77605af00d5e74be4eef2a2cefb761ac9bdc5c1 100644
+index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..f7d3b7cca8ad9f2ffbb50698e2a13499b3feaa93 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 @@ -1,6 +1,14 @@
