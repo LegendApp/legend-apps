@@ -229,9 +229,6 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const isActive = activeBlock !== undefined;
   const rowWidth$ = useObservable(700);
   const rowRef = useRef<View>(null);
-  const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
-    ? { height: activeBlock.editorFrame.height }
-    : null;
 
   if (!block) {
     return null;
@@ -239,6 +236,11 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
 
   const layoutBlock = isActive ? activeEditorBlock : block;
   const rowStyle = blockRowSpacingStyle(layoutBlock, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
+  const rowPaddingTop = typeof rowStyle.paddingTop === "number" ? rowStyle.paddingTop : 0;
+  const rowPaddingBottom = typeof rowStyle.paddingBottom === "number" ? rowStyle.paddingBottom : 0;
+  const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
+    ? { height: activeBlock.editorFrame.height + rowPaddingTop + rowPaddingBottom }
+    : null;
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
   const selectionOverlay = isBlockSelected ? (
     <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
@@ -304,6 +306,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
         <MarkdownBlockActivationView
           ref={rowRef}
           blockId={block.id}
+          bottomPadding={rowPaddingBottom}
           contentsHidden={isActive}
           markdown={block.markdown}
           onLayout={(event) => {
@@ -311,6 +314,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
             measureWindowLayout();
           }}
           style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
+          topPadding={rowPaddingTop}
         >
           {renderedMarkdown}
           {selectionOverlay}
@@ -327,15 +331,18 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
         rowWidth$.set(event.nativeEvent.layout.width);
         measureWindowLayout();
       }}
-      style={[rowStyle, styles.blockRow]}
+      style={styles.blockRow}
     >
       <Pressable
         delayHoverIn={0}
         delayHoverOut={0}
         onPress={(event) => {
-          onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth$.peek()));
+          onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth$.peek(), {
+            paddingBottom: rowPaddingBottom,
+            paddingTop: rowPaddingTop,
+          }));
         }}
-        style={styles.rowContent}
+        style={[rowStyle, styles.rowContent]}
       >
         {renderedMarkdown}
       </Pressable>

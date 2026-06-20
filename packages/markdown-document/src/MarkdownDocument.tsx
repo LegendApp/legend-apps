@@ -2534,9 +2534,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockIndex < currentBlockState.blockIds.length - 1,
           resolvedMarkdownLayout,
         );
-      const rowMarginTop = numberFromStyleValue(rowSpacing?.marginTop);
-      const rowMarginBottom = numberFromStyleValue(rowSpacing?.marginBottom);
-      const rowHeight = height + rowMarginTop + rowMarginBottom;
+      const rowPaddingTop = numberFromStyleValue(rowSpacing?.paddingTop);
+      const rowPaddingBottom = numberFromStyleValue(rowSpacing?.paddingBottom);
+      const rowHeight = height + rowPaddingTop + rowPaddingBottom;
       const previousRowSize = nativeEditorRowSizeRef.current.get(blockId);
       if (!previousRowSize || previousRowSize.height !== rowHeight || previousRowSize.width !== width) {
         nativeEditorRowSizeRef.current.set(blockId, { height: rowHeight, width });

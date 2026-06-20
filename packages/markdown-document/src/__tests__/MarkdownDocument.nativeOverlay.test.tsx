@@ -451,7 +451,7 @@ describe("MarkdownDocument native editor overlay", () => {
     });
     expect(activationView(renderer!, "d1:b0").props.style).toEqual(
       expect.arrayContaining([
-        { height: 60 },
+        { height: 84 },
       ]),
     );
   });
@@ -485,7 +485,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 28 }));
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 44 }));
 
     await act(async () => {
       nativeHost(renderer!).props.onEditorFrameChange({
@@ -499,7 +499,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 44 }));
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 60 }));
   });
 
   it("keeps the native row width stable when the editor frame has a negative x offset", async () => {

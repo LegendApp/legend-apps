@@ -451,7 +451,7 @@ static BOOL isEnrichedMarkdownInput(id view)
     return NSZeroRect;
   }
 
-  NSRect frame = [view convertRect:view.bounds toView:overlaySuperview];
+  NSRect frame = [view convertRect:view.contentBounds toView:overlaySuperview];
   if (_lastLoadedBlockId != nil && [_lastLoadedBlockId isEqualToString:view.blockId]) {
     CGFloat measuredHeight = measuredInputHeight(_overlayInput, frame.size.width);
     frame.size.height = measuredHeight > 0 ? measuredHeight : frame.size.height;
@@ -610,7 +610,14 @@ static BOOL isEnrichedMarkdownInput(id view)
 
   callFocus(_overlayInput);
   if (event != nil) {
-    callSetSelectionForWindowPoint(_overlayInput, event.locationInWindow);
+    NSPoint selectionPoint = event.locationInWindow;
+    NSPoint localPoint = [view convertPoint:selectionPoint fromView:nil];
+    NSRect contentBounds = view.contentBounds;
+    if (NSHeight(contentBounds) > 0) {
+      localPoint.y = MIN(MAX(localPoint.y, NSMinY(contentBounds)), NSMaxY(contentBounds));
+      selectionPoint = [view convertPoint:localPoint toView:nil];
+    }
+    callSetSelectionForWindowPoint(_overlayInput, selectionPoint);
   }
 }
 
@@ -728,9 +735,23 @@ static BOOL isEnrichedMarkdownInput(id view)
     _props = std::make_shared<const MarkdownBlockActivationViewProps>();
     _blockId = @"";
     _markdown = @"";
+    _bottomPadding = 0;
     _contentsHidden = NO;
+    _topPadding = 0;
   }
   return self;
+}
+
+- (NSRect)contentBounds
+{
+  NSRect bounds = self.bounds;
+  CGFloat topPadding = MAX(0, self.topPadding);
+  CGFloat bottomPadding = MAX(0, self.bottomPadding);
+  CGFloat verticalPadding = MIN(NSHeight(bounds), topPadding + bottomPadding);
+  NSRect contentBounds = bounds;
+  contentBounds.size.height = MAX(0, NSHeight(bounds) - verticalPadding);
+  contentBounds.origin.y += self.isFlipped ? topPadding : bottomPadding;
+  return contentBounds;
 }
 
 - (void)applyContentsHidden
@@ -817,6 +838,8 @@ static BOOL isEnrichedMarkdownInput(id view)
     [self registerWithHostIfNeeded];
   }
   _markdown = [nextMarkdown copy];
+  self.bottomPadding = MAX(0, newViewProps.bottomPadding);
+  self.topPadding = MAX(0, newViewProps.topPadding);
   [self setContentsHidden:newViewProps.contentsHidden];
 
   [super updateProps:props oldProps:oldProps];
@@ -845,7 +868,9 @@ static BOOL isEnrichedMarkdownInput(id view)
   [super prepareForRecycle];
   [self setContentsHidden:NO];
   _blockId = @"";
+  _bottomPadding = 0;
   _markdown = @"";
+  _topPadding = 0;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider

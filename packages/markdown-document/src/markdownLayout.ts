@@ -141,8 +141,8 @@ export function blockRowSpacingStyle(
       : undefined;
 
   return {
-    marginBottom: hasNextBlock ? 0 : spacing.marginBottom ?? 0,
-    marginTop: previousSpacing ? Math.max(previousSpacing.marginBottom ?? 0, spacing.marginTop ?? 0) : 0,
+    paddingBottom: hasNextBlock ? 0 : spacing.marginBottom ?? 0,
+    paddingTop: previousSpacing ? Math.max(previousSpacing.marginBottom ?? 0, spacing.marginTop ?? 0) : 0,
   };
 }
 
@@ -163,11 +163,23 @@ function hiddenLeadingMarkdownSyntaxLength(line: string) {
   return headingMatch?.[1]?.length ?? 0;
 }
 
-export function estimateMarkdownSelection(markdown: string, event: GestureResponderEvent, width: number) {
+export function estimateMarkdownSelection(
+  markdown: string,
+  event: GestureResponderEvent,
+  width: number,
+  verticalPadding: { paddingBottom?: number; paddingTop?: number } = {},
+) {
   const lineHeight = 25;
   const averageCharacterWidth = 8;
   const x = Math.max(0, event.nativeEvent.locationX);
-  const y = Math.max(0, event.nativeEvent.locationY);
+  const paddingTop = verticalPadding.paddingTop ?? 0;
+  const paddingBottom = verticalPadding.paddingBottom ?? 0;
+  const contentHeight = estimateMarkdownEditorHeight(markdown, width);
+  const y = Math.max(0, Math.min(contentHeight, event.nativeEvent.locationY - paddingTop));
+  if (event.nativeEvent.locationY >= paddingTop + contentHeight + paddingBottom) {
+    return markdown.length;
+  }
+
   const visualLine = Math.floor(y / lineHeight);
   const characterInVisualLine = Math.floor(x / averageCharacterWidth);
   const charactersPerLine = Math.max(20, Math.floor(width / averageCharacterWidth));

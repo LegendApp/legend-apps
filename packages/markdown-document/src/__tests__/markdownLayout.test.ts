@@ -1,8 +1,9 @@
 import {
+  blockRowSpacingStyle,
   editableTextStyleForBlock,
   estimateMarkdownSelection,
 } from "../markdownLayout";
-import { defaultMarkdownStyle } from "../styles";
+import { defaultMarkdownLayout, defaultMarkdownStyle } from "../styles";
 import type { MarkdownBlockSnapshot } from "../types";
 
 function pressEvent(locationX: number, locationY = 0) {
@@ -23,6 +24,58 @@ describe("estimateMarkdownSelection", () => {
     const markdown = "### 1234567890abcdefghijk";
 
     expect(estimateMarkdownSelection(markdown, pressEvent(0, 25), 80)).toBe("### 1234567890abcdefghij".length);
+  });
+
+  it("maps vertical padding clicks to the nearest block edge", () => {
+    expect(estimateMarkdownSelection("Paragraph", pressEvent(0, 4), 700, { paddingTop: 12, paddingBottom: 8 })).toBe(0);
+    expect(estimateMarkdownSelection("Paragraph", pressEvent(0, 46), 700, { paddingTop: 12, paddingBottom: 8 })).toBe(
+      "Paragraph".length,
+    );
+  });
+});
+
+describe("blockRowSpacingStyle", () => {
+  const paragraphBlock: MarkdownBlockSnapshot = {
+    contentEndByte: 9,
+    contentStartByte: 0,
+    depth: 0,
+    headingLevel: 0,
+    id: "d1:b0",
+    index: 0,
+    markdown: "Paragraph",
+    sourceEndByte: 9,
+    sourceStartByte: 0,
+    textRevision: 0,
+    type: "paragraph",
+  };
+  const headingBlock: MarkdownBlockSnapshot = {
+    ...paragraphBlock,
+    headingLevel: 2,
+    id: "d1:b1",
+    index: 1,
+    markdown: "## Heading",
+    type: "heading",
+  };
+
+  it("moves collapsed inter-block spacing inside the following row hit target", () => {
+    expect(blockRowSpacingStyle(headingBlock, paragraphBlock, true, true, defaultMarkdownLayout)).toEqual(
+      expect.objectContaining({
+        paddingBottom: 0,
+        paddingTop: Math.max(
+          defaultMarkdownLayout.blockSpacing.paragraph.marginBottom ?? 0,
+          defaultMarkdownLayout.blockSpacing.heading[2].marginTop ?? 0,
+        ),
+      }),
+    );
+  });
+
+  it("keeps final bottom spacing inside the last row hit target", () => {
+    expect(blockRowSpacingStyle(paragraphBlock, undefined, false, false, defaultMarkdownLayout)).toEqual(
+      expect.objectContaining({
+        paddingBottom: defaultMarkdownLayout.blockSpacing.paragraph.marginBottom,
+        paddingTop: 0,
+      }),
+    );
   });
 });
 
