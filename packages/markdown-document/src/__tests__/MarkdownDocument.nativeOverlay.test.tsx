@@ -502,6 +502,41 @@ describe("MarkdownDocument native editor overlay", () => {
     expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 44 }));
   });
 
+  it("keeps the native row width stable when the editor frame has a negative x offset", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "### Heading", 3),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    __legendListTestHooks.updateItemSize.mockClear();
+    await act(async () => {
+      nativeHost(renderer!).props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          width: 640,
+          x: -10,
+          y: 80,
+        },
+      });
+    });
+
+    expect(__legendListTestHooks.updateItemSize).toHaveBeenLastCalledWith("d1:b0", expect.objectContaining({
+      width: 640,
+    }));
+  });
+
   it("keeps rendered markdown mounted inside the active native row", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),

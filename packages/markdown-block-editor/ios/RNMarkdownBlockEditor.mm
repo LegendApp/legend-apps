@@ -29,9 +29,19 @@ static SEL setSelectionSelector()
   return NSSelectorFromString(@"setSelection:end:");
 }
 
+static SEL setSelectionForWindowPointSelector()
+{
+  return NSSelectorFromString(@"setSelectionForWindowPointX:y:");
+}
+
 static SEL measureSizeSelector()
 {
   return NSSelectorFromString(@"measureSize:");
+}
+
+static SEL markdownPrefixWidthSelector()
+{
+  return NSSelectorFromString(@"markdownPrefixWidthForLength:");
 }
 
 static SEL mouseDownSelector()
@@ -41,6 +51,30 @@ static SEL mouseDownSelector()
 
 static NSString *const ENRMMarkdownTextInputContentSizeDidChangeNotification =
   @"ENRMMarkdownTextInputContentSizeDidChangeNotification";
+
+static NSRange hangingPrefixRangeForMarkdown(NSString *markdown)
+{
+  NSRange prefixRange = NSMakeRange(NSNotFound, 0);
+
+  if (markdown.length > 0) {
+    static NSRegularExpression *headingPrefixRegex = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+      headingPrefixRegex = [NSRegularExpression regularExpressionWithPattern:@"^[ \\t]{0,3}#{1,6}[ \\t]+"
+                                                                      options:0
+                                                                        error:nil];
+    });
+
+    NSTextCheckingResult *match = [headingPrefixRegex firstMatchInString:markdown
+                                                                 options:0
+                                                                   range:NSMakeRange(0, markdown.length)];
+    if (match != nil) {
+      prefixRange = match.range;
+    }
+  }
+
+  return prefixRange;
+}
 
 static NSString *blockStyleKeyForMarkdown(NSString *markdown)
 {
@@ -109,6 +143,15 @@ static void callSetSelection(id target, NSInteger start, NSInteger end)
   send(target, selector, start, end);
 }
 
+static void callSetSelectionForWindowPoint(id target, NSPoint windowPoint)
+{
+  SEL selector = setSelectionForWindowPointSelector();
+  if ([target respondsToSelector:selector]) {
+    void (*send)(id, SEL, CGFloat, CGFloat) = (void (*)(id, SEL, CGFloat, CGFloat))[target methodForSelector:selector];
+    send(target, selector, windowPoint.x, windowPoint.y);
+  }
+}
+
 static CGFloat measuredInputHeight(id target, CGFloat width)
 {
   SEL selector = measureSizeSelector();
@@ -121,14 +164,18 @@ static CGFloat measuredInputHeight(id target, CGFloat width)
   return std::isfinite(measuredSize.height) && measuredSize.height > 0 ? ceil(measuredSize.height) : 0;
 }
 
-static void callMouseDown(id target, NSEvent *event)
+static CGFloat measuredHangingPrefixWidth(id target, NSString *markdown)
 {
-  SEL selector = mouseDownSelector();
-  if (![target respondsToSelector:selector]) {
-    return;
+  CGFloat measuredWidth = 0;
+  NSRange prefixRange = hangingPrefixRangeForMarkdown(markdown);
+  SEL selector = markdownPrefixWidthSelector();
+
+  if (prefixRange.location != NSNotFound && prefixRange.length > 0 && [target respondsToSelector:selector]) {
+    CGFloat (*send)(id, SEL, NSInteger) = (CGFloat (*)(id, SEL, NSInteger))[target methodForSelector:selector];
+    measuredWidth = send(target, selector, (NSInteger)NSMaxRange(prefixRange));
   }
-  void (*send)(id, SEL, NSEvent *) = (void (*)(id, SEL, NSEvent *))[target methodForSelector:selector];
-  send(target, selector, event);
+
+  return std::isfinite(measuredWidth) && measuredWidth > 0 ? ceil(measuredWidth) : 0;
 }
 
 static BOOL isEnrichedMarkdownInput(id view)
@@ -145,6 +192,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   NSMapTable<NSString *, RNMarkdownBlockActivationView *> *_activationViews;
   NSString *_activeBlockId;
   NSString *_lastLoadedBlockId;
+  NSString *_lastLoadedMarkdown;
   BOOL _isPositioningOverlay;
   NSScrollView *_observedScrollView;
   id _overlayScrollWheelMonitor;
@@ -223,7 +271,10 @@ static BOOL isEnrichedMarkdownInput(id view)
   [_activationViews setObject:view forKey:view.blockId];
   if (_activeBlockId != nil && [_activeBlockId isEqualToString:view.blockId]) {
     [self observeScrollViewForBlockView:view];
-    [self showOverlayForBlockView:view markdown:view.markdown event:nil loadValue:_lastLoadedBlockId == nil || ![_lastLoadedBlockId isEqualToString:view.blockId]];
+    [self showOverlayForBlockView:view
+                         markdown:_lastLoadedMarkdown ?: view.markdown
+                            event:nil
+                        loadValue:_lastLoadedBlockId == nil || ![_lastLoadedBlockId isEqualToString:view.blockId]];
     [self emitBeginEditingForBlockView:view];
   }
 }
@@ -545,19 +596,24 @@ static BOOL isEnrichedMarkdownInput(id view)
     return;
   }
 
-  [self setBlockView:view contentsHidden:YES];
-  [self positionOverlayForBlockView:view];
-  _overlayInput.hidden = NO;
-  [overlaySuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:view];
-
   if (loadValue) {
     callSetValue(_overlayInput, markdown ?: @"");
     _lastLoadedBlockId = [view.blockId copy];
+    _lastLoadedMarkdown = [markdown copy];
   }
+
+  [self setBlockView:view contentsHidden:YES];
+  [self positionOverlayForBlockView:view];
+  _overlayInput.hidden = NO;
 
   callFocus(_overlayInput);
   if (event != nil) {
-    callMouseDown(_overlayInput, event);
+    NSPoint selectionPoint = event.locationInWindow;
+    CGFloat hangingPrefixWidth = measuredHangingPrefixWidth(_overlayInput, markdown ?: @"");
+    if (hangingPrefixWidth > 0) {
+      selectionPoint.x += hangingPrefixWidth;
+    }
+    callSetSelectionForWindowPoint(_overlayInput, selectionPoint);
   }
 }
 
@@ -570,6 +626,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
   [self stopObservingScrollView];
   _lastLoadedBlockId = nil;
+  _lastLoadedMarkdown = nil;
   _activeBlockId = nil;
 }
 
@@ -598,11 +655,13 @@ static BOOL isEnrichedMarkdownInput(id view)
     } else {
       _activeBlockId = [nextActiveBlockId copy];
       _lastLoadedBlockId = nil;
+      _lastLoadedMarkdown = [nextActiveMarkdown copy];
       [self stopObservingScrollView];
     }
   } else {
     NSString *oldStyleKey = blockStyleKeyForMarkdown([NSString stringWithUTF8String:oldViewProps.activeMarkdown.c_str()]);
     NSString *newStyleKey = blockStyleKeyForMarkdown(nextActiveMarkdown);
+    _lastLoadedMarkdown = [nextActiveMarkdown copy];
     if (![oldStyleKey isEqualToString:newStyleKey]) {
       callSetValuePreservingSelection(_overlayInput, nextActiveMarkdown ?: @"");
       _lastLoadedBlockId = [nextActiveBlockId copy];
@@ -647,6 +706,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   _overlayInputHomeSuperview = nil;
   _activeBlockId = nil;
   _lastLoadedBlockId = nil;
+  _lastLoadedMarkdown = nil;
   _isPositioningOverlay = NO;
 }
 

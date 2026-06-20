@@ -595,7 +595,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e21131550 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -33,16 +33,17 @@
+@@ -33,16 +33,19 @@
 
  #if !TARGET_OS_OSX
  @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtocol, UITextViewDelegate>
@@ -605,6 +605,8 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  - (void)setupTextView;
  - (void)applyFormatting;
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown;
++- (CGFloat)markdownPrefixWidthForLength:(NSInteger)prefixLength;
++- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y;
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
@@ -613,6 +615,52 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
  @implementation EnrichedMarkdownTextInput {
    ENRMPlatformTextView *_textView;
    ENRMInputLayoutManager *_layoutManager;
+@@ -214,3 +216,37 @@
++- (CGFloat)markdownPrefixWidthForLength:(NSInteger)prefixLength
++{
++  CGFloat prefixWidth = 0;
++  NSString *text = ENRMGetPlainText(_textView);
++  NSUInteger textLength = text.length;
++
++  if (prefixLength > 0 && prefixLength <= (NSInteger)text.length) {
++#if TARGET_OS_OSX
++    if (_textView.window != nil) {
++      NSRect screenRect = [_textView firstRectForCharacterRange:NSMakeRange((NSUInteger)prefixLength, 0) actualRange:NULL];
++      if (!NSEqualRects(screenRect, NSZeroRect)) {
++        NSRect windowRect = [_textView.window convertRectFromScreen:screenRect];
++        NSRect localRect = [_textView convertRect:windowRect fromView:nil];
++        prefixWidth = NSMinX(localRect);
++      }
++    }
++#endif
++
++    NSLayoutManager *layoutManager = _textView.layoutManager;
++    NSTextContainer *textContainer = _textView.textContainer;
++    if (prefixWidth <= 0 && layoutManager != nil && textContainer != nil) {
++      [layoutManager ensureLayoutForTextContainer:textContainer];
++      if ((NSUInteger)prefixLength < textLength && layoutManager.numberOfGlyphs > 0) {
++        NSUInteger glyphIndex = [layoutManager glyphIndexForCharacterAtIndex:(NSUInteger)prefixLength];
++        glyphIndex = MIN(glyphIndex, layoutManager.numberOfGlyphs - 1);
++        NSPoint glyphLocation = [layoutManager locationForGlyphAtIndex:glyphIndex];
++        prefixWidth = glyphLocation.x + _textView.textContainerInset.left;
++      } else {
++        NSRange glyphRange = [layoutManager glyphRangeForCharacterRange:NSMakeRange(0, (NSUInteger)prefixLength)
++                                                   actualCharacterRange:NULL];
++        if (glyphRange.length > 0) {
++          CGRect boundingRect = [layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:textContainer];
++          prefixWidth = CGRectGetMaxX(boundingRect) + _textView.textContainerInset.left;
++        }
++      }
++    }
++
++  }
++
++  return MAX(0, ceil(prefixWidth));
++}
++
+ - (CGSize)measureSize:(CGFloat)maxWidth
+ {
+   NSMutableAttributedString *measuredText =
 @@ -326,54 +327,60 @@
      }
    }
@@ -787,7 +835,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
    if (ENRMHasMarkedText(_textView)) {
      return;
    }
-@@ -553,33 +618,100 @@
+@@ -553,33 +618,138 @@
  - (void)blur
  {
    ENRMBlurTextView(_textView);
@@ -879,6 +927,40 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 +  [self setSelection:selection end:selection];
 +}
 +#endif
++
++- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y
++{
++#if TARGET_OS_OSX
++  NSUInteger textLength = ENRMGetPlainText(_textView).length;
++  NSTextContainer *textContainer = _textView.textContainer;
++  NSLayoutManager *layoutManager = _textView.layoutManager;
++  NSUInteger characterIndex = 0;
++
++  if (textLength > 0 && textContainer != nil && layoutManager != nil) {
++    [layoutManager ensureLayoutForTextContainer:textContainer];
++    if (layoutManager.numberOfGlyphs > 0) {
++      NSPoint localPoint = [_textView convertPoint:NSMakePoint(x, y) fromView:nil];
++      NSPoint textPoint = NSMakePoint(localPoint.x - _textView.textContainerInset.left, localPoint.y - _textView.textContainerInset.top);
++      CGFloat fraction = 0;
++      NSUInteger glyphIndex = [layoutManager glyphIndexForPoint:textPoint
++                                                inTextContainer:textContainer
++                               fractionOfDistanceThroughGlyph:&fraction];
++      glyphIndex = MIN(glyphIndex, layoutManager.numberOfGlyphs - 1);
++      characterIndex = [layoutManager characterIndexForGlyphAtIndex:glyphIndex];
++      if (fraction > 0.5) {
++        characterIndex += 1;
++      }
++      characterIndex = MIN(characterIndex, textLength);
++    }
++  }
++
++  [self.window makeFirstResponder:_textView];
++  _textView.selectedRange = NSMakeRange(characterIndex, 0);
++  [_textView scrollRangeToVisible:_textView.selectedRange];
++  [self emitOnChangeSelection];
++  [self emitOnChangeState];
++#endif
++}
 +
  - (void)toggleBold
  {
