@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { useResolveClassNames } from "uniwind";
 import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
 import {
@@ -52,11 +53,12 @@ export function MarkdownFormattingToolbar({
       }}
       style={[styles.button, buttonStyle]}
     >
+      <SFSymbol name={item.icon} size={14} style={styles.icon} />
       <Text
         className="text-foreground"
-        style={[styles.buttonText, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}
+        style={[styles.fallbackIconText, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}
       >
-        {item.label}
+        {item.fallbackLabel}
       </Text>
     </Pressable>
   ));
@@ -112,6 +114,15 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 4, width: 0 },
     shadowOpacity: 0.16,
     shadowRadius: 12,
+  },
+  fallbackIconText: {
+    fontSize: 0,
+    height: 0,
+    opacity: 0,
+    width: 0,
+  },
+  icon: {
+    flexShrink: 0,
   },
   italic: {
     fontStyle: "italic",

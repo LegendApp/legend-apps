@@ -2,7 +2,8 @@ import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document
 
 export type MarkdownToolbarItem = {
   id: MarkdownToolbarItemId;
-  label: string;
+  fallbackLabel: string;
+  icon: string;
   accessibilityLabel: string;
   textStyle?: "bold" | "italic" | "underline" | "strikethrough";
   run: (commands: MarkdownDocumentCommands) => void;
@@ -35,89 +36,103 @@ export type MarkdownToolbarItemId = (typeof markdownToolbarItemIds)[number];
 export const markdownToolbarItems = [
   {
     id: "paragraph",
-    label: "P",
+    fallbackLabel: "P",
+    icon: "text.alignleft",
     accessibilityLabel: "Paragraph",
     run: (commands) => commands.setParagraph(),
   },
   ...([1, 2, 3, 4, 5, 6] as const).map((level): MarkdownToolbarItem => ({
     id: `heading-${level}` as MarkdownToolbarItemId,
-    label: `H${level}`,
+    fallbackLabel: `H${level}`,
+    icon: `h${level}.circle`,
     accessibilityLabel: `Heading ${level}`,
     run: (commands: MarkdownDocumentCommands) => commands.setHeading(level),
   })),
   {
     id: "bold",
-    label: "B",
+    fallbackLabel: "B",
+    icon: "bold",
     accessibilityLabel: "Bold",
     textStyle: "bold",
     run: (commands) => commands.toggleBold(),
   },
   {
     id: "italic",
-    label: "I",
+    fallbackLabel: "I",
+    icon: "italic",
     accessibilityLabel: "Italic",
     textStyle: "italic",
     run: (commands) => commands.toggleItalic(),
   },
   {
     id: "underline",
-    label: "U",
+    fallbackLabel: "U",
+    icon: "underline",
     accessibilityLabel: "Underline",
     textStyle: "underline",
     run: (commands) => commands.toggleUnderline(),
   },
   {
     id: "strikethrough",
-    label: "S",
+    fallbackLabel: "S",
+    icon: "strikethrough",
     accessibilityLabel: "Strikethrough",
     textStyle: "strikethrough",
     run: (commands) => commands.toggleStrikethrough(),
   },
   {
     id: "spoiler",
-    label: "||",
+    fallbackLabel: "||",
+    icon: "eye.slash",
     accessibilityLabel: "Spoiler",
     run: (commands) => commands.toggleSpoiler(),
   },
   {
     id: "link",
-    label: "Link",
+    fallbackLabel: "Link",
+    icon: "link",
     accessibilityLabel: "Link",
     run: (commands) => commands.insertLink(),
   },
   {
     id: "blockquote",
-    label: ">",
+    fallbackLabel: ">",
+    icon: "quote.opening",
     accessibilityLabel: "Blockquote",
     run: (commands) => commands.toggleBlockquote(),
   },
   {
     id: "unordered-list",
-    label: "UL",
+    fallbackLabel: "UL",
+    icon: "list.bullet",
     accessibilityLabel: "Bulleted List",
     run: (commands) => commands.toggleUnorderedList(),
   },
   {
     id: "ordered-list",
-    label: "OL",
+    fallbackLabel: "OL",
+    icon: "list.number",
     accessibilityLabel: "Numbered List",
     run: (commands) => commands.toggleOrderedList(),
   },
   {
     id: "task-list",
-    label: "[ ]",
+    fallbackLabel: "[ ]",
+    icon: "checklist",
     accessibilityLabel: "Task List",
     run: (commands) => commands.toggleTaskList(),
   },
   {
     id: "code-block",
-    label: "```",
+    fallbackLabel: "```",
+    icon: "curlybraces.square",
     accessibilityLabel: "Code Block",
     run: (commands) => commands.toggleCodeBlock(),
   },
   {
     id: "thematic-break",
-    label: "---",
+    fallbackLabel: "---",
+    icon: "minus",
     accessibilityLabel: "Thematic Break",
     run: (commands) => commands.insertThematicBreak(),
   },

@@ -103,3 +103,7 @@ jest.mock("@legend-desktop/window-manager", () => ({
     UnifiedTitleAndToolbar: "UnifiedTitleAndToolbar",
   },
 }));
+
+jest.mock("@legend-desktop/sf-symbol", () => ({
+  SFSymbol: () => null,
+}));

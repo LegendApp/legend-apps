@@ -19,6 +19,7 @@
     "@legend-desktop/recent-documents": "0.0.0",
     "@legend-desktop/reorder-controls": "0.0.0",
     "@legend-desktop/settings-window": "0.0.0",
+    "@legend-desktop/sf-symbol": "0.0.0",
     "@legend-desktop/storage": "0.0.0",
     "@legend-desktop/theme": "workspace:*",
     "@legend-desktop/window-manager": "0.0.0",
