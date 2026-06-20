@@ -7,6 +7,11 @@ import type { MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentPro
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 const systemBlockSelectionBackgroundColor = Platform.OS === "macos" ? PlatformColor("selectedTextBackgroundColor") : "#bfdbfe";
+const inputStyleCache = new WeakMap<NonNullable<MarkdownDocumentProps["markdownStyle"]>, MarkdownTextInputStyle>();
+
+function stringStyleValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
 
 function textInputStyleFromMarkdownBlockStyle(markdownTextStyle: TextStyle | undefined): TextStyle | undefined {
   if (!markdownTextStyle) {
@@ -42,7 +47,29 @@ function textInputStyleFromMarkdownBlockStyle(markdownTextStyle: TextStyle | und
 }
 
 export function inputStyleFromMarkdownStyle(markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>) {
-  return markdownStyle as MarkdownTextInputStyle;
+  const cachedStyle = inputStyleCache.get(markdownStyle);
+  if (cachedStyle) {
+    return cachedStyle;
+  }
+
+  const inputStyle = markdownStyle as MarkdownTextInputStyle;
+  const paragraphStyle = markdownStyle.paragraph as TextStyle | undefined;
+  const codeStyle = markdownStyle.code as TextStyle | undefined;
+  const spoilerColor = inputStyle.spoiler?.color ?? stringStyleValue(paragraphStyle?.color);
+  const spoilerBackgroundColor = inputStyle.spoiler?.backgroundColor ?? stringStyleValue(codeStyle?.backgroundColor);
+  const resolvedInputStyle = spoilerColor || spoilerBackgroundColor
+    ? {
+        ...inputStyle,
+        spoiler: {
+          ...inputStyle.spoiler,
+          ...(spoilerColor ? { color: spoilerColor } : {}),
+          ...(spoilerBackgroundColor ? { backgroundColor: spoilerBackgroundColor } : {}),
+        },
+      }
+    : inputStyle;
+
+  inputStyleCache.set(markdownStyle, resolvedInputStyle);
+  return resolvedInputStyle;
 }
 
 export function resolveSelectionColor(selectionColor: string | undefined): ColorValue {

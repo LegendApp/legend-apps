@@ -13,6 +13,7 @@
     "selection": "auto",
     "code": "#111827",
     "codeForeground": "#f9fafb",
+    "inlineCodeBackground": "#e5e7eb",
     "blockquoteBackground": "#f8fafc",
     "blockquoteBorder": "#94a3b8",
     "tableHeader": "#f3f4f6",

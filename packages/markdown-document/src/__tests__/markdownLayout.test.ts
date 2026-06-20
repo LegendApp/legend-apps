@@ -2,6 +2,7 @@ import {
   blockRowSpacingStyle,
   editableTextStyleForBlock,
   estimateMarkdownSelection,
+  inputStyleFromMarkdownStyle,
 } from "../markdownLayout";
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "../styles";
 import type { MarkdownBlockSnapshot } from "../types";
@@ -113,5 +114,41 @@ describe("editableTextStyleForBlock", () => {
     expect(style.paddingRight).toBeUndefined();
     expect(style.paddingBottom).toBeUndefined();
     expect(style.paddingLeft).toBeUndefined();
+  });
+});
+
+describe("inputStyleFromMarkdownStyle", () => {
+  it("derives spoiler input colors from the active markdown theme", () => {
+    const markdownStyle = {
+      ...defaultMarkdownStyle,
+      code: {
+        ...defaultMarkdownStyle.code,
+        backgroundColor: "#2d2e30",
+      },
+      paragraph: {
+        ...defaultMarkdownStyle.paragraph,
+        color: "#f5f5f5",
+      },
+    };
+
+    expect(inputStyleFromMarkdownStyle(markdownStyle).spoiler).toEqual({
+      backgroundColor: "#2d2e30",
+      color: "#f5f5f5",
+    });
+  });
+
+  it("preserves explicit spoiler input colors", () => {
+    const markdownStyle = {
+      ...defaultMarkdownStyle,
+      spoiler: {
+        backgroundColor: "#123456",
+        color: "#abcdef",
+      },
+    } as typeof defaultMarkdownStyle;
+
+    expect(inputStyleFromMarkdownStyle(markdownStyle).spoiler).toEqual({
+      backgroundColor: "#123456",
+      color: "#abcdef",
+    });
   });
 });
