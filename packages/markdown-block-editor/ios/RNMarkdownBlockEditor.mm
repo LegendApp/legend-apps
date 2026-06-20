@@ -234,14 +234,25 @@ static BOOL isEnrichedMarkdownInput(id view)
                             index:(NSInteger)index
 {
   if (childComponentView == _overlayInput) {
+    // The overlay input may be reparented next to the active block while editing.
+    // RCTViewComponentView asserts that a child is still at its original indexed
+    // parent during unmount, so remove this managed overlay child directly.
+    [self showActiveBlockContents];
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:NSViewFrameDidChangeNotification
                                                   object:_overlayInput];
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:ENRMMarkdownTextInputContentSizeDidChangeNotification
                                                   object:_overlayInput];
+    [self stopObservingScrollView];
+    [childComponentView removeFromSuperview];
     _overlayInput = nil;
     _overlayInputHomeSuperview = nil;
+    _activeBlockId = nil;
+    _lastLoadedBlockId = nil;
+    _lastLoadedMarkdown = nil;
+    _isPositioningOverlay = NO;
+    return;
   }
 
   [super unmountChildComponentView:childComponentView index:index];

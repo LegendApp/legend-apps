@@ -200,7 +200,13 @@ export function useMarkdownDocumentSession() {
     return false;
   }, [saveCurrentDocument, sessionState$]);
 
-  const prepareCurrentDocumentForClose = useCallback(async ({ autosaveEnabled }: { autosaveEnabled: boolean }) => {
+  const prepareCurrentDocumentForClose = useCallback(async ({
+    autosaveEnabled,
+    reason = "close",
+  }: {
+    autosaveEnabled: boolean;
+    reason?: "close" | "quit";
+  }) => {
     const state = sessionState$.peek();
     if (!state.filename || !state.isDirty) {
       return true;
@@ -212,7 +218,7 @@ export function useMarkdownDocumentSession() {
 
     const action = await confirmDirtyDocumentTransition({
       filename: getFilename(state.filename),
-      reason: "close",
+      reason,
     });
 
     if (action === "discard") {

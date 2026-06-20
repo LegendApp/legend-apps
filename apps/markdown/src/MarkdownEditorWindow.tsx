@@ -148,8 +148,9 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   });
 
   useMarkdownAppExit({
-    flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
+    autosaveEnabled: autosave === "enabled",
     handleError: session.handleError,
+    prepareCurrentDocumentForClose: session.prepareCurrentDocumentForClose,
   });
 
   useMarkdownWindowCloseRequest({

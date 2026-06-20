@@ -2,6 +2,10 @@ import { render } from "@testing-library/react-native";
 import React from "react";
 import { Text } from "react-native";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
+import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
+
+const mockUseMarkdownAppExit = useMarkdownAppExit as jest.MockedFunction<typeof useMarkdownAppExit>;
+const mockUseMarkdownWindowCloseRequest = useMarkdownWindowCloseRequest as jest.MockedFunction<typeof useMarkdownWindowCloseRequest>;
 
 const mockMarkdownE2EEditorSmoke = jest.fn((props: { autoSelectBlocks?: boolean; variant?: string }) => (
   <Text>{`editor-smoke:${props.variant}:${props.autoSelectBlocks ? "auto" : "manual"}`}</Text>
@@ -117,6 +121,8 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockMarkdownE2EEditorSmoke.mockClear();
     mockMarkdownE2ERunner.mockClear();
     mockInvalidateLayoutMeasurements.mockClear();
+    mockUseMarkdownAppExit.mockClear();
+    mockUseMarkdownWindowCloseRequest.mockClear();
   });
 
   it.each([
@@ -144,6 +150,22 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       scenario: "far-down-structural-edits",
     }));
     expect(mockMarkdownE2EEditorSmoke).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it("uses the autosave-aware close preparation for app quit", async () => {
+    const view = await render(<MarkdownEditorWindow />);
+
+    expect(mockUseMarkdownAppExit).toHaveBeenCalledWith({
+      autosaveEnabled: true,
+      handleError: mockSession.handleError,
+      prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
+    });
+    expect(mockUseMarkdownWindowCloseRequest).toHaveBeenCalledWith({
+      autosaveEnabled: true,
+      handleError: mockSession.handleError,
+      prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
+    });
     await view.unmount();
   });
 });

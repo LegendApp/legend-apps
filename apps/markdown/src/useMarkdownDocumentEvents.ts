@@ -17,7 +17,7 @@ type DocumentEventsOptions = {
   launchArguments?: string[];
   openSelectedFile: (path: string) => void;
   openUntitledDocument: () => void;
-  prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean }) => Promise<boolean>;
+  prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean; reason?: "close" | "quit" }) => Promise<boolean>;
 };
 
 function getStartupMarkdownPath(launchArguments: string[] | undefined) {
@@ -85,13 +85,16 @@ export function useRecentMarkdownDocumentOpener({
 }
 
 export function useMarkdownAppExit({
-  flushCurrentDocumentBeforeTransition,
+  autosaveEnabled,
   handleError,
-}: Pick<DocumentEventsOptions, "flushCurrentDocumentBeforeTransition" | "handleError">) {
+  prepareCurrentDocumentForClose,
+}: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & {
+  autosaveEnabled: boolean;
+}) {
   useEffect(() => {
     async function completeRequestedExit() {
       try {
-        const didFlush = await flushCurrentDocumentBeforeTransition("quit");
+        const didFlush = await prepareCurrentDocumentForClose({ autosaveEnabled, reason: "quit" });
         completeAppExit(didFlush);
       } catch (error) {
         handleError(error);
@@ -108,7 +111,7 @@ export function useMarkdownAppExit({
     return () => {
       subscription.remove();
     };
-  }, [flushCurrentDocumentBeforeTransition, handleError]);
+  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
 }
 
 export function useMarkdownWindowCloseRequest({
