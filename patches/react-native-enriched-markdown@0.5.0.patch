@@ -1033,6 +1033,35 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..73eefc0d5e9b9c86049db0874c03122e
 
  - (BOOL)textView:(UITextView *)textView shouldChangeTextInRange:(NSRange)range replacementText:(NSString *)text
  {
+@@ -930,16 +1089,28 @@
+ #else
+   NSRange selection = _textView.selectedRange;
+   if (selection.location != NSNotFound) {
+-    NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selection.location, 0)
+-                                                         actualCharacterRange:NULL];
+-    caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
+-    caretRect.origin.x += _textView.textContainerInset.left;
+-    caretRect.origin.y += _textView.textContainerInset.top;
++    NSUInteger selectionLocation = MIN(selection.location, _textView.string.length);
++    if (_textView.window != nil) {
++      NSRect screenRect = [_textView firstRectForCharacterRange:NSMakeRange(selectionLocation, 0) actualRange:NULL];
++      if (!NSEqualRects(screenRect, NSZeroRect)) {
++        NSRect windowRect = [_textView.window convertRectFromScreen:screenRect];
++        caretRect = [_textView convertRect:windowRect fromView:nil];
++      }
++    }
++
++    if (CGRectEqualToRect(caretRect, CGRectZero)) {
++      NSRange glyphRange = [_textView.layoutManager glyphRangeForCharacterRange:NSMakeRange(selectionLocation, 0)
++                                                           actualCharacterRange:NULL];
++      caretRect = [_textView.layoutManager boundingRectForGlyphRange:glyphRange inTextContainer:_textView.textContainer];
++      caretRect.origin.x += _textView.textContainerInset.left;
++      caretRect.origin.y += _textView.textContainerInset.top;
++    }
+   }
+ #endif
+   return caretRect;
+ }
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
 index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..064aa2c13dde399e7d2ff1137848d40f20e2aaf3 100644
 --- a/ios/input/InputStylePropsUtils.h

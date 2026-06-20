@@ -618,7 +618,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 : nativeOverlayFrame?.width ?? inputWidth;
               const itemHeight = activeBlockLayout?.height ?? nativeOverlayFrame?.height ?? inputHeight;
               const contentItemX = itemX - contentContainerOffsetX;
-              const activeMarkdown = draftMarkdownRef.current;
               const paragraphStyle = resolvedMarkdownStyle.paragraph;
               const paragraphFontSize = typeof paragraphStyle?.fontSize === "number" ? paragraphStyle.fontSize : 16;
               const paragraphLineHeight = typeof paragraphStyle?.lineHeight === "number"
@@ -631,13 +630,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 itemHeight,
                 itemWidth,
                 itemY,
-                markdown: activeMarkdown,
-                paragraphFontSize,
                 paragraphLineHeight,
                 scrollOffsetY: nativeOverlayFrame ? 0 : scrollOffsetYRef.current,
                 selectedLength,
-                selectionEnd,
-                selectionStart,
               });
               publishTextSelectionAnchor(anchor);
             });
