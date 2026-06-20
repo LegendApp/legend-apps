@@ -6,7 +6,7 @@ import {
   WindowStyleMask,
 } from "@legend-desktop/window-manager";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
-import { getMarkdownFileTitle } from "./appMetadata";
+import type { MarkdownSaveState } from "@legend-desktop/markdown-document";
 import {
   editorWindowIdentifier,
   editorWindowModuleName,
@@ -14,6 +14,7 @@ import {
   settingsWindowModuleName,
 } from "./appConstants";
 import { getMarkdownDisplayThemeSetting } from "./markdownSettings";
+import { markdownEditorWindowTitle } from "./markdownWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 
@@ -102,16 +103,17 @@ export function setMarkdownEditorWindowOptions({
   filename,
   isDirty,
   isUntitledDocument,
+  saveState,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
   filename: string;
   isDirty: boolean;
   isUntitledDocument: boolean;
+  saveState: MarkdownSaveState;
 }) {
-  const title = isUntitledDocument ? "Untitled" : getMarkdownFileTitle(filename);
   return setWindowOptions(editorWindowIdentifier, {
-    title: isDirty ? `• ${title}` : title,
+    title: markdownEditorWindowTitle({ filename, isDirty, isUntitledDocument, saveState }),
     windowStyle: createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame: false }),
   });
 }

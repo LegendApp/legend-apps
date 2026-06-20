@@ -40,6 +40,7 @@ export function useMarkdownEditorWindowOptions({
       filename: state.filename,
       isDirty: state.isDirty,
       isUntitledDocument: state.documentSource === "untitled",
+      saveState: state.saveState,
     }).catch(onError);
   }, [appearance, backgroundColor, onError, sessionState$]);
 }
