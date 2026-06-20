@@ -13,6 +13,7 @@ const mockToolbarLayouts = {
 };
 
 jest.mock("../markdownSettings", () => ({
+  useMarkdownDisplayThemeSetting: () => "light",
   useMarkdownToolbarLayoutSetting: (layoutId: "selection" | "top") => mockToolbarLayouts[layoutId],
 }));
 

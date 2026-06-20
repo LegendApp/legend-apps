@@ -41,6 +41,7 @@ jest.mock("@legend-desktop/sf-symbol", () => ({
 jest.mock("../markdownSettings", () => ({
   resetMarkdownToolbarLayoutSetting: jest.fn(),
   setMarkdownToolbarLayoutSetting: (layoutId: string, layout: unknown) => mockSetMarkdownToolbarLayoutSetting(layoutId, layout),
+  useMarkdownDisplayThemeSetting: () => "light",
   useMarkdownToolbarLayoutSetting: () => mockToolbarLayout,
 }));
 

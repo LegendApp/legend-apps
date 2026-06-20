@@ -2,10 +2,12 @@ import { useMemo } from "react";
 import type { RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { useResolveClassNames } from "uniwind";
 import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
 import {
   type MarkdownToolbarLayoutId,
+  useMarkdownDisplayThemeSetting,
   useMarkdownToolbarLayoutSetting,
 } from "./markdownSettings";
 import { markdownToolbarItemMap } from "./markdownToolbarItems";
@@ -29,6 +31,8 @@ export function MarkdownFormattingToolbar({
 }) {
   const toolbarStyle = useResolveClassNames("border-border bg-surface");
   const buttonStyle = useResolveClassNames("border-border bg-surface-muted");
+  const displayTheme = getLegendDisplayTheme(useMarkdownDisplayThemeSetting());
+  const iconColor = displayTheme.colors.foreground;
   const toolbarLayout = useMarkdownToolbarLayoutSetting(layoutId);
   const toolbarItems = useMemo(
     () => toolbarLayout.shown.map((itemId) => markdownToolbarItemMap[itemId]).filter(Boolean),
@@ -53,7 +57,7 @@ export function MarkdownFormattingToolbar({
       }}
       style={[styles.button, buttonStyle]}
     >
-      <SFSymbol name={item.icon} size={14} style={styles.icon} />
+      <SFSymbol color={iconColor} name={item.icon} size={14} style={styles.icon} />
       <Text
         className="text-foreground"
         style={[styles.fallbackIconText, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}

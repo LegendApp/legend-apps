@@ -1,6 +1,7 @@
 import { cn } from "@legend-desktop/classnames";
 import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-desktop/reorder-controls";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { Fragment, useCallback, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -9,6 +10,7 @@ import {
   setMarkdownToolbarLayoutSetting,
   type MarkdownToolbarControlGroup,
   type MarkdownToolbarLayoutId,
+  useMarkdownDisplayThemeSetting,
   useMarkdownToolbarLayoutSetting,
 } from "../markdownSettings";
 import {
@@ -42,6 +44,7 @@ const toolbarLayoutZonePrefix = "markdown-toolbar-layout";
 
 export function ToolbarLayoutEditor({ description, layoutId, title }: ToolbarLayoutEditorProps) {
   const layout = useMarkdownToolbarLayoutSetting(layoutId);
+  const displayTheme = getLegendDisplayTheme(useMarkdownDisplayThemeSetting());
   const normalizedLayout = useMemo(() => normalizeMarkdownToolbarLayout(layout, layoutId), [layout, layoutId]);
 
   const handleMove = useCallback(
@@ -77,6 +80,7 @@ export function ToolbarLayoutEditor({ description, layoutId, title }: ToolbarLay
       <DragDropProvider className="flex-none flex-col gap-4">
         <ToolbarControlGroup
           group="shown"
+          iconColor={displayTheme.colors.foreground}
           items={normalizedLayout.shown}
           label="Shown"
           layoutId={layoutId}
@@ -84,6 +88,7 @@ export function ToolbarLayoutEditor({ description, layoutId, title }: ToolbarLay
         />
         <ToolbarControlGroup
           group="hidden"
+          iconColor={displayTheme.colors.muted}
           items={normalizedLayout.hidden}
           label="Hidden"
           layoutId={layoutId}
@@ -96,13 +101,14 @@ export function ToolbarLayoutEditor({ description, layoutId, title }: ToolbarLay
 
 type ToolbarControlGroupProps = {
   group: MarkdownToolbarControlGroup;
+  iconColor: string;
   items: MarkdownToolbarItemId[];
   label: string;
   layoutId: MarkdownToolbarLayoutId;
   onMove: (params: MoveToolbarItemParams) => void;
 };
 
-function ToolbarControlGroup({ group, items, label, layoutId, onMove }: ToolbarControlGroupProps) {
+function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove }: ToolbarControlGroupProps) {
   const hasItems = items.length > 0;
   const zoneId = `${toolbarLayoutZonePrefix}-${layoutId}`;
 
@@ -128,7 +134,7 @@ function ToolbarControlGroup({ group, items, label, layoutId, onMove }: ToolbarC
                 id={`${layoutId}-${group}-${itemId}`}
                 zoneId={zoneId}
               >
-                <ToolbarChip itemId={itemId} />
+                <ToolbarChip iconColor={iconColor} itemId={itemId} />
               </DraggableItem>
               {index < items.length - 1 ? (
                 <ToolbarDropZone
@@ -201,12 +207,12 @@ function ToolbarDropZone({ index, isExpanded = false, onMove, targetGroup }: Too
   );
 }
 
-function ToolbarChip({ itemId }: { itemId: MarkdownToolbarItemId }) {
+function ToolbarChip({ iconColor, itemId }: { iconColor: string; itemId: MarkdownToolbarItemId }) {
   const item = markdownToolbarItemMap[itemId];
 
   return (
     <View className="flex-row items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
-      <SFSymbol name={item.icon} size={12} />
+      <SFSymbol color={iconColor} name={item.icon} size={12} />
       <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
         {item.accessibilityLabel}
       </Text>

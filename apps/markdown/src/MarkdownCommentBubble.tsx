@@ -1,4 +1,5 @@
 import type { MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
+import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   Pressable,
   StyleSheet,
@@ -7,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { useResolveClassNames } from "uniwind";
+import { useMarkdownDisplayThemeSetting } from "./markdownSettings";
 
 const bubbleWidth = 280;
 const bubbleGap = 12;
@@ -28,6 +30,8 @@ export function MarkdownCommentBubble({
   const inputStyle = useResolveClassNames("border-border bg-background text-foreground");
   const secondaryButtonStyle = useResolveClassNames("border-border bg-surface-muted");
   const primaryButtonStyle = useResolveClassNames("bg-primary");
+  const displayTheme = getLegendDisplayTheme(useMarkdownDisplayThemeSetting());
+  const mutedColor = displayTheme.colors.muted;
   const canSave = value.trim().length > 0;
   const itemRight = anchor.itemWidth ?? anchor.width;
   const itemTop = anchor.itemY ?? anchor.y;
@@ -49,7 +53,7 @@ export function MarkdownCommentBubble({
         multiline
         onChangeText={onChangeText}
         placeholder="Add a comment"
-        placeholderTextColor="#8a8a8a"
+        placeholderTextColor={mutedColor}
         style={[styles.input, inputStyle]}
         value={value}
       />

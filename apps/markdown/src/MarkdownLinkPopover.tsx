@@ -1,4 +1,5 @@
 import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { useEffect, useState } from "react";
 import {
   Pressable,
@@ -8,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useResolveClassNames } from "uniwind";
+import { useMarkdownDisplayThemeSetting } from "./markdownSettings";
 
 const defaultLinkURL = "https://";
 
@@ -23,6 +25,9 @@ export function MarkdownLinkPopover({
   const inputStyle = useResolveClassNames("border-border bg-background text-foreground");
   const secondaryButtonStyle = useResolveClassNames("border-border bg-surface-muted");
   const primaryButtonStyle = useResolveClassNames("bg-primary");
+  const displayTheme = getLegendDisplayTheme(useMarkdownDisplayThemeSetting());
+  const mutedColor = displayTheme.colors.muted;
+  const foregroundColor = displayTheme.colors.foreground;
   const trimmedURL = url.trim();
   const canSubmit = trimmedURL.length > 0;
 
@@ -34,7 +39,7 @@ export function MarkdownLinkPopover({
     <View pointerEvents="box-none" style={styles.container}>
       <View className="border" style={[styles.popover, cardStyle]}>
         <View style={styles.header}>
-          <SFSymbol name="link" size={14} />
+          <SFSymbol color={foregroundColor} name="link" size={14} />
           <Text className="text-foreground" style={styles.title}>Link</Text>
         </View>
         <TextInput
@@ -50,7 +55,7 @@ export function MarkdownLinkPopover({
             }
           }}
           placeholder={defaultLinkURL}
-          placeholderTextColor="#8a8a8a"
+          placeholderTextColor={mutedColor}
           style={[styles.input, inputStyle]}
           value={url}
         />

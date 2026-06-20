@@ -224,7 +224,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         {showUntitledPlaceholder ? (
           <View pointerEvents="none" style={styles.placeholder}>
             <Text style={[styles.placeholderTitle, { color: displayTheme.colors.foreground }]}>Untitled</Text>
-            <Text style={[styles.placeholderText, { color: displayTheme.colors.mutedForeground }]}>Start writing</Text>
+            <Text style={[styles.placeholderText, { color: displayTheme.colors.muted }]}>Start writing</Text>
           </View>
         ) : null}
         <MarkdownDocument
