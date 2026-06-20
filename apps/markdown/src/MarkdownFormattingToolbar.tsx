@@ -15,12 +15,14 @@ export function MarkdownFormattingToolbar({
   commandsRef,
   floating,
   layoutId = floating ? "selection" : "top",
+  onInsertLink,
   placement = "top",
   style,
 }: {
   commandsRef: RefObject<MarkdownDocumentCommands | null>;
   floating?: boolean;
   layoutId?: MarkdownToolbarLayoutId;
+  onInsertLink?: () => void;
   placement?: MarkdownFormattingToolbarPlacement;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -38,6 +40,11 @@ export function MarkdownFormattingToolbar({
       className="border"
       key={item.id}
       onPressIn={() => {
+        if (item.id === "link" && onInsertLink) {
+          onInsertLink();
+          return;
+        }
+
         const commands = commandsRef.current;
         if (commands) {
           item.run(commands);

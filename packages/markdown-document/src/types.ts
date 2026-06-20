@@ -110,7 +110,7 @@ export type MarkdownDocumentCommands = {
   toggleTaskList(): void;
   toggleUnorderedList(): void;
   insertThematicBreak(): void;
-  insertLink(): void;
+  insertLink(options?: { text?: string; url?: string }): void;
 };
 
 export type MarkdownDocumentCommandState = {

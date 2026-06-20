@@ -53,12 +53,13 @@ describe("MarkdownFormattingToolbar", () => {
 
   it("renders top bottom and floating toolbar controls from their configured layouts", async () => {
     const { commands, commandsRef } = commandsRefFixture();
+    const onInsertLink = jest.fn();
 
     const view = await render(
       <>
         <MarkdownFormattingToolbar commandsRef={commandsRef} />
         <MarkdownFormattingToolbar commandsRef={commandsRef} placement="bottom" />
-        <MarkdownFormattingToolbar commandsRef={commandsRef} floating />
+        <MarkdownFormattingToolbar commandsRef={commandsRef} floating onInsertLink={onInsertLink} />
       </>,
     );
 
@@ -72,9 +73,12 @@ describe("MarkdownFormattingToolbar", () => {
 
     await fireEvent(view.getAllByLabelText("Heading 1")[0], "pressIn");
     await fireEvent(view.getByLabelText("Bold"), "pressIn");
+    await fireEvent(view.getByLabelText("Link"), "pressIn");
 
     expect(commands.setHeading).toHaveBeenCalledWith(1);
     expect(commands.toggleBold).toHaveBeenCalledTimes(1);
+    expect(onInsertLink).toHaveBeenCalledTimes(1);
+    expect(commands.insertLink).not.toHaveBeenCalled();
     await view.unmount();
   });
 });

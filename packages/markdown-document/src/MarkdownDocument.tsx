@@ -2244,8 +2244,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         focus() {
           activeInputRef.current?.focus();
         },
-        insertLink() {
-          runActiveInputCommand(() => activeInputRef.current?.insertLink("link", "https://"));
+        insertLink(options) {
+          const selection = activeInputSelectionRef.current;
+          const selectionStart = Math.min(selection.start, selection.end);
+          const selectionEnd = Math.max(selection.start, selection.end);
+          const selectedText = draftMarkdownRef.current.slice(selectionStart, selectionEnd);
+          const text = options?.text ?? (selectedText.length > 0 ? selectedText : "Link");
+          const url = (options?.url ?? "https://").trim();
+          if (url.length > 0) {
+            runActiveInputCommand(() => activeInputRef.current?.insertLink(text, url));
+          }
         },
         invalidateLayoutMeasurements() {
           listRef.current?.clearCaches({ mode: "sizes" });

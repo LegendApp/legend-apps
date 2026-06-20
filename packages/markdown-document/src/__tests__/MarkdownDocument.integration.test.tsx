@@ -18,7 +18,9 @@ const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-
     clearInputInstances: () => void;
     clearRenderCounts: () => void;
     inputInstances: () => Array<{
+      insertLink: jest.Mock;
       setSelectionForVerticalNavigation: jest.Mock;
+      setSelection: jest.Mock;
     }>;
     inputRenderCount: (value: string) => number;
     textRenderCount: (markdown: string) => number;
@@ -4022,6 +4024,21 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.markdownById.get("d1:b0")).toBe("> ## Title");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("inserts links using the selected active block text", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Visit Legend")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+
+    await changeSelection(editorInput(renderer), 6, "Visit Legend".length);
+    await act(async () => {
+      commandsRef.current?.insertLink({ url: " https://legendapp.com " });
+    });
+
+    const [inputInstance] = __enrichedMarkdownTestHooks.inputInstances();
+    expect(inputInstance?.setSelection).toHaveBeenCalledWith(6, "Visit Legend".length);
+    expect(inputInstance?.insertLink).toHaveBeenCalledWith("Legend", "https://legendapp.com");
     expect(onError).not.toHaveBeenCalled();
   });
 

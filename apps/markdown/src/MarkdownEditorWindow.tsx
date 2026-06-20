@@ -43,6 +43,7 @@ import {
   getMarkdownStyleForAppearance,
 } from "./markdownAppearance";
 import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature";
+import { promptMarkdownLink } from "./promptMarkdownLink";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
@@ -103,14 +104,23 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
   });
+  const insertLink = useCallback(() => {
+    promptMarkdownLink()
+      .then((url) => {
+        if (url) {
+          session.documentCommandsRef.current?.insertLink({ url });
+        }
+      })
+      .catch(session.handleError);
+  }, [session.documentCommandsRef, session.handleError]);
 
   const renderSelectionToolbar = useCallback(
     (anchor: MarkdownSelectionAnchor) => (
       <MarkdownFloatingSurface anchor={anchor} coordinateSpace="content">
-        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating />
+        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating onInsertLink={insertLink} />
       </MarkdownFloatingSurface>
     ),
-    [session.documentCommandsRef],
+    [insertLink, session.documentCommandsRef],
   );
 
   useEffect(() => {
@@ -155,6 +165,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   useMarkdownMenus({
     documentCommandsRef: session.documentCommandsRef,
     onError: session.handleError,
+    onInsertLink: insertLink,
     onNewDocument: session.newMarkdownDocument,
     onOpenDocument: session.openMarkdownDialog,
     onOpenSettings: openSettingsWindow,
@@ -201,7 +212,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{session.lastError}</Text>
       ) : null}
       {formattingToolbarMode === "top" ? (
-        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} />
+        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={insertLink} />
       ) : null}
       <View style={styles.documentFrame}>
         <MarkdownDocument
@@ -227,6 +238,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
       {formattingToolbarMode === "bottom" ? (
         <MarkdownFormattingToolbar
           commandsRef={session.documentCommandsRef}
+          onInsertLink={insertLink}
           placement="bottom"
           style={styles.bottomToolbar}
         />
