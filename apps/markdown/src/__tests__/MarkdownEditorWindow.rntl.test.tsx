@@ -123,6 +123,9 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockInvalidateLayoutMeasurements.mockClear();
     mockUseMarkdownAppExit.mockClear();
     mockUseMarkdownWindowCloseRequest.mockClear();
+    mockSession.isDirty = false;
+    mockSession.isUntitledDocument = true;
+    mockSession.lastError = null;
   });
 
   it.each([
@@ -166,6 +169,18 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       handleError: mockSession.handleError,
       prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
     });
+    await view.unmount();
+  });
+
+  it("shows a quiet placeholder for a clean untitled document", async () => {
+    mockSession.isUntitledDocument = true;
+    mockSession.isDirty = false;
+    mockSession.lastError = null;
+
+    const view = await render(<MarkdownEditorWindow />);
+
+    expect(view.getByText("Untitled")).toBeTruthy();
+    expect(view.getByText("Start writing")).toBeTruthy();
     await view.unmount();
   });
 });

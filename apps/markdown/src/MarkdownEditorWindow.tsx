@@ -96,6 +96,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings),
     [appearanceSettings, layoutTheme],
   );
+  const showUntitledPlaceholder = session.isUntitledDocument && !session.isDirty && !session.lastError;
   const measurementSignature = useMemo(
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
@@ -215,6 +216,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={insertLink} />
       ) : null}
       <View style={styles.documentFrame}>
+        {showUntitledPlaceholder ? (
+          <View pointerEvents="none" style={styles.placeholder}>
+            <Text style={[styles.placeholderTitle, { color: displayTheme.colors.foreground }]}>Untitled</Text>
+            <Text style={[styles.placeholderText, { color: displayTheme.colors.mutedForeground }]}>Start writing</Text>
+          </View>
+        ) : null}
         <MarkdownDocument
           adapter={session.activeAdapter}
           autoFocusFirstBlock={session.isUntitledDocument}
@@ -255,6 +262,7 @@ const styles = StyleSheet.create({
   },
   documentFrame: {
     flex: 1,
+    position: "relative",
   },
   bottomToolbar: {
     bottom: 0,
@@ -262,6 +270,21 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 0,
     zIndex: 1,
+  },
+  placeholder: {
+    left: 40,
+    position: "absolute",
+    top: 48,
+    zIndex: 1,
+  },
+  placeholderText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  placeholderTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    lineHeight: 30,
   },
   error: {
     fontSize: 13,
