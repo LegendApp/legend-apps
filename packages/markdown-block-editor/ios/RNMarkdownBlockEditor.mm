@@ -754,6 +754,12 @@ static BOOL isEnrichedMarkdownInput(id view)
   return contentBounds;
 }
 
+- (void)resetCursorRects
+{
+  [super resetCursorRects];
+  [self addCursorRect:self.bounds cursor:NSCursor.IBeamCursor];
+}
+
 - (void)applyContentsHidden
 {
   for (NSView *subview in self.subviews) {
