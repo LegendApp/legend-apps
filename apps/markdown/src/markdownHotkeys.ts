@@ -2,6 +2,12 @@ import { createDefaultHotkeyState, KeyCodes, type HotkeyDefinition } from "@lege
 
 export const markdownHotkeyDefinitions = [
   {
+    defaultValue: `${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.MODIFIER_OPTION}+${KeyCodes.KEY_T}`,
+    description: "Show or hide the formatting toolbar.",
+    id: "toggleFormattingToolbar",
+    title: "Toggle Formatting Toolbar",
+  },
+  {
     defaultValue: `${KeyCodes.MODIFIER_OPTION}+${KeyCodes.KEY_UP}`,
     description: "Move the active block or selected blocks one position up.",
     id: "moveBlockUp",

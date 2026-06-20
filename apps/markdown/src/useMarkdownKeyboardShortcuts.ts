@@ -3,7 +3,10 @@ import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
 import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
 import { useEffect, useMemo, type RefObject } from "react";
 import { markdownHotkeyDefinitions } from "./markdownHotkeys";
-import { useMarkdownHotkeySettings } from "./markdownSettings";
+import {
+  toggleMarkdownFormattingToolbarModeSetting,
+  useMarkdownHotkeySettings,
+} from "./markdownSettings";
 
 type MarkdownKeyboardShortcutsOptions = {
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
@@ -18,6 +21,7 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKe
     focusLastBlock: () => documentCommandsRef.current?.focusLastBlock(),
     moveBlockDown: () => documentCommandsRef.current?.moveActiveBlockDown(),
     moveBlockUp: () => documentCommandsRef.current?.moveActiveBlockUp(),
+    toggleFormattingToolbar: toggleMarkdownFormattingToolbarModeSetting,
   }), [documentCommandsRef]);
 
   useHotkeys({

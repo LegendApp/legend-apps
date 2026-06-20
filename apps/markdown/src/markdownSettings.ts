@@ -344,6 +344,11 @@ export function setMarkdownFormattingToolbarModeSetting(formattingToolbarMode: M
   markdownSettings$.formattingToolbarMode.set(formattingToolbarMode);
 }
 
+export function toggleMarkdownFormattingToolbarModeSetting() {
+  const currentMode = getMarkdownFormattingToolbarModeSetting();
+  markdownSettings$.formattingToolbarMode.set(currentMode === "hidden" ? "selection" : "hidden");
+}
+
 export function setMarkdownFontFamilySetting(fontFamily: MarkdownFontFamilySetting) {
   markdownSettings$.fontFamily.set(fontFamily);
 }
