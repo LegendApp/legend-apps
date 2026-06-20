@@ -239,7 +239,10 @@ export function useMarkdownDocumentSession() {
     openDialogInFlight.current = true;
 
     try {
-      const paths = await openFileDialog();
+      const paths = await openFileDialog({
+        allowedFileTypes: markdownFileTypes,
+        canChooseFiles: true,
+      });
       const path = paths?.find(isMarkdownPath) ?? null;
 
       if (path) {
@@ -247,6 +250,8 @@ export function useMarkdownDocumentSession() {
         if (didFlush) {
           openSelectedFile(path);
         }
+      } else if (paths && paths.length > 0) {
+        handleError(new Error(`Choose a Markdown file (${markdownFileTypes.map((type) => `.${type}`).join(", ")}).`));
       }
     } catch (error) {
       handleError(error);
