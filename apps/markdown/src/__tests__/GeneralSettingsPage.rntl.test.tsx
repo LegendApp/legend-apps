@@ -36,17 +36,21 @@ jest.mock("../markdownSettings", () => ({
   useMarkdownToolbarLayoutSetting: (layoutId: "selection" | "top") => mockSettings.toolbarLayouts[layoutId],
 }));
 
-function radioChecked(view: RenderResult, label: string) {
-  return radioOption(view, label).props.accessibilityState?.checked;
+function segmentedSelected(view: RenderResult, label: string) {
+  return segmentedOption(view, label).props.accessibilityState?.selected;
 }
 
-function radioOption(view: RenderResult, label: string) {
-  const radioText = view.getByText(label);
-  const radio = radioText.parent;
-  if (!radio) {
-    throw new Error(`Missing radio parent for ${label}`);
+function segmentedOption(view: RenderResult, label: string) {
+  const optionText = view.getByText(label);
+  const option = optionText.parent;
+  if (!option) {
+    throw new Error(`Missing segmented option parent for ${label}`);
   }
-  return radio;
+  return option;
+}
+
+function switchControl(view: RenderResult) {
+  return view.getByLabelText("Autosave");
 }
 
 describe("GeneralSettingsPage", () => {
@@ -69,24 +73,24 @@ describe("GeneralSettingsPage", () => {
     await view.unmount();
   });
 
-  it("updates startup autosave and toolbar mode radio settings", async () => {
+  it("updates startup autosave and toolbar mode settings", async () => {
     const view = await render(<GeneralSettingsPage />);
 
-    expect(radioChecked(view, "New Document")).toBe(true);
-    expect(radioChecked(view, "Enabled")).toBe(true);
-    expect(radioChecked(view, "Above Selection")).toBe(true);
+    expect(segmentedSelected(view, "New")).toBe(true);
+    expect(switchControl(view).props.accessibilityState?.checked).toBe(true);
+    expect(segmentedSelected(view, "Floating")).toBe(true);
 
-    await fireEvent.press(radioOption(view, "Last Document"));
-    await fireEvent.press(radioOption(view, "Disabled"));
-    await fireEvent.press(radioOption(view, "Bottom Toolbar"));
+    await fireEvent.press(segmentedOption(view, "Last"));
+    await fireEvent.press(switchControl(view));
+    await fireEvent.press(segmentedOption(view, "Bottom"));
     await view.rerender(<GeneralSettingsPage />);
 
     expect(mockSetMarkdownStartupBehaviorSetting).toHaveBeenCalledWith("lastDocument");
     expect(mockSetMarkdownAutosaveSetting).toHaveBeenCalledWith("disabled");
     expect(mockSetMarkdownFormattingToolbarModeSetting).toHaveBeenCalledWith("bottom");
-    expect(radioChecked(view, "Last Document")).toBe(true);
-    expect(radioChecked(view, "Disabled")).toBe(true);
-    expect(radioChecked(view, "Bottom Toolbar")).toBe(true);
+    expect(segmentedSelected(view, "Last")).toBe(true);
+    expect(switchControl(view).props.accessibilityState?.checked).toBe(false);
+    expect(segmentedSelected(view, "Bottom")).toBe(true);
     await view.unmount();
   });
 });

@@ -64,13 +64,15 @@ export function SegmentedOptions<Value extends string>({
 }
 
 export type SwitchControlProps = {
+  accessibilityLabel?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 };
 
-export function SwitchControl({ checked, onChange }: SwitchControlProps) {
+export function SwitchControl({ accessibilityLabel, checked, onChange }: SwitchControlProps) {
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="switch"
       accessibilityState={{ checked }}
       className="flex-row items-center gap-2"

@@ -1,11 +1,16 @@
-import { RadioOption } from "@legend-desktop/design-system";
-import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
-import { View } from "react-native";
+import {
+  SegmentedOptions,
+  SwitchControl,
+} from "@legend-desktop/design-system";
+import {
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+} from "@legend-desktop/settings-window";
 import {
   setMarkdownAutosaveSetting,
   setMarkdownStartupBehaviorSetting,
   setMarkdownFormattingToolbarModeSetting,
-  type MarkdownAutosaveSetting,
   type MarkdownFormattingToolbarModeSetting,
   type MarkdownStartupBehaviorSetting,
   useMarkdownAutosaveSetting,
@@ -14,6 +19,18 @@ import {
 } from "../markdownSettings";
 import { ToolbarLayoutEditor } from "./ToolbarLayoutEditor";
 
+const startupBehaviorOptions = [
+  { label: "New", value: "newDocument" },
+  { label: "Last", value: "lastDocument" },
+] as const satisfies readonly { label: string; value: MarkdownStartupBehaviorSetting }[];
+
+const formattingToolbarModeOptions = [
+  { label: "Floating", value: "selection" },
+  { label: "Top", value: "top" },
+  { label: "Bottom", value: "bottom" },
+  { label: "Hidden", value: "hidden" },
+] as const satisfies readonly { label: string; value: MarkdownFormattingToolbarModeSetting }[];
+
 export function GeneralSettingsPage() {
   const startupBehavior = useMarkdownStartupBehaviorSetting();
   const autosave = useMarkdownAutosaveSetting();
@@ -21,65 +38,56 @@ export function GeneralSettingsPage() {
 
   return (
     <SettingsPage>
-      <SettingsSection card={false} first title="On Startup">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownStartupBehaviorSetting>
-            label="New Document"
-            onSelect={setMarkdownStartupBehaviorSetting}
-            selected={startupBehavior === "newDocument"}
-            value="newDocument"
-          />
-          <RadioOption<MarkdownStartupBehaviorSetting>
-            label="Last Document"
-            onSelect={setMarkdownStartupBehaviorSetting}
-            selected={startupBehavior === "lastDocument"}
-            value="lastDocument"
-          />
-        </View>
+      <SettingsSection
+        card={false}
+        contentClassName="gap-3"
+        description="Choose how Markdown opens documents, saves changes, and presents formatting controls."
+        first
+        title="Editor"
+      >
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownStartupBehaviorSetting}
+              options={startupBehaviorOptions}
+              value={startupBehavior}
+            />
+          )}
+          description="Choose the document that appears when Markdown starts."
+          title="Startup"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SwitchControl
+              accessibilityLabel="Autosave"
+              checked={autosave === "enabled"}
+              onChange={(checked) => setMarkdownAutosaveSetting(checked ? "enabled" : "disabled")}
+            />
+          )}
+          description="Save file-backed documents automatically while you edit."
+          title="Autosave"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownFormattingToolbarModeSetting}
+              options={formattingToolbarModeOptions}
+              value={formattingToolbarMode}
+            />
+          )}
+          description="Pick where formatting controls appear while editing."
+          title="Formatting Toolbar"
+        />
       </SettingsSection>
-      <SettingsSection card={false} title="Autosave">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownAutosaveSetting>
-            label="Enabled"
-            onSelect={setMarkdownAutosaveSetting}
-            selected={autosave === "enabled"}
-            value="enabled"
-          />
-          <RadioOption<MarkdownAutosaveSetting>
-            label="Disabled"
-            onSelect={setMarkdownAutosaveSetting}
-            selected={autosave === "disabled"}
-            value="disabled"
-          />
-        </View>
-      </SettingsSection>
-      <SettingsSection card={false} title="Formatting Toolbar">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownFormattingToolbarModeSetting>
-            label="Above Selection"
-            onSelect={setMarkdownFormattingToolbarModeSetting}
-            selected={formattingToolbarMode === "selection"}
-            value="selection"
-          />
-          <RadioOption<MarkdownFormattingToolbarModeSetting>
-            label="Top Toolbar"
-            onSelect={setMarkdownFormattingToolbarModeSetting}
-            selected={formattingToolbarMode === "top"}
-            value="top"
-          />
-          <RadioOption<MarkdownFormattingToolbarModeSetting>
-            label="Bottom Toolbar"
-            onSelect={setMarkdownFormattingToolbarModeSetting}
-            selected={formattingToolbarMode === "bottom"}
-            value="bottom"
-          />
-          <RadioOption<MarkdownFormattingToolbarModeSetting>
-            label="Hidden"
-            onSelect={setMarkdownFormattingToolbarModeSetting}
-            selected={formattingToolbarMode === "hidden"}
-            value="hidden"
-          />
-        </View>
+      <SettingsSection
+        card={false}
+        contentClassName="gap-6"
+        description="Tune which controls are shown and the order they appear in."
+        title="Toolbar Layout"
+      >
         <ToolbarLayoutEditor
           description="Choose the controls and order used by the top and bottom toolbars."
           layoutId="top"

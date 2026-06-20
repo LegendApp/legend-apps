@@ -1,9 +1,12 @@
 import { ThemeSelectorSection } from "@legend-desktop/appearance-settings";
-import { RadioOption } from "@legend-desktop/design-system";
+import { SegmentedOptions } from "@legend-desktop/design-system";
 import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-desktop/theme";
-import { SettingsPage, SettingsSection } from "@legend-desktop/settings-window";
+import {
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+} from "@legend-desktop/settings-window";
 import { useMemo } from "react";
-import { View } from "react-native";
 import {
   setMarkdownContentWidthSetting,
   setMarkdownDocumentDensitySetting,
@@ -26,6 +29,38 @@ import {
   useMarkdownLineHeightSetting,
 } from "../markdownSettings";
 import { loadMarkdownUserThemesSync } from "../userThemes";
+
+const fontFamilyOptions = [
+  { label: "Theme", value: "system" },
+  { label: "Serif", value: "serif" },
+  { label: "Mono", value: "mono" },
+] as const satisfies readonly { label: string; value: MarkdownFontFamilySetting }[];
+
+const fontSizeOptions = [
+  { label: "Small", value: "small" },
+  { label: "Default", value: "default" },
+  { label: "Large", value: "large" },
+  { label: "XL", value: "xlarge" },
+] as const satisfies readonly { label: string; value: MarkdownFontSizeSetting }[];
+
+const lineHeightOptions = [
+  { label: "Compact", value: "compact" },
+  { label: "Normal", value: "normal" },
+  { label: "Relaxed", value: "relaxed" },
+] as const satisfies readonly { label: string; value: MarkdownLineHeightSetting }[];
+
+const contentWidthOptions = [
+  { label: "Narrow", value: "narrow" },
+  { label: "Standard", value: "standard" },
+  { label: "Wide", value: "wide" },
+  { label: "Full", value: "full" },
+] as const satisfies readonly { label: string; value: MarkdownContentWidthSetting }[];
+
+const densityOptions = [
+  { label: "Compact", value: "compact" },
+  { label: "Comfortable", value: "comfortable" },
+  { label: "Spacious", value: "spacious" },
+] as const satisfies readonly { label: string; value: MarkdownDocumentDensitySetting }[];
 
 function formatThemeLabel(name: string) {
   return name
@@ -70,127 +105,72 @@ export function AppearanceSettingsPage() {
         themes={layoutThemeOptions}
         title="Layout Theme"
       />
-      <SettingsSection card={false} title="Font">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownFontFamilySetting>
-            label="Display Theme"
-            onSelect={setMarkdownFontFamilySetting}
-            selected={selectedFontFamily === "system"}
-            value="system"
-          />
-          <RadioOption<MarkdownFontFamilySetting>
-            label="Serif"
-            onSelect={setMarkdownFontFamilySetting}
-            selected={selectedFontFamily === "serif"}
-            value="serif"
-          />
-          <RadioOption<MarkdownFontFamilySetting>
-            label="Monospace"
-            onSelect={setMarkdownFontFamilySetting}
-            selected={selectedFontFamily === "mono"}
-            value="mono"
-          />
-        </View>
-      </SettingsSection>
-      <SettingsSection card={false} title="Font Size">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownFontSizeSetting>
-            label="Small"
-            onSelect={setMarkdownFontSizeSetting}
-            selected={selectedFontSize === "small"}
-            value="small"
-          />
-          <RadioOption<MarkdownFontSizeSetting>
-            label="Default"
-            onSelect={setMarkdownFontSizeSetting}
-            selected={selectedFontSize === "default"}
-            value="default"
-          />
-          <RadioOption<MarkdownFontSizeSetting>
-            label="Large"
-            onSelect={setMarkdownFontSizeSetting}
-            selected={selectedFontSize === "large"}
-            value="large"
-          />
-          <RadioOption<MarkdownFontSizeSetting>
-            label="Extra Large"
-            onSelect={setMarkdownFontSizeSetting}
-            selected={selectedFontSize === "xlarge"}
-            value="xlarge"
-          />
-        </View>
-      </SettingsSection>
-      <SettingsSection card={false} title="Line Height">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownLineHeightSetting>
-            label="Compact"
-            onSelect={setMarkdownLineHeightSetting}
-            selected={selectedLineHeight === "compact"}
-            value="compact"
-          />
-          <RadioOption<MarkdownLineHeightSetting>
-            label="Normal"
-            onSelect={setMarkdownLineHeightSetting}
-            selected={selectedLineHeight === "normal"}
-            value="normal"
-          />
-          <RadioOption<MarkdownLineHeightSetting>
-            label="Relaxed"
-            onSelect={setMarkdownLineHeightSetting}
-            selected={selectedLineHeight === "relaxed"}
-            value="relaxed"
-          />
-        </View>
-      </SettingsSection>
-      <SettingsSection card={false} title="Maximum Document Width">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownContentWidthSetting>
-            label="Narrow"
-            onSelect={setMarkdownContentWidthSetting}
-            selected={selectedContentWidth === "narrow"}
-            value="narrow"
-          />
-          <RadioOption<MarkdownContentWidthSetting>
-            label="Standard"
-            onSelect={setMarkdownContentWidthSetting}
-            selected={selectedContentWidth === "standard"}
-            value="standard"
-          />
-          <RadioOption<MarkdownContentWidthSetting>
-            label="Wide"
-            onSelect={setMarkdownContentWidthSetting}
-            selected={selectedContentWidth === "wide"}
-            value="wide"
-          />
-          <RadioOption<MarkdownContentWidthSetting>
-            label="Full"
-            onSelect={setMarkdownContentWidthSetting}
-            selected={selectedContentWidth === "full"}
-            value="full"
-          />
-        </View>
-      </SettingsSection>
-      <SettingsSection card={false} title="Density">
-        <View accessibilityRole="radiogroup" className="gap-2">
-          <RadioOption<MarkdownDocumentDensitySetting>
-            label="Compact"
-            onSelect={setMarkdownDocumentDensitySetting}
-            selected={selectedDensity === "compact"}
-            value="compact"
-          />
-          <RadioOption<MarkdownDocumentDensitySetting>
-            label="Comfortable"
-            onSelect={setMarkdownDocumentDensitySetting}
-            selected={selectedDensity === "comfortable"}
-            value="comfortable"
-          />
-          <RadioOption<MarkdownDocumentDensitySetting>
-            label="Spacious"
-            onSelect={setMarkdownDocumentDensitySetting}
-            selected={selectedDensity === "spacious"}
-            value="spacious"
-          />
-        </View>
+      <SettingsSection
+        card={false}
+        contentClassName="gap-3"
+        description="Shape the reading surface without changing the Markdown source."
+        title="Document"
+      >
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownFontFamilySetting}
+              options={fontFamilyOptions}
+              value={selectedFontFamily}
+            />
+          )}
+          description="Use the theme typeface, a serif reading face, or a fixed-width face."
+          title="Font"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownFontSizeSetting}
+              options={fontSizeOptions}
+              value={selectedFontSize}
+            />
+          )}
+          description="Adjust the base text size for the editor."
+          title="Font Size"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownLineHeightSetting}
+              options={lineHeightOptions}
+              value={selectedLineHeight}
+            />
+          )}
+          description="Change vertical rhythm for dense editing or slower reading."
+          title="Line Height"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownContentWidthSetting}
+              options={contentWidthOptions}
+              value={selectedContentWidth}
+            />
+          )}
+          description="Set the maximum width used by the document body."
+          title="Maximum Width"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SegmentedOptions
+              onChange={setMarkdownDocumentDensitySetting}
+              options={densityOptions}
+              value={selectedDensity}
+            />
+          )}
+          description="Control the outer padding and spacing between blocks."
+          title="Density"
+        />
       </SettingsSection>
     </SettingsPage>
   );
