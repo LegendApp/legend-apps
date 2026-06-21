@@ -1,0 +1,18 @@
+{
+  "name": "@legend-desktop/app-code",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@legend-desktop/app-exit": "0.0.0",
+    "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/native-menu": "0.0.0",
+    "@legend-desktop/recent-documents": "0.0.0",
+    "@legend-desktop/syntax-parser": "workspace:*",
+    "@legend-desktop/theme": "workspace:*",
+    "@legend-desktop/window-manager": "0.0.0",
+    "@legend-desktop/windows": "0.0.0",
+    "@legendapp/list": "^3.0.6",
+    "expo-file-system": "~19.0.21"
+  }
+}

@@ -61,6 +61,7 @@ export function ensureMacOSDevWorkspace(manifest: AppManifest) {
   const workspaceDir = getMacOSAppDevWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
   ensureDevWorkspaceLinks();
+  ensureDevAppRoot(manifest);
   copyMacOSTemplate(workspaceDir);
   patchMacOSProjectForApp(workspaceDir, manifest);
   return workspaceDir;
@@ -102,6 +103,15 @@ function ensureReleaseAppRoot(manifest: AppManifest, configPath: string) {
   ensureSymlink(path.join(shellDir, "app.config.ts"), path.join(appRoot, "app.config.ts"), "file");
   ensureSymlink(path.join(shellDir, "react-native.config.js"), path.join(appRoot, "react-native.config.js"), "file");
   writeReleasePackageJson(manifest, configPath, appRoot);
+}
+
+function ensureDevAppRoot(manifest: AppManifest) {
+  const appRoot = path.join(workspaceRoot, "dev", manifest.id);
+
+  fs.mkdirSync(appRoot, { recursive: true });
+  ensureSymlink(path.join(shellDir, "app.config.ts"), path.join(appRoot, "app.config.ts"), "file");
+  ensureSymlink(path.join(shellDir, "react-native.config.js"), path.join(appRoot, "react-native.config.js"), "file");
+  ensureSymlink(path.join(shellDir, "package.json"), path.join(appRoot, "package.json"), "file");
 }
 
 export function installMacOSPods(
