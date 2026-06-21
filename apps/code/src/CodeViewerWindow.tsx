@@ -7,9 +7,13 @@ import {
   type SyntaxStyle,
 } from "@legend-desktop/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
-import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import {
+  useVirtualizedDocumentRows,
+  VirtualizedFixedDocumentList,
+  type VirtualizedDocumentSnapshot,
+  type VirtualizedFixedDocumentListRenderRowProps,
+} from "@legend-desktop/virtualized-document";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { codeFileTypes } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
@@ -17,6 +21,12 @@ import { setCodeViewerWindowOptions } from "./codeWindows";
 
 type CodeViewerWindowProps = {
   launchArguments?: string[];
+};
+
+type CodeViewerTiming = {
+  lineCount: number;
+  tokenCount: number;
+  tokenizeMs: number;
 };
 
 const rowHeight = 22;
@@ -40,15 +50,9 @@ type CodeViewerState =
     filePath: string;
     error: null;
     document: SyntaxDocument;
-    lineCount: number;
-    lineCache: Map<number, SyntaxRenderLine>;
-    refreshKey: number;
+    initialLines: SyntaxRenderLine[];
     styles: SyntaxStyle[];
-    timing: {
-      lineCount: number;
-      tokenCount: number;
-      tokenizeMs: number;
-    };
+    timing: CodeViewerTiming;
   }
   | {
     status: "error";
@@ -63,7 +67,7 @@ const emptyState: CodeViewerState = {
   error: null,
 };
 
-function createStyleMap(styles: SyntaxStyle[]) {
+function createStyleMap(styles: readonly SyntaxStyle[]) {
   return new Map(styles.map((style) => [style.id, style]));
 }
 
@@ -71,23 +75,43 @@ function formatLineCount(count: number) {
   return `${count.toLocaleString()} ${count === 1 ? "line" : "lines"}`;
 }
 
-function createLineCache(lines: SyntaxRenderLine[]) {
-  const cache = new Map<number, SyntaxRenderLine>();
-  for (const line of lines) {
-    cache.set(line.index, line);
-  }
-  return cache;
-}
-
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<CodeViewerState>(emptyState);
-  const stateRef = useRef<CodeViewerState>(emptyState);
-  const stylesForState = state.status === "loaded" ? state.styles : [];
+  const documentSnapshot = useMemo<VirtualizedDocumentSnapshot<SyntaxDocument, SyntaxRenderLine, SyntaxStyle, CodeViewerTiming> | null>(
+    () => state.status === "loaded"
+      ? {
+          document: state.document,
+          initialRows: state.initialLines,
+          itemCount: state.document.lineCount,
+          styles: state.styles,
+          timing: state.timing,
+        }
+      : null,
+    [state],
+  );
+  const getRowIndex = useCallback((line: SyntaxRenderLine) => line.index, []);
+  const getRows = useCallback((document: SyntaxDocument, start: number, count: number) => (
+    document.getRenderLines(start, count)
+  ), []);
+  const getStyles = useCallback((document: SyntaxDocument) => document.getStyles(), []);
+  const getTiming = useCallback((document: SyntaxDocument) => {
+    const timing = document.getTiming();
+    return {
+      lineCount: timing.lineCount,
+      tokenCount: timing.tokenCount,
+      tokenizeMs: timing.tokenizeMs,
+    };
+  }, []);
+  const virtualizedLines = useVirtualizedDocumentRows({
+    getRowIndex,
+    getRows,
+    getStyles,
+    getTiming,
+    snapshot: documentSnapshot,
+  });
+  const stylesForState = virtualizedLines.styles;
   const tokenStyleById = useMemo(() => createStyleMap(stylesForState), [stylesForState]);
-  const lineCache = state.status === "loaded" ? state.lineCache : null;
-  const lineCount = state.status === "loaded" ? state.lineCount : 0;
-  const lineIndexes = useMemo(() => Array.from({ length: lineCount }, (_, index) => index), [lineCount]);
   const fileName = state.filePath ? getFilename(state.filePath) : "No file";
   const backgroundColor = displayTheme.colors.background;
   const mutedColor = displayTheme.colors.muted;
@@ -109,9 +133,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         filePath,
         error: null,
         document: highlighted.document,
-        lineCount: highlighted.document.lineCount,
-        lineCache: createLineCache(highlighted.initialLines),
-        refreshKey: 0,
+        initialLines: highlighted.initialLines,
         styles: highlighted.styles,
         timing: {
           lineCount: highlighted.timing.lineCount,
@@ -129,60 +151,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       });
     }
   }, []);
-
-  const requestLineRange = useCallback((start: number, count: number) => {
-    const loadedState = stateRef.current;
-    if (loadedState.status === "loaded") {
-      const safeStart = Math.max(0, Math.floor(start));
-      const safeEnd = Math.min(loadedState.lineCount, safeStart + Math.max(0, Math.ceil(count)));
-
-      if (safeStart < safeEnd) {
-        let hasMissingLine = false;
-        for (let index = safeStart; index < safeEnd; index += 1) {
-          if (!loadedState.lineCache.has(index)) {
-            hasMissingLine = true;
-            break;
-          }
-        }
-
-        if (hasMissingLine) {
-          const fetchedLines = loadedState.document.getRenderLines(safeStart, safeEnd - safeStart);
-          const styles = loadedState.document.getStyles();
-          const timing = loadedState.document.getTiming();
-
-          setState((currentState) => {
-            if (currentState.status !== "loaded" || currentState.document !== loadedState.document) {
-              return currentState;
-            }
-
-            const nextLineCache = new Map(currentState.lineCache);
-            for (const line of fetchedLines) {
-              nextLineCache.set(line.index, line);
-            }
-
-            return {
-              ...currentState,
-              lineCache: nextLineCache,
-              refreshKey: currentState.refreshKey + 1,
-              styles,
-              timing: {
-                lineCount: timing.lineCount,
-                tokenCount: timing.tokenCount,
-                tokenizeMs: timing.tokenizeMs,
-              },
-            };
-          });
-        }
-      }
-    }
-  }, []);
-
-  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, layoutMeasurement } = event.nativeEvent;
-    const start = Math.floor(contentOffset.y / rowHeight) - lineOverscan;
-    const count = Math.ceil(layoutMeasurement.height / rowHeight) + lineOverscan * 2;
-    requestLineRange(start, count);
-  }, [requestLineRange]);
 
   const openCodeDialog = useCallback(async () => {
     const paths = await openFileDialog({
@@ -204,8 +172,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   }, [loadFile, state.filePath]);
 
   const renderLine = useCallback(
-    ({ item: lineIndex }: LegendListRenderItemProps<number>) => {
-      const line = lineCache?.get(lineIndex);
+    ({ index: lineIndex, row: line }: VirtualizedFixedDocumentListRenderRowProps<SyntaxRenderLine>) => {
       return (
         <View style={styles.lineRow}>
           <Text selectable={false} style={[styles.lineNumber, { color: mutedColor }]}>
@@ -232,12 +199,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         </View>
       );
     },
-    [foregroundColor, lineCache, mutedColor, tokenStyleById],
+    [foregroundColor, mutedColor, tokenStyleById],
   );
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
 
   useEffect(() => {
     const launchFile = getLaunchCodeFile(launchArguments);
@@ -263,8 +226,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             {fileName}
           </Text>
           <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
-            {state.status === "loaded" && state.timing
-              ? `${formatLineCount(state.timing.lineCount)} · ${state.timing.tokenCount.toLocaleString()} tokens · ${state.timing.tokenizeMs.toFixed(1)} ms`
+            {state.status === "loaded" && virtualizedLines.timing
+              ? `${formatLineCount(virtualizedLines.timing.lineCount)} · ${virtualizedLines.timing.tokenCount.toLocaleString()} tokens · ${virtualizedLines.timing.tokenizeMs.toFixed(1)} ms`
               : state.status === "loading"
                 ? "Loading..."
                 : state.filePath ?? "Open a .ts or .tsx file"}
@@ -284,15 +247,15 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       {state.error ? (
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
       ) : null}
-      {lineIndexes.length > 0 ? (
-        <LegendList
-          data={lineIndexes}
-          extraData={state.status === "loaded" ? state.refreshKey : 0}
-          getFixedItemSize={() => rowHeight}
-          keyExtractor={(lineIndex) => String(lineIndex)}
-          onScroll={handleScroll}
-          recycleItems
-          renderItem={renderLine}
+      {virtualizedLines.itemIndexes.length > 0 ? (
+        <VirtualizedFixedDocumentList
+          itemIndexes={virtualizedLines.itemIndexes}
+          lineOverscan={lineOverscan}
+          requestRange={virtualizedLines.requestRange}
+          rowCache={virtualizedLines.rowCache}
+          rowHeight={rowHeight}
+          rowsVersion={virtualizedLines.rowsVersion}
+          renderRow={renderLine}
           style={styles.list}
         />
       ) : (

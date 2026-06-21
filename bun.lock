@@ -31,10 +31,9 @@
         "@legend-desktop/recent-documents": "0.0.0",
         "@legend-desktop/syntax-parser": "workspace:*",
         "@legend-desktop/theme": "workspace:*",
+        "@legend-desktop/virtualized-document": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
-        "@legendapp/list": "^3.0.6",
-        "expo-file-system": "~19.0.21",
       },
     },
     "apps/markdown": {
@@ -465,6 +464,17 @@
         "@legendapp/state": "^3.0.0-beta.42",
         "react-native-enriched-markdown": "0.5.0",
         "uniwind": "^1.6.3",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/virtualized-document": {
+      "name": "@legend-desktop/virtualized-document",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legendapp/list": "^3.0.6",
       },
       "peerDependencies": {
         "react": "*",
@@ -910,6 +920,8 @@
     "@legend-desktop/text-input-search": ["@legend-desktop/text-input-search@workspace:packages/text-input-search"],
 
     "@legend-desktop/theme": ["@legend-desktop/theme@workspace:packages/theme"],
+
+    "@legend-desktop/virtualized-document": ["@legend-desktop/virtualized-document@workspace:packages/virtualized-document"],
 
     "@legend-desktop/window-controls": ["@legend-desktop/window-controls@workspace:packages/window-controls"],
 
