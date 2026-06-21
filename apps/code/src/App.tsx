@@ -1,7 +1,7 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
 import { useNativeMenu, type NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
-import { addWindowClosedListener } from "@legend-desktop/window-manager";
+import { addWindowClosedListener, closeWindow } from "@legend-desktop/window-manager";
 import { useEffect, useRef } from "react";
 import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
 import { installCodeBenchmarkHook } from "./codeBenchmark";
@@ -16,6 +16,7 @@ warmCodeSyntaxHighlighters().catch(reportCodeAppControllerError);
 
 declare global {
   var __legendCodeBenchmarkOpenFile: ((filePath: string) => Promise<void>) | undefined;
+  var __legendCodeBenchmarkCloseFile: (() => Promise<void>) | undefined;
 }
 
 type CodeAppProps = {
@@ -29,6 +30,9 @@ function reportCodeAppControllerError(error: unknown) {
 
 if (__DEV__) {
   globalThis.__legendCodeBenchmarkOpenFile = (filePath: string) => openCodeViewerWindow([filePath]);
+  globalThis.__legendCodeBenchmarkCloseFile = async () => {
+    await closeWindow(codeViewerWindowIdentifier);
+  };
 }
 
 async function openCodeViewerForSelectedFile() {

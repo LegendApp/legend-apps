@@ -22,6 +22,10 @@ import { codeFileTypes, codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
+const debugPrefix = "[DEBUG-code-cold-v1]";
+let debugSequence = 0;
+const moduleEvaluatedAt = nowMs();
+
 type CodeViewerWindowProps = {
   launchArguments?: string[];
 };
@@ -106,6 +110,16 @@ function formatLineCount(count: number) {
 
 function nowMs() {
   return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function debugLog(event: string, payload: Record<string, unknown>) {
+  if (__DEV__) {
+    console.info(`${debugPrefix} ${event} ${JSON.stringify({
+      seq: ++debugSequence,
+      t: Number(nowMs().toFixed(1)),
+      ...payload,
+    })}`);
+  }
 }
 
 function formatMs(value: number) {
@@ -264,7 +278,57 @@ function measureAfterEffect(callback: (timing: {
   });
 }
 
+type RowLayoutDebugBatch = {
+  count: number;
+  first: number | null;
+  highlighted: number;
+  last: number | null;
+  missing: number;
+  plain: number;
+};
+
+let rowLayoutBatch: RowLayoutDebugBatch | null = null;
+
+function recordRowLayout(index: number, line: SyntaxRenderLine | undefined) {
+  if (__DEV__) {
+    rowLayoutBatch ??= {
+      count: 0,
+      first: null,
+      highlighted: 0,
+      last: null,
+      missing: 0,
+      plain: 0,
+    };
+    rowLayoutBatch.count += 1;
+    rowLayoutBatch.first = rowLayoutBatch.first === null ? index : Math.min(rowLayoutBatch.first, index);
+    rowLayoutBatch.last = rowLayoutBatch.last === null ? index : Math.max(rowLayoutBatch.last, index);
+    if (!line) {
+      rowLayoutBatch.missing += 1;
+    } else if (line.tokens.length === 0) {
+      rowLayoutBatch.plain += 1;
+    } else {
+      rowLayoutBatch.highlighted += 1;
+    }
+
+    if (rowLayoutBatch.count === 1) {
+      requestAnimationFrame(() => {
+        const completedBatch = rowLayoutBatch;
+        rowLayoutBatch = null;
+        if (completedBatch) {
+          debugLog("row.layoutFrame", completedBatch as unknown as Record<string, unknown>);
+        }
+      });
+    }
+  }
+}
+
+debugLog("module.evaluated", {
+  moduleEvaluatedAt,
+});
+
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<CodeViewerState>(emptyState);
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
@@ -307,6 +371,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     return toCodeViewerTiming(document.getTiming(), 0);
   }, []);
   const virtualizedLines = useVirtualizedDocumentRows({
+    debugName: "code",
     getRowIndex,
     getRows,
     getStyles,
@@ -322,8 +387,32 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const foregroundColor = displayTheme.colors.foreground;
   const borderColor = displayTheme.colors.border;
 
+  debugLog("window.render", {
+    cacheSize: virtualizedLines.rowCache.size,
+    itemCount: virtualizedLines.itemIndexes.length,
+    renderCount: renderCountRef.current,
+    rowsVersion: virtualizedLines.rowsVersion,
+    state: state.status,
+  });
+
+  useEffect(() => {
+    debugLog("window.mounted", {
+      sinceModuleMs: Number((nowMs() - moduleEvaluatedAt).toFixed(1)),
+    });
+
+    return () => {
+      debugLog("window.unmounted", {
+        renderCount: renderCountRef.current,
+      });
+    };
+  }, []);
+
   const loadFile = useCallback(async (filePath: string) => {
     const loadStartedAt = nowMs();
+    debugLog("load.start", {
+      filePath,
+      language: getCodeLanguage(filePath),
+    });
     const trace: CodeViewerLoadTrace = {
       document: null,
       filePath,
@@ -349,6 +438,11 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       trace.nativeResolvedAt = loadFinishedAt;
       logCodeLoadTiming(filePath, timing);
       trace.setStateAt = nowMs();
+      debugLog("load.setLoaded", {
+        filePath,
+        lineCount: highlighted.document.lineCount,
+        nativeTotalMs: Number(timing.nativeTotalMs.toFixed(1)),
+      });
       setState({
         status: "loaded",
         filePath,
@@ -386,9 +480,18 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           timeoutAt,
           trace,
         });
+        const initialHighlightCount = Math.min(initialRequestRowCount, state.document.lineCount);
+        const rangeKey = `0:${initialHighlightCount}`;
+        if (initialHighlightCount > 0 && highlightedInitialRangeRef.current !== rangeKey) {
+          highlightedInitialRangeRef.current = rangeKey;
+          virtualizedLines.requestRange(0, initialHighlightCount, {
+            force: true,
+            reason: "highlight",
+          });
+        }
       });
     }
-  }, [state]);
+  }, [state, virtualizedLines]);
 
   useEffect(() => {
     const loadTrace = loadTraceRef.current;
@@ -448,7 +551,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const renderLine = useCallback(
     ({ index: lineIndex, row: line }: VirtualizedFixedDocumentListRenderRowProps<SyntaxRenderLine>) => {
       return (
-        <View style={styles.lineRow}>
+        <View
+          onLayout={() => recordRowLayout(lineIndex, line)}
+          style={styles.lineRow}
+        >
           <Text selectable={false} style={[styles.lineNumber, { color: mutedColor }]}>
             {lineIndex + 1}
           </Text>
@@ -520,6 +626,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       ) : null}
       {virtualizedLines.itemIndexes.length > 0 ? (
         <VirtualizedFixedDocumentList
+          debugName="code"
           initialRequestRowCount={initialRequestRowCount}
           itemIndexes={virtualizedLines.itemIndexes}
           lineOverscan={lineOverscan}

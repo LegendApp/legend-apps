@@ -67,7 +67,7 @@ std::shared_ptr<Promise<SyntaxFileLoadResult>> HybridSyntaxParser::loadCodeFile(
     const auto initialLinesStartedAt = SyntaxClock::now();
     SyntaxFileLoadResult result;
     result.document = document;
-    result.initialLines = document->getRenderLines(0, initialLineCount);
+    result.initialLines = document->getPlainLines(0, initialLineCount);
     const auto initialLinesFinishedAt = SyntaxClock::now();
     document->setInitialLoadTiming(
         elapsedSyntaxMs(initialLinesStartedAt, initialLinesFinishedAt),

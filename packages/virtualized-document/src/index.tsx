@@ -28,6 +28,7 @@ export type UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming> 
   getRows: (document: TDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => readonly TRow[];
   getStyles?: (document: TDocument) => readonly TStyle[];
   getTiming?: (document: TDocument) => TTiming;
+  debugName?: string;
   snapshot: VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> | null;
 };
 
@@ -57,6 +58,7 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
 };
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
+  debugName?: string;
   initialRequestRowCount?: number;
   itemIndexes: number[];
   onInitialRowsRequested?: (start: number, count: number) => void;
@@ -70,6 +72,63 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   rowHeight: number;
   style?: StyleProp<ViewStyle>;
 };
+
+const debugPrefix = "[DEBUG-code-cold-v1]";
+let debugSequence = 0;
+
+function debugNowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function debugLog(debugName: string | undefined, event: string, payload: Record<string, unknown>) {
+  if (__DEV__ && debugName) {
+    console.info(`${debugPrefix} ${event} ${JSON.stringify({
+      debugName,
+      seq: ++debugSequence,
+      t: Number(debugNowMs().toFixed(1)),
+      ...payload,
+    })}`);
+  }
+}
+
+type RenderItemDebugBatch = {
+  count: number;
+  first: number | null;
+  last: number | null;
+  missing: number;
+  present: number;
+};
+
+function recordRenderItemDebug(debugName: string | undefined, batchRef: { current: RenderItemDebugBatch | null }, index: number, hasRow: boolean) {
+  if (__DEV__ && debugName) {
+    batchRef.current ??= {
+      count: 0,
+      first: null,
+      last: null,
+      missing: 0,
+      present: 0,
+    };
+    const batch = batchRef.current;
+    batch.count += 1;
+    batch.first = batch.first === null ? index : Math.min(batch.first, index);
+    batch.last = batch.last === null ? index : Math.max(batch.last, index);
+    if (hasRow) {
+      batch.present += 1;
+    } else {
+      batch.missing += 1;
+    }
+
+    if (batch.count === 1) {
+      requestAnimationFrame(() => {
+        const completedBatch = batchRef.current;
+        batchRef.current = null;
+        if (completedBatch) {
+          debugLog(debugName, "list.renderItemFrame", completedBatch as unknown as Record<string, unknown>);
+        }
+      });
+    }
+  }
+}
 
 function createRowCache<TRow>(
   rows: readonly TRow[],
@@ -97,6 +156,7 @@ function createRowsState<TDocument, TRow, TStyle, TTiming>(
 }
 
 export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
+  debugName,
   getRowIndex,
   getRows,
   getStyles,
@@ -110,6 +170,11 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
     const nextRowsState = createRowsState(snapshot, getRowIndex);
     rowsStateRef.current = nextRowsState;
     setRowsState(nextRowsState);
+    debugLog(debugName, "rows.reset", {
+      cacheSize: nextRowsState.rowCache.size,
+      itemCount: nextRowsState.itemCount,
+      rowsVersion: nextRowsState.rowsVersion,
+    });
   }, [getRowIndex, snapshot]);
 
   useEffect(() => {
@@ -119,6 +184,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const loadedRowsState = rowsStateRef.current;
     if (loadedRowsState.document) {
+      const requestStartedAt = debugNowMs();
       const safeStart = Math.max(0, Math.floor(start));
       const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
 
@@ -131,13 +197,32 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
           }
         }
 
+        debugLog(debugName, "rows.request", {
+          cacheSize: loadedRowsState.rowCache.size,
+          count: safeEnd - safeStart,
+          force: options?.force === true,
+          hasMissingRow,
+          reason: options?.reason ?? "unknown",
+          start: safeStart,
+        });
+
         if (hasMissingRow) {
           const fetchedRows = getRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
           const styles = getStyles?.(loadedRowsState.document) ?? loadedRowsState.styles;
           const timing = getTiming?.(loadedRowsState.document) ?? loadedRowsState.timing;
+          debugLog(debugName, "rows.fetched", {
+            count: safeEnd - safeStart,
+            fetchedRows: fetchedRows.length,
+            getRowsMs: Number((debugNowMs() - requestStartedAt).toFixed(1)),
+            reason: options?.reason ?? "unknown",
+            start: safeStart,
+          });
 
           setRowsState((currentRowsState) => {
             if (currentRowsState.document !== loadedRowsState.document) {
+              debugLog(debugName, "rows.commitSkipped", {
+                reason: options?.reason ?? "unknown",
+              });
               return currentRowsState;
             }
 
@@ -157,7 +242,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
         }
       }
     }
-  }, [getRowIndex, getRows, getStyles, getTiming]);
+  }, [debugName, getRowIndex, getRows, getStyles, getTiming]);
 
   const itemIndexes = useMemo(
     () => Array.from({ length: rowsState.itemCount }, (_, index) => index),
@@ -176,6 +261,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 }
 
 export function VirtualizedFixedDocumentList<TRow>({
+  debugName,
   initialRequestRowCount,
   itemIndexes,
   lineOverscan = 0,
@@ -191,6 +277,16 @@ export function VirtualizedFixedDocumentList<TRow>({
 }: VirtualizedFixedDocumentListProps<TRow>) {
   const hasRequestedInitialRangeRef = useRef(false);
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renderItemBatchRef = useRef<RenderItemDebugBatch | null>(null);
+  const renderCountRef = useRef(0);
+
+  renderCountRef.current += 1;
+  debugLog(debugName, "list.render", {
+    cacheSize: rowCache.size,
+    itemCount: itemIndexes.length,
+    renderCount: renderCountRef.current,
+    rowsVersion,
+  });
 
   useEffect(() => () => {
     if (overscanTimeoutRef.current) {
@@ -203,13 +299,30 @@ export function VirtualizedFixedDocumentList<TRow>({
     const visibleStart = Math.floor(offsetY / rowHeight);
     const visibleCount = Math.ceil(height / rowHeight);
     const start = includeOverscan ? visibleStart - lineOverscan : visibleStart;
-    const count = includeOverscan ? visibleCount + lineOverscan * 2 : Math.min(visibleCount, initialRequestRowCount ?? visibleCount);
+    const initialCount = initialRequestRowCount ?? visibleCount;
+    const count = includeOverscan ? visibleCount + lineOverscan * 2 : Math.max(visibleCount, initialCount);
+    debugLog(debugName, "list.requestVisibleRange", {
+      count,
+      height,
+      includeOverscan,
+      offsetY,
+      reason,
+      start,
+      visibleCount,
+      visibleStart,
+    });
     requestRange(start, count, { reason });
     return { count, start };
-  }, [initialRequestRowCount, lineOverscan, requestRange, rowHeight]);
+  }, [debugName, initialRequestRowCount, lineOverscan, requestRange, rowHeight]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
+    debugLog(debugName, "list.layout", {
+      height,
+      initialAlreadyRequested: hasRequestedInitialRangeRef.current,
+      itemCount: itemIndexes.length,
+      rowsVersion,
+    });
 
     if (!hasRequestedInitialRangeRef.current) {
       hasRequestedInitialRangeRef.current = true;
@@ -228,20 +341,28 @@ export function VirtualizedFixedDocumentList<TRow>({
     } else {
       requestVisibleRange(0, height, true, "overscan");
     }
-  }, [lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestVisibleRange]);
+  }, [debugName, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestVisibleRange, rowsVersion]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    debugLog(debugName, "list.scroll", {
+      height: layoutMeasurement.height,
+      offsetY: contentOffset.y,
+    });
     requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll");
-  }, [requestVisibleRange]);
+  }, [debugName, requestVisibleRange]);
 
   const renderItem = useCallback(
-    ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => renderRow({
-      index,
-      listIndex,
-      row: rowCache.get(index),
-    }),
-    [renderRow, rowCache],
+    ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => {
+      const row = rowCache.get(index);
+      recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
+      return renderRow({
+        index,
+        listIndex,
+        row,
+      });
+    },
+    [debugName, renderRow, rowCache],
   );
 
   return (
