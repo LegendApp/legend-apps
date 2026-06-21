@@ -2781,7 +2781,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           <MarkdownOverlayEditorInput
             activeBlock={activeBlock}
             activeInputRef={activeInputRef}
-            inactiveOverlayWidth$={inactiveOverlayWidth$}
             markdownStyle={resolvedMarkdownStyle}
             onBlurRef={handleEditorBlurRef}
             onChangeMarkdownRef={handleChangeMarkdownRef}

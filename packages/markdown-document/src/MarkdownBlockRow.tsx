@@ -111,7 +111,6 @@ export const MarkdownOverlayEditorInput = memo(
     onBlurRef,
     onChangeMarkdownRef,
     onChangeSelectionRef,
-    inactiveOverlayWidth$,
     onSelectionDragOutsideRef,
     onVerticalNavigationOutsideRef,
     sourceBlockIdRef,
@@ -119,7 +118,6 @@ export const MarkdownOverlayEditorInput = memo(
     activeBlock?: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
-    inactiveOverlayWidth$: Observable<number>;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
@@ -128,7 +126,6 @@ export const MarkdownOverlayEditorInput = memo(
     sourceBlockIdRef: RefObject<string | null>;
   }) {
     const activeBlockRef = useLatestRef(activeBlock);
-    const inactiveOverlayWidth = useValue(inactiveOverlayWidth$);
 
     return (
       <EnrichedMarkdownTextInput
@@ -160,7 +157,6 @@ export const MarkdownOverlayEditorInput = memo(
         style={StyleSheet.flatten([
           activeBlock ? editableTextStyleForBlock(activeBlock, markdownStyle) : styles.editorInput,
           styles.overlayEditorInput,
-          { width: inactiveOverlayWidth },
         ])}
       />
     );
@@ -171,7 +167,6 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.activeBlock?.headingLevel === nextProps.activeBlock?.headingLevel &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
-    previousProps.inactiveOverlayWidth$ === nextProps.inactiveOverlayWidth$ &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
