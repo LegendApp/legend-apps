@@ -62,6 +62,7 @@ public:
 
   double getBlockCount() override;
   double getSourceSize() override;
+  std::vector<std::string> getBlockIds(double start, double count) override;
   std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) override;
   MarkdownDocumentTiming getTiming() override;
   MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) override;

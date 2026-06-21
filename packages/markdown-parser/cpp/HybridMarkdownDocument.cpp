@@ -202,6 +202,22 @@ double HybridMarkdownDocument::getSourceSize() {
   return static_cast<double>(sourceText_.size());
 }
 
+std::vector<std::string> HybridMarkdownDocument::getBlockIds(double start, double count) {
+  const auto safeStart = static_cast<size_t>(std::max(0.0, start));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, count));
+  if (safeStart >= blocks_.size() || safeCount == 0) {
+    return {};
+  }
+
+  const auto end = std::min(blocks_.size(), safeStart + safeCount);
+  std::vector<std::string> blockIds;
+  blockIds.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    blockIds.push_back(blocks_[index].id);
+  }
+  return blockIds;
+}
+
 std::vector<MarkdownRenderBlock> HybridMarkdownDocument::getRenderBlocks(double start, double count) {
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));

@@ -71,6 +71,8 @@ export type MarkdownTransactionResult = {
 export type MarkdownDocumentAdapter = {
   load(filename: string): Promise<MarkdownDocumentSnapshot>;
   getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot>;
+  getBlockAtIndexSync?: (documentId: string, index: number) => MarkdownBlockSnapshot | undefined;
+  getBlockIds?: (documentId: string, startIndex: number, count: number) => Promise<string[]>;
   getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]>;
   save(documentId: string): Promise<void>;
   saveAs(documentId: string, filename: string): Promise<void>;

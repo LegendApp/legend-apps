@@ -184,6 +184,7 @@ export const MarkdownOverlayEditorInput = memo(
 export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   activeInputRef,
   commentAnchor,
+  getBlockSnapshot,
   hasNextBlock,
   hasPreviousBlock,
   onActivate,
@@ -200,9 +201,11 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   renderCommentBubble,
   selectionOverlayStyle,
   item: blockId,
+  index,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   commentAnchor?: MarkdownSelectionAnchor | null;
+  getBlockSnapshot: (blockId: string, index: number) => MarkdownBlockSnapshot | undefined;
   hasNextBlock: boolean;
   hasPreviousBlock: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
@@ -219,10 +222,12 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
-  const block = useValue(documentRenderState$.blocksById.get(blockId));
+  const observedBlock = useValue(documentRenderState$.blocksById.get(blockId));
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
-  const previousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
+  const observedPreviousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
+  const block = observedBlock ?? getBlockSnapshot(blockId, index);
+  const previousBlock = observedPreviousBlock ?? (previousBlockId ? getBlockSnapshot(previousBlockId, index - 1) : undefined);
   const activeEditorBlock = activeBlock?.block ?? block;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;

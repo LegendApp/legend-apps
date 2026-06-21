@@ -20,6 +20,7 @@ let nextDocumentNumber = 1;
 
 type NativeDocumentSession = {
   nativeDocument: NativeMarkdownDocument;
+  blockIds: string[];
   blocksById: Map<string, MarkdownBlockSnapshot>;
   blockIdToIndex: Map<string, number>;
 };
@@ -50,9 +51,38 @@ function toBlockSnapshot(block: MarkdownRenderBlock): MarkdownBlockSnapshot {
 
 function cacheBlocks(session: NativeDocumentSession, blocks: MarkdownBlockSnapshot[]) {
   for (const block of blocks) {
+    session.blockIds[block.index] = block.id;
     session.blocksById.set(block.id, block);
     session.blockIdToIndex.set(block.id, block.index);
   }
+}
+
+function cacheBlockIds(session: NativeDocumentSession, startIndex: number, blockIds: string[]) {
+  for (const [offset, blockId] of blockIds.entries()) {
+    const index = startIndex + offset;
+    session.blockIds[index] = blockId;
+    session.blockIdToIndex.set(blockId, index);
+  }
+}
+
+function rebuildBlockIndex(session: NativeDocumentSession) {
+  session.blockIdToIndex.clear();
+  for (const [index, blockId] of session.blockIds.entries()) {
+    if (blockId) {
+      session.blockIdToIndex.set(blockId, index);
+    }
+  }
+}
+
+function getBlockAtIndex(session: NativeDocumentSession, index: number) {
+  const block = session.nativeDocument.getRenderBlocks(index, 1)[0];
+  if (!block) {
+    return undefined;
+  }
+
+  const snapshot = toBlockSnapshot(block);
+  cacheBlocks(session, [snapshot]);
+  return snapshot;
 }
 
 function toTransactionResult(result: NativeMarkdownTransactionResult): MarkdownTransactionResult {
@@ -89,6 +119,7 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     const initialBlocks = result.initialBlocks.map(toBlockSnapshot);
     const session: NativeDocumentSession = {
       nativeDocument: result.document,
+      blockIds: new Array(result.document.blockCount),
       blocksById: new Map(),
       blockIdToIndex: new Map(),
     };
@@ -114,6 +145,13 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     return nativeMarkdownDocumentAdapter.loadDocument(filename, await createMarkdownDocument(markdown, { initialBlockCount }));
   },
 
+  getBlockAtIndexSync(documentId: string, index: number): MarkdownBlockSnapshot | undefined {
+    const session = getSession(documentId);
+    const blockId = session.blockIds[index];
+    const cached = blockId ? session.blocksById.get(blockId) : undefined;
+    return cached ?? getBlockAtIndex(session, index);
+  },
+
   async getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot> {
     const session = getSession(documentId);
     const cached = session.blocksById.get(blockId);
@@ -126,14 +164,23 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
       throw new Error(`Markdown block is not loaded: ${blockId}`);
     }
 
-    const block = session.nativeDocument.getRenderBlocks(index, 1)[0];
+    const block = getBlockAtIndex(session, index);
     if (!block) {
       throw new Error(`Markdown block not found at index ${index}`);
     }
 
-    const snapshot = toBlockSnapshot(block);
-    cacheBlocks(session, [snapshot]);
-    return snapshot;
+    return block;
+  },
+
+  async getBlockIds(documentId: string, startIndex: number, count: number): Promise<string[]> {
+    if (count <= 0) {
+      return [];
+    }
+
+    const session = getSession(documentId);
+    const blockIds = session.nativeDocument.getBlockIds(startIndex, count);
+    cacheBlockIds(session, startIndex, blockIds);
+    return blockIds;
   },
 
   async getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]> {
@@ -179,10 +226,15 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
           }
         : transaction;
     const result = toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
+    session.blockIds.splice(
+      result.changedRange.startBlockIndex,
+      result.changedRange.deleteCount,
+      ...result.changedRange.blockIds,
+    );
+    rebuildBlockIndex(session);
     cacheBlocks(session, result.changedBlocks);
     for (const retiredBlockId of result.retiredBlockIds) {
       session.blocksById.delete(retiredBlockId);
-      session.blockIdToIndex.delete(retiredBlockId);
     }
     return result;
   },
