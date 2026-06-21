@@ -1,4 +1,4 @@
-import { findBlockIdAtWindowY, getBlockSelectionRects } from "../blockSelection";
+import { findBlockIdAtContentY, getBlockSelectionRects } from "../blockSelection";
 import type { BlockLayout } from "../internalTypes";
 
 const layoutsByBlockId = new Map<string, BlockLayout>([
@@ -6,47 +6,40 @@ const layoutsByBlockId = new Map<string, BlockLayout>([
   ["b", { y: 60, height: 40 }],
   ["c", { y: 120, height: 40 }],
 ]);
+const getBlockLayout = (blockId: string) => layoutsByBlockId.get(blockId);
 
 describe("blockSelection", () => {
-  it("converts a native window Y to content coordinates before hit-testing", () => {
+  it("hit-tests content coordinates", () => {
     const blockIds = ["a", "b", "c"];
 
-    expect(findBlockIdAtWindowY({
+    expect(findBlockIdAtContentY({
       blockIds,
-      containerWindowY: 100,
-      layoutsByBlockId,
-      scrollOffsetY: 0,
-      windowY: 172,
+      getBlockLayout,
+      y: 72,
     })).toBe("b");
 
-    expect(findBlockIdAtWindowY({
+    expect(findBlockIdAtContentY({
       blockIds,
-      containerWindowY: 100,
-      layoutsByBlockId,
-      scrollOffsetY: 60,
-      windowY: 172,
+      getBlockLayout,
+      y: 132,
     })).toBe("c");
   });
 
   it("does not switch downward selection to the next block while the pointer is still in the gap above it", () => {
-    expect(findBlockIdAtWindowY({
+    expect(findBlockIdAtContentY({
       blockIds: ["a", "b", "c"],
-      containerWindowY: 100,
       direction: "down",
-      layoutsByBlockId,
-      scrollOffsetY: 0,
-      windowY: 150,
+      getBlockLayout,
+      y: 50,
     })).toBe("a");
   });
 
   it("does not switch upward selection to the previous block while the pointer is still in the gap below it", () => {
-    expect(findBlockIdAtWindowY({
+    expect(findBlockIdAtContentY({
       blockIds: ["a", "b", "c"],
-      containerWindowY: 100,
       direction: "up",
-      layoutsByBlockId,
-      scrollOffsetY: 0,
-      windowY: 210,
+      getBlockLayout,
+      y: 110,
     })).toBe("c");
   });
 
@@ -54,7 +47,7 @@ describe("blockSelection", () => {
     expect(getBlockSelectionRects({
       blockIds: ["a", "b", "c"],
       blockSelection: { anchorBlockId: "b", focusBlockId: "c" },
-      layoutsByBlockId,
+      getBlockLayout,
     })).toEqual([
       { blockId: "b", height: 40, y: 60 },
       { blockId: "c", height: 40, y: 120 },

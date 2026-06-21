@@ -1,25 +1,22 @@
 import type { BlockLayout, BlockSelectionState } from "./internalTypes";
 import type { MarkdownBlockSnapshot } from "./types";
 
-export function findBlockIdAtWindowY({
+export type GetBlockLayout = (blockId: string, index: number) => BlockLayout | undefined;
+
+export function findBlockIdAtContentY({
   blockIds,
-  containerWindowY,
   direction,
-  layoutsByBlockId,
-  scrollOffsetY,
-  windowY,
+  getBlockLayout,
+  y,
 }: {
   blockIds: string[];
-  containerWindowY: number;
   direction?: "down" | "up";
-  layoutsByBlockId: Map<string, BlockLayout>;
-  scrollOffsetY: number;
-  windowY: number;
+  getBlockLayout: GetBlockLayout;
+  y: number;
 }) {
-  const y = windowY - containerWindowY + scrollOffsetY;
   const layouts = blockIds
-    .map((blockId) => {
-      const layout = layoutsByBlockId.get(blockId);
+    .map((blockId, index) => {
+      const layout = getBlockLayout(blockId, index);
       return layout ? { blockId, layout } : undefined;
     })
     .filter((entry): entry is { blockId: string; layout: BlockLayout } => entry !== undefined)
@@ -59,11 +56,11 @@ export function findBlockIdAtWindowY({
 export function getBlockSelectionRects({
   blockIds,
   blockSelection,
-  layoutsByBlockId,
+  getBlockLayout,
 }: {
   blockIds: string[];
   blockSelection: BlockSelectionState | null;
-  layoutsByBlockId: Map<string, BlockLayout>;
+  getBlockLayout: GetBlockLayout;
 }) {
   const rects: { blockId: string; height: number; y: number }[] = [];
   if (!blockSelection) {
@@ -80,7 +77,7 @@ export function getBlockSelectionRects({
   const endIndex = Math.max(anchorIndex, focusIndex);
   for (let index = startIndex; index <= endIndex; index += 1) {
     const blockId = blockIds[index];
-    const layout = blockId ? layoutsByBlockId.get(blockId) : undefined;
+    const layout = blockId ? getBlockLayout(blockId, index) : undefined;
     if (blockId && layout) {
       rects.push({
         blockId,

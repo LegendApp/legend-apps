@@ -17,7 +17,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocumentAdapter";
-import { findBlockIdAtWindowY, getBlockSelectionRects } from "./blockSelection";
+import { findBlockIdAtContentY, getBlockSelectionRects } from "./blockSelection";
 import {
   createMarkdownDocumentBlockState,
   createMarkdownDocumentBlockStateFromIds,
@@ -111,7 +111,6 @@ function createMarkdownDocumentRenderState(): MarkdownDocumentRenderState {
   return {
     activeBlocksById: new Map(),
     blockIds: [],
-    blockLayoutsById: new Map(),
     blockSelection: null,
     blocksById: new Map(),
     scrollOffsetY: 0,
@@ -137,6 +136,7 @@ type MarkdownBlockSelectionAnchorPublisherProps = {
   enabled: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
   inactiveOverlayWidth$: Observable<number>;
+  listRef: RefObject<LegendListRef | null>;
   onSelectionAnchorChangeRef: RefObject<((anchor: MarkdownSelectionAnchor | null) => void) | undefined>;
   resolvedContentHorizontalPadding: number;
   selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
@@ -146,13 +146,13 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
   enabled,
   documentRenderState$,
   inactiveOverlayWidth$,
+  listRef,
   onSelectionAnchorChangeRef,
   resolvedContentHorizontalPadding,
   selectionAnchor$,
 }: MarkdownBlockSelectionAnchorPublisherProps) {
   const blockIds = useValue(documentRenderState$.blockIds);
   const blockSelection = useValue(documentRenderState$.blockSelection);
-  const blockLayoutsById = useValue(documentRenderState$.blockLayoutsById);
   const inactiveOverlayWidth = useValue(inactiveOverlayWidth$);
   const scrollOffsetY = useValue(documentRenderState$.scrollOffsetY);
   const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
@@ -160,10 +160,11 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
       return null;
     }
 
+    const listState = listRef.current?.getState();
     const blockSelectionRects = getBlockSelectionRects({
       blockIds,
       blockSelection,
-      layoutsByBlockId: blockLayoutsById,
+      getBlockLayout: (_blockId, index) => getBlockLayoutFromListState(listState, index),
     });
     if (blockSelectionRects.length === 0) {
       return null;
@@ -188,7 +189,7 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
       x: resolvedContentHorizontalPadding,
       y: firstRect.y + scrollOffsetY,
     };
-  }, [blockIds, blockLayoutsById, blockSelection, inactiveOverlayWidth, resolvedContentHorizontalPadding, scrollOffsetY]);
+  }, [blockIds, blockSelection, inactiveOverlayWidth, listRef, resolvedContentHorizontalPadding, scrollOffsetY]);
 
   useEffect(() => {
     if (enabled) {
@@ -299,6 +300,30 @@ function numberFromStyleValue(value: unknown) {
   return typeof value === "number" ? value : 0;
 }
 
+type MarkdownLegendListState = ReturnType<LegendListRef["getState"]>;
+
+function getBlockLayoutFromListState(listState: MarkdownLegendListState | undefined, index: number): BlockLayout | undefined {
+  let layout: BlockLayout | undefined;
+  if (
+    listState &&
+    index >= 0 &&
+    typeof listState.positionAtIndex === "function" &&
+    typeof listState.sizeAtIndex === "function"
+  ) {
+    const y = listState.positionAtIndex(index);
+    const height = listState.sizeAtIndex(index);
+    if (
+      typeof y === "number" &&
+      Number.isFinite(y) &&
+      typeof height === "number" &&
+      Number.isFinite(height)
+    ) {
+      layout = { y, height };
+    }
+  }
+  return layout;
+}
+
 function isTwoLineMarkdownPasteFromEmptyBlock(markdown: string) {
   const lines = markdown.split(markdownLineBreakPattern);
   return lines.length === 2 && (
@@ -375,7 +400,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const focusAdjacentBlockInFlightRef = useRef(false);
     const pendingVerticalNavigationSelectionRef = useRef<PendingVerticalNavigationSelection | null>(null);
     const pendingVerticalNavigationFrameRef = useRef<number | undefined>(undefined);
-    const blockContentLayoutsRef = useRef(new Map<string, BlockLayout>());
     const activeRenderBlockIdRef = useRef<string | null>(null);
     const selectedRenderBlockIdsRef = useRef(new Set<string>());
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
@@ -603,7 +627,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const measuredItemX = inputX - containerX;
               const measuredItemY = inputY - containerY;
               const activeBlockId = activeBlockIdRef.current ?? undefined;
-              const activeBlockLayout = activeBlockId ? blockContentLayoutsRef.current.get(activeBlockId) : undefined;
+              const activeBlockIndex = activeBlockId ? blockStateRef.current.blockIds.indexOf(activeBlockId) : -1;
+              const activeBlockLayout = getBlockLayoutFromListState(listRef.current?.getState(), activeBlockIndex);
               const nativeOverlayFrame = usesNativeEditorOverlay ? overlayFrameRef.current : undefined;
               const contentContainerOffsetX = layoutMetrics$.contentContainerOffsetX.peek();
               const itemX = activeBlockLayout
@@ -990,32 +1015,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const blockIdAtWindowY = useCallback((y: number, direction: "down" | "up") => {
-      return findBlockIdAtWindowY({
+      const contentY = y - layoutMetrics$.containerWindowY.peek() + scrollOffsetYRef.current;
+      const listState = listRef.current?.getState();
+      return findBlockIdAtContentY({
         blockIds,
-        containerWindowY: layoutMetrics$.containerWindowY.peek(),
         direction,
-        layoutsByBlockId: blockContentLayoutsRef.current,
-        scrollOffsetY: scrollOffsetYRef.current,
-        windowY: y,
+        getBlockLayout: (_blockId, index) => getBlockLayoutFromListState(listState, index),
+        y: contentY,
       });
     }, [blockIds, layoutMetrics$]);
 
-    const handleBlockWindowLayout = useCallback((blockId: string, windowLayout: BlockLayout) => {
-      const containerWindowY = layoutMetrics$.containerWindowY.peek();
-      const layout = {
-        height: windowLayout.height,
-        y: windowLayout.y - containerWindowY + scrollOffsetYRef.current,
-      };
-      const previousLayout = blockContentLayoutsRef.current.get(blockId);
-      if (previousLayout?.y === layout.y && previousLayout.height === layout.height) {
-        return;
-      }
-      blockContentLayoutsRef.current.set(blockId, layout);
-      documentRenderState$.blockLayoutsById.get(blockId).set(layout);
-    }, [documentRenderState$, layoutMetrics$]);
-
     const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot) => {
-      const blockLayout = blockContentLayoutsRef.current.get(block.id);
+      const blockIndex = blockStateRef.current.blockIds.indexOf(block.id);
+      const blockLayout = getBlockLayoutFromListState(listRef.current?.getState(), blockIndex);
       const viewportHeight = scrollViewportHeightRef.current;
       const currentScrollOffset = scrollOffsetYRef.current;
 
@@ -1925,10 +1937,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearAutosaveTimer();
       commitQueueRef.current = Promise.resolve();
       activeBlockIdRef.current = null;
-      blockContentLayoutsRef.current.forEach((_layout, blockId) => {
-        documentRenderState$.blockLayoutsById.get(blockId).delete();
-      });
-      blockContentLayoutsRef.current.clear();
       if (activeRenderBlockIdRef.current) {
         documentRenderState$.activeBlocksById.get(activeRenderBlockIdRef.current).delete();
         activeRenderBlockIdRef.current = null;
@@ -2586,7 +2594,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
-          onBlockWindowLayout={handleBlockWindowLayout}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
           onChangeSelectionRef={handleChangeSelectionRef}
@@ -2603,7 +2610,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         commentAnchor,
         documentRenderState$,
         getBlockAtIndexForRender,
-        handleBlockWindowLayout,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
         handleChangeSelectionRef,
@@ -2726,6 +2732,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           documentRenderState$={documentRenderState$}
           enabled={selectionToolbarAnchor === undefined && blockSelection !== null}
           inactiveOverlayWidth$={inactiveOverlayWidth$}
+          listRef={listRef}
           onSelectionAnchorChangeRef={onSelectionAnchorChangeRef}
           resolvedContentHorizontalPadding={resolvedContentHorizontalPadding}
           selectionAnchor$={selectionAnchor$}
