@@ -208,6 +208,27 @@ double HybridSyntaxDocument::getSourceSize() {
   return static_cast<double>(source_->size());
 }
 
+std::vector<SyntaxRenderLine> HybridSyntaxDocument::getPlainLines(double start, double count) {
+  const auto safeStart = static_cast<size_t>(std::max(0.0, start));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, count));
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (safeStart >= lines_.size() || safeCount == 0) {
+    return {};
+  }
+
+  const auto end = std::min(lines_.size(), safeStart + safeCount);
+  std::vector<SyntaxRenderLine> renderLines;
+  renderLines.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    renderLines.push_back(SyntaxRenderLine(
+        static_cast<double>(index),
+        lineText(index),
+        {}));
+  }
+  return renderLines;
+}
+
 std::vector<SyntaxRenderLine> HybridSyntaxDocument::getRenderLines(double start, double count) {
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));

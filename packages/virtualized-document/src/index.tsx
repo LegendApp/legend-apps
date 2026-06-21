@@ -16,9 +16,16 @@ export type VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> = {
   timing: TTiming;
 };
 
+export type VirtualizedDocumentRequestReason = "highlight" | "initial" | "overscan" | "scroll";
+
+export type VirtualizedDocumentRequestOptions = {
+  force?: boolean;
+  reason?: VirtualizedDocumentRequestReason;
+};
+
 export type UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming> = {
   getRowIndex: (row: TRow) => number;
-  getRows: (document: TDocument, start: number, count: number) => readonly TRow[];
+  getRows: (document: TDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => readonly TRow[];
   getStyles?: (document: TDocument) => readonly TStyle[];
   getTiming?: (document: TDocument) => TTiming;
   snapshot: VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> | null;
@@ -27,7 +34,7 @@ export type UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming> 
 export type VirtualizedDocumentRowsState<TRow, TStyle, TTiming> = {
   itemIndexes: number[];
   itemCount: number;
-  requestRange: (start: number, count: number) => void;
+  requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
   rowCache: Map<number, TRow>;
   rowsVersion: number;
   styles: readonly TStyle[];
@@ -52,11 +59,12 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
 export type VirtualizedFixedDocumentListProps<TRow> = {
   initialRequestRowCount?: number;
   itemIndexes: number[];
+  onInitialRowsRequested?: (start: number, count: number) => void;
   lineOverscan?: number;
   overscanRequestDelayMs?: number;
   recycleItems?: boolean;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
-  requestRange: (start: number, count: number) => void;
+  requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
   rowCache: Map<number, TRow>;
   rowsVersion: number;
   rowHeight: number;
@@ -108,14 +116,14 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
     rowsStateRef.current = rowsState;
   }, [rowsState]);
 
-  const requestRange = useCallback((start: number, count: number) => {
+  const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const loadedRowsState = rowsStateRef.current;
     if (loadedRowsState.document) {
       const safeStart = Math.max(0, Math.floor(start));
       const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
 
       if (safeStart < safeEnd) {
-        let hasMissingRow = false;
+        let hasMissingRow = options?.force === true;
         for (let index = safeStart; index < safeEnd; index += 1) {
           if (!loadedRowsState.rowCache.has(index)) {
             hasMissingRow = true;
@@ -124,7 +132,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
         }
 
         if (hasMissingRow) {
-          const fetchedRows = getRows(loadedRowsState.document, safeStart, safeEnd - safeStart);
+          const fetchedRows = getRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
           const styles = getStyles?.(loadedRowsState.document) ?? loadedRowsState.styles;
           const timing = getTiming?.(loadedRowsState.document) ?? loadedRowsState.timing;
 
@@ -171,6 +179,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   initialRequestRowCount,
   itemIndexes,
   lineOverscan = 0,
+  onInitialRowsRequested,
   overscanRequestDelayMs = 0,
   recycleItems = true,
   renderRow,
@@ -190,12 +199,13 @@ export function VirtualizedFixedDocumentList<TRow>({
     }
   }, []);
 
-  const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean) => {
+  const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason) => {
     const visibleStart = Math.floor(offsetY / rowHeight);
     const visibleCount = Math.ceil(height / rowHeight);
     const start = includeOverscan ? visibleStart - lineOverscan : visibleStart;
     const count = includeOverscan ? visibleCount + lineOverscan * 2 : Math.min(visibleCount, initialRequestRowCount ?? visibleCount);
-    requestRange(start, count);
+    requestRange(start, count, { reason });
+    return { count, start };
   }, [initialRequestRowCount, lineOverscan, requestRange, rowHeight]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -203,7 +213,8 @@ export function VirtualizedFixedDocumentList<TRow>({
 
     if (!hasRequestedInitialRangeRef.current) {
       hasRequestedInitialRangeRef.current = true;
-      requestVisibleRange(0, height, false);
+      const initialRange = requestVisibleRange(0, height, false, "initial");
+      onInitialRowsRequested?.(initialRange.start, initialRange.count);
 
       if (lineOverscan > 0) {
         if (overscanTimeoutRef.current) {
@@ -211,17 +222,17 @@ export function VirtualizedFixedDocumentList<TRow>({
         }
         overscanTimeoutRef.current = setTimeout(() => {
           overscanTimeoutRef.current = null;
-          requestVisibleRange(0, height, true);
+          requestVisibleRange(0, height, true, "overscan");
         }, overscanRequestDelayMs);
       }
     } else {
-      requestVisibleRange(0, height, true);
+      requestVisibleRange(0, height, true, "overscan");
     }
-  }, [lineOverscan, overscanRequestDelayMs, requestVisibleRange]);
+  }, [lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestVisibleRange]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
-    requestVisibleRange(contentOffset.y, layoutMeasurement.height, true);
+    requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll");
   }, [requestVisibleRange]);
 
   const renderItem = useCallback(

@@ -49,6 +49,7 @@ export interface SyntaxDocument
   }> {
   readonly lineCount: number;
   readonly sourceSize: number;
+  getPlainLines(start: number, count: number): SyntaxRenderLine[];
   getRenderLines(start: number, count: number): SyntaxRenderLine[];
   getStyles(): SyntaxStyle[];
   getTiming(): SyntaxHighlightTiming;

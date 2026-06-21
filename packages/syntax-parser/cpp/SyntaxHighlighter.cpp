@@ -23,6 +23,15 @@ struct GrammarConfig {
   std::vector<std::string> grammarFiles;
 };
 
+struct HighlighterCacheEntry {
+  std::condition_variable cv;
+  std::shared_ptr<TextMateHighlighterContext> context;
+  SyntaxHighlightTiming timing;
+  std::string error;
+  bool failed = false;
+  bool ready = false;
+};
+
 int getFontStyle(uint32_t metadata) {
   return static_cast<int>((metadata & fontStyleMask) >> fontStyleOffset);
 }
@@ -99,6 +108,26 @@ std::string getThemeFileName(const std::string& theme) {
   throw std::runtime_error("Unsupported syntax theme: " + theme);
 }
 
+std::vector<std::string> warmupLinesForLanguage(const std::string& language) {
+  const auto normalized = normalizeOption(language);
+
+  if (normalized == "tsx" || normalized == "typescriptreact") {
+    return {
+        "import React, { useMemo } from \"react\";",
+        "type Props = { value?: string; count: number };",
+        "export const Warmup = ({ value, count }: Props) => <Text testID=\"warmup\">{value ?? count}</Text>;",
+        "const items = [1, 2, 3].map((item) => ({ item, label: `${item}` }));",
+    };
+  }
+
+  return {
+      "type Props = { value?: string; count: number };",
+      "export function warmup({ value, count }: Props) {",
+      "  return [value ?? String(count), /[a-z]+/i.test(value ?? \"\")];",
+      "}",
+  };
+}
+
 void addStyle(
     SyntaxStyleState& styleState,
     int foregroundId,
@@ -163,6 +192,45 @@ std::shared_ptr<TextMateHighlighterContext> createHighlighterContext(
   }
 
   return std::make_shared<TextMateHighlighterContext>(onig, registry, grammar, colorMap);
+}
+
+SyntaxHighlighterWarmupResult createWarmedHighlighterContext(
+    const std::string& language,
+    const std::string& theme) {
+  const auto startedAt = SyntaxClock::now();
+  const auto root = packageRoot();
+  const auto grammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
+  const auto themesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
+  auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
+  const auto contextReadyAt = SyntaxClock::now();
+
+  SyntaxStyleState styleState;
+  TextMateStateStack state = textmate_get_initial_state();
+  double tokenCount = 0;
+  const auto lines = warmupLinesForLanguage(language);
+
+  {
+    std::lock_guard<std::mutex> contextLock(context->mutex);
+    for (const auto& line : lines) {
+      auto tokenizedLine = tokenizeSyntaxLine(*context, line, state, styleState);
+      tokenCount += tokenizedLine.tokenCount;
+    }
+  }
+
+  const auto finishedAt = SyntaxClock::now();
+  return SyntaxHighlighterWarmupResult{
+      context,
+      SyntaxHighlightTiming(
+          static_cast<double>(lines.size()),
+          tokenCount,
+          static_cast<double>(styleState.styles.size()),
+          0,
+          0,
+          elapsedSyntaxMs(startedAt, contextReadyAt),
+          elapsedSyntaxMs(contextReadyAt, finishedAt),
+          elapsedSyntaxMs(contextReadyAt, finishedAt),
+          elapsedSyntaxMs(startedAt, finishedAt)),
+  };
 }
 
 } // namespace
@@ -243,35 +311,66 @@ std::vector<std::string> splitSyntaxLines(const std::string& source) {
   return lines;
 }
 
-std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
+SyntaxHighlighterWarmupResult warmHighlighterContext(
     const std::string& language,
     const std::string& theme) {
   const auto normalizedLanguage = normalizeOption(language);
   const auto normalizedTheme = normalizeOption(theme);
   const auto key = normalizedLanguage + ":" + normalizedTheme;
   static std::mutex cacheMutex;
-  static std::map<std::string, std::shared_ptr<TextMateHighlighterContext>> contextCache;
+  static std::map<std::string, std::shared_ptr<HighlighterCacheEntry>> contextCache;
+  std::shared_ptr<HighlighterCacheEntry> entry;
+  bool shouldWarm = false;
 
   {
-    std::lock_guard<std::mutex> lock(cacheMutex);
+    std::unique_lock<std::mutex> lock(cacheMutex);
     const auto cached = contextCache.find(key);
     if (cached != contextCache.end()) {
-      return cached->second;
+      entry = cached->second;
+      entry->cv.wait(lock, [&entry]() {
+        return entry->ready || entry->failed;
+      });
+      if (entry->failed) {
+        throw std::runtime_error(entry->error);
+      }
+      return SyntaxHighlighterWarmupResult{entry->context, entry->timing};
+    }
+
+    entry = std::make_shared<HighlighterCacheEntry>();
+    contextCache[key] = entry;
+    shouldWarm = true;
+  }
+
+  if (shouldWarm) {
+    try {
+      auto result = createWarmedHighlighterContext(language, theme);
+
+      {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        entry->context = result.context;
+        entry->timing = result.timing;
+        entry->ready = true;
+      }
+      entry->cv.notify_all();
+      return result;
+    } catch (const std::exception& error) {
+      {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        entry->error = error.what();
+        entry->failed = true;
+      }
+      entry->cv.notify_all();
+      throw;
     }
   }
 
-  const auto root = packageRoot();
-  const auto grammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
-  const auto themesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
-  auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
+  throw std::runtime_error("Failed to warm syntax highlighter.");
+}
 
-  std::lock_guard<std::mutex> lock(cacheMutex);
-  const auto cached = contextCache.find(key);
-  if (cached != contextCache.end()) {
-    return cached->second;
-  }
-  contextCache[key] = context;
-  return context;
+std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
+    const std::string& language,
+    const std::string& theme) {
+  return warmHighlighterContext(language, theme).context;
 }
 
 SyntaxTokenizedLine tokenizeSyntaxLine(

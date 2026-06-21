@@ -7,6 +7,7 @@
 #include "../vendor/TextMateLib/packages/tml-cpp/src/c_api.h"
 
 #include <chrono>
+#include <condition_variable>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -26,6 +27,13 @@ struct SyntaxTokenizedLine {
 struct SyntaxStyleState {
   std::vector<SyntaxStyle> styles;
   std::map<std::pair<int, int>, double> styleIds;
+};
+
+class TextMateHighlighterContext;
+
+struct SyntaxHighlighterWarmupResult {
+  std::shared_ptr<TextMateHighlighterContext> context;
+  SyntaxHighlightTiming timing;
 };
 
 class TextMateHighlighterContext {
@@ -50,6 +58,7 @@ private:
 double elapsedSyntaxMs(SyntaxClock::time_point start, SyntaxClock::time_point end);
 double utf16Length(const std::string& text);
 std::vector<std::string> splitSyntaxLines(const std::string& source);
+SyntaxHighlighterWarmupResult warmHighlighterContext(const std::string& language, const std::string& theme);
 std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(const std::string& language, const std::string& theme);
 SyntaxTokenizedLine tokenizeSyntaxLine(
     TextMateHighlighterContext& context,

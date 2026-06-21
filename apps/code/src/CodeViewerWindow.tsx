@@ -12,6 +12,8 @@ import {
   useVirtualizedDocumentRows,
   VirtualizedFixedDocumentList,
   type VirtualizedDocumentSnapshot,
+  type VirtualizedDocumentRequestOptions,
+  type VirtualizedDocumentRequestReason,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,6 +53,7 @@ type CodeViewerRowsTrace = {
   count: number;
   document: SyntaxDocument;
   finishedAt: number;
+  reason: VirtualizedDocumentRequestReason;
   start: number;
   startedAt: number;
 };
@@ -208,6 +211,7 @@ function logCodeRowsTiming({
   console.info(
     [
       `[CodeViewer] rows ${loadTrace.filePath}`,
+      `reason=${rowsTrace.reason}`,
       `start=${rowsTrace.start}`,
       `count=${rowsTrace.count}`,
       `getRows=${formatMs(elapsedMs(rowsTrace.startedAt, rowsTrace.finishedAt))}`,
@@ -268,6 +272,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
   const rowsTraceRef = useRef<CodeViewerRowsTrace | null>(null);
   const loggedRowsVersionRef = useRef(-1);
+  const highlightedInitialRangeRef = useRef<string | null>(null);
   const documentSnapshot = useMemo<VirtualizedDocumentSnapshot<SyntaxDocument, SyntaxRenderLine, SyntaxStyle, CodeViewerTiming> | null>(
     () => state.status === "loaded"
       ? {
@@ -281,13 +286,17 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     [state],
   );
   const getRowIndex = useCallback((line: SyntaxRenderLine) => line.index, []);
-  const getRows = useCallback((document: SyntaxDocument, start: number, count: number) => {
+  const getRows = useCallback((document: SyntaxDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+    const reason = options?.reason ?? "scroll";
     const startedAt = nowMs();
-    const rows = document.getRenderLines(start, count);
+    const rows = reason === "initial"
+      ? document.getPlainLines(start, count)
+      : document.getRenderLines(start, count);
     rowsTraceRef.current = {
       count,
       document,
       finishedAt: nowMs(),
+      reason,
       start,
       startedAt,
     };
@@ -353,6 +362,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       noteRecentDocument(filePath);
       trace.noteRecentFinishedAt = nowMs();
     } catch (error) {
+      loadTraceRef.current = null;
       setState({
         status: "error",
         filePath,
@@ -402,9 +412,19 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           secondFrameAt,
           timeoutAt,
         });
+        if (rowsTrace.reason === "initial") {
+          const rangeKey = `${rowsTrace.start}:${rowsTrace.count}`;
+          if (highlightedInitialRangeRef.current !== rangeKey) {
+            highlightedInitialRangeRef.current = rangeKey;
+            virtualizedLines.requestRange(rowsTrace.start, rowsTrace.count, {
+              force: true,
+              reason: "highlight",
+            });
+          }
+        }
       });
     }
-  }, [state, virtualizedLines.rowsVersion]);
+  }, [state, virtualizedLines]);
 
   const openCodeDialog = useCallback(async () => {
     const paths = await openFileDialog({
@@ -433,7 +453,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             {lineIndex + 1}
           </Text>
           <Text numberOfLines={1} selectable style={[styles.codeLine, { color: foregroundColor }]}>
-            {line?.tokens.map((token, tokenIndex) => {
+            {line && line.tokens.length === 0 ? line.text : line?.tokens.map((token, tokenIndex) => {
               const tokenStyle = tokenStyleById.get(token.styleId);
               const text = line.text.slice(token.startColumn, token.startColumn + token.length);
               return (
@@ -503,6 +523,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           initialRequestRowCount={initialRequestRowCount}
           itemIndexes={virtualizedLines.itemIndexes}
           lineOverscan={lineOverscan}
+          onInitialRowsRequested={(start, count) => {
+            highlightedInitialRangeRef.current = null;
+            console.info(`[CodeViewer] initialRowsRequested start=${start} count=${count}`);
+          }}
           overscanRequestDelayMs={overscanRequestDelayMs}
           requestRange={virtualizedLines.requestRange}
           rowCache={virtualizedLines.rowCache}

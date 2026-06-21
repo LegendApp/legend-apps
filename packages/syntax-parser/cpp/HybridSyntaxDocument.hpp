@@ -47,6 +47,7 @@ public:
 
   double getLineCount() override;
   double getSourceSize() override;
+  std::vector<SyntaxRenderLine> getPlainLines(double start, double count) override;
   std::vector<SyntaxRenderLine> getRenderLines(double start, double count) override;
   std::vector<SyntaxStyle> getStyles() override;
   SyntaxHighlightTiming getTiming() override;

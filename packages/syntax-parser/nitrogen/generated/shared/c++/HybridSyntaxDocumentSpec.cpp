@@ -16,6 +16,7 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridGetter("lineCount", &HybridSyntaxDocumentSpec::getLineCount);
       prototype.registerHybridGetter("sourceSize", &HybridSyntaxDocumentSpec::getSourceSize);
+      prototype.registerHybridMethod("getPlainLines", &HybridSyntaxDocumentSpec::getPlainLines);
       prototype.registerHybridMethod("getRenderLines", &HybridSyntaxDocumentSpec::getRenderLines);
       prototype.registerHybridMethod("getStyles", &HybridSyntaxDocumentSpec::getStyles);
       prototype.registerHybridMethod("getTiming", &HybridSyntaxDocumentSpec::getTiming);

@@ -57,6 +57,7 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
 
     public:
       // Methods
+      virtual std::vector<SyntaxRenderLine> getPlainLines(double start, double count) = 0;
       virtual std::vector<SyntaxRenderLine> getRenderLines(double start, double count) = 0;
       virtual std::vector<SyntaxStyle> getStyles() = 0;
       virtual SyntaxHighlightTiming getTiming() = 0;
