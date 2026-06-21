@@ -122,7 +122,7 @@ export function runPlatformCommand(
   } else {
     const argsWithPort = withDefaultPortArg(runnerArgs, devServerPort ?? getDefaultDevServerPort(appId));
     const openMode = readStringArg(argsWithPort, ["--mode", "--configuration"], "Debug");
-    const openArgs = openMode === "Release" ? ["--mode", "Release"] : [];
+    const openArgs = openMode === "Release" ? ["--mode", "Release"] : ["--port", String(devServerPort)];
     runMacOSBuildForLaunchArgs(argsWithPort, env);
     runCommand("bun", ["scripts/open-app.ts", appId, platform, ...openArgs, ...launchArgs], {
       cwd: rootDir,

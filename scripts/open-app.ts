@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { assertSupportedPlatform, loadAppManifest, shellDir } from "./lib/apps";
+import { assertSupportedPlatform, loadAppManifest, resolveDevServerPort, shellDir } from "./lib/apps";
 import { parseAppCommand } from "./lib/apps";
 import { splitLaunchArgs, type OptionSpecs } from "./lib/launchArgs";
 import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
@@ -15,6 +15,7 @@ const openOptionSpecs: OptionSpecs = {
   "--configuration": "value",
   "--mode": "value",
   "--print": "boolean",
+  "--port": "value",
   "--release": "boolean",
 };
 
@@ -82,10 +83,11 @@ function getBuiltMacAppPath(workspaceDir: string, mode: string) {
   return path.join(productsDir, wrapperName);
 }
 
-function getOpenEnvironmentArgs(appId: string, generated: ReturnType<typeof writeGeneratedConfig>) {
+function getOpenEnvironmentArgs(appId: string, generated: ReturnType<typeof writeGeneratedConfig>, metroPort?: number) {
   const env = {
     ...getMacOSEnv(appId, generated.configPath),
     LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
+    RCT_METRO_PORT: metroPort === undefined ? undefined : String(metroPort),
   };
 
   return Object.entries(env)
@@ -106,6 +108,7 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
   const graphMode = mode === "Release" ? "release" : "dev";
   const generated = writeGeneratedConfig(manifest, platform, graphMode);
   const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : ensureMacOSDevWorkspace(manifest);
+  const metroPort = mode === "Release" ? undefined : resolveDevServerPort(appId, runnerArgs);
 
   const appPath = getBuiltMacAppPath(workspaceDir, mode);
 
@@ -118,7 +121,7 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
     return;
   }
 
-  const envArgs = getOpenEnvironmentArgs(appId, generated);
+  const envArgs = getOpenEnvironmentArgs(appId, generated, metroPort);
   runCommand("open", launchArgs.length > 0 ? ["-n", ...envArgs, appPath, "--args", ...launchArgs] : [...envArgs, appPath]);
 }
 
