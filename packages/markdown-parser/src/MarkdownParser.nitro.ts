@@ -57,6 +57,9 @@ export interface MarkdownDocument
   readonly blockCount: number;
   readonly sourceSize: number;
   getBlockIds(start: number, count: number): string[];
+  getBlockKey(index: number): string;
+  getIndexForBlockId(blockId: string): number;
+  getRenderBlockById(blockId: string): MarkdownRenderBlock;
   getRenderBlocks(start: number, count: number): MarkdownRenderBlock[];
   getTiming(): MarkdownDocumentTiming;
   applyTransaction(transaction: MarkdownTransaction): MarkdownTransactionResult;

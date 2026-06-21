@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
@@ -63,6 +64,9 @@ public:
   double getBlockCount() override;
   double getSourceSize() override;
   std::vector<std::string> getBlockIds(double start, double count) override;
+  std::string getBlockKey(double index) override;
+  double getIndexForBlockId(const std::string& blockId) override;
+  MarkdownRenderBlock getRenderBlockById(const std::string& blockId) override;
   std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) override;
   MarkdownDocumentTiming getTiming() override;
   MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) override;
@@ -90,6 +94,7 @@ private:
   void writeToFilePath(const std::string& filePath) const;
   void shiftBlocksAfter(size_t startIndex, long long delta);
   void renumberBlocks(size_t startIndex);
+  void rebuildBlockIndex();
   std::string nextBlockId();
 
   std::string filePath_;
@@ -99,6 +104,7 @@ private:
   mutable std::vector<std::optional<std::string>> markdownCache_;
   MarkdownDocumentTiming timing_;
   std::string documentId_;
+  std::unordered_map<std::string, size_t> blockIndexById_;
   size_t nextBlockNumber_ = 0;
   size_t revision_ = 0;
 };
