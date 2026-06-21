@@ -67,6 +67,11 @@ type CodeViewerState =
     error: null;
   }
   | {
+    status: "opening";
+    filePath: string;
+    error: null;
+  }
+  | {
     status: "loaded";
     filePath: string;
     error: null;
@@ -301,10 +306,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   });
   const stylesForState = virtualizedLines.styles;
   const tokenStyleById = useMemo(() => createStyleMap(stylesForState), [stylesForState]);
-  const pendingFilePath = state.status === "empty" ? launchFile : null;
-  const visibleFilePath = state.filePath ?? pendingFilePath;
+  const visibleFilePath = state.filePath ?? launchFile;
   const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
-  const shouldShowEmptyState = state.status !== "empty" || !pendingFilePath;
   const backgroundColor = displayTheme.colors.background;
   const mutedColor = displayTheme.colors.muted;
   const foregroundColor = displayTheme.colors.foreground;
@@ -324,6 +327,11 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
 
     try {
       loadTraceRef.current = trace;
+      setState({
+        status: "opening",
+        filePath,
+        error: null,
+      });
       const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), "github-dark", codeInitialLineCount);
       const loadFinishedAt = nowMs();
       const timing = toCodeViewerTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
@@ -503,7 +511,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           renderRow={renderLine}
           style={styles.list}
         />
-      ) : shouldShowEmptyState ? (
+      ) : state.status === "empty" ? (
         <View style={styles.empty}>
           <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
             No code file open
@@ -513,7 +521,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           </Text>
         </View>
       ) : (
-        <View style={styles.list} />
+        null
       )}
     </View>
   );
