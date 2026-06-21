@@ -18,6 +18,11 @@ export type AppManifest = {
     macos: string;
   };
   androidPackage: string;
+  hostWindow?: {
+    macos?: {
+      hidden?: boolean;
+    };
+  };
   nativeModules: Record<Platform, string[]>;
   documentTypes?: {
     macos?: MacOSDocumentType[];

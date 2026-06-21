@@ -100,6 +100,12 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
   assertContains(infoPlist, `<string>${manifest.id}</string>`, `${manifest.id}/macos Info.plist has wrong app id`);
   assertContains(infoPlist, "<key>LegendAppDisplayName</key>", `${manifest.id}/macos Info.plist has no app display name metadata`);
   assertContains(infoPlist, `<string>${manifest.displayName}</string>`, `${manifest.id}/macos Info.plist has wrong app display name metadata`);
+  assertContains(infoPlist, "<key>LegendHostWindowHidden</key>", `${manifest.id}/macos Info.plist has no host window metadata`);
+  assertContains(
+    infoPlist,
+    `<key>LegendHostWindowHidden</key>\n\t${manifest.hostWindow?.macos?.hidden === true ? "<true/>" : "<false/>"}`,
+    `${manifest.id}/macos Info.plist has wrong host window metadata`,
+  );
   assertContains(
     project,
     `PRODUCT_BUNDLE_IDENTIFIER = "${manifest.bundleIds.macos}";`,

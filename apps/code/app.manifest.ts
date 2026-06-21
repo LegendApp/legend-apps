@@ -9,6 +9,11 @@ const manifest = {
     macos: "app.legend.code.macos",
   },
   androidPackage: "app.legend.code",
+  hostWindow: {
+    macos: {
+      hidden: true,
+    },
+  },
   nativeModules: {
     macos: [
       "@legend-desktop/app-exit",

@@ -9,6 +9,11 @@ const manifest = {
     macos: "app.legend.markdown.macos",
   },
   androidPackage: "app.legend.markdown",
+  hostWindow: {
+    macos: {
+      hidden: true,
+    },
+  },
   nativeModules: {
     macos: [
       "@legend-desktop/app-exit",
