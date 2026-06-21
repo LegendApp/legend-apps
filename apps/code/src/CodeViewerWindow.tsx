@@ -258,6 +258,7 @@ function measureAfterEffect(callback: (timing: {
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<CodeViewerState>(emptyState);
+  const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
   const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
   const rowsTraceRef = useRef<CodeViewerRowsTrace | null>(null);
@@ -300,7 +301,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   });
   const stylesForState = virtualizedLines.styles;
   const tokenStyleById = useMemo(() => createStyleMap(stylesForState), [stylesForState]);
-  const fileName = state.filePath ? getFilename(state.filePath) : "No file";
+  const pendingFilePath = state.status === "empty" ? launchFile : null;
+  const visibleFilePath = state.filePath ?? pendingFilePath;
+  const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
+  const shouldShowEmptyState = state.status !== "empty" || !pendingFilePath;
   const backgroundColor = displayTheme.colors.background;
   const mutedColor = displayTheme.colors.muted;
   const foregroundColor = displayTheme.colors.foreground;
@@ -445,11 +449,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   );
 
   useEffect(() => {
-    const launchFile = getLaunchCodeFile(launchArguments);
     if (launchFile) {
       loadFile(launchFile);
     }
-  }, [launchArguments, loadFile]);
+  }, [launchFile, loadFile]);
 
   useEffect(() => {
     setCodeViewerWindowOptions({
@@ -470,7 +473,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
             {state.status === "loaded" && virtualizedLines.timing
               ? formatTimingSummary(virtualizedLines.timing)
-              : state.filePath ?? "Open a .ts or .tsx file"}
+              : visibleFilePath ?? "Open a .ts or .tsx file"}
           </Text>
         </View>
         <Pressable
@@ -500,7 +503,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           renderRow={renderLine}
           style={styles.list}
         />
-      ) : (
+      ) : shouldShowEmptyState ? (
         <View style={styles.empty}>
           <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
             No code file open
@@ -509,6 +512,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             Open a TypeScript or TSX file to view it.
           </Text>
         </View>
+      ) : (
+        <View style={styles.list} />
       )}
     </View>
   );
