@@ -18,8 +18,11 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
       prototype.registerHybridGetter("sourceSize", &HybridSyntaxDocumentSpec::getSourceSize);
       prototype.registerHybridMethod("getPlainLines", &HybridSyntaxDocumentSpec::getPlainLines);
       prototype.registerHybridMethod("getRenderLines", &HybridSyntaxDocumentSpec::getRenderLines);
+      prototype.registerHybridMethod("getTokenizedLineCount", &HybridSyntaxDocumentSpec::getTokenizedLineCount);
       prototype.registerHybridMethod("getStyles", &HybridSyntaxDocumentSpec::getStyles);
       prototype.registerHybridMethod("getTiming", &HybridSyntaxDocumentSpec::getTiming);
+      prototype.registerHybridMethod("startBackgroundTokenization", &HybridSyntaxDocumentSpec::startBackgroundTokenization);
+      prototype.registerHybridMethod("stopBackgroundTokenization", &HybridSyntaxDocumentSpec::stopBackgroundTokenization);
     });
   }
 

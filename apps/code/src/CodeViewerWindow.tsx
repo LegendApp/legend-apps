@@ -18,7 +18,7 @@ import {
 } from "@legend-desktop/virtualized-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { codeFileTypes, codeInitialLineCount } from "./appConstants";
+import { codeBackgroundTokenizationChunkLineCount, codeFileTypes, codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
@@ -337,6 +337,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const rowsTraceRef = useRef<CodeViewerRowsTrace | null>(null);
   const loggedRowsVersionRef = useRef(-1);
   const highlightedInitialRangeRef = useRef<string | null>(null);
+  const backgroundTokenizationDocumentRef = useRef<SyntaxDocument | null>(null);
   const documentSnapshot = useMemo<VirtualizedDocumentSnapshot<SyntaxDocument, SyntaxRenderLine, SyntaxStyle, CodeViewerTiming> | null>(
     () => state.status === "loaded"
       ? {
@@ -378,6 +379,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     getTiming,
     snapshot: documentSnapshot,
   });
+  const currentDocument = state.status === "loaded" ? state.document : null;
   const stylesForState = virtualizedLines.styles;
   const tokenStyleById = useMemo(() => createStyleMap(stylesForState), [stylesForState]);
   const visibleFilePath = state.filePath ?? launchFile;
@@ -394,6 +396,22 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     rowsVersion: virtualizedLines.rowsVersion,
     state: state.status,
   });
+
+  useEffect(() => {
+    if (__DEV__) {
+      globalThis.__legendCodeBenchmarkGetTokenizedLineCount = () => currentDocument?.getTokenizedLineCount() ?? 0;
+    }
+
+    return () => {
+      if (__DEV__ && globalThis.__legendCodeBenchmarkGetTokenizedLineCount) {
+        globalThis.__legendCodeBenchmarkGetTokenizedLineCount = undefined;
+      }
+      currentDocument?.stopBackgroundTokenization();
+      if (backgroundTokenizationDocumentRef.current === currentDocument) {
+        backgroundTokenizationDocumentRef.current = null;
+      }
+    };
+  }, [currentDocument]);
 
   useEffect(() => {
     debugLog("window.mounted", {
@@ -524,6 +542,17 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
               reason: "highlight",
             });
           }
+        } else if (rowsTrace.reason === "overscan" && backgroundTokenizationDocumentRef.current !== state.document) {
+          backgroundTokenizationDocumentRef.current = state.document;
+          const tokenizedLineCount = state.document.startBackgroundTokenization(codeBackgroundTokenizationChunkLineCount);
+          console.info(
+            [
+              `[CodeViewer] backgroundTokenization ${state.filePath}`,
+              `chunk=${codeBackgroundTokenizationChunkLineCount}`,
+              `tokenized=${tokenizedLineCount}`,
+              `lines=${state.document.lineCount}`,
+            ].join(" "),
+          );
         }
       });
     }

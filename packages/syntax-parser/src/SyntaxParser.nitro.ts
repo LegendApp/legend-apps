@@ -51,8 +51,11 @@ export interface SyntaxDocument
   readonly sourceSize: number;
   getPlainLines(start: number, count: number): SyntaxRenderLine[];
   getRenderLines(start: number, count: number): SyntaxRenderLine[];
+  getTokenizedLineCount(): number;
   getStyles(): SyntaxStyle[];
   getTiming(): SyntaxHighlightTiming;
+  startBackgroundTokenization(chunkLineCount: number): number;
+  stopBackgroundTokenization(): number;
 }
 
 export interface SyntaxParser

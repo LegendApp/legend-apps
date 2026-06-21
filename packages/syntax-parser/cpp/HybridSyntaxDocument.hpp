@@ -4,10 +4,12 @@
 
 #include "../nitrogen/generated/shared/c++/HybridSyntaxDocumentSpec.hpp"
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace margelo::nitro::legenddesktop::syntaxparser {
@@ -39,6 +41,7 @@ public:
       double mapFileMs,
       double indexLinesMs,
       double contextMs);
+  ~HybridSyntaxDocument() override;
 
   static std::shared_ptr<HybridSyntaxDocument> loadFile(
       const std::string& filePath,
@@ -49,8 +52,11 @@ public:
   double getSourceSize() override;
   std::vector<SyntaxRenderLine> getPlainLines(double start, double count) override;
   std::vector<SyntaxRenderLine> getRenderLines(double start, double count) override;
+  double getTokenizedLineCount() override;
   std::vector<SyntaxStyle> getStyles() override;
   SyntaxHighlightTiming getTiming() override;
+  double startBackgroundTokenization(double chunkLineCount) override;
+  double stopBackgroundTokenization() override;
   void setInitialLoadTiming(double initialLinesMs, double totalMs);
 
 protected:
@@ -75,6 +81,9 @@ private:
   double initialLinesMs_ = 0;
   double tokenizeMs_ = 0;
   double totalMs_ = 0;
+  std::atomic<uint64_t> backgroundGeneration_{0};
+  std::atomic<bool> backgroundTokenizationRunning_{false};
+  std::thread backgroundThread_;
   mutable std::mutex mutex_;
 };
 

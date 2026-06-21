@@ -1,10 +1,12 @@
 #include "HybridSyntaxDocument.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <thread>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
@@ -178,6 +180,10 @@ HybridSyntaxDocument::HybridSyntaxDocument(
       contextMs_(contextMs),
       totalMs_(mapFileMs + indexLinesMs + contextMs) {}
 
+HybridSyntaxDocument::~HybridSyntaxDocument() {
+  stopBackgroundTokenization();
+}
+
 std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadFile(
     const std::string& filePath,
     const std::string& language,
@@ -252,6 +258,11 @@ std::vector<SyntaxRenderLine> HybridSyntaxDocument::getRenderLines(double start,
   return renderLines;
 }
 
+double HybridSyntaxDocument::getTokenizedLineCount() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return static_cast<double>(tokenizedLineCount_);
+}
+
 std::vector<SyntaxStyle> HybridSyntaxDocument::getStyles() {
   std::lock_guard<std::mutex> lock(mutex_);
   return styleState_.styles;
@@ -275,6 +286,60 @@ void HybridSyntaxDocument::setInitialLoadTiming(double initialLinesMs, double to
   std::lock_guard<std::mutex> lock(mutex_);
   initialLinesMs_ = initialLinesMs;
   totalMs_ = totalMs;
+}
+
+double HybridSyntaxDocument::startBackgroundTokenization(double chunkLineCount) {
+  stopBackgroundTokenization();
+
+  const auto safeChunkLineCount = static_cast<size_t>(std::max(1.0, chunkLineCount));
+  const auto generation = backgroundGeneration_.fetch_add(1) + 1;
+  backgroundTokenizationRunning_.store(true);
+  auto document = shared_cast<HybridSyntaxDocument>();
+
+  backgroundThread_ = std::thread([document, generation, safeChunkLineCount]() {
+    bool shouldContinue = true;
+
+    while (shouldContinue && document->backgroundGeneration_.load() == generation) {
+      bool didTokenizeChunk = false;
+      {
+        std::lock_guard<std::mutex> lock(document->mutex_);
+        if (document->tokenizedLineCount_ < document->lines_.size()) {
+          const auto nextEnd = std::min(
+              document->lines_.size(),
+              document->tokenizedLineCount_ + safeChunkLineCount);
+          document->ensureTokenized(nextEnd);
+          didTokenizeChunk = true;
+        } else {
+          shouldContinue = false;
+        }
+      }
+
+      if (shouldContinue && didTokenizeChunk) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    }
+
+    if (document->backgroundGeneration_.load() == generation) {
+      document->backgroundTokenizationRunning_.store(false);
+    }
+  });
+
+  return getTokenizedLineCount();
+}
+
+double HybridSyntaxDocument::stopBackgroundTokenization() {
+  backgroundGeneration_.fetch_add(1);
+  backgroundTokenizationRunning_.store(false);
+
+  if (backgroundThread_.joinable()) {
+    if (backgroundThread_.get_id() == std::this_thread::get_id()) {
+      backgroundThread_.detach();
+    } else {
+      backgroundThread_.join();
+    }
+  }
+
+  return getTokenizedLineCount();
 }
 
 size_t HybridSyntaxDocument::getExternalMemorySize() noexcept {

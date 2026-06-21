@@ -17,6 +17,7 @@ warmCodeSyntaxHighlighters().catch(reportCodeAppControllerError);
 declare global {
   var __legendCodeBenchmarkOpenFile: ((filePath: string) => Promise<void>) | undefined;
   var __legendCodeBenchmarkCloseFile: (() => Promise<void>) | undefined;
+  var __legendCodeBenchmarkGetTokenizedLineCount: (() => number) | undefined;
 }
 
 type CodeAppProps = {
