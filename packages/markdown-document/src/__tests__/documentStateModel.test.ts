@@ -2,6 +2,8 @@ import {
   applyMarkdownTransactionResultToBlockState,
   assertMarkdownDocumentBlockStateInvariants,
   createMarkdownDocumentBlockState,
+  createMarkdownDocumentBlockStateFromIds,
+  mergeHydratedMarkdownBlockIds,
   mergeHydratedMarkdownBlocks,
   mergeHydratedMarkdownBlocksForRevision,
   validateMarkdownTransactionResultToBlockState,
@@ -137,6 +139,17 @@ describe("documentStateModel", () => {
 
     expect(nextState.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
     expect(nextState.blocksById.get("d1:b1")?.markdown).toBe("Fresh markdown");
+    expect(() => assertMarkdownDocumentBlockStateInvariants(nextState)).not.toThrow();
+  });
+
+  it("appends hydrated ids without requiring cached block snapshots", () => {
+    const state = createMarkdownDocumentBlockStateFromIds(["d1:b0"], [block("d1:b0", 0)]);
+
+    const nextState = mergeHydratedMarkdownBlockIds(state, ["d1:b1", "d1:b2"]);
+
+    expect(nextState.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
+    expect(nextState.blocksById.has("d1:b0")).toBe(true);
+    expect(nextState.blocksById.has("d1:b1")).toBe(false);
     expect(() => assertMarkdownDocumentBlockStateInvariants(nextState)).not.toThrow();
   });
 

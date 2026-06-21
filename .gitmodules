@@ -1,0 +1,3 @@
+[submodule "packages/syntax-parser/vendor/TextMateLib"]
+	path = packages/syntax-parser/vendor/TextMateLib
+	url = https://github.com/jbltx/TextMateLib.git

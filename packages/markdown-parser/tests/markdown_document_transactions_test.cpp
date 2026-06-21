@@ -144,7 +144,16 @@ void expectDocumentInvariants(const std::shared_ptr<HybridMarkdownDocumentSpec>&
   expectUniqueBlockIds(blocks);
   for (size_t index = 0; index < blocks.size(); index += 1) {
     expectEqual(static_cast<size_t>(blocks[index].index), index, "block index matches storage position");
+    expectEqual(document->getBlockKey(static_cast<double>(index)), blocks[index].id, "native block key matches storage position");
+    expectEqual(
+        static_cast<size_t>(document->getIndexForBlockId(blocks[index].id)),
+        index,
+        "native block id index matches storage position");
+    expectEqual(document->getRenderBlockById(blocks[index].id).id, blocks[index].id, "native render block by id resolves live block");
   }
+  expectEqual(document->getBlockKey(-1), "", "negative native block key is empty");
+  expectEqual(document->getBlockKey(static_cast<double>(blocks.size())), "", "out of bounds native block key is empty");
+  expect(document->getIndexForBlockId("missing:block") < 0, "missing native block id index is negative");
   expectEqual(static_cast<size_t>(document->getSourceSize()), source.size(), "source size matches saved source size");
   expectBlockSourceSlices(document, source);
 }

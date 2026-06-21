@@ -61,6 +61,12 @@ static NSString *LegendCurrentDisplayName(void)
   return displayName;
 }
 
+static BOOL LegendHostWindowHidden(void)
+{
+  id value = NSBundle.mainBundle.infoDictionary[@"LegendHostWindowHidden"];
+  return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
+}
+
 static void LegendRetitleMenuItemsWithPrefix(NSMenu *menu, NSString *prefix, NSString *displayName)
 {
   for (NSMenuItem *item in menu.itemArray) {
@@ -209,7 +215,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 {
   NSString *appId = LegendCurrentAppId();
   BOOL isMusic = [appId isEqualToString:@"music"];
-  BOOL isMarkdown = [appId isEqualToString:@"markdown"];
+  BOOL hostWindowHidden = LegendHostWindowHidden();
   BOOL shouldHandleReopen = YES;
 
   if (isMusic) {
@@ -221,7 +227,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
       [self.window makeKeyAndOrderFront:self];
     }
     [NSApp activateIgnoringOtherApps:YES];
-  } else if (isMarkdown) {
+  } else if (hostWindowHidden) {
+    [self.window orderOut:self];
+
     NSWindow *targetWindow = nil;
     for (NSWindow *window in NSApp.windows) {
       BOOL canFocusWindow = window != self.window && window.isVisible && !window.sheet && ![window isKindOfClass:NSPanel.class];
@@ -233,8 +241,6 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
     if (targetWindow) {
       [targetWindow makeKeyAndOrderFront:self];
-    } else {
-      [self.window orderOut:self];
     }
     [NSApp activateIgnoringOtherApps:YES];
     shouldHandleReopen = NO;
@@ -282,6 +288,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   NSString *appId = LegendCurrentAppId();
   BOOL isMarkdown = [appId isEqualToString:@"markdown"];
   BOOL isMusic = [appId isEqualToString:@"music"];
+  BOOL hostWindowHidden = LegendHostWindowHidden();
   NSRect frame = isMusic ? NSMakeRect(0, 0, 360, 640) : NSMakeRect(0, 0, 1280, 720);
   self.window = [[NSWindow alloc] initWithContentRect:frame
                                            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
@@ -364,7 +371,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   if (![self.window setFrameUsingName:autosaveName]) {
     [self.window center];
   }
-  if (!isMarkdown) {
+  if (hostWindowHidden) {
+    [self.window orderOut:self];
+  } else {
     [self.window makeKeyAndOrderFront:self];
   }
   if (isMusic) {

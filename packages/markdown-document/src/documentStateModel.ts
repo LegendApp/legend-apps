@@ -26,6 +26,37 @@ export function createMarkdownDocumentBlockState(blocks: MarkdownBlockSnapshot[]
   return { blockIds, blocksById };
 }
 
+export function createMarkdownDocumentBlockStateFromIds(
+  blockIds: string[],
+  blocks: MarkdownBlockSnapshot[] = [],
+): MarkdownDocumentBlockState {
+  const blocksById = new Map<string, MarkdownBlockSnapshot>();
+  for (const block of blocks) {
+    blocksById.set(block.id, block);
+  }
+  return { blockIds, blocksById };
+}
+
+export function mergeHydratedMarkdownBlockIds(
+  previousState: MarkdownDocumentBlockState,
+  blockIds: string[],
+): MarkdownDocumentBlockState {
+  const seen = new Set(previousState.blockIds);
+  const nextBlockIds = [...previousState.blockIds];
+
+  for (const blockId of blockIds) {
+    if (!seen.has(blockId)) {
+      seen.add(blockId);
+      nextBlockIds.push(blockId);
+    }
+  }
+
+  return {
+    blockIds: nextBlockIds,
+    blocksById: previousState.blocksById,
+  };
+}
+
 export function mergeHydratedMarkdownBlocks(
   previousState: MarkdownDocumentBlockState,
   blocks: MarkdownBlockSnapshot[],
@@ -60,6 +91,23 @@ export function mergeHydratedMarkdownBlocksForRevision({
     return previousState;
   }
   return mergeHydratedMarkdownBlocks(previousState, blocks);
+}
+
+export function mergeHydratedMarkdownBlockIdsForRevision({
+  blockIds,
+  currentRevision,
+  previousState,
+  requestRevision,
+}: {
+  blockIds: string[];
+  currentRevision: number;
+  previousState: MarkdownDocumentBlockState;
+  requestRevision: number;
+}): MarkdownDocumentBlockState {
+  if (requestRevision !== currentRevision) {
+    return previousState;
+  }
+  return mergeHydratedMarkdownBlockIds(previousState, blockIds);
 }
 
 export function applyMarkdownTransactionResultToBlockState(
@@ -164,9 +212,6 @@ export function assertMarkdownDocumentBlockStateInvariants(
     }
     seen.add(blockId);
 
-    if (!state.blocksById.has(blockId)) {
-      throw new Error(`Markdown block id is missing a block snapshot: ${blockId}`);
-    }
     if (retiredBlockIds.has(blockId)) {
       throw new Error(`Retired markdown block id remains in document state: ${blockId}`);
     }

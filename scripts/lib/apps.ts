@@ -7,12 +7,13 @@ export const shellDir = path.join(rootDir, "shell");
 export const appsDir = path.join(rootDir, "apps");
 export const packagesDir = path.join(rootDir, "packages");
 
-export const appIds = ["music", "markdown", "test-kitchen-sink"] as const;
+export const appIds = ["music", "markdown", "code", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
 const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify", "pods"] as const;
 const devServerPorts: Record<(typeof appIds)[number], number> = {
   music: 19091,
   markdown: 19092,
+  code: 19094,
   "test-kitchen-sink": 19093,
 };
 

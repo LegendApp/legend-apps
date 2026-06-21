@@ -123,6 +123,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios"],
   },
   {
+    name: "@legend-desktop/syntax-parser",
+    root: path.join(packagesDir, "syntax-parser"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/markdown-block-editor",
     root: path.join(packagesDir, "markdown-block-editor"),
     platforms: ["macos"],

@@ -61,6 +61,10 @@ namespace margelo::nitro::legenddesktop::markdownparser {
 
     public:
       // Methods
+      virtual std::vector<std::string> getBlockIds(double start, double count) = 0;
+      virtual std::string getBlockKey(double index) = 0;
+      virtual double getIndexForBlockId(const std::string& blockId) = 0;
+      virtual MarkdownRenderBlock getRenderBlockById(const std::string& blockId) = 0;
       virtual std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) = 0;
       virtual MarkdownDocumentTiming getTiming() = 0;
       virtual MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) = 0;

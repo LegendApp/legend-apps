@@ -188,6 +188,7 @@ HybridMarkdownDocument::HybridMarkdownDocument(
       block.id = documentId_ + ":b" + std::to_string(block.index);
     }
   }
+  rebuildBlockIndex();
 }
 
 void HybridMarkdownDocument::setDocumentDurationMs(double durationMs) {
@@ -200,6 +201,40 @@ double HybridMarkdownDocument::getBlockCount() {
 
 double HybridMarkdownDocument::getSourceSize() {
   return static_cast<double>(sourceText_.size());
+}
+
+std::vector<std::string> HybridMarkdownDocument::getBlockIds(double start, double count) {
+  const auto safeStart = static_cast<size_t>(std::max(0.0, start));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, count));
+  if (safeStart >= blocks_.size() || safeCount == 0) {
+    return {};
+  }
+
+  const auto end = std::min(blocks_.size(), safeStart + safeCount);
+  std::vector<std::string> blockIds;
+  blockIds.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    blockIds.push_back(blocks_[index].id);
+  }
+  return blockIds;
+}
+
+std::string HybridMarkdownDocument::getBlockKey(double index) {
+  if (index < 0) {
+    return "";
+  }
+  const auto safeIndex = static_cast<size_t>(index);
+  return safeIndex < blocks_.size() ? blocks_[safeIndex].id : "";
+}
+
+double HybridMarkdownDocument::getIndexForBlockId(const std::string& blockId) {
+  const auto it = blockIndexById_.find(blockId);
+  return it == blockIndexById_.end() ? -1.0 : static_cast<double>(it->second);
+}
+
+MarkdownRenderBlock HybridMarkdownDocument::getRenderBlockById(const std::string& blockId) {
+  const size_t index = findBlockIndex(blockId);
+  return renderBlockForBlock(index, blocks_[index]);
 }
 
 std::vector<MarkdownRenderBlock> HybridMarkdownDocument::getRenderBlocks(double start, double count) {
@@ -318,13 +353,11 @@ std::string HybridMarkdownDocument::sourceString(size_t start, size_t end) const
 }
 
 size_t HybridMarkdownDocument::findBlockIndex(const std::string& blockId) const {
-  const auto it = std::find_if(blocks_.begin(), blocks_.end(), [&](const auto& block) {
-    return block.id == blockId;
-  });
-  if (it == blocks_.end()) {
+  const auto it = blockIndexById_.find(blockId);
+  if (it == blockIndexById_.end()) {
     throw std::runtime_error("Markdown block not found: " + blockId);
   }
-  return static_cast<size_t>(std::distance(blocks_.begin(), it));
+  return it->second;
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const MarkdownTransaction& transaction) {
@@ -736,6 +769,15 @@ void HybridMarkdownDocument::shiftBlocksAfter(size_t startIndex, long long delta
 void HybridMarkdownDocument::renumberBlocks(size_t startIndex) {
   for (size_t index = startIndex; index < blocks_.size(); index += 1) {
     blocks_[index].index = index;
+  }
+  rebuildBlockIndex();
+}
+
+void HybridMarkdownDocument::rebuildBlockIndex() {
+  blockIndexById_.clear();
+  blockIndexById_.reserve(blocks_.size());
+  for (size_t index = 0; index < blocks_.size(); index += 1) {
+    blockIndexById_[blocks_[index].id] = index;
   }
 }
 

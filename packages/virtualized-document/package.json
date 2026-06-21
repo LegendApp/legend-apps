@@ -1,0 +1,14 @@
+{
+  "name": "@legend-desktop/virtualized-document",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "dependencies": {
+    "@legendapp/list": "^3.0.6"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

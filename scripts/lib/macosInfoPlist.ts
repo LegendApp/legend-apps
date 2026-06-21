@@ -61,12 +61,15 @@ function renderDocumentTypes(types: MacOSDocumentType[]) {
 
 export function writeMacOSInfoPlist(manifest: AppManifest, outputDir: string) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
+  const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
   const basePlist = fs.readFileSync(baseInfoPlistPath, "utf8");
   const appMetadata = [
     "\t<key>LegendAppId</key>",
     `\t<string>${escapePlistString(manifest.id)}</string>`,
     "\t<key>LegendAppDisplayName</key>",
     `\t<string>${escapePlistString(manifest.displayName)}</string>`,
+    "\t<key>LegendHostWindowHidden</key>",
+    hostWindowHidden ? "\t<true/>" : "\t<false/>",
   ].join("\n");
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",

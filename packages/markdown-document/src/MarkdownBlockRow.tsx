@@ -12,7 +12,6 @@ import { Linking, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } 
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { usesNativeEditorOverlay } from "./constants";
 import type {
-  BlockLayout,
   ChangeSelectionHandler,
   ChangeMarkdownHandler,
   MarkdownDocumentRenderState,
@@ -184,13 +183,13 @@ export const MarkdownOverlayEditorInput = memo(
 export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   activeInputRef,
   commentAnchor,
+  getBlockSnapshot,
   hasNextBlock,
   hasPreviousBlock,
   onActivate,
   onBlurRef,
   onChangeMarkdownRef,
   onChangeSelectionRef,
-  onBlockWindowLayout,
   onSelectionDragOutsideRef,
   onVerticalNavigationOutsideRef,
   documentRenderState$,
@@ -200,16 +199,17 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   renderCommentBubble,
   selectionOverlayStyle,
   item: blockId,
+  index,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   commentAnchor?: MarkdownSelectionAnchor | null;
+  getBlockSnapshot: (blockId: string, index: number) => MarkdownBlockSnapshot | undefined;
   hasNextBlock: boolean;
   hasPreviousBlock: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
-  onBlockWindowLayout: (blockId: string, layout: BlockLayout) => void;
   onBlurRef: RefObject<() => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
@@ -219,10 +219,12 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
-  const block = useValue(documentRenderState$.blocksById.get(blockId));
+  const observedBlock = useValue(documentRenderState$.blocksById.get(blockId));
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
-  const previousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
+  const observedPreviousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
+  const block = observedBlock ?? getBlockSnapshot(blockId, index);
+  const previousBlock = observedPreviousBlock ?? (previousBlockId ? getBlockSnapshot(previousBlockId, index - 1) : undefined);
   const activeEditorBlock = activeBlock?.block ?? block;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;
@@ -246,21 +248,12 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
     <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
   ) : null;
 
-  const measureWindowLayout = () => {
-    requestAnimationFrame(() => {
-      rowRef.current?.measureInWindow((_x, y, _width, height) => {
-        onBlockWindowLayout(block.id, { y, height });
-      });
-    });
-  };
-
   if (isActive && !usesNativeEditorOverlay) {
     return (
       <View
         ref={rowRef}
         onLayout={(event) => {
           rowWidth$.set(event.nativeEvent.layout.width);
-          measureWindowLayout();
         }}
         style={[rowStyle, styles.blockRow]}
       >
@@ -311,7 +304,6 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           markdown={block.markdown}
           onLayout={(event) => {
             rowWidth$.set(event.nativeEvent.layout.width);
-            measureWindowLayout();
           }}
           style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
           topPadding={rowPaddingTop}
@@ -329,7 +321,6 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       ref={rowRef}
       onLayout={(event) => {
         rowWidth$.set(event.nativeEvent.layout.width);
-        measureWindowLayout();
       }}
       style={styles.blockRow}
     >
