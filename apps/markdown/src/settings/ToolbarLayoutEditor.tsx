@@ -212,7 +212,13 @@ function ToolbarChip({ iconColor, itemId }: { iconColor: string; itemId: Markdow
 
   return (
     <View className="flex-row items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
-      <SFSymbol color={iconColor} name={item.icon} size={12} />
+      {item.icon ? (
+        <SFSymbol color={iconColor} name={item.icon} size={12} />
+      ) : (
+        <Text numberOfLines={1} style={{ color: iconColor, fontSize: 11, fontWeight: "700", minWidth: 16 }}>
+          {item.fallbackLabel}
+        </Text>
+      )}
       <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
         {item.accessibilityLabel}
       </Text>

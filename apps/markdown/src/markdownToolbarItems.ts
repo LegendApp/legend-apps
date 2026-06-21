@@ -3,7 +3,7 @@ import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document
 export type MarkdownToolbarItem = {
   id: MarkdownToolbarItemId;
   fallbackLabel: string;
-  icon: string;
+  icon?: string;
   accessibilityLabel: string;
   textStyle?: "bold" | "italic" | "underline" | "strikethrough";
   run: (commands: MarkdownDocumentCommands) => void;
@@ -44,7 +44,6 @@ export const markdownToolbarItems = [
   ...([1, 2, 3, 4, 5, 6] as const).map((level): MarkdownToolbarItem => ({
     id: `heading-${level}` as MarkdownToolbarItemId,
     fallbackLabel: `H${level}`,
-    icon: `h${level}.circle`,
     accessibilityLabel: `Heading ${level}`,
     run: (commands: MarkdownDocumentCommands) => commands.setHeading(level),
   })),

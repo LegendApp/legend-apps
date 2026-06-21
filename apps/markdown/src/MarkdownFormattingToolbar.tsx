@@ -57,13 +57,16 @@ export function MarkdownFormattingToolbar({
       }}
       style={[styles.button, buttonStyle]}
     >
-      <SFSymbol color={iconColor} name={item.icon} size={14} style={styles.icon} />
-      <Text
-        className="text-foreground"
-        style={[styles.fallbackIconText, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}
-      >
-        {item.fallbackLabel}
-      </Text>
+      {item.icon ? (
+        <SFSymbol color={iconColor} name={item.icon} size={14} style={styles.icon} />
+      ) : (
+        <Text
+          className="text-foreground"
+          style={[styles.textIcon, "textStyle" in item && item.textStyle ? styles[item.textStyle] : null]}
+        >
+          {item.fallbackLabel}
+        </Text>
+      )}
     </Pressable>
   ));
 
@@ -119,12 +122,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 12,
   },
-  fallbackIconText: {
-    fontSize: 0,
-    height: 0,
-    opacity: 0,
-    width: 0,
-  },
   icon: {
     flexShrink: 0,
   },
@@ -137,6 +134,13 @@ const styles = StyleSheet.create({
   toolbar: {
     borderRadius: 8,
     maxWidth: "100%",
+  },
+  textIcon: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    minWidth: 16,
+    textAlign: "center",
   },
   toolbarContent: {
     alignItems: "center",
