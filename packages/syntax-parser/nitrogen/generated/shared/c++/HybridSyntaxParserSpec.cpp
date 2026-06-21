@@ -15,6 +15,7 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("highlightString", &HybridSyntaxParserSpec::highlightString);
+      prototype.registerHybridMethod("warmSyntaxHighlighter", &HybridSyntaxParserSpec::warmSyntaxHighlighter);
       prototype.registerHybridMethod("loadCodeFile", &HybridSyntaxParserSpec::loadCodeFile);
     });
   }

@@ -35,7 +35,10 @@ public:
       std::string filePath,
       std::shared_ptr<const SyntaxSource> source,
       std::shared_ptr<TextMateHighlighterContext> context,
-      std::vector<SyntaxLineRange> lines);
+      std::vector<SyntaxLineRange> lines,
+      double mapFileMs,
+      double indexLinesMs,
+      double contextMs);
 
   static std::shared_ptr<HybridSyntaxDocument> loadFile(
       const std::string& filePath,
@@ -47,6 +50,7 @@ public:
   std::vector<SyntaxRenderLine> getRenderLines(double start, double count) override;
   std::vector<SyntaxStyle> getStyles() override;
   SyntaxHighlightTiming getTiming() override;
+  void setInitialLoadTiming(double initialLinesMs, double totalMs);
 
 protected:
   size_t getExternalMemorySize() noexcept override;
@@ -64,7 +68,12 @@ private:
   TextMateStateStack nextState_;
   size_t tokenizedLineCount_ = 0;
   double tokenCount_ = 0;
+  double mapFileMs_ = 0;
+  double indexLinesMs_ = 0;
+  double contextMs_ = 0;
+  double initialLinesMs_ = 0;
   double tokenizeMs_ = 0;
+  double totalMs_ = 0;
   mutable std::mutex mutex_;
 };
 

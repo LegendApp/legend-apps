@@ -42,11 +42,16 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     double lineCount     SWIFT_PRIVATE;
     double tokenCount     SWIFT_PRIVATE;
     double colorCount     SWIFT_PRIVATE;
+    double mapFileMs     SWIFT_PRIVATE;
+    double indexLinesMs     SWIFT_PRIVATE;
+    double contextMs     SWIFT_PRIVATE;
+    double initialLinesMs     SWIFT_PRIVATE;
     double tokenizeMs     SWIFT_PRIVATE;
+    double totalMs     SWIFT_PRIVATE;
 
   public:
     SyntaxHighlightTiming() = default;
-    explicit SyntaxHighlightTiming(double lineCount, double tokenCount, double colorCount, double tokenizeMs): lineCount(lineCount), tokenCount(tokenCount), colorCount(colorCount), tokenizeMs(tokenizeMs) {}
+    explicit SyntaxHighlightTiming(double lineCount, double tokenCount, double colorCount, double mapFileMs, double indexLinesMs, double contextMs, double initialLinesMs, double tokenizeMs, double totalMs): lineCount(lineCount), tokenCount(tokenCount), colorCount(colorCount), mapFileMs(mapFileMs), indexLinesMs(indexLinesMs), contextMs(contextMs), initialLinesMs(initialLinesMs), tokenizeMs(tokenizeMs), totalMs(totalMs) {}
 
   public:
     friend bool operator==(const SyntaxHighlightTiming& lhs, const SyntaxHighlightTiming& rhs) = default;
@@ -65,7 +70,12 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lineCount"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokenCount"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "colorCount"))),
-        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokenizeMs")))
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mapFileMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "indexLinesMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "contextMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialLinesMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokenizeMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "totalMs")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming& arg) {
@@ -73,7 +83,12 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "lineCount"), JSIConverter<double>::toJSI(runtime, arg.lineCount));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokenCount"), JSIConverter<double>::toJSI(runtime, arg.tokenCount));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "colorCount"), JSIConverter<double>::toJSI(runtime, arg.colorCount));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "mapFileMs"), JSIConverter<double>::toJSI(runtime, arg.mapFileMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "indexLinesMs"), JSIConverter<double>::toJSI(runtime, arg.indexLinesMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "contextMs"), JSIConverter<double>::toJSI(runtime, arg.contextMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialLinesMs"), JSIConverter<double>::toJSI(runtime, arg.initialLinesMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokenizeMs"), JSIConverter<double>::toJSI(runtime, arg.tokenizeMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "totalMs"), JSIConverter<double>::toJSI(runtime, arg.totalMs));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -87,7 +102,12 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lineCount")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokenCount")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "colorCount")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mapFileMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "indexLinesMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "contextMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialLinesMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokenizeMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "totalMs")))) return false;
       return true;
     }
   };

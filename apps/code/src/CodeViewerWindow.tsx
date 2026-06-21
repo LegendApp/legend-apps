@@ -3,6 +3,7 @@ import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
   loadCodeFile,
   type SyntaxDocument,
+  type SyntaxHighlightTiming,
   type SyntaxRenderLine,
   type SyntaxStyle,
 } from "@legend-desktop/syntax-parser";
@@ -13,9 +14,9 @@ import {
   type VirtualizedDocumentSnapshot,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { codeFileTypes } from "./appConstants";
+import { codeFileTypes, codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
@@ -24,13 +25,37 @@ type CodeViewerWindowProps = {
 };
 
 type CodeViewerTiming = {
+  colorCount: number;
+  contextMs: number;
+  indexLinesMs: number;
+  initialLinesMs: number;
+  jsLoadMs: number;
   lineCount: number;
+  mapFileMs: number;
+  nativeTotalMs: number;
   tokenCount: number;
   tokenizeMs: number;
 };
 
+type CodeViewerLoadTrace = {
+  document: SyntaxDocument | null;
+  filePath: string;
+  loadStartedAt: number;
+  nativeResolvedAt: number;
+  noteRecentFinishedAt: number;
+  noteRecentStartedAt: number;
+  setStateAt: number;
+};
+
+type CodeViewerRowsTrace = {
+  count: number;
+  document: SyntaxDocument;
+  finishedAt: number;
+  start: number;
+  startedAt: number;
+};
+
 const rowHeight = 22;
-const initialLineCount = 360;
 const lineOverscan = 160;
 
 type CodeViewerState =
@@ -38,12 +63,6 @@ type CodeViewerState =
     status: "empty";
     filePath: null;
     error: null;
-  }
-  | {
-    status: "loading";
-    filePath: string;
-    error: null;
-    timing: null;
   }
   | {
     status: "loaded";
@@ -75,9 +94,172 @@ function formatLineCount(count: number) {
   return `${count.toLocaleString()} ${count === 1 ? "line" : "lines"}`;
 }
 
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function formatMs(value: number) {
+  return `${value.toFixed(1)} ms`;
+}
+
+function elapsedMs(start: number, end: number) {
+  return Math.max(0, end - start);
+}
+
+function formatTimingSummary(timing: CodeViewerTiming) {
+  return [
+    `${formatLineCount(timing.lineCount)}`,
+    `${timing.tokenCount.toLocaleString()} tokens`,
+    `native ${formatMs(timing.nativeTotalMs)}`,
+    `js ${formatMs(timing.jsLoadMs)}`,
+  ].join(" · ");
+}
+
+function toCodeViewerTiming(timing: SyntaxHighlightTiming, jsLoadMs: number): CodeViewerTiming {
+  return {
+    colorCount: timing.colorCount,
+    contextMs: timing.contextMs,
+    indexLinesMs: timing.indexLinesMs,
+    initialLinesMs: timing.initialLinesMs,
+    jsLoadMs,
+    lineCount: timing.lineCount,
+    mapFileMs: timing.mapFileMs,
+    nativeTotalMs: timing.totalMs,
+    tokenCount: timing.tokenCount,
+    tokenizeMs: timing.tokenizeMs,
+  };
+}
+
+function logCodeLoadTiming(filePath: string, timing: CodeViewerTiming) {
+  console.info(
+    [
+      `[CodeViewer] loaded ${filePath}`,
+      `nativeTotal=${formatMs(timing.nativeTotalMs)}`,
+      `jsAwait=${formatMs(timing.jsLoadMs)}`,
+      `map=${formatMs(timing.mapFileMs)}`,
+      `index=${formatMs(timing.indexLinesMs)}`,
+      `context=${formatMs(timing.contextMs)}`,
+      `initialLines=${formatMs(timing.initialLinesMs)}`,
+      `tokenize=${formatMs(timing.tokenizeMs)}`,
+      `lines=${timing.lineCount}`,
+      `tokens=${timing.tokenCount}`,
+      `colors=${timing.colorCount}`,
+    ].join(" "),
+  );
+}
+
+function logCodeUiTiming({
+  effectAt,
+  frameAt,
+  microtaskAt,
+  secondFrameAt,
+  timeoutAt,
+  trace,
+}: {
+  effectAt: number;
+  frameAt: number;
+  microtaskAt: number;
+  secondFrameAt: number;
+  timeoutAt: number;
+  trace: CodeViewerLoadTrace;
+}) {
+  console.info(
+    [
+      `[CodeViewer] ui ${trace.filePath}`,
+      `loadToNative=${formatMs(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt))}`,
+      `nativeToSetState=${formatMs(elapsedMs(trace.nativeResolvedAt, trace.setStateAt))}`,
+      `setStateToEffect=${formatMs(elapsedMs(trace.setStateAt, effectAt))}`,
+      `effectToMicrotask=${formatMs(elapsedMs(effectAt, microtaskAt))}`,
+      `effectToTimeout=${formatMs(elapsedMs(effectAt, timeoutAt))}`,
+      `effectToFrame=${formatMs(elapsedMs(effectAt, frameAt))}`,
+      `frameToFrame=${formatMs(elapsedMs(frameAt, secondFrameAt))}`,
+      `loadToEffect=${formatMs(elapsedMs(trace.loadStartedAt, effectAt))}`,
+      `loadToFrame=${formatMs(elapsedMs(trace.loadStartedAt, frameAt))}`,
+      `loadToSecondFrame=${formatMs(elapsedMs(trace.loadStartedAt, secondFrameAt))}`,
+      `noteRecent=${formatMs(elapsedMs(trace.noteRecentStartedAt, trace.noteRecentFinishedAt))}`,
+    ].join(" "),
+  );
+}
+
+function logCodeRowsTiming({
+  effectAt,
+  frameAt,
+  loadTrace,
+  microtaskAt,
+  rowsTrace,
+  secondFrameAt,
+  timeoutAt,
+}: {
+  effectAt: number;
+  frameAt: number;
+  loadTrace: CodeViewerLoadTrace;
+  microtaskAt: number;
+  rowsTrace: CodeViewerRowsTrace;
+  secondFrameAt: number;
+  timeoutAt: number;
+}) {
+  console.info(
+    [
+      `[CodeViewer] rows ${loadTrace.filePath}`,
+      `start=${rowsTrace.start}`,
+      `count=${rowsTrace.count}`,
+      `getRows=${formatMs(elapsedMs(rowsTrace.startedAt, rowsTrace.finishedAt))}`,
+      `loadToRowsFetched=${formatMs(elapsedMs(loadTrace.loadStartedAt, rowsTrace.finishedAt))}`,
+      `rowsFetchedToEffect=${formatMs(elapsedMs(rowsTrace.finishedAt, effectAt))}`,
+      `effectToMicrotask=${formatMs(elapsedMs(effectAt, microtaskAt))}`,
+      `effectToTimeout=${formatMs(elapsedMs(effectAt, timeoutAt))}`,
+      `effectToFrame=${formatMs(elapsedMs(effectAt, frameAt))}`,
+      `frameToFrame=${formatMs(elapsedMs(frameAt, secondFrameAt))}`,
+      `loadToRowsFrame=${formatMs(elapsedMs(loadTrace.loadStartedAt, frameAt))}`,
+      `loadToRowsSecondFrame=${formatMs(elapsedMs(loadTrace.loadStartedAt, secondFrameAt))}`,
+    ].join(" "),
+  );
+}
+
+function measureAfterEffect(callback: (timing: {
+  frameAt: number;
+  microtaskAt: number;
+  secondFrameAt: number;
+  timeoutAt: number;
+}) => void) {
+  const timing = {
+    frameAt: 0,
+    microtaskAt: 0,
+    secondFrameAt: 0,
+    timeoutAt: 0,
+  };
+
+  const maybeComplete = () => {
+    if (timing.frameAt > 0 && timing.microtaskAt > 0 && timing.secondFrameAt > 0 && timing.timeoutAt > 0) {
+      callback(timing);
+    }
+  };
+
+  Promise.resolve().then(() => {
+    timing.microtaskAt = nowMs();
+    maybeComplete();
+  });
+  setTimeout(() => {
+    timing.timeoutAt = nowMs();
+    maybeComplete();
+  }, 0);
+  requestAnimationFrame(() => {
+    timing.frameAt = nowMs();
+    requestAnimationFrame(() => {
+      timing.secondFrameAt = nowMs();
+      maybeComplete();
+    });
+    maybeComplete();
+  });
+}
+
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<CodeViewerState>(emptyState);
+  const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
+  const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
+  const rowsTraceRef = useRef<CodeViewerRowsTrace | null>(null);
+  const loggedRowsVersionRef = useRef(-1);
   const documentSnapshot = useMemo<VirtualizedDocumentSnapshot<SyntaxDocument, SyntaxRenderLine, SyntaxStyle, CodeViewerTiming> | null>(
     () => state.status === "loaded"
       ? {
@@ -91,17 +273,21 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     [state],
   );
   const getRowIndex = useCallback((line: SyntaxRenderLine) => line.index, []);
-  const getRows = useCallback((document: SyntaxDocument, start: number, count: number) => (
-    document.getRenderLines(start, count)
-  ), []);
+  const getRows = useCallback((document: SyntaxDocument, start: number, count: number) => {
+    const startedAt = nowMs();
+    const rows = document.getRenderLines(start, count);
+    rowsTraceRef.current = {
+      count,
+      document,
+      finishedAt: nowMs(),
+      start,
+      startedAt,
+    };
+    return rows;
+  }, []);
   const getStyles = useCallback((document: SyntaxDocument) => document.getStyles(), []);
   const getTiming = useCallback((document: SyntaxDocument) => {
-    const timing = document.getTiming();
-    return {
-      lineCount: timing.lineCount,
-      tokenCount: timing.tokenCount,
-      tokenizeMs: timing.tokenizeMs,
-    };
+    return toCodeViewerTiming(document.getTiming(), 0);
   }, []);
   const virtualizedLines = useVirtualizedDocumentRows({
     getRowIndex,
@@ -119,15 +305,27 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const borderColor = displayTheme.colors.border;
 
   const loadFile = useCallback(async (filePath: string) => {
-    setState({
-      status: "loading",
+    const loadStartedAt = nowMs();
+    const trace: CodeViewerLoadTrace = {
+      document: null,
       filePath,
-      error: null,
-      timing: null,
-    });
+      loadStartedAt,
+      nativeResolvedAt: loadStartedAt,
+      noteRecentFinishedAt: loadStartedAt,
+      noteRecentStartedAt: loadStartedAt,
+      setStateAt: loadStartedAt,
+    };
 
     try {
-      const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), "github-dark", initialLineCount);
+      loadTraceRef.current = trace;
+      const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), "github-dark", codeInitialLineCount);
+      const loadFinishedAt = nowMs();
+      const timing = toCodeViewerTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
+
+      trace.document = highlighted.document;
+      trace.nativeResolvedAt = loadFinishedAt;
+      logCodeLoadTiming(filePath, timing);
+      trace.setStateAt = nowMs();
       setState({
         status: "loaded",
         filePath,
@@ -135,13 +333,11 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         document: highlighted.document,
         initialLines: highlighted.initialLines,
         styles: highlighted.styles,
-        timing: {
-          lineCount: highlighted.timing.lineCount,
-          tokenCount: highlighted.timing.tokenCount,
-          tokenizeMs: highlighted.timing.tokenizeMs,
-        },
+        timing,
       });
+      trace.noteRecentStartedAt = nowMs();
       noteRecentDocument(filePath);
+      trace.noteRecentFinishedAt = nowMs();
     } catch (error) {
       setState({
         status: "error",
@@ -151,6 +347,50 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       });
     }
   }, []);
+
+  useEffect(() => {
+    const trace = loadTraceRef.current;
+    if (state.status === "loaded" && trace?.document === state.document && loggedTraceDocumentRef.current !== state.document) {
+      loggedTraceDocumentRef.current = state.document;
+      const effectAt = nowMs();
+      measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
+        logCodeUiTiming({
+          effectAt,
+          frameAt,
+          microtaskAt,
+          secondFrameAt,
+          timeoutAt,
+          trace,
+        });
+      });
+    }
+  }, [state]);
+
+  useEffect(() => {
+    const loadTrace = loadTraceRef.current;
+    const rowsTrace = rowsTraceRef.current;
+    if (
+      state.status === "loaded" &&
+      loadTrace?.document === state.document &&
+      rowsTrace?.document === state.document &&
+      virtualizedLines.rowsVersion > 0 &&
+      loggedRowsVersionRef.current !== virtualizedLines.rowsVersion
+    ) {
+      loggedRowsVersionRef.current = virtualizedLines.rowsVersion;
+      const effectAt = nowMs();
+      measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
+        logCodeRowsTiming({
+          effectAt,
+          frameAt,
+          loadTrace,
+          microtaskAt,
+          rowsTrace,
+          secondFrameAt,
+          timeoutAt,
+        });
+      });
+    }
+  }, [state, virtualizedLines.rowsVersion]);
 
   const openCodeDialog = useCallback(async () => {
     const paths = await openFileDialog({
@@ -227,10 +467,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           </Text>
           <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
             {state.status === "loaded" && virtualizedLines.timing
-              ? `${formatLineCount(virtualizedLines.timing.lineCount)} · ${virtualizedLines.timing.tokenCount.toLocaleString()} tokens · ${virtualizedLines.timing.tokenizeMs.toFixed(1)} ms`
-              : state.status === "loading"
-                ? "Loading..."
-                : state.filePath ?? "Open a .ts or .tsx file"}
+              ? formatTimingSummary(virtualizedLines.timing)
+              : state.filePath ?? "Open a .ts or .tsx file"}
           </Text>
         </View>
         <Pressable
@@ -261,10 +499,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       ) : (
         <View style={styles.empty}>
           <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-            {state.status === "loading" ? "Loading file" : "No code file open"}
+            No code file open
           </Text>
           <Text style={[styles.emptyText, { color: mutedColor }]}>
-            {state.status === "loading" ? state.filePath : "Open a TypeScript or TSX file to view it."}
+            Open a TypeScript or TSX file to view it.
           </Text>
         </View>
       )}

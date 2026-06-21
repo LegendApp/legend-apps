@@ -12,6 +12,9 @@ public:
       const std::string& source,
       const std::string& language,
       const std::string& theme) override;
+  std::shared_ptr<Promise<SyntaxHighlightTiming>> warmSyntaxHighlighter(
+      const std::string& language,
+      const std::string& theme) override;
   std::shared_ptr<Promise<SyntaxFileLoadResult>> loadCodeFile(
       const std::string& filePath,
       const std::string& language,

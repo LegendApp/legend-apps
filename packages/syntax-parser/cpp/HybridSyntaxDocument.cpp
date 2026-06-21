@@ -162,27 +162,41 @@ HybridSyntaxDocument::HybridSyntaxDocument(
     std::string filePath,
     std::shared_ptr<const SyntaxSource> source,
     std::shared_ptr<TextMateHighlighterContext> context,
-    std::vector<SyntaxLineRange> lines)
+    std::vector<SyntaxLineRange> lines,
+    double mapFileMs,
+    double indexLinesMs,
+    double contextMs)
     : HybridObject(TAG),
       filePath_(std::move(filePath)),
       source_(std::move(source)),
       context_(std::move(context)),
       lines_(std::move(lines)),
       tokenCache_(lines_.size()),
-      nextState_(textmate_get_initial_state()) {}
+      nextState_(textmate_get_initial_state()),
+      mapFileMs_(mapFileMs),
+      indexLinesMs_(indexLinesMs),
+      contextMs_(contextMs),
+      totalMs_(mapFileMs + indexLinesMs + contextMs) {}
 
 std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadFile(
     const std::string& filePath,
     const std::string& language,
     const std::string& theme) {
+  const auto startedAt = SyntaxClock::now();
   auto source = readFileSource(filePath);
+  const auto mappedAt = SyntaxClock::now();
   auto lines = indexLines(*source);
+  const auto indexedAt = SyntaxClock::now();
   auto context = getHighlighterContext(language, theme);
+  const auto contextReadyAt = SyntaxClock::now();
   return std::make_shared<HybridSyntaxDocument>(
       normalizeFilePath(filePath),
       std::move(source),
       std::move(context),
-      std::move(lines));
+      std::move(lines),
+      elapsedSyntaxMs(startedAt, mappedAt),
+      elapsedSyntaxMs(mappedAt, indexedAt),
+      elapsedSyntaxMs(indexedAt, contextReadyAt));
 }
 
 double HybridSyntaxDocument::getLineCount() {
@@ -228,7 +242,18 @@ SyntaxHighlightTiming HybridSyntaxDocument::getTiming() {
       static_cast<double>(lines_.size()),
       tokenCount_,
       static_cast<double>(styleState_.styles.size()),
-      tokenizeMs_);
+      mapFileMs_,
+      indexLinesMs_,
+      contextMs_,
+      initialLinesMs_,
+      tokenizeMs_,
+      totalMs_);
+}
+
+void HybridSyntaxDocument::setInitialLoadTiming(double initialLinesMs, double totalMs) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  initialLinesMs_ = initialLinesMs;
+  totalMs_ = totalMs;
 }
 
 size_t HybridSyntaxDocument::getExternalMemorySize() noexcept {

@@ -1,6 +1,7 @@
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type {
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   StyleProp,
@@ -175,12 +176,20 @@ export function VirtualizedFixedDocumentList<TRow>({
   rowsVersion,
   style,
 }: VirtualizedFixedDocumentListProps<TRow>) {
-  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, layoutMeasurement } = event.nativeEvent;
-    const start = Math.floor(contentOffset.y / rowHeight) - lineOverscan;
-    const count = Math.ceil(layoutMeasurement.height / rowHeight) + lineOverscan * 2;
+  const requestVisibleRange = useCallback((offsetY: number, height: number) => {
+    const start = Math.floor(offsetY / rowHeight) - lineOverscan;
+    const count = Math.ceil(height / rowHeight) + lineOverscan * 2;
     requestRange(start, count);
   }, [lineOverscan, requestRange, rowHeight]);
+
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    requestVisibleRange(0, event.nativeEvent.layout.height);
+  }, [requestVisibleRange]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    requestVisibleRange(contentOffset.y, layoutMeasurement.height);
+  }, [requestVisibleRange]);
 
   const renderItem = useCallback(
     ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => renderRow({
@@ -197,6 +206,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       extraData={rowsVersion}
       getFixedItemSize={() => rowHeight}
       keyExtractor={(index) => String(index)}
+      onLayout={handleLayout}
       onScroll={handleScroll}
       recycleItems={recycleItems}
       renderItem={renderItem}

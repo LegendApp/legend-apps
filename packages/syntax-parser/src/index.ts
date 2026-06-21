@@ -12,6 +12,10 @@ export function highlightString(source: string, language = "typescript", theme =
   return getSyntaxParser().highlightString(source, language, theme);
 }
 
+export function warmSyntaxHighlighter(language = "typescript", theme = "github-dark") {
+  return getSyntaxParser().warmSyntaxHighlighter(language, theme);
+}
+
 export function loadCodeFile(
   filePath: string,
   language = "typescript",

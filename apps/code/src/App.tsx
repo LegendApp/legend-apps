@@ -4,11 +4,19 @@ import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents"
 import { addWindowClosedListener } from "@legend-desktop/window-manager";
 import { useEffect, useRef } from "react";
 import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
+import { installCodeBenchmarkHook } from "./codeBenchmark";
 import { getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { codeMenuConfig } from "./codeMenus";
+import { warmCodeSyntaxHighlighters } from "./codeSyntaxWarmup";
 import { openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
 
 registerCodeWindows();
+installCodeBenchmarkHook();
+warmCodeSyntaxHighlighters().catch(reportCodeAppControllerError);
+
+declare global {
+  var __legendCodeBenchmarkOpenFile: ((filePath: string) => Promise<void>) | undefined;
+}
 
 type CodeAppProps = {
   launchArguments?: string[];
@@ -17,6 +25,10 @@ type CodeAppProps = {
 function reportCodeAppControllerError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[CodeAppController] ${message}`);
+}
+
+if (__DEV__) {
+  globalThis.__legendCodeBenchmarkOpenFile = (filePath: string) => openCodeViewerWindow([filePath]);
 }
 
 async function openCodeViewerForSelectedFile() {
