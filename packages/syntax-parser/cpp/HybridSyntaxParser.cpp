@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -31,6 +33,43 @@ constexpr int foregroundOffset = 15;
 struct GrammarConfig {
   std::string scopeName;
   std::vector<std::string> grammarFiles;
+};
+
+class TextMateHighlighterContext {
+public:
+  TextMateHighlighterContext(TextMateOnigLib onig, TextMateRegistry registry, TextMateGrammar grammar, TextMateColorMap* colorMap)
+      : onig_(onig), registry_(registry), grammar_(grammar), colorMap_(colorMap) {}
+
+  TextMateHighlighterContext(const TextMateHighlighterContext&) = delete;
+  TextMateHighlighterContext& operator=(const TextMateHighlighterContext&) = delete;
+
+  ~TextMateHighlighterContext() {
+    if (colorMap_) {
+      textmate_free_color_map(colorMap_);
+    }
+    if (registry_) {
+      textmate_registry_dispose(registry_);
+    }
+    if (onig_) {
+      textmate_oniglib_dispose(onig_);
+    }
+  }
+
+  TextMateGrammar grammar() const {
+    return grammar_;
+  }
+
+  TextMateColorMap* colorMap() const {
+    return colorMap_;
+  }
+
+  std::mutex mutex;
+
+private:
+  TextMateOnigLib onig_ = nullptr;
+  TextMateRegistry registry_ = nullptr;
+  TextMateGrammar grammar_ = nullptr;
+  TextMateColorMap* colorMap_ = nullptr;
 };
 
 double elapsedMs(Clock::time_point start, Clock::time_point end) {
@@ -174,6 +213,88 @@ void addStyle(
   styles.push_back(SyntaxStyle(id, foreground, static_cast<double>(fontStyle)));
 }
 
+std::shared_ptr<TextMateHighlighterContext> createHighlighterContext(
+    const GrammarConfig& grammarConfig,
+    const std::string& theme,
+    const std::filesystem::path& grammarsRoot,
+    const std::filesystem::path& themesRoot) {
+  const auto themeJson = readTextFile(themesRoot / getThemeFileName(theme));
+
+  TextMateOnigLib onig = textmate_oniglib_create();
+  if (!onig) {
+    throw std::runtime_error("Failed to create TextMate Oniguruma runtime.");
+  }
+
+  TextMateRegistry registry = textmate_registry_create(onig);
+  if (!registry) {
+    textmate_oniglib_dispose(onig);
+    throw std::runtime_error("Failed to create TextMate registry.");
+  }
+
+  for (const auto& grammarFile : grammarConfig.grammarFiles) {
+    const auto grammarPath = grammarsRoot / grammarFile;
+    if (!textmate_registry_add_grammar_from_file(registry, grammarPath.string().c_str())) {
+      textmate_registry_dispose(registry);
+      textmate_oniglib_dispose(onig);
+      throw std::runtime_error("Failed to register TextMate grammar: " + grammarPath.string());
+    }
+  }
+
+  if (!textmate_registry_set_theme(registry, themeJson.c_str())) {
+    textmate_registry_dispose(registry);
+    textmate_oniglib_dispose(onig);
+    throw std::runtime_error("Failed to set TextMate theme: " + theme);
+  }
+
+  TextMateColorMap* colorMap = textmate_registry_get_color_map(registry);
+  if (!colorMap) {
+    textmate_registry_dispose(registry);
+    textmate_oniglib_dispose(onig);
+    throw std::runtime_error("Failed to read TextMate theme color map.");
+  }
+
+  TextMateGrammar grammar = textmate_registry_load_grammar(registry, grammarConfig.scopeName.c_str());
+  if (!grammar) {
+    textmate_free_color_map(colorMap);
+    textmate_registry_dispose(registry);
+    textmate_oniglib_dispose(onig);
+    throw std::runtime_error("Failed to load TextMate grammar scope: " + grammarConfig.scopeName);
+  }
+
+  return std::make_shared<TextMateHighlighterContext>(onig, registry, grammar, colorMap);
+}
+
+std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
+    const std::string& language,
+    const std::string& theme) {
+  const auto normalizedLanguage = normalizeOption(language);
+  const auto normalizedTheme = normalizeOption(theme);
+  const auto key = normalizedLanguage + ":" + normalizedTheme;
+  static std::mutex cacheMutex;
+  static std::map<std::string, std::shared_ptr<TextMateHighlighterContext>> contextCache;
+
+  {
+    std::lock_guard<std::mutex> lock(cacheMutex);
+    const auto cached = contextCache.find(key);
+    if (cached != contextCache.end()) {
+      return cached->second;
+    }
+  }
+
+  const auto root = packageRoot();
+  const auto grammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
+  const auto themesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
+  auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
+
+  std::lock_guard<std::mutex> lock(cacheMutex);
+  const auto cached = contextCache.find(key);
+  if (cached != contextCache.end()) {
+    return cached->second;
+  }
+  contextCache[key] = context;
+  return context;
+}
+
 } // namespace
 
 HybridSyntaxParser::HybridSyntaxParser() : HybridObject(TAG) {}
@@ -184,52 +305,10 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightStr
     const std::string& theme) {
   return Promise<SyntaxHighlightResult>::async([source, language, theme]() -> SyntaxHighlightResult {
     const auto startedAt = Clock::now();
-    const auto root = packageRoot();
-    const auto grammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
-    const auto themesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
-    const auto grammarConfig = getGrammarConfig(language);
-    const auto themeJson = readTextFile(themesRoot / getThemeFileName(theme));
-
-    TextMateOnigLib onig = textmate_oniglib_create();
-    if (!onig) {
-      throw std::runtime_error("Failed to create TextMate Oniguruma runtime.");
-    }
-
-    TextMateRegistry registry = textmate_registry_create(onig);
-    if (!registry) {
-      textmate_oniglib_dispose(onig);
-      throw std::runtime_error("Failed to create TextMate registry.");
-    }
-
-    for (const auto& grammarFile : grammarConfig.grammarFiles) {
-      const auto grammarPath = grammarsRoot / grammarFile;
-      if (!textmate_registry_add_grammar_from_file(registry, grammarPath.string().c_str())) {
-        textmate_registry_dispose(registry);
-        textmate_oniglib_dispose(onig);
-        throw std::runtime_error("Failed to register TextMate grammar: " + grammarPath.string());
-      }
-    }
-
-    if (!textmate_registry_set_theme(registry, themeJson.c_str())) {
-      textmate_registry_dispose(registry);
-      textmate_oniglib_dispose(onig);
-      throw std::runtime_error("Failed to set TextMate theme: " + theme);
-    }
-
-    TextMateColorMap* colorMap = textmate_registry_get_color_map(registry);
-    if (!colorMap) {
-      textmate_registry_dispose(registry);
-      textmate_oniglib_dispose(onig);
-      throw std::runtime_error("Failed to read TextMate theme color map.");
-    }
-
-    TextMateGrammar grammar = textmate_registry_load_grammar(registry, grammarConfig.scopeName.c_str());
-    if (!grammar) {
-      textmate_free_color_map(colorMap);
-      textmate_registry_dispose(registry);
-      textmate_oniglib_dispose(onig);
-      throw std::runtime_error("Failed to load TextMate grammar scope: " + grammarConfig.scopeName);
-    }
+    const auto context = getHighlighterContext(language, theme);
+    std::lock_guard<std::mutex> contextLock(context->mutex);
+    TextMateGrammar grammar = context->grammar();
+    TextMateColorMap* colorMap = context->colorMap();
 
     const auto lines = splitLines(source);
     std::vector<SyntaxRenderLine> renderLines;
@@ -245,9 +324,6 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightStr
       const auto lineLength = utf16Length(line);
       TextMateTokenizeResult2* result = textmate_tokenize_line2_utf16(grammar, line.c_str(), state);
       if (!result) {
-        textmate_free_color_map(colorMap);
-        textmate_registry_dispose(registry);
-        textmate_oniglib_dispose(onig);
         throw std::runtime_error("Failed to tokenize syntax line.");
       }
 
@@ -285,10 +361,6 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightStr
           std::move(tokens)));
       textmate_free_tokenize_result2(result);
     }
-
-    textmate_free_color_map(colorMap);
-    textmate_registry_dispose(registry);
-    textmate_oniglib_dispose(onig);
 
     const auto finishedAt = Clock::now();
     SyntaxHighlightTiming timing(
