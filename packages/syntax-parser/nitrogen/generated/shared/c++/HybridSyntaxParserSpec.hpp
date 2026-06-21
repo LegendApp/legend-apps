@@ -15,10 +15,13 @@
 
 // Forward declaration of `SyntaxHighlightResult` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxHighlightResult; }
+// Forward declaration of `SyntaxFileLoadResult` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxFileLoadResult; }
 
 #include "SyntaxHighlightResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
+#include "SyntaxFileLoadResult.hpp"
 
 namespace margelo::nitro::legenddesktop::syntaxparser {
 
@@ -52,6 +55,7 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     public:
       // Methods
       virtual std::shared_ptr<Promise<SyntaxHighlightResult>> highlightString(const std::string& source, const std::string& language, const std::string& theme) = 0;
+      virtual std::shared_ptr<Promise<SyntaxFileLoadResult>> loadCodeFile(const std::string& filePath, const std::string& language, const std::string& theme, double initialLineCount) = 0;
 
     protected:
       // Hybrid Setup

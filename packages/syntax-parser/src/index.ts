@@ -12,7 +12,18 @@ export function highlightString(source: string, language = "typescript", theme =
   return getSyntaxParser().highlightString(source, language, theme);
 }
 
+export function loadCodeFile(
+  filePath: string,
+  language = "typescript",
+  theme = "github-dark",
+  initialLineCount = 200,
+) {
+  return getSyntaxParser().loadCodeFile(filePath, language, theme, initialLineCount);
+}
+
 export type {
+  SyntaxDocument,
+  SyntaxFileLoadResult,
   SyntaxHighlightResult,
   SyntaxHighlightTiming,
   SyntaxRenderLine,

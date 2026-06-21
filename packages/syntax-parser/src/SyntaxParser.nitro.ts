@@ -31,9 +31,33 @@ export interface SyntaxHighlightResult {
   timing: SyntaxHighlightTiming;
 }
 
+export interface SyntaxFileLoadResult {
+  document: SyntaxDocument;
+  initialLines: SyntaxRenderLine[];
+  styles: SyntaxStyle[];
+  timing: SyntaxHighlightTiming;
+}
+
+export interface SyntaxDocument
+  extends HybridObject<{
+    ios: "c++";
+  }> {
+  readonly lineCount: number;
+  readonly sourceSize: number;
+  getRenderLines(start: number, count: number): SyntaxRenderLine[];
+  getStyles(): SyntaxStyle[];
+  getTiming(): SyntaxHighlightTiming;
+}
+
 export interface SyntaxParser
   extends HybridObject<{
     ios: "c++";
   }> {
   highlightString(source: string, language: string, theme: string): Promise<SyntaxHighlightResult>;
+  loadCodeFile(
+    filePath: string,
+    language: string,
+    theme: string,
+    initialLineCount: number,
+  ): Promise<SyntaxFileLoadResult>;
 }
