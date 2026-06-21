@@ -56,7 +56,9 @@ type CodeViewerRowsTrace = {
 };
 
 const rowHeight = 22;
+const initialRequestRowCount = 80;
 const lineOverscan = 160;
+const overscanRequestDelayMs = 80;
 
 type CodeViewerState =
   | {
@@ -487,8 +489,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       ) : null}
       {virtualizedLines.itemIndexes.length > 0 ? (
         <VirtualizedFixedDocumentList
+          initialRequestRowCount={initialRequestRowCount}
           itemIndexes={virtualizedLines.itemIndexes}
           lineOverscan={lineOverscan}
+          overscanRequestDelayMs={overscanRequestDelayMs}
           requestRange={virtualizedLines.requestRange}
           rowCache={virtualizedLines.rowCache}
           rowHeight={rowHeight}

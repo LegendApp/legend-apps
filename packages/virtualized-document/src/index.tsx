@@ -50,8 +50,10 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
 };
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
+  initialRequestRowCount?: number;
   itemIndexes: number[];
   lineOverscan?: number;
+  overscanRequestDelayMs?: number;
   recycleItems?: boolean;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
   requestRange: (start: number, count: number) => void;
@@ -166,8 +168,10 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 }
 
 export function VirtualizedFixedDocumentList<TRow>({
+  initialRequestRowCount,
   itemIndexes,
   lineOverscan = 0,
+  overscanRequestDelayMs = 0,
   recycleItems = true,
   renderRow,
   requestRange,
@@ -176,19 +180,48 @@ export function VirtualizedFixedDocumentList<TRow>({
   rowsVersion,
   style,
 }: VirtualizedFixedDocumentListProps<TRow>) {
-  const requestVisibleRange = useCallback((offsetY: number, height: number) => {
-    const start = Math.floor(offsetY / rowHeight) - lineOverscan;
-    const count = Math.ceil(height / rowHeight) + lineOverscan * 2;
+  const hasRequestedInitialRangeRef = useRef(false);
+  const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (overscanTimeoutRef.current) {
+      clearTimeout(overscanTimeoutRef.current);
+      overscanTimeoutRef.current = null;
+    }
+  }, []);
+
+  const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean) => {
+    const visibleStart = Math.floor(offsetY / rowHeight);
+    const visibleCount = Math.ceil(height / rowHeight);
+    const start = includeOverscan ? visibleStart - lineOverscan : visibleStart;
+    const count = includeOverscan ? visibleCount + lineOverscan * 2 : Math.min(visibleCount, initialRequestRowCount ?? visibleCount);
     requestRange(start, count);
-  }, [lineOverscan, requestRange, rowHeight]);
+  }, [initialRequestRowCount, lineOverscan, requestRange, rowHeight]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
-    requestVisibleRange(0, event.nativeEvent.layout.height);
-  }, [requestVisibleRange]);
+    const height = event.nativeEvent.layout.height;
+
+    if (!hasRequestedInitialRangeRef.current) {
+      hasRequestedInitialRangeRef.current = true;
+      requestVisibleRange(0, height, false);
+
+      if (lineOverscan > 0) {
+        if (overscanTimeoutRef.current) {
+          clearTimeout(overscanTimeoutRef.current);
+        }
+        overscanTimeoutRef.current = setTimeout(() => {
+          overscanTimeoutRef.current = null;
+          requestVisibleRange(0, height, true);
+        }, overscanRequestDelayMs);
+      }
+    } else {
+      requestVisibleRange(0, height, true);
+    }
+  }, [lineOverscan, overscanRequestDelayMs, requestVisibleRange]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
-    requestVisibleRange(contentOffset.y, layoutMeasurement.height);
+    requestVisibleRange(contentOffset.y, layoutMeasurement.height, true);
   }, [requestVisibleRange]);
 
   const renderItem = useCallback(
