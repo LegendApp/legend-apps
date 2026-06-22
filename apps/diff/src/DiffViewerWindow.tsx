@@ -267,7 +267,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   });
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
   const visibleItemIndexes = useMemo(
-    () => state.status === "loaded"
+    () => state.status === "loaded" && collapsedFileIndexes.size > 0
       ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
       : diffRows.itemIndexes,
     [collapsedFileIndexes, diffRows.itemIndexes, state],
