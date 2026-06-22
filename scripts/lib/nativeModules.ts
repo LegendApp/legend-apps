@@ -128,6 +128,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios"],
   },
   {
+    name: "@legend-desktop/diff-parser",
+    root: path.join(packagesDir, "diff-parser"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/markdown-block-editor",
     root: path.join(packagesDir, "markdown-block-editor"),
     platforms: ["macos"],

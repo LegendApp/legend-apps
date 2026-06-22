@@ -1,8 +1,14 @@
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
+require 'json'
 require 'pathname'
 
 shell_dir = Pathname.new(ENV['LEGEND_SHELL_ROOT'] || File.expand_path("..", __dir__))
 app_root = Pathname.new(ENV['LEGEND_APP_ROOT'] || shell_dir.to_s)
+app_config_path = ENV['LEGEND_APP_CONFIG']
+uses_diff_parser = app_config_path && File.exist?(app_config_path) &&
+  JSON.parse(File.read(app_config_path))
+    .fetch("activeNativePackages", [])
+    .any? { |native_package| native_package["name"] == "@legend-desktop/diff-parser" }
 rn_macos_absolute_path = shell_dir.join("node_modules", "react-native-macos")
 rn_macos_path = rn_macos_absolute_path.relative_path_from(Pathname.new(__dir__)).to_s
 require "#{rn_macos_absolute_path}/scripts/react_native_pods.rb"
@@ -14,6 +20,7 @@ prepare_react_native_project!
 target 'legendapp-shell-macos' do
   platform :osx, '14.0'
   use_expo_modules!
+  pod 'libgit2', :modular_headers => true if uses_diff_parser
 
   config_command = [
     'npx',
@@ -38,11 +45,64 @@ target 'legendapp-shell-macos' do
   post_install do |installer|
     react_native_post_install(installer, rn_macos_path)
 
-    installer.pods_project.targets.each do |target|
-      next unless target.name == 'fmt'
+    libgit2_tag_source = installer.sandbox.root + 'libgit2/src/tag.c'
+    if File.exist?(libgit2_tag_source)
+      tag_source = File.read(libgit2_tag_source)
+      unless tag_source.include?('#include "compat/fnmatch.h"')
+        patched_tag_source = if tag_source.include?('#include "posix.h"')
+          tag_source.sub("#include \"posix.h\"\n", "#include \"compat/fnmatch.h\"\n")
+        elsif tag_source.include?('#include <fnmatch.h>')
+          tag_source.sub("#include <fnmatch.h>\n", "#include \"compat/fnmatch.h\"\n")
+        else
+          tag_source.sub("#include \"common.h\"\n", "#include \"common.h\"\n#include \"compat/fnmatch.h\"\n")
+        end
+        File.chmod(0644, libgit2_tag_source)
+        File.write(libgit2_tag_source, patched_tag_source)
+      end
+      tag_source = File.read(libgit2_tag_source)
+      unless tag_source.include?('#undef p_fnmatch')
+        File.chmod(0644, libgit2_tag_source)
+        File.write(
+          libgit2_tag_source,
+          tag_source.sub(
+            "#include \"git2/signature.h\"\n",
+            "#include \"git2/signature.h\"\n\n#ifdef p_fnmatch\n#undef p_fnmatch\n#endif\n"
+          )
+        )
+      end
+    end
+    libgit2_posix_header = installer.sandbox.root + 'libgit2/src/unix/posix.h'
+    if File.exist?(libgit2_posix_header)
+      posix_header = File.read(libgit2_posix_header)
+      fnmatch_header_block = <<~HEADER
+        #ifndef __sun
+        #\tinclude <fnmatch.h>
+        #\tdefine p_fnmatch(p, s, f) fnmatch(p, s, f)
+        #else
+        #\tinclude "compat/fnmatch.h"
+        #endif
+      HEADER
+      if posix_header.include?(fnmatch_header_block)
+        File.chmod(0644, libgit2_posix_header)
+        File.write(
+          libgit2_posix_header,
+          posix_header.sub(fnmatch_header_block, "#include \"compat/fnmatch.h\"\n")
+        )
+      end
+    end
 
+    installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+        if target.name == 'fmt'
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+        elsif target.name == 'libgit2'
+          config.build_settings['CLANG_ENABLE_MODULES'] = 'NO'
+          config.build_settings['USE_HEADERMAP'] = 'NO'
+          config.build_settings['HEADER_SEARCH_PATHS'] = [
+            '$(PODS_TARGET_SRCROOT)/src',
+            '$(inherited)'
+          ].join(' ')
+        end
       end
     end
   end
