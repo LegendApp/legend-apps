@@ -5,7 +5,8 @@
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
-    "@legend-desktop/syntax-parser": "workspace:*"
+    "@legend-desktop/syntax-parser": "workspace:*",
+    "@legend-desktop/virtualized-document": "workspace:*"
   },
   "peerDependencies": {
     "react": "*",

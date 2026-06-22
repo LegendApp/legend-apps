@@ -2,23 +2,25 @@ import { openFileDialog } from "@legend-desktop/file-dialog";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
   createSyntaxStyleMap,
+  SourceDocumentView,
+  type SourceDocumentRowsTrace,
+  type SourceDocumentSnapshot,
+  type SourceDocumentTiming,
   SourceLineRow,
-  sourceViewerRowHeight,
+  sourceViewerInitialRequestRowCount,
+  sourceViewerLineOverscan,
+  sourceViewerOverscanRequestDelayMs,
+  toSourceDocumentTiming,
+  useSourceDocumentRows,
 } from "@legend-desktop/source-viewer";
 import {
   loadCodeFile,
   type SyntaxDocument,
-  type SyntaxHighlightTiming,
   type SyntaxRenderLine,
   type SyntaxStyle,
 } from "@legend-desktop/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
-  useVirtualizedDocumentRows,
-  VirtualizedFixedDocumentList,
-  type VirtualizedDocumentSnapshot,
-  type VirtualizedDocumentRequestOptions,
-  type VirtualizedDocumentRequestReason,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,19 +37,6 @@ type CodeViewerWindowProps = {
   launchArguments?: string[];
 };
 
-type CodeViewerTiming = {
-  colorCount: number;
-  contextMs: number;
-  indexLinesMs: number;
-  initialLinesMs: number;
-  jsLoadMs: number;
-  lineCount: number;
-  mapFileMs: number;
-  nativeTotalMs: number;
-  tokenCount: number;
-  tokenizeMs: number;
-};
-
 type CodeViewerLoadTrace = {
   document: SyntaxDocument | null;
   filePath: string;
@@ -57,20 +46,6 @@ type CodeViewerLoadTrace = {
   noteRecentStartedAt: number;
   setStateAt: number;
 };
-
-type CodeViewerRowsTrace = {
-  count: number;
-  document: SyntaxDocument;
-  finishedAt: number;
-  reason: VirtualizedDocumentRequestReason;
-  start: number;
-  startedAt: number;
-};
-
-const rowHeight = sourceViewerRowHeight;
-const initialRequestRowCount = 80;
-const lineOverscan = 160;
-const overscanRequestDelayMs = 80;
 
 type CodeViewerState =
   | {
@@ -90,7 +65,7 @@ type CodeViewerState =
     document: SyntaxDocument;
     initialLines: SyntaxRenderLine[];
     styles: SyntaxStyle[];
-    timing: CodeViewerTiming;
+    timing: SourceDocumentTiming;
   }
   | {
     status: "error";
@@ -140,22 +115,9 @@ function formatTimingSummary(timing: CodeViewerTiming) {
   ].join(" · ");
 }
 
-function toCodeViewerTiming(timing: SyntaxHighlightTiming, jsLoadMs: number): CodeViewerTiming {
-  return {
-    colorCount: timing.colorCount,
-    contextMs: timing.contextMs,
-    indexLinesMs: timing.indexLinesMs,
-    initialLinesMs: timing.initialLinesMs,
-    jsLoadMs,
-    lineCount: timing.lineCount,
-    mapFileMs: timing.mapFileMs,
-    nativeTotalMs: timing.totalMs,
-    tokenCount: timing.tokenCount,
-    tokenizeMs: timing.tokenizeMs,
-  };
-}
+type CodeViewerTiming = SourceDocumentTiming;
 
-function logCodeLoadTiming(filePath: string, timing: CodeViewerTiming) {
+function logCodeLoadTiming(filePath: string, timing: SourceDocumentTiming) {
   console.info(
     [
       `[CodeViewer] loaded ${filePath}`,
@@ -219,7 +181,7 @@ function logCodeRowsTiming({
   frameAt: number;
   loadTrace: CodeViewerLoadTrace;
   microtaskAt: number;
-  rowsTrace: CodeViewerRowsTrace;
+  rowsTrace: SourceDocumentRowsTrace;
   secondFrameAt: number;
   timeoutAt: number;
 }) {
@@ -335,11 +297,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
   const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
-  const rowsTraceRef = useRef<CodeViewerRowsTrace | null>(null);
   const loggedRowsVersionRef = useRef(-1);
-  const highlightedInitialRangeRef = useRef<string | null>(null);
-  const backgroundTokenizationDocumentRef = useRef<SyntaxDocument | null>(null);
-  const documentSnapshot = useMemo<VirtualizedDocumentSnapshot<SyntaxDocument, SyntaxRenderLine, SyntaxStyle, CodeViewerTiming> | null>(
+  const documentSnapshot = useMemo<SourceDocumentSnapshot | null>(
     () => state.status === "loaded"
       ? {
           document: state.document,
@@ -351,37 +310,50 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       : null,
     [state],
   );
-  const getRowIndex = useCallback((line: SyntaxRenderLine) => line.index, []);
-  const getRows = useCallback((document: SyntaxDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    const reason = options?.reason ?? "scroll";
-    const startedAt = nowMs();
-    const rows = reason === "initial"
-      ? document.getPlainLines(start, count)
-      : document.getRenderLines(start, count);
-    rowsTraceRef.current = {
-      count,
-      document,
-      finishedAt: nowMs(),
-      reason,
-      start,
-      startedAt,
-    };
-    return rows;
-  }, []);
-  const getStyles = useCallback((document: SyntaxDocument) => document.getStyles(), []);
-  const getTiming = useCallback((document: SyntaxDocument) => {
-    return toCodeViewerTiming(document.getTiming(), 0);
-  }, []);
-  const virtualizedLines = useVirtualizedDocumentRows({
+  const sourceRows = useSourceDocumentRows({
+    backgroundTokenizationChunkLineCount: codeBackgroundTokenizationChunkLineCount,
     debugName: "code",
-    getRowIndex,
-    getRows,
-    getStyles,
-    getTiming,
+    initialHighlightRowCount: sourceViewerInitialRequestRowCount,
+    onBackgroundTokenizationStart: ({ tokenizedLineCount }) => {
+      if (state.status === "loaded") {
+        console.info(
+          [
+            `[CodeViewer] backgroundTokenization ${state.filePath}`,
+            `chunk=${codeBackgroundTokenizationChunkLineCount}`,
+            `tokenized=${tokenizedLineCount}`,
+            `lines=${state.document.lineCount}`,
+          ].join(" "),
+        );
+      }
+    },
+    onRowsFetched: (rowsTrace, rowsVersion) => {
+      const loadTrace = loadTraceRef.current;
+      if (
+        state.status === "loaded" &&
+        loadTrace?.document === state.document &&
+        rowsTrace.document === state.document &&
+        rowsVersion > 0 &&
+        loggedRowsVersionRef.current !== rowsVersion
+      ) {
+        loggedRowsVersionRef.current = rowsVersion;
+        const effectAt = nowMs();
+        measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
+          logCodeRowsTiming({
+            effectAt,
+            frameAt,
+            loadTrace,
+            microtaskAt,
+            rowsTrace,
+            secondFrameAt,
+            timeoutAt,
+          });
+        });
+      }
+    },
     snapshot: documentSnapshot,
   });
   const currentDocument = state.status === "loaded" ? state.document : null;
-  const stylesForState = virtualizedLines.styles;
+  const stylesForState = sourceRows.styles;
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(stylesForState), [stylesForState]);
   const visibleFilePath = state.filePath ?? launchFile;
   const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
@@ -391,10 +363,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const borderColor = displayTheme.colors.border;
 
   debugLog("window.render", {
-    cacheSize: virtualizedLines.rowCache.size,
-    itemCount: virtualizedLines.itemIndexes.length,
+    cacheSize: sourceRows.rowCache.size,
+    itemCount: sourceRows.itemIndexes.length,
     renderCount: renderCountRef.current,
-    rowsVersion: virtualizedLines.rowsVersion,
+    rowsVersion: sourceRows.rowsVersion,
     state: state.status,
   });
 
@@ -406,10 +378,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     return () => {
       if (__DEV__ && globalThis.__legendCodeBenchmarkGetTokenizedLineCount) {
         globalThis.__legendCodeBenchmarkGetTokenizedLineCount = undefined;
-      }
-      currentDocument?.stopBackgroundTokenization();
-      if (backgroundTokenizationDocumentRef.current === currentDocument) {
-        backgroundTokenizationDocumentRef.current = null;
       }
     };
   }, [currentDocument]);
@@ -451,7 +419,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       });
       const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), "github-dark", codeInitialLineCount);
       const loadFinishedAt = nowMs();
-      const timing = toCodeViewerTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
+      const timing = toSourceDocumentTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
 
       trace.document = highlighted.document;
       trace.nativeResolvedAt = loadFinishedAt;
@@ -499,65 +467,9 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           timeoutAt,
           trace,
         });
-        const initialHighlightCount = Math.min(initialRequestRowCount, state.document.lineCount);
-        const rangeKey = `0:${initialHighlightCount}`;
-        if (initialHighlightCount > 0 && highlightedInitialRangeRef.current !== rangeKey) {
-          highlightedInitialRangeRef.current = rangeKey;
-          virtualizedLines.requestRange(0, initialHighlightCount, {
-            force: true,
-            reason: "highlight",
-          });
-        }
       });
     }
-  }, [state, virtualizedLines]);
-
-  useEffect(() => {
-    const loadTrace = loadTraceRef.current;
-    const rowsTrace = rowsTraceRef.current;
-    if (
-      state.status === "loaded" &&
-      loadTrace?.document === state.document &&
-      rowsTrace?.document === state.document &&
-      virtualizedLines.rowsVersion > 0 &&
-      loggedRowsVersionRef.current !== virtualizedLines.rowsVersion
-    ) {
-      loggedRowsVersionRef.current = virtualizedLines.rowsVersion;
-      const effectAt = nowMs();
-      measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
-        logCodeRowsTiming({
-          effectAt,
-          frameAt,
-          loadTrace,
-          microtaskAt,
-          rowsTrace,
-          secondFrameAt,
-          timeoutAt,
-        });
-        if (rowsTrace.reason === "initial") {
-          const rangeKey = `${rowsTrace.start}:${rowsTrace.count}`;
-          if (highlightedInitialRangeRef.current !== rangeKey) {
-            highlightedInitialRangeRef.current = rangeKey;
-            virtualizedLines.requestRange(rowsTrace.start, rowsTrace.count, {
-              force: true,
-              reason: "highlight",
-            });
-          }
-        } else if (rowsTrace.reason === "overscan" && backgroundTokenizationDocumentRef.current !== state.document) {
-          backgroundTokenizationDocumentRef.current = state.document;
-          const tokenizedLineCount = state.document.startBackgroundTokenization(codeBackgroundTokenizationChunkLineCount);
-          console.info(
-            [
-              `[CodeViewer] backgroundTokenization ${state.filePath}`,
-              `chunk=${codeBackgroundTokenizationChunkLineCount}`,
-              `tokenized=${tokenizedLineCount}`,
-              `lines=${state.document.lineCount}`,
-            ].join(" "),
-          );
-        }
-      });
-    }
-  }, [state, virtualizedLines]);
+  }, [state]);
 
   const openCodeDialog = useCallback(async () => {
     const paths = await openFileDialog({
@@ -617,8 +529,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             {fileName}
           </Text>
           <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
-            {state.status === "loaded" && virtualizedLines.timing
-              ? formatTimingSummary(virtualizedLines.timing)
+            {state.status === "loaded" && sourceRows.timing
+              ? formatTimingSummary(sourceRows.timing)
               : visibleFilePath ?? "Open a .ts or .tsx file"}
           </Text>
         </View>
@@ -636,22 +548,14 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       {state.error ? (
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
       ) : null}
-      {virtualizedLines.itemIndexes.length > 0 ? (
-        <VirtualizedFixedDocumentList
+      {sourceRows.itemIndexes.length > 0 ? (
+        <SourceDocumentView
           debugName="code"
-          initialRequestRowCount={initialRequestRowCount}
-          itemIndexes={virtualizedLines.itemIndexes}
-          lineOverscan={lineOverscan}
-          onInitialRowsRequested={(start, count) => {
-            highlightedInitialRangeRef.current = null;
-            console.info(`[CodeViewer] initialRowsRequested start=${start} count=${count}`);
-          }}
-          overscanRequestDelayMs={overscanRequestDelayMs}
-          requestRange={virtualizedLines.requestRange}
-          rowCache={virtualizedLines.rowCache}
-          rowHeight={rowHeight}
-          rowsVersion={virtualizedLines.rowsVersion}
+          initialRequestRowCount={sourceViewerInitialRequestRowCount}
+          lineOverscan={sourceViewerLineOverscan}
+          overscanRequestDelayMs={sourceViewerOverscanRequestDelayMs}
           renderRow={renderLine}
+          sourceRows={sourceRows}
           style={styles.list}
         />
       ) : state.status === "empty" ? (

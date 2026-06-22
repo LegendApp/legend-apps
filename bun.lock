@@ -430,6 +430,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/syntax-parser": "workspace:*",
+        "@legend-desktop/virtualized-document": "workspace:*",
       },
       "peerDependencies": {
         "react": "*",
