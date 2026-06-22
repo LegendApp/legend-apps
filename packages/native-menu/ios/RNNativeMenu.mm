@@ -393,6 +393,7 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
     @"action": item.action ? NSStringFromSelector(item.action) : @"",
     @"representedObject": item.representedObject ?: (id)kCFNull,
     @"enabled": @(item.enabled),
+    @"hidden": @(item.hidden),
     @"state": @(item.state),
     @"title": item.title ?: @"",
     @"keyEquivalent": item.keyEquivalent ?: @"",
@@ -429,6 +430,7 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
   id representedObject = record[@"representedObject"];
   item.representedObject = representedObject == (id)kCFNull ? nil : representedObject;
   item.enabled = [record[@"enabled"] boolValue];
+  item.hidden = [record[@"hidden"] boolValue];
   item.state = [record[@"state"] integerValue];
   item.title = [record[@"title"] isKindOfClass:[NSString class]] ? record[@"title"] : item.title;
   item.keyEquivalent = [record[@"keyEquivalent"] isKindOfClass:[NSString class]] ? record[@"keyEquivalent"] : item.keyEquivalent;
@@ -495,6 +497,11 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
   NSNumber *enabled = [config[@"enabled"] isKindOfClass:[NSNumber class]] ? config[@"enabled"] : nil;
   if (enabled) {
     item.enabled = enabled.boolValue;
+  }
+
+  NSNumber *hidden = [config[@"hidden"] isKindOfClass:[NSNumber class]] ? config[@"hidden"] : nil;
+  if (hidden) {
+    item.hidden = hidden.boolValue;
   }
 
   NSNumber *checked = [config[@"checked"] isKindOfClass:[NSNumber class]] ? config[@"checked"] : nil;

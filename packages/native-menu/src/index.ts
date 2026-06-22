@@ -15,6 +15,7 @@ export type NativeMenuItem = {
   targetPath?: string[];
   enabled?: boolean;
   checked?: boolean;
+  hidden?: boolean;
   separator?: boolean;
   shortcut?: NativeMenuShortcut | null;
   payload?: Record<string, unknown>;
