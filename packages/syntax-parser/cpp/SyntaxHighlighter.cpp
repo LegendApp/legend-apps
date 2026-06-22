@@ -97,10 +97,6 @@ GrammarConfig getGrammarConfig(const std::string& language) {
 std::string getThemeFileName(const std::string& theme) {
   const auto normalized = normalizeOption(theme);
 
-  if (normalized == "github-dark") {
-    return "github-dark-dimmed.json";
-  }
-
   if (normalized.empty()) {
     throw std::runtime_error("Unsupported syntax theme: " + theme);
   }
