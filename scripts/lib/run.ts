@@ -4,6 +4,7 @@ import path from "node:path";
 import { getDefaultDevServerPort, resolveDevServerPort, rootDir, shellDir, withDefaultPortArg } from "./apps";
 import { splitLaunchArgs, type OptionSpecs } from "./launchArgs";
 import { macOSSchemeName, macOSWorkspaceName, macOSXcodeProjectName } from "./macosShell";
+import { getMacOSDevDerivedDataPath } from "./macosWorkspaces";
 import type { Platform } from "./types";
 
 const macosRunOptionSpecs: OptionSpecs = {
@@ -59,6 +60,7 @@ function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string |
   const projectDir = path.join(shellDir, projectPath);
   const workspacePath = path.join(projectDir, macOSWorkspaceName);
   const xcodeProjectPath = path.join(projectDir, macOSXcodeProjectName);
+  const derivedDataPath = getMacOSDevDerivedDataPath(projectDir);
   const containerArgs = fs.existsSync(workspacePath)
     ? ["-workspace", workspacePath]
     : ["-project", xcodeProjectPath];
@@ -71,6 +73,8 @@ function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string |
       mode,
       "-scheme",
       scheme,
+      "-derivedDataPath",
+      derivedDataPath,
     ],
     {
       cwd: shellDir,

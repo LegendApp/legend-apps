@@ -6,7 +6,12 @@ import { assertSupportedPlatform, loadAppManifest, resolveDevServerPort, shellDi
 import { parseAppCommand } from "./lib/apps";
 import { splitLaunchArgs, type OptionSpecs } from "./lib/launchArgs";
 import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
-import { ensureMacOSDevWorkspace, getMacOSEnv, getMacOSReleaseWorkspaceDir } from "./lib/macosWorkspaces";
+import {
+  ensureMacOSDevWorkspace,
+  getMacOSDevDerivedDataPath,
+  getMacOSEnv,
+  getMacOSReleaseWorkspaceDir,
+} from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -46,18 +51,22 @@ function parseBuildSettings(output: string) {
 
 function getBuiltMacAppPath(workspaceDir: string, mode: string) {
   const macosWorkspace = path.join(workspaceDir, macOSWorkspaceName);
+  const buildSettingsArgs = [
+    "-workspace",
+    macosWorkspace,
+    "-scheme",
+    macOSSchemeName,
+    "-configuration",
+    mode,
+    "-showBuildSettings",
+    "-json",
+  ];
+  const args = mode === "Release"
+    ? buildSettingsArgs
+    : [...buildSettingsArgs, "-derivedDataPath", getMacOSDevDerivedDataPath(workspaceDir)];
   const result = spawnSync(
     "xcodebuild",
-    [
-      "-workspace",
-      macosWorkspace,
-      "-scheme",
-      macOSSchemeName,
-      "-configuration",
-      mode,
-      "-showBuildSettings",
-      "-json",
-    ],
+    args,
     {
       cwd: shellDir,
       encoding: "utf8",

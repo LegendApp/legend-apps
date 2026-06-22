@@ -47,6 +47,10 @@ export function getMacOSReleaseProjectPath(appId: string) {
   return path.relative(shellDir, getMacOSReleaseWorkspaceDir(appId));
 }
 
+export function getMacOSDevDerivedDataPath(workspaceDir: string) {
+  return path.join(workspaceDir, "build", "xcodebuild-dev");
+}
+
 export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: string) {
   const workspaceDir = getMacOSReleaseWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
@@ -291,6 +295,10 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
     addFile(hash, path.join(appsDir, config.id, "package.json"));
   }
   addFile(hash, path.join(workspaceDir, "Podfile"));
+
+  if (config.activeNativePackages?.some((pkg) => pkg.root === "packages/diff-parser")) {
+    addFile(hash, path.join(rootDir, "packages/libgit2/LegendLibGit2.podspec"));
+  }
 
   for (const pkg of config.activeNativePackages ?? []) {
     const pkgRoot = path.join(rootDir, pkg.root);

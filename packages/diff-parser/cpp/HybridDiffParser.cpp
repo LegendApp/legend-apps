@@ -38,7 +38,7 @@ std::string normalizeFolderPath(const std::string& folderPath) {
 }
 
 std::string gitErrorMessage(const std::string& fallback) {
-  const git_error* error = giterr_last();
+  const git_error* error = git_error_last();
   if (error == nullptr || error->message == nullptr) {
     return fallback;
   }
@@ -52,8 +52,26 @@ struct GitRepositoryDeleter {
 };
 
 struct GitDiffDeleter {
-  void operator()(git_diff_list* diff) const {
-    git_diff_list_free(diff);
+  void operator()(git_diff* diff) const {
+    git_diff_free(diff);
+  }
+};
+
+struct GitReferenceDeleter {
+  void operator()(git_reference* reference) const {
+    git_reference_free(reference);
+  }
+};
+
+struct GitCommitDeleter {
+  void operator()(git_commit* commit) const {
+    git_commit_free(commit);
+  }
+};
+
+struct GitTreeDeleter {
+  void operator()(git_tree* tree) const {
+    git_tree_free(tree);
   }
 };
 
@@ -114,7 +132,7 @@ struct DiffBuildState {
   }
 };
 
-int onFile(void* payload, git_diff_delta* delta, float) {
+int onFile(const git_diff_delta* delta, float, void* payload) {
   auto* state = static_cast<DiffBuildState*>(payload);
   state->finishCurrentFile();
 
@@ -131,7 +149,7 @@ int onFile(void* payload, git_diff_delta* delta, float) {
   file.deletions = 0;
   file.rowStart = static_cast<double>(state->rows.size());
   file.rowCount = 0;
-  file.isBinary = delta->binary != 0;
+  file.isBinary = (delta->flags & GIT_DIFF_FLAG_BINARY) != 0;
   state->files.push_back(std::move(file));
 
   DiffRenderRow row;
@@ -147,50 +165,44 @@ int onFile(void* payload, git_diff_delta* delta, float) {
   return 0;
 }
 
-int onHunk(void* payload, git_diff_delta*, git_diff_range* range, const char*, size_t) {
+int onHunk(const git_diff_delta*, const git_diff_hunk* hunk, void* payload) {
   auto* state = static_cast<DiffBuildState*>(payload);
   if (state->currentFileIndex < 0) {
     return 0;
   }
 
   state->currentHunkIndex += 1;
-  state->currentOldLine = range->old_start;
-  state->currentNewLine = range->new_start;
+  state->currentOldLine = hunk->old_start;
+  state->currentNewLine = hunk->new_start;
   return 0;
 }
 
 int onLine(
-    void* payload,
-    git_diff_delta*,
-    git_diff_range*,
-    char lineOrigin,
-    const char* content,
-    size_t contentLength) {
+    const git_diff_delta*,
+    const git_diff_hunk*,
+    const git_diff_line* line,
+    void* payload) {
   auto* state = static_cast<DiffBuildState*>(payload);
   if (state->currentFileIndex < 0) {
     return 0;
   }
 
   double changeType = diffChangeTypeContext;
-  double oldLineNumber = -1;
-  double newLineNumber = -1;
-  if (lineOrigin == GIT_DIFF_LINE_ADDITION) {
+  double oldLineNumber = line->old_lineno >= 0 ? static_cast<double>(line->old_lineno) : -1;
+  double newLineNumber = line->new_lineno >= 0 ? static_cast<double>(line->new_lineno) : -1;
+  if (line->origin == GIT_DIFF_LINE_ADDITION) {
     changeType = diffChangeTypeAdd;
-    newLineNumber = static_cast<double>(state->currentNewLine);
     state->currentNewLine += 1;
     state->files[static_cast<size_t>(state->currentFileIndex)].additions += 1;
-  } else if (lineOrigin == GIT_DIFF_LINE_DELETION) {
+  } else if (line->origin == GIT_DIFF_LINE_DELETION) {
     changeType = diffChangeTypeRemove;
-    oldLineNumber = static_cast<double>(state->currentOldLine);
     state->currentOldLine += 1;
     state->files[static_cast<size_t>(state->currentFileIndex)].deletions += 1;
-  } else if (lineOrigin == GIT_DIFF_LINE_ADD_EOFNL) {
+  } else if (line->origin == GIT_DIFF_LINE_ADD_EOFNL) {
     changeType = diffChangeTypeAdd;
-  } else if (lineOrigin == GIT_DIFF_LINE_DEL_EOFNL) {
+  } else if (line->origin == GIT_DIFF_LINE_DEL_EOFNL) {
     changeType = diffChangeTypeRemove;
   } else {
-    oldLineNumber = static_cast<double>(state->currentOldLine);
-    newLineNumber = static_cast<double>(state->currentNewLine);
     state->currentOldLine += 1;
     state->currentNewLine += 1;
   }
@@ -203,7 +215,7 @@ int onLine(
   row.oldLineNumber = oldLineNumber;
   row.newLineNumber = newLineNumber;
   row.changeType = changeType;
-  row.text = trimDiffLine(content, contentLength);
+  row.text = trimDiffLine(line->content, line->content_len);
   state->rows.push_back(std::move(row));
   return 0;
 }
@@ -219,16 +231,42 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
 
   git_diff_options options = {};
+  if (git_diff_options_init(&options, GIT_DIFF_OPTIONS_VERSION) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
+  }
   options.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS;
-  git_diff_list* rawDiff = nullptr;
-  if (git_diff_workdir_to_index(repo.get(), &options, &rawDiff) != 0) {
+
+  git_reference* rawHead = nullptr;
+  if (git_repository_head(&rawHead, repo.get()) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to resolve repository HEAD"));
+  }
+  std::unique_ptr<git_reference, GitReferenceDeleter> head(rawHead);
+  const git_oid* headTarget = git_reference_target(head.get());
+  if (headTarget == nullptr) {
+    throw std::runtime_error("Failed to read repository HEAD target");
+  }
+
+  git_commit* rawHeadCommit = nullptr;
+  if (git_commit_lookup(&rawHeadCommit, repo.get(), headTarget) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD commit"));
+  }
+  std::unique_ptr<git_commit, GitCommitDeleter> headCommit(rawHeadCommit);
+
+  git_tree* rawHeadTree = nullptr;
+  if (git_commit_tree(&rawHeadTree, headCommit.get()) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD tree"));
+  }
+  std::unique_ptr<git_tree, GitTreeDeleter> headTree(rawHeadTree);
+
+  git_diff* rawDiff = nullptr;
+  if (git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &options) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to create git diff"));
   }
   const auto diffCreatedAt = DiffClock::now();
-  std::unique_ptr<git_diff_list, GitDiffDeleter> diff(rawDiff);
+  std::unique_ptr<git_diff, GitDiffDeleter> diff(rawDiff);
 
   DiffBuildState state;
-  if (git_diff_foreach(diff.get(), &state, onFile, onHunk, onLine) != 0) {
+  if (git_diff_foreach(diff.get(), onFile, nullptr, onHunk, onLine, &state) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to read git diff"));
   }
   state.finishCurrentFile();
