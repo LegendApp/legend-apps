@@ -209,7 +209,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
-  const highlightedInitialDocumentRef = useRef<DiffDocument | null>(null);
+  const highlightedVisibleRangeRef = useRef<{
+    count: number;
+    document: DiffDocument;
+    start: number;
+  } | null>(null);
+  const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const visibleFolderPath = state.folderPath;
   const title = visibleFolderPath ? getFilename(visibleFolderPath) : "No folder";
   const backgroundColor = syntaxTheme.background;
@@ -237,13 +242,17 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
   const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const startedAt = nowMs();
-    const rows = document.getRows(start, count);
+    const shouldHighlight = options?.reason === "highlight";
+    const rows = shouldHighlight
+      ? document.getRows(start, count)
+      : document.getPlainRows(start, count);
     logDiffOpenTiming("viewer.rowsFetched", {
       count,
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       reason: options?.reason ?? "unknown",
       rows: rows.length,
       start,
+      tokenized: shouldHighlight,
     });
     return rows;
   }, []);
@@ -276,67 +285,87 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     ? formatDiffSummary(diffRows.timing)
     : visibleFolderPath ?? "Open a Git folder to view its changes";
 
+  const clearHighlightTimeouts = useCallback(() => {
+    for (const timeoutHandle of highlightTimeoutHandlesRef.current) {
+      clearTimeout(timeoutHandle);
+    }
+    highlightTimeoutHandlesRef.current.clear();
+  }, []);
+
   useEffect(() => {
+    highlightedVisibleRangeRef.current = null;
+    clearHighlightTimeouts();
     if (state.status === "loaded") {
       setCollapsedFileIndexes((current) => current.size > 0 ? new Set() : current);
-    } else {
-      highlightedInitialDocumentRef.current = null;
     }
-  }, [state.status === "loaded" ? state.document : null]);
+  }, [clearHighlightTimeouts, state.status === "loaded" ? state.document : null]);
 
-  useEffect(() => {
-    let frameHandle: number | null = null;
-    const timeoutHandles = new Set<ReturnType<typeof setTimeout>>();
-    let cancelled = false;
+  useEffect(() => clearHighlightTimeouts, [clearHighlightTimeouts]);
 
-    const scheduleHighlightChunk = (start: number, count: number) => {
-      const timeoutHandle = setTimeout(() => {
-        timeoutHandles.delete(timeoutHandle);
-        if (!cancelled) {
-          const chunkCount = Math.min(diffInitialHighlightChunkRowCount, count - start);
-          logDiffOpenTiming("viewer.initialHighlight.request", {
-            count: chunkCount,
-            remaining: Math.max(0, count - start - chunkCount),
-            start,
-          });
-          diffRows.requestRange(start, chunkCount, {
-            force: true,
-            reason: "highlight",
-          });
+  const scheduleVisibleHighlight = useCallback((start: number, count: number, reason: string) => {
+    if (state.status === "loaded") {
+      const safeStart = Math.max(0, Math.floor(start));
+      const safeCount = Math.min(
+        Math.max(0, Math.ceil(count)),
+        Math.max(0, state.document.rowCount - safeStart),
+      );
+      const highlightedRange = highlightedVisibleRangeRef.current;
+      const isAlreadyHighlighted = highlightedRange?.document === state.document
+        && highlightedRange.start === safeStart
+        && highlightedRange.count === safeCount;
 
-          if (start + chunkCount < count) {
-            scheduleHighlightChunk(start + chunkCount, count);
-          }
-        }
-      }, 0);
-      timeoutHandles.add(timeoutHandle);
-    };
-
-    if (state.status === "loaded" && highlightedInitialDocumentRef.current !== state.document) {
-      highlightedInitialDocumentRef.current = state.document;
-      const count = Math.min(diffInitialRowCount, state.document.rowCount);
-      if (count > 0) {
-        frameHandle = requestAnimationFrame(() => {
-          logDiffOpenTiming("viewer.initialHighlight.schedule", {
-            chunkSize: diffInitialHighlightChunkRowCount,
-            count,
-          });
-          scheduleHighlightChunk(0, count);
+      if (safeCount > 0 && !isAlreadyHighlighted) {
+        highlightedVisibleRangeRef.current = {
+          count: safeCount,
+          document: state.document,
+          start: safeStart,
+        };
+        clearHighlightTimeouts();
+        logDiffOpenTiming("viewer.visibleHighlight.schedule", {
+          chunkSize: diffInitialHighlightChunkRowCount,
+          count: safeCount,
+          reason,
+          start: safeStart,
         });
+
+        const scheduleHighlightChunk = (chunkStart: number) => {
+          const timeoutHandle = setTimeout(() => {
+            highlightTimeoutHandlesRef.current.delete(timeoutHandle);
+            if (highlightedVisibleRangeRef.current?.document === state.document) {
+              const chunkOffset = chunkStart - safeStart;
+              const chunkCount = Math.min(diffInitialHighlightChunkRowCount, safeCount - chunkOffset);
+              if (chunkCount > 0) {
+                logDiffOpenTiming("viewer.visibleHighlight.request", {
+                  count: chunkCount,
+                  remaining: Math.max(0, safeCount - chunkOffset - chunkCount),
+                  start: chunkStart,
+                });
+                diffRows.requestRange(chunkStart, chunkCount, {
+                  force: true,
+                  reason: "highlight",
+                });
+
+                if (chunkOffset + chunkCount < safeCount) {
+                  scheduleHighlightChunk(chunkStart + chunkCount);
+                }
+              }
+            }
+          }, 0);
+          highlightTimeoutHandlesRef.current.add(timeoutHandle);
+        };
+
+        const timeoutHandle = setTimeout(() => {
+          highlightTimeoutHandlesRef.current.delete(timeoutHandle);
+          scheduleHighlightChunk(safeStart);
+        }, 0);
+        highlightTimeoutHandlesRef.current.add(timeoutHandle);
       }
     }
+  }, [clearHighlightTimeouts, diffRows.requestRange, state]);
 
-    return () => {
-      cancelled = true;
-      if (frameHandle !== null) {
-        cancelAnimationFrame(frameHandle);
-      }
-      for (const timeoutHandle of timeoutHandles) {
-        clearTimeout(timeoutHandle);
-      }
-      timeoutHandles.clear();
-    };
-  }, [diffRows.requestRange, state]);
+  const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: string) => {
+    scheduleVisibleHighlight(start, count, reason);
+  }, [scheduleVisibleHighlight]);
 
   useEffect(() => {
     logDiffOpenTiming("viewer.renderCommitted", {
@@ -646,9 +675,9 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       return (
         <VirtualizedFixedDocumentList
           debugName="diff"
-          initialRequestRowCount={diffInitialRowCount}
           itemIndexes={visibleItemIndexes}
           lineOverscan={diffLineOverscan}
+          onVisibleRowsRequested={handleVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={diffRows.requestRange}
           rowCache={diffRows.rowCache}
@@ -683,7 +712,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </Text>
       </View>
     );
-  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
+  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, handleVisibleRowsRequested, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>

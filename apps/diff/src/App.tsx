@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { diffMenuOwnerId } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
+import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 registerDiffWindows();
@@ -10,6 +11,9 @@ logDiffOpenTiming("app.module", {
   phase: "evaluated",
 });
 prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
+setTimeout(() => {
+  warmDiffSyntaxHighlighters().catch(reportDiffAppControllerError);
+}, 0);
 
 type DiffAppProps = {
   launchArguments?: string[];

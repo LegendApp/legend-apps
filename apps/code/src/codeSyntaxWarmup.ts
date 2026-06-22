@@ -1,33 +1,14 @@
-import { warmSyntaxHighlighter, type SyntaxHighlightTiming } from "@legend-desktop/syntax-parser";
+import { warmSyntaxHighlighters, type SyntaxHighlighterWarmupResult } from "@legend-desktop/syntax-parser";
 import { getCodeSyntaxThemeSetting } from "./codeSettings";
 
-type CodeSyntaxWarmupResult = {
-  language: string;
-  timing: SyntaxHighlightTiming;
-};
-
-let warmupPromise: Promise<CodeSyntaxWarmupResult[]> | null = null;
-
-function formatMs(value: number) {
-  return `${value.toFixed(1)} ms`;
-}
+let warmupPromise: Promise<SyntaxHighlighterWarmupResult[]> | null = null;
 
 export function warmCodeSyntaxHighlighters(languages = ["tsx"]) {
   const syntaxTheme = getCodeSyntaxThemeSetting();
-  warmupPromise ??= languages.reduce<Promise<CodeSyntaxWarmupResult[]>>(
-    (promise, language) => promise.then((results) => (
-      warmSyntaxHighlighter(language, syntaxTheme).then((timing) => [...results, { language, timing }])
-    )),
-    Promise.resolve([]),
-  ).then((results) => {
-    console.info(
-      results
-        .map(({ language, timing }) => (
-          `[CodeViewer] warm ${language} total=${formatMs(timing.totalMs)} context=${formatMs(timing.contextMs)} tokenize=${formatMs(timing.tokenizeMs)}`
-        ))
-        .join(" "),
-    );
-    return results;
+  warmupPromise ??= warmSyntaxHighlighters({
+    label: "CodeViewer",
+    languages,
+    theme: syntaxTheme,
   }).catch((error: unknown) => {
     warmupPromise = null;
     throw error;

@@ -62,6 +62,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   initialRequestRowCount?: number;
   itemIndexes: number[];
   onInitialRowsRequested?: (start: number, count: number) => void;
+  onVisibleRowsRequested?: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
   lineOverscan?: number;
   overscanRequestDelayMs?: number;
   recycleItems?: boolean;
@@ -266,7 +267,10 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
               : loadedRowsState;
             const nextRowCache = new Map(baseRowsState.rowCache);
             for (const row of fetchedRows) {
-              nextRowCache.set(getRowIndex(row), row);
+              const rowIndex = getRowIndex(row);
+              if (options?.force === true || !nextRowCache.has(rowIndex)) {
+                nextRowCache.set(rowIndex, row);
+              }
             }
 
             return {
@@ -304,6 +308,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   itemIndexes,
   lineOverscan = 0,
   onInitialRowsRequested,
+  onVisibleRowsRequested,
   overscanRequestDelayMs = 0,
   recycleItems = true,
   renderRow,
@@ -339,6 +344,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     const listStart = includeOverscan ? visibleStart - lineOverscan : visibleStart;
     const initialCount = initialRequestRowCount ?? visibleCount;
     const listCount = includeOverscan ? visibleCount + lineOverscan * 2 : Math.max(visibleCount, initialCount);
+    const visibleDocumentRange = getDocumentRangeForListRange(itemIndexes, visibleStart, visibleCount);
     const documentRange = getDocumentRangeForListRange(itemIndexes, listStart, listCount);
     debugLog(debugName, "list.requestVisibleRange", {
       count: documentRange.count,
@@ -350,11 +356,16 @@ export function VirtualizedFixedDocumentList<TRow>({
       reason,
       start: documentRange.start,
       visibleCount,
+      visibleDocumentCount: visibleDocumentRange.count,
+      visibleDocumentStart: visibleDocumentRange.start,
       visibleStart,
     });
     requestRange(documentRange.start, documentRange.count, { reason });
+    if (visibleDocumentRange.count > 0) {
+      onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, reason);
+    }
     return documentRange;
-  }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, requestRange, rowHeight]);
+  }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, onVisibleRowsRequested, requestRange, rowHeight]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
