@@ -3,12 +3,13 @@ import { useEffect, useRef } from "react";
 import { diffMenuOwnerId } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
-import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows } from "./diffWindows";
+import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 registerDiffWindows();
 logDiffOpenTiming("app.module", {
   phase: "evaluated",
 });
+prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
 
 type DiffAppProps = {
   launchArguments?: string[];

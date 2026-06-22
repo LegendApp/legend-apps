@@ -97,6 +97,10 @@ export function openDiffViewerWindow(folderPath?: string | null) {
   });
 }
 
+export function prefetchDiffViewerWindow() {
+  return DiffWindowsNavigator.prefetch(diffViewerWindowModuleName as DiffWindow);
+}
+
 export function openDiffSettingsWindow() {
   return DiffWindowsNavigator.open(diffSettingsWindowModuleName as DiffWindow);
 }
