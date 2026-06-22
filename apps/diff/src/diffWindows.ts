@@ -71,10 +71,29 @@ export function registerDiffWindows() {
   // Importing this module registers the windows above.
 }
 
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
+  console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
+}
+
 export function openDiffViewerWindow(folderPath?: string | null) {
+  const startedAt = nowMs();
+  logDiffOpenTiming("window.open.start", {
+    folderPath,
+  });
+
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     initialProperties: folderPath ? { folderPath } : undefined,
     windowStyle: createDiffViewerWindowStyle({ includeFrame: true }),
+  }).then((result) => {
+    logDiffOpenTiming("window.open.finish", {
+      folderPath,
+      windowOpenMs: Number((nowMs() - startedAt).toFixed(1)),
+    });
+    return result;
   });
 }
 
@@ -91,6 +110,7 @@ export function setDiffViewerWindowOptions({
   backgroundColor: string;
   folderPath: string | null;
 }) {
+  const startedAt = nowMs();
   return setWindowOptions(diffViewerWindowIdentifier, {
     representedURL: folderPath,
     title: folderPath ? getFilename(folderPath) : "Legend Diff",
@@ -99,5 +119,11 @@ export function setDiffViewerWindowOptions({
       backgroundColor,
       includeFrame: false,
     }),
+  }).then((result) => {
+    logDiffOpenTiming("window.options.finish", {
+      folderPath,
+      setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
+    });
+    return result;
   });
 }

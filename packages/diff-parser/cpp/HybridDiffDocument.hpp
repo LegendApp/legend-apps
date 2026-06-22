@@ -42,6 +42,7 @@ public:
 
   double getRowCount() override;
   double getFileCount() override;
+  std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxStyle> getStyles() override;

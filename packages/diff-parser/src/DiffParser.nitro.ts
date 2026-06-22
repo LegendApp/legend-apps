@@ -63,6 +63,7 @@ export interface DiffDocument
   }> {
   readonly rowCount: number;
   readonly fileCount: number;
+  getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
   getFiles(): DiffFileSummary[];
   getStyles(): DiffSyntaxStyle[];

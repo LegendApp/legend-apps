@@ -81,6 +81,19 @@ std::vector<DiffRenderRow> HybridDiffDocument::getRows(double start, double coun
   return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
 }
 
+std::vector<DiffRenderRow> HybridDiffDocument::getPlainRows(double start, double count) {
+  const auto safeStart = static_cast<size_t>(std::max(0.0, start));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, count));
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (safeStart >= rows_.size() || safeCount == 0) {
+    return {};
+  }
+
+  const auto end = std::min(rows_.size(), safeStart + safeCount);
+  return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
+}
+
 std::vector<DiffFileSummary> HybridDiffDocument::getFiles() {
   std::lock_guard<std::mutex> lock(mutex_);
   return files_;

@@ -17,6 +17,7 @@ import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
   VirtualizedFixedDocumentList,
+  type VirtualizedDocumentRequestOptions,
   type VirtualizedDocumentSnapshot,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
@@ -35,6 +36,14 @@ const diffChangeTypeRemove = 2;
 
 type DiffViewerWindowProps = {
   folderPath?: string;
+};
+
+type DiffLoadTrace = {
+  document: DiffDocument | null;
+  folderPath: string;
+  loadStartedAt: number;
+  nativeResolvedAt: number;
+  setStateAt: number;
 };
 
 type DiffViewerState =
@@ -74,25 +83,68 @@ function formatDiffSummary(timing: DiffLoadTiming) {
   ].join(" · ");
 }
 
-function formatMs(value: number) {
-  return `${value.toFixed(1)} ms`;
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function elapsedMs(start: number, end = nowMs()) {
+  return Math.max(0, end - start);
+}
+
+function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
+  console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
+}
+
+function measureAfterEffect(callback: (timing: {
+  frameAt: number;
+  microtaskAt: number;
+  secondFrameAt: number;
+  timeoutAt: number;
+}) => void) {
+  const timing = {
+    frameAt: 0,
+    microtaskAt: 0,
+    secondFrameAt: 0,
+    timeoutAt: 0,
+  };
+
+  const maybeComplete = () => {
+    if (timing.frameAt > 0 && timing.microtaskAt > 0 && timing.secondFrameAt > 0 && timing.timeoutAt > 0) {
+      callback(timing);
+    }
+  };
+
+  Promise.resolve().then(() => {
+    timing.microtaskAt = nowMs();
+    maybeComplete();
+  });
+  setTimeout(() => {
+    timing.timeoutAt = nowMs();
+    maybeComplete();
+  }, 0);
+  requestAnimationFrame(() => {
+    timing.frameAt = nowMs();
+    requestAnimationFrame(() => {
+      timing.secondFrameAt = nowMs();
+      maybeComplete();
+    });
+    maybeComplete();
+  });
 }
 
 function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
-  console.info(
-    [
-      `[DiffViewer] loaded ${folderPath}`,
-      `nativeTotal=${formatMs(timing.nativeTotalMs)}`,
-      `openRepo=${formatMs(timing.openRepoMs)}`,
-      `createDiff=${formatMs(timing.createDiffMs)}`,
-      `walkDiff=${formatMs(timing.walkDiffMs)}`,
-      `document=${formatMs(timing.documentMs)}`,
-      `copyFiles=${formatMs(timing.copyFilesMs)}`,
-      `copyInitialRows=${formatMs(timing.copyInitialRowsMs)}`,
-      `files=${timing.fileCount}`,
-      `rows=${timing.rowCount}`,
-    ].join(" "),
-  );
+  logDiffOpenTiming("viewer.native.loaded", {
+    copyFilesMs: Number(timing.copyFilesMs.toFixed(1)),
+    copyInitialRowsMs: Number(timing.copyInitialRowsMs.toFixed(1)),
+    createDiffMs: Number(timing.createDiffMs.toFixed(1)),
+    documentMs: Number(timing.documentMs.toFixed(1)),
+    fileCount: timing.fileCount,
+    folderPath,
+    nativeTotalMs: Number(timing.nativeTotalMs.toFixed(1)),
+    openRepoMs: Number(timing.openRepoMs.toFixed(1)),
+    rowCount: timing.rowCount,
+    walkDiffMs: Number(timing.walkDiffMs.toFixed(1)),
+  });
 }
 
 function getDirectoryPath(path: string) {
@@ -146,12 +198,17 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
 }
 
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const loadRequestIdRef = useRef(0);
+  const loadTraceRef = useRef<DiffLoadTrace | null>(null);
+  const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
+  const highlightedInitialDocumentRef = useRef<DiffDocument | null>(null);
   const visibleFolderPath = state.folderPath;
   const title = visibleFolderPath ? getFilename(visibleFolderPath) : "No folder";
   const backgroundColor = syntaxTheme.background;
@@ -177,8 +234,27 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     [state],
   );
   const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
-  const getRows = useCallback((document: DiffDocument, start: number, count: number) => document.getRows(start, count), []);
-  const getStyles = useCallback((document: DiffDocument) => document.getStyles(), []);
+  const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+    const startedAt = nowMs();
+    const rows = document.getRows(start, count);
+    logDiffOpenTiming("viewer.rowsFetched", {
+      count,
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      reason: options?.reason ?? "unknown",
+      rows: rows.length,
+      start,
+    });
+    return rows;
+  }, []);
+  const getStyles = useCallback((document: DiffDocument) => {
+    const startedAt = nowMs();
+    const styles = document.getStyles();
+    logDiffOpenTiming("viewer.stylesFetched", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      styles: styles.length,
+    });
+    return styles;
+  }, []);
   const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
   const diffRows = useVirtualizedDocumentRows({
     debugName: "diff",
@@ -202,17 +278,84 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   useEffect(() => {
     if (state.status === "loaded") {
       setCollapsedFileIndexes(new Set());
+    } else {
+      highlightedInitialDocumentRef.current = null;
     }
   }, [state.status === "loaded" ? state.document : null]);
+
+  useEffect(() => {
+    let frameHandle: number | null = null;
+    if (state.status === "loaded" && highlightedInitialDocumentRef.current !== state.document) {
+      highlightedInitialDocumentRef.current = state.document;
+      const count = Math.min(diffInitialRowCount, state.document.rowCount);
+      if (count > 0) {
+        frameHandle = requestAnimationFrame(() => {
+          logDiffOpenTiming("viewer.initialHighlight.request", {
+            count,
+          });
+          diffRows.requestRange(0, count, {
+            force: true,
+            reason: "highlight",
+          });
+        });
+      }
+    }
+
+    return () => {
+      if (frameHandle !== null) {
+        cancelAnimationFrame(frameHandle);
+      }
+    };
+  }, [diffRows.requestRange, state]);
+
+  useEffect(() => {
+    logDiffOpenTiming("viewer.renderCommitted", {
+      cacheSize: diffRows.rowCache.size,
+      itemCount: diffRows.itemIndexes.length,
+      renderCount: renderCountRef.current,
+      rowsVersion: diffRows.rowsVersion,
+      state: state.status,
+      visibleItemCount: visibleItemIndexes.length,
+    });
+  });
 
   const loadFolder = useCallback(async (path: string, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
+    const loadStartedAt = nowMs();
+    const trace: DiffLoadTrace = {
+      document: null,
+      folderPath: path,
+      loadStartedAt,
+      nativeResolvedAt: loadStartedAt,
+      setStateAt: loadStartedAt,
+    };
+    loadTraceRef.current = trace;
+    logDiffOpenTiming("viewer.load.start", {
+      path,
+      requestId,
+      syntaxTheme: syntaxThemeName,
+    });
 
     try {
+      const nativeStartedAt = nowMs();
       const result = await loadGitFolderDiff(path, syntaxThemeName, diffInitialRowCount);
+      const nativeResolvedAt = nowMs();
+      trace.document = result.document;
+      trace.nativeResolvedAt = nativeResolvedAt;
+      logDiffOpenTiming("viewer.load.nativeResolved", {
+        files: result.files.length,
+        initialRows: result.initialRows.length,
+        jsAwaitMs: Number((nativeResolvedAt - nativeStartedAt).toFixed(1)),
+        nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+        requestId,
+        rows: result.document.rowCount,
+        styles: result.styles.length,
+        unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
+      });
       logDiffLoadTiming(path, result.timing);
       if (loadRequestIdRef.current === requestId) {
+        trace.setStateAt = nowMs();
         setState({
           status: "loaded",
           error: null,
@@ -224,13 +367,27 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           syntaxTheme: syntaxThemeName,
           timing: result.timing,
         });
+        logDiffOpenTiming("viewer.load.setLoaded", {
+          requestId,
+          setStateMs: Number((nowMs() - trace.setStateAt).toFixed(1)),
+        });
+      } else {
+        logDiffOpenTiming("viewer.load.stale", {
+          activeRequestId: loadRequestIdRef.current,
+          requestId,
+        });
       }
     } catch (error) {
       if (loadRequestIdRef.current === requestId) {
+        loadTraceRef.current = null;
         setState({
           status: "error",
           error: error instanceof Error ? error.message : String(error),
           folderPath: path,
+        });
+        logDiffOpenTiming("viewer.load.error", {
+          error: error instanceof Error ? error.message : String(error),
+          requestId,
         });
       }
     }
@@ -238,13 +395,25 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   useEffect(() => {
     if (folderPath) {
+      logDiffOpenTiming("viewer.launchFolder.effect", {
+        folderPath,
+        selectedSyntaxTheme,
+      });
       loadFolder(folderPath, selectedSyntaxTheme);
     }
-  }, [folderPath, loadFolder]);
+  }, [folderPath, loadFolder, selectedSyntaxTheme]);
 
   const openFolder = useCallback(async () => {
     try {
+      const dialogStartedAt = nowMs();
+      logDiffOpenTiming("viewer.dialog.start", {
+        currentFolderPath: state.folderPath,
+      });
       const path = await openDiffFolderDialog();
+      logDiffOpenTiming("viewer.dialog.finish", {
+        dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
+        path,
+      });
       if (path) {
         await loadFolder(path, selectedSyntaxTheme);
       }
@@ -256,6 +425,28 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       }));
     }
   }, [loadFolder, selectedSyntaxTheme]);
+
+  useEffect(() => {
+    const trace = loadTraceRef.current;
+    if (state.status === "loaded" && trace?.document === state.document && loggedTraceDocumentRef.current !== state.document) {
+      loggedTraceDocumentRef.current = state.document;
+      const effectAt = nowMs();
+      measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
+        logDiffOpenTiming("viewer.ui.loaded", {
+          effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
+          effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
+          effectToSecondFrameMs: Number(elapsedMs(effectAt, secondFrameAt).toFixed(1)),
+          effectToTimeoutMs: Number(elapsedMs(effectAt, timeoutAt).toFixed(1)),
+          loadToEffectMs: Number(elapsedMs(trace.loadStartedAt, effectAt).toFixed(1)),
+          loadToFrameMs: Number(elapsedMs(trace.loadStartedAt, frameAt).toFixed(1)),
+          loadToNativeMs: Number(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt).toFixed(1)),
+          loadToSecondFrameMs: Number(elapsedMs(trace.loadStartedAt, secondFrameAt).toFixed(1)),
+          nativeToSetStateMs: Number(elapsedMs(trace.nativeResolvedAt, trace.setStateAt).toFixed(1)),
+          setStateToEffectMs: Number(elapsedMs(trace.setStateAt, effectAt).toFixed(1)),
+        });
+      });
+    }
+  }, [state]);
 
   useEffect(() => {
     if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
@@ -270,13 +461,21 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   }, [loadFolder, selectedSyntaxTheme, state]);
 
   useEffect(() => {
+    const startedAt = nowMs();
     setDiffViewerWindowOptions({
       appearance: syntaxTheme.appearance,
       backgroundColor: syntaxTheme.background,
       folderPath: state.folderPath,
-    }).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
-    });
+    })
+      .then(() => {
+        logDiffOpenTiming("viewer.windowOptions.finish", {
+          folderPath: state.folderPath,
+          setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
+        });
+      })
+      .catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
   }, [state.folderPath, syntaxTheme.appearance, syntaxTheme.background]);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {

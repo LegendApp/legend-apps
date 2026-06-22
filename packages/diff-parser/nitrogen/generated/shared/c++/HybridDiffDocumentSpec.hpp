@@ -60,6 +60,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
     public:
       // Methods
+      virtual std::vector<DiffRenderRow> getPlainRows(double start, double count) = 0;
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
       virtual std::vector<DiffSyntaxStyle> getStyles() = 0;
