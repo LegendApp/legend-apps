@@ -87,6 +87,8 @@ export function openDiffViewerWindow(folderPath?: string | null) {
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     initialProperties: folderPath ? { folderPath } : undefined,
+    representedURL: folderPath,
+    title: folderPath ? getFilename(folderPath) : "Legend Diff",
     windowStyle: createDiffViewerWindowStyle({ includeFrame: true }),
   }).then((result) => {
     logDiffOpenTiming("window.open.finish", {

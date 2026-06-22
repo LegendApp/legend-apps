@@ -491,21 +491,49 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   }, [loadFolder, selectedSyntaxTheme, state]);
 
   useEffect(() => {
-    const startedAt = nowMs();
-    setDiffViewerWindowOptions({
-      appearance: syntaxTheme.appearance,
-      backgroundColor: syntaxTheme.background,
-      folderPath: state.folderPath,
-    })
-      .then(() => {
-        logDiffOpenTiming("viewer.windowOptions.finish", {
-          folderPath: state.folderPath,
-          setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
-        });
+    let frameHandle: number | null = null;
+    let secondFrameHandle: number | null = null;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+    const applyWindowOptions = () => {
+      const startedAt = nowMs();
+      setDiffViewerWindowOptions({
+        appearance: syntaxTheme.appearance,
+        backgroundColor: syntaxTheme.background,
+        folderPath: state.folderPath,
       })
-      .catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
+        .then(() => {
+          logDiffOpenTiming("viewer.windowOptions.finish", {
+            folderPath: state.folderPath,
+            setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
+          });
+        })
+        .catch((error: unknown) => {
+          console.error(error instanceof Error ? error.message : String(error));
+        });
+    };
+
+    if (state.status === "loaded") {
+      frameHandle = requestAnimationFrame(() => {
+        secondFrameHandle = requestAnimationFrame(() => {
+          timeoutHandle = setTimeout(applyWindowOptions, 0);
+        });
       });
+    } else {
+      applyWindowOptions();
+    }
+
+    return () => {
+      if (frameHandle !== null) {
+        cancelAnimationFrame(frameHandle);
+      }
+      if (secondFrameHandle !== null) {
+        cancelAnimationFrame(secondFrameHandle);
+      }
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+      }
+    };
   }, [state.folderPath, syntaxTheme.appearance, syntaxTheme.background]);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
