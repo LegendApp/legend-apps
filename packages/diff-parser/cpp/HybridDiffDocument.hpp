@@ -25,8 +25,10 @@ struct DiffTokenizedSource {
 struct DiffFileSources {
   std::string oldPath;
   std::string newPath;
-  std::string oldText;
-  std::string newText;
+  std::string status;
+  bool isBinary = false;
+  bool oldSourceLoaded = false;
+  bool newSourceLoaded = false;
   DiffTokenizedSource oldSource;
   DiffTokenizedSource newSource;
 };
@@ -37,6 +39,9 @@ public:
       std::vector<DiffFileSummary> files,
       std::vector<DiffRenderRow> rows,
       std::vector<DiffFileSources> fileSources,
+      std::string repositoryPath,
+      std::string workdirPath,
+      std::string headTreeOid,
       std::string theme,
       DiffLoadTiming timing);
 
@@ -53,12 +58,16 @@ protected:
 
 private:
   void ensureRowTokens(size_t rowIndex);
+  DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);
   std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
 
   std::vector<DiffFileSummary> files_;
   std::vector<DiffRenderRow> rows_;
   std::vector<DiffFileSources> fileSources_;
+  std::string repositoryPath_;
+  std::string workdirPath_;
+  std::string headTreeOid_;
   std::string theme_;
   std::shared_ptr<DiffSyntaxState> syntaxState_;
   DiffLoadTiming timing_;
