@@ -270,16 +270,19 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       const changeType = row?.changeType ?? 0;
       const isAdd = changeType === diffChangeTypeAdd;
       const isRemove = changeType === diffChangeTypeRemove;
+      const isChanged = isAdd || isRemove;
       const isFileHeader = row?.kind === diffRowKindFileHeader;
       const file = row ? fileByIndex.get(row.fileIndex) : undefined;
+      const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
       const rowBackgroundColor = isAdd
         ? "#17351f"
         : isRemove
           ? "#3a1d24"
           : "transparent";
-      const textColor = isFileHeader
+      const textColor = isChanged || isFileHeader
         ? foregroundColor
-        : foregroundColor;
+        : "#c9d1d9";
+      const lineNumberColor = isChanged ? accentColor : mutedColor;
       const marker = isAdd ? "+" : isRemove ? "-" : " ";
 
       if (isFileHeader) {
@@ -333,14 +336,14 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       }
 
       return (
-        <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor }]}>
-          <Text selectable={false} style={[styles.lineNumber, { color: mutedColor }]}>
+        <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor }]}>
+          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor }]}>
             {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
           </Text>
-          <Text selectable={false} style={[styles.lineNumber, { color: mutedColor }]}>
+          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor }]}>
             {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
           </Text>
-          <Text selectable={false} style={[styles.marker, { color: isAdd ? "#7ee787" : isRemove ? "#ff7b72" : mutedColor }]}>
+          <Text selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor }]}>
             {isFileHeader ? "" : marker}
           </Text>
           <Text selectable style={[styles.diffText, { color: textColor }]} numberOfLines={1}>
@@ -453,9 +456,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   diffRow: {
+    borderLeftWidth: 3,
     flexDirection: "row",
     height: sourceViewerRowHeight,
-    paddingHorizontal: 12,
   },
   diffText: {
     flex: 1,
@@ -463,6 +466,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     overflow: "hidden",
+    paddingRight: 12,
   },
   fileAdded: {
     fontFamily: sourceViewerCodeFontFamily,
@@ -531,7 +535,7 @@ const styles = StyleSheet.create({
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 12,
     lineHeight: sourceViewerRowHeight,
-    paddingRight: 12,
+    paddingHorizontal: 8,
     textAlign: "right",
     width: sourceViewerLineNumberWidth,
   },
@@ -543,7 +547,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     textAlign: "center",
-    width: 24,
+    width: 28,
   },
   openButton: {
     borderRadius: 6,
