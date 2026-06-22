@@ -59,6 +59,7 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
   debugName?: string;
+  extraData?: unknown;
   getItemSize?: (index: number, row: TRow | undefined) => number;
   getItemType?: (index: number, row: TRow | undefined) => string | undefined;
   initialRequestRowCount?: number;
@@ -306,6 +307,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 
 export function VirtualizedFixedDocumentList<TRow>({
   debugName,
+  extraData,
   getItemSize,
   getItemType,
   initialRequestRowCount,
@@ -326,6 +328,13 @@ export function VirtualizedFixedDocumentList<TRow>({
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderItemBatchRef = useRef<RenderItemDebugBatch | null>(null);
   const renderCountRef = useRef(0);
+  const listExtraData = useMemo(
+    () => ({
+      extraData,
+      rowsVersion,
+    }),
+    [extraData, rowsVersion],
+  );
 
   renderCountRef.current += 1;
   debugLog(debugName, "list.render", {
@@ -432,7 +441,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   return (
     <LegendList
       data={itemIndexes}
-      extraData={rowsVersion}
+      extraData={listExtraData}
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
       keyExtractor={(index) => String(index)}

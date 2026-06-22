@@ -24,7 +24,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename, openDiffFolderDialog } from "./diffFiles";
-import { useDiffSyntaxTheme, useDiffSyntaxThemeSetting, type DiffSettingsFile } from "./diffSettings";
+import { useDiffFontFamilySetting, useDiffFontSizeSetting, useDiffSyntaxTheme, useDiffSyntaxThemeSetting, type DiffSettingsFile } from "./diffSettings";
 import { setDiffViewerWindowOptions } from "./diffWindows";
 
 const diffInitialRowCount = 160;
@@ -91,6 +91,10 @@ function nowMs() {
 
 function elapsedMs(start: number, end = nowMs()) {
   return Math.max(0, end - start);
+}
+
+function getDiffLineRowHeight(fontSize: number) {
+  return Math.max(20, fontSize + 9);
 }
 
 function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
@@ -207,6 +211,9 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
+  const fontFamily = useDiffFontFamilySetting();
+  const fontSize = useDiffFontSizeSetting();
+  const rowHeight = getDiffLineRowHeight(fontSize);
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
@@ -244,6 +251,14 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         }
       : null,
     [state],
+  );
+  const listExtraData = useMemo(
+    () => ({
+      fontFamily,
+      fontSize,
+      rowHeight,
+    }),
+    [fontFamily, fontSize, rowHeight],
   );
   const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
   const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
@@ -594,11 +609,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   ), [fileHeaderRowIndexes]);
 
   const getItemSize = useCallback((index: number, row: DiffRenderRow | undefined) => (
-    getItemType(index, row) === "file-header" ? diffFileHeaderRowHeight : sourceViewerRowHeight
-  ), [getItemType]);
+    getItemType(index, row) === "file-header" ? diffFileHeaderRowHeight : rowHeight
+  ), [getItemType, rowHeight]);
 
   const renderRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
+      const fileHeaderLineHeight = Math.max(18, fontSize + 8);
       const changeType = row?.changeType ?? 0;
       const isAdd = changeType === diffChangeTypeAdd;
       const isRemove = changeType === diffChangeTypeRemove;
@@ -650,20 +666,20 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             ) : null}
             <View style={styles.fileTitleGroup}>
               {directory ? (
-                <Text selectable style={[styles.filePath, { color: mutedColor }]} numberOfLines={1}>
-                  {directory}
+                <Text selectable style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
+                  {directory}/
                 </Text>
               ) : null}
-              <Text selectable style={[styles.fileName, { color: foregroundColor }]} numberOfLines={1}>
+              <Text selectable style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
                 {filename}
               </Text>
             </View>
             {file ? (
               <View style={styles.fileMeta}>
-                <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787" }]}>
+                <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
                   +{file.additions}
                 </Text>
-                <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72" }]}>
+                <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
                   -{file.deletions}
                 </Text>
               </View>
@@ -673,26 +689,26 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       }
 
       return (
-        <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor }]}>
-          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor }]}>
+        <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
+          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
             {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
           </Text>
-          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor }]}>
+          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
             {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
           </Text>
-          <Text selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor }]}>
+          <Text selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
             {isFileHeader ? "" : marker}
           </Text>
           <TokenizedText
             foregroundColor={textColor}
             line={row}
-            style={styles.diffText}
+            style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
             tokenStyleById={tokenStyleById}
           />
         </View>
       );
     },
-    [borderColor, collapsedFileIndexes, fileByIndex, foregroundColor, mutedColor, toggleFileCollapsed, tokenStyleById],
+    [borderColor, collapsedFileIndexes, fileByIndex, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, toggleFileCollapsed, tokenStyleById],
   );
 
   const body = useMemo(() => {
@@ -700,6 +716,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       return (
         <VirtualizedFixedDocumentList
           debugName="diff"
+          extraData={listExtraData}
           itemIndexes={visibleItemIndexes}
           getItemSize={getItemSize}
           getItemType={getItemType}
@@ -708,7 +725,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={diffRows.requestRange}
           rowCache={diffRows.rowCache}
-          rowHeight={sourceViewerRowHeight}
+          rowHeight={rowHeight}
           rowsVersion={diffRows.rowsVersion}
           renderRow={renderRow}
           style={styles.list}
@@ -739,7 +756,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </Text>
       </View>
     );
-  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, getItemSize, getItemType, handleVisibleRowsRequested, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
+  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, getItemSize, getItemType, handleVisibleRowsRequested, listExtraData, mutedColor, renderRow, rowHeight, state.status, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -872,7 +889,6 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     flex: 1,
     flexDirection: "row",
-    gap: 8,
   },
   header: {
     alignItems: "center",
