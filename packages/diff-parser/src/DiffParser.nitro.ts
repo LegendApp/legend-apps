@@ -25,6 +25,13 @@ export interface DiffRenderRow {
 
 export interface DiffLoadTiming {
   diffMs: number;
+  openRepoMs: number;
+  createDiffMs: number;
+  walkDiffMs: number;
+  documentMs: number;
+  copyFilesMs: number;
+  copyInitialRowsMs: number;
+  nativeTotalMs: number;
   rowCount: number;
   fileCount: number;
 }

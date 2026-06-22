@@ -220,11 +220,13 @@ int onLine(
 }
 
 std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath) {
+  const auto loadStartedAt = DiffClock::now();
   git_repository* rawRepo = nullptr;
   const std::string normalizedPath = normalizeFolderPath(folderPath);
   if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
   }
+  const auto repoOpenedAt = DiffClock::now();
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
 
   git_diff_options options = {};
@@ -233,18 +235,25 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
   if (git_diff_workdir_to_index(repo.get(), &options, &rawDiff) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to create git diff"));
   }
+  const auto diffCreatedAt = DiffClock::now();
   std::unique_ptr<git_diff_list, GitDiffDeleter> diff(rawDiff);
 
-  const auto startedAt = DiffClock::now();
   DiffBuildState state;
   if (git_diff_foreach(diff.get(), &state, onFile, onHunk, onLine) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to read git diff"));
   }
   state.finishCurrentFile();
-  const auto finishedAt = DiffClock::now();
+  const auto diffWalkedAt = DiffClock::now();
 
   DiffLoadTiming timing;
-  timing.diffMs = elapsedDiffMs(startedAt, finishedAt);
+  timing.openRepoMs = elapsedDiffMs(loadStartedAt, repoOpenedAt);
+  timing.createDiffMs = elapsedDiffMs(repoOpenedAt, diffCreatedAt);
+  timing.walkDiffMs = elapsedDiffMs(diffCreatedAt, diffWalkedAt);
+  timing.diffMs = timing.walkDiffMs;
+  timing.documentMs = 0;
+  timing.copyFilesMs = 0;
+  timing.copyInitialRowsMs = 0;
+  timing.nativeTotalMs = elapsedDiffMs(loadStartedAt, diffWalkedAt);
   timing.rowCount = static_cast<double>(state.rows.size());
   timing.fileCount = static_cast<double>(state.files.size());
 
@@ -259,12 +268,23 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,
     double initialRowCount) {
   return Promise<DiffLoadResult>::async([folderPath, initialRowCount]() -> DiffLoadResult {
+    const auto startedAt = DiffClock::now();
     auto document = loadGitDiffDocument(folderPath);
+    const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
+    const auto filesStartedAt = DiffClock::now();
     result.files = document->getFiles();
+    const auto filesFinishedAt = DiffClock::now();
+    const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getRows(0, initialRowCount);
-    result.timing = document->getTiming();
+    const auto rowsFinishedAt = DiffClock::now();
+    auto timing = document->getTiming();
+    timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
+    timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
+    timing.copyInitialRowsMs = elapsedDiffMs(rowsStartedAt, rowsFinishedAt);
+    timing.nativeTotalMs = elapsedDiffMs(startedAt, rowsFinishedAt);
+    result.timing = timing;
     return result;
   });
 }

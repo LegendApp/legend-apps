@@ -16,7 +16,7 @@ import {
   type VirtualizedDocumentSnapshot,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename, openDiffFolderDialog } from "./diffFiles";
 import { setDiffViewerWindowOptions } from "./diffWindows";
@@ -38,11 +38,6 @@ type DiffViewerState =
     status: "empty";
     error: null;
     folderPath: null;
-  }
-  | {
-    status: "loading";
-    error: null;
-    folderPath: string;
   }
   | {
     status: "loaded";
@@ -68,13 +63,35 @@ function formatDiffSummary(timing: DiffLoadTiming) {
   return [
     `${timing.fileCount.toLocaleString()} ${timing.fileCount === 1 ? "file" : "files"}`,
     `${timing.rowCount.toLocaleString()} rows`,
-    `${timing.diffMs.toFixed(1)} ms`,
+    `${timing.nativeTotalMs.toFixed(1)} ms`,
   ].join(" · ");
+}
+
+function formatMs(value: number) {
+  return `${value.toFixed(1)} ms`;
+}
+
+function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
+  console.info(
+    [
+      `[DiffViewer] loaded ${folderPath}`,
+      `nativeTotal=${formatMs(timing.nativeTotalMs)}`,
+      `openRepo=${formatMs(timing.openRepoMs)}`,
+      `createDiff=${formatMs(timing.createDiffMs)}`,
+      `walkDiff=${formatMs(timing.walkDiffMs)}`,
+      `document=${formatMs(timing.documentMs)}`,
+      `copyFiles=${formatMs(timing.copyFilesMs)}`,
+      `copyInitialRows=${formatMs(timing.copyInitialRowsMs)}`,
+      `files=${timing.fileCount}`,
+      `rows=${timing.rowCount}`,
+    ].join(" "),
+  );
 }
 
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<DiffViewerState>(emptyState);
+  const loadRequestIdRef = useRef(0);
   const visibleFolderPath = state.folderPath;
   const title = visibleFolderPath ? getFilename(visibleFolderPath) : "No folder";
   const backgroundColor = displayTheme.colors.background;
@@ -108,28 +125,30 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     : visibleFolderPath ?? "Open a Git folder to view its changes";
 
   const loadFolder = useCallback(async (path: string) => {
-    setState({
-      status: "loading",
-      error: null,
-      folderPath: path,
-    });
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
 
     try {
       const result = await loadGitFolderDiff(path, diffInitialRowCount);
-      setState({
-        status: "loaded",
-        error: null,
-        folderPath: path,
-        document: result.document,
-        initialRows: result.initialRows,
-        timing: result.timing,
-      });
+      logDiffLoadTiming(path, result.timing);
+      if (loadRequestIdRef.current === requestId) {
+        setState({
+          status: "loaded",
+          error: null,
+          folderPath: path,
+          document: result.document,
+          initialRows: result.initialRows,
+          timing: result.timing,
+        });
+      }
     } catch (error) {
-      setState({
-        status: "error",
-        error: error instanceof Error ? error.message : String(error),
-        folderPath: path,
-      });
+      if (loadRequestIdRef.current === requestId) {
+        setState({
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+          folderPath: path,
+        });
+      }
     }
   }, []);
 
@@ -231,19 +250,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           </Text>
           <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
             {visibleFolderPath ?? "The selected folder has no unstaged changes."}
-          </Text>
-        </View>
-      );
-    }
-
-    if (state.status === "loading") {
-      return (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-            Loading changes
-          </Text>
-          <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
-            {visibleFolderPath}
           </Text>
         </View>
       );

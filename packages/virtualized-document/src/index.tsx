@@ -165,6 +165,11 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 }: UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming>): VirtualizedDocumentRowsState<TRow, TStyle, TTiming> {
   const [rowsState, setRowsState] = useState(() => createRowsState(snapshot, getRowIndex));
   const rowsStateRef = useRef(rowsState);
+  const snapshotDocument = snapshot?.document ?? null;
+  const activeRowsState = rowsState.document === snapshotDocument
+    ? rowsState
+    : createRowsState(snapshot, getRowIndex);
+  rowsStateRef.current = activeRowsState;
 
   useEffect(() => {
     const nextRowsState = createRowsState(snapshot, getRowIndex);
@@ -178,8 +183,8 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   }, [getRowIndex, snapshot]);
 
   useEffect(() => {
-    rowsStateRef.current = rowsState;
-  }, [rowsState]);
+    rowsStateRef.current = activeRowsState;
+  }, [activeRowsState]);
 
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const loadedRowsState = rowsStateRef.current;
@@ -219,22 +224,26 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
           });
 
           setRowsState((currentRowsState) => {
-            if (currentRowsState.document !== loadedRowsState.document) {
+            const isLoadedDocumentCurrent = rowsStateRef.current.document === loadedRowsState.document;
+            if (currentRowsState.document !== loadedRowsState.document && !isLoadedDocumentCurrent) {
               debugLog(debugName, "rows.commitSkipped", {
                 reason: options?.reason ?? "unknown",
               });
               return currentRowsState;
             }
 
-            const nextRowCache = new Map(currentRowsState.rowCache);
+            const baseRowsState = currentRowsState.document === loadedRowsState.document
+              ? currentRowsState
+              : loadedRowsState;
+            const nextRowCache = new Map(baseRowsState.rowCache);
             for (const row of fetchedRows) {
               nextRowCache.set(getRowIndex(row), row);
             }
 
             return {
-              ...currentRowsState,
+              ...baseRowsState,
               rowCache: nextRowCache,
-              rowsVersion: currentRowsState.rowsVersion + 1,
+              rowsVersion: baseRowsState.rowsVersion + 1,
               styles,
               timing,
             };
@@ -245,18 +254,18 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   }, [debugName, getRowIndex, getRows, getStyles, getTiming]);
 
   const itemIndexes = useMemo(
-    () => Array.from({ length: rowsState.itemCount }, (_, index) => index),
-    [rowsState.itemCount],
+    () => Array.from({ length: activeRowsState.itemCount }, (_, index) => index),
+    [activeRowsState.itemCount],
   );
 
   return {
-    itemCount: rowsState.itemCount,
+    itemCount: activeRowsState.itemCount,
     itemIndexes,
     requestRange,
-    rowCache: rowsState.rowCache,
-    rowsVersion: rowsState.rowsVersion,
-    styles: rowsState.styles,
-    timing: rowsState.timing,
+    rowCache: activeRowsState.rowCache,
+    rowsVersion: activeRowsState.rowsVersion,
+    styles: activeRowsState.styles,
+    timing: activeRowsState.timing,
   };
 }
 
