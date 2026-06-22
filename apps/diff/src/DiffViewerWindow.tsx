@@ -28,6 +28,7 @@ import { useDiffSyntaxTheme, useDiffSyntaxThemeSetting, type DiffSettingsFile } 
 import { setDiffViewerWindowOptions } from "./diffWindows";
 
 const diffInitialRowCount = 160;
+const diffInitialHighlightChunkRowCount = 40;
 const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffRowKindFileHeader = 0;
@@ -285,26 +286,55 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   useEffect(() => {
     let frameHandle: number | null = null;
+    const timeoutHandles = new Set<ReturnType<typeof setTimeout>>();
+    let cancelled = false;
+
+    const scheduleHighlightChunk = (start: number, count: number) => {
+      const timeoutHandle = setTimeout(() => {
+        timeoutHandles.delete(timeoutHandle);
+        if (!cancelled) {
+          const chunkCount = Math.min(diffInitialHighlightChunkRowCount, count - start);
+          logDiffOpenTiming("viewer.initialHighlight.request", {
+            count: chunkCount,
+            remaining: Math.max(0, count - start - chunkCount),
+            start,
+          });
+          diffRows.requestRange(start, chunkCount, {
+            force: true,
+            reason: "highlight",
+          });
+
+          if (start + chunkCount < count) {
+            scheduleHighlightChunk(start + chunkCount, count);
+          }
+        }
+      }, 0);
+      timeoutHandles.add(timeoutHandle);
+    };
+
     if (state.status === "loaded" && highlightedInitialDocumentRef.current !== state.document) {
       highlightedInitialDocumentRef.current = state.document;
       const count = Math.min(diffInitialRowCount, state.document.rowCount);
       if (count > 0) {
         frameHandle = requestAnimationFrame(() => {
-          logDiffOpenTiming("viewer.initialHighlight.request", {
+          logDiffOpenTiming("viewer.initialHighlight.schedule", {
+            chunkSize: diffInitialHighlightChunkRowCount,
             count,
           });
-          diffRows.requestRange(0, count, {
-            force: true,
-            reason: "highlight",
-          });
+          scheduleHighlightChunk(0, count);
         });
       }
     }
 
     return () => {
+      cancelled = true;
       if (frameHandle !== null) {
         cancelAnimationFrame(frameHandle);
       }
+      for (const timeoutHandle of timeoutHandles) {
+        clearTimeout(timeoutHandle);
+      }
+      timeoutHandles.clear();
     };
   }, [diffRows.requestRange, state]);
 
