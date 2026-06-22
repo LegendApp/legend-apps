@@ -25,7 +25,7 @@ import {
 } from "@legend-desktop/virtualized-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
-import { getFilename } from "./diffFiles";
+import { getFilename, openDiffFolderDialog } from "./diffFiles";
 import { useDiffFontFamilySetting, useDiffFontSizeSetting, useDiffSyntaxTheme, useDiffSyntaxThemeSetting, type DiffSettingsFile } from "./diffSettings";
 import { setDiffViewerWindowOptions } from "./diffWindows";
 
@@ -532,6 +532,29 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
   }, [folderPath, loadFolder, selectedSyntaxTheme]);
 
+  const openFolder = useCallback(async () => {
+    try {
+      const dialogStartedAt = nowMs();
+      logDiffOpenTiming("viewer.dialog.start", {
+        currentFolderPath: state.folderPath,
+      });
+      const path = await openDiffFolderDialog();
+      logDiffOpenTiming("viewer.dialog.finish", {
+        dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
+        path,
+      });
+      if (path) {
+        await loadFolder(path, selectedSyntaxTheme);
+      }
+    } catch (error) {
+      setState((current) => ({
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+        folderPath: current.folderPath,
+      }));
+    }
+  }, [loadFolder, selectedSyntaxTheme, state.folderPath]);
+
   useEffect(() => {
     const trace = loadTraceRef.current;
     if (state.status === "loaded" && trace?.document === state.document && loggedTraceDocumentRef.current !== state.document) {
@@ -819,6 +842,21 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           <Text style={[styles.emptyText, { color: mutedColor }]}>
             Open a Git folder to view its changes.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={openFolder}
+            style={({ pressed }) => [
+              styles.emptyButton,
+              {
+                borderColor: displayTheme.colors.border,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
+              Open Folder
+            </Text>
+          </Pressable>
         </View>
       );
     })();
@@ -898,7 +936,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
 
     return diffContent;
-  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, handleDiffPaneLayout, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, renderRow, rowHeight, scrollToFile, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, visibleFolderPath, visibleItemIndexes]);
+  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, handleDiffPaneLayout, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, rowHeight, scrollToFile, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -916,9 +954,21 @@ const styles = StyleSheet.create({
   empty: {
     alignItems: "center",
     flex: 1,
-    gap: 8,
+    gap: 10,
     justifyContent: "center",
     padding: 32,
+  },
+  emptyButton: {
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  emptyButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   emptyText: {
     fontSize: 13,

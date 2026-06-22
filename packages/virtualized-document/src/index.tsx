@@ -417,6 +417,36 @@ export function VirtualizedFixedDocumentList<TRow>({
     return documentRange;
   }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, onVisibleRowsRequested, requestRange, rowHeight]);
 
+  const requestLegendListRange = useCallback((reason: VirtualizedDocumentRequestReason) => {
+    const listState = internalListRef.current?.getState();
+    if (listState && listState.start >= 0 && listState.end >= listState.start) {
+      const requestListStart = listState.startBuffered >= 0 ? listState.startBuffered : listState.start;
+      const requestListEnd = listState.endBuffered >= requestListStart ? listState.endBuffered : listState.end;
+      const documentRange = getDocumentRangeForListRange(itemIndexes, requestListStart, requestListEnd - requestListStart + 1);
+      const visibleDocumentRange = getDocumentRangeForListRange(itemIndexes, listState.start, listState.end - listState.start + 1);
+      debugLog(debugName, "list.requestLegendListRange", {
+        count: documentRange.count,
+        end: listState.end,
+        endBuffered: listState.endBuffered,
+        listCount: documentRange.listCount,
+        listStart: documentRange.listStart,
+        offsetY: listState.scroll,
+        reason,
+        start: documentRange.start,
+        startBuffered: listState.startBuffered,
+        visibleDocumentCount: visibleDocumentRange.count,
+        visibleDocumentStart: visibleDocumentRange.start,
+      });
+      requestRange(documentRange.start, documentRange.count, { reason });
+      if (visibleDocumentRange.count > 0) {
+        onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, reason);
+      }
+      return true;
+    }
+
+    return false;
+  }, [debugName, itemIndexes, onVisibleRowsRequested, requestRange]);
+
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
     debugLog(debugName, "list.layout", {
@@ -437,14 +467,18 @@ export function VirtualizedFixedDocumentList<TRow>({
         }
         overscanTimeoutRef.current = setTimeout(() => {
           overscanTimeoutRef.current = null;
-          requestVisibleRange(0, height, true, "overscan");
+          if (!requestLegendListRange("overscan")) {
+            requestVisibleRange(0, height, true, "overscan");
+          }
         }, overscanRequestDelayMs);
       }
     } else {
-      requestVisibleRange(0, height, true, "overscan");
+      if (!requestLegendListRange("overscan")) {
+        requestVisibleRange(0, height, true, "overscan");
+      }
     }
     emitTopItemChanged();
-  }, [debugName, emitTopItemChanged, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestVisibleRange, rowsVersion]);
+  }, [debugName, emitTopItemChanged, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestLegendListRange, requestVisibleRange, rowsVersion]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
@@ -452,9 +486,11 @@ export function VirtualizedFixedDocumentList<TRow>({
       height: layoutMeasurement.height,
       offsetY: contentOffset.y,
     });
-    requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll");
+    if (!requestLegendListRange("scroll")) {
+      requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll");
+    }
     emitTopItemChanged();
-  }, [debugName, emitTopItemChanged, requestVisibleRange]);
+  }, [debugName, emitTopItemChanged, requestLegendListRange, requestVisibleRange]);
 
   const renderItem = useCallback(
     ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => {
