@@ -30,6 +30,11 @@ static inline NSAppearance *LegendDarkAppearance()
   return nil;
 }
 
+static void LegendWindowOpenTiming(NSString *event, NSDictionary *payload)
+{
+  NSLog(@"[WindowOpenTiming] %@ %@", event, payload ?: @{});
+}
+
 static NSAppearance *LegendAppearanceForName(NSString *value)
 {
   if (![value isKindOfClass:NSString.class] || value.length == 0 || [value isEqualToString:@"system"]) {
@@ -524,6 +529,11 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 #if TARGET_OS_OSX
 - (RCTUIView *)createReactRootViewWithModuleName:(NSString *)moduleName initialProperties:(NSDictionary *)initialProps
 {
+  LegendWindowOpenTiming(@"native.createRootView.start", @{
+    @"moduleName": moduleName ?: @"",
+    @"initialPropKeys": initialProps ? initialProps.allKeys : @[],
+  });
+
   id appDelegate = NSApplication.sharedApplication.delegate;
   RCTRootViewFactory *rootViewFactory = nil;
 
@@ -532,7 +542,13 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   }
 
   if (rootViewFactory) {
-    return (RCTUIView *)[rootViewFactory viewWithModuleName:moduleName initialProperties:initialProps];
+    RCTUIView *rootView = (RCTUIView *)[rootViewFactory viewWithModuleName:moduleName initialProperties:initialProps];
+    LegendWindowOpenTiming(@"native.createRootView.finish", @{
+      @"factory": @"rootViewFactory",
+      @"moduleName": moduleName ?: @"",
+      @"rootView": [NSString stringWithFormat:@"%p", rootView],
+    });
+    return rootView;
   }
 
   RCTBridge *bridge = self.bridge;
@@ -540,7 +556,13 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     return nil;
   }
 
-  return [[RCTRootView alloc] initWithBridge:bridge moduleName:moduleName initialProperties:initialProps];
+  RCTUIView *rootView = [[RCTRootView alloc] initWithBridge:bridge moduleName:moduleName initialProperties:initialProps];
+  LegendWindowOpenTiming(@"native.createRootView.finish", @{
+    @"factory": @"bridge",
+    @"moduleName": moduleName ?: @"",
+    @"rootView": [NSString stringWithFormat:@"%p", rootView],
+  });
+  return rootView;
 }
 #endif
 
@@ -626,16 +648,28 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 
     NSNumber *originX = [options[@"x"] isKindOfClass:NSNumber.class] ? options[@"x"] : nil;
     NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
-    BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
-    NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
-
-    if (existingWindow) {
-      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
-      NSString *nextModuleName = moduleName ?: @"";
-      if (![existingModuleName isEqualToString:nextModuleName]) {
-        [existingWindow orderOut:nil];
-        [self handleWindowClosedForIdentifier:identifier];
-        existingWindow = nil;
+	    BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
+	    NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
+	    LegendWindowOpenTiming(@"native.open.start", @{
+	      @"identifier": identifier ?: @"",
+	      @"moduleName": moduleName ?: @"",
+	      @"existingWindow": existingWindow ? @"true" : @"false",
+	      @"existingWindowPointer": existingWindow ? [NSString stringWithFormat:@"%p", existingWindow] : @"",
+	      @"initialPropKeys": [self initialPropsFromOptions:options] ? [self initialPropsFromOptions:options].allKeys : @[],
+	    });
+	
+	    if (existingWindow) {
+	      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
+	      NSString *nextModuleName = moduleName ?: @"";
+	      if (![existingModuleName isEqualToString:nextModuleName]) {
+	        LegendWindowOpenTiming(@"native.open.moduleMismatch", @{
+	          @"identifier": identifier ?: @"",
+	          @"existingModuleName": existingModuleName,
+	          @"nextModuleName": nextModuleName,
+	        });
+	        [existingWindow orderOut:nil];
+	        [self handleWindowClosedForIdentifier:identifier];
+	        existingWindow = nil;
       }
     }
 
@@ -722,10 +756,16 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                               hasMinHeight ? minHeight : currentMinSize.height)];
       }
 
-      NSDictionary *initialProps = [self initialPropsFromOptions:options];
-      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
-        [existingRootView setValue:initialProps forKey:@"appProperties"];
-      }
+	      NSDictionary *initialProps = [self initialPropsFromOptions:options];
+	      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
+	        LegendWindowOpenTiming(@"native.open.reuse.setAppProperties", @{
+	          @"identifier": identifier ?: @"",
+	          @"moduleName": moduleName ?: @"",
+	          @"rootView": [NSString stringWithFormat:@"%p", existingRootView],
+	          @"initialPropKeys": initialProps.allKeys,
+	        });
+	        [existingRootView setValue:initialProps forKey:@"appProperties"];
+	      }
       if (usesTitlebarBackground && existingRootView) {
         LegendEnsureRootViewContainer(existingWindow, existingRootView);
         LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
@@ -737,11 +777,17 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       } else {
         [self.closeRequestIdentifiers removeObject:identifier];
       }
-      self.moduleNames[identifier] = moduleName ?: @"";
-      [existingWindow makeKeyAndOrderFront:nil];
-      resolve([self successJson]);
-      return;
-    }
+	      self.moduleNames[identifier] = moduleName ?: @"";
+	      [existingWindow makeKeyAndOrderFront:nil];
+	      LegendWindowOpenTiming(@"native.open.reuse.finish", @{
+	        @"identifier": identifier ?: @"",
+	        @"moduleName": moduleName ?: @"",
+	        @"rootView": existingRootView ? [NSString stringWithFormat:@"%p", existingRootView] : @"",
+	        @"window": [NSString stringWithFormat:@"%p", existingWindow],
+	      });
+	      resolve([self successJson]);
+	      return;
+	    }
 
     NSUInteger styleMask = maskNumber
       ? maskNumber.unsignedIntegerValue
@@ -810,10 +856,16 @@ RCT_EXPORT_MODULE(NativeWindowManager)
                                     hasMinHeight ? minHeight : currentMinSize.height)];
     }
 
-    NSDictionary *initialProps = [self initialPropsFromOptions:options];
-    RCTUIView *rootView = [self createReactRootViewWithModuleName:moduleName initialProperties:initialProps];
-    if (!rootView) {
-      reject(@"no_root_view", @"React root view could not be created", nil);
+	    NSDictionary *initialProps = [self initialPropsFromOptions:options];
+	    LegendWindowOpenTiming(@"native.open.createWindow.start", @{
+	      @"identifier": identifier ?: @"",
+	      @"moduleName": moduleName ?: @"",
+	      @"initialPropKeys": initialProps ? initialProps.allKeys : @[],
+	      @"window": [NSString stringWithFormat:@"%p", window],
+	    });
+	    RCTUIView *rootView = [self createReactRootViewWithModuleName:moduleName initialProperties:initialProps];
+	    if (!rootView) {
+	      reject(@"no_root_view", @"React root view could not be created", nil);
       return;
     }
 
@@ -848,12 +900,18 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       [self.closeRequestIdentifiers removeObject:identifier];
     }
 
-    [window makeKeyAndOrderFront:nil];
-    if (levelNumber) {
-      [window orderFrontRegardless];
-    }
-    resolve([self successJson]);
-  });
+	    [window makeKeyAndOrderFront:nil];
+	    if (levelNumber) {
+	      [window orderFrontRegardless];
+	    }
+	    LegendWindowOpenTiming(@"native.open.createWindow.finish", @{
+	      @"identifier": identifier ?: @"",
+	      @"moduleName": moduleName ?: @"",
+	      @"rootView": [NSString stringWithFormat:@"%p", rootView],
+	      @"window": [NSString stringWithFormat:@"%p", window],
+	    });
+	    resolve([self successJson]);
+	  });
 #else
   resolve([self failureJson:@"WindowManager is only available on macOS"]);
 #endif
