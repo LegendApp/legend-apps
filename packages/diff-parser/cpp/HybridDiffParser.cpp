@@ -265,7 +265,7 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
   if (git_diff_options_init(&options, GIT_DIFF_OPTIONS_VERSION) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
   }
-  options.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS;
+  options.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
 
   git_reference* rawHead = nullptr;
   if (git_repository_head(&rawHead, repo.get()) != 0) {
