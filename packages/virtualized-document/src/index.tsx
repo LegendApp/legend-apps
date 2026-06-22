@@ -68,6 +68,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   itemIndexes: number[];
   listRef?: Ref<LegendListRef>;
   onInitialRowsRequested?: (start: number, count: number) => void;
+  onTopItemChanged?: (index: number, listIndex: number) => void;
   onVisibleRowsRequested?: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
   lineOverscan?: number;
   overscanRequestDelayMs?: number;
@@ -318,6 +319,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   listRef,
   lineOverscan = 0,
   onInitialRowsRequested,
+  onTopItemChanged,
   onVisibleRowsRequested,
   overscanRequestDelayMs = 0,
   recycleItems = true,
@@ -332,6 +334,8 @@ export function VirtualizedFixedDocumentList<TRow>({
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderItemBatchRef = useRef<RenderItemDebugBatch | null>(null);
   const renderCountRef = useRef(0);
+  const internalListRef = useRef<LegendListRef | null>(null);
+  const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
   const listExtraData = useMemo(
     () => ({
       extraData,
@@ -354,6 +358,35 @@ export function VirtualizedFixedDocumentList<TRow>({
       overscanTimeoutRef.current = null;
     }
   }, []);
+
+  const setListRef = useCallback((list: LegendListRef | null) => {
+    internalListRef.current = list;
+    if (typeof listRef === "function") {
+      listRef(list);
+    } else if (listRef) {
+      listRef.current = list;
+    }
+  }, [listRef]);
+
+  const emitTopItemChanged = useCallback(() => {
+    if (onTopItemChanged) {
+      const topListIndex = internalListRef.current?.getState().start;
+      if (topListIndex !== undefined && topListIndex >= 0) {
+        const topItemIndex = itemIndexes[topListIndex];
+        const lastTopItem = lastTopItemRef.current;
+        if (
+          topItemIndex !== undefined &&
+          (lastTopItem?.index !== topItemIndex || lastTopItem.listIndex !== topListIndex)
+        ) {
+          lastTopItemRef.current = {
+            index: topItemIndex,
+            listIndex: topListIndex,
+          };
+          onTopItemChanged(topItemIndex, topListIndex);
+        }
+      }
+    }
+  }, [itemIndexes, onTopItemChanged]);
 
   const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason) => {
     const visibleStart = Math.floor(offsetY / rowHeight);
@@ -410,7 +443,8 @@ export function VirtualizedFixedDocumentList<TRow>({
     } else {
       requestVisibleRange(0, height, true, "overscan");
     }
-  }, [debugName, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestVisibleRange, rowsVersion]);
+    emitTopItemChanged();
+  }, [debugName, emitTopItemChanged, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestVisibleRange, rowsVersion]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
@@ -419,7 +453,8 @@ export function VirtualizedFixedDocumentList<TRow>({
       offsetY: contentOffset.y,
     });
     requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll");
-  }, [debugName, requestVisibleRange]);
+    emitTopItemChanged();
+  }, [debugName, emitTopItemChanged, requestVisibleRange]);
 
   const renderItem = useCallback(
     ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => {
@@ -449,7 +484,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
       keyExtractor={(index) => String(index)}
-      ref={listRef}
+      ref={setListRef}
       onLayout={handleLayout}
       onScroll={handleScroll}
       recycleItems={recycleItems}

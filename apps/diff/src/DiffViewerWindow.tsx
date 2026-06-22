@@ -203,6 +203,28 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
   return indexes;
 }
 
+function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {
+  let low = 0;
+  let high = files.length - 1;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const file = files[middle];
+    const rowStart = Math.max(0, Math.floor(file.rowStart));
+    const rowEnd = rowStart + Math.max(0, Math.floor(file.rowCount));
+
+    if (rowIndex < rowStart) {
+      high = middle - 1;
+    } else if (rowIndex >= rowEnd) {
+      low = middle + 1;
+    } else {
+      return file.index;
+    }
+  }
+
+  return files.length > 0 ? files[Math.max(0, Math.min(files.length - 1, high))].index : null;
+}
+
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
@@ -214,6 +236,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
+  const [activeFileIndex, setActiveFileIndex] = useState<number | null>(null);
   const [splitPaneMetrics, setSplitPaneMetrics] = useState({
     contentHeight: 0,
     contentWidth: 0,
@@ -333,7 +356,10 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     highlightedVisibleRangeRef.current = null;
     clearHighlightTimeouts();
     if (state.status === "loaded") {
+      setActiveFileIndex(state.files[0]?.index ?? null);
       setCollapsedFileIndexes((current) => current.size > 0 ? new Set() : current);
+    } else {
+      setActiveFileIndex(null);
     }
   }, [clearHighlightTimeouts, state.status === "loaded" ? state.document : null]);
 
@@ -403,6 +429,13 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: string) => {
     scheduleVisibleHighlight(start, count, reason);
   }, [scheduleVisibleHighlight]);
+
+  const handleTopItemChanged = useCallback((rowIndex: number) => {
+    if (state.status === "loaded") {
+      const nextFileIndex = findFileIndexForRow(state.files, rowIndex);
+      setActiveFileIndex((current) => current === nextFileIndex ? current : nextFileIndex);
+    }
+  }, [state]);
 
   useEffect(() => {
     logDiffOpenTiming("viewer.renderCommitted", {
@@ -751,6 +784,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
               getItemType={getItemType}
               lineOverscan={diffLineOverscan}
               listRef={listRef}
+              onTopItemChanged={handleTopItemChanged}
               onVisibleRowsRequested={handleVisibleRowsRequested}
               overscanRequestDelayMs={diffOverscanRequestDelayMs}
               requestRange={diffRows.requestRange}
@@ -807,6 +841,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
               const filename = getFilename(file.path);
               const directory = getDirectoryPath(file.path);
               const statusIcon = getFileStatusIcon(file.status);
+              const isActive = file.index === activeFileIndex;
 
               return (
                 <Pressable
@@ -815,6 +850,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
                   onPress={() => scrollToFile(file)}
                   style={({ pressed }) => [
                     styles.sidebarFile,
+                    isActive
+                      ? {
+                          backgroundColor: "#2d333b",
+                          borderColor: displayTheme.colors.border,
+                        }
+                      : null,
                     { opacity: pressed ? 0.72 : 1 },
                   ]}
                 >
@@ -857,7 +898,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
 
     return diffContent;
-  }, [diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, getItemSize, getItemType, handleDiffPaneLayout, handleSplitViewResize, handleVisibleRowsRequested, listExtraData, mutedColor, renderRow, rowHeight, scrollToFile, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, visibleFolderPath, visibleItemIndexes]);
+  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, handleDiffPaneLayout, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, renderRow, rowHeight, scrollToFile, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -1011,6 +1052,9 @@ const styles = StyleSheet.create({
   },
   sidebarFile: {
     alignItems: "center",
+    borderColor: "transparent",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
     minHeight: 34,
