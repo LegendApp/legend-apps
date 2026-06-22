@@ -19,8 +19,8 @@
     }
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*",
+    "react": "catalog:",
+    "react-native": "catalog:",
     "react-native-enriched-markdown": "*"
   }
 }

@@ -14,8 +14,8 @@
         "@types/react-test-renderer": "19.1.0",
         "babel-jest": "29.7.0",
         "jest": "29.7.0",
-        "react": "19.1.4",
-        "react-native": "0.81.6",
+        "react": "catalog:",
+        "react-native": "catalog:",
         "react-test-renderer": "19.1.4",
         "test-renderer": "1.1.0",
         "typescript": "~5.9.2",
@@ -39,7 +39,7 @@
         "@legend-desktop/virtualized-document": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/state": "catalog:",
       },
     },
     "apps/diff": {
@@ -80,7 +80,7 @@
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
         "uniwind": "^1.6.3",
       },
@@ -118,9 +118,9 @@
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
-        "@legendapp/list": "^3.0.6",
-        "@legendapp/motion": "^2.5.3",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/list": "catalog:",
+        "@legendapp/motion": "catalog:",
+        "@legendapp/state": "catalog:",
         "expo-file-system": "~19.0.21",
         "sf-symbols-typescript": "^2.2.0",
       },
@@ -154,7 +154,7 @@
         "@legend-desktop/text-input-search": "0.0.0",
         "@legend-desktop/window-controls": "0.0.0",
         "@legend-desktop/window-manager": "0.0.0",
-        "@legendapp/list": "^3.0.6",
+        "@legendapp/list": "catalog:",
         "react-native-enriched-markdown": "^0.5.0",
       },
     },
@@ -165,16 +165,16 @@
         "@legend-desktop/command-runner": "0.0.0",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/app-exit": {
       "name": "@legend-desktop/app-exit",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/appearance-settings": {
@@ -186,32 +186,32 @@
         "@legend-desktop/theme": "workspace:*",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/appkit-split-view": {
       "name": "@legend-desktop/appkit-split-view",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/audio-player": {
       "name": "@legend-desktop/audio-player",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/auto-updater": {
       "name": "@legend-desktop/auto-updater",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/classnames": {
@@ -226,16 +226,16 @@
       "name": "@legend-desktop/command-runner",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/context-menu": {
       "name": "@legend-desktop/context-menu",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/design-system": {
@@ -247,8 +247,8 @@
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/diff-parser": {
@@ -259,8 +259,8 @@
         "react-native-nitro-modules": "0.35.6",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/document-scanner": {
@@ -270,56 +270,56 @@
         "@legend-desktop/file-scanner": "0.0.0",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/drag-drop": {
       "name": "@legend-desktop/drag-drop",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/file-dialog": {
       "name": "@legend-desktop/file-dialog",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/file-scanner": {
       "name": "@legend-desktop/file-scanner",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/file-system-watcher": {
       "name": "@legend-desktop/file-system-watcher",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/glass-effect-view": {
       "name": "@legend-desktop/glass-effect-view",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/global-hotkey": {
       "name": "@legend-desktop/global-hotkey",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/hotkeys": {
@@ -331,24 +331,24 @@
         "@legend-desktop/native-menu": "0.0.0",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/keyboard-manager": {
       "name": "@legend-desktop/keyboard-manager",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/markdown-block-editor": {
       "name": "@legend-desktop/markdown-block-editor",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
         "react-native-enriched-markdown": "*",
       },
     },
@@ -358,13 +358,13 @@
       "dependencies": {
         "@legend-desktop/markdown-block-editor": "0.0.0",
         "@legend-desktop/markdown-parser": "0.0.0",
-        "@legendapp/list": "3.0.6",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/list": "catalog:",
+        "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/markdown-parser": {
@@ -375,8 +375,8 @@
         "react-native-nitro-modules": "0.35.6",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/media-library-scanner": {
@@ -387,32 +387,32 @@
         "@legend-desktop/media-tags": "0.0.0",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/media-tags": {
       "name": "@legend-desktop/media-tags",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/native-menu": {
       "name": "@legend-desktop/native-menu",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/recent-documents": {
       "name": "@legend-desktop/recent-documents",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/reorder-controls": {
@@ -421,11 +421,11 @@
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/classnames": "0.0.0",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/state": "catalog:",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/settings-window": {
@@ -437,24 +437,24 @@
         "@legend-desktop/window-manager": "0.0.0",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/sf-symbol": {
       "name": "@legend-desktop/sf-symbol",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/sidebar": {
       "name": "@legend-desktop/sidebar",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/source-viewer": {
@@ -465,20 +465,20 @@
         "@legend-desktop/virtualized-document": "workspace:*",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/storage": {
       "name": "@legend-desktop/storage",
       "version": "0.0.0",
       "dependencies": {
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/state": "catalog:",
         "expo-file-system": "~19.0.21",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/syntax-parser": {
@@ -489,16 +489,16 @@
         "react-native-nitro-modules": "0.35.6",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/text-input-search": {
       "name": "@legend-desktop/text-input-search",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/theme": {
@@ -506,40 +506,40 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/markdown-document": "workspace:*",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/virtualized-document": {
       "name": "@legend-desktop/virtualized-document",
       "version": "0.0.0",
       "dependencies": {
-        "@legendapp/list": "^3.0.6",
+        "@legendapp/list": "catalog:",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/window-controls": {
       "name": "@legend-desktop/window-controls",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/window-manager": {
       "name": "@legend-desktop/window-manager",
       "version": "0.0.0",
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/windows": {
@@ -547,11 +547,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-desktop/window-manager": "0.0.0",
-        "@legendapp/state": "^3.0.0-beta.42",
+        "@legendapp/state": "catalog:",
       },
       "peerDependencies": {
-        "react": "*",
-        "react-native": "*",
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "shell": {
@@ -561,8 +561,8 @@
         "@legend-desktop/appkit-split-view": "0.0.0",
         "expo": "~54.0.33",
         "expo-status-bar": "~3.0.9",
-        "react": "19.1.4",
-        "react-native": "0.81.6",
+        "react": "catalog:",
+        "react-native": "catalog:",
         "react-native-macos": "0.81.7",
         "react-native-nitro-modules": "0.35.6",
         "tailwindcss": "^4.2.4",
@@ -586,6 +586,13 @@
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
     "@legendapp/list@3.0.6": "patches/@legendapp%2Flist@3.0.6.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
+  },
+  "catalog": {
+    "@legendapp/list": "3.0.6",
+    "@legendapp/motion": "^2.5.3",
+    "@legendapp/state": "^3.0.0-beta.42",
+    "react": "19.1.4",
+    "react-native": "0.81.6",
   },
   "packages": {
     "@0no-co/graphql.web": ["@0no-co/graphql.web@1.2.0", "", { "peerDependencies": { "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0" }, "optionalPeers": ["graphql"] }, "sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw=="],

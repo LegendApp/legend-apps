@@ -10,7 +10,7 @@
     "uniwind": "^1.6.3"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }

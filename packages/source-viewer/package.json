@@ -9,7 +9,7 @@
     "@legend-desktop/virtualized-document": "workspace:*"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }

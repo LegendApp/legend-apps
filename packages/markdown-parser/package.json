@@ -5,8 +5,8 @@
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   },
   "devDependencies": {
     "nitrogen": "0.35.6",

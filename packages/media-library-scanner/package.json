@@ -22,7 +22,7 @@
     }
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }

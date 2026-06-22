@@ -6,10 +6,10 @@
   "react-native": "src/index.ts",
   "dependencies": {
     "@legend-desktop/window-manager": "0.0.0",
-    "@legendapp/state": "^3.0.0-beta.42"
+    "@legendapp/state": "catalog:"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }

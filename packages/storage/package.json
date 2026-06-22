@@ -18,11 +18,11 @@
     }
   },
   "dependencies": {
-    "@legendapp/state": "^3.0.0-beta.42",
+    "@legendapp/state": "catalog:",
     "expo-file-system": "~19.0.21"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }

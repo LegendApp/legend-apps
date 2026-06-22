@@ -10,7 +10,7 @@
     "@legend-desktop/native-menu": "0.0.0"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }

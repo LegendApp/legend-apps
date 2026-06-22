@@ -18,6 +18,6 @@
     "@legend-desktop/virtualized-document": "workspace:*",
     "@legend-desktop/window-manager": "0.0.0",
     "@legend-desktop/windows": "0.0.0",
-    "@legendapp/state": "^3.0.0-beta.42"
+    "@legendapp/state": "catalog:"
   }
 }

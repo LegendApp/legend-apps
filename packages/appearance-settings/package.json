@@ -10,7 +10,7 @@
     "@legend-desktop/theme": "workspace:*"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": "catalog:",
+    "react-native": "catalog:"
   }
 }
