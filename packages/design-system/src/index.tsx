@@ -1,5 +1,5 @@
 import { cn } from "@legend-desktop/classnames";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
 export type RadioOptionProps<Value extends string = string> = {
@@ -60,6 +60,59 @@ export function SegmentedOptions<Value extends string>({
         </Pressable>
       ))}
     </View>
+  );
+}
+
+export type SelectOption<Value extends string = string> = {
+  label: string;
+  value: Value;
+};
+
+export type SelectControlProps<Value extends string = string> = {
+  accessibilityLabel?: string;
+  onChange: (value: Value) => void;
+  options: readonly SelectOption<Value>[];
+  value: Value;
+};
+
+export function SelectControl<Value extends string = string>({
+  accessibilityLabel,
+  onChange,
+  options,
+  value,
+}: SelectControlProps<Value>) {
+  const selectedOption = options.find((option) => option.value === value) ?? options[0];
+
+  const handlePress = async (event: GestureResponderEvent) => {
+    const { pageX = 0, pageY = 0 } = event.nativeEvent;
+    const { showContextMenu } = await import("@legend-desktop/context-menu");
+    const selected = await showContextMenu(
+      options.map((option) => ({
+        id: option.value,
+        title: option.value === value ? `* ${option.label}` : option.label,
+      })),
+      { x: pageX, y: pageY },
+    );
+
+    if (selected && options.some((option) => option.value === selected)) {
+      onChange(selected as Value);
+    }
+  };
+
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      className="h-9 min-w-56 flex-row items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 hover:bg-surface-muted active:bg-surface-muted"
+      onPress={handlePress}
+    >
+      <Text className="min-w-0 flex-1 text-foreground" numberOfLines={1} style={styles.selectText}>
+        {selectedOption?.label ?? value}
+      </Text>
+      <Text className="text-text-secondary" selectable={false} style={styles.selectChevron}>
+        v
+      </Text>
+    </Pressable>
   );
 }
 
@@ -125,5 +178,13 @@ const styles = StyleSheet.create({
   },
   segmentedOptionText: {
     fontSize: 13,
+  },
+  selectChevron: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  selectText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

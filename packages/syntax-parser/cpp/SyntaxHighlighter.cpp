@@ -101,11 +101,18 @@ std::string getThemeFileName(const std::string& theme) {
     return "github-dark-dimmed.json";
   }
 
-  if (normalized == "dark-plus") {
-    return "dark-plus.json";
+  if (normalized.empty()) {
+    throw std::runtime_error("Unsupported syntax theme: " + theme);
   }
 
-  throw std::runtime_error("Unsupported syntax theme: " + theme);
+  for (const char character : normalized) {
+    const bool isAlphaNumeric = std::isalnum(static_cast<unsigned char>(character));
+    if (!isAlphaNumeric && character != '-') {
+      throw std::runtime_error("Unsupported syntax theme: " + theme);
+    }
+  }
+
+  return normalized + ".json";
 }
 
 std::vector<std::string> warmupLinesForLanguage(const std::string& language) {

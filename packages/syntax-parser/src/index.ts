@@ -25,6 +25,16 @@ export function loadCodeFile(
   return getSyntaxParser().loadCodeFile(filePath, language, theme, initialLineCount);
 }
 
+export {
+  bundledSyntaxThemes,
+  defaultSyntaxThemeName,
+  getSyntaxTheme,
+  isBundledSyntaxThemeName,
+  type BundledSyntaxThemeName,
+  type SyntaxTheme,
+  type SyntaxThemeAppearance,
+} from "./syntaxThemes";
+
 export type {
   SyntaxDocument,
   SyntaxFileLoadResult,

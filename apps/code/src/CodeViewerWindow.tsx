@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { codeBackgroundTokenizationChunkLineCount, codeFileTypes, codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
+import { useCodeSyntaxTheme, useCodeSyntaxThemeSetting, type CodeSettingsFile } from "./codeSettings";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
 const debugPrefix = "[DEBUG-code-cold-v1]";
@@ -65,6 +66,7 @@ type CodeViewerState =
     document: SyntaxDocument;
     initialLines: SyntaxRenderLine[];
     styles: SyntaxStyle[];
+    syntaxTheme: CodeSettingsFile["syntaxTheme"];
     timing: SourceDocumentTiming;
   }
   | {
@@ -292,9 +294,12 @@ debugLog("module.evaluated", {
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
-  const displayTheme = getLegendDisplayTheme("dark");
+  const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
+  const syntaxTheme = useCodeSyntaxTheme();
+  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<CodeViewerState>(emptyState);
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
+  const loadedLaunchFileRef = useRef<string | null>(null);
   const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
   const loggedRowsVersionRef = useRef(-1);
@@ -357,9 +362,9 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(stylesForState), [stylesForState]);
   const visibleFilePath = state.filePath ?? launchFile;
   const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
-  const backgroundColor = displayTheme.colors.background;
+  const backgroundColor = syntaxTheme.background;
   const mutedColor = displayTheme.colors.muted;
-  const foregroundColor = displayTheme.colors.foreground;
+  const foregroundColor = syntaxTheme.foreground;
   const borderColor = displayTheme.colors.border;
 
   debugLog("window.render", {
@@ -394,11 +399,12 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     };
   }, []);
 
-  const loadFile = useCallback(async (filePath: string) => {
+  const loadFile = useCallback(async (filePath: string, syntaxThemeName: CodeSettingsFile["syntaxTheme"]) => {
     const loadStartedAt = nowMs();
     debugLog("load.start", {
       filePath,
       language: getCodeLanguage(filePath),
+      syntaxTheme: syntaxThemeName,
     });
     const trace: CodeViewerLoadTrace = {
       document: null,
@@ -417,7 +423,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         filePath,
         error: null,
       });
-      const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), "github-dark", codeInitialLineCount);
+      const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), syntaxThemeName, codeInitialLineCount);
       const loadFinishedAt = nowMs();
       const timing = toSourceDocumentTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
 
@@ -437,6 +443,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         document: highlighted.document,
         initialLines: highlighted.initialLines,
         styles: highlighted.styles,
+        syntaxTheme: syntaxThemeName,
         timing,
       });
       trace.noteRecentStartedAt = nowMs();
@@ -479,7 +486,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     const path = paths?.find(isCodePath) ?? null;
 
     if (path) {
-      await loadFile(path);
+      await loadFile(path, selectedSyntaxTheme);
     } else if (paths && paths.length > 0) {
       setState({
         status: "error",
@@ -488,7 +495,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         timing: null,
       });
     }
-  }, [loadFile, state.filePath]);
+  }, [loadFile, selectedSyntaxTheme, state.filePath]);
 
   const renderLine = useCallback(
     ({ index: lineIndex, row: line }: VirtualizedFixedDocumentListRenderRowProps<SyntaxRenderLine>) => {
@@ -507,19 +514,27 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   );
 
   useEffect(() => {
-    if (launchFile) {
-      loadFile(launchFile);
+    if (launchFile && loadedLaunchFileRef.current !== launchFile) {
+      loadedLaunchFileRef.current = launchFile;
+      loadFile(launchFile, selectedSyntaxTheme);
     }
-  }, [launchFile, loadFile]);
+  }, [launchFile, loadFile, selectedSyntaxTheme]);
+
+  useEffect(() => {
+    if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
+      loadFile(state.filePath, selectedSyntaxTheme);
+    }
+  }, [loadFile, selectedSyntaxTheme, state]);
 
   useEffect(() => {
     setCodeViewerWindowOptions({
-      backgroundColor: displayTheme.colors.windowBackground,
+      appearance: syntaxTheme.appearance,
+      backgroundColor: syntaxTheme.background,
       filePath: state.filePath,
     }).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));
     });
-  }, [displayTheme.colors.windowBackground, state.filePath]);
+  }, [state.filePath, syntaxTheme.appearance, syntaxTheme.background]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>

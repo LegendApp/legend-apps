@@ -1,8 +1,15 @@
+import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import { setWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
-import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
-import { codeViewerWindowIdentifier, codeViewerWindowModuleName } from "./appConstants";
+import {
+  codeSettingsWindowIdentifier,
+  codeSettingsWindowModuleName,
+  codeViewerWindowIdentifier,
+  codeViewerWindowModuleName,
+} from "./appConstants";
+import { getCodeSyntaxTheme } from "./codeSettings";
 import { getFilename } from "./codeFiles";
+import { SettingsWindow } from "./SettingsWindow";
 
 function createCodeViewerWindowStyle({
   appearance,
@@ -13,11 +20,11 @@ function createCodeViewerWindowStyle({
   backgroundColor?: string;
   includeFrame: boolean;
 }) {
-  const displayTheme = getLegendDisplayTheme("dark");
+  const syntaxTheme = getCodeSyntaxTheme();
 
   return {
-    appearance: appearance ?? getLegendDisplayThemeAppearance("dark"),
-    backgroundColor: backgroundColor ?? displayTheme.colors.windowBackground,
+    appearance: appearance ?? syntaxTheme.appearance,
+    backgroundColor: backgroundColor ?? syntaxTheme.background,
     ...(includeFrame
       ? {
           width: 1080,
@@ -49,6 +56,11 @@ const codeWindowsConfig = {
       windowStyle: createCodeViewerWindowStyle({ includeFrame: true }),
     },
   },
+  [codeSettingsWindowModuleName]: {
+    component: SettingsWindow,
+    identifier: codeSettingsWindowIdentifier,
+    options: createSettingsWindowOptions(),
+  },
 } satisfies WindowsConfig;
 
 const CodeWindowsNavigator = createWindowsNavigator(codeWindowsConfig);
@@ -59,6 +71,10 @@ export function registerCodeWindows() {
   // Importing this module registers the windows above.
 }
 
+export function openCodeSettingsWindow() {
+  return CodeWindowsNavigator.open(codeSettingsWindowModuleName as CodeWindow);
+}
+
 export function openCodeViewerWindow(launchArguments?: string[]) {
   return CodeWindowsNavigator.open(codeViewerWindowModuleName as CodeWindow, {
     initialProperties: launchArguments ? { launchArguments } : undefined,
@@ -67,9 +83,11 @@ export function openCodeViewerWindow(launchArguments?: string[]) {
 }
 
 export function setCodeViewerWindowOptions({
+  appearance,
   backgroundColor,
   filePath,
 }: {
+  appearance: "dark" | "light";
   backgroundColor: string;
   filePath: string | null;
 }) {
@@ -77,7 +95,7 @@ export function setCodeViewerWindowOptions({
     representedURL: filePath,
     title: filePath ? getFilename(filePath) : "Legend Code",
     windowStyle: createCodeViewerWindowStyle({
-      appearance: getLegendDisplayThemeAppearance("dark"),
+      appearance,
       backgroundColor,
       includeFrame: false,
     }),

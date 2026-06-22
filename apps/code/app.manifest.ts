@@ -17,9 +17,11 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-desktop/app-exit",
+      "@legend-desktop/context-menu",
       "@legend-desktop/file-dialog",
       "@legend-desktop/native-menu",
       "@legend-desktop/recent-documents",
+      "@legend-desktop/storage",
       "@legend-desktop/syntax-parser",
       "@legend-desktop/window-manager",
     ],

@@ -1,4 +1,5 @@
 import { warmSyntaxHighlighter, type SyntaxHighlightTiming } from "@legend-desktop/syntax-parser";
+import { getCodeSyntaxThemeSetting } from "./codeSettings";
 
 type CodeSyntaxWarmupResult = {
   language: string;
@@ -12,9 +13,10 @@ function formatMs(value: number) {
 }
 
 export function warmCodeSyntaxHighlighters(languages = ["tsx"]) {
+  const syntaxTheme = getCodeSyntaxThemeSetting();
   warmupPromise ??= languages.reduce<Promise<CodeSyntaxWarmupResult[]>>(
     (promise, language) => promise.then((results) => (
-      warmSyntaxHighlighter(language, "github-dark").then((timing) => [...results, { language, timing }])
+      warmSyntaxHighlighter(language, syntaxTheme).then((timing) => [...results, { language, timing }])
     )),
     Promise.resolve([]),
   ).then((results) => {

@@ -8,7 +8,7 @@ import { installCodeBenchmarkHook } from "./codeBenchmark";
 import { getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { codeMenuConfig } from "./codeMenus";
 import { warmCodeSyntaxHighlighters } from "./codeSyntaxWarmup";
-import { openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
+import { openCodeSettingsWindow, openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
 
 registerCodeWindows();
 installCodeBenchmarkHook();
@@ -67,6 +67,9 @@ export function App({ launchArguments }: CodeAppProps) {
           }
         })
         .catch(reportCodeAppControllerError);
+    },
+    settings: () => {
+      openCodeSettingsWindow().catch(reportCodeAppControllerError);
     },
   }).current;
 

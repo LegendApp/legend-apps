@@ -5,6 +5,7 @@ import {
 } from "@legend-desktop/syntax-parser";
 import { codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage } from "./codeFiles";
+import { getCodeSyntaxThemeSetting } from "./codeSettings";
 import { warmCodeSyntaxHighlighters } from "./codeSyntaxWarmup";
 
 export type CodeLoadBenchmarkResult = {
@@ -35,7 +36,7 @@ function nowMs() {
 
 async function benchmarkLoadFile(filePath: string, initialLineCount = codeInitialLineCount) {
   const startedAt = nowMs();
-  const result = await loadCodeFile(filePath, getCodeLanguage(filePath), "github-dark", initialLineCount);
+  const result = await loadCodeFile(filePath, getCodeLanguage(filePath), getCodeSyntaxThemeSetting(), initialLineCount);
   const finishedAt = nowMs();
 
   return {
@@ -50,7 +51,7 @@ async function benchmarkLoadFile(filePath: string, initialLineCount = codeInitia
 
 async function benchmarkHighlightString(source: string, language = "tsx") {
   const startedAt = nowMs();
-  const result = await highlightString(source, language, "github-dark");
+  const result = await highlightString(source, language, getCodeSyntaxThemeSetting());
   const finishedAt = nowMs();
 
   return {

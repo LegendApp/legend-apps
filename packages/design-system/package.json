@@ -6,6 +6,7 @@
   "react-native": "src/index.tsx",
   "dependencies": {
     "@legend-desktop/classnames": "0.0.0",
+    "@legend-desktop/context-menu": "0.0.0",
     "uniwind": "^1.6.3"
   },
   "peerDependencies": {
