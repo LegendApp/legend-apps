@@ -1,6 +1,7 @@
 import {
   loadGitFolderDiff,
   type DiffDocument,
+  type DiffFileSummary,
   type DiffLoadTiming,
   type DiffRenderRow,
 } from "@legend-desktop/diff-parser";
@@ -44,6 +45,7 @@ type DiffViewerState =
     error: null;
     folderPath: string;
     document: DiffDocument;
+    files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
     timing: DiffLoadTiming;
   }
@@ -88,6 +90,30 @@ function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
   );
 }
 
+function getDirectoryPath(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex >= 0 ? path.slice(0, separatorIndex) : "";
+}
+
+function formatStatus(status: string) {
+  switch (status) {
+    case "added":
+      return "Added";
+    case "deleted":
+      return "Deleted";
+    case "modified":
+      return "Modified";
+    case "renamed":
+      return "Renamed";
+    case "copied":
+      return "Copied";
+    case "untracked":
+      return "Untracked";
+    default:
+      return status.length > 0 ? status[0].toUpperCase() + status.slice(1) : "Changed";
+  }
+}
+
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<DiffViewerState>(emptyState);
@@ -98,6 +124,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const borderColor = displayTheme.colors.border;
   const foregroundColor = displayTheme.colors.foreground;
   const mutedColor = displayTheme.colors.muted;
+  const fileByIndex = useMemo(() => {
+    if (state.status !== "loaded") {
+      return new Map<number, DiffFileSummary>();
+    }
+    return new Map(state.files.map((file) => [file.index, file]));
+  }, [state]);
   const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, never, DiffLoadTiming> | null>(
     () => state.status === "loaded"
       ? {
@@ -137,6 +169,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           error: null,
           folderPath: path,
           document: result.document,
+          files: result.files,
           initialRows: result.initialRows,
           timing: result.timing,
         });
@@ -189,6 +222,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       const isRemove = changeType === diffChangeTypeRemove;
       const isFileHeader = row?.kind === diffRowKindFileHeader;
       const isHunkHeader = row?.kind === diffRowKindHunkHeader;
+      const file = row ? fileByIndex.get(row.fileIndex) : undefined;
       const rowBackgroundColor = isAdd
         ? "#17351f"
         : isRemove
@@ -202,6 +236,43 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           ? "#8cb4ff"
           : foregroundColor;
       const marker = isAdd ? "+" : isRemove ? "-" : " ";
+
+      if (isFileHeader) {
+        const path = file?.path ?? row?.text ?? "";
+        const filename = getFilename(path);
+        const directory = getDirectoryPath(path);
+
+        return (
+          <View style={[styles.fileRow, { borderBottomColor: borderColor, borderTopColor: borderColor }]}>
+            <Text selectable={false} style={[styles.fileDisclosure, { color: mutedColor }]}>
+              {""}
+            </Text>
+            <View style={styles.fileTitleGroup}>
+              <Text selectable style={[styles.fileName, { color: foregroundColor }]} numberOfLines={1}>
+                {filename}
+              </Text>
+              {directory ? (
+                <Text selectable style={[styles.filePath, { color: mutedColor }]} numberOfLines={1}>
+                  {directory}
+                </Text>
+              ) : null}
+            </View>
+            {file ? (
+              <View style={styles.fileMeta}>
+                <Text selectable={false} style={[styles.fileStatus, { borderColor, color: foregroundColor }]}>
+                  {formatStatus(file.status)}
+                </Text>
+                <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787" }]}>
+                  +{file.additions}
+                </Text>
+                <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72" }]}>
+                  -{file.deletions}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      }
 
       return (
         <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor }]}>
@@ -220,7 +291,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </View>
       );
     },
-    [foregroundColor, mutedColor],
+    [borderColor, fileByIndex, foregroundColor, mutedColor],
   );
 
   const body = useMemo(() => {
@@ -334,6 +405,60 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     overflow: "hidden",
+  },
+  fileAdded: {
+    fontFamily: sourceViewerCodeFontFamily,
+    fontSize: 12,
+    lineHeight: sourceViewerRowHeight,
+  },
+  fileDisclosure: {
+    fontSize: 12,
+    lineHeight: sourceViewerRowHeight,
+    textAlign: "center",
+    width: 20,
+  },
+  fileMeta: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  fileName: {
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: sourceViewerRowHeight,
+  },
+  filePath: {
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: sourceViewerRowHeight,
+  },
+  fileRemoved: {
+    fontFamily: sourceViewerCodeFontFamily,
+    fontSize: 12,
+    lineHeight: sourceViewerRowHeight,
+  },
+  fileRow: {
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    height: sourceViewerRowHeight,
+    paddingHorizontal: 12,
+  },
+  fileStatus: {
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 16,
+    paddingHorizontal: 6,
+  },
+  fileTitleGroup: {
+    alignItems: "baseline",
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
   },
   header: {
     alignItems: "center",
