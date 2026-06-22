@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "code": "bun scripts/run-app.ts code",
+    "diff": "bun scripts/run-app.ts diff",
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "test-kitchen-sink": "bun scripts/run-app.ts test-kitchen-sink",
