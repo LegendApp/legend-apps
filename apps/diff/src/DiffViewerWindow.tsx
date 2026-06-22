@@ -113,9 +113,36 @@ function formatStatus(status: string) {
   }
 }
 
+function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly number[]) {
+  const indexes: number[] = [];
+
+  if (files.length > 0) {
+    for (const file of files) {
+      const rowStart = Math.max(0, Math.floor(file.rowStart));
+      const rowCount = Math.max(0, Math.floor(file.rowCount));
+
+      if (rowCount > 0) {
+        indexes.push(rowStart);
+
+        if (!collapsedFileIndexes.has(file.index)) {
+          const rowEnd = rowStart + rowCount;
+          for (let rowIndex = rowStart + 1; rowIndex < rowEnd; rowIndex += 1) {
+            indexes.push(rowIndex);
+          }
+        }
+      }
+    }
+  } else {
+    indexes.push(...fallbackItemIndexes);
+  }
+
+  return indexes;
+}
+
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme("dark");
   const [state, setState] = useState<DiffViewerState>(emptyState);
+  const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const loadRequestIdRef = useRef(0);
   const visibleFolderPath = state.folderPath;
   const title = visibleFolderPath ? getFilename(visibleFolderPath) : "No folder";
@@ -151,9 +178,21 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     getTiming,
     snapshot,
   });
+  const visibleItemIndexes = useMemo(
+    () => state.status === "loaded"
+      ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
+      : diffRows.itemIndexes,
+    [collapsedFileIndexes, diffRows.itemIndexes, state],
+  );
   const subtitle = state.status === "loaded" && diffRows.timing
     ? formatDiffSummary(diffRows.timing)
     : visibleFolderPath ?? "Open a Git folder to view its changes";
+
+  useEffect(() => {
+    if (state.status === "loaded") {
+      setCollapsedFileIndexes(new Set());
+    }
+  }, [state.status === "loaded" ? state.document : null]);
 
   const loadFolder = useCallback(async (path: string) => {
     const requestId = loadRequestIdRef.current + 1;
@@ -214,6 +253,18 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     });
   }, [displayTheme.colors.windowBackground, state.folderPath]);
 
+  const toggleFileCollapsed = useCallback((fileIndex: number) => {
+    setCollapsedFileIndexes((current) => {
+      const next = new Set(current);
+      if (next.has(fileIndex)) {
+        next.delete(fileIndex);
+      } else {
+        next.add(fileIndex);
+      }
+      return next;
+    });
+  }, []);
+
   const renderRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
       const changeType = row?.changeType ?? 0;
@@ -235,11 +286,24 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         const path = file?.path ?? row?.text ?? "";
         const filename = getFilename(path);
         const directory = getDirectoryPath(path);
+        const fileIndex = file?.index ?? row?.fileIndex ?? index;
+        const isCollapsed = collapsedFileIndexes.has(fileIndex);
 
         return (
-          <View style={[styles.fileRow, { borderBottomColor: borderColor, borderTopColor: borderColor }]}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => toggleFileCollapsed(fileIndex)}
+            style={({ pressed }) => [
+              styles.fileRow,
+              {
+                borderBottomColor: borderColor,
+                borderTopColor: borderColor,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
             <Text selectable={false} style={[styles.fileDisclosure, { color: mutedColor }]}>
-              {""}
+              {isCollapsed ? ">" : "v"}
             </Text>
             <View style={styles.fileTitleGroup}>
               <Text selectable style={[styles.fileName, { color: foregroundColor }]} numberOfLines={1}>
@@ -264,7 +328,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
                 </Text>
               </View>
             ) : null}
-          </View>
+          </Pressable>
         );
       }
 
@@ -285,16 +349,16 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </View>
       );
     },
-    [borderColor, fileByIndex, foregroundColor, mutedColor],
+    [borderColor, collapsedFileIndexes, fileByIndex, foregroundColor, mutedColor, toggleFileCollapsed],
   );
 
   const body = useMemo(() => {
-    if (state.status === "loaded" && diffRows.itemIndexes.length > 0) {
+    if (state.status === "loaded" && visibleItemIndexes.length > 0) {
       return (
         <VirtualizedFixedDocumentList
           debugName="diff"
           initialRequestRowCount={diffInitialRowCount}
-          itemIndexes={diffRows.itemIndexes}
+          itemIndexes={visibleItemIndexes}
           lineOverscan={diffLineOverscan}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={diffRows.requestRange}
@@ -330,7 +394,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </Text>
       </View>
     );
-  }, [diffRows.itemIndexes, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, mutedColor, renderRow, state.status, visibleFolderPath]);
+  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>

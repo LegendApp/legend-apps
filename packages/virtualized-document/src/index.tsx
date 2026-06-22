@@ -155,6 +155,35 @@ function createRowsState<TDocument, TRow, TStyle, TTiming>(
   };
 }
 
+function getDocumentRangeForListRange(itemIndexes: readonly number[], start: number, count: number) {
+  const safeListStart = Math.max(0, Math.floor(start));
+  const safeListEnd = Math.min(itemIndexes.length, safeListStart + Math.max(0, Math.ceil(count)));
+  let requestStart = Number.POSITIVE_INFINITY;
+  let requestEnd = Number.NEGATIVE_INFINITY;
+
+  for (let listIndex = safeListStart; listIndex < safeListEnd; listIndex += 1) {
+    const itemIndex = itemIndexes[listIndex];
+    if (Number.isFinite(itemIndex)) {
+      requestStart = Math.min(requestStart, itemIndex);
+      requestEnd = Math.max(requestEnd, itemIndex + 1);
+    }
+  }
+
+  return requestStart < requestEnd
+    ? {
+        count: requestEnd - requestStart,
+        listCount: safeListEnd - safeListStart,
+        listStart: safeListStart,
+        start: requestStart,
+      }
+    : {
+        count: 0,
+        listCount: 0,
+        listStart: safeListStart,
+        start: 0,
+      };
+}
+
 export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   debugName,
   getRowIndex,
@@ -307,22 +336,25 @@ export function VirtualizedFixedDocumentList<TRow>({
   const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason) => {
     const visibleStart = Math.floor(offsetY / rowHeight);
     const visibleCount = Math.ceil(height / rowHeight);
-    const start = includeOverscan ? visibleStart - lineOverscan : visibleStart;
+    const listStart = includeOverscan ? visibleStart - lineOverscan : visibleStart;
     const initialCount = initialRequestRowCount ?? visibleCount;
-    const count = includeOverscan ? visibleCount + lineOverscan * 2 : Math.max(visibleCount, initialCount);
+    const listCount = includeOverscan ? visibleCount + lineOverscan * 2 : Math.max(visibleCount, initialCount);
+    const documentRange = getDocumentRangeForListRange(itemIndexes, listStart, listCount);
     debugLog(debugName, "list.requestVisibleRange", {
-      count,
+      count: documentRange.count,
       height,
       includeOverscan,
+      listCount: documentRange.listCount,
+      listStart: documentRange.listStart,
       offsetY,
       reason,
-      start,
+      start: documentRange.start,
       visibleCount,
       visibleStart,
     });
-    requestRange(start, count, { reason });
-    return { count, start };
-  }, [debugName, initialRequestRowCount, lineOverscan, requestRange, rowHeight]);
+    requestRange(documentRange.start, documentRange.count, { reason });
+    return documentRange;
+  }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, requestRange, rowHeight]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
