@@ -16,7 +16,6 @@ namespace margelo::nitro::legenddesktop::diffparser {
 namespace {
 
 constexpr double diffRowKindFileHeader = 0;
-constexpr double diffRowKindHunkHeader = 1;
 constexpr double diffRowKindLine = 2;
 
 constexpr double diffChangeTypeContext = 0;
@@ -148,7 +147,7 @@ int onFile(void* payload, git_diff_delta* delta, float) {
   return 0;
 }
 
-int onHunk(void* payload, git_diff_delta*, git_diff_range* range, const char* header, size_t headerLength) {
+int onHunk(void* payload, git_diff_delta*, git_diff_range* range, const char*, size_t) {
   auto* state = static_cast<DiffBuildState*>(payload);
   if (state->currentFileIndex < 0) {
     return 0;
@@ -157,16 +156,6 @@ int onHunk(void* payload, git_diff_delta*, git_diff_range* range, const char* he
   state->currentHunkIndex += 1;
   state->currentOldLine = range->old_start;
   state->currentNewLine = range->new_start;
-  DiffRenderRow row;
-  row.index = static_cast<double>(state->rows.size());
-  row.kind = diffRowKindHunkHeader;
-  row.fileIndex = static_cast<double>(state->currentFileIndex);
-  row.hunkIndex = static_cast<double>(state->currentHunkIndex);
-  row.oldLineNumber = static_cast<double>(range->old_start);
-  row.newLineNumber = static_cast<double>(range->new_start);
-  row.changeType = diffChangeTypeMeta;
-  row.text = trimDiffLine(header, headerLength);
-  state->rows.push_back(std::move(row));
   return 0;
 }
 

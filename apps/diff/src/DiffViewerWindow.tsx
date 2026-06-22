@@ -26,7 +26,6 @@ const diffInitialRowCount = 160;
 const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffRowKindFileHeader = 0;
-const diffRowKindHunkHeader = 1;
 const diffChangeTypeAdd = 1;
 const diffChangeTypeRemove = 2;
 
@@ -221,20 +220,15 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       const isAdd = changeType === diffChangeTypeAdd;
       const isRemove = changeType === diffChangeTypeRemove;
       const isFileHeader = row?.kind === diffRowKindFileHeader;
-      const isHunkHeader = row?.kind === diffRowKindHunkHeader;
       const file = row ? fileByIndex.get(row.fileIndex) : undefined;
       const rowBackgroundColor = isAdd
         ? "#17351f"
         : isRemove
           ? "#3a1d24"
-          : isHunkHeader
-            ? "#242a34"
-            : "transparent";
+          : "transparent";
       const textColor = isFileHeader
         ? foregroundColor
-        : isHunkHeader
-          ? "#8cb4ff"
-          : foregroundColor;
+        : foregroundColor;
       const marker = isAdd ? "+" : isRemove ? "-" : " ";
 
       if (isFileHeader) {
@@ -283,7 +277,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
           </Text>
           <Text selectable={false} style={[styles.marker, { color: isAdd ? "#7ee787" : isRemove ? "#ff7b72" : mutedColor }]}>
-            {isFileHeader || isHunkHeader ? "" : marker}
+            {isFileHeader ? "" : marker}
           </Text>
           <Text selectable style={[styles.diffText, { color: textColor }]} numberOfLines={1}>
             {row?.text ?? ""}
