@@ -47,6 +47,7 @@
       "name": "@legend-desktop/app-diff",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/diff-parser": "workspace:*",
         "@legend-desktop/file-dialog": "0.0.0",

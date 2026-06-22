@@ -1,5 +1,5 @@
-import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
 import type {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -7,6 +7,8 @@ import type {
   StyleProp,
   ViewStyle,
 } from "react-native";
+
+export type VirtualizedFixedDocumentListRef = LegendListRef;
 
 export type VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> = {
   document: TDocument;
@@ -64,6 +66,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   getItemType?: (index: number, row: TRow | undefined) => string | undefined;
   initialRequestRowCount?: number;
   itemIndexes: number[];
+  listRef?: Ref<LegendListRef>;
   onInitialRowsRequested?: (start: number, count: number) => void;
   onVisibleRowsRequested?: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
   lineOverscan?: number;
@@ -312,6 +315,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   getItemType,
   initialRequestRowCount,
   itemIndexes,
+  listRef,
   lineOverscan = 0,
   onInitialRowsRequested,
   onVisibleRowsRequested,
@@ -445,6 +449,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
       keyExtractor={(index) => String(index)}
+      ref={listRef}
       onLayout={handleLayout}
       onScroll={handleScroll}
       recycleItems={recycleItems}

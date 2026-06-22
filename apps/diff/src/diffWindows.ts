@@ -13,18 +13,15 @@ import { SettingsWindow } from "./SettingsWindow";
 
 function createDiffViewerWindowStyle({
   appearance,
-  backgroundColor,
   includeFrame,
 }: {
   appearance?: "dark" | "light";
-  backgroundColor?: string;
   includeFrame: boolean;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
 
   return {
     appearance: appearance ?? syntaxTheme.appearance,
-    backgroundColor: backgroundColor ?? syntaxTheme.background,
     ...(includeFrame
       ? {
           width: 1180,
@@ -33,17 +30,19 @@ function createDiffViewerWindowStyle({
           minHeight: 460,
         }
       : null),
-    hasToolbar: false,
+    hasToolbar: true,
     mask: [
       WindowStyleMask.Titled,
       WindowStyleMask.Closable,
       WindowStyleMask.Miniaturizable,
       WindowStyleMask.Resizable,
       WindowStyleMask.FullSizeContentView,
+      WindowStyleMask.UnifiedTitleAndToolbar,
     ],
     titlebarAppearsTransparent: true,
     titlebarSeparatorStyle: "none" as const,
     titleVisibility: "visible" as const,
+    toolbarStyle: "unified" as const,
   };
 }
 
@@ -53,6 +52,7 @@ const diffWindowsConfig = {
     identifier: diffViewerWindowIdentifier,
     options: {
       title: "Legend Diff",
+      transparentBackground: true,
       windowStyle: createDiffViewerWindowStyle({ includeFrame: true }),
     },
   },
@@ -89,6 +89,7 @@ export function openDiffViewerWindow(folderPath?: string | null) {
     initialProperties: folderPath ? { folderPath } : undefined,
     representedURL: folderPath,
     title: folderPath ? getFilename(folderPath) : "Legend Diff",
+    transparentBackground: true,
     windowStyle: createDiffViewerWindowStyle({ includeFrame: true }),
   }).then((result) => {
     logDiffOpenTiming("window.open.finish", {
@@ -122,7 +123,6 @@ export function setDiffViewerWindowOptions({
     title: folderPath ? getFilename(folderPath) : "Legend Diff",
     windowStyle: createDiffViewerWindowStyle({
       appearance,
-      backgroundColor,
       includeFrame: false,
     }),
   }).then((result) => {
