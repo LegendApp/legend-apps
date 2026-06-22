@@ -278,7 +278,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   useEffect(() => {
     if (state.status === "loaded") {
-      setCollapsedFileIndexes(new Set());
+      setCollapsedFileIndexes((current) => current.size > 0 ? new Set() : current);
     } else {
       highlightedInitialDocumentRef.current = null;
     }
