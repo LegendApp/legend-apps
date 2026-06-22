@@ -16,6 +16,7 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-desktop/diff-parser",
       "@legend-desktop/file-dialog",
       "@legend-desktop/native-menu",
       "@legend-desktop/window-manager",
