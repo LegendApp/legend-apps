@@ -1,0 +1,20 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["legenddesktop", "diffparser"],
+  "ios": {
+    "iosModuleName": "RNDiffParser"
+  },
+  "android": {
+    "androidNamespace": ["legenddesktop", "diffparser"],
+    "androidCxxLibName": "RNDiffParser"
+  },
+  "autolinking": {
+    "DiffParser": {
+      "ios": {
+        "language": "c++",
+        "implementationClassName": "HybridDiffParser"
+      }
+    }
+  },
+  "gitAttributesGeneratedFlag": true
+}

@@ -242,6 +242,18 @@
         "react-native": "*",
       },
     },
+    "packages/diff-parser": {
+      "name": "@legend-desktop/diff-parser",
+      "version": "0.0.0",
+      "devDependencies": {
+        "nitrogen": "0.35.6",
+        "react-native-nitro-modules": "0.35.6",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
     "packages/document-scanner": {
       "name": "@legend-desktop/document-scanner",
       "version": "0.0.0",
@@ -898,6 +910,8 @@
     "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
 
     "@legend-desktop/design-system": ["@legend-desktop/design-system@workspace:packages/design-system"],
+
+    "@legend-desktop/diff-parser": ["@legend-desktop/diff-parser@workspace:packages/diff-parser"],
 
     "@legend-desktop/document-scanner": ["@legend-desktop/document-scanner@workspace:packages/document-scanner"],
 
