@@ -31,6 +31,7 @@ const diffInitialRowCount = 160;
 const diffInitialHighlightChunkRowCount = 40;
 const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
+const diffFileHeaderRowHeight = 52;
 const diffRowKindFileHeader = 0;
 const diffChangeTypeAdd = 1;
 const diffChangeTypeRemove = 2;
@@ -153,22 +154,27 @@ function getDirectoryPath(path: string) {
   return separatorIndex >= 0 ? path.slice(0, separatorIndex) : "";
 }
 
-function formatStatus(status: string) {
+function getFileStatusIcon(status: string) {
   switch (status) {
     case "added":
-      return "Added";
-    case "deleted":
-      return "Deleted";
-    case "modified":
-      return "Modified";
-    case "renamed":
-      return "Renamed";
-    case "copied":
-      return "Copied";
     case "untracked":
-      return "Untracked";
+      return {
+        backgroundColor: "#238636",
+        color: "#ffffff",
+        label: "+",
+      };
+    case "deleted":
+      return {
+        backgroundColor: "#da3633",
+        color: "#ffffff",
+        label: "x",
+      };
     default:
-      return status.length > 0 ? status[0].toUpperCase() + status.slice(1) : "Changed";
+      return {
+        backgroundColor: "#f0883e",
+        color: "#1f1300",
+        label: "✎",
+      };
   }
 }
 
@@ -577,6 +583,10 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     });
   }, []);
 
+  const getItemSize = useCallback((_index: number, row: DiffRenderRow | undefined) => (
+    row?.kind === diffRowKindFileHeader ? diffFileHeaderRowHeight : sourceViewerRowHeight
+  ), []);
+
   const renderRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
       const changeType = row?.changeType ?? 0;
@@ -603,6 +613,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         const directory = getDirectoryPath(path);
         const fileIndex = file?.index ?? row?.fileIndex ?? index;
         const isCollapsed = collapsedFileIndexes.has(fileIndex);
+        const statusIcon = getFileStatusIcon(file?.status ?? "");
 
         return (
           <Pressable
@@ -611,30 +622,34 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             style={({ pressed }) => [
               styles.fileRow,
               {
-                borderBottomColor: borderColor,
-                borderTopColor: borderColor,
+                backgroundColor: "#252526",
+                borderColor,
                 opacity: pressed ? 0.72 : 1,
               },
             ]}
           >
             <Text selectable={false} style={[styles.fileDisclosure, { color: mutedColor }]}>
-              {isCollapsed ? ">" : "v"}
+              {isCollapsed ? "▸" : "▾"}
             </Text>
+            {file ? (
+              <View style={[styles.fileStatusIcon, { backgroundColor: statusIcon.backgroundColor }]}>
+                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusIcon.color }]}>
+                  {statusIcon.label}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.fileTitleGroup}>
-              <Text selectable style={[styles.fileName, { color: foregroundColor }]} numberOfLines={1}>
-                {filename}
-              </Text>
               {directory ? (
                 <Text selectable style={[styles.filePath, { color: mutedColor }]} numberOfLines={1}>
                   {directory}
                 </Text>
               ) : null}
+              <Text selectable style={[styles.fileName, { color: foregroundColor }]} numberOfLines={1}>
+                {filename}
+              </Text>
             </View>
             {file ? (
               <View style={styles.fileMeta}>
-                <Text selectable={false} style={[styles.fileStatus, { borderColor, color: foregroundColor }]}>
-                  {formatStatus(file.status)}
-                </Text>
                 <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787" }]}>
                   +{file.additions}
                 </Text>
@@ -676,6 +691,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         <VirtualizedFixedDocumentList
           debugName="diff"
           itemIndexes={visibleItemIndexes}
+          getItemSize={getItemSize}
           lineOverscan={diffLineOverscan}
           onVisibleRowsRequested={handleVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
@@ -712,7 +728,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </Text>
       </View>
     );
-  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, handleVisibleRowsRequested, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
+  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, getItemSize, handleVisibleRowsRequested, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -786,11 +802,11 @@ const styles = StyleSheet.create({
   fileAdded: {
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
+    lineHeight: 18,
   },
   fileDisclosure: {
-    fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
+    fontSize: 22,
+    lineHeight: 20,
     textAlign: "center",
     width: 20,
   },
@@ -800,36 +816,46 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   fileName: {
+    flexShrink: 0,
     fontSize: 13,
-    fontWeight: "600",
-    lineHeight: sourceViewerRowHeight,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   filePath: {
     flexShrink: 1,
-    fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
+    fontSize: 13,
+    fontWeight: "400",
+    lineHeight: 20,
   },
   fileRemoved: {
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
+    lineHeight: 18,
   },
   fileRow: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
-    height: sourceViewerRowHeight,
-    paddingHorizontal: 12,
+    height: 40,
+    marginHorizontal: 12,
+    marginVertical: 6,
+    paddingHorizontal: 10,
   },
-  fileStatus: {
+  fileStatusIcon: {
+    alignItems: "center",
     borderRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    fontSize: 11,
-    fontWeight: "600",
-    lineHeight: 16,
-    paddingHorizontal: 6,
+    height: 16,
+    justifyContent: "center",
+    width: 16,
+  },
+  fileStatusIconText: {
+    fontFamily: sourceViewerCodeFontFamily,
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 17,
+    textAlign: "center",
   },
   fileTitleGroup: {
     alignItems: "baseline",

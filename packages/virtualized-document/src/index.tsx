@@ -59,6 +59,7 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
   debugName?: string;
+  getItemSize?: (index: number, row: TRow | undefined) => number;
   initialRequestRowCount?: number;
   itemIndexes: number[];
   onInitialRowsRequested?: (start: number, count: number) => void;
@@ -304,6 +305,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 
 export function VirtualizedFixedDocumentList<TRow>({
   debugName,
+  getItemSize,
   initialRequestRowCount,
   itemIndexes,
   lineOverscan = 0,
@@ -417,11 +419,15 @@ export function VirtualizedFixedDocumentList<TRow>({
     [debugName, renderRow, rowCache],
   );
 
+  const getFixedItemSize = useCallback((index: number) => (
+    getItemSize?.(index, rowCache.get(index)) ?? rowHeight
+  ), [getItemSize, rowCache, rowHeight]);
+
   return (
     <LegendList
       data={itemIndexes}
       extraData={rowsVersion}
-      getFixedItemSize={() => rowHeight}
+      getFixedItemSize={getFixedItemSize}
       keyExtractor={(index) => String(index)}
       onLayout={handleLayout}
       onScroll={handleScroll}
