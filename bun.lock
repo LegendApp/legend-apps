@@ -29,6 +29,7 @@
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/recent-documents": "0.0.0",
+        "@legend-desktop/source-viewer": "workspace:*",
         "@legend-desktop/syntax-parser": "workspace:*",
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/virtualized-document": "workspace:*",
@@ -419,6 +420,17 @@
     "packages/sidebar": {
       "name": "@legend-desktop/sidebar",
       "version": "0.0.0",
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+      },
+    },
+    "packages/source-viewer": {
+      "name": "@legend-desktop/source-viewer",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/syntax-parser": "workspace:*",
+      },
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
@@ -912,6 +924,8 @@
     "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
 
     "@legend-desktop/sidebar": ["@legend-desktop/sidebar@workspace:packages/sidebar"],
+
+    "@legend-desktop/source-viewer": ["@legend-desktop/source-viewer@workspace:packages/source-viewer"],
 
     "@legend-desktop/storage": ["@legend-desktop/storage@workspace:packages/storage"],
 

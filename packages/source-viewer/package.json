@@ -1,0 +1,14 @@
+{
+  "name": "@legend-desktop/source-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "dependencies": {
+    "@legend-desktop/syntax-parser": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

@@ -1,6 +1,11 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
+  createSyntaxStyleMap,
+  SourceLineRow,
+  sourceViewerRowHeight,
+} from "@legend-desktop/source-viewer";
+import {
   loadCodeFile,
   type SyntaxDocument,
   type SyntaxHighlightTiming,
@@ -62,7 +67,7 @@ type CodeViewerRowsTrace = {
   startedAt: number;
 };
 
-const rowHeight = 22;
+const rowHeight = sourceViewerRowHeight;
 const initialRequestRowCount = 80;
 const lineOverscan = 160;
 const overscanRequestDelayMs = 80;
@@ -99,10 +104,6 @@ const emptyState: CodeViewerState = {
   filePath: null,
   error: null,
 };
-
-function createStyleMap(styles: readonly SyntaxStyle[]) {
-  return new Map(styles.map((style) => [style.id, style]));
-}
 
 function formatLineCount(count: number) {
   return `${count.toLocaleString()} ${count === 1 ? "line" : "lines"}`;
@@ -381,7 +382,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   });
   const currentDocument = state.status === "loaded" ? state.document : null;
   const stylesForState = virtualizedLines.styles;
-  const tokenStyleById = useMemo(() => createStyleMap(stylesForState), [stylesForState]);
+  const tokenStyleById = useMemo(() => createSyntaxStyleMap(stylesForState), [stylesForState]);
   const visibleFilePath = state.filePath ?? launchFile;
   const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
   const backgroundColor = displayTheme.colors.background;
@@ -580,32 +581,14 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const renderLine = useCallback(
     ({ index: lineIndex, row: line }: VirtualizedFixedDocumentListRenderRowProps<SyntaxRenderLine>) => {
       return (
-        <View
+        <SourceLineRow
+          foregroundColor={foregroundColor}
+          index={lineIndex}
+          line={line}
+          mutedColor={mutedColor}
           onLayout={() => recordRowLayout(lineIndex, line)}
-          style={styles.lineRow}
-        >
-          <Text selectable={false} style={[styles.lineNumber, { color: mutedColor }]}>
-            {lineIndex + 1}
-          </Text>
-          <Text numberOfLines={1} selectable style={[styles.codeLine, { color: foregroundColor }]}>
-            {line && line.tokens.length === 0 ? line.text : line?.tokens.map((token, tokenIndex) => {
-              const tokenStyle = tokenStyleById.get(token.styleId);
-              const text = line.text.slice(token.startColumn, token.startColumn + token.length);
-              return (
-                <Text
-                  key={`${line.index}:${token.startColumn}:${tokenIndex}`}
-                  style={{
-                    color: tokenStyle?.foreground || foregroundColor,
-                    fontStyle: tokenStyle?.fontStyle === 1 || tokenStyle?.fontStyle === 3 ? "italic" : "normal",
-                    fontWeight: tokenStyle?.fontStyle === 2 || tokenStyle?.fontStyle === 3 ? "700" : "400",
-                  }}
-                >
-                  {text}
-                </Text>
-              );
-            })}
-          </Text>
-        </View>
+          tokenStyleById={tokenStyleById}
+        />
       );
     },
     [foregroundColor, mutedColor, tokenStyleById],
@@ -690,13 +673,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
 export default CodeViewerWindow;
 
 const styles = StyleSheet.create({
-  codeLine: {
-    flex: 1,
-    fontFamily: "Menlo",
-    fontSize: 13,
-    lineHeight: 22,
-    overflow: "hidden",
-  },
   empty: {
     alignItems: "center",
     flex: 1,
@@ -727,19 +703,6 @@ const styles = StyleSheet.create({
     minHeight: 60,
     paddingHorizontal: 20,
     paddingTop: 10,
-  },
-  lineNumber: {
-    fontFamily: "Menlo",
-    fontSize: 12,
-    lineHeight: 22,
-    paddingRight: 16,
-    textAlign: "right",
-    width: 72,
-  },
-  lineRow: {
-    flexDirection: "row",
-    height: 22,
-    paddingHorizontal: 12,
   },
   list: {
     flex: 1,
