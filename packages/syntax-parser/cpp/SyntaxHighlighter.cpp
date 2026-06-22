@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace margelo::nitro::legenddesktop::syntaxparser {
 
@@ -67,6 +68,27 @@ std::string normalizeOption(std::string value) {
   return value;
 }
 
+std::string lowerPath(std::string path) {
+  for (char& character : path) {
+    character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+  }
+  return path;
+}
+
+std::string fileExtension(const std::string& path) {
+  const auto slash = path.find_last_of("/\\");
+  const auto dot = path.find_last_of('.');
+  if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) {
+    return "";
+  }
+  return path.substr(dot + 1);
+}
+
+std::string fileName(const std::string& path) {
+  const auto slash = path.find_last_of("/\\");
+  return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
 GrammarConfig getGrammarConfig(const std::string& language) {
   const auto normalized = normalizeOption(language);
 
@@ -84,10 +106,164 @@ GrammarConfig getGrammarConfig(const std::string& language) {
     };
   }
 
+  if (normalized == "javascriptreact" || normalized == "jsx") {
+    return {
+        "source.jsx",
+        {"javascript.json", "jsx.json"},
+    };
+  }
+
   if (normalized == "javascript" || normalized == "js") {
     return {
         "source.js",
         {"javascript.json"},
+    };
+  }
+
+  if (normalized == "json" || normalized == "jsonc" || normalized == "json5" || normalized == "jsonl") {
+    return {
+        "source.json",
+        {"json.json"},
+    };
+  }
+
+  if (normalized == "yaml" || normalized == "yml") {
+    return {
+        "source.yaml",
+        {"yaml.json"},
+    };
+  }
+
+  if (normalized == "markdown" || normalized == "md" || normalized == "mdx") {
+    return {
+        "text.html.markdown",
+        {"markdown.json"},
+    };
+  }
+
+  if (normalized == "css") {
+    return {
+        "source.css",
+        {"css.json"},
+    };
+  }
+
+  if (normalized == "scss") {
+    return {
+        "source.css.scss",
+        {"css.json", "scss.json"},
+    };
+  }
+
+  if (normalized == "html") {
+    return {
+        "text.html.basic",
+        {"html.json"},
+    };
+  }
+
+  if (normalized == "xml") {
+    return {
+        "text.xml",
+        {"xml.json"},
+    };
+  }
+
+  if (normalized == "shellscript" || normalized == "shell" || normalized == "bash" || normalized == "sh" || normalized == "zsh") {
+    return {
+        "source.shell",
+        {"shellscript.json"},
+    };
+  }
+
+  if (normalized == "python" || normalized == "py") {
+    return {
+        "source.python",
+        {"python.json"},
+    };
+  }
+
+  if (normalized == "ruby" || normalized == "rb") {
+    return {
+        "source.ruby",
+        {"ruby.json"},
+    };
+  }
+
+  if (normalized == "swift") {
+    return {
+        "source.swift",
+        {"swift.json"},
+    };
+  }
+
+  if (normalized == "kotlin" || normalized == "kt" || normalized == "kts") {
+    return {
+        "source.kotlin",
+        {"kotlin.json"},
+    };
+  }
+
+  if (normalized == "java") {
+    return {
+        "source.java",
+        {"java.json"},
+    };
+  }
+
+  if (normalized == "cpp" || normalized == "c++" || normalized == "cc" || normalized == "cxx" || normalized == "hpp" || normalized == "h++") {
+    return {
+        "source.cpp",
+        {"cpp.json"},
+    };
+  }
+
+  if (normalized == "c" || normalized == "h") {
+    return {
+        "source.c",
+        {"c.json"},
+    };
+  }
+
+  if (normalized == "objective-c" || normalized == "objc" || normalized == "m") {
+    return {
+        "source.objc",
+        {"c.json", "objective-c.json"},
+    };
+  }
+
+  if (normalized == "objective-cpp" || normalized == "objcpp" || normalized == "mm") {
+    return {
+        "source.objcpp",
+        {"cpp.json", "objective-cpp.json"},
+    };
+  }
+
+  if (normalized == "go") {
+    return {
+        "source.go",
+        {"go.json"},
+    };
+  }
+
+  if (normalized == "rust" || normalized == "rs") {
+    return {
+        "source.rust",
+        {"rust.json"},
+    };
+  }
+
+  if (normalized == "toml") {
+    return {
+        "source.toml",
+        {"toml.json"},
+    };
+  }
+
+  if (normalized == "dockerfile" || normalized == "docker") {
+    return {
+        "source.dockerfile",
+        {"docker.json"},
     };
   }
 
@@ -113,6 +289,197 @@ std::string getThemeFileName(const std::string& theme) {
 
 std::vector<std::string> warmupLinesForLanguage(const std::string& language) {
   const auto normalized = normalizeOption(language);
+
+  if (normalized == "yaml" || normalized == "yml") {
+    return {
+        "nodeLinker: node-modules",
+        "npmScopes:",
+        "  legend:",
+        "    npmRegistryServer: \"https://registry.npmjs.org\"",
+    };
+  }
+
+  if (normalized == "json" || normalized == "jsonc" || normalized == "json5" || normalized == "jsonl") {
+    return {
+        "{",
+        "  \"name\": \"legend\",",
+        "  \"private\": true,",
+        "  \"scripts\": {",
+        "    \"start\": \"bun start\"",
+        "  }",
+        "}",
+    };
+  }
+
+  if (normalized == "markdown" || normalized == "md" || normalized == "mdx") {
+    return {
+        "# Legend",
+        "",
+        "A short paragraph with `inline code`.",
+        "",
+        "```ts",
+        "const value = true;",
+        "```",
+    };
+  }
+
+  if (normalized == "css" || normalized == "scss") {
+    return {
+        ".root {",
+        "  display: flex;",
+        "  color: #c9d1d9;",
+        "}",
+    };
+  }
+
+  if (normalized == "html" || normalized == "xml") {
+    return {
+        "<section class=\"root\">",
+        "  <h1>Legend</h1>",
+        "</section>",
+    };
+  }
+
+  if (normalized == "shellscript" || normalized == "shell" || normalized == "bash" || normalized == "sh" || normalized == "zsh") {
+    return {
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "echo \"Legend\"",
+    };
+  }
+
+  if (normalized == "python" || normalized == "py") {
+    return {
+        "def main():",
+        "    value = \"Legend\"",
+        "    print(value)",
+    };
+  }
+
+  if (normalized == "ruby" || normalized == "rb") {
+    return {
+        "def main",
+        "  puts \"Legend\"",
+        "end",
+    };
+  }
+
+  if (normalized == "swift") {
+    return {
+        "import Foundation",
+        "",
+        "let value = \"Legend\"",
+        "print(value)",
+    };
+  }
+
+  if (normalized == "kotlin" || normalized == "kt" || normalized == "kts") {
+    return {
+        "fun main() {",
+        "  val value = \"Legend\"",
+        "  println(value)",
+        "}",
+    };
+  }
+
+  if (normalized == "java") {
+    return {
+        "public class Legend {",
+        "  public static void main(String[] args) {",
+        "    System.out.println(\"Legend\");",
+        "  }",
+        "}",
+    };
+  }
+
+  if (normalized == "cpp" || normalized == "c++" || normalized == "cc" || normalized == "cxx" || normalized == "hpp" || normalized == "h++") {
+    return {
+        "#include <string>",
+        "",
+        "auto value = std::string(\"Legend\");",
+    };
+  }
+
+  if (normalized == "c" || normalized == "h") {
+    return {
+        "#include <stdio.h>",
+        "",
+        "int main(void) {",
+        "  puts(\"Legend\");",
+        "}",
+    };
+  }
+
+  if (normalized == "objective-c" || normalized == "objc" || normalized == "m") {
+    return {
+        "#import <Foundation/Foundation.h>",
+        "",
+        "NSString *value = @\"Legend\";",
+    };
+  }
+
+  if (normalized == "objective-cpp" || normalized == "objcpp" || normalized == "mm") {
+    return {
+        "#import <Foundation/Foundation.h>",
+        "#include <string>",
+        "",
+        "auto value = std::string(\"Legend\");",
+    };
+  }
+
+  if (normalized == "go") {
+    return {
+        "package main",
+        "",
+        "func main() {",
+        "  println(\"Legend\")",
+        "}",
+    };
+  }
+
+  if (normalized == "rust" || normalized == "rs") {
+    return {
+        "fn main() {",
+        "  let value = \"Legend\";",
+        "  println!(\"{}\", value);",
+        "}",
+    };
+  }
+
+  if (normalized == "toml") {
+    return {
+        "name = \"legend\"",
+        "private = true",
+        "",
+        "[scripts]",
+        "start = \"bun start\"",
+    };
+  }
+
+  if (normalized == "dockerfile" || normalized == "docker") {
+    return {
+        "FROM node:24",
+        "WORKDIR /app",
+        "CMD [\"bun\", \"start\"]",
+    };
+  }
+
+  if (normalized == "javascript" || normalized == "js") {
+    return {
+        "const value = \"Legend\";",
+        "console.log(value);",
+    };
+  }
+
+  if (normalized == "javascriptreact" || normalized == "jsx") {
+    return {
+        "import React from \"react\";",
+        "",
+        "export function App() {",
+        "  return <Text>Legend</Text>;",
+        "}",
+    };
+  }
 
   if (normalized == "tsx" || normalized == "typescriptreact") {
     return {
@@ -442,6 +809,60 @@ std::vector<std::string> splitSyntaxLines(const std::string& source) {
 
   lines.push_back(currentLine);
   return lines;
+}
+
+std::string getSyntaxLanguageForPath(const std::string& path) {
+  const auto normalizedPath = lowerPath(path);
+  const auto name = fileName(normalizedPath);
+  const auto extension = fileExtension(normalizedPath);
+
+  if (name == "dockerfile" || name.starts_with("dockerfile.")) {
+    return "dockerfile";
+  }
+
+  if (name == ".yarnrc" || name == ".yarnrc.yml" || name == ".yarnrc.yaml" || extension == "yml") {
+    return "yaml";
+  }
+
+  static const std::unordered_map<std::string, std::string> languagesByExtension = {
+      {"bash", "shellscript"},
+      {"c", "c"},
+      {"cc", "cpp"},
+      {"cpp", "cpp"},
+      {"css", "css"},
+      {"cxx", "cpp"},
+      {"go", "go"},
+      {"h", "c"},
+      {"hpp", "cpp"},
+      {"html", "html"},
+      {"java", "java"},
+      {"js", "javascript"},
+      {"json", "json"},
+      {"json5", "json"},
+      {"jsonc", "json"},
+      {"jsx", "javascriptreact"},
+      {"kt", "kotlin"},
+      {"kts", "kotlin"},
+      {"m", "objective-c"},
+      {"md", "markdown"},
+      {"mdx", "markdown"},
+      {"mm", "objective-cpp"},
+      {"py", "python"},
+      {"rb", "ruby"},
+      {"rs", "rust"},
+      {"scss", "scss"},
+      {"sh", "shellscript"},
+      {"swift", "swift"},
+      {"toml", "toml"},
+      {"ts", "typescript"},
+      {"tsx", "tsx"},
+      {"xml", "xml"},
+      {"yaml", "yaml"},
+      {"zsh", "shellscript"},
+  };
+
+  const auto match = languagesByExtension.find(extension);
+  return match != languagesByExtension.end() ? match->second : "";
 }
 
 SyntaxHighlighterWarmupResult warmHighlighterContext(

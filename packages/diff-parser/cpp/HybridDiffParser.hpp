@@ -10,6 +10,7 @@ public:
 
   std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(
       const std::string& folderPath,
+      const std::string& theme,
       double initialRowCount) override;
 };
 

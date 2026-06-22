@@ -17,10 +17,15 @@ Pod::Spec.new do |s|
     "HEADER_SEARCH_PATHS" => [
       "$(PODS_ROOT)/LegendLibGit2/build/include",
       "$(PODS_ROOT)/LegendLibGit2/build/gen_headers",
+      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/src",
+      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/build",
+      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/build/oniguruma/include",
+      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/thirdparty/rapidjson/include",
     ].join(" "),
   }
   s.dependency "React-Core"
   s.dependency "LegendLibGit2"
+  s.dependency "RNSyntaxParser"
   load "nitrogen/generated/ios/RNDiffParser+autolinking.rb"
   add_nitrogen_files(s)
 end

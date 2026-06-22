@@ -47,11 +47,11 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
     public:
       // Properties
-
+      
 
     public:
       // Methods
-      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount) = 0;
+      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, const std::string& theme, double initialRowCount) = 0;
 
     protected:
       // Hybrid Setup

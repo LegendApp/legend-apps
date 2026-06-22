@@ -66,7 +66,21 @@ async function installPods(appId: string, platform: Platform) {
 
 function withMacOSDevProjectPath(appId: string, args: string[]) {
   const hasProjectPath = args.includes("--project-path") || args.some((arg) => arg.startsWith("--project-path="));
-  return hasProjectPath ? args : [...args, "--project-path", getMacOSAppDevProjectPath(appId)];
+  if (hasProjectPath) {
+    return args;
+  }
+
+  const launchArgsSeparatorIndex = args.indexOf("--");
+  const projectPathArgs = ["--project-path", getMacOSAppDevProjectPath(appId)];
+  if (launchArgsSeparatorIndex < 0) {
+    return [...args, ...projectPathArgs];
+  }
+
+  return [
+    ...args.slice(0, launchArgsSeparatorIndex),
+    ...projectPathArgs,
+    ...args.slice(launchArgsSeparatorIndex),
+  ];
 }
 
 async function main() {

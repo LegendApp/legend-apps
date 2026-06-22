@@ -34,6 +34,8 @@ namespace margelo::nitro::legenddesktop::diffparser { class HybridDiffDocumentSp
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
+// Forward declaration of `DiffSyntaxStyle` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxStyle; }
 // Forward declaration of `DiffLoadTiming` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 
@@ -42,6 +44,7 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 #include "DiffFileSummary.hpp"
 #include <vector>
 #include "DiffRenderRow.hpp"
+#include "DiffSyntaxStyle.hpp"
 #include "DiffLoadTiming.hpp"
 
 namespace margelo::nitro::legenddesktop::diffparser {
@@ -54,11 +57,12 @@ namespace margelo::nitro::legenddesktop::diffparser {
     std::shared_ptr<HybridDiffDocumentSpec> document     SWIFT_PRIVATE;
     std::vector<DiffFileSummary> files     SWIFT_PRIVATE;
     std::vector<DiffRenderRow> initialRows     SWIFT_PRIVATE;
+    std::vector<DiffSyntaxStyle> styles     SWIFT_PRIVATE;
     DiffLoadTiming timing     SWIFT_PRIVATE;
 
   public:
     DiffLoadResult() = default;
-    explicit DiffLoadResult(std::shared_ptr<HybridDiffDocumentSpec> document, std::vector<DiffFileSummary> files, std::vector<DiffRenderRow> initialRows, DiffLoadTiming timing): document(document), files(files), initialRows(initialRows), timing(timing) {}
+    explicit DiffLoadResult(std::shared_ptr<HybridDiffDocumentSpec> document, std::vector<DiffFileSummary> files, std::vector<DiffRenderRow> initialRows, std::vector<DiffSyntaxStyle> styles, DiffLoadTiming timing): document(document), files(files), initialRows(initialRows), styles(styles), timing(timing) {}
 
   public:
     friend bool operator==(const DiffLoadResult& lhs, const DiffLoadResult& rhs) = default;
@@ -77,6 +81,7 @@ namespace margelo::nitro {
         JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::diffparser::HybridDiffDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
         JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffFileSummary>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "files"))),
         JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialRows"))),
+        JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles"))),
         JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
       );
     }
@@ -85,6 +90,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::diffparser::HybridDiffDocumentSpec>>::toJSI(runtime, arg.document));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "files"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffFileSummary>>::toJSI(runtime, arg.files));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialRows"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>>::toJSI(runtime, arg.initialRows));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "styles"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle>>::toJSI(runtime, arg.styles));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming>::toJSI(runtime, arg.timing));
       return obj;
     }
@@ -99,6 +105,7 @@ namespace margelo::nitro {
       if (!JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::diffparser::HybridDiffDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
       if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffFileSummary>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "files")))) return false;
       if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialRows")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles")))) return false;
       if (!JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
       return true;
     }

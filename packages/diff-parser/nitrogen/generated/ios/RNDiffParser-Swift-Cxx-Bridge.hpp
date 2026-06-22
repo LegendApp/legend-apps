@@ -22,6 +22,6 @@
  */
 namespace margelo::nitro::legenddesktop::diffparser::bridge::swift {
 
-
+  
 
 } // namespace margelo::nitro::legenddesktop::diffparser::bridge::swift

@@ -4,12 +4,16 @@ import {
   type DiffFileSummary,
   type DiffLoadTiming,
   type DiffRenderRow,
+  type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
 import {
+  createSyntaxStyleMap,
   sourceViewerCodeFontFamily,
   sourceViewerLineNumberWidth,
   sourceViewerRowHeight,
+  TokenizedText,
 } from "@legend-desktop/source-viewer";
+import { defaultSyntaxThemeName, getSyntaxTheme } from "@legend-desktop/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
@@ -46,6 +50,7 @@ type DiffViewerState =
     document: DiffDocument;
     files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
+    styles: DiffSyntaxStyle[];
     timing: DiffLoadTiming;
   }
   | {
@@ -140,15 +145,16 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
 }
 
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
-  const displayTheme = getLegendDisplayTheme("dark");
+  const syntaxTheme = getSyntaxTheme(defaultSyntaxThemeName);
+  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const loadRequestIdRef = useRef(0);
   const visibleFolderPath = state.folderPath;
   const title = visibleFolderPath ? getFilename(visibleFolderPath) : "No folder";
-  const backgroundColor = displayTheme.colors.background;
+  const backgroundColor = syntaxTheme.background;
   const borderColor = displayTheme.colors.border;
-  const foregroundColor = displayTheme.colors.foreground;
+  const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
   const fileByIndex = useMemo(() => {
     if (state.status !== "loaded") {
@@ -156,13 +162,13 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
     return new Map(state.files.map((file) => [file.index, file]));
   }, [state]);
-  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, never, DiffLoadTiming> | null>(
+  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
     () => state.status === "loaded"
       ? {
           document: state.document,
           initialRows: state.initialRows,
           itemCount: state.document.rowCount,
-          styles: [],
+          styles: state.styles,
           timing: state.timing,
         }
       : null,
@@ -170,14 +176,17 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   );
   const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
   const getRows = useCallback((document: DiffDocument, start: number, count: number) => document.getRows(start, count), []);
+  const getStyles = useCallback((document: DiffDocument) => document.getStyles(), []);
   const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
   const diffRows = useVirtualizedDocumentRows({
     debugName: "diff",
     getRowIndex,
     getRows,
+    getStyles,
     getTiming,
     snapshot,
   });
+  const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
   const visibleItemIndexes = useMemo(
     () => state.status === "loaded"
       ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
@@ -199,7 +208,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     loadRequestIdRef.current = requestId;
 
     try {
-      const result = await loadGitFolderDiff(path, diffInitialRowCount);
+      const result = await loadGitFolderDiff(path, defaultSyntaxThemeName, diffInitialRowCount);
       logDiffLoadTiming(path, result.timing);
       if (loadRequestIdRef.current === requestId) {
         setState({
@@ -209,6 +218,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           document: result.document,
           files: result.files,
           initialRows: result.initialRows,
+          styles: result.styles,
           timing: result.timing,
         });
       }
@@ -346,13 +356,16 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           <Text selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor }]}>
             {isFileHeader ? "" : marker}
           </Text>
-          <Text selectable style={[styles.diffText, { color: textColor }]} numberOfLines={1}>
-            {row?.text ?? ""}
-          </Text>
+          <TokenizedText
+            foregroundColor={textColor}
+            line={row}
+            style={styles.diffText}
+            tokenStyleById={tokenStyleById}
+          />
         </View>
       );
     },
-    [borderColor, collapsedFileIndexes, fileByIndex, foregroundColor, mutedColor, toggleFileCollapsed],
+    [borderColor, collapsedFileIndexes, fileByIndex, foregroundColor, mutedColor, toggleFileCollapsed, tokenStyleById],
   );
 
   const body = useMemo(() => {
@@ -381,7 +394,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             No changes
           </Text>
           <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
-            {visibleFolderPath ?? "The selected folder has no unstaged changes."}
+            {visibleFolderPath ?? "The selected folder has no changes."}
           </Text>
         </View>
       );

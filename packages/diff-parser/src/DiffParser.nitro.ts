@@ -12,6 +12,18 @@ export interface DiffFileSummary {
   isBinary: boolean;
 }
 
+export interface DiffSyntaxTokenRun {
+  startColumn: number;
+  length: number;
+  styleId: number;
+}
+
+export interface DiffSyntaxStyle {
+  id: number;
+  foreground: string;
+  fontStyle: number;
+}
+
 export interface DiffRenderRow {
   index: number;
   kind: number;
@@ -21,6 +33,7 @@ export interface DiffRenderRow {
   newLineNumber: number;
   changeType: number;
   text: string;
+  tokens: DiffSyntaxTokenRun[];
 }
 
 export interface DiffLoadTiming {
@@ -40,6 +53,7 @@ export interface DiffLoadResult {
   document: DiffDocument;
   files: DiffFileSummary[];
   initialRows: DiffRenderRow[];
+  styles: DiffSyntaxStyle[];
   timing: DiffLoadTiming;
 }
 
@@ -51,6 +65,7 @@ export interface DiffDocument
   readonly fileCount: number;
   getRows(start: number, count: number): DiffRenderRow[];
   getFiles(): DiffFileSummary[];
+  getStyles(): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
 }
 
@@ -58,5 +73,5 @@ export interface DiffParser
   extends HybridObject<{
     ios: "c++";
   }> {
-  loadGitFolderDiff(folderPath: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadGitFolderDiff(folderPath: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
 }

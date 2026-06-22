@@ -58,6 +58,7 @@ private:
 double elapsedSyntaxMs(SyntaxClock::time_point start, SyntaxClock::time_point end);
 double utf16Length(const std::string& text);
 std::vector<std::string> splitSyntaxLines(const std::string& source);
+std::string getSyntaxLanguageForPath(const std::string& path);
 SyntaxHighlighterWarmupResult warmHighlighterContext(const std::string& language, const std::string& theme);
 std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(const std::string& language, const std::string& theme);
 SyntaxTokenizedLine tokenizeSyntaxLine(

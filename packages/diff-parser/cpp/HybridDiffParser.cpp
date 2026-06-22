@@ -4,8 +4,13 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include "git2.h"
 #include <memory>
+#include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -45,6 +50,18 @@ std::string gitErrorMessage(const std::string& fallback) {
   return fallback + ": " + error->message;
 }
 
+void ensureLibGit2Initialized() {
+  static std::once_flag initOnce;
+  std::call_once(initOnce, [] {
+    if (git_libgit2_init() < 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to initialize git library"));
+    }
+    std::atexit([] {
+      git_libgit2_shutdown();
+    });
+  });
+}
+
 struct GitRepositoryDeleter {
   void operator()(git_repository* repo) const {
     git_repository_free(repo);
@@ -72,6 +89,18 @@ struct GitCommitDeleter {
 struct GitTreeDeleter {
   void operator()(git_tree* tree) const {
     git_tree_free(tree);
+  }
+};
+
+struct GitTreeEntryDeleter {
+  void operator()(git_tree_entry* entry) const {
+    git_tree_entry_free(entry);
+  }
+};
+
+struct GitBlobDeleter {
+  void operator()(git_blob* blob) const {
+    git_blob_free(blob);
   }
 };
 
@@ -114,6 +143,72 @@ std::string trimDiffLine(const char* content, size_t contentLength) {
     length -= 1;
   }
   return std::string(content, length);
+}
+
+std::string readFileText(const std::filesystem::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    return "";
+  }
+
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
+}
+
+std::string readHeadBlobText(git_repository* repo, git_tree* headTree, const std::string& path) {
+  if (path.empty()) {
+    return "";
+  }
+
+  git_tree_entry* rawEntry = nullptr;
+  if (git_tree_entry_bypath(&rawEntry, headTree, path.c_str()) != 0) {
+    return "";
+  }
+  std::unique_ptr<git_tree_entry, GitTreeEntryDeleter> entry(rawEntry);
+  if (git_tree_entry_type(entry.get()) != GIT_OBJECT_BLOB) {
+    return "";
+  }
+
+  git_blob* rawBlob = nullptr;
+  if (git_blob_lookup(&rawBlob, repo, git_tree_entry_id(entry.get())) != 0) {
+    return "";
+  }
+  std::unique_ptr<git_blob, GitBlobDeleter> blob(rawBlob);
+  const auto* content = static_cast<const char*>(git_blob_rawcontent(blob.get()));
+  const auto size = git_blob_rawsize(blob.get());
+  return content != nullptr && size > 0 ? std::string(content, content + size) : "";
+}
+
+std::string readWorkdirFileText(git_repository* repo, const std::string& path) {
+  const char* workdir = git_repository_workdir(repo);
+  if (workdir == nullptr || path.empty()) {
+    return "";
+  }
+  return readFileText(std::filesystem::path(workdir) / path);
+}
+
+std::vector<DiffFileSources> createFileSources(
+    git_repository* repo,
+    git_tree* headTree,
+    const std::vector<DiffFileSummary>& files) {
+  std::vector<DiffFileSources> fileSources;
+  fileSources.reserve(files.size());
+  for (const auto& file : files) {
+    DiffFileSources sources;
+    sources.oldPath = file.oldPath;
+    sources.newPath = file.path;
+    if (!file.isBinary) {
+      if (file.status != "added" && file.status != "untracked") {
+        sources.oldText = readHeadBlobText(repo, headTree, file.oldPath);
+      }
+      if (file.status != "deleted") {
+        sources.newText = readWorkdirFileText(repo, file.path);
+      }
+    }
+    fileSources.push_back(std::move(sources));
+  }
+  return fileSources;
 }
 
 struct DiffBuildState {
@@ -161,6 +256,7 @@ int onFile(const git_diff_delta* delta, float, void* payload) {
   row.newLineNumber = -1;
   row.changeType = diffChangeTypeMeta;
   row.text = state->files.back().path;
+  row.tokens = {};
   state->rows.push_back(std::move(row));
   return 0;
 }
@@ -216,12 +312,14 @@ int onLine(
   row.newLineNumber = newLineNumber;
   row.changeType = changeType;
   row.text = trimDiffLine(line->content, line->content_len);
+  row.tokens = {};
   state->rows.push_back(std::move(row));
   return 0;
 }
 
-std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath) {
+std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath, const std::string& theme) {
   const auto loadStartedAt = DiffClock::now();
+  ensureLibGit2Initialized();
   git_repository* rawRepo = nullptr;
   const std::string normalizedPath = normalizeFolderPath(folderPath);
   if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
@@ -271,6 +369,7 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
   }
   state.finishCurrentFile();
   const auto diffWalkedAt = DiffClock::now();
+  auto fileSources = createFileSources(repo.get(), headTree.get(), state.files);
 
   DiffLoadTiming timing;
   timing.openRepoMs = elapsedDiffMs(loadStartedAt, repoOpenedAt);
@@ -284,7 +383,12 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
   timing.rowCount = static_cast<double>(state.rows.size());
   timing.fileCount = static_cast<double>(state.files.size());
 
-  return std::make_shared<HybridDiffDocument>(std::move(state.files), std::move(state.rows), timing);
+  return std::make_shared<HybridDiffDocument>(
+      std::move(state.files),
+      std::move(state.rows),
+      std::move(fileSources),
+      theme,
+      timing);
 }
 
 } // namespace
@@ -293,10 +397,11 @@ HybridDiffParser::HybridDiffParser() : HybridObject(TAG) {}
 
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,
+    const std::string& theme,
     double initialRowCount) {
-  return Promise<DiffLoadResult>::async([folderPath, initialRowCount]() -> DiffLoadResult {
+  return Promise<DiffLoadResult>::async([folderPath, theme, initialRowCount]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadGitDiffDocument(folderPath);
+    auto document = loadGitDiffDocument(folderPath, theme);
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -306,6 +411,7 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getRows(0, initialRowCount);
     const auto rowsFinishedAt = DiffClock::now();
+    result.styles = document->getStyles();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);

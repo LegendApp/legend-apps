@@ -17,12 +17,15 @@
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
 // Forward declaration of `DiffFileSummary` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
+// Forward declaration of `DiffSyntaxStyle` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxStyle; }
 // Forward declaration of `DiffLoadTiming` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 
 #include "DiffRenderRow.hpp"
 #include <vector>
 #include "DiffFileSummary.hpp"
+#include "DiffSyntaxStyle.hpp"
 #include "DiffLoadTiming.hpp"
 
 namespace margelo::nitro::legenddesktop::diffparser {
@@ -59,6 +62,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
       // Methods
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
+      virtual std::vector<DiffSyntaxStyle> getStyles() = 0;
       virtual DiffLoadTiming getTiming() = 0;
 
     protected:

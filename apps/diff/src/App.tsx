@@ -1,11 +1,15 @@
 import { useNativeMenu, type NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { useEffect, useRef } from "react";
 import { diffMenuOwnerId } from "./appConstants";
-import { openDiffFolderDialog } from "./diffFiles";
+import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { openDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 registerDiffWindows();
+
+type DiffAppProps = {
+  launchArguments?: string[];
+};
 
 function reportDiffAppControllerError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -19,7 +23,7 @@ async function openDiffViewerForSelectedFolder() {
   }
 }
 
-export function App() {
+export function App({ launchArguments }: DiffAppProps) {
   const didOpenViewerRef = useRef(false);
   const menuHandlers = useRef<NativeMenuActionHandlers>({
     openFolder: () => {
@@ -36,9 +40,9 @@ export function App() {
   useEffect(() => {
     if (!didOpenViewerRef.current) {
       didOpenViewerRef.current = true;
-      openDiffViewerWindow().catch(reportDiffAppControllerError);
+      openDiffViewerWindow(getLaunchDiffFolder(launchArguments)).catch(reportDiffAppControllerError);
     }
-  }, []);
+  }, [launchArguments]);
 
   return null;
 }

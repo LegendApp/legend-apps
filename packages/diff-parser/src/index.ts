@@ -8,8 +8,8 @@ function getDiffParser() {
   return diffParser;
 }
 
-export function loadGitFolderDiff(folderPath: string, initialRowCount = 200) {
-  return getDiffParser().loadGitFolderDiff(folderPath, initialRowCount);
+export function loadGitFolderDiff(folderPath: string, theme = "github-dark", initialRowCount = 200) {
+  return getDiffParser().loadGitFolderDiff(folderPath, theme, initialRowCount);
 }
 
 export type {
@@ -18,4 +18,6 @@ export type {
   DiffLoadResult,
   DiffLoadTiming,
   DiffRenderRow,
+  DiffSyntaxStyle,
+  DiffSyntaxTokenRun,
 } from "./DiffParser.nitro";

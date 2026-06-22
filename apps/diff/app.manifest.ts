@@ -19,6 +19,7 @@ const manifest = {
       "@legend-desktop/diff-parser",
       "@legend-desktop/file-dialog",
       "@legend-desktop/native-menu",
+      "@legend-desktop/syntax-parser",
       "@legend-desktop/window-manager",
     ],
     ios: [],

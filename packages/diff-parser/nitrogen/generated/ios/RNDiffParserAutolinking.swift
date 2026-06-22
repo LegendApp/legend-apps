@@ -12,5 +12,5 @@ import NitroModules
 public final class RNDiffParserAutolinking {
   public typealias bridge = margelo.nitro.legenddesktop.diffparser.bridge.swift
 
-
+  
 }
