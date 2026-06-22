@@ -14,6 +14,7 @@
     "@legend-desktop/source-viewer": "workspace:*",
     "@legend-desktop/storage": "0.0.0",
     "@legend-desktop/syntax-parser": "workspace:*",
+    "@legend-desktop/syntax-settings": "workspace:*",
     "@legend-desktop/theme": "workspace:*",
     "@legend-desktop/virtualized-document": "workspace:*",
     "@legend-desktop/window-manager": "0.0.0",

@@ -1,8 +1,15 @@
+import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import { setWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
-import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
-import { diffViewerWindowIdentifier, diffViewerWindowModuleName } from "./appConstants";
+import {
+  diffSettingsWindowIdentifier,
+  diffSettingsWindowModuleName,
+  diffViewerWindowIdentifier,
+  diffViewerWindowModuleName,
+} from "./appConstants";
 import { getFilename } from "./diffFiles";
+import { getDiffSyntaxTheme } from "./diffSettings";
+import { SettingsWindow } from "./SettingsWindow";
 
 function createDiffViewerWindowStyle({
   appearance,
@@ -13,11 +20,11 @@ function createDiffViewerWindowStyle({
   backgroundColor?: string;
   includeFrame: boolean;
 }) {
-  const displayTheme = getLegendDisplayTheme("dark");
+  const syntaxTheme = getDiffSyntaxTheme();
 
   return {
-    appearance: appearance ?? getLegendDisplayThemeAppearance("dark"),
-    backgroundColor: backgroundColor ?? displayTheme.colors.windowBackground,
+    appearance: appearance ?? syntaxTheme.appearance,
+    backgroundColor: backgroundColor ?? syntaxTheme.background,
     ...(includeFrame
       ? {
           width: 1180,
@@ -49,6 +56,11 @@ const diffWindowsConfig = {
       windowStyle: createDiffViewerWindowStyle({ includeFrame: true }),
     },
   },
+  [diffSettingsWindowModuleName]: {
+    component: SettingsWindow,
+    identifier: diffSettingsWindowIdentifier,
+    options: createSettingsWindowOptions(),
+  },
 } satisfies WindowsConfig;
 
 const DiffWindowsNavigator = createWindowsNavigator(diffWindowsConfig);
@@ -66,10 +78,16 @@ export function openDiffViewerWindow(folderPath?: string | null) {
   });
 }
 
+export function openDiffSettingsWindow() {
+  return DiffWindowsNavigator.open(diffSettingsWindowModuleName as DiffWindow);
+}
+
 export function setDiffViewerWindowOptions({
+  appearance,
   backgroundColor,
   folderPath,
 }: {
+  appearance: "dark" | "light";
   backgroundColor: string;
   folderPath: string | null;
 }) {
@@ -77,7 +95,7 @@ export function setDiffViewerWindowOptions({
     representedURL: folderPath,
     title: folderPath ? getFilename(folderPath) : "Legend Diff",
     windowStyle: createDiffViewerWindowStyle({
-      appearance: getLegendDisplayThemeAppearance("dark"),
+      appearance,
       backgroundColor,
       includeFrame: false,
     }),

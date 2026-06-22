@@ -75,6 +75,32 @@ export type SelectControlProps<Value extends string = string> = {
   value: Value;
 };
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function getContextMenuLocation(event: GestureResponderEvent) {
+  const { locationX, locationY, pageX, pageY } = event.nativeEvent;
+
+  if (finiteNumber(pageX) && finiteNumber(pageY)) {
+    return Promise.resolve({ x: pageX, y: pageY });
+  }
+
+  return new Promise<{ x: number; y: number }>((resolve) => {
+    event.currentTarget.measure((_x, _y, width, height, measuredPageX, measuredPageY) => {
+      const localX = finiteNumber(locationX) ? locationX : Math.max(0, width - 1);
+      const localY = finiteNumber(locationY) ? locationY : Math.max(0, height - 1);
+      const originX = finiteNumber(measuredPageX) ? measuredPageX : 0;
+      const originY = finiteNumber(measuredPageY) ? measuredPageY : 0;
+
+      resolve({
+        x: originX + localX,
+        y: originY + localY,
+      });
+    });
+  });
+}
+
 export function SelectControl<Value extends string = string>({
   accessibilityLabel,
   onChange,
@@ -84,14 +110,14 @@ export function SelectControl<Value extends string = string>({
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
 
   const handlePress = async (event: GestureResponderEvent) => {
-    const { pageX = 0, pageY = 0 } = event.nativeEvent;
+    const location = await getContextMenuLocation(event);
     const { showContextMenu } = await import("@legend-desktop/context-menu");
     const selected = await showContextMenu(
       options.map((option) => ({
         id: option.value,
         title: option.value === value ? `* ${option.label}` : option.label,
       })),
-      { x: pageX, y: pageY },
+      location,
     );
 
     if (selected && options.some((option) => option.value === selected)) {

@@ -13,7 +13,6 @@ import {
   sourceViewerRowHeight,
   TokenizedText,
 } from "@legend-desktop/source-viewer";
-import { defaultSyntaxThemeName, getSyntaxTheme } from "@legend-desktop/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
@@ -24,6 +23,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename, openDiffFolderDialog } from "./diffFiles";
+import { useDiffSyntaxTheme, useDiffSyntaxThemeSetting, type DiffSettingsFile } from "./diffSettings";
 import { setDiffViewerWindowOptions } from "./diffWindows";
 
 const diffInitialRowCount = 160;
@@ -51,6 +51,7 @@ type DiffViewerState =
     files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
     styles: DiffSyntaxStyle[];
+    syntaxTheme: DiffSettingsFile["syntaxTheme"];
     timing: DiffLoadTiming;
   }
   | {
@@ -145,7 +146,8 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
 }
 
 export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
-  const syntaxTheme = getSyntaxTheme(defaultSyntaxThemeName);
+  const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
+  const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
@@ -203,12 +205,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
   }, [state.status === "loaded" ? state.document : null]);
 
-  const loadFolder = useCallback(async (path: string) => {
+  const loadFolder = useCallback(async (path: string, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
 
     try {
-      const result = await loadGitFolderDiff(path, defaultSyntaxThemeName, diffInitialRowCount);
+      const result = await loadGitFolderDiff(path, syntaxThemeName, diffInitialRowCount);
       logDiffLoadTiming(path, result.timing);
       if (loadRequestIdRef.current === requestId) {
         setState({
@@ -219,6 +221,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           files: result.files,
           initialRows: result.initialRows,
           styles: result.styles,
+          syntaxTheme: syntaxThemeName,
           timing: result.timing,
         });
       }
@@ -235,7 +238,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   useEffect(() => {
     if (folderPath) {
-      loadFolder(folderPath);
+      loadFolder(folderPath, selectedSyntaxTheme);
     }
   }, [folderPath, loadFolder]);
 
@@ -243,7 +246,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     try {
       const path = await openDiffFolderDialog();
       if (path) {
-        await loadFolder(path);
+        await loadFolder(path, selectedSyntaxTheme);
       }
     } catch (error) {
       setState((current) => ({
@@ -252,16 +255,29 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         folderPath: current.folderPath,
       }));
     }
-  }, [loadFolder]);
+  }, [loadFolder, selectedSyntaxTheme]);
+
+  useEffect(() => {
+    if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
+      loadFolder(state.folderPath, selectedSyntaxTheme).catch((error: unknown) => {
+        setState((current) => ({
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+          folderPath: current.folderPath,
+        }));
+      });
+    }
+  }, [loadFolder, selectedSyntaxTheme, state]);
 
   useEffect(() => {
     setDiffViewerWindowOptions({
-      backgroundColor: displayTheme.colors.windowBackground,
+      appearance: syntaxTheme.appearance,
+      backgroundColor: syntaxTheme.background,
       folderPath: state.folderPath,
     }).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));
     });
-  }, [displayTheme.colors.windowBackground, state.folderPath]);
+  }, [state.folderPath, syntaxTheme.appearance, syntaxTheme.background]);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
     setCollapsedFileIndexes((current) => {

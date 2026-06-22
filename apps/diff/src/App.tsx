@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { diffMenuOwnerId } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
-import { openDiffViewerWindow, registerDiffWindows } from "./diffWindows";
+import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 registerDiffWindows();
 
@@ -28,6 +28,9 @@ export function App({ launchArguments }: DiffAppProps) {
   const menuHandlers = useRef<NativeMenuActionHandlers>({
     openFolder: () => {
       openDiffViewerForSelectedFolder().catch(reportDiffAppControllerError);
+    },
+    settings: () => {
+      openDiffSettingsWindow().catch(reportDiffAppControllerError);
     },
   }).current;
 

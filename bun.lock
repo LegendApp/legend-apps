@@ -35,6 +35,7 @@
         "@legend-desktop/source-viewer": "workspace:*",
         "@legend-desktop/storage": "0.0.0",
         "@legend-desktop/syntax-parser": "workspace:*",
+        "@legend-desktop/syntax-settings": "workspace:*",
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/virtualized-document": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
@@ -46,15 +47,20 @@
       "name": "@legend-desktop/app-diff",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/diff-parser": "workspace:*",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/source-viewer": "workspace:*",
+        "@legend-desktop/storage": "0.0.0",
         "@legend-desktop/syntax-parser": "workspace:*",
+        "@legend-desktop/syntax-settings": "workspace:*",
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/virtualized-document": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
+        "@legendapp/state": "catalog:",
       },
     },
     "apps/markdown": {
@@ -488,6 +494,19 @@
       "devDependencies": {
         "nitrogen": "0.35.6",
         "react-native-nitro-modules": "0.35.6",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/syntax-settings": {
+      "name": "@legend-desktop/syntax-settings",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/design-system": "workspace:*",
+        "@legend-desktop/settings-window": "0.0.0",
+        "@legend-desktop/syntax-parser": "workspace:*",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -975,6 +994,8 @@
     "@legend-desktop/storage": ["@legend-desktop/storage@workspace:packages/storage"],
 
     "@legend-desktop/syntax-parser": ["@legend-desktop/syntax-parser@workspace:packages/syntax-parser"],
+
+    "@legend-desktop/syntax-settings": ["@legend-desktop/syntax-settings@workspace:packages/syntax-settings"],
 
     "@legend-desktop/text-input-search": ["@legend-desktop/text-input-search@workspace:packages/text-input-search"],
 

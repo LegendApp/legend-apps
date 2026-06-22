@@ -16,9 +16,12 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-desktop/appkit-split-view",
+      "@legend-desktop/context-menu",
       "@legend-desktop/diff-parser",
       "@legend-desktop/file-dialog",
       "@legend-desktop/native-menu",
+      "@legend-desktop/storage",
       "@legend-desktop/syntax-parser",
       "@legend-desktop/window-manager",
     ],

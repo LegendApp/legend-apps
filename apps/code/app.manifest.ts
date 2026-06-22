@@ -17,6 +17,7 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-desktop/app-exit",
+      "@legend-desktop/appkit-split-view",
       "@legend-desktop/context-menu",
       "@legend-desktop/file-dialog",
       "@legend-desktop/native-menu",

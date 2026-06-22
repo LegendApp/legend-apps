@@ -4,30 +4,30 @@ import {
   type SettingsWindowPage,
 } from "@legend-desktop/settings-window";
 import { SyntaxThemeSelectorSection } from "@legend-desktop/syntax-settings";
-import { codeSettingsWindowIdentifier } from "./appConstants";
+import { diffSettingsWindowIdentifier } from "./appConstants";
 import {
-  setCodeSyntaxThemeSetting,
-  useCodeSyntaxTheme,
-  useCodeSyntaxThemeSetting,
-} from "./codeSettings";
+  setDiffSyntaxThemeSetting,
+  useDiffSyntaxTheme,
+  useDiffSyntaxThemeSetting,
+} from "./diffSettings";
 
-type CodeSettingsPage = "appearance";
+type DiffSettingsPage = "appearance";
 
 function AppearanceSettingsPage() {
-  const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
+  const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
 
   return (
     <SettingsPage>
       <SyntaxThemeSelectorSection
         first
-        onThemeChange={setCodeSyntaxThemeSetting}
+        onThemeChange={setDiffSyntaxThemeSetting}
         selectedTheme={selectedSyntaxTheme}
       />
     </SettingsPage>
   );
 }
 
-const pages: SettingsWindowPage<CodeSettingsPage>[] = [
+const pages: SettingsWindowPage<DiffSettingsPage>[] = [
   {
     id: "appearance",
     render: () => <AppearanceSettingsPage />,
@@ -36,13 +36,13 @@ const pages: SettingsWindowPage<CodeSettingsPage>[] = [
 ];
 
 export function SettingsWindow() {
-  const syntaxTheme = useCodeSyntaxTheme();
+  const syntaxTheme = useDiffSyntaxTheme();
 
   return (
     <SharedSettingsWindow
       appearance={syntaxTheme.appearance}
       pages={pages}
-      windowIdentifier={codeSettingsWindowIdentifier}
+      windowIdentifier={diffSettingsWindowIdentifier}
     />
   );
 }
