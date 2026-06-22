@@ -281,6 +281,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     snapshot,
   });
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
+  const fileHeaderRowIndexes = useMemo(() => {
+    if (state.status !== "loaded") {
+      return new Set<number>();
+    }
+    return new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
+  }, [state]);
   const visibleItemIndexes = useMemo(
     () => state.status === "loaded" && collapsedFileIndexes.size > 0
       ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
@@ -583,9 +589,13 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     });
   }, []);
 
-  const getItemSize = useCallback((_index: number, row: DiffRenderRow | undefined) => (
-    row?.kind === diffRowKindFileHeader ? diffFileHeaderRowHeight : sourceViewerRowHeight
-  ), []);
+  const getItemType = useCallback((index: number, row: DiffRenderRow | undefined) => (
+    row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"
+  ), [fileHeaderRowIndexes]);
+
+  const getItemSize = useCallback((index: number, row: DiffRenderRow | undefined) => (
+    getItemType(index, row) === "file-header" ? diffFileHeaderRowHeight : sourceViewerRowHeight
+  ), [getItemType]);
 
   const renderRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
@@ -692,6 +702,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           debugName="diff"
           itemIndexes={visibleItemIndexes}
           getItemSize={getItemSize}
+          getItemType={getItemType}
           lineOverscan={diffLineOverscan}
           onVisibleRowsRequested={handleVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
@@ -728,7 +739,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </Text>
       </View>
     );
-  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, getItemSize, handleVisibleRowsRequested, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
+  }, [diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, foregroundColor, getItemSize, getItemType, handleVisibleRowsRequested, mutedColor, renderRow, state.status, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
