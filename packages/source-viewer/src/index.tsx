@@ -25,6 +25,57 @@ export const sourceViewerOverscanRequestDelayMs = 80;
 
 export type SyntaxStyleMap = Map<number, SyntaxStyle>;
 
+export type AfterEffectTiming = {
+  frameAt: number;
+  microtaskAt: number;
+  secondFrameAt: number;
+  timeoutAt: number;
+};
+
+export function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+export function elapsedMs(start: number, end = nowMs()) {
+  return Math.max(0, end - start);
+}
+
+export function formatMs(value: number) {
+  return `${value.toFixed(1)} ms`;
+}
+
+export function measureAfterEffect(callback: (timing: AfterEffectTiming) => void) {
+  const timing = {
+    frameAt: 0,
+    microtaskAt: 0,
+    secondFrameAt: 0,
+    timeoutAt: 0,
+  };
+
+  const maybeComplete = () => {
+    if (timing.frameAt > 0 && timing.microtaskAt > 0 && timing.secondFrameAt > 0 && timing.timeoutAt > 0) {
+      callback(timing);
+    }
+  };
+
+  Promise.resolve().then(() => {
+    timing.microtaskAt = nowMs();
+    maybeComplete();
+  });
+  setTimeout(() => {
+    timing.timeoutAt = nowMs();
+    maybeComplete();
+  }, 0);
+  requestAnimationFrame(() => {
+    timing.frameAt = nowMs();
+    requestAnimationFrame(() => {
+      timing.secondFrameAt = nowMs();
+      maybeComplete();
+    });
+    maybeComplete();
+  });
+}
+
 export type SourceDocumentTiming = {
   colorCount: number;
   contextMs: number;
@@ -138,7 +189,22 @@ export function useSourceDocumentRows({
     snapshot,
   });
   const currentDocument = snapshot?.document ?? null;
-  const requestRange = virtualizedRows.requestRange;
+  const startBackgroundTokenization = useCallback((document: SyntaxDocument) => {
+    if (backgroundTokenizationDocumentRef.current !== document) {
+      backgroundTokenizationDocumentRef.current = document;
+      const tokenizedLineCount = document.startBackgroundTokenization(backgroundTokenizationChunkLineCount);
+      onBackgroundTokenizationStart?.({
+        document,
+        tokenizedLineCount,
+      });
+    }
+  }, [backgroundTokenizationChunkLineCount, onBackgroundTokenizationStart]);
+  const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+    virtualizedRows.requestRange(start, count, options);
+    if (currentDocument && options?.reason === "overscan") {
+      startBackgroundTokenization(currentDocument);
+    }
+  }, [currentDocument, startBackgroundTokenization, virtualizedRows.requestRange]);
   const rowsVersion = virtualizedRows.rowsVersion;
 
   useEffect(() => () => {
@@ -184,16 +250,11 @@ export function useSourceDocumentRows({
             reason: "highlight",
           });
         }
-      } else if (rowsTrace.reason === "overscan" && backgroundTokenizationDocumentRef.current !== currentDocument) {
-        backgroundTokenizationDocumentRef.current = currentDocument;
-        const tokenizedLineCount = currentDocument.startBackgroundTokenization(backgroundTokenizationChunkLineCount);
-        onBackgroundTokenizationStart?.({
-          document: currentDocument,
-          tokenizedLineCount,
-        });
+      } else if (rowsTrace.reason === "overscan") {
+        startBackgroundTokenization(currentDocument);
       }
     }
-  }, [backgroundTokenizationChunkLineCount, currentDocument, onBackgroundTokenizationStart, onRowsFetched, requestRange, rowsVersion]);
+  }, [currentDocument, onRowsFetched, requestRange, rowsVersion, startBackgroundTokenization]);
 
   const handleInitialRowsRequested = useCallback((_start: number, _count: number) => {
     highlightedInitialRangeRef.current = null;
@@ -202,6 +263,7 @@ export function useSourceDocumentRows({
   return {
     ...virtualizedRows,
     handleInitialRowsRequested,
+    requestRange,
   };
 }
 
@@ -243,10 +305,6 @@ export type TokenizedTextProps = {
   style?: StyleProp<TextStyle>;
   tokenStyleById: SyntaxStyleMap;
 };
-
-function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
 
 export function TokenizedText({
   foregroundColor,

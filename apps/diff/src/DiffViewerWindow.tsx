@@ -9,6 +9,9 @@ import {
 } from "@legend-desktop/diff-parser";
 import {
   createSyntaxStyleMap,
+  elapsedMs,
+  measureAfterEffect,
+  nowMs,
   sourceViewerCodeFontFamily,
   sourceViewerLineNumberWidth,
   sourceViewerRowHeight,
@@ -80,57 +83,12 @@ const emptyState: DiffViewerState = {
   folderPath: null,
 };
 
-function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-function elapsedMs(start: number, end = nowMs()) {
-  return Math.max(0, end - start);
-}
-
 function getDiffLineRowHeight(fontSize: number) {
   return Math.max(20, fontSize + 9);
 }
 
 function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
-}
-
-function measureAfterEffect(callback: (timing: {
-  frameAt: number;
-  microtaskAt: number;
-  secondFrameAt: number;
-  timeoutAt: number;
-}) => void) {
-  const timing = {
-    frameAt: 0,
-    microtaskAt: 0,
-    secondFrameAt: 0,
-    timeoutAt: 0,
-  };
-
-  const maybeComplete = () => {
-    if (timing.frameAt > 0 && timing.microtaskAt > 0 && timing.secondFrameAt > 0 && timing.timeoutAt > 0) {
-      callback(timing);
-    }
-  };
-
-  Promise.resolve().then(() => {
-    timing.microtaskAt = nowMs();
-    maybeComplete();
-  });
-  setTimeout(() => {
-    timing.timeoutAt = nowMs();
-    maybeComplete();
-  }, 0);
-  requestAnimationFrame(() => {
-    timing.frameAt = nowMs();
-    requestAnimationFrame(() => {
-      timing.secondFrameAt = nowMs();
-      maybeComplete();
-    });
-    maybeComplete();
-  });
 }
 
 function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
