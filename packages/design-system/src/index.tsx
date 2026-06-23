@@ -2,14 +2,16 @@ import { cn } from "@legend-desktop/classnames";
 import { Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
-export type RadioOptionProps<Value extends string = string> = {
+type OptionValue = string | number;
+
+export type RadioOptionProps<Value extends OptionValue = string> = {
   label: string;
   onSelect: (value: Value) => void;
   selected: boolean;
   value: Value;
 };
 
-export function RadioOption<Value extends string = string>({
+export function RadioOption<Value extends OptionValue = string>({
   label,
   onSelect,
   selected,
@@ -32,13 +34,13 @@ export function RadioOption<Value extends string = string>({
   );
 }
 
-export type SegmentedOptionsProps<Value extends string> = {
+export type SegmentedOptionsProps<Value extends OptionValue> = {
   onChange: (value: Value) => void;
   options: readonly { label: string; value: Value }[];
   value: Value;
 };
 
-export function SegmentedOptions<Value extends string>({
+export function SegmentedOptions<Value extends OptionValue>({
   onChange,
   options,
   value,

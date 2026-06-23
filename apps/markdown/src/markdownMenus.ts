@@ -1,5 +1,11 @@
-import type { NativeMenuConfig } from "@legend-desktop/native-menu";
-import { commandModifier, shiftModifier } from "./appConstants";
+import {
+  commandModifier,
+  openTargetTitles,
+  saveTargetTitles,
+  settingsTargetTitles,
+  shiftModifier,
+  type NativeMenuConfig,
+} from "@legend-desktop/native-menu";
 
 export const markdownMenuConfig: NativeMenuConfig[] = [
   {
@@ -15,12 +21,12 @@ export const markdownMenuConfig: NativeMenuConfig[] = [
       },
       {
         id: "open",
-        targetTitles: ["Open", "Open...", "Open…"],
+        targetTitles: openTargetTitles,
         enabled: true,
       },
       {
         id: "save",
-        targetTitles: ["Save", "Save...", "Save…"],
+        targetTitles: saveTargetTitles,
         enabled: false,
       },
       {
@@ -44,7 +50,7 @@ export const markdownMenuConfig: NativeMenuConfig[] = [
     items: [
       {
         id: "settings",
-        targetTitles: ["Settings...", "Settings…", "Preferences...", "Preferences…"],
+        targetTitles: settingsTargetTitles,
         enabled: true,
       },
     ],

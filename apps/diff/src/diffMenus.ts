@@ -1,5 +1,11 @@
-import type { NativeMenuConfig } from "@legend-desktop/native-menu";
-import { commandModifier } from "./appConstants";
+import {
+  commandModifier,
+  openTargetTitles,
+  saveAsTargetTitles,
+  saveTargetTitles,
+  settingsTargetTitles,
+  type NativeMenuConfig,
+} from "@legend-desktop/native-menu";
 
 export const diffMenuConfig: NativeMenuConfig[] = [
   {
@@ -9,7 +15,7 @@ export const diffMenuConfig: NativeMenuConfig[] = [
     items: [
       {
         id: "settings",
-        targetTitles: ["Settings...", "Settings…", "Preferences...", "Preferences…"],
+        targetTitles: settingsTargetTitles,
         enabled: true,
       },
     ],
@@ -27,18 +33,18 @@ export const diffMenuConfig: NativeMenuConfig[] = [
       {
         id: "openFolder",
         title: "Open Folder...",
-        targetTitles: ["Open", "Open...", "Open…", "Open Folder", "Open Folder...", "Open Folder…"],
+        targetTitles: [...openTargetTitles, "Open Folder", "Open Folder...", "Open Folder…"],
         enabled: true,
         shortcut: { key: "o", modifiers: commandModifier },
       },
       {
         id: "hideSave",
-        targetTitles: ["Save", "Save...", "Save…"],
+        targetTitles: saveTargetTitles,
         hidden: true,
       },
       {
         id: "hideSaveAs",
-        targetTitles: ["Save As", "Save As...", "Save As…"],
+        targetTitles: saveAsTargetTitles,
         hidden: true,
       },
     ],

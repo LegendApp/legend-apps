@@ -7,6 +7,13 @@ export type NativeMenuShortcut = {
   modifiers?: number;
 };
 
+export const commandModifier = 1 << 20;
+export const shiftModifier = 1 << 17;
+export const settingsTargetTitles = ["Settings...", "Settings…", "Preferences...", "Preferences…"];
+export const openTargetTitles = ["Open", "Open...", "Open…"];
+export const saveTargetTitles = ["Save", "Save...", "Save…"];
+export const saveAsTargetTitles = ["Save As", "Save As...", "Save As…"];
+
 export type NativeMenuItem = {
   id: string;
   title?: string;
