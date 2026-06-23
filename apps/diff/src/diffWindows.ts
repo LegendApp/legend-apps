@@ -12,6 +12,10 @@ import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type D
 import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
+const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
+  blocks: "square.grid.2x2",
+  unified: "list.bullet",
+};
 
 function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffViewModeSetting()) {
   return {
@@ -20,6 +24,7 @@ function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffView
     selectedValue,
     segments: diffViewModeOptions.map((option) => ({
       label: option.label,
+      systemImageName: diffViewModeToolbarIconByValue[option.value],
       value: option.value,
     })),
     type: "segmented" as const,

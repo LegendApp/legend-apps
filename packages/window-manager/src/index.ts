@@ -90,6 +90,7 @@ export type WindowStyleOptions = {
 
 export type WindowToolbarSegment = {
   label: string;
+  systemImageName?: string;
   value: string;
 };
 

@@ -602,6 +602,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
   NSArray *segments = [config[@"segments"] isKindOfClass:NSArray.class] ? config[@"segments"] : @[];
   NSMutableArray<NSString *> *labels = [NSMutableArray new];
+  NSMutableArray<NSString *> *systemImageNames = [NSMutableArray new];
   NSMutableArray<NSString *> *values = [NSMutableArray new];
   NSInteger selectedSegment = -1;
   NSString *selectedValue = [config[@"selectedValue"] isKindOfClass:NSString.class] ? config[@"selectedValue"] : nil;
@@ -612,10 +613,14 @@ willBeInsertedIntoToolbar:(BOOL)flag
       NSString *label = [segmentConfig[@"label"] isKindOfClass:NSString.class] ? segmentConfig[@"label"] : @"";
       NSString *value = [segmentConfig[@"value"] isKindOfClass:NSString.class] ? segmentConfig[@"value"] : label;
       if (label.length > 0 && value.length > 0) {
+        NSString *systemImageName = [segmentConfig[@"systemImageName"] isKindOfClass:NSString.class]
+          ? segmentConfig[@"systemImageName"]
+          : @"";
         if ([value isEqualToString:selectedValue]) {
           selectedSegment = values.count;
         }
         [labels addObject:label];
+        [systemImageNames addObject:systemImageName];
         [values addObject:value];
       }
     }
@@ -625,17 +630,33 @@ willBeInsertedIntoToolbar:(BOOL)flag
     return nil;
   }
 
-  NSSegmentedControl *control = [NSSegmentedControl segmentedControlWithLabels:labels
-                                                                  trackingMode:NSSegmentSwitchTrackingSelectOne
-                                                                        target:self
-                                                                        action:@selector(toolbarSegmentedControlChanged:)];
+  NSSegmentedControl *control = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+  control.segmentCount = labels.count;
+  control.trackingMode = NSSegmentSwitchTrackingSelectOne;
+  control.target = self;
+  control.action = @selector(toolbarSegmentedControlChanged:);
   control.controlSize = NSControlSizeRegular;
   control.segmentStyle = NSSegmentStyleAutomatic;
   control.selectedSegment = selectedSegment >= 0 ? selectedSegment : 0;
 
   CGFloat totalWidth = 0;
   for (NSInteger index = 0; index < labels.count; index += 1) {
-    CGFloat width = MAX(76, [labels[index] sizeWithAttributes:@{NSFontAttributeName: control.font}].width + 28);
+    NSString *systemImageName = systemImageNames[index];
+    NSImage *image = nil;
+    if (systemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:labels[index]];
+      }
+    }
+    if (image) {
+      [control setImage:image forSegment:index];
+      [control setToolTip:labels[index] forSegment:index];
+    } else {
+      [control setLabel:labels[index] forSegment:index];
+    }
+
+    NSFont *font = control.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
+    CGFloat width = image ? 38 : MAX(76, [labels[index] sizeWithAttributes:@{NSFontAttributeName: font}].width + 28);
     [control setWidth:width forSegment:index];
     totalWidth += width;
   }
