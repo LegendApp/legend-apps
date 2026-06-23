@@ -18,6 +18,8 @@ namespace margelo::nitro::legenddesktop::diffparser {
       prototype.registerHybridGetter("fileCount", &HybridDiffDocumentSpec::getFileCount);
       prototype.registerHybridMethod("getPlainRows", &HybridDiffDocumentSpec::getPlainRows);
       prototype.registerHybridMethod("getRows", &HybridDiffDocumentSpec::getRows);
+      prototype.registerHybridMethod("getSideBySideSegmentMetrics", &HybridDiffDocumentSpec::getSideBySideSegmentMetrics);
+      prototype.registerHybridMethod("getSideBySideSegments", &HybridDiffDocumentSpec::getSideBySideSegments);
       prototype.registerHybridMethod("getFiles", &HybridDiffDocumentSpec::getFiles);
       prototype.registerHybridMethod("getStyles", &HybridDiffDocumentSpec::getStyles);
       prototype.registerHybridMethod("getTiming", &HybridDiffDocumentSpec::getTiming);

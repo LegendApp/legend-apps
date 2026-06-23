@@ -5,6 +5,9 @@ import {
   type DiffFileSummary,
   type DiffLoadTiming,
   type DiffRenderRow,
+  type DiffSideBySideLine,
+  type DiffSideBySideSegment,
+  type DiffSideBySideSegmentMetric,
   type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
 import { watchDirectories } from "@legend-desktop/file-system-watcher";
@@ -30,12 +33,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
-import {
-  createDiffPresentationSegments,
-  createSegmentListIndexByRowIndex,
-  type DiffPresentationSegment,
-  type DiffSideBySideLine,
-} from "./diffPresentation";
 import { diffViewerWindowIdentifier } from "./appConstants";
 import { getFilename, openDiffFolderDialog } from "./diffFiles";
 import {
@@ -217,6 +214,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const [activeFileIndex, setActiveFileIndex] = useState<number | null>(null);
+  const [sideBySideSegmentCache, setSideBySideSegmentCache] = useState<Map<number, DiffSideBySideSegment>>(() => new Map());
+  const [sideBySideSegmentsVersion, setSideBySideSegmentsVersion] = useState(0);
   const [splitPaneMetrics, setSplitPaneMetrics] = useState({
     contentHeight: 0,
     contentWidth: 0,
@@ -238,6 +237,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
+  const showViewModeToolbar = state.status === "loaded" && state.files.length > 0;
   const fileByIndex = useMemo(() => {
     if (state.status !== "loaded") {
       return new Map<number, DiffFileSummary>();
@@ -325,37 +325,36 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     });
     return indexes;
   }, [visibleItemIndexes]);
-  const sideBySidePlainRows = useMemo(
-    () => state.status === "loaded" && viewMode !== "unified"
-      ? state.document.getPlainRows(0, state.document.rowCount)
-      : [],
-    [state, viewMode],
+  const collapsedFileIndexList = useMemo(
+    () => Array.from(collapsedFileIndexes).sort((left, right) => left - right),
+    [collapsedFileIndexes],
   );
-  const sideBySideSegments = useMemo(
+  const collapsedFileIndexKey = collapsedFileIndexList.join(",");
+  const sideBySideSegmentMetrics = useMemo(
     () => state.status === "loaded" && viewMode !== "unified"
-      ? createDiffPresentationSegments({
-          collapsedFileIndexes,
-          files: state.files,
-          rows: sideBySidePlainRows,
-        })
+      ? state.document.getSideBySideSegmentMetrics(collapsedFileIndexList)
       : [],
-    [collapsedFileIndexes, sideBySidePlainRows, state, viewMode],
+    [collapsedFileIndexList, state, viewMode],
   );
   const sideBySideItemIndexes = useMemo(
-    () => sideBySideSegments.map((segment) => segment.index),
-    [sideBySideSegments],
+    () => sideBySideSegmentMetrics.map((segment) => segment.index),
+    [sideBySideSegmentMetrics],
   );
-  const sideBySideRowCache = useMemo(
-    () => new Map(sideBySideSegments.map((segment) => [segment.index, segment])),
-    [sideBySideSegments],
-  );
-  const sideBySidePlainRowByIndex = useMemo(
-    () => new Map(sideBySidePlainRows.map((row) => [row.index, row])),
-    [sideBySidePlainRows],
+  const sideBySideMetricCache = useMemo(
+    () => new Map(sideBySideSegmentMetrics.map((segment) => [segment.index, segment])),
+    [sideBySideSegmentMetrics],
   );
   const sideBySideListIndexByRowIndex = useMemo(
-    () => createSegmentListIndexByRowIndex(sideBySideSegments),
-    [sideBySideSegments],
+    () => {
+      const indexes = new Map<number, number>();
+      sideBySideSegmentMetrics.forEach((segment, listIndex) => {
+        if (segment.kind === "file-header") {
+          indexes.set(segment.sourceStart, listIndex);
+        }
+      });
+      return indexes;
+    },
+    [sideBySideSegmentMetrics],
   );
   const clearHighlightTimeouts = useCallback(() => {
     for (const timeoutHandle of highlightTimeoutHandlesRef.current) {
@@ -374,6 +373,11 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       setActiveFileIndex(null);
     }
   }, [clearHighlightTimeouts, state.status === "loaded" ? state.document : null]);
+
+  useEffect(() => {
+    setSideBySideSegmentCache((current) => current.size > 0 ? new Map() : current);
+    setSideBySideSegmentsVersion((current) => current + 1);
+  }, [collapsedFileIndexKey, state.status === "loaded" ? state.document : null]);
 
   useEffect(() => clearHighlightTimeouts, [clearHighlightTimeouts]);
 
@@ -641,6 +645,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         appearance: syntaxTheme.appearance,
         backgroundColor: syntaxTheme.background,
         folderPath: state.folderPath,
+        showViewModeToolbar,
         viewMode,
       })
         .then(() => {
@@ -675,7 +680,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         clearTimeout(timeoutHandle);
       }
     };
-  }, [state.folderPath, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
+  }, [showViewModeToolbar, state.folderPath, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
 
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {
@@ -840,12 +845,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   const getSideBySideSourceRange = useCallback((segmentStart: number, segmentCount: number) => {
     const safeStart = Math.max(0, Math.floor(segmentStart));
-    const safeEnd = Math.min(sideBySideSegments.length, safeStart + Math.max(0, Math.ceil(segmentCount)));
+    const safeEnd = Math.min(sideBySideSegmentMetrics.length, safeStart + Math.max(0, Math.ceil(segmentCount)));
     let sourceStart = Number.POSITIVE_INFINITY;
     let sourceEnd = Number.NEGATIVE_INFINITY;
 
     for (let index = safeStart; index < safeEnd; index += 1) {
-      const segment = sideBySideSegments[index];
+      const segment = sideBySideSegmentMetrics[index];
       if (segment && segment.kind !== "file-header") {
         sourceStart = Math.min(sourceStart, segment.sourceStart);
         sourceEnd = Math.max(sourceEnd, segment.sourceEnd);
@@ -861,14 +866,36 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           count: 0,
           start: 0,
         };
-  }, [sideBySideSegments]);
+  }, [sideBySideSegmentMetrics]);
 
   const requestSideBySideRange = useCallback((segmentStart: number, segmentCount: number, options?: VirtualizedDocumentRequestOptions) => {
-    const range = getSideBySideSourceRange(segmentStart, segmentCount);
-    if (range.count > 0) {
-      diffRows.requestRange(range.start, range.count, options);
+    if (state.status === "loaded") {
+      const safeStart = Math.max(0, Math.floor(segmentStart));
+      const safeCount = Math.max(0, Math.ceil(segmentCount));
+      if (safeCount > 0) {
+        const segments = state.document.getSideBySideSegments(safeStart, safeCount, collapsedFileIndexList);
+        if (segments.length > 0) {
+          setSideBySideSegmentCache((current) => {
+            const next = new Map(current);
+            let didChange = false;
+            for (const segment of segments) {
+              if (next.get(segment.index) !== segment) {
+                next.set(segment.index, segment);
+                didChange = true;
+              }
+            }
+            return didChange ? next : current;
+          });
+          setSideBySideSegmentsVersion((current) => current + 1);
+        }
+      }
+
+      const range = getSideBySideSourceRange(segmentStart, segmentCount);
+      if (range.count > 0) {
+        diffRows.requestRange(range.start, range.count, options);
+      }
     }
-  }, [diffRows.requestRange, getSideBySideSourceRange]);
+  }, [collapsedFileIndexList, diffRows.requestRange, getSideBySideSourceRange, state]);
 
   const handleSideBySideVisibleRowsRequested = useCallback((segmentStart: number, segmentCount: number, reason: string) => {
     const range = getSideBySideSourceRange(segmentStart, segmentCount);
@@ -879,27 +906,37 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   const handleSideBySideTopItemChanged = useCallback((segmentIndex: number) => {
     if (state.status === "loaded") {
-      const segment = sideBySideSegments[segmentIndex];
+      const segment = sideBySideMetricCache.get(segmentIndex);
       const nextFileIndex = segment
         ? findFileIndexForRow(state.files, segment.sourceStart)
         : null;
       setActiveFileIndex((current) => current === nextFileIndex ? current : nextFileIndex);
     }
-  }, [sideBySideSegments, state]);
+  }, [sideBySideMetricCache, state]);
 
-  const getSideBySideItemType = useCallback((_index: number, segment: DiffPresentationSegment | undefined) => (
-    segment?.kind === "file-header" ? "file-header" : `side-by-side-${viewMode}-${segment?.kind ?? "unknown"}`
-  ), [viewMode]);
+  const getSideBySideItemType = useCallback((index: number, segment: DiffSideBySideSegment | undefined) => {
+    const metric = segment ?? sideBySideMetricCache.get(index);
+    return metric?.kind === "file-header" ? "file-header" : `side-by-side-${viewMode}-${metric?.kind ?? "unknown"}`;
+  }, [sideBySideMetricCache, viewMode]);
 
-  const getSideBySideItemSize = useCallback((_index: number, segment: DiffPresentationSegment | undefined) => {
-    if (!segment || segment.kind === "file-header") {
+  const getSideBySideItemSize = useCallback((index: number, segment: DiffSideBySideSegment | undefined) => {
+    if (segment) {
+      const lineCount = Math.max(1, segment.lines.length);
+      const extraPadding = segment.kind === "change" ? diffSideBySideBlockVerticalPadding * 2 : 0;
+      return segment.kind === "file-header"
+        ? diffFileHeaderRowHeight
+        : lineCount * rowHeight + extraPadding;
+    }
+
+    const metric = sideBySideMetricCache.get(index);
+    if (!metric || metric.kind === "file-header") {
       return diffFileHeaderRowHeight;
     }
 
-    const lineCount = Math.max(1, segment.lines.length);
-    const extraPadding = segment.kind === "change" ? diffSideBySideBlockVerticalPadding * 2 : 0;
+    const lineCount = Math.max(1, metric.lineCount);
+    const extraPadding = metric.kind === "change" ? diffSideBySideBlockVerticalPadding * 2 : 0;
     return lineCount * rowHeight + extraPadding;
-  }, [rowHeight]);
+  }, [rowHeight, sideBySideMetricCache]);
 
   const renderSideBySideLine = useCallback(({
     line,
@@ -911,8 +948,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     side: "new" | "old";
   }) => {
     const sourceRowIndex = side === "old" ? line.oldRowIndex : line.newRowIndex;
-    const row = sourceRowIndex !== null
-      ? diffRows.rowCache.get(sourceRowIndex) ?? sideBySidePlainRowByIndex.get(sourceRowIndex)
+    const row = sourceRowIndex >= 0
+      ? diffRows.rowCache.get(sourceRowIndex)
       : undefined;
     const isRemove = side === "old" && row?.changeType === diffChangeTypeRemove;
     const isAdd = side === "new" && row?.changeType === diffChangeTypeAdd;
@@ -952,21 +989,20 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         />
       </View>
     );
-  }, [diffRows.rowCache, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, sideBySidePlainRowByIndex, tokenStyleById]);
+  }, [diffRows.rowCache, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, tokenStyleById]);
 
   const renderSideBySideSegment = useCallback(
-    ({ index, row: segment }: VirtualizedFixedDocumentListRenderRowProps<DiffPresentationSegment>) => {
+    ({ index, row: segment }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideSegment>) => {
       if (!segment) {
         return <View style={{ height: rowHeight }} />;
       }
 
       if (segment.kind === "file-header") {
-        const plainRow = sideBySidePlainRowByIndex.get(segment.sourceStart);
-        const file = plainRow ? fileByIndex.get(plainRow.fileIndex) : fileByRowStart.get(segment.sourceStart);
-        const path = file?.path ?? plainRow?.text ?? "";
+        const file = fileByRowStart.get(segment.sourceStart) ?? fileByIndex.get(segment.fileIndex);
+        const path = file?.path ?? "";
         const filename = getFilename(path);
         const directory = getDirectoryPath(path);
-        const fileIndex = file?.index ?? plainRow?.fileIndex ?? index;
+        const fileIndex = file?.index ?? index;
         const isCollapsed = collapsedFileIndexes.has(fileIndex);
         const statusIcon = getFileStatusIcon(file?.status ?? "");
         const fileHeaderLineHeight = Math.max(18, fontSize + 8);
@@ -1027,7 +1063,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             styles.sideBySideSegment,
             isChange && viewMode === "blocks" ? styles.blockChangeSegment : null,
             {
-              borderColor: isChange && viewMode === "blocks" ? displayTheme.colors.border : "transparent",
               marginHorizontal: isChange && viewMode === "blocks" ? 10 : 0,
               paddingVertical: segmentPadding,
             },
@@ -1052,7 +1087,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </View>
       );
     },
-    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, renderSideBySideLine, rowHeight, sideBySidePlainRowByIndex, toggleFileCollapsed, viewMode],
+    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, renderSideBySideLine, rowHeight, toggleFileCollapsed, viewMode],
   );
 
   const body = useMemo(() => {
@@ -1067,6 +1102,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         const list = viewMode === "unified" ? (
           <VirtualizedFixedDocumentList
             debugName="diff"
+            key="unified"
             extraData={listExtraData}
             itemIndexes={visibleItemIndexes}
             getItemSize={getItemSize}
@@ -1086,6 +1122,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         ) : (
           <VirtualizedFixedDocumentList
             debugName={`diff-${viewMode}`}
+            key={viewMode}
             extraData={listExtraData}
             itemIndexes={sideBySideItemIndexes}
             getItemSize={getSideBySideItemSize}
@@ -1096,9 +1133,9 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
             overscanRequestDelayMs={diffOverscanRequestDelayMs}
             requestRange={requestSideBySideRange}
-            rowCache={sideBySideRowCache}
+            rowCache={sideBySideSegmentCache}
             rowHeight={rowHeight}
-            rowsVersion={diffRows.rowsVersion + sideBySideSegments.length}
+            rowsVersion={diffRows.rowsVersion + sideBySideSegmentsVersion + sideBySideSegmentMetrics.length}
             renderRow={renderSideBySideSegment}
             style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
           />
@@ -1234,7 +1271,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
 
     return diffContent;
-  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideSegment, requestSideBySideRange, rowHeight, scrollToFile, sideBySideItemIndexes, sideBySideRowCache, sideBySideSegments.length, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
+  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideSegment, requestSideBySideRange, rowHeight, scrollToFile, sideBySideItemIndexes, sideBySideSegmentCache, sideBySideSegmentMetrics.length, sideBySideSegmentsVersion, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -1311,7 +1348,6 @@ const styles = StyleSheet.create({
   },
   blockChangeSegment: {
     borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
   fileAdded: {

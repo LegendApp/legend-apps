@@ -49,6 +49,8 @@ public:
   double getFileCount() override;
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
+  std::vector<DiffSideBySideSegmentMetric> getSideBySideSegmentMetrics(const std::vector<double>& collapsedFileIndexes) override;
+  std::vector<DiffSideBySideSegment> getSideBySideSegments(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxStyle> getStyles() override;
   DiffLoadTiming getTiming() override;
@@ -64,6 +66,7 @@ private:
 
   std::vector<DiffFileSummary> files_;
   std::vector<DiffRenderRow> rows_;
+  std::vector<DiffSideBySideSegment> sideBySideSegments_;
   std::vector<DiffFileSources> fileSources_;
   std::string repositoryPath_;
   std::string workdirPath_;

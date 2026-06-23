@@ -36,6 +36,31 @@ export interface DiffRenderRow {
   tokens: DiffSyntaxTokenRun[];
 }
 
+export interface DiffSideBySideLine {
+  oldRowIndex: number;
+  newRowIndex: number;
+}
+
+export interface DiffSideBySideSegmentMetric {
+  index: number;
+  kind: string;
+  fileIndex: number;
+  hunkIndex: number;
+  sourceStart: number;
+  sourceEnd: number;
+  lineCount: number;
+}
+
+export interface DiffSideBySideSegment {
+  index: number;
+  kind: string;
+  fileIndex: number;
+  hunkIndex: number;
+  sourceStart: number;
+  sourceEnd: number;
+  lines: DiffSideBySideLine[];
+}
+
 export interface DiffLoadTiming {
   diffMs: number;
   openRepoMs: number;
@@ -65,6 +90,8 @@ export interface DiffDocument
   readonly fileCount: number;
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
+  getSideBySideSegmentMetrics(collapsedFileIndexes: number[]): DiffSideBySideSegmentMetric[];
+  getSideBySideSegments(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideSegment[];
   getFiles(): DiffFileSummary[];
   getStyles(): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;

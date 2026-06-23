@@ -34,10 +34,12 @@ function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffView
 function createDiffViewerWindowStyle({
   appearance,
   includeFrame,
+  showViewModeToolbar,
   viewMode,
 }: {
   appearance?: "dark" | "light";
   includeFrame: boolean;
+  showViewModeToolbar?: boolean;
   viewMode?: DiffViewMode;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
@@ -56,7 +58,7 @@ function createDiffViewerWindowStyle({
 
   return {
     ...windowStyle,
-    toolbarItems: [createDiffViewModeToolbarItem(viewMode)],
+    toolbarItems: showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : [],
   };
 }
 
@@ -104,7 +106,7 @@ export function openDiffViewerWindow(folderPath?: string | null) {
     representedURL: folderPath,
     title: folderPath ? getFilename(folderPath) : "Legend Diff",
     transparentBackground: true,
-    windowStyle: createDiffViewerWindowStyle({ includeFrame: true }),
+    windowStyle: createDiffViewerWindowStyle({ includeFrame: true, showViewModeToolbar: false }),
   }).then((result) => {
     logDiffOpenTiming("window.open.finish", {
       folderPath,
@@ -126,11 +128,13 @@ export function setDiffViewerWindowOptions({
   appearance,
   backgroundColor,
   folderPath,
+  showViewModeToolbar,
   viewMode,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
   folderPath: string | null;
+  showViewModeToolbar: boolean;
   viewMode: DiffViewMode;
 }) {
   const startedAt = nowMs();
@@ -140,6 +144,7 @@ export function setDiffViewerWindowOptions({
     windowStyle: createDiffViewerWindowStyle({
       appearance,
       includeFrame: false,
+      showViewModeToolbar,
       viewMode,
     }),
   }).then((result) => {
