@@ -213,6 +213,7 @@ static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
 }
 
 static char LegendManagedRootViewKey;
+static char LegendToolbarControlMetadataKey;
 
 static RCTUIView *LegendManagedRootView(NSWindow *window)
 {
@@ -396,11 +397,12 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 
 @interface RNWindowManager ()
 #if TARGET_OS_OSX
-<NSWindowDelegate>
+<NSWindowDelegate, NSToolbarDelegate>
 #endif
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *windows;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleNames;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *toolbarItemConfigs;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
 @property (nonatomic, assign) BOOL hasListeners;
@@ -422,6 +424,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _windows = [NSMutableDictionary new];
     _rootViews = [NSMutableDictionary new];
     _moduleNames = [NSMutableDictionary new];
+    _toolbarItemConfigs = [NSMutableDictionary new];
     _windowBlurFilters = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
   }
@@ -436,6 +439,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     @"onMainWindowMoved",
     @"onMainWindowResized",
     @"onWindowFocused",
+    @"onToolbarItemSelected",
   ];
 }
 
@@ -488,6 +492,191 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
   return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
 }
+
+#if TARGET_OS_OSX
+- (NSString *)toolbarItemIdentifierForConfig:(NSDictionary *)config
+{
+  NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : nil;
+  return itemId.length > 0 ? [@"legend.toolbar." stringByAppendingString:itemId] : nil;
+}
+
+- (NSDictionary *)toolbarItemConfigForIdentifier:(NSToolbarItemIdentifier)itemIdentifier toolbar:(NSToolbar *)toolbar
+{
+  if (![itemIdentifier hasPrefix:@"legend.toolbar."]) {
+    return nil;
+  }
+
+  NSArray<NSDictionary *> *configs = self.toolbarItemConfigs[toolbar.identifier] ?: @[];
+  for (NSDictionary *config in configs) {
+    NSString *configIdentifier = [self toolbarItemIdentifierForConfig:config];
+    if ([configIdentifier isEqualToString:itemIdentifier]) {
+      return config;
+    }
+  }
+  return nil;
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarItemIdentifiersForToolbar:(NSToolbar *)toolbar
+{
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [NSMutableArray arrayWithObject:NSToolbarFlexibleSpaceItemIdentifier];
+  NSArray<NSDictionary *> *configs = self.toolbarItemConfigs[toolbar.identifier] ?: @[];
+  for (NSDictionary *config in configs) {
+    NSString *itemIdentifier = [self toolbarItemIdentifierForConfig:config];
+    if (itemIdentifier.length > 0) {
+      [identifiers addObject:itemIdentifier];
+    }
+  }
+  return identifiers;
+}
+
+- (NSToolbar *)ensureToolbarForWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSToolbar *toolbar = window.toolbar;
+  if (!toolbar) {
+    toolbar = [[NSToolbar alloc] initWithIdentifier:identifier ?: @"LegendWindowToolbar"];
+    toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+    toolbar.showsBaselineSeparator = NO;
+    window.toolbar = toolbar;
+  }
+  toolbar.delegate = self;
+  toolbar.allowsUserCustomization = NO;
+  toolbar.autosavesConfiguration = NO;
+  return toolbar;
+}
+
+- (void)applyToolbarItemsFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (!LegendDictionaryHasKey(windowStyle, @"toolbarItems")) {
+    return;
+  }
+
+  NSArray *toolbarItems = [windowStyle[@"toolbarItems"] isKindOfClass:NSArray.class] ? windowStyle[@"toolbarItems"] : @[];
+  NSToolbar *toolbar = [self ensureToolbarForWindow:window identifier:identifier];
+  NSMutableArray<NSDictionary *> *configs = [NSMutableArray new];
+  for (id item in toolbarItems) {
+    if ([item isKindOfClass:NSDictionary.class]) {
+      [configs addObject:item];
+    }
+  }
+  self.toolbarItemConfigs[toolbar.identifier] = configs;
+
+  while (toolbar.items.count > 0) {
+    [toolbar removeItemAtIndex:0];
+  }
+  for (NSToolbarItemIdentifier itemIdentifier in [self toolbarDefaultItemIdentifiers:toolbar]) {
+    [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];
+  }
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
+{
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [[self toolbarItemIdentifiersForToolbar:toolbar] mutableCopy];
+  [identifiers addObject:NSToolbarSpaceItemIdentifier];
+  return identifiers;
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
+{
+  return [self toolbarItemIdentifiersForToolbar:toolbar];
+}
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
+{
+  return @[];
+}
+
+- (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
+    itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier
+willBeInsertedIntoToolbar:(BOOL)flag
+{
+  NSDictionary *config = [self toolbarItemConfigForIdentifier:itemIdentifier toolbar:toolbar];
+  if (!config) {
+    return nil;
+  }
+
+  NSString *type = [config[@"type"] isKindOfClass:NSString.class] ? config[@"type"] : nil;
+  if (![type isEqualToString:@"segmented"]) {
+    return nil;
+  }
+
+  NSArray *segments = [config[@"segments"] isKindOfClass:NSArray.class] ? config[@"segments"] : @[];
+  NSMutableArray<NSString *> *labels = [NSMutableArray new];
+  NSMutableArray<NSString *> *values = [NSMutableArray new];
+  NSInteger selectedSegment = -1;
+  NSString *selectedValue = [config[@"selectedValue"] isKindOfClass:NSString.class] ? config[@"selectedValue"] : nil;
+
+  for (id segment in segments) {
+    if ([segment isKindOfClass:NSDictionary.class]) {
+      NSDictionary *segmentConfig = (NSDictionary *)segment;
+      NSString *label = [segmentConfig[@"label"] isKindOfClass:NSString.class] ? segmentConfig[@"label"] : @"";
+      NSString *value = [segmentConfig[@"value"] isKindOfClass:NSString.class] ? segmentConfig[@"value"] : label;
+      if (label.length > 0 && value.length > 0) {
+        if ([value isEqualToString:selectedValue]) {
+          selectedSegment = values.count;
+        }
+        [labels addObject:label];
+        [values addObject:value];
+      }
+    }
+  }
+
+  if (labels.count == 0) {
+    return nil;
+  }
+
+  NSSegmentedControl *control = [NSSegmentedControl segmentedControlWithLabels:labels
+                                                                  trackingMode:NSSegmentSwitchTrackingSelectOne
+                                                                        target:self
+                                                                        action:@selector(toolbarSegmentedControlChanged:)];
+  control.controlSize = NSControlSizeRegular;
+  control.segmentStyle = NSSegmentStyleAutomatic;
+  control.selectedSegment = selectedSegment >= 0 ? selectedSegment : 0;
+
+  CGFloat totalWidth = 0;
+  for (NSInteger index = 0; index < labels.count; index += 1) {
+    CGFloat width = MAX(76, [labels[index] sizeWithAttributes:@{NSFontAttributeName: control.font}].width + 28);
+    [control setWidth:width forSegment:index];
+    totalWidth += width;
+  }
+
+  NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+  objc_setAssociatedObject(control, &LegendToolbarControlMetadataKey, @{
+    @"itemId": itemId,
+    @"values": values,
+    @"windowIdentifier": toolbar.identifier ?: @"",
+  }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  control.frame = NSMakeRect(0, 0, totalWidth, control.fittingSize.height);
+
+  NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+  toolbarItem.view = control;
+  toolbarItem.label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+  toolbarItem.paletteLabel = toolbarItem.label;
+  return toolbarItem;
+}
+
+- (void)toolbarSegmentedControlChanged:(NSSegmentedControl *)sender
+{
+  id metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSArray *values = [representedObject[@"values"] isKindOfClass:NSArray.class] ? representedObject[@"values"] : @[];
+  NSInteger selectedSegment = sender.selectedSegment;
+  NSString *value = selectedSegment >= 0 && selectedSegment < values.count && [values[selectedSegment] isKindOfClass:NSString.class]
+    ? values[selectedSegment]
+    : @"";
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarItemSelected"
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+#endif
 
 - (NSString *)successJson
 {
@@ -720,6 +909,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
       LegendApplyToolbarStyle(existingWindow, toolbarStyle);
       LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
+      [self applyToolbarItemsFromOptions:options toWindow:existingWindow identifier:identifier];
       LegendApplyWindowAppearance(existingWindow, appearance);
       LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
 
@@ -817,6 +1007,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     }
     LegendApplyToolbarStyle(window, toolbarStyle);
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+    [self applyToolbarItemsFromOptions:options toWindow:window identifier:identifier];
     LegendApplyWindowAppearance(window, appearance);
     LegendApplyWindowBackgroundColor(window, backgroundColor);
     if (levelNumber) {
@@ -1002,7 +1193,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       return;
     }
 
-    LegendApplyWindowOptions(mainWindow, [self parseObjectJSON:optionsJson]);
+    NSDictionary *options = [self parseObjectJSON:optionsJson];
+    LegendApplyWindowOptions(mainWindow, options);
+    [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];
     resolve([self successJson]);
   });
 #else
@@ -1024,7 +1217,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       return;
     }
 
-    LegendApplyWindowOptions(window, [self parseObjectJSON:optionsJson]);
+    NSDictionary *options = [self parseObjectJSON:optionsJson];
+    LegendApplyWindowOptions(window, options);
+    [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
     RCTUIView *rootView = self.rootViews[targetIdentifier];
     LegendSizeRootViewToWindow(rootView, window);
     resolve([self successJson]);

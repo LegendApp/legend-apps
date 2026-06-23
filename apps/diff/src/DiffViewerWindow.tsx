@@ -29,15 +29,17 @@ import {
 } from "@legend-desktop/virtualized-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import {
   createDiffPresentationSegments,
   createSegmentListIndexByRowIndex,
   type DiffPresentationSegment,
   type DiffSideBySideLine,
 } from "./diffPresentation";
+import { diffViewerWindowIdentifier } from "./appConstants";
 import { getFilename, openDiffFolderDialog } from "./diffFiles";
 import {
-  diffViewModeOptions,
+  isDiffViewMode,
   setDiffViewModeSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
@@ -45,9 +47,8 @@ import {
   useDiffSyntaxThemeSetting,
   useDiffViewModeSetting,
   type DiffSettingsFile,
-  type DiffViewMode,
 } from "./diffSettings";
-import { setDiffViewerWindowOptions } from "./diffWindows";
+import { diffViewModeToolbarItemId, setDiffViewerWindowOptions } from "./diffWindows";
 
 const diffInitialRowCount = 160;
 const diffInitialHighlightChunkRowCount = 40;
@@ -640,6 +641,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         appearance: syntaxTheme.appearance,
         backgroundColor: syntaxTheme.background,
         folderPath: state.folderPath,
+        viewMode,
       })
         .then(() => {
           logDiffOpenTiming("viewer.windowOptions.finish", {
@@ -673,7 +675,20 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         clearTimeout(timeoutHandle);
       }
     };
-  }, [state.folderPath, syntaxTheme.appearance, syntaxTheme.background]);
+  }, [state.folderPath, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
+
+  useEffect(() => {
+    const subscription = addWindowToolbarItemSelectedListener((event) => {
+      if (
+        event.identifier === diffViewerWindowIdentifier &&
+        event.itemId === diffViewModeToolbarItemId &&
+        isDiffViewMode(event.value)
+      ) {
+        setDiffViewModeSetting(event.value);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
     setCollapsedFileIndexes((current) => {
@@ -685,10 +700,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       }
       return next;
     });
-  }, []);
-
-  const handleViewModeChange = useCallback((nextViewMode: DiffViewMode) => {
-    setDiffViewModeSetting(nextViewMode);
   }, []);
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
@@ -1044,52 +1055,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, renderSideBySideLine, rowHeight, sideBySidePlainRowByIndex, toggleFileCollapsed, viewMode],
   );
 
-  const renderViewModeToolbar = useCallback(() => (
-    <View
-      accessibilityLabel="Diff view mode"
-      style={[
-        styles.viewModeToolbar,
-        {
-          backgroundColor: syntaxTheme.appearance === "dark" ? "#2b2b2dcc" : "#f1f1f4dd",
-          borderColor: displayTheme.colors.border,
-        },
-      ]}
-    >
-      {diffViewModeOptions.map((option) => {
-        const selected = option.value === viewMode;
-        return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            key={option.value}
-            onPress={() => handleViewModeChange(option.value)}
-            style={({ pressed }) => [
-              styles.viewModeButton,
-              selected
-                ? {
-                    backgroundColor: syntaxTheme.appearance === "dark" ? "#4a4a4f" : "#ffffff",
-                  }
-                : null,
-              pressed ? styles.viewModeButtonPressed : null,
-            ]}
-          >
-            <Text
-              selectable={false}
-              style={[
-                styles.viewModeButtonText,
-                {
-                  color: selected ? foregroundColor : mutedColor,
-                },
-              ]}
-            >
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  ), [displayTheme.colors.border, foregroundColor, handleViewModeChange, mutedColor, syntaxTheme.appearance, viewMode]);
-
   const body = useMemo(() => {
     const diffListHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
     const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
@@ -1263,14 +1228,13 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           {sidebar}
           <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
             {diffContent}
-            {renderViewModeToolbar()}
           </View>
         </SidebarSplitView>
       );
     }
 
     return diffContent;
-  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideSegment, renderViewModeToolbar, requestSideBySideRange, rowHeight, scrollToFile, sideBySideItemIndexes, sideBySideRowCache, sideBySideSegments.length, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
+  }, [activeFileIndex, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideSegment, requestSideBySideRange, rowHeight, scrollToFile, sideBySideItemIndexes, sideBySideRowCache, sideBySideSegments.length, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -1528,33 +1492,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     textTransform: "uppercase",
-  },
-  viewModeButton: {
-    alignItems: "center",
-    borderRadius: 5,
-    height: 26,
-    justifyContent: "center",
-    minWidth: 72,
-    paddingHorizontal: 10,
-  },
-  viewModeButtonPressed: {
-    opacity: 0.72,
-  },
-  viewModeButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 16,
-  },
-  viewModeToolbar: {
-    alignItems: "center",
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 2,
-    padding: 2,
-    position: "absolute",
-    right: 16,
-    top: diffTitlebarTopInset + 8,
-    zIndex: 10,
   },
 });

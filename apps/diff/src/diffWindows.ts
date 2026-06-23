@@ -8,19 +8,36 @@ import {
   diffViewerWindowModuleName,
 } from "./appConstants";
 import { getFilename } from "./diffFiles";
-import { getDiffSyntaxTheme } from "./diffSettings";
+import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { SettingsWindow } from "./SettingsWindow";
+
+export const diffViewModeToolbarItemId = "diff-view-mode";
+
+function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffViewModeSetting()) {
+  return {
+    id: diffViewModeToolbarItemId,
+    label: "View Mode",
+    selectedValue,
+    segments: diffViewModeOptions.map((option) => ({
+      label: option.label,
+      value: option.value,
+    })),
+    type: "segmented" as const,
+  };
+}
 
 function createDiffViewerWindowStyle({
   appearance,
   includeFrame,
+  viewMode,
 }: {
   appearance?: "dark" | "light";
   includeFrame: boolean;
+  viewMode?: DiffViewMode;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
 
-  return createUnifiedToolbarWindowStyle({
+  const windowStyle = createUnifiedToolbarWindowStyle({
     appearance: appearance ?? syntaxTheme.appearance,
     frame: {
       width: 1180,
@@ -31,6 +48,11 @@ function createDiffViewerWindowStyle({
     includeFrame,
     miniaturizable: true,
   });
+
+  return {
+    ...windowStyle,
+    toolbarItems: [createDiffViewModeToolbarItem(viewMode)],
+  };
 }
 
 const diffWindowsConfig = {
@@ -99,10 +121,12 @@ export function setDiffViewerWindowOptions({
   appearance,
   backgroundColor,
   folderPath,
+  viewMode,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
   folderPath: string | null;
+  viewMode: DiffViewMode;
 }) {
   const startedAt = nowMs();
   return setWindowOptions(diffViewerWindowIdentifier, {
@@ -111,6 +135,7 @@ export function setDiffViewerWindowOptions({
     windowStyle: createDiffViewerWindowStyle({
       appearance,
       includeFrame: false,
+      viewMode,
     }),
   }).then((result) => {
     logDiffOpenTiming("window.options.finish", {

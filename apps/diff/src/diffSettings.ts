@@ -47,9 +47,13 @@ function normalizeDiffFontFamily(fontFamily: unknown): DiffFontFamilySetting {
 }
 
 function normalizeDiffViewMode(viewMode: unknown): DiffViewMode {
-  return typeof viewMode === "string" && diffViewModeOptions.some((option) => option.value === viewMode)
+  return isDiffViewMode(viewMode)
     ? viewMode as DiffViewMode
     : defaultDiffViewMode;
+}
+
+export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
+  return typeof viewMode === "string" && diffViewModeOptions.some((option) => option.value === viewMode);
 }
 
 const diffSettings = createObservableSettings({

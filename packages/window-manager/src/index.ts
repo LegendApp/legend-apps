@@ -85,6 +85,20 @@ export type WindowStyleOptions = {
   titlebarSeparatorStyle?: "automatic" | "none" | "line" | "shadow";
   backgroundColor?: string;
   hasToolbar?: boolean;
+  toolbarItems?: WindowToolbarItem[];
+};
+
+export type WindowToolbarSegment = {
+  label: string;
+  value: string;
+};
+
+export type WindowToolbarItem = {
+  id: string;
+  label?: string;
+  selectedValue?: string;
+  segments: WindowToolbarSegment[];
+  type: "segmented";
 };
 
 export type WindowOptions = {
@@ -145,6 +159,12 @@ export type WindowCloseRequestedEvent = {
 export type WindowFocusedEvent = {
   identifier: string;
   moduleName?: string;
+};
+
+export type WindowToolbarItemSelectedEvent = {
+  identifier: string;
+  itemId: string;
+  value: string;
 };
 
 const emptySubscription = { remove() {} };
@@ -323,6 +343,13 @@ export function addWindowFocusedListener(listener: (event: WindowFocusedEvent) =
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowFocused", listener);
 }
 
+export function addWindowToolbarItemSelectedListener(listener: (event: WindowToolbarItemSelectedEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onToolbarItemSelected", listener);
+}
+
 export function addMainWindowMovedListener(listener: (frame: WindowFrame) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -352,6 +379,7 @@ export function useWindowManager() {
     onWindowClosed: addWindowClosedListener,
     onWindowCloseRequested: addWindowCloseRequestedListener,
     onWindowFocused: addWindowFocusedListener,
+    onWindowToolbarItemSelected: addWindowToolbarItemSelectedListener,
     onMainWindowMoved: addMainWindowMovedListener,
     onMainWindowResized: addMainWindowResizedListener,
   };
