@@ -5,10 +5,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 namespace margelo::nitro::legenddesktop::syntaxparser {
 
@@ -44,6 +49,78 @@ int getForegroundId(uint32_t metadata) {
 std::filesystem::path packageRoot() {
   auto current = std::filesystem::path(__FILE__);
   return current.parent_path().parent_path();
+}
+
+bool canReadFile(const std::filesystem::path& path) {
+  std::ifstream input(path, std::ios::binary);
+  return static_cast<bool>(input);
+}
+
+#ifdef __APPLE__
+std::filesystem::path pathFromUrl(CFURLRef url) {
+  if (!url) {
+    return {};
+  }
+
+  UInt8 buffer[PATH_MAX];
+  if (!CFURLGetFileSystemRepresentation(url, true, buffer, sizeof(buffer))) {
+    return {};
+  }
+  return std::filesystem::path(reinterpret_cast<const char*>(buffer));
+}
+
+std::filesystem::path resourceBundleRoot(const char* bundleName) {
+  CFBundleRef mainBundle = CFBundleGetMainBundle();
+  if (!mainBundle) {
+    return {};
+  }
+
+  CFStringRef bundleNameString = CFStringCreateWithCString(nullptr, bundleName, kCFStringEncodingUTF8);
+  if (!bundleNameString) {
+    return {};
+  }
+
+  CFURLRef bundleUrl = CFBundleCopyResourceURL(mainBundle, bundleNameString, CFSTR("bundle"), nullptr);
+  CFRelease(bundleNameString);
+
+  if (!bundleUrl) {
+    return {};
+  }
+
+  CFBundleRef resourceBundle = CFBundleCreate(nullptr, bundleUrl);
+  CFRelease(bundleUrl);
+
+  if (!resourceBundle) {
+    return {};
+  }
+
+  CFURLRef resourcesUrl = CFBundleCopyResourcesDirectoryURL(resourceBundle);
+  const auto resourcesPath = pathFromUrl(resourcesUrl);
+  if (resourcesUrl) {
+    CFRelease(resourcesUrl);
+  }
+  CFRelease(resourceBundle);
+
+  return resourcesPath;
+}
+#endif
+
+std::filesystem::path syntaxAssetRoot(
+    const std::filesystem::path& sourceRoot,
+    const char* resourceBundleName,
+    const char* sentinelFileName) {
+  if (canReadFile(sourceRoot / sentinelFileName)) {
+    return sourceRoot;
+  }
+
+#ifdef __APPLE__
+  const auto bundledRoot = resourceBundleRoot(resourceBundleName);
+  if (!bundledRoot.empty() && canReadFile(bundledRoot / sentinelFileName)) {
+    return bundledRoot;
+  }
+#endif
+
+  return sourceRoot;
 }
 
 std::string readTextFile(const std::filesystem::path& path) {
@@ -699,8 +776,10 @@ SyntaxHighlighterWarmupResult createWarmedHighlighterContext(
     const std::string& theme) {
   const auto startedAt = SyntaxClock::now();
   const auto root = packageRoot();
-  const auto grammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
-  const auto themesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
+  const auto sourceGrammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
+  const auto sourceThemesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
+  const auto grammarsRoot = syntaxAssetRoot(sourceGrammarsRoot, "RNSyntaxParserGrammars", "typescript.json");
+  const auto themesRoot = syntaxAssetRoot(sourceThemesRoot, "RNSyntaxParserThemes", "github-dark-dimmed.json");
   auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
   const auto contextReadyAt = SyntaxClock::now();
 
