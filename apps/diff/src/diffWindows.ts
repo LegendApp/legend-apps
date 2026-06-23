@@ -13,8 +13,8 @@ import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
-  blocks: "square.grid.2x2",
-  unified: "list.bullet",
+  blocks: "rectangle.split.2x1",
+  unified: "rectangle.portrait",
 };
 
 function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffViewModeSetting()) {
