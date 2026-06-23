@@ -1,6 +1,6 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { setWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+import { openWindow, setWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
 import {
   codeSettingsWindowIdentifier,
   codeSettingsWindowModuleName,
@@ -79,6 +79,13 @@ export function openCodeViewerWindow(launchArguments?: string[]) {
   return CodeWindowsNavigator.open(codeViewerWindowModuleName as CodeWindow, {
     initialProperties: launchArguments ? { launchArguments } : undefined,
     windowStyle: createCodeViewerWindowStyle({ includeFrame: true }),
+  });
+}
+
+export function focusCodeViewerWindow() {
+  return openWindow({
+    identifier: codeViewerWindowIdentifier,
+    moduleName: codeViewerWindowModuleName,
   });
 }
 

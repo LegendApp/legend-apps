@@ -1,0 +1,12 @@
+{
+  "name": "@legend-desktop/document-app",
+  "version": "0.0.0",
+  "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "dependencies": {
+    "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/native-menu": "0.0.0",
+    "@legend-desktop/recent-documents": "0.0.0",
+    "@legend-desktop/window-manager": "0.0.0"
+  }
+}

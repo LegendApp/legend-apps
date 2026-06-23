@@ -1,8 +1,10 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { useNativeMenu, type NativeMenuAction, type NativeMenuActionHandlers } from "@legend-desktop/native-menu";
-import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
-import { addWindowClosedListener } from "@legend-desktop/window-manager";
-import { useEffect, useRef } from "react";
+import {
+  openSelectedDocumentPath,
+  useDocumentAppController,
+  type DocumentAppController,
+} from "@legend-desktop/document-app";
+import type { NativeMenuAction, NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+import { useEffect } from "react";
 import { editorWindowIdentifier, markdownFileTypes, markdownMenuOwnerId } from "./appConstants";
 import {
   dispatchMarkdownEditorMenuAction,
@@ -30,52 +32,41 @@ function reportMarkdownAppControllerError(error: unknown) {
   console.error(`[MarkdownAppController] ${message}`);
 }
 
-async function openMarkdownEditorForSelectedFile() {
-  const paths = await openFileDialog({
+async function openMarkdownEditorForSelectedFile(controller: DocumentAppController) {
+  const path = await openSelectedDocumentPath({
     allowedFileTypes: markdownFileTypes,
-    canChooseFiles: true,
+    invalidSelectionMessage: `Choose a Markdown file (${markdownFileTypes.map((type) => `.${type}`).join(", ")}).`,
+    isDocumentPath: isMarkdownPath,
   });
-  const path = paths?.find(isMarkdownPath) ?? null;
 
   if (path) {
     await openMarkdownEditorWindow([path]);
+    controller.setDocumentWindowOpen(true);
     return true;
-  }
-
-  if (paths && paths.length > 0) {
-    throw new Error(`Choose a Markdown file (${markdownFileTypes.map((type) => `.${type}`).join(", ")}).`);
   }
 
   return false;
 }
 
-function openNewMarkdownEditorWindow() {
-  return openMarkdownEditorWindow([newMarkdownDocumentLaunchArgument]);
+async function openNewMarkdownEditorWindow(controller: DocumentAppController) {
+  await openMarkdownEditorWindow([newMarkdownDocumentLaunchArgument]);
+  controller.setDocumentWindowOpen(true);
 }
 
-export function App({ launchArguments }: MarkdownAppProps) {
-  const didOpenEditorRef = useRef(false);
-  const editorWindowOpenRef = useRef(false);
+function createMarkdownMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
   const dispatchOpenEditorMenuAction = (action: NativeMenuAction) =>
-    editorWindowOpenRef.current && dispatchMarkdownEditorMenuAction(action);
-  const menuHandlers = useRef<NativeMenuActionHandlers>({
+    controller.isDocumentWindowOpen() && dispatchMarkdownEditorMenuAction(action);
+
+  return {
     new: (action: NativeMenuAction) => {
       if (!dispatchOpenEditorMenuAction(action)) {
-        openNewMarkdownEditorWindow()
-          .then(() => {
-            editorWindowOpenRef.current = true;
-          })
+        openNewMarkdownEditorWindow(controller)
           .catch(reportMarkdownAppControllerError);
       }
     },
     open: (action: NativeMenuAction) => {
       if (!dispatchOpenEditorMenuAction(action)) {
-        openMarkdownEditorForSelectedFile()
-          .then((didOpen) => {
-            if (didOpen) {
-              editorWindowOpenRef.current = true;
-            }
-          })
+        openMarkdownEditorForSelectedFile(controller)
           .catch(reportMarkdownAppControllerError);
       }
     },
@@ -98,69 +89,47 @@ export function App({ launchArguments }: MarkdownAppProps) {
     increaseFontSize: dispatchOpenEditorMenuAction,
     decreaseFontSize: dispatchOpenEditorMenuAction,
     resetFontSize: dispatchOpenEditorMenuAction,
-  }).current;
+  };
+}
 
-  useNativeMenu({
-    handlers: menuHandlers,
+async function openRecentMarkdownDocument(path: string, controller: DocumentAppController) {
+  if (isMarkdownPath(path)) {
+    const editorHandler = controller.isDocumentWindowOpen() ? getMarkdownEditorRecentDocumentHandler() : null;
+    if (editorHandler) {
+      await editorHandler(path);
+    } else {
+      await openMarkdownEditorWindow([path]);
+      controller.setDocumentWindowOpen(true);
+    }
+  }
+}
+
+async function openInitialMarkdownEditor(launchArguments: string[] | undefined, controller: DocumentAppController) {
+  applyMarkdownThemeSetting();
+  console.info("[MarkdownAppController] mounted in hidden host; opening editor window.");
+  try {
+    await openMarkdownEditorWindow(launchArguments);
+    controller.setDocumentWindowOpen(true);
+  } catch (error) {
+    throw error instanceof Error ? new Error(`Unable to open editor window: ${error.message}`) : error;
+  }
+}
+
+export function App({ launchArguments }: MarkdownAppProps) {
+  useDocumentAppController({
+    createMenuHandlers: createMarkdownMenuHandlers,
+    launchArguments,
     menus: markdownMenuConfig,
+    onInitialOpen: openInitialMarkdownEditor,
+    onRecentDocumentOpen: openRecentMarkdownDocument,
     ownerId: markdownMenuOwnerId,
+    reportError: reportMarkdownAppControllerError,
+    windowIdentifier: editorWindowIdentifier,
   });
 
   useEffect(() => {
     applyMarkdownThemeSetting();
   }, []);
-
-  useEffect(() => {
-    const subscription = addRecentDocumentOpenListener(({ path }) => {
-      if (!isMarkdownPath(path)) {
-        return;
-      }
-
-      const editorHandler = editorWindowOpenRef.current ? getMarkdownEditorRecentDocumentHandler() : null;
-      if (editorHandler) {
-        editorHandler(path).catch(reportMarkdownAppControllerError);
-      } else {
-        openMarkdownEditorWindow([path])
-          .then(() => {
-            editorWindowOpenRef.current = true;
-          })
-          .catch(reportMarkdownAppControllerError);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const subscription = addWindowClosedListener((event) => {
-      if (event.identifier === editorWindowIdentifier) {
-        editorWindowOpenRef.current = false;
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!didOpenEditorRef.current) {
-      didOpenEditorRef.current = true;
-      applyMarkdownThemeSetting();
-      console.info("[MarkdownAppController] mounted in hidden host; opening editor window.");
-      openMarkdownEditorWindow(launchArguments)
-        .then(() => {
-          editorWindowOpenRef.current = true;
-        })
-        .catch((error: unknown) => {
-          reportMarkdownAppControllerError(
-            error instanceof Error ? new Error(`Unable to open editor window: ${error.message}`) : error,
-          );
-        });
-    }
-  }, [launchArguments]);
 
   return null;
 }

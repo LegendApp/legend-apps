@@ -2,6 +2,10 @@ import { openFileDialog } from "@legend-desktop/file-dialog";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
   createSyntaxStyleMap,
+  elapsedMs,
+  formatMs,
+  measureAfterEffect,
+  nowMs,
   SourceDocumentView,
   type SourceDocumentRowsTrace,
   type SourceDocumentSnapshot,
@@ -23,11 +27,13 @@ import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
+import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { codeBackgroundTokenizationChunkLineCount, codeFileTypes, codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { useCodeSyntaxTheme, useCodeSyntaxThemeSetting, type CodeSettingsFile } from "./codeSettings";
+import { codeViewerFileRequest$ } from "./codeViewerRequests";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
 const debugPrefix = "[DEBUG-code-cold-v1]";
@@ -86,10 +92,6 @@ function formatLineCount(count: number) {
   return `${count.toLocaleString()} ${count === 1 ? "line" : "lines"}`;
 }
 
-function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
 function debugLog(event: string, payload: Record<string, unknown>) {
   if (__DEV__) {
     console.info(`${debugPrefix} ${event} ${JSON.stringify({
@@ -98,14 +100,6 @@ function debugLog(event: string, payload: Record<string, unknown>) {
       ...payload,
     })}`);
   }
-}
-
-function formatMs(value: number) {
-  return `${value.toFixed(1)} ms`;
-}
-
-function elapsedMs(start: number, end: number) {
-  return Math.max(0, end - start);
 }
 
 function formatTimingSummary(timing: CodeViewerTiming) {
@@ -206,43 +200,6 @@ function logCodeRowsTiming({
   );
 }
 
-function measureAfterEffect(callback: (timing: {
-  frameAt: number;
-  microtaskAt: number;
-  secondFrameAt: number;
-  timeoutAt: number;
-}) => void) {
-  const timing = {
-    frameAt: 0,
-    microtaskAt: 0,
-    secondFrameAt: 0,
-    timeoutAt: 0,
-  };
-
-  const maybeComplete = () => {
-    if (timing.frameAt > 0 && timing.microtaskAt > 0 && timing.secondFrameAt > 0 && timing.timeoutAt > 0) {
-      callback(timing);
-    }
-  };
-
-  Promise.resolve().then(() => {
-    timing.microtaskAt = nowMs();
-    maybeComplete();
-  });
-  setTimeout(() => {
-    timing.timeoutAt = nowMs();
-    maybeComplete();
-  }, 0);
-  requestAnimationFrame(() => {
-    timing.frameAt = nowMs();
-    requestAnimationFrame(() => {
-      timing.secondFrameAt = nowMs();
-      maybeComplete();
-    });
-    maybeComplete();
-  });
-}
-
 type RowLayoutDebugBatch = {
   count: number;
   first: number | null;
@@ -299,7 +256,9 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<CodeViewerState>(emptyState);
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
+  const fileRequest = useValue(codeViewerFileRequest$);
   const loadedLaunchFileRef = useRef<string | null>(null);
+  const loadedFileRequestVersionRef = useRef(0);
   const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
   const loggedRowsVersionRef = useRef(-1);
@@ -519,6 +478,17 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       loadFile(launchFile, selectedSyntaxTheme);
     }
   }, [launchFile, loadFile, selectedSyntaxTheme]);
+
+  useEffect(() => {
+    if (
+      fileRequest.path &&
+      loadedFileRequestVersionRef.current !== fileRequest.version
+    ) {
+      loadedFileRequestVersionRef.current = fileRequest.version;
+      loadedLaunchFileRef.current = fileRequest.path;
+      loadFile(fileRequest.path, selectedSyntaxTheme);
+    }
+  }, [fileRequest.path, fileRequest.version, loadFile, selectedSyntaxTheme]);
 
   useEffect(() => {
     if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {

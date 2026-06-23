@@ -1,6 +1,6 @@
-import { useNativeMenu, type NativeMenuActionHandlers } from "@legend-desktop/native-menu";
-import { useEffect, useRef } from "react";
-import { diffMenuOwnerId } from "./appConstants";
+import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
+import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
@@ -36,7 +36,7 @@ function reportDiffAppControllerError(error: unknown) {
   console.error(`[DiffAppController] ${message}`);
 }
 
-async function openDiffViewerForSelectedFolder() {
+async function openDiffViewerForSelectedFolder(controller: DocumentAppController) {
   const dialogStartedAt = nowMs();
   logDiffOpenTiming("menu.dialog.start", {});
   const folderPath = await openDiffFolderDialog();
@@ -49,6 +49,7 @@ async function openDiffViewerForSelectedFolder() {
   if (folderPath) {
     const windowStartedAt = nowMs();
     await openDiffViewerWindow(folderPath);
+    controller.setDocumentWindowOpen(true);
     logDiffOpenTiming("menu.window.opened", {
       folderPath,
       windowOpenMs: elapsedMs(windowStartedAt),
@@ -56,12 +57,11 @@ async function openDiffViewerForSelectedFolder() {
   }
 }
 
-export function App({ launchArguments }: DiffAppProps) {
-  const didOpenViewerRef = useRef(false);
-  const menuHandlers = useRef<NativeMenuActionHandlers>({
+function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
+  return {
     openFolder: () => {
       logDiffOpenTiming("menu.openFolder", {});
-      openDiffViewerForSelectedFolder()
+      openDiffViewerForSelectedFolder(controller)
         .then(() => {
           logDiffOpenTiming("menu.openFolder.finish", {});
         })
@@ -70,33 +70,34 @@ export function App({ launchArguments }: DiffAppProps) {
     settings: () => {
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
     },
-  }).current;
+  };
+}
 
-  useNativeMenu({
-    handlers: menuHandlers,
-    menus: diffMenuConfig,
-    ownerId: diffMenuOwnerId,
+async function openInitialDiffViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
+  const folderPath = getLaunchDiffFolder(launchArguments);
+  const startedAt = nowMs();
+  logDiffOpenTiming("launch.open.start", {
+    folderPath,
+    launchArgumentCount: launchArguments?.length ?? 0,
   });
+  await openDiffViewerWindow(folderPath);
+  controller.setDocumentWindowOpen(true);
+  logDiffOpenTiming("launch.open.finish", {
+    folderPath,
+    windowOpenMs: elapsedMs(startedAt),
+  });
+}
 
-  useEffect(() => {
-    if (!didOpenViewerRef.current) {
-      didOpenViewerRef.current = true;
-      const folderPath = getLaunchDiffFolder(launchArguments);
-      const startedAt = nowMs();
-      logDiffOpenTiming("launch.open.start", {
-        folderPath,
-        launchArgumentCount: launchArguments?.length ?? 0,
-      });
-      openDiffViewerWindow(folderPath)
-        .then(() => {
-          logDiffOpenTiming("launch.open.finish", {
-            folderPath,
-            windowOpenMs: elapsedMs(startedAt),
-          });
-        })
-        .catch(reportDiffAppControllerError);
-    }
-  }, [launchArguments]);
+export function App({ launchArguments }: DiffAppProps) {
+  useDocumentAppController({
+    createMenuHandlers: createDiffMenuHandlers,
+    launchArguments,
+    menus: diffMenuConfig,
+    onInitialOpen: openInitialDiffViewer,
+    ownerId: diffMenuOwnerId,
+    reportError: reportDiffAppControllerError,
+    windowIdentifier: diffViewerWindowIdentifier,
+  });
 
   return null;
 }

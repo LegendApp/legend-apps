@@ -28,6 +28,7 @@
         "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/design-system": "0.0.0",
+        "@legend-desktop/document-app": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/recent-documents": "0.0.0",
@@ -50,6 +51,7 @@
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
         "@legend-desktop/diff-parser": "workspace:*",
+        "@legend-desktop/document-app": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/settings-window": "0.0.0",
@@ -74,6 +76,7 @@
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/classnames": "0.0.0",
         "@legend-desktop/design-system": "workspace:*",
+        "@legend-desktop/document-app": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/hotkeys": "workspace:*",
         "@legend-desktop/keyboard-manager": "0.0.0",
@@ -269,6 +272,16 @@
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
+      },
+    },
+    "packages/document-app": {
+      "name": "@legend-desktop/document-app",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/file-dialog": "0.0.0",
+        "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/recent-documents": "0.0.0",
+        "@legend-desktop/window-manager": "0.0.0",
       },
     },
     "packages/document-scanner": {
@@ -949,6 +962,8 @@
     "@legend-desktop/design-system": ["@legend-desktop/design-system@workspace:packages/design-system"],
 
     "@legend-desktop/diff-parser": ["@legend-desktop/diff-parser@workspace:packages/diff-parser"],
+
+    "@legend-desktop/document-app": ["@legend-desktop/document-app@workspace:packages/document-app"],
 
     "@legend-desktop/document-scanner": ["@legend-desktop/document-scanner@workspace:packages/document-scanner"],
 

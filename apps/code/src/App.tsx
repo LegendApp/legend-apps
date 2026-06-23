@@ -1,14 +1,18 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { useNativeMenu, type NativeMenuActionHandlers } from "@legend-desktop/native-menu";
-import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
-import { addWindowClosedListener, closeWindow } from "@legend-desktop/window-manager";
-import { useEffect, useRef } from "react";
+import {
+  openSelectedDocumentPath,
+  useDocumentAppController,
+  type DocumentAppController,
+} from "@legend-desktop/document-app";
+import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+import { closeWindow } from "@legend-desktop/window-manager";
+import { useEffect } from "react";
 import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
 import { installCodeBenchmarkHook } from "./codeBenchmark";
 import { getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { codeMenuConfig } from "./codeMenus";
 import { warmCodeSyntaxHighlighters } from "./codeSyntaxWarmup";
-import { openCodeSettingsWindow, openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
+import { focusCodeViewerWindow, openCodeSettingsWindow, openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
+import { requestCodeViewerFile } from "./codeViewerRequests";
 
 registerCodeWindows();
 installCodeBenchmarkHook();
@@ -30,94 +34,87 @@ function reportCodeAppControllerError(error: unknown) {
 }
 
 if (__DEV__) {
-  globalThis.__legendCodeBenchmarkOpenFile = (filePath: string) => openCodeViewerWindow([filePath]);
   globalThis.__legendCodeBenchmarkCloseFile = async () => {
     await closeWindow(codeViewerWindowIdentifier);
   };
 }
 
-async function openCodeViewerForSelectedFile() {
-  const paths = await openFileDialog({
+async function openCodeFileInViewer(filePath: string, isViewerOpen: boolean) {
+  if (isViewerOpen) {
+    requestCodeViewerFile(filePath);
+    await focusCodeViewerWindow();
+  } else {
+    await openCodeViewerWindow([filePath]);
+  }
+}
+
+async function openCodeViewerForSelectedFile(controller: DocumentAppController) {
+  const path = await openSelectedDocumentPath({
     allowedFileTypes: codeFileTypes,
-    canChooseFiles: true,
+    invalidSelectionMessage: `Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`,
+    isDocumentPath: isCodePath,
   });
-  const path = paths?.find(isCodePath) ?? null;
 
   if (path) {
-    await openCodeViewerWindow([path]);
+    await openCodeFileInViewer(path, controller.isDocumentWindowOpen());
+    controller.setDocumentWindowOpen(true);
     return true;
-  }
-
-  if (paths && paths.length > 0) {
-    throw new Error(`Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`);
   }
 
   return false;
 }
 
-export function App({ launchArguments }: CodeAppProps) {
-  const didOpenViewerRef = useRef(false);
-  const viewerWindowOpenRef = useRef(false);
-  const menuHandlers = useRef<NativeMenuActionHandlers>({
+function createCodeMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
+  return {
     open: () => {
-      openCodeViewerForSelectedFile()
-        .then((didOpen) => {
-          if (didOpen) {
-            viewerWindowOpenRef.current = true;
-          }
-        })
+      openCodeViewerForSelectedFile(controller)
         .catch(reportCodeAppControllerError);
     },
     settings: () => {
       openCodeSettingsWindow().catch(reportCodeAppControllerError);
     },
-  }).current;
+  };
+}
 
-  useNativeMenu({
-    handlers: menuHandlers,
+async function openRecentCodeDocument(path: string, controller: DocumentAppController) {
+  if (isCodePath(path)) {
+    await openCodeFileInViewer(path, controller.isDocumentWindowOpen());
+    controller.setDocumentWindowOpen(true);
+  }
+}
+
+async function openInitialCodeViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
+  const launchFile = getLaunchCodeFile(launchArguments);
+  await openCodeViewerWindow(launchFile ? [launchFile] : launchArguments);
+  controller.setDocumentWindowOpen(true);
+}
+
+export function App({ launchArguments }: CodeAppProps) {
+  const controller = useDocumentAppController({
+    createMenuHandlers: createCodeMenuHandlers,
+    launchArguments,
     menus: codeMenuConfig,
+    onInitialOpen: openInitialCodeViewer,
+    onRecentDocumentOpen: openRecentCodeDocument,
     ownerId: codeMenuOwnerId,
+    reportError: reportCodeAppControllerError,
+    windowIdentifier: codeViewerWindowIdentifier,
   });
 
   useEffect(() => {
-    const subscription = addRecentDocumentOpenListener(({ path }) => {
-      if (isCodePath(path)) {
-        openCodeViewerWindow([path])
-          .then(() => {
-            viewerWindowOpenRef.current = true;
-          })
-          .catch(reportCodeAppControllerError);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const subscription = addWindowClosedListener((event) => {
-      if (event.identifier === codeViewerWindowIdentifier) {
-        viewerWindowOpenRef.current = false;
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!didOpenViewerRef.current) {
-      didOpenViewerRef.current = true;
-      const launchFile = getLaunchCodeFile(launchArguments);
-      openCodeViewerWindow(launchFile ? [launchFile] : launchArguments)
-        .then(() => {
-          viewerWindowOpenRef.current = true;
-        })
-        .catch(reportCodeAppControllerError);
+    if (__DEV__) {
+      globalThis.__legendCodeBenchmarkOpenFile = async (filePath: string) => {
+        await openCodeFileInViewer(filePath, controller.isDocumentWindowOpen());
+        controller.setDocumentWindowOpen(true);
+      };
     }
-  }, [launchArguments]);
+
+    return () => {
+      if (__DEV__ && globalThis.__legendCodeBenchmarkOpenFile) {
+        globalThis.__legendCodeBenchmarkOpenFile = undefined;
+      }
+    };
+  }, [controller]);
 
   return null;
 }
