@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-desktop/storage";
+import { createObservableSettings } from "@legend-desktop/storage";
 import {
   defaultSyntaxThemeName,
   getSyntaxTheme,
@@ -6,24 +6,25 @@ import {
   type BundledSyntaxThemeName,
   type SyntaxTheme,
 } from "@legend-desktop/syntax-parser";
-import { useValue } from "@legendapp/state/react";
 
 export type CodeSettingsFile = {
   syntaxTheme: BundledSyntaxThemeName;
 };
 
-const initialCodeSettings: CodeSettingsFile = {
-  syntaxTheme: defaultSyntaxThemeName,
-};
-
-const codeSettings$ = createObservableFile<CodeSettingsFile>({
+const codeSettings = createObservableSettings({
+  fields: {
+    syntaxTheme: {
+      defaultValue: defaultSyntaxThemeName,
+      normalize: (syntaxTheme): BundledSyntaxThemeName =>
+        isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : defaultSyntaxThemeName,
+    },
+  },
   filename: "settings",
-  initialValue: initialCodeSettings,
 });
+const syntaxThemeSetting = codeSettings.field("syntaxTheme");
 
 export function getCodeSyntaxThemeSetting(): BundledSyntaxThemeName {
-  const syntaxTheme = codeSettings$.syntaxTheme.get();
-  return isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : initialCodeSettings.syntaxTheme;
+  return syntaxThemeSetting.get();
 }
 
 export function getCodeSyntaxTheme(): SyntaxTheme {
@@ -31,8 +32,7 @@ export function getCodeSyntaxTheme(): SyntaxTheme {
 }
 
 export function useCodeSyntaxThemeSetting(): BundledSyntaxThemeName {
-  const syntaxTheme = useValue(codeSettings$.syntaxTheme);
-  return isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : initialCodeSettings.syntaxTheme;
+  return syntaxThemeSetting.use();
 }
 
 export function useCodeSyntaxTheme(): SyntaxTheme {
@@ -40,5 +40,5 @@ export function useCodeSyntaxTheme(): SyntaxTheme {
 }
 
 export function setCodeSyntaxThemeSetting(syntaxTheme: BundledSyntaxThemeName) {
-  codeSettings$.syntaxTheme.set(syntaxTheme);
+  syntaxThemeSetting.set(syntaxTheme);
 }

@@ -1,4 +1,5 @@
 import { applyChanges, internal, isArray, observable, type Change, type Observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
 import {
   synced,
   type ObservablePersistPlugin,
@@ -70,6 +71,17 @@ export type CreateObservableFileOptions<T extends object> = {
   storage?: Storage;
   subfolder?: string;
   transform?: SyncTransform<any, any>;
+};
+
+export type ObservableSettingsField<TValue> = {
+  defaultValue: TValue;
+  normalize?: (value: unknown) => TValue;
+};
+
+export type ObservableSettingsFields = Record<string, ObservableSettingsField<any>>;
+
+export type ObservableSettingsValues<TFields extends ObservableSettingsFields> = {
+  [K in keyof TFields]: TFields[K] extends ObservableSettingsField<infer TValue> ? TValue : never;
 };
 
 const observablePersistPlugins = new WeakMap<Observable<unknown>, ManagedPersistPlugin>();
@@ -363,6 +375,60 @@ export function createObservableFile<T extends object>({
 
   observablePersistPlugins.set(data$ as unknown as Observable<unknown>, plugin);
   return data$ as unknown as Observable<T>;
+}
+
+function getObservableSettingsInitialValue<TFields extends ObservableSettingsFields>(
+  fields: TFields,
+): ObservableSettingsValues<TFields> {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, field]) => [key, field.defaultValue]),
+  ) as ObservableSettingsValues<TFields>;
+}
+
+function normalizeObservableSettingsValue<TValue>(
+  field: ObservableSettingsField<TValue>,
+  value: unknown,
+): TValue {
+  if (field.normalize) {
+    return field.normalize(value);
+  }
+
+  return value === undefined || value === null ? field.defaultValue : value as TValue;
+}
+
+export function createObservableSettings<const TFields extends ObservableSettingsFields>({
+  fields,
+  ...options
+}: Omit<CreateObservableFileOptions<ObservableSettingsValues<TFields>>, "initialValue"> & {
+  fields: TFields;
+}) {
+  const settings$ = createObservableFile<ObservableSettingsValues<TFields>>({
+    ...options,
+    initialValue: getObservableSettingsInitialValue(fields),
+  });
+
+  function field<TKey extends keyof TFields & string>(key: TKey): {
+    get: () => ObservableSettingsValues<TFields>[TKey];
+    set: (value: ObservableSettingsValues<TFields>[TKey]) => void;
+    use: () => ObservableSettingsValues<TFields>[TKey];
+  } {
+    type TValue = ObservableSettingsValues<TFields>[TKey];
+    const settingField = fields[key] as ObservableSettingsField<TValue>;
+    const setting$ = (settings$ as any)[key];
+
+    return {
+      get: () => normalizeObservableSettingsValue(settingField, setting$.get()),
+      set: (value: TValue) => {
+        setting$.set(normalizeObservableSettingsValue(settingField, value));
+      },
+      use: () => normalizeObservableSettingsValue(settingField, useValue(setting$)),
+    };
+  }
+
+  return {
+    field,
+    settings$,
+  };
 }
 
 export function getPersistPlugin(obs$: Observable<unknown>): ManagedPersistPlugin | undefined {

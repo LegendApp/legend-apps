@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-desktop/storage";
+import { createObservableSettings } from "@legend-desktop/storage";
 import {
   defaultSyntaxThemeName,
   getSyntaxTheme,
@@ -6,7 +6,6 @@ import {
   type BundledSyntaxThemeName,
   type SyntaxTheme,
 } from "@legend-desktop/syntax-parser";
-import { useValue } from "@legendapp/state/react";
 
 export type DiffSettingsFile = {
   fontFamily?: DiffFontFamilySetting;
@@ -27,26 +26,6 @@ export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const diffFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
 
-const initialDiffSettings: DiffSettingsFile = {
-  fontFamily: defaultDiffFontFamily,
-  fontSize: defaultDiffFontSize,
-  syntaxTheme: defaultSyntaxThemeName,
-};
-
-const diffSettings$ = createObservableFile<DiffSettingsFile>({
-  filename: "settings",
-  initialValue: initialDiffSettings,
-});
-
-export function getDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
-  const syntaxTheme = diffSettings$.syntaxTheme.get();
-  return isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : initialDiffSettings.syntaxTheme;
-}
-
-export function getDiffSyntaxTheme(): SyntaxTheme {
-  return getSyntaxTheme(getDiffSyntaxThemeSetting());
-}
-
 function normalizeDiffFontSize(fontSize: unknown): number {
   return typeof fontSize === "number" && diffFontSizeOptions.includes(fontSize as typeof diffFontSizeOptions[number])
     ? fontSize
@@ -59,25 +38,54 @@ function normalizeDiffFontFamily(fontFamily: unknown): DiffFontFamilySetting {
     : defaultDiffFontFamily;
 }
 
+const diffSettings = createObservableSettings({
+  fields: {
+    fontFamily: {
+      defaultValue: defaultDiffFontFamily,
+      normalize: normalizeDiffFontFamily,
+    },
+    fontSize: {
+      defaultValue: defaultDiffFontSize,
+      normalize: normalizeDiffFontSize,
+    },
+    syntaxTheme: {
+      defaultValue: defaultSyntaxThemeName,
+      normalize: (syntaxTheme): BundledSyntaxThemeName =>
+        isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : defaultSyntaxThemeName,
+    },
+  },
+  filename: "settings",
+});
+const fontFamilySetting = diffSettings.field("fontFamily");
+const fontSizeSetting = diffSettings.field("fontSize");
+const syntaxThemeSetting = diffSettings.field("syntaxTheme");
+
+export function getDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
+  return syntaxThemeSetting.get();
+}
+
+export function getDiffSyntaxTheme(): SyntaxTheme {
+  return getSyntaxTheme(getDiffSyntaxThemeSetting());
+}
+
 export function getDiffFontFamilySetting(): DiffFontFamilySetting {
-  return normalizeDiffFontFamily(diffSettings$.fontFamily.get());
+  return fontFamilySetting.get();
 }
 
 export function getDiffFontSizeSetting(): number {
-  return normalizeDiffFontSize(diffSettings$.fontSize.get());
+  return fontSizeSetting.get();
 }
 
 export function useDiffFontFamilySetting(): DiffFontFamilySetting {
-  return normalizeDiffFontFamily(useValue(diffSettings$.fontFamily));
+  return fontFamilySetting.use();
 }
 
 export function useDiffFontSizeSetting(): number {
-  return normalizeDiffFontSize(useValue(diffSettings$.fontSize));
+  return fontSizeSetting.use();
 }
 
 export function useDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
-  const syntaxTheme = useValue(diffSettings$.syntaxTheme);
-  return isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : initialDiffSettings.syntaxTheme;
+  return syntaxThemeSetting.use();
 }
 
 export function useDiffSyntaxTheme(): SyntaxTheme {
@@ -85,13 +93,13 @@ export function useDiffSyntaxTheme(): SyntaxTheme {
 }
 
 export function setDiffSyntaxThemeSetting(syntaxTheme: BundledSyntaxThemeName) {
-  diffSettings$.syntaxTheme.set(syntaxTheme);
+  syntaxThemeSetting.set(syntaxTheme);
 }
 
 export function setDiffFontFamilySetting(fontFamily: DiffFontFamilySetting) {
-  diffSettings$.fontFamily.set(normalizeDiffFontFamily(fontFamily));
+  fontFamilySetting.set(fontFamily);
 }
 
 export function setDiffFontSizeSetting(fontSize: number) {
-  diffSettings$.fontSize.set(normalizeDiffFontSize(fontSize));
+  fontSizeSetting.set(fontSize);
 }
