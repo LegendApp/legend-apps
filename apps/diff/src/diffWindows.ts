@@ -1,6 +1,6 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
-import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { setWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
+import { setWindowOptions } from "@legend-desktop/window-manager";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,
@@ -20,30 +20,17 @@ function createDiffViewerWindowStyle({
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
 
-  return {
+  return createUnifiedToolbarWindowStyle({
     appearance: appearance ?? syntaxTheme.appearance,
-    ...(includeFrame
-      ? {
-          width: 1180,
-          height: 780,
-          minWidth: 640,
-          minHeight: 460,
-        }
-      : null),
-    hasToolbar: true,
-    mask: [
-      WindowStyleMask.Titled,
-      WindowStyleMask.Closable,
-      WindowStyleMask.Miniaturizable,
-      WindowStyleMask.Resizable,
-      WindowStyleMask.FullSizeContentView,
-      WindowStyleMask.UnifiedTitleAndToolbar,
-    ],
-    titlebarAppearsTransparent: true,
-    titlebarSeparatorStyle: "none" as const,
-    titleVisibility: "visible" as const,
-    toolbarStyle: "unified" as const,
-  };
+    frame: {
+      width: 1180,
+      height: 780,
+      minWidth: 640,
+      minHeight: 460,
+    },
+    includeFrame,
+    miniaturizable: true,
+  });
 }
 
 const diffWindowsConfig = {

@@ -1,6 +1,6 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
-import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { openWindow, setWindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
+import { openWindow, setWindowOptions } from "@legend-desktop/window-manager";
 import {
   codeSettingsWindowIdentifier,
   codeSettingsWindowModuleName,
@@ -22,29 +22,17 @@ function createCodeViewerWindowStyle({
 }) {
   const syntaxTheme = getCodeSyntaxTheme();
 
-  return {
+  return createDocumentWindowStyle({
     appearance: appearance ?? syntaxTheme.appearance,
     backgroundColor: backgroundColor ?? syntaxTheme.background,
-    ...(includeFrame
-      ? {
-          width: 1080,
-          height: 760,
-          minWidth: 560,
-          minHeight: 420,
-        }
-      : null),
-    hasToolbar: false,
-    mask: [
-      WindowStyleMask.Titled,
-      WindowStyleMask.Closable,
-      WindowStyleMask.Miniaturizable,
-      WindowStyleMask.Resizable,
-      WindowStyleMask.FullSizeContentView,
-    ],
-    titlebarAppearsTransparent: true,
-    titlebarSeparatorStyle: "none" as const,
-    titleVisibility: "visible" as const,
-  };
+    frame: {
+      width: 1080,
+      height: 760,
+      minWidth: 560,
+      minHeight: 420,
+    },
+    includeFrame,
+  });
 }
 
 const codeWindowsConfig = {

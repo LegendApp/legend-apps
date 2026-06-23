@@ -1,9 +1,8 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
-import { createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
+import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import {
   closeWindow,
   setWindowOptions,
-  WindowStyleMask,
 } from "@legend-desktop/window-manager";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
 import type { MarkdownSaveState } from "@legend-desktop/markdown-document";
@@ -32,29 +31,17 @@ function createMarkdownEditorWindowStyle({
   const displayThemeSetting = getMarkdownDisplayThemeSetting();
   const displayTheme = getLegendDisplayTheme(displayThemeSetting);
 
-  return {
+  return createDocumentWindowStyle({
     appearance: appearance ?? getLegendDisplayThemeAppearance(displayThemeSetting),
     backgroundColor: backgroundColor ?? displayTheme.colors.windowBackground,
-    ...(includeFrame
-      ? {
-          width: 900,
-          height: 700,
-          minWidth: 520,
-          minHeight: 420,
-        }
-      : null),
-    hasToolbar: false,
-    mask: [
-      WindowStyleMask.Titled,
-      WindowStyleMask.Closable,
-      WindowStyleMask.Miniaturizable,
-      WindowStyleMask.Resizable,
-      WindowStyleMask.FullSizeContentView,
-    ],
-    titlebarAppearsTransparent: true,
-    titlebarSeparatorStyle: "none" as const,
-    titleVisibility: "visible" as const,
-  };
+    frame: {
+      width: 900,
+      height: 700,
+      minWidth: 520,
+      minHeight: 420,
+    },
+    includeFrame,
+  });
 }
 
 const markdownWindowsConfig = {

@@ -1,0 +1,84 @@
+import { type WindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+
+type WindowStyle = NonNullable<WindowOptions["windowStyle"]>;
+
+type WindowFrame = {
+  height: number;
+  minHeight: number;
+  minWidth: number;
+  width: number;
+};
+
+type DocumentWindowStyleOptions = {
+  appearance?: WindowStyle["appearance"];
+  backgroundColor?: string;
+  frame: WindowFrame;
+  includeFrame: boolean;
+};
+
+type UnifiedToolbarWindowStyleOptions = DocumentWindowStyleOptions & {
+  miniaturizable?: boolean;
+};
+
+export function createDocumentWindowStyle({
+  appearance,
+  backgroundColor,
+  frame,
+  includeFrame,
+}: DocumentWindowStyleOptions): WindowStyle {
+  return {
+    appearance,
+    backgroundColor,
+    ...(includeFrame ? frame : null),
+    hasToolbar: false,
+    mask: [
+      WindowStyleMask.Titled,
+      WindowStyleMask.Closable,
+      WindowStyleMask.Miniaturizable,
+      WindowStyleMask.Resizable,
+      WindowStyleMask.FullSizeContentView,
+    ],
+    titlebarAppearsTransparent: true,
+    titlebarSeparatorStyle: "none",
+    titleVisibility: "visible",
+  };
+}
+
+export function createUnifiedToolbarWindowStyle({
+  appearance,
+  backgroundColor,
+  frame,
+  includeFrame,
+  miniaturizable = false,
+}: UnifiedToolbarWindowStyleOptions): WindowStyle {
+  return {
+    appearance,
+    backgroundColor,
+    ...(includeFrame ? frame : null),
+    hasToolbar: true,
+    mask: [
+      WindowStyleMask.Titled,
+      WindowStyleMask.Closable,
+      ...(miniaturizable ? [WindowStyleMask.Miniaturizable] : []),
+      WindowStyleMask.Resizable,
+      WindowStyleMask.FullSizeContentView,
+      WindowStyleMask.UnifiedTitleAndToolbar,
+    ],
+    titlebarAppearsTransparent: true,
+    titlebarSeparatorStyle: "none",
+    titleVisibility: "visible",
+    toolbarStyle: "unified",
+  };
+}
+
+export function createBorderlessOverlayWindowStyle(frame: WindowFrame): WindowStyle {
+  return {
+    ...frame,
+    mask: [
+      WindowStyleMask.Borderless,
+      WindowStyleMask.NonactivatingPanel,
+      WindowStyleMask.FullSizeContentView,
+    ],
+    titlebarAppearsTransparent: true,
+  };
+}
