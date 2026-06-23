@@ -7,6 +7,7 @@ import {
   type DiffRenderRow,
   type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
+import { watchDirectories } from "@legend-desktop/file-system-watcher";
 import {
   createSyntaxStyleMap,
   elapsedMs,
@@ -598,6 +599,35 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       });
     }
   }, [loadFolder, selectedSyntaxTheme, state]);
+
+  useEffect(() => {
+    if (!visibleFolderPath) {
+      return undefined;
+    }
+
+    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+    const subscription = watchDirectories([visibleFolderPath], () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(() => {
+        loadFolder(visibleFolderPath, selectedSyntaxTheme).catch((error: unknown) => {
+          setState((current) => ({
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+            folderPath: current.folderPath,
+          }));
+        });
+      }, 250);
+    });
+
+    return () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      subscription.remove();
+    };
+  }, [loadFolder, selectedSyntaxTheme, visibleFolderPath]);
 
   useEffect(() => {
     let frameHandle: number | null = null;

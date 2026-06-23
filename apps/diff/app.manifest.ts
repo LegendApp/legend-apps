@@ -20,6 +20,7 @@ const manifest = {
       "@legend-desktop/context-menu",
       "@legend-desktop/diff-parser",
       "@legend-desktop/file-dialog",
+      "@legend-desktop/file-system-watcher",
       "@legend-desktop/native-menu",
       "@legend-desktop/storage",
       "@legend-desktop/syntax-parser",

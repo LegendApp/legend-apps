@@ -20,6 +20,7 @@ const manifest = {
       "@legend-desktop/appkit-split-view",
       "@legend-desktop/context-menu",
       "@legend-desktop/file-dialog",
+      "@legend-desktop/file-system-watcher",
       "@legend-desktop/native-menu",
       "@legend-desktop/recent-documents",
       "@legend-desktop/storage",

@@ -84,6 +84,7 @@ export type MarkdownDocumentAdapter = {
 };
 
 export type MarkdownDocumentCommands = {
+  reload(): void;
   save(): Promise<void>;
   saveAs(filename: string): Promise<void>;
   undo(): void;

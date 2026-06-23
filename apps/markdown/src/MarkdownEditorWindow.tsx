@@ -2,6 +2,7 @@ import {
   MarkdownDocument,
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
+import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -102,6 +103,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
   );
+  const watchedFilePath = session.filename && !session.isUntitledDocument ? session.filename : null;
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
@@ -134,6 +136,35 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   useEffect(() => {
     applyMarkdownThemeSetting();
   }, []);
+
+  useEffect(() => {
+    if (!watchedFilePath) {
+      return undefined;
+    }
+
+    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+    const subscription = watchFiles([watchedFilePath], () => {
+      if (session.sessionState$.isDirty.peek()) {
+        return;
+      }
+
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(() => {
+        if (!session.sessionState$.isDirty.peek()) {
+          session.documentCommandsRef.current?.reload();
+        }
+      }, 100);
+    });
+
+    return () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      subscription.remove();
+    };
+  }, [session.documentCommandsRef, session.sessionState$, watchedFilePath]);
 
   useMarkdownStartupDocument({
     launchArguments,

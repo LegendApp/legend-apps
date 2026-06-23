@@ -1,4 +1,5 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
+import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
   createSyntaxStyleMap,
@@ -262,6 +263,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
   const loggedRowsVersionRef = useRef(-1);
+  const loadedFilePath = state.status === "loaded" ? state.filePath : null;
   const documentSnapshot = useMemo<SourceDocumentSnapshot | null>(
     () => state.status === "loaded"
       ? {
@@ -495,6 +497,29 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       loadFile(state.filePath, selectedSyntaxTheme);
     }
   }, [loadFile, selectedSyntaxTheme, state]);
+
+  useEffect(() => {
+    if (!loadedFilePath) {
+      return undefined;
+    }
+
+    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+    const subscription = watchFiles([loadedFilePath], () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(() => {
+        loadFile(loadedFilePath, selectedSyntaxTheme);
+      }, 100);
+    });
+
+    return () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      subscription.remove();
+    };
+  }, [loadFile, loadedFilePath, selectedSyntaxTheme]);
 
   useEffect(() => {
     setCodeViewerWindowOptions({

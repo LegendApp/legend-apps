@@ -9,6 +9,7 @@
     "@legend-desktop/document-app": "0.0.0",
     "@legend-desktop/design-system": "0.0.0",
     "@legend-desktop/file-dialog": "0.0.0",
+    "@legend-desktop/file-system-watcher": "0.0.0",
     "@legend-desktop/native-menu": "0.0.0",
     "@legend-desktop/recent-documents": "0.0.0",
     "@legend-desktop/settings-window": "0.0.0",

@@ -19,6 +19,7 @@ const manifest = {
       "@legend-desktop/app-exit",
       "@legend-desktop/appkit-split-view",
       "@legend-desktop/file-dialog",
+      "@legend-desktop/file-system-watcher",
       "@legend-desktop/keyboard-manager",
       "@legend-desktop/markdown-block-editor",
       "@legend-desktop/markdown-parser",

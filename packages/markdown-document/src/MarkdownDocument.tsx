@@ -441,6 +441,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const textSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const inactiveOverlayWidth$ = useObservable(contentMaxWidth - contentHorizontalPadding * 2);
     const [documentState, setDocumentState] = useState<DocumentState>({ status: "loading" });
+    const [reloadVersion, setReloadVersion] = useState(0);
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
     const onCommandStateChangeRef = useLatestRef(onCommandStateChange);
     const onErrorRef = useLatestRef(onError);
@@ -2044,6 +2045,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       autoFocusFirstBlock,
       documentRenderState$,
       filename,
+      reloadVersion,
       onDirtyChangeRef,
       onErrorRef,
       onLoadErrorRef,
@@ -2155,6 +2157,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       await saveDocument(saveFilename);
     }, [documentState.status, saveDocument]);
+
+    const reload = useCallback(() => {
+      setReloadVersion((version) => version + 1);
+    }, []);
 
     useEffect(() => {
       saveRef.current = save;
@@ -2408,6 +2414,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           focusAdjacentBlock("up");
         },
         redo,
+        reload,
         save,
         saveAs,
         commitAndBlurActiveBlock,
@@ -2463,6 +2470,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         formatCurrentBlockRange,
         moveActiveBlock,
         redo,
+        reload,
         runActiveInputCommand,
         save,
         saveAs,
