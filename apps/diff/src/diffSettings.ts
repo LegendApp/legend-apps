@@ -6,14 +6,17 @@ import {
   type BundledSyntaxThemeName,
   type SyntaxTheme,
 } from "@legend-desktop/syntax-parser";
+import { useValue } from "@legendapp/state/react";
 
 export type DiffSettingsFile = {
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
   syntaxTheme: BundledSyntaxThemeName;
+  viewMode?: DiffViewMode;
 };
 
 export type DiffFontFamilySetting = typeof diffFontFamilyOptions[number]["value"];
+export type DiffViewMode = typeof diffViewModeOptions[number]["value"];
 
 export const diffFontFamilyOptions = [
   { label: "Menlo", value: "Menlo" },
@@ -24,7 +27,13 @@ export const diffFontFamilyOptions = [
 ] as const;
 export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
+export const defaultDiffViewMode: DiffViewMode = "unified";
 export const diffFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+export const diffViewModeOptions = [
+  { label: "Unified", value: "unified" },
+  { label: "Fluid", value: "fluid" },
+  { label: "Blocks", value: "blocks" },
+] as const;
 
 function normalizeDiffFontSize(fontSize: unknown): number {
   return typeof fontSize === "number" && diffFontSizeOptions.includes(fontSize as typeof diffFontSizeOptions[number])
@@ -36,6 +45,12 @@ function normalizeDiffFontFamily(fontFamily: unknown): DiffFontFamilySetting {
   return typeof fontFamily === "string" && diffFontFamilyOptions.some((option) => option.value === fontFamily)
     ? fontFamily as DiffFontFamilySetting
     : defaultDiffFontFamily;
+}
+
+function normalizeDiffViewMode(viewMode: unknown): DiffViewMode {
+  return typeof viewMode === "string" && diffViewModeOptions.some((option) => option.value === viewMode)
+    ? viewMode as DiffViewMode
+    : defaultDiffViewMode;
 }
 
 const diffSettings = createObservableSettings({
@@ -53,12 +68,18 @@ const diffSettings = createObservableSettings({
       normalize: (syntaxTheme): BundledSyntaxThemeName =>
         isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : defaultSyntaxThemeName,
     },
+    viewMode: {
+      defaultValue: defaultDiffViewMode,
+      normalize: normalizeDiffViewMode,
+    },
   },
   filename: "settings",
 });
 const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
+const viewModeSetting = diffSettings.field("viewMode");
+const diffSettings$ = diffSettings.settings$;
 
 export function getDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
   return syntaxThemeSetting.get();
@@ -76,20 +97,29 @@ export function getDiffFontSizeSetting(): number {
   return fontSizeSetting.get();
 }
 
+export function getDiffViewModeSetting(): DiffViewMode {
+  return viewModeSetting.get();
+}
+
 export function useDiffFontFamilySetting(): DiffFontFamilySetting {
-  return fontFamilySetting.use();
+  return normalizeDiffFontFamily(useValue(diffSettings$.fontFamily));
 }
 
 export function useDiffFontSizeSetting(): number {
-  return fontSizeSetting.use();
+  return normalizeDiffFontSize(useValue(diffSettings$.fontSize));
 }
 
 export function useDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
-  return syntaxThemeSetting.use();
+  const syntaxTheme = useValue(diffSettings$.syntaxTheme);
+  return isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : defaultSyntaxThemeName;
 }
 
 export function useDiffSyntaxTheme(): SyntaxTheme {
   return getSyntaxTheme(useDiffSyntaxThemeSetting());
+}
+
+export function useDiffViewModeSetting(): DiffViewMode {
+  return normalizeDiffViewMode(useValue(diffSettings$.viewMode));
 }
 
 export function setDiffSyntaxThemeSetting(syntaxTheme: BundledSyntaxThemeName) {
@@ -102,4 +132,8 @@ export function setDiffFontFamilySetting(fontFamily: DiffFontFamilySetting) {
 
 export function setDiffFontSizeSetting(fontSize: number) {
   fontSizeSetting.set(fontSize);
+}
+
+export function setDiffViewModeSetting(viewMode: DiffViewMode) {
+  viewModeSetting.set(viewMode);
 }
