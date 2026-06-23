@@ -31,7 +31,6 @@ export const defaultDiffViewMode: DiffViewMode = "unified";
 export const diffFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
 export const diffViewModeOptions = [
   { label: "Unified", value: "unified" },
-  { label: "Fluid", value: "fluid" },
   { label: "Blocks", value: "blocks" },
 ] as const;
 

@@ -887,9 +887,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
     const lineCount = Math.max(1, segment.lines.length);
     const extraPadding = segment.kind === "change" ? diffSideBySideBlockVerticalPadding * 2 : 0;
-    const fluidGap = viewMode === "fluid" && segment.kind === "change" ? 8 : 0;
-    return lineCount * rowHeight + extraPadding + fluidGap;
-  }, [rowHeight, viewMode]);
+    return lineCount * rowHeight + extraPadding;
+  }, [rowHeight]);
 
   const renderSideBySideLine = useCallback(({
     line,
@@ -1009,7 +1008,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       }
 
       const isChange = segment.kind === "change";
-      const isFluid = viewMode === "fluid";
       const segmentPadding = isChange ? diffSideBySideBlockVerticalPadding : 0;
 
       return (
@@ -1032,13 +1030,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             }))}
           </View>
           <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
-            {isFluid && isChange ? (
-              <View style={styles.fluidConnector}>
-                <View style={styles.fluidConnectorLeft} />
-                <View style={styles.fluidConnectorBridge} />
-                <View style={styles.fluidConnectorRight} />
-              </View>
-            ) : null}
           </View>
           <View style={styles.sidePane}>
             {segment.lines.map((line, lineIndex) => renderSideBySideLine({
@@ -1482,33 +1473,6 @@ const styles = StyleSheet.create({
   sidePane: {
     flex: 1,
     minWidth: 0,
-  },
-  fluidConnector: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
-    minHeight: 22,
-    width: diffSideBySideGutterWidth,
-  },
-  fluidConnectorBridge: {
-    backgroundColor: "#3fb95066",
-    height: 6,
-    width: 16,
-  },
-  fluidConnectorLeft: {
-    backgroundColor: "#ff7b7266",
-    borderBottomLeftRadius: 6,
-    borderTopLeftRadius: 6,
-    height: "70%",
-    width: 10,
-  },
-  fluidConnectorRight: {
-    backgroundColor: "#7ee78766",
-    borderBottomRightRadius: 6,
-    borderTopRightRadius: 6,
-    height: "70%",
-    width: 10,
   },
   sidebar: {
     flex: 1,
