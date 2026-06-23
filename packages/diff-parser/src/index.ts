@@ -19,8 +19,7 @@ export type {
   DiffLoadTiming,
   DiffRenderRow,
   DiffSideBySideLine,
-  DiffSideBySideSegment,
-  DiffSideBySideSegmentMetric,
+  DiffSideBySideLineMetric,
   DiffSyntaxStyle,
   DiffSyntaxTokenRun,
 } from "./DiffParser.nitro";

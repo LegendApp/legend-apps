@@ -30,7 +30,7 @@
 
 
 
-
+#include <string>
 
 namespace margelo::nitro::legenddesktop::diffparser {
 
@@ -39,12 +39,18 @@ namespace margelo::nitro::legenddesktop::diffparser {
    */
   struct DiffSideBySideLine final {
   public:
+    double index     SWIFT_PRIVATE;
+    std::string kind     SWIFT_PRIVATE;
+    double fileIndex     SWIFT_PRIVATE;
+    double hunkIndex     SWIFT_PRIVATE;
+    double sourceStart     SWIFT_PRIVATE;
+    double sourceEnd     SWIFT_PRIVATE;
     double oldRowIndex     SWIFT_PRIVATE;
     double newRowIndex     SWIFT_PRIVATE;
 
   public:
     DiffSideBySideLine() = default;
-    explicit DiffSideBySideLine(double oldRowIndex, double newRowIndex): oldRowIndex(oldRowIndex), newRowIndex(newRowIndex) {}
+    explicit DiffSideBySideLine(double index, std::string kind, double fileIndex, double hunkIndex, double sourceStart, double sourceEnd, double oldRowIndex, double newRowIndex): index(index), kind(kind), fileIndex(fileIndex), hunkIndex(hunkIndex), sourceStart(sourceStart), sourceEnd(sourceEnd), oldRowIndex(oldRowIndex), newRowIndex(newRowIndex) {}
 
   public:
     friend bool operator==(const DiffSideBySideLine& lhs, const DiffSideBySideLine& rhs) = default;
@@ -60,12 +66,24 @@ namespace margelo::nitro {
     static inline margelo::nitro::legenddesktop::diffparser::DiffSideBySideLine fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
       return margelo::nitro::legenddesktop::diffparser::DiffSideBySideLine(
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "kind"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileIndex"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "hunkIndex"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceStart"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceEnd"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRowIndex"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRowIndex")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffSideBySideLine& arg) {
       jsi::Object obj(runtime);
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "kind"), JSIConverter<std::string>::toJSI(runtime, arg.kind));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "fileIndex"), JSIConverter<double>::toJSI(runtime, arg.fileIndex));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "hunkIndex"), JSIConverter<double>::toJSI(runtime, arg.hunkIndex));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceStart"), JSIConverter<double>::toJSI(runtime, arg.sourceStart));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceEnd"), JSIConverter<double>::toJSI(runtime, arg.sourceEnd));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "oldRowIndex"), JSIConverter<double>::toJSI(runtime, arg.oldRowIndex));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "newRowIndex"), JSIConverter<double>::toJSI(runtime, arg.newRowIndex));
       return obj;
@@ -78,6 +96,12 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index")))) return false;
+      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "kind")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileIndex")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "hunkIndex")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceStart")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceEnd")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRowIndex")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRowIndex")))) return false;
       return true;

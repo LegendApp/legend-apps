@@ -15,10 +15,10 @@
 
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
-// Forward declaration of `DiffSideBySideSegmentMetric` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideSegmentMetric; }
-// Forward declaration of `DiffSideBySideSegment` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideSegment; }
+// Forward declaration of `DiffSideBySideLineMetric` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideLineMetric; }
+// Forward declaration of `DiffSideBySideLine` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideLine; }
 // Forward declaration of `DiffFileSummary` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
 // Forward declaration of `DiffSyntaxStyle` to properly resolve imports.
@@ -28,8 +28,8 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 
 #include "DiffRenderRow.hpp"
 #include <vector>
-#include "DiffSideBySideSegmentMetric.hpp"
-#include "DiffSideBySideSegment.hpp"
+#include "DiffSideBySideLineMetric.hpp"
+#include "DiffSideBySideLine.hpp"
 #include "DiffFileSummary.hpp"
 #include "DiffSyntaxStyle.hpp"
 #include "DiffLoadTiming.hpp"
@@ -68,8 +68,8 @@ namespace margelo::nitro::legenddesktop::diffparser {
       // Methods
       virtual std::vector<DiffRenderRow> getPlainRows(double start, double count) = 0;
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
-      virtual std::vector<DiffSideBySideSegmentMetric> getSideBySideSegmentMetrics(const std::vector<double>& collapsedFileIndexes) = 0;
-      virtual std::vector<DiffSideBySideSegment> getSideBySideSegments(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual std::vector<DiffSideBySideLineMetric> getSideBySideLineMetrics(const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual std::vector<DiffSideBySideLine> getSideBySideLines(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
       virtual std::vector<DiffSyntaxStyle> getStyles() = 0;
       virtual DiffLoadTiming getTiming() = 0;

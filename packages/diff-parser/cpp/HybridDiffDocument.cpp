@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <fstream>
 #include "git2.h"
-#include <limits>
 #include <sstream>
 #include <unordered_set>
 
@@ -136,70 +135,73 @@ bool isRemoveRow(const DiffRenderRow& row) {
   return row.changeType == diffChangeTypeRemove;
 }
 
-DiffSideBySideSegment createSideBySideSegment(
+double getSideBySideSourceStart(double oldRowIndex, double newRowIndex, double fallbackIndex) {
+  if (oldRowIndex >= 0 && newRowIndex >= 0) {
+    return std::min(oldRowIndex, newRowIndex);
+  }
+  if (oldRowIndex >= 0) {
+    return oldRowIndex;
+  }
+  if (newRowIndex >= 0) {
+    return newRowIndex;
+  }
+  return fallbackIndex;
+}
+
+double getSideBySideSourceEnd(double oldRowIndex, double newRowIndex, double fallbackIndex) {
+  if (oldRowIndex >= 0 && newRowIndex >= 0) {
+    return std::max(oldRowIndex, newRowIndex) + 1;
+  }
+  if (oldRowIndex >= 0) {
+    return oldRowIndex + 1;
+  }
+  if (newRowIndex >= 0) {
+    return newRowIndex + 1;
+  }
+  return fallbackIndex + 1;
+}
+
+DiffSideBySideLine createSideBySideLine(
     double index,
     std::string kind,
     double fileIndex,
     double hunkIndex,
-    std::vector<DiffSideBySideLine> lines,
-    double sourceStart,
-    double sourceEnd) {
-  if (!lines.empty() && sourceStart < 0) {
-    double firstRowIndex = std::numeric_limits<double>::infinity();
-    double lastRowIndex = -std::numeric_limits<double>::infinity();
-    for (const auto& line : lines) {
-      for (const auto rowIndex : {line.oldRowIndex, line.newRowIndex}) {
-        if (rowIndex >= 0) {
-          firstRowIndex = std::min(firstRowIndex, rowIndex);
-          lastRowIndex = std::max(lastRowIndex, rowIndex);
-        }
-      }
-    }
-    if (firstRowIndex <= lastRowIndex) {
-      sourceStart = firstRowIndex;
-      sourceEnd = lastRowIndex + 1;
-    }
-  }
-
-  return DiffSideBySideSegment(
+    double oldRowIndex,
+    double newRowIndex) {
+  return DiffSideBySideLine(
       index,
       std::move(kind),
       fileIndex,
       hunkIndex,
-      sourceStart >= 0 ? sourceStart : index,
-      sourceEnd >= 0 ? sourceEnd : index + 1,
-      std::move(lines));
+      getSideBySideSourceStart(oldRowIndex, newRowIndex, index),
+      getSideBySideSourceEnd(oldRowIndex, newRowIndex, index),
+      oldRowIndex,
+      newRowIndex);
 }
 
-std::vector<DiffSideBySideSegment> createSideBySideSegments(const std::vector<DiffRenderRow>& rows) {
-  std::vector<DiffSideBySideSegment> segments;
+std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRenderRow>& rows) {
+  std::vector<DiffSideBySideLine> lines;
   std::vector<const DiffRenderRow*> contextRows;
   std::vector<const DiffRenderRow*> removedRows;
   std::vector<const DiffRenderRow*> addedRows;
   double currentFileIndex = -1;
   double currentHunkIndex = -1;
 
-  auto pushSegment = [&](DiffSideBySideSegment segment) {
-    segment.index = static_cast<double>(segments.size());
-    segments.push_back(std::move(segment));
+  auto pushLine = [&](std::string kind, double fileIndex, double hunkIndex, double oldRowIndex, double newRowIndex) {
+    lines.push_back(createSideBySideLine(
+        static_cast<double>(lines.size()),
+        std::move(kind),
+        fileIndex,
+        hunkIndex,
+        oldRowIndex,
+        newRowIndex));
   };
 
   auto flushContextRows = [&]() {
     if (!contextRows.empty()) {
-      std::vector<DiffSideBySideLine> lines;
-      lines.reserve(contextRows.size());
       for (const auto* row : contextRows) {
-        lines.emplace_back(row->index, row->index);
+        pushLine("context", row->fileIndex, row->hunkIndex, row->index, row->index);
       }
-      const auto* firstRow = contextRows.front();
-      pushSegment(createSideBySideSegment(
-          static_cast<double>(segments.size()),
-          "context",
-          firstRow->fileIndex,
-          firstRow->hunkIndex,
-          std::move(lines),
-          -1,
-          -1));
       contextRows.clear();
     }
   };
@@ -207,22 +209,15 @@ std::vector<DiffSideBySideSegment> createSideBySideSegments(const std::vector<Di
   auto flushChangedRows = [&]() {
     if (!removedRows.empty() || !addedRows.empty()) {
       const auto lineCount = std::max(removedRows.size(), addedRows.size());
-      std::vector<DiffSideBySideLine> lines;
-      lines.reserve(lineCount);
+      const auto* firstRow = !removedRows.empty() ? removedRows.front() : addedRows.front();
       for (size_t index = 0; index < lineCount; index += 1) {
-        lines.emplace_back(
+        pushLine(
+            "change",
+            firstRow->fileIndex,
+            firstRow->hunkIndex,
             index < removedRows.size() ? removedRows[index]->index : emptySideBySideRowIndex,
             index < addedRows.size() ? addedRows[index]->index : emptySideBySideRowIndex);
       }
-      const auto* firstRow = !removedRows.empty() ? removedRows.front() : addedRows.front();
-      pushSegment(createSideBySideSegment(
-          static_cast<double>(segments.size()),
-          "change",
-          firstRow->fileIndex,
-          firstRow->hunkIndex,
-          std::move(lines),
-          -1,
-          -1));
       removedRows.clear();
       addedRows.clear();
     }
@@ -238,14 +233,7 @@ std::vector<DiffSideBySideSegment> createSideBySideSegments(const std::vector<Di
       flushRows();
       currentFileIndex = row.fileIndex;
       currentHunkIndex = row.hunkIndex;
-      pushSegment(createSideBySideSegment(
-          static_cast<double>(segments.size()),
-          "file-header",
-          row.fileIndex,
-          row.hunkIndex,
-          {},
-          row.index,
-          row.index + 1));
+      pushLine("file-header", row.fileIndex, row.hunkIndex, row.index, row.index);
     } else {
       if (currentFileIndex != row.fileIndex || currentHunkIndex != row.hunkIndex) {
         flushRows();
@@ -270,18 +258,17 @@ std::vector<DiffSideBySideSegment> createSideBySideSegments(const std::vector<Di
   }
 
   flushRows();
-  return segments;
+  return lines;
 }
 
-DiffSideBySideSegmentMetric createSegmentMetric(const DiffSideBySideSegment& segment, double index) {
-  return DiffSideBySideSegmentMetric(
+DiffSideBySideLineMetric createLineMetric(const DiffSideBySideLine& line, double index) {
+  return DiffSideBySideLineMetric(
       index,
-      segment.kind,
-      segment.fileIndex,
-      segment.hunkIndex,
-      segment.sourceStart,
-      segment.sourceEnd,
-      static_cast<double>(segment.lines.size()));
+      line.kind,
+      line.fileIndex,
+      line.hunkIndex,
+      line.sourceStart,
+      line.sourceEnd);
 }
 
 std::unordered_set<int> createCollapsedFileIndexSet(const std::vector<double>& collapsedFileIndexes) {
@@ -295,10 +282,10 @@ std::unordered_set<int> createCollapsedFileIndexSet(const std::vector<double>& c
   return collapsedFileIndexSet;
 }
 
-bool shouldIncludeSideBySideSegment(
-    const DiffSideBySideSegment& segment,
+bool shouldIncludeSideBySideLine(
+    const DiffSideBySideLine& line,
     const std::unordered_set<int>& collapsedFileIndexes) {
-  return segment.kind == "file-header" || !collapsedFileIndexes.contains(static_cast<int>(segment.fileIndex));
+  return line.kind == "file-header" || !collapsedFileIndexes.contains(static_cast<int>(line.fileIndex));
 }
 
 } // namespace
@@ -322,7 +309,7 @@ HybridDiffDocument::HybridDiffDocument(
       theme_(std::move(theme)),
       syntaxState_(std::make_shared<DiffSyntaxState>()),
       timing_(timing) {
-  sideBySideSegments_ = createSideBySideSegments(rows_);
+  sideBySideLines_ = createSideBySideLines(rows_);
 }
 
 double HybridDiffDocument::getRowCount() {
@@ -364,20 +351,20 @@ std::vector<DiffRenderRow> HybridDiffDocument::getPlainRows(double start, double
   return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
 }
 
-std::vector<DiffSideBySideSegmentMetric> HybridDiffDocument::getSideBySideSegmentMetrics(const std::vector<double>& collapsedFileIndexes) {
+std::vector<DiffSideBySideLineMetric> HybridDiffDocument::getSideBySideLineMetrics(const std::vector<double>& collapsedFileIndexes) {
   std::lock_guard<std::mutex> lock(mutex_);
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
-  std::vector<DiffSideBySideSegmentMetric> metrics;
-  metrics.reserve(sideBySideSegments_.size());
-  for (const auto& segment : sideBySideSegments_) {
-    if (shouldIncludeSideBySideSegment(segment, collapsedFileIndexSet)) {
-      metrics.push_back(createSegmentMetric(segment, static_cast<double>(metrics.size())));
+  std::vector<DiffSideBySideLineMetric> metrics;
+  metrics.reserve(sideBySideLines_.size());
+  for (const auto& line : sideBySideLines_) {
+    if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
+      metrics.push_back(createLineMetric(line, static_cast<double>(metrics.size())));
     }
   }
   return metrics;
 }
 
-std::vector<DiffSideBySideSegment> HybridDiffDocument::getSideBySideSegments(
+std::vector<DiffSideBySideLine> HybridDiffDocument::getSideBySideLines(
     double start,
     double count,
     const std::vector<double>& collapsedFileIndexes) {
@@ -389,23 +376,23 @@ std::vector<DiffSideBySideSegment> HybridDiffDocument::getSideBySideSegments(
 
   std::lock_guard<std::mutex> lock(mutex_);
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
-  std::vector<DiffSideBySideSegment> segments;
-  segments.reserve(safeCount);
+  std::vector<DiffSideBySideLine> lines;
+  lines.reserve(safeCount);
   size_t logicalIndex = 0;
-  for (const auto& segment : sideBySideSegments_) {
-    if (shouldIncludeSideBySideSegment(segment, collapsedFileIndexSet)) {
-      if (logicalIndex >= safeStart && segments.size() < safeCount) {
-        auto nextSegment = segment;
-        nextSegment.index = static_cast<double>(logicalIndex);
-        segments.push_back(std::move(nextSegment));
+  for (const auto& line : sideBySideLines_) {
+    if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
+      if (logicalIndex >= safeStart && lines.size() < safeCount) {
+        auto nextLine = line;
+        nextLine.index = static_cast<double>(logicalIndex);
+        lines.push_back(std::move(nextLine));
       }
       logicalIndex += 1;
-      if (segments.size() >= safeCount) {
+      if (lines.size() >= safeCount) {
         break;
       }
     }
   }
-  return segments;
+  return lines;
 }
 
 std::vector<DiffFileSummary> HybridDiffDocument::getFiles() {
@@ -438,10 +425,9 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
   for (const auto& file : files_) {
     size += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();
   }
-  size += sideBySideSegments_.capacity() * sizeof(DiffSideBySideSegment);
-  for (const auto& segment : sideBySideSegments_) {
-    size += segment.kind.capacity();
-    size += segment.lines.capacity() * sizeof(DiffSideBySideLine);
+  size += sideBySideLines_.capacity() * sizeof(DiffSideBySideLine);
+  for (const auto& line : sideBySideLines_) {
+    size += line.kind.capacity();
   }
   for (const auto& sources : fileSources_) {
     size += sources.oldPath.capacity() + sources.newPath.capacity() + sources.status.capacity();
