@@ -15,6 +15,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("loadGitFolderDiff", &HybridDiffParserSpec::loadGitFolderDiff);
+      prototype.registerHybridMethod("loadUnifiedDiff", &HybridDiffParserSpec::loadUnifiedDiff);
     });
   }
 

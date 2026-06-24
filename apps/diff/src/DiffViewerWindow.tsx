@@ -1,6 +1,7 @@
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
 import {
   loadGitFolderDiff,
+  loadUnifiedDiff,
   type DiffDocument,
   type DiffFileSummary,
   type DiffLoadTiming,
@@ -38,10 +39,10 @@ import {
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowTitlebarControlPressedListener, addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
-import { getFilename, openDiffFolderDialog } from "./diffFiles";
+import { getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
   isDiffViewMode,
   setDiffViewModeSetting,
@@ -79,6 +80,7 @@ const diffSideBySideAdaptiveRender = {
 
 type DiffViewerWindowProps = {
   folderPath?: string;
+  source?: DiffOpenSource;
 };
 
 type DiffLoadTrace = {
@@ -223,11 +225,13 @@ type DiffViewerState =
     status: "empty";
     error: null;
     folderPath: null;
+    source: null;
   }
   | {
     status: "loaded";
     error: null;
     folderPath: string;
+    source: DiffOpenSource;
     document: DiffDocument;
     files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
@@ -239,12 +243,14 @@ type DiffViewerState =
     status: "error";
     error: string;
     folderPath: string | null;
+    source: DiffOpenSource | null;
   };
 
 const emptyState: DiffViewerState = {
   status: "empty",
   error: null,
   folderPath: null,
+  source: null,
 };
 
 function DiffSidebarFileRow({
@@ -394,7 +400,7 @@ function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number
   return files.length > 0 ? files[Math.max(0, Math.min(files.length - 1, high))].index : null;
 }
 
-export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
+export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
   const fontFamily = useDiffFontFamilySetting();
@@ -405,6 +411,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlInputError, setUrlInputError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const activeFileIndex$ = useObservable<number | null>(null);
@@ -439,7 +447,9 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   } | null>(null);
   const collapsedFileIndexListRef = useRef<number[]>([]);
   const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-  const visibleFolderPath = state.folderPath;
+  const visibleSource = state.source;
+  const visibleFolderPath = visibleSource?.kind === "folder" ? visibleSource.value : null;
+  const visibleSourceLabel = getDiffSourceLabel(visibleSource);
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
@@ -764,27 +774,37 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     });
   });
 
-  const loadFolder = useCallback(async (path: string, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => {
+  const loadSource = useCallback(async (nextSource: DiffOpenSource, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     const loadStartedAt = nowMs();
     const trace: DiffLoadTrace = {
       document: null,
-      folderPath: path,
+      folderPath: nextSource.value,
       loadStartedAt,
       nativeResolvedAt: loadStartedAt,
       setStateAt: loadStartedAt,
     };
     loadTraceRef.current = trace;
     logDiffOpenTiming("viewer.load.start", {
-      path,
+      source: nextSource,
       requestId,
       syntaxTheme: syntaxThemeName,
     });
 
     try {
       const nativeStartedAt = nowMs();
-      const result = await loadGitFolderDiff(path, syntaxThemeName, diffInitialRowCount);
+      let result;
+      if (nextSource.kind === "github") {
+        const response = await fetch(nextSource.diffUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch GitHub diff (${response.status})`);
+        }
+        const diffText = await response.text();
+        result = await loadUnifiedDiff(diffText, nextSource.label, syntaxThemeName, diffInitialRowCount);
+      } else {
+        result = await loadGitFolderDiff(nextSource.value, syntaxThemeName, diffInitialRowCount);
+      }
       const nativeResolvedAt = nowMs();
       trace.document = result.document;
       trace.nativeResolvedAt = nativeResolvedAt;
@@ -798,14 +818,15 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         styles: result.styles.length,
         unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
       });
-      logDiffLoadTiming(path, result.timing);
-      noteRecentDocument(path);
+      logDiffLoadTiming(nextSource.value, result.timing);
+      noteRecentDocument(nextSource.value);
       if (loadRequestIdRef.current === requestId) {
         trace.setStateAt = nowMs();
         setState({
           status: "loaded",
           error: null,
-          folderPath: path,
+          folderPath: nextSource.value,
+          source: nextSource,
           document: result.document,
           files: result.files,
           initialRows: result.initialRows,
@@ -829,7 +850,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         setState({
           status: "error",
           error: error instanceof Error ? error.message : String(error),
-          folderPath: path,
+          folderPath: nextSource.value,
+          source: nextSource,
         });
         logDiffOpenTiming("viewer.load.error", {
           error: error instanceof Error ? error.message : String(error),
@@ -840,14 +862,15 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   }, []);
 
   useEffect(() => {
-    if (folderPath) {
-      logDiffOpenTiming("viewer.launchFolder.effect", {
-        folderPath,
+    const initialSource = normalizeDiffOpenSource(source ?? folderPath);
+    if (initialSource) {
+      logDiffOpenTiming("viewer.launchSource.effect", {
+        source: initialSource,
         selectedSyntaxTheme,
       });
-      loadFolder(folderPath, selectedSyntaxTheme);
+      loadSource(initialSource, selectedSyntaxTheme);
     }
-  }, [folderPath, loadFolder, selectedSyntaxTheme]);
+  }, [folderPath, loadSource, selectedSyntaxTheme, source]);
 
   const openFolder = useCallback(async () => {
     try {
@@ -861,16 +884,30 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         path,
       });
       if (path) {
-        await loadFolder(path, selectedSyntaxTheme);
+        const nextSource = normalizeDiffOpenSource(path);
+        if (nextSource) {
+          await loadSource(nextSource, selectedSyntaxTheme);
+        }
       }
     } catch (error) {
       setState((current) => ({
         status: "error",
         error: error instanceof Error ? error.message : String(error),
         folderPath: current.folderPath,
+        source: current.source,
       }));
     }
-  }, [loadFolder, selectedSyntaxTheme, state.folderPath]);
+  }, [loadSource, selectedSyntaxTheme, state.folderPath]);
+
+  const openUrl = useCallback(async () => {
+    const nextSource = normalizeDiffOpenSource(urlInput);
+    if (nextSource?.kind === "github") {
+      setUrlInputError(null);
+      await loadSource(nextSource, selectedSyntaxTheme);
+    } else {
+      setUrlInputError("Enter a GitHub PR or commit URL.");
+    }
+  }, [loadSource, selectedSyntaxTheme, urlInput]);
 
   useEffect(() => {
     const trace = loadTraceRef.current;
@@ -896,15 +933,16 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   useEffect(() => {
     if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
-      loadFolder(state.folderPath, selectedSyntaxTheme).catch((error: unknown) => {
+      loadSource(state.source, selectedSyntaxTheme).catch((error: unknown) => {
         setState((current) => ({
           status: "error",
           error: error instanceof Error ? error.message : String(error),
           folderPath: current.folderPath,
+          source: current.source,
         }));
       });
     }
-  }, [loadFolder, selectedSyntaxTheme, state]);
+  }, [loadSource, selectedSyntaxTheme, state]);
 
   useEffect(() => {
     if (!visibleFolderPath) {
@@ -917,11 +955,12 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         clearTimeout(reloadTimeout);
       }
       reloadTimeout = setTimeout(() => {
-        loadFolder(visibleFolderPath, selectedSyntaxTheme).catch((error: unknown) => {
+        loadSource({ kind: "folder", label: getDiffSourceLabel(visibleSource), value: visibleFolderPath }, selectedSyntaxTheme).catch((error: unknown) => {
           setState((current) => ({
             status: "error",
             error: error instanceof Error ? error.message : String(error),
             folderPath: current.folderPath,
+            source: current.source,
           }));
         });
       }, 250);
@@ -933,22 +972,23 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       }
       subscription.remove();
     };
-  }, [loadFolder, selectedSyntaxTheme, visibleFolderPath]);
+  }, [loadSource, selectedSyntaxTheme, visibleFolderPath, visibleSource]);
 
-  const reloadCurrentFolder = useCallback(() => {
+  const reloadCurrentSource = useCallback(() => {
     if (state.status !== "loaded") {
       return false;
     }
 
-    loadFolder(state.folderPath, selectedSyntaxTheme).catch((error: unknown) => {
+    loadSource(state.source, selectedSyntaxTheme).catch((error: unknown) => {
       setState((current) => ({
         status: "error",
         error: error instanceof Error ? error.message : String(error),
         folderPath: current.folderPath,
+        source: current.source,
       }));
     });
     return true;
-  }, [loadFolder, selectedSyntaxTheme, state]);
+  }, [loadSource, selectedSyntaxTheme, state]);
 
   const revealCurrentFolder = useCallback(() => {
     if (!visibleFolderPath) {
@@ -977,7 +1017,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       setDiffViewerWindowOptions({
         appearance: syntaxTheme.appearance,
         backgroundColor: syntaxTheme.background,
-        folderPath: state.folderPath,
+        source: state.source,
         showSidebarControl,
         showViewModeToolbar,
         sidebarCollapsed,
@@ -985,7 +1025,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       })
         .then(() => {
           logDiffOpenTiming("viewer.windowOptions.finish", {
-            folderPath: state.folderPath,
+            source: state.source,
             setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
           });
         })
@@ -1015,7 +1055,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         clearTimeout(timeoutHandle);
       }
     };
-  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.folderPath, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
+  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.source, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
 
   const toggleSidebar = useCallback(() => {
     if (!showSidebarControl) {
@@ -1027,10 +1067,10 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   }, [showSidebarControl]);
 
   useEffect(() => registerDiffViewerActionHandlers({
-    reload: reloadCurrentFolder,
+    reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
     toggleSidebar,
-  }), [reloadCurrentFolder, revealCurrentFolder, toggleSidebar]);
+  }), [reloadCurrentSource, revealCurrentFolder, toggleSidebar]);
 
   useEffect(() => {
     updateMenuItems(diffMenuOwnerId, [
@@ -1495,7 +1535,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
               No changes
             </Text>
             <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
-              {visibleFolderPath ?? "The selected folder has no changes."}
+              {visibleSourceLabel}
             </Text>
           </View>
         );
@@ -1509,6 +1549,52 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           <Text style={[styles.emptyText, { color: mutedColor }]}>
             Open a Git folder to view its changes.
           </Text>
+          <View style={styles.emptyUrlForm}>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={(text) => {
+                setUrlInput(text);
+                if (urlInputError) {
+                  setUrlInputError(null);
+                }
+              }}
+              onSubmitEditing={openUrl}
+              placeholder="GitHub PR or commit URL"
+              placeholderTextColor={mutedColor}
+              returnKeyType="go"
+              style={[
+                styles.emptyUrlInput,
+                {
+                  borderColor: displayTheme.colors.border,
+                  color: foregroundColor,
+                },
+              ]}
+              value={urlInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              disabled={!urlInput.trim()}
+              onPress={openUrl}
+              style={({ pressed }) => [
+                styles.emptyButton,
+                styles.emptyUrlButton,
+                {
+                  borderColor: displayTheme.colors.border,
+                  opacity: !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
+                Open URL
+              </Text>
+            </Pressable>
+          </View>
+          {urlInputError ? (
+            <Text style={[styles.emptyValidationText, { color: displayTheme.colors.danger }]}>
+              {urlInputError}
+            </Text>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             onPress={openFolder}
@@ -1582,7 +1668,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
 
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -1625,6 +1711,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     lineHeight: 24,
+  },
+  emptyUrlForm: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    maxWidth: 560,
+    width: "100%",
+  },
+  emptyUrlInput: {
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    flex: 1,
+    fontSize: 13,
+    height: 34,
+    lineHeight: 18,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  emptyUrlButton: {
+    marginTop: 0,
+  },
+  emptyValidationText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   error: {
     fontSize: 13,

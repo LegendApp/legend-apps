@@ -7,7 +7,7 @@ import {
   diffViewerWindowIdentifier,
   diffViewerWindowModuleName,
 } from "./appConstants";
-import { getFilename } from "./diffFiles";
+import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { SettingsWindow } from "./SettingsWindow";
 
@@ -111,21 +111,22 @@ function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
 }
 
-export function openDiffViewerWindow(folderPath?: string | null) {
+export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null) {
+  const source = normalizeDiffOpenSource(sourceInput);
   const startedAt = nowMs();
   logDiffOpenTiming("window.open.start", {
-    folderPath,
+    source,
   });
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
-    initialProperties: folderPath ? { folderPath } : undefined,
-    representedURL: folderPath,
-    title: folderPath ? getFilename(folderPath) : "Legend Diff",
+    initialProperties: source ? { source } : undefined,
+    representedURL: source?.value,
+    title: getDiffSourceLabel(source),
     transparentBackground: true,
     windowStyle: createDiffViewerWindowStyle({ includeFrame: true, showViewModeToolbar: false }),
   }).then((result) => {
     logDiffOpenTiming("window.open.finish", {
-      folderPath,
+      source,
       windowOpenMs: Number((nowMs() - startedAt).toFixed(1)),
     });
     return result;
@@ -143,7 +144,7 @@ export function openDiffSettingsWindow() {
 export function setDiffViewerWindowOptions({
   appearance,
   backgroundColor,
-  folderPath,
+  source,
   showSidebarControl,
   showViewModeToolbar,
   sidebarCollapsed,
@@ -151,7 +152,7 @@ export function setDiffViewerWindowOptions({
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
-  folderPath: string | null;
+  source: DiffOpenSource | null;
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
@@ -159,8 +160,8 @@ export function setDiffViewerWindowOptions({
 }) {
   const startedAt = nowMs();
   return setWindowOptions(diffViewerWindowIdentifier, {
-    representedURL: folderPath,
-    title: folderPath ? getFilename(folderPath) : "Legend Diff",
+    representedURL: source?.value,
+    title: getDiffSourceLabel(source),
     windowStyle: createDiffViewerWindowStyle({
       appearance,
       includeFrame: false,
@@ -171,7 +172,7 @@ export function setDiffViewerWindowOptions({
     }),
   }).then((result) => {
     logDiffOpenTiming("window.options.finish", {
-      folderPath,
+      source,
       setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
     });
     return result;

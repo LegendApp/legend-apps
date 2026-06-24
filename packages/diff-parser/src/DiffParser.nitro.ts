@@ -111,4 +111,5 @@ export interface DiffParser
     ios: "c++";
   }> {
   loadGitFolderDiff(folderPath: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadUnifiedDiff(diffText: string, sourceLabel: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
 }

@@ -12,6 +12,10 @@ export function loadGitFolderDiff(folderPath: string, theme = "github-dark", ini
   return getDiffParser().loadGitFolderDiff(folderPath, theme, initialRowCount);
 }
 
+export function loadUnifiedDiff(diffText: string, sourceLabel: string, theme = "github-dark", initialRowCount = 200) {
+  return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, theme, initialRowCount);
+}
+
 export type {
   DiffDocument,
   DiffFileSummary,

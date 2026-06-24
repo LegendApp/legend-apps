@@ -12,6 +12,11 @@ public:
       const std::string& folderPath,
       const std::string& theme,
       double initialRowCount) override;
+  std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(
+      const std::string& diffText,
+      const std::string& sourceLabel,
+      const std::string& theme,
+      double initialRowCount) override;
 };
 
 } // namespace margelo::nitro::legenddesktop::diffparser

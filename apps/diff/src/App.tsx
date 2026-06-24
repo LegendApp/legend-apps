@@ -2,7 +2,7 @@ import { useDocumentAppController, type DocumentAppController } from "@legend-de
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
-import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
+import { getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { setDiffViewModeSetting } from "./diffSettings";
 import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
@@ -55,7 +55,7 @@ async function openDiffViewerForSelectedFolder(controller: DocumentAppController
 
   if (folderPath) {
     const windowStartedAt = nowMs();
-    await openDiffViewerWindow(folderPath);
+    await openDiffViewerWindow(normalizeDiffOpenSource(folderPath));
     controller.setDocumentWindowOpen(true);
     logDiffOpenTiming("menu.window.opened", {
       folderPath,
@@ -90,21 +90,21 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
 }
 
 async function openRecentDiffFolder(path: string, controller: DocumentAppController) {
-  await openDiffViewerWindow(path);
+  await openDiffViewerWindow(normalizeDiffOpenSource(path));
   controller.setDocumentWindowOpen(true);
 }
 
 async function openInitialDiffViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
-  const folderPath = getLaunchDiffFolder(launchArguments);
+  const source = getLaunchDiffSource(launchArguments);
   const startedAt = nowMs();
   logDiffOpenTiming("launch.open.start", {
-    folderPath,
+    source,
     launchArgumentCount: launchArguments?.length ?? 0,
   });
-  await openDiffViewerWindow(folderPath);
+  await openDiffViewerWindow(source);
   controller.setDocumentWindowOpen(true);
   logDiffOpenTiming("launch.open.finish", {
-    folderPath,
+    source,
     windowOpenMs: elapsedMs(startedAt),
   });
 }
