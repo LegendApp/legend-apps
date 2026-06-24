@@ -322,6 +322,7 @@ function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
     copyFilesMs: Number(timing.copyFilesMs.toFixed(1)),
     copyInitialRowsMs: Number(timing.copyInitialRowsMs.toFixed(1)),
     createDiffMs: Number(timing.createDiffMs.toFixed(1)),
+    diffMs: Number(timing.diffMs.toFixed(1)),
     documentMs: Number(timing.documentMs.toFixed(1)),
     fileCount: timing.fileCount,
     folderPath,
@@ -493,27 +494,52 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const showViewModeToolbar = state.status === "loaded" && state.files.length > 0;
   const showSidebarControl = showViewModeToolbar;
   const fileByIndex = useMemo(() => {
+    const startedAt = nowMs();
     if (state.status !== "loaded") {
       return new Map<number, DiffFileSummary>();
     }
-    return new Map(state.files.map((file) => [file.index, file]));
+    const map = new Map(state.files.map((file) => [file.index, file]));
+    logDiffOpenTiming("viewer.derive.fileByIndex", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      files: state.files.length,
+      rows: state.document.rowCount,
+    });
+    return map;
   }, [state]);
   const fileByRowStart = useMemo(() => {
+    const startedAt = nowMs();
     if (state.status !== "loaded") {
       return new Map<number, DiffFileSummary>();
     }
-    return new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
+    const map = new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
+    logDiffOpenTiming("viewer.derive.fileByRowStart", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      files: state.files.length,
+      rows: state.document.rowCount,
+    });
+    return map;
   }, [state]);
   const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
-    () => state.status === "loaded"
-      ? {
+    () => {
+      const startedAt = nowMs();
+      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
+      if (state.status === "loaded") {
+        nextSnapshot = {
           document: state.document,
           initialRows: state.initialRows,
           itemCount: state.document.rowCount,
           styles: state.styles,
           timing: state.timing,
-        }
-      : null,
+        };
+        logDiffOpenTiming("viewer.derive.snapshot", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          initialRows: state.initialRows.length,
+          rows: state.document.rowCount,
+          styles: state.styles.length,
+        });
+      }
+      return nextSnapshot;
+    },
     [state],
   );
   const listExtraData = useMemo(
@@ -601,32 +627,62 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     }
   }, [bumpSideBySideRowVersion, refreshSideBySideTokenStyles]);
   const fileHeaderRowIndexes = useMemo(() => {
+    const startedAt = nowMs();
     if (state.status !== "loaded") {
       return new Set<number>();
     }
-    return new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
+    const indexes = new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
+    logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      files: state.files.length,
+      rows: state.document.rowCount,
+    });
+    return indexes;
   }, [state]);
   const visibleItemIndexes = useMemo(
-    () => state.status === "loaded" && collapsedFileIndexes.size > 0
-      ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
-      : diffRows.itemIndexes,
+    () => {
+      const startedAt = nowMs();
+      const indexes = state.status === "loaded" && collapsedFileIndexes.size > 0
+        ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
+        : diffRows.itemIndexes;
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.visibleItemIndexes", {
+          collapsedFiles: collapsedFileIndexes.size,
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          items: indexes.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
     [collapsedFileIndexes, diffRows.itemIndexes, state],
   );
   const visibleListIndexByRowIndex = useMemo(() => {
-    if (collapsedFileIndexes.size === 0) {
-      return null;
+    const startedAt = nowMs();
+    let indexes: Map<number, number> | null = null;
+    if (collapsedFileIndexes.size > 0) {
+      indexes = new Map<number, number>();
+      visibleItemIndexes.forEach((rowIndex, listIndex) => {
+        indexes?.set(rowIndex ?? listIndex, listIndex);
+      });
     }
-
-    const indexes = new Map<number, number>();
-    visibleItemIndexes.forEach((rowIndex, listIndex) => {
-      indexes.set(rowIndex ?? listIndex, listIndex);
-    });
+    if (state.status === "loaded") {
+      logDiffOpenTiming("viewer.derive.visibleListIndexByRowIndex", {
+        collapsedFiles: collapsedFileIndexes.size,
+        durationMs: Number((nowMs() - startedAt).toFixed(1)),
+        eagerMap: indexes !== null,
+        items: visibleItemIndexes.length,
+        rows: state.document.rowCount,
+      });
+    }
     return indexes;
-  }, [collapsedFileIndexes, visibleItemIndexes]);
+  }, [collapsedFileIndexes, state, visibleItemIndexes]);
   const getVisibleListIndex = useCallback((rowIndex: number) => (
     visibleListIndexByRowIndex
       ? visibleListIndexByRowIndex.get(rowIndex)
-      : rowIndex >= 0 && rowIndex < visibleItemIndexes.length ? rowIndex : undefined
+      : rowIndex >= 0 && rowIndex < visibleItemIndexes.length
+        ? rowIndex
+        : undefined
   ), [visibleItemIndexes.length, visibleListIndexByRowIndex]);
   const collapsedFileIndexList = useMemo(
     () => Array.from(collapsedFileIndexes).sort((left, right) => left - right),
@@ -634,34 +690,90 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   );
   collapsedFileIndexListRef.current = collapsedFileIndexList;
   const sideBySideRowCount = useMemo(
-    () => state.status === "loaded" && viewMode !== "unified"
-      ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
-      : 0,
+    () => {
+      const startedAt = nowMs();
+      const count = state.status === "loaded" && viewMode !== "unified"
+        ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
+        : 0;
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideRowCount", {
+          collapsedFiles: collapsedFileIndexList.length,
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          rows: state.document.rowCount,
+          sideBySideRows: count,
+          viewMode,
+        });
+      }
+      return count;
+    },
     [collapsedFileIndexList, state, viewMode],
   );
   const sideBySideItemIndexes = useMemo(
-    () => createIdentityDiffRowIndexes(sideBySideRowCount),
-    [sideBySideRowCount],
+    () => {
+      const startedAt = nowMs();
+      const indexes = createIdentityDiffRowIndexes(sideBySideRowCount);
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          items: indexes.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
+    [sideBySideRowCount, state],
   );
   const sideBySideFileHeaders = useMemo(
-    () => state.status === "loaded" && viewMode !== "unified"
-      ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
-      : [],
+    () => {
+      const startedAt = nowMs();
+      const headers = state.status === "loaded" && viewMode !== "unified"
+        ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
+        : [];
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", {
+          collapsedFiles: collapsedFileIndexList.length,
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          files: headers.length,
+          rows: state.document.rowCount,
+          viewMode,
+        });
+      }
+      return headers;
+    },
     [collapsedFileIndexList, state, viewMode],
   );
   const sideBySideFileHeaderIndexes = useMemo(
-    () => new Set(sideBySideFileHeaders.map((header) => header.listIndex)),
-    [sideBySideFileHeaders],
+    () => {
+      const startedAt = nowMs();
+      const indexes = new Set(sideBySideFileHeaders.map((header) => header.listIndex));
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          files: sideBySideFileHeaders.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
+    [sideBySideFileHeaders, state],
   );
   const sideBySideListIndexByRowIndex = useMemo(
     () => {
+      const startedAt = nowMs();
       const indexes = new Map<number, number>();
       sideBySideFileHeaders.forEach((header) => {
         indexes.set(header.sourceStart, header.listIndex);
       });
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          files: sideBySideFileHeaders.length,
+          rows: state.document.rowCount,
+        });
+      }
       return indexes;
     },
-    [sideBySideFileHeaders],
+    [sideBySideFileHeaders, state],
   );
   const clearHighlightTimeouts = useCallback(() => {
     for (const timeoutHandle of highlightTimeoutHandlesRef.current) {
@@ -843,14 +955,73 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       const nativeStartedAt = nowMs();
       let result;
       if (nextSource.kind === "github") {
+        const fetchStartedAt = nowMs();
+        logDiffOpenTiming("viewer.fetch.start", {
+          diffUrl: nextSource.diffUrl,
+          requestId,
+        });
         const response = await fetch(nextSource.diffUrl);
+        const responseAt = nowMs();
+        logDiffOpenTiming("viewer.fetch.response", {
+          contentLength: response.headers.get("content-length"),
+          contentType: response.headers.get("content-type"),
+          diffUrl: nextSource.diffUrl,
+          redirected: response.redirected,
+          requestId,
+          responseMs: Number((responseAt - fetchStartedAt).toFixed(1)),
+          responseUrl: response.url,
+          status: response.status,
+        });
         if (!response.ok) {
           throw new Error(`Failed to fetch GitHub diff (${response.status})`);
         }
+        const bodyStartedAt = nowMs();
         const diffText = await response.text();
+        const bodyFinishedAt = nowMs();
+        logDiffOpenTiming("viewer.fetch.body", {
+          bodyMs: Number((bodyFinishedAt - bodyStartedAt).toFixed(1)),
+          charCount: diffText.length,
+          diffUrl: nextSource.diffUrl,
+          requestId,
+          totalFetchMs: Number((bodyFinishedAt - fetchStartedAt).toFixed(1)),
+        });
+        const parseStartedAt = nowMs();
+        logDiffOpenTiming("viewer.native.start", {
+          charCount: diffText.length,
+          initialRowCount: diffInitialRowCount,
+          requestId,
+          sourceLabel: nextSource.label,
+          sourceKind: nextSource.kind,
+        });
         result = await loadUnifiedDiff(diffText, nextSource.label, syntaxThemeName, diffInitialRowCount);
+        logDiffOpenTiming("viewer.native.finish", {
+          files: result.files.length,
+          initialRows: result.initialRows.length,
+          nativeAwaitMs: Number((nowMs() - parseStartedAt).toFixed(1)),
+          nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+          requestId,
+          rows: result.document.rowCount,
+          sourceKind: nextSource.kind,
+          styles: result.styles.length,
+        });
       } else {
+        logDiffOpenTiming("viewer.native.start", {
+          folderPath: nextSource.value,
+          initialRowCount: diffInitialRowCount,
+          requestId,
+          sourceKind: nextSource.kind,
+        });
         result = await loadGitFolderDiff(nextSource.value, syntaxThemeName, diffInitialRowCount);
+        logDiffOpenTiming("viewer.native.finish", {
+          files: result.files.length,
+          initialRows: result.initialRows.length,
+          nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
+          nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+          requestId,
+          rows: result.document.rowCount,
+          sourceKind: nextSource.kind,
+          styles: result.styles.length,
+        });
       }
       const nativeResolvedAt = nowMs();
       trace.document = result.document;
@@ -866,10 +1037,15 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
       });
       logDiffLoadTiming(nextSource.value, result.timing);
+      const recentStartedAt = nowMs();
       noteRecentDocument(nextSource.value);
+      logDiffOpenTiming("viewer.recentDocument.noted", {
+        durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
+        requestId,
+      });
       if (loadRequestIdRef.current === requestId) {
-        trace.setStateAt = nowMs();
-        setState({
+        const statePayloadStartedAt = nowMs();
+        const nextLoadedState: DiffViewerState = {
           status: "loaded",
           error: null,
           folderPath: nextSource.value,
@@ -880,10 +1056,14 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           styles: result.styles,
           syntaxTheme: syntaxThemeName,
           timing: result.timing,
-        });
+        };
+        const statePayloadFinishedAt = nowMs();
+        trace.setStateAt = statePayloadFinishedAt;
+        setState(nextLoadedState);
         logDiffOpenTiming("viewer.load.setLoaded", {
           requestId,
-          setStateMs: Number((nowMs() - trace.setStateAt).toFixed(1)),
+          statePayloadMs: Number((statePayloadFinishedAt - statePayloadStartedAt).toFixed(1)),
+          setStateCallMs: Number((nowMs() - trace.setStateAt).toFixed(1)),
         });
       } else {
         logDiffOpenTiming("viewer.load.stale", {
