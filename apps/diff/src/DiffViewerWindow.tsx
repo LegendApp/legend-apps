@@ -607,12 +607,21 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     [collapsedFileIndexes, diffRows.itemIndexes, state],
   );
   const visibleListIndexByRowIndex = useMemo(() => {
+    if (collapsedFileIndexes.size === 0) {
+      return null;
+    }
+
     const indexes = new Map<number, number>();
     visibleItemIndexes.forEach((rowIndex, listIndex) => {
       indexes.set(rowIndex, listIndex);
     });
     return indexes;
-  }, [visibleItemIndexes]);
+  }, [collapsedFileIndexes, visibleItemIndexes]);
+  const getVisibleListIndex = useCallback((rowIndex: number) => (
+    visibleListIndexByRowIndex
+      ? visibleListIndexByRowIndex.get(rowIndex)
+      : rowIndex >= 0 && rowIndex < visibleItemIndexes.length ? rowIndex : undefined
+  ), [visibleItemIndexes.length, visibleListIndexByRowIndex]);
   const collapsedFileIndexList = useMemo(
     () => Array.from(collapsedFileIndexes).sort((left, right) => left - right),
     [collapsedFileIndexes],
@@ -1167,7 +1176,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
     const listIndex = viewMode === "unified"
-      ? visibleListIndexByRowIndex.get(rowStart)
+      ? getVisibleListIndex(rowStart)
       : sideBySideListIndexByRowIndex.get(rowStart);
     if (listIndex !== undefined) {
       listRef.current?.scrollToIndex({
@@ -1178,7 +1187,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         console.error(error instanceof Error ? error.message : String(error));
       });
     }
-  }, [sideBySideListIndexByRowIndex, viewMode, visibleListIndexByRowIndex]);
+  }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
 
   const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
     const directory = getDirectoryPath(file.path);
