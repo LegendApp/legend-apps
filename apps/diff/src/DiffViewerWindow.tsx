@@ -469,6 +469,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     document: DiffDocument;
     start: number;
   } | null>(null);
+  const isRenderingInitialLoadedFrame = state.status === "loaded" && sourcesMatch(loadingSource, state.source);
   const sideBySideScrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sideBySideScrollingRef = useRef(false);
   const pendingSideBySideTokenRangesRef = useRef<{
@@ -1683,7 +1684,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       );
     })();
 
-      if (state.status === "loaded" && activeItemIndexes.length > 0) {
+      if (state.status === "loaded" && activeItemIndexes.length > 0 && !isRenderingInitialLoadedFrame) {
         const sidebar = (
         <View
           style={[
@@ -1725,7 +1726,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     }
 
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
