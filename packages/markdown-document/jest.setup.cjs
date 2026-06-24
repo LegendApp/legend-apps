@@ -37,7 +37,7 @@ jest.mock("@legendapp/list/react-native", () => {
   const React = require("react");
   const { View } = require("react-native");
   const clearCaches = jest.fn();
-  const updateItemSize = jest.fn();
+  const setItemSize = jest.fn();
   const getComponent = (Component) => (
     React.isValidElement(Component) ? Component : React.createElement(Component)
   );
@@ -45,7 +45,7 @@ jest.mock("@legendapp/list/react-native", () => {
   return {
     __legendListTestHooks: {
       clearCaches,
-      updateItemSize,
+      setItemSize,
     },
     LegendList: React.forwardRef(function LegendList({
       data,
@@ -68,7 +68,7 @@ jest.mock("@legendapp/list/react-native", () => {
         }),
         scrollToIndex: jest.fn(async () => undefined),
         scrollToOffset: jest.fn(async () => undefined),
-        updateItemSize,
+        setItemSize,
       }), [data]);
 
       React.useEffect(() => {

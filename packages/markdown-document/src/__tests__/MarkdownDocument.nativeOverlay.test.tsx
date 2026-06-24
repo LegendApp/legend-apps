@@ -15,7 +15,7 @@ import type {
 
 const { __legendListTestHooks } = jest.requireMock("@legendapp/list/react-native") as {
   __legendListTestHooks: {
-    updateItemSize: jest.Mock;
+    setItemSize: jest.Mock;
   };
 };
 
@@ -359,7 +359,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    __legendListTestHooks.updateItemSize.mockClear();
+    __legendListTestHooks.setItemSize.mockClear();
     await changeText(editorInput(renderer!), "## Heading");
 
     expect(adapter.applyTransactions).toEqual([
@@ -370,7 +370,7 @@ describe("MarkdownDocument native editor overlay", () => {
       },
     ]);
     expect(nativeHost(renderer!).props.activeMarkdown).toBe("## Heading");
-    expect(__legendListTestHooks.updateItemSize).not.toHaveBeenCalled();
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 
     await act(async () => {
       nativeHost(renderer!).props.onEditorFrameChange({
@@ -384,7 +384,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(__legendListTestHooks.updateItemSize).toHaveBeenCalledWith("d1:b0", {
+    expect(__legendListTestHooks.setItemSize).toHaveBeenCalledWith("d1:b0", {
       height: 54.2,
       width: 640,
     });
@@ -426,11 +426,11 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    __legendListTestHooks.updateItemSize.mockClear();
+    __legendListTestHooks.setItemSize.mockClear();
     await changeText(editorInput(renderer!), "# Heading text");
 
     expect(nativeHost(renderer!).props.activeMarkdown).toBe("# Heading text");
-    expect(__legendListTestHooks.updateItemSize).not.toHaveBeenCalled();
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 
     await act(async () => {
       nativeHost(renderer!).props.onEditorFrameChange({
@@ -444,7 +444,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(__legendListTestHooks.updateItemSize).toHaveBeenCalledWith("d1:b0", {
+    expect(__legendListTestHooks.setItemSize).toHaveBeenCalledWith("d1:b0", {
       height: 84,
       width: 640,
     });
@@ -518,7 +518,7 @@ describe("MarkdownDocument native editor overlay", () => {
       await Promise.resolve();
     });
 
-    __legendListTestHooks.updateItemSize.mockClear();
+    __legendListTestHooks.setItemSize.mockClear();
     await act(async () => {
       nativeHost(renderer!).props.onBeginEditing({
         nativeEvent: {
@@ -531,7 +531,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(__legendListTestHooks.updateItemSize).toHaveBeenLastCalledWith("d1:b0", expect.objectContaining({
+    expect(__legendListTestHooks.setItemSize).toHaveBeenLastCalledWith("d1:b0", expect.objectContaining({
       width: 640,
     }));
   });

@@ -2687,7 +2687,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const previousRowSize = nativeEditorRowSizeRef.current.get(blockId);
       if (!previousRowSize || previousRowSize.height !== rowHeight || previousRowSize.width !== width) {
         nativeEditorRowSizeRef.current.set(blockId, { height: rowHeight, width });
-        listRef.current?.updateItemSize?.(blockId, { height: rowHeight, width });
+        listRef.current?.setItemSize?.(blockId, { height: rowHeight, width });
       }
 
       return block;
