@@ -5,7 +5,8 @@
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
-    "@legendapp/list": "catalog:"
+    "@legendapp/list": "catalog:",
+    "@legendapp/state": "catalog:"
   },
   "peerDependencies": {
     "react": "catalog:",

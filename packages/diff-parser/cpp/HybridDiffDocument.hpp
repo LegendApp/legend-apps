@@ -33,6 +33,17 @@ struct DiffFileSources {
   DiffTokenizedSource newSource;
 };
 
+struct DiffSideBySideLine {
+  double index = 0;
+  std::string kind;
+  double fileIndex = -1;
+  double hunkIndex = -1;
+  double sourceStart = 0;
+  double sourceEnd = 0;
+  double oldRowIndex = -1;
+  double newRowIndex = -1;
+};
+
 class HybridDiffDocument final : public HybridDiffDocumentSpec {
 public:
   HybridDiffDocument(
@@ -49,8 +60,13 @@ public:
   double getFileCount() override;
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
-  std::vector<DiffSideBySideLineMetric> getSideBySideLineMetrics(const std::vector<double>& collapsedFileIndexes) override;
-  std::vector<DiffSideBySideLine> getSideBySideLines(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
+  double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) override;
+  std::vector<DiffSideBySideFileHeader> getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) override;
+  double getSideBySideListIndexForSourceRow(double sourceRowIndex, const std::vector<double>& collapsedFileIndexes) override;
+  DiffSideBySideRenderRow getPlainSideBySideRow(double index, const std::vector<double>& collapsedFileIndexes) override;
+  DiffSideBySideRenderRow getSideBySideRow(double index, const std::vector<double>& collapsedFileIndexes) override;
+  std::vector<DiffSideBySideRenderRow> getPlainSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
+  std::vector<DiffSideBySideRenderRow> getSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxStyle> getStyles() override;
   DiffLoadTiming getTiming() override;
@@ -59,6 +75,16 @@ protected:
   size_t getExternalMemorySize() noexcept override;
 
 private:
+  DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
+  DiffSideBySideRenderRow getSideBySideRowForIndex(
+      double index,
+      const std::vector<double>& collapsedFileIndexes,
+      bool tokenizeRows);
+  std::vector<DiffSideBySideRenderRow> getSideBySideRowsForRange(
+      double start,
+      double count,
+      const std::vector<double>& collapsedFileIndexes,
+      bool tokenizeRows);
   void ensureRowTokens(size_t rowIndex);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);

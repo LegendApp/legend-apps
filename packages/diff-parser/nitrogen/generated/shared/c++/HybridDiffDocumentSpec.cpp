@@ -18,8 +18,13 @@ namespace margelo::nitro::legenddesktop::diffparser {
       prototype.registerHybridGetter("fileCount", &HybridDiffDocumentSpec::getFileCount);
       prototype.registerHybridMethod("getPlainRows", &HybridDiffDocumentSpec::getPlainRows);
       prototype.registerHybridMethod("getRows", &HybridDiffDocumentSpec::getRows);
-      prototype.registerHybridMethod("getSideBySideLineMetrics", &HybridDiffDocumentSpec::getSideBySideLineMetrics);
-      prototype.registerHybridMethod("getSideBySideLines", &HybridDiffDocumentSpec::getSideBySideLines);
+      prototype.registerHybridMethod("getSideBySideRowCount", &HybridDiffDocumentSpec::getSideBySideRowCount);
+      prototype.registerHybridMethod("getSideBySideFileHeaders", &HybridDiffDocumentSpec::getSideBySideFileHeaders);
+      prototype.registerHybridMethod("getSideBySideListIndexForSourceRow", &HybridDiffDocumentSpec::getSideBySideListIndexForSourceRow);
+      prototype.registerHybridMethod("getPlainSideBySideRow", &HybridDiffDocumentSpec::getPlainSideBySideRow);
+      prototype.registerHybridMethod("getSideBySideRow", &HybridDiffDocumentSpec::getSideBySideRow);
+      prototype.registerHybridMethod("getPlainSideBySideRows", &HybridDiffDocumentSpec::getPlainSideBySideRows);
+      prototype.registerHybridMethod("getSideBySideRows", &HybridDiffDocumentSpec::getSideBySideRows);
       prototype.registerHybridMethod("getFiles", &HybridDiffDocumentSpec::getFiles);
       prototype.registerHybridMethod("getStyles", &HybridDiffDocumentSpec::getStyles);
       prototype.registerHybridMethod("getTiming", &HybridDiffDocumentSpec::getTiming);

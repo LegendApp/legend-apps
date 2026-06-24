@@ -289,6 +289,7 @@ export function SourceDocumentView({
       recycleItems={recycleItems}
       requestRange={sourceRows.requestRange}
       rowCache={sourceRows.rowCache}
+      rowVersions$={sourceRows.rowVersions$}
       rowHeight={rowHeight}
       rowsVersion={sourceRows.rowsVersion}
       renderRow={renderRow}

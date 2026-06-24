@@ -15,10 +15,10 @@
 
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
-// Forward declaration of `DiffSideBySideLineMetric` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideLineMetric; }
-// Forward declaration of `DiffSideBySideLine` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideLine; }
+// Forward declaration of `DiffSideBySideFileHeader` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideFileHeader; }
+// Forward declaration of `DiffSideBySideRenderRow` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideRenderRow; }
 // Forward declaration of `DiffFileSummary` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
 // Forward declaration of `DiffSyntaxStyle` to properly resolve imports.
@@ -28,8 +28,8 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 
 #include "DiffRenderRow.hpp"
 #include <vector>
-#include "DiffSideBySideLineMetric.hpp"
-#include "DiffSideBySideLine.hpp"
+#include "DiffSideBySideFileHeader.hpp"
+#include "DiffSideBySideRenderRow.hpp"
 #include "DiffFileSummary.hpp"
 #include "DiffSyntaxStyle.hpp"
 #include "DiffLoadTiming.hpp"
@@ -68,8 +68,13 @@ namespace margelo::nitro::legenddesktop::diffparser {
       // Methods
       virtual std::vector<DiffRenderRow> getPlainRows(double start, double count) = 0;
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
-      virtual std::vector<DiffSideBySideLineMetric> getSideBySideLineMetrics(const std::vector<double>& collapsedFileIndexes) = 0;
-      virtual std::vector<DiffSideBySideLine> getSideBySideLines(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual std::vector<DiffSideBySideFileHeader> getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual double getSideBySideListIndexForSourceRow(double sourceRowIndex, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual DiffSideBySideRenderRow getPlainSideBySideRow(double index, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual DiffSideBySideRenderRow getSideBySideRow(double index, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual std::vector<DiffSideBySideRenderRow> getPlainSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual std::vector<DiffSideBySideRenderRow> getSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
       virtual std::vector<DiffSyntaxStyle> getStyles() = 0;
       virtual DiffLoadTiming getTiming() = 0;

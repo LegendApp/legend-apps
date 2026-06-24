@@ -1,4 +1,6 @@
 import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
 import type {
   LayoutChangeEvent,
@@ -39,6 +41,7 @@ export type VirtualizedDocumentRowsState<TRow, TStyle, TTiming> = {
   itemCount: number;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
   rowCache: Map<number, TRow>;
+  rowVersions$: Observable<Record<string, number>>;
   rowsVersion: number;
   styles: readonly TStyle[];
   timing: TTiming | null;
@@ -59,6 +62,17 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
   row: TRow | undefined;
 };
 
+type VirtualizedFixedDocumentListRowProps<TRow> = {
+  debugName?: string;
+  getRow?: (index: number) => TRow | undefined;
+  index: number;
+  listIndex: number;
+  renderItemBatchRef: { current: RenderItemDebugBatch | null };
+  renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
+  rowCache?: Map<number, TRow>;
+  rowVersions$?: Observable<Record<string, number>>;
+};
+
 export type VirtualizedFixedDocumentListProps<TRow> = {
   debugName?: string;
   extraData?: unknown;
@@ -75,7 +89,9 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   recycleItems?: boolean;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
-  rowCache: Map<number, TRow>;
+  getRow?: (index: number) => TRow | undefined;
+  rowCache?: Map<number, TRow>;
+  rowVersions$?: Observable<Record<string, number>>;
   rowsVersion: number;
   rowHeight: number;
   style?: StyleProp<ViewStyle>;
@@ -163,6 +179,39 @@ function createRowsState<TDocument, TRow, TStyle, TTiming>(
   };
 }
 
+function bumpRowVersion(rowVersions$: Observable<Record<string, number>>, rowIndex: number) {
+  const key = String(rowIndex);
+  rowVersions$[key].set((rowVersions$[key].peek() ?? 0) + 1);
+}
+
+function VirtualizedFixedDocumentListRowContent<TRow>({
+  debugName,
+  getRow,
+  index,
+  listIndex,
+  renderItemBatchRef,
+  renderRow,
+  rowCache,
+}: Omit<VirtualizedFixedDocumentListRowProps<TRow>, "rowVersions$">) {
+  const row = getRow?.(index) ?? rowCache?.get(index);
+  recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
+  return renderRow({
+    index,
+    listIndex,
+    row,
+  });
+}
+
+function VirtualizedFixedDocumentListVersionedRow<TRow>({
+  rowVersions$,
+  ...props
+}: VirtualizedFixedDocumentListRowProps<TRow> & {
+  rowVersions$: Observable<Record<string, number>>;
+}) {
+  useValue(() => rowVersions$[String(props.index)].get() ?? 0);
+  return <VirtualizedFixedDocumentListRowContent {...props} />;
+}
+
 function getDocumentRangeForListRange(itemIndexes: readonly number[], start: number, count: number) {
   const safeListStart = Math.max(0, Math.floor(start));
   const safeListEnd = Math.min(itemIndexes.length, safeListStart + Math.max(0, Math.ceil(count)));
@@ -200,6 +249,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   getTiming,
   snapshot,
 }: UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming>): VirtualizedDocumentRowsState<TRow, TStyle, TTiming> {
+  const rowVersions$ = useObservable<Record<string, number>>({});
   const [rowsState, setRowsState] = useState(() => createRowsState(snapshot, getRowIndex));
   const rowsStateRef = useRef(rowsState);
   const snapshotDocument = snapshot?.document ?? null;
@@ -211,13 +261,14 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   useEffect(() => {
     const nextRowsState = createRowsState(snapshot, getRowIndex);
     rowsStateRef.current = nextRowsState;
+    rowVersions$.set({});
     setRowsState(nextRowsState);
     debugLog(debugName, "rows.reset", {
       cacheSize: nextRowsState.rowCache.size,
       itemCount: nextRowsState.itemCount,
       rowsVersion: nextRowsState.rowsVersion,
     });
-  }, [getRowIndex, snapshot]);
+  }, [getRowIndex, rowVersions$, snapshot]);
 
   useEffect(() => {
     rowsStateRef.current = activeRowsState;
@@ -260,38 +311,55 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
             start: safeStart,
           });
 
-          setRowsState((currentRowsState) => {
-            const isLoadedDocumentCurrent = rowsStateRef.current.document === loadedRowsState.document;
-            if (currentRowsState.document !== loadedRowsState.document && !isLoadedDocumentCurrent) {
-              debugLog(debugName, "rows.commitSkipped", {
-                reason: options?.reason ?? "unknown",
-              });
-              return currentRowsState;
-            }
-
-            const baseRowsState = currentRowsState.document === loadedRowsState.document
-              ? currentRowsState
-              : loadedRowsState;
-            const nextRowCache = new Map(baseRowsState.rowCache);
+          if (options?.reason === "scroll") {
             for (const row of fetchedRows) {
               const rowIndex = getRowIndex(row);
-              if (options?.force === true || !nextRowCache.has(rowIndex)) {
-                nextRowCache.set(rowIndex, row);
+              if (!loadedRowsState.rowCache.has(rowIndex)) {
+                loadedRowsState.rowCache.set(rowIndex, row);
               }
             }
-
-            return {
-              ...baseRowsState,
-              rowCache: nextRowCache,
-              rowsVersion: baseRowsState.rowsVersion + 1,
+            rowsStateRef.current = {
+              ...loadedRowsState,
               styles,
               timing,
             };
-          });
+          } else {
+            setRowsState((currentRowsState) => {
+              const isLoadedDocumentCurrent = rowsStateRef.current.document === loadedRowsState.document;
+              if (currentRowsState.document !== loadedRowsState.document && !isLoadedDocumentCurrent) {
+                debugLog(debugName, "rows.commitSkipped", {
+                  reason: options?.reason ?? "unknown",
+                });
+                return currentRowsState;
+              }
+
+              const baseRowsState = currentRowsState.document === loadedRowsState.document
+                ? currentRowsState
+                : loadedRowsState;
+              const nextRowCache = new Map(baseRowsState.rowCache);
+              for (const row of fetchedRows) {
+                const rowIndex = getRowIndex(row);
+                if (options?.force === true || !nextRowCache.has(rowIndex)) {
+                  nextRowCache.set(rowIndex, row);
+                }
+              }
+
+              return {
+                ...baseRowsState,
+                rowCache: nextRowCache,
+                rowsVersion: baseRowsState.rowsVersion + 1,
+                styles,
+                timing,
+              };
+            });
+            for (const row of fetchedRows) {
+              bumpRowVersion(rowVersions$, getRowIndex(row));
+            }
+          }
         }
       }
     }
-  }, [debugName, getRowIndex, getRows, getStyles, getTiming]);
+  }, [debugName, getRowIndex, getRows, getStyles, getTiming, rowVersions$]);
 
   const itemIndexes = useMemo(
     () => Array.from({ length: activeRowsState.itemCount }, (_, index) => index),
@@ -303,6 +371,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
     itemIndexes,
     requestRange,
     rowCache: activeRowsState.rowCache,
+    rowVersions$,
     rowsVersion: activeRowsState.rowsVersion,
     styles: activeRowsState.styles,
     timing: activeRowsState.timing,
@@ -312,6 +381,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 export function VirtualizedFixedDocumentList<TRow>({
   debugName,
   extraData,
+  getRow,
   getItemSize,
   getItemType,
   initialRequestRowCount,
@@ -326,6 +396,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   renderRow,
   requestRange,
   rowCache,
+  rowVersions$: rowVersionsProp$,
   rowHeight,
   rowsVersion,
   style,
@@ -346,7 +417,7 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   renderCountRef.current += 1;
   debugLog(debugName, "list.render", {
-    cacheSize: rowCache.size,
+    cacheSize: rowCache?.size ?? 0,
     itemCount: itemIndexes.length,
     renderCount: renderCountRef.current,
     rowsVersion,
@@ -494,23 +565,34 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const renderItem = useCallback(
     ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => {
-      const row = rowCache.get(index);
-      recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
-      return renderRow({
+      const rowProps = {
+        debugName,
+        getRow,
         index,
         listIndex,
-        row,
-      });
+        renderItemBatchRef,
+        renderRow,
+        rowCache,
+      };
+
+      return rowVersionsProp$ ? (
+        <VirtualizedFixedDocumentListVersionedRow
+          {...rowProps}
+          rowVersions$={rowVersionsProp$}
+        />
+      ) : (
+        <VirtualizedFixedDocumentListRowContent {...rowProps} />
+      );
     },
-    [debugName, renderRow, rowCache],
+    [debugName, getRow, renderRow, rowCache, rowVersionsProp$],
   );
 
   const getFixedItemSize = useCallback((index: number) => (
-    getItemSize?.(index, rowCache.get(index)) ?? rowHeight
+    getItemSize?.(index, rowCache?.get(index)) ?? rowHeight
   ), [getItemSize, rowCache, rowHeight]);
 
   const getLegendItemType = useCallback((index: number) => (
-    getItemType?.(index, rowCache.get(index))
+    getItemType?.(index, rowCache?.get(index))
   ), [getItemType, rowCache]);
 
   return (

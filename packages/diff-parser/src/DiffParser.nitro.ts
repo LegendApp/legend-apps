@@ -36,24 +36,24 @@ export interface DiffRenderRow {
   tokens: DiffSyntaxTokenRun[];
 }
 
-export interface DiffSideBySideLine {
-  index: number;
-  kind: string;
+export interface DiffSideBySideFileHeader {
   fileIndex: number;
-  hunkIndex: number;
   sourceStart: number;
-  sourceEnd: number;
-  oldRowIndex: number;
-  newRowIndex: number;
+  listIndex: number;
 }
 
-export interface DiffSideBySideLineMetric {
+export interface DiffSideBySideRenderRow {
   index: number;
   kind: string;
   fileIndex: number;
   hunkIndex: number;
   sourceStart: number;
   sourceEnd: number;
+  oldRowVisible: boolean;
+  newRowVisible: boolean;
+  newRowEqualsOldRow: boolean;
+  oldRow: DiffRenderRow;
+  newRow: DiffRenderRow;
 }
 
 export interface DiffLoadTiming {
@@ -85,8 +85,13 @@ export interface DiffDocument
   readonly fileCount: number;
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
-  getSideBySideLineMetrics(collapsedFileIndexes: number[]): DiffSideBySideLineMetric[];
-  getSideBySideLines(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideLine[];
+  getSideBySideRowCount(collapsedFileIndexes: number[]): number;
+  getSideBySideFileHeaders(collapsedFileIndexes: number[]): DiffSideBySideFileHeader[];
+  getSideBySideListIndexForSourceRow(sourceRowIndex: number, collapsedFileIndexes: number[]): number;
+  getPlainSideBySideRow(index: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow;
+  getSideBySideRow(index: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow;
+  getPlainSideBySideRows(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow[];
+  getSideBySideRows(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow[];
   getFiles(): DiffFileSummary[];
   getStyles(): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
