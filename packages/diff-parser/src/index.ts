@@ -16,6 +16,10 @@ export function loadUnifiedDiff(diffText: string, sourceLabel: string, theme = "
   return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, theme, initialRowCount);
 }
 
+export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, theme = "github-dark", initialRowCount = 200) {
+  return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, theme, initialRowCount);
+}
+
 export type {
   DiffDocument,
   DiffFileSummary,

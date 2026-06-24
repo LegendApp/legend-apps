@@ -40,6 +40,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
   struct DiffLoadTiming final {
   public:
     double diffMs     SWIFT_PRIVATE;
+    double fetchMs     SWIFT_PRIVATE;
     double openRepoMs     SWIFT_PRIVATE;
     double createDiffMs     SWIFT_PRIVATE;
     double walkDiffMs     SWIFT_PRIVATE;
@@ -52,7 +53,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
   public:
     DiffLoadTiming() = default;
-    explicit DiffLoadTiming(double diffMs, double openRepoMs, double createDiffMs, double walkDiffMs, double documentMs, double copyFilesMs, double copyInitialRowsMs, double nativeTotalMs, double rowCount, double fileCount): diffMs(diffMs), openRepoMs(openRepoMs), createDiffMs(createDiffMs), walkDiffMs(walkDiffMs), documentMs(documentMs), copyFilesMs(copyFilesMs), copyInitialRowsMs(copyInitialRowsMs), nativeTotalMs(nativeTotalMs), rowCount(rowCount), fileCount(fileCount) {}
+    explicit DiffLoadTiming(double diffMs, double fetchMs, double openRepoMs, double createDiffMs, double walkDiffMs, double documentMs, double copyFilesMs, double copyInitialRowsMs, double nativeTotalMs, double rowCount, double fileCount): diffMs(diffMs), fetchMs(fetchMs), openRepoMs(openRepoMs), createDiffMs(createDiffMs), walkDiffMs(walkDiffMs), documentMs(documentMs), copyFilesMs(copyFilesMs), copyInitialRowsMs(copyInitialRowsMs), nativeTotalMs(nativeTotalMs), rowCount(rowCount), fileCount(fileCount) {}
 
   public:
     friend bool operator==(const DiffLoadTiming& lhs, const DiffLoadTiming& rhs) = default;
@@ -69,6 +70,7 @@ namespace margelo::nitro {
       jsi::Object obj = arg.asObject(runtime);
       return margelo::nitro::legenddesktop::diffparser::DiffLoadTiming(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "diffMs"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fetchMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "openRepoMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "createDiffMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "walkDiffMs"))),
@@ -83,6 +85,7 @@ namespace margelo::nitro {
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffLoadTiming& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "diffMs"), JSIConverter<double>::toJSI(runtime, arg.diffMs));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "fetchMs"), JSIConverter<double>::toJSI(runtime, arg.fetchMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "openRepoMs"), JSIConverter<double>::toJSI(runtime, arg.openRepoMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "createDiffMs"), JSIConverter<double>::toJSI(runtime, arg.createDiffMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "walkDiffMs"), JSIConverter<double>::toJSI(runtime, arg.walkDiffMs));
@@ -103,6 +106,7 @@ namespace margelo::nitro {
         return false;
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "diffMs")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fetchMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "openRepoMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "createDiffMs")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "walkDiffMs")))) return false;

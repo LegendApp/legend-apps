@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :ios => "15.0", :osx => "14.0" }
-  s.source_files = "cpp/**/*.{h,hpp,cpp}"
+  s.source_files = "cpp/**/*.{h,hpp,cpp,mm}"
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",
     "HEADER_SEARCH_PATHS" => [

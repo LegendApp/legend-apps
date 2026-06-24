@@ -63,6 +63,7 @@ export interface DiffTokenizedRowRange {
 
 export interface DiffLoadTiming {
   diffMs: number;
+  fetchMs: number;
   openRepoMs: number;
   createDiffMs: number;
   walkDiffMs: number;
@@ -112,4 +113,5 @@ export interface DiffParser
   }> {
   loadGitFolderDiff(folderPath: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
   loadUnifiedDiff(diffText: string, sourceLabel: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
 }

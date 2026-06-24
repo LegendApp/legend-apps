@@ -1,7 +1,7 @@
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
 import {
   loadGitFolderDiff,
-  loadUnifiedDiff,
+  loadUnifiedDiffFromUrl,
   type DiffDocument,
   type DiffFileSummary,
   type DiffLoadTiming,
@@ -324,6 +324,7 @@ function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
     createDiffMs: Number(timing.createDiffMs.toFixed(1)),
     diffMs: Number(timing.diffMs.toFixed(1)),
     documentMs: Number(timing.documentMs.toFixed(1)),
+    fetchMs: Number(timing.fetchMs.toFixed(1)),
     fileCount: timing.fileCount,
     folderPath,
     nativeTotalMs: Number(timing.nativeTotalMs.toFixed(1)),
@@ -955,49 +956,19 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       const nativeStartedAt = nowMs();
       let result;
       if (nextSource.kind === "github") {
-        const fetchStartedAt = nowMs();
-        logDiffOpenTiming("viewer.fetch.start", {
-          diffUrl: nextSource.diffUrl,
-          requestId,
-        });
-        const response = await fetch(nextSource.diffUrl);
-        const responseAt = nowMs();
-        logDiffOpenTiming("viewer.fetch.response", {
-          contentLength: response.headers.get("content-length"),
-          contentType: response.headers.get("content-type"),
-          diffUrl: nextSource.diffUrl,
-          redirected: response.redirected,
-          requestId,
-          responseMs: Number((responseAt - fetchStartedAt).toFixed(1)),
-          responseUrl: response.url,
-          status: response.status,
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to fetch GitHub diff (${response.status})`);
-        }
-        const bodyStartedAt = nowMs();
-        const diffText = await response.text();
-        const bodyFinishedAt = nowMs();
-        logDiffOpenTiming("viewer.fetch.body", {
-          bodyMs: Number((bodyFinishedAt - bodyStartedAt).toFixed(1)),
-          charCount: diffText.length,
-          diffUrl: nextSource.diffUrl,
-          requestId,
-          totalFetchMs: Number((bodyFinishedAt - fetchStartedAt).toFixed(1)),
-        });
-        const parseStartedAt = nowMs();
         logDiffOpenTiming("viewer.native.start", {
-          charCount: diffText.length,
+          diffUrl: nextSource.diffUrl,
           initialRowCount: diffInitialRowCount,
           requestId,
           sourceLabel: nextSource.label,
           sourceKind: nextSource.kind,
         });
-        result = await loadUnifiedDiff(diffText, nextSource.label, syntaxThemeName, diffInitialRowCount);
+        result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, syntaxThemeName, diffInitialRowCount);
         logDiffOpenTiming("viewer.native.finish", {
+          fetchMs: Number(result.timing.fetchMs.toFixed(1)),
           files: result.files.length,
           initialRows: result.initialRows.length,
-          nativeAwaitMs: Number((nowMs() - parseStartedAt).toFixed(1)),
+          nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
           nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
           requestId,
           rows: result.document.rowCount,

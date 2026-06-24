@@ -1,6 +1,7 @@
 #include "HybridDiffParser.hpp"
 
 #include "HybridDiffDocument.hpp"
+#include "HybridDiffUrlLoader.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <algorithm>
@@ -520,6 +521,7 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
 
   DiffLoadTiming timing;
   timing.openRepoMs = 0;
+  timing.fetchMs = 0;
   timing.createDiffMs = 0;
   timing.walkDiffMs = elapsedDiffMs(loadStartedAt, diffWalkedAt);
   timing.diffMs = timing.walkDiffMs;
@@ -602,6 +604,7 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
 
   DiffLoadTiming timing;
   timing.openRepoMs = elapsedDiffMs(loadStartedAt, repoOpenedAt);
+  timing.fetchMs = 0;
   timing.createDiffMs = elapsedDiffMs(repoOpenedAt, diffCreatedAt);
   timing.walkDiffMs = elapsedDiffMs(diffCreatedAt, diffWalkedAt);
   timing.diffMs = timing.walkDiffMs;
@@ -673,6 +676,36 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     const auto rowsFinishedAt = DiffClock::now();
     result.styles = document->getStyles();
     auto timing = document->getTiming();
+    timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
+    timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
+    timing.copyInitialRowsMs = elapsedDiffMs(rowsStartedAt, rowsFinishedAt);
+    timing.nativeTotalMs = elapsedDiffMs(startedAt, rowsFinishedAt);
+    result.timing = timing;
+    return result;
+  });
+}
+
+std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUrl(
+    const std::string& diffUrl,
+    const std::string& sourceLabel,
+    const std::string& theme,
+    double initialRowCount) {
+  return Promise<DiffLoadResult>::async([diffUrl, sourceLabel, theme, initialRowCount]() -> DiffLoadResult {
+    const auto startedAt = DiffClock::now();
+    const auto diff = loadDiffUrlText(diffUrl);
+    auto document = loadUnifiedDiffDocument(diff.text, sourceLabel, theme);
+    const auto documentCreatedAt = DiffClock::now();
+    DiffLoadResult result;
+    result.document = document;
+    const auto filesStartedAt = DiffClock::now();
+    result.files = document->getFiles();
+    const auto filesFinishedAt = DiffClock::now();
+    const auto rowsStartedAt = DiffClock::now();
+    result.initialRows = document->getPlainRows(0, initialRowCount);
+    const auto rowsFinishedAt = DiffClock::now();
+    result.styles = document->getStyles();
+    auto timing = document->getTiming();
+    timing.fetchMs = diff.fetchMs;
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
     timing.copyInitialRowsMs = elapsedDiffMs(rowsStartedAt, rowsFinishedAt);
