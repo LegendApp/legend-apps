@@ -103,12 +103,11 @@ type DiffLoadTrace = {
 type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
   borderColor: string;
-  directory: string;
   file: DiffFileSummary;
   foregroundColor: string;
   mutedColor: string;
   onPress: () => void;
-  statusIcon: ReturnType<typeof getFileStatusIcon>;
+  statusPresentation: ReturnType<typeof getFileStatusPresentation>;
 };
 
 type SideBySideTokenStyleState = {
@@ -265,18 +264,20 @@ const emptyState: DiffViewerState = {
 function DiffSidebarFileRow({
   activeFileIndex$,
   borderColor,
-  directory,
   file,
   foregroundColor,
   mutedColor,
   onPress,
-  statusIcon,
+  statusPresentation,
 }: DiffSidebarFileRowProps) {
   const isActive = useValue(() => activeFileIndex$.get() === file.index);
   const filename = getFilename(file.path);
+  const directory = getDirectoryPath(file.path);
+  const pathContext = getFilePathContext(file, directory);
 
   return (
     <Pressable
+      accessibilityLabel={`${filename}, ${statusPresentation.title}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
@@ -290,18 +291,18 @@ function DiffSidebarFileRow({
         { opacity: pressed ? 0.72 : 1 },
       ]}
     >
-      <View style={[styles.sidebarStatusIcon, { backgroundColor: statusIcon.backgroundColor }]}>
-        <Text selectable={false} style={[styles.sidebarStatusIconText, { color: statusIcon.color }]}>
-          {statusIcon.label}
+      <View style={[styles.sidebarStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
+        <Text selectable={false} style={[styles.sidebarStatusIconText, { color: statusPresentation.color }]}>
+          {statusPresentation.label}
         </Text>
       </View>
       <View style={styles.sidebarFileTextGroup}>
         <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
           {filename}
         </Text>
-        {directory ? (
+        {pathContext ? (
           <Text numberOfLines={1} style={[styles.sidebarFilePath, { color: mutedColor }]}>
-            {directory}/
+            {pathContext}
           </Text>
         ) : null}
       </View>
@@ -382,28 +383,80 @@ function EmptyLinkIcon({ color }: { color: string }) {
   );
 }
 
-function getFileStatusIcon(status: string) {
+function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "status"> | null | undefined) {
+  const status = file?.status ?? "unknown";
+  let presentation = {
+    backgroundColor: "#f0883e",
+    color: "#1f1300",
+    label: "M",
+    title: "Modified",
+  };
+
   switch (status) {
     case "added":
-    case "untracked":
-      return {
+      presentation = {
         backgroundColor: "#238636",
         color: "#ffffff",
-        label: "+",
+        label: "A",
+        title: "Added",
       };
+      break;
+    case "untracked":
+      presentation = {
+        backgroundColor: "#238636",
+        color: "#ffffff",
+        label: "U",
+        title: "Untracked",
+      };
+      break;
     case "deleted":
-      return {
+      presentation = {
         backgroundColor: "#da3633",
         color: "#ffffff",
-        label: "x",
+        label: "D",
+        title: "Deleted",
       };
+      break;
+    case "renamed":
+      presentation = {
+        backgroundColor: "#388bfd",
+        color: "#ffffff",
+        label: "R",
+        title: "Renamed",
+      };
+      break;
+    case "copied":
+      presentation = {
+        backgroundColor: "#8957e5",
+        color: "#ffffff",
+        label: "C",
+        title: "Copied",
+      };
+      break;
+    case "modified":
+      break;
     default:
-      return {
-        backgroundColor: "#f0883e",
-        color: "#1f1300",
-        label: "✎",
+      presentation = {
+        backgroundColor: "#6e7681",
+        color: "#ffffff",
+        label: "?",
+        title: status === "unknown" ? "Unknown" : status,
       };
+      break;
   }
+
+  return file?.isBinary
+    ? { ...presentation, title: `${presentation.title} binary` }
+    : presentation;
+}
+
+function getFilePathContext(file: DiffFileSummary, directory: string) {
+  const hasOldPath = file.oldPath && file.oldPath !== file.path;
+  let context = directory ? `${directory}/` : "";
+  if (hasOldPath && (file.status === "renamed" || file.status === "copied")) {
+    context = `${file.oldPath} -> ${context}`;
+  }
+  return context;
 }
 
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
@@ -1470,19 +1523,17 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
 
   const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
-    const directory = getDirectoryPath(file.path);
-    const statusIcon = getFileStatusIcon(file.status);
+    const statusPresentation = getFileStatusPresentation(file);
 
     return (
       <DiffSidebarFileRow
         activeFileIndex$={activeFileIndex$}
         borderColor={displayTheme.colors.border}
-        directory={directory}
         file={file}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         onPress={() => scrollToFile(file)}
-        statusIcon={statusIcon}
+        statusPresentation={statusPresentation}
       />
     );
   }, [activeFileIndex$, displayTheme.colors.border, foregroundColor, mutedColor, scrollToFile]);
@@ -1563,7 +1614,8 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         const directory = getDirectoryPath(path);
         const fileIndex = file?.index ?? row?.fileIndex ?? index;
         const isCollapsed = collapsedFileIndexes.has(fileIndex);
-        const statusIcon = getFileStatusIcon(file?.status ?? "");
+        const statusPresentation = getFileStatusPresentation(file);
+        const pathContext = file ? getFilePathContext(file, directory) : directory ? `${directory}/` : "";
 
         return (
           <Pressable
@@ -1582,16 +1634,16 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
               {isCollapsed ? "▸" : "▾"}
             </Text>
             {file ? (
-              <View style={[styles.fileStatusIcon, { backgroundColor: statusIcon.backgroundColor }]}>
-                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusIcon.color }]}>
-                  {statusIcon.label}
+              <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
+                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusPresentation.color }]}>
+                  {statusPresentation.label}
                 </Text>
               </View>
             ) : null}
             <View style={styles.fileTitleGroup}>
-              {directory ? (
+              {pathContext ? (
                 <Text selectable style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
-                  {directory}/
+                  {pathContext}
                 </Text>
               ) : null}
               <Text selectable style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
@@ -1600,12 +1652,21 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
             </View>
             {file ? (
               <View style={styles.fileMeta}>
-                <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                  +{file.additions}
-                </Text>
-                <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                  -{file.deletions}
-                </Text>
+                <View style={[styles.fileStatusPill, { backgroundColor: statusPresentation.backgroundColor }]}>
+                  <Text selectable={false} style={[styles.fileStatusPillText, { color: statusPresentation.color }]}>
+                    {statusPresentation.title}
+                  </Text>
+                </View>
+                {!file.isBinary ? (
+                  <>
+                    <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
+                      +{file.additions}
+                    </Text>
+                    <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
+                      -{file.deletions}
+                    </Text>
+                  </>
+                ) : null}
               </View>
             ) : null}
           </Pressable>
@@ -1731,7 +1792,8 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         const directory = getDirectoryPath(path);
         const fileIndex = file?.index ?? index;
         const isCollapsed = collapsedFileIndexes.has(fileIndex);
-        const statusIcon = getFileStatusIcon(file?.status ?? "");
+        const statusPresentation = getFileStatusPresentation(file);
+        const pathContext = file ? getFilePathContext(file, directory) : directory ? `${directory}/` : "";
         const fileHeaderLineHeight = Math.max(18, fontSize + 8);
 
         return (
@@ -1751,16 +1813,16 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
               {isCollapsed ? "▸" : "▾"}
             </Text>
             {file ? (
-              <View style={[styles.fileStatusIcon, { backgroundColor: statusIcon.backgroundColor }]}>
-                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusIcon.color }]}>
-                  {statusIcon.label}
+              <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
+                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusPresentation.color }]}>
+                  {statusPresentation.label}
                 </Text>
               </View>
             ) : null}
             <View style={styles.fileTitleGroup}>
-              {directory ? (
+              {pathContext ? (
                 <Text selectable style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
-                  {directory}/
+                  {pathContext}
                 </Text>
               ) : null}
               <Text selectable style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
@@ -1769,12 +1831,21 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
             </View>
             {file ? (
               <View style={styles.fileMeta}>
-                <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                  +{file.additions}
-                </Text>
-                <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                  -{file.deletions}
-                </Text>
+                <View style={[styles.fileStatusPill, { backgroundColor: statusPresentation.backgroundColor }]}>
+                  <Text selectable={false} style={[styles.fileStatusPillText, { color: statusPresentation.color }]}>
+                    {statusPresentation.title}
+                  </Text>
+                </View>
+                {!file.isBinary ? (
+                  <>
+                    <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
+                      +{file.additions}
+                    </Text>
+                    <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
+                      -{file.deletions}
+                    </Text>
+                  </>
+                ) : null}
               </View>
             ) : null}
           </Pressable>
@@ -2402,16 +2473,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 16,
   },
-  fileStatusIconText: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 17,
-    textAlign: "center",
-  },
-  fileTitleGroup: {
-    alignItems: "baseline",
-    flex: 1,
+	  fileStatusIconText: {
+	    fontFamily: sourceViewerCodeFontFamily,
+	    fontSize: 16,
+	    fontWeight: "700",
+	    lineHeight: 17,
+	    textAlign: "center",
+	  },
+	  fileStatusPill: {
+	    alignItems: "center",
+	    borderRadius: 4,
+	    justifyContent: "center",
+	    minWidth: 68,
+	    paddingHorizontal: 7,
+	    paddingVertical: 2,
+	  },
+	  fileStatusPillText: {
+	    fontSize: 11,
+	    fontWeight: "700",
+	    lineHeight: 14,
+	  },
+	  fileTitleGroup: {
+	    alignItems: "baseline",
+	    flex: 1,
     flexDirection: "row",
   },
   lineNumber: {
