@@ -83,6 +83,12 @@ type DiffSidebarFileRowProps = {
   statusIcon: ReturnType<typeof getFileStatusIcon>;
 };
 
+type SideBySideTokenStyleState = {
+  document: DiffDocument;
+  styleCount: number;
+  tokenStyleById: SyntaxStyleMap;
+};
+
 type DiffViewerState =
   | {
     status: "empty";
@@ -283,11 +289,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
-  const tokenStyleMapCacheRef = useRef<{
-    document: DiffDocument;
-    styleCount: number;
-    tokenStyleById: SyntaxStyleMap;
-  } | null>(null);
+  const [sideBySideTokenStyleState, setSideBySideTokenStyleState] = useState<SideBySideTokenStyleState | null>(null);
   const highlightedVisibleRangeRef = useRef<{
     count: number;
     document: DiffDocument;
@@ -367,20 +369,17 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     snapshot,
   });
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
-  const getCurrentTokenStyleById = useCallback((document: DiffDocument) => {
+  const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
     const styles = document.getStyles();
-    const cached = tokenStyleMapCacheRef.current;
-    if (cached?.document === document && cached.styleCount === styles.length) {
-      return cached.tokenStyleById;
-    }
-
-    const nextTokenStyleById = createSyntaxStyleMap(styles);
-    tokenStyleMapCacheRef.current = {
-      document,
-      styleCount: styles.length,
-      tokenStyleById: nextTokenStyleById,
-    };
-    return nextTokenStyleById;
+    setSideBySideTokenStyleState((current) => (
+      current?.document === document && current.styleCount === styles.length
+        ? current
+        : {
+            document,
+            styleCount: styles.length,
+            tokenStyleById: createSyntaxStyleMap(styles),
+          }
+    ));
   }, []);
   const fileHeaderRowIndexes = useMemo(() => {
     if (state.status !== "loaded") {
@@ -920,7 +919,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   );
 
   const requestSideBySideRange = useCallback((_lineStart: number, _lineCount: number, _options?: VirtualizedDocumentRequestOptions) => {
-    // Blocks rows materialize directly from native during render. Range requests are reserved for a future native prefetch hint.
+    // Blocks rows materialize directly from native during render. Keep range requests side-effect free so
+    // scroll-driven requests never update React state.
   }, []);
 
   const getSideBySideRow = useCallback((index: number) => (
@@ -928,6 +928,16 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       ? state.document.getSideBySideRow(index, collapsedFileIndexList)
       : undefined
   ), [collapsedFileIndexList, state]);
+
+  useEffect(() => {
+    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
+      const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
+      state.document.getSideBySideRows(0, initialCount, collapsedFileIndexList);
+      refreshSideBySideTokenStyles(state.document);
+    } else if (viewMode === "unified") {
+      setSideBySideTokenStyleState(null);
+    }
+  }, [collapsedFileIndexList, diffPaneHeight, refreshSideBySideTokenStyles, rowHeight, sideBySideRowCount, state, viewMode]);
 
   const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
     if (state.status === "loaded") {
@@ -1071,8 +1081,8 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         );
       }
 
-      const sideBySideTokenStyleById = state.status === "loaded"
-        ? getCurrentTokenStyleById(state.document)
+      const sideBySideTokenStyleById = state.status === "loaded" && sideBySideTokenStyleState?.document === state.document
+        ? sideBySideTokenStyleState.tokenStyleById
         : tokenStyleById;
 
       return (
@@ -1100,7 +1110,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         </View>
       );
     },
-    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, getCurrentTokenStyleById, mutedColor, renderSideBySideLine, rowHeight, state, toggleFileCollapsed, tokenStyleById],
+    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, renderSideBySideLine, rowHeight, sideBySideTokenStyleState, state, toggleFileCollapsed, tokenStyleById],
   );
 
   const body = useMemo(() => {
