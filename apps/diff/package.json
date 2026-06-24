@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@legend-desktop/appkit-split-view": "0.0.0",
+    "@legend-desktop/auto-updater": "0.0.0",
     "@legend-desktop/context-menu": "0.0.0",
     "@legend-desktop/design-system": "workspace:*",
     "@legend-desktop/document-app": "0.0.0",

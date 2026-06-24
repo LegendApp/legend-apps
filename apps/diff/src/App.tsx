@@ -1,3 +1,4 @@
+import { AutoUpdater } from "@legend-desktop/auto-updater";
 import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { LogBox } from "react-native";
@@ -21,6 +22,7 @@ prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
 setTimeout(() => {
   warmDiffSyntaxHighlighters().catch(reportDiffAppControllerError);
 }, 0);
+configureDiffAutoUpdates().catch(reportDiffAppControllerError);
 
 type DiffAppProps = {
   launchArguments?: string[];
@@ -41,6 +43,13 @@ function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
 function reportDiffAppControllerError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[DiffAppController] ${message}`);
+}
+
+async function configureDiffAutoUpdates() {
+  if (AutoUpdater.isAvailable()) {
+    await AutoUpdater.setAutomaticallyChecksForUpdates(true);
+    await AutoUpdater.setUpdateCheckInterval(60 * 60 * 24);
+  }
 }
 
 async function openDiffViewerForSelectedFolder(controller: DocumentAppController) {
@@ -76,6 +85,9 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
     },
     settings: () => {
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
+    },
+    checkForUpdates: () => {
+      AutoUpdater.checkForUpdates().catch(reportDiffAppControllerError);
     },
     reload: dispatchDiffViewerAction,
     revealInFinder: dispatchDiffViewerAction,

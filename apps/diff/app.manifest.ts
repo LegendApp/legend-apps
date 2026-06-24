@@ -17,6 +17,7 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-desktop/appkit-split-view",
+      "@legend-desktop/auto-updater",
       "@legend-desktop/context-menu",
       "@legend-desktop/diff-parser",
       "@legend-desktop/file-dialog",

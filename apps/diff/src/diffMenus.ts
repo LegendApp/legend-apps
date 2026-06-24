@@ -19,6 +19,12 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         targetTitles: settingsTargetTitles,
         enabled: true,
       },
+      { separator: true, id: "separator-app-updates" },
+      {
+        id: "checkForUpdates",
+        title: "Check for Updates...",
+        enabled: true,
+      },
     ],
   },
   {
