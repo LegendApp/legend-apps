@@ -1,6 +1,13 @@
 import type { NativeMenuAction } from "@legend-desktop/native-menu";
 
-type DiffViewerActionId = "filterFiles" | "reload" | "revealInFinder" | "toggleSidebar";
+type DiffViewerActionId =
+  | "copyFilePath"
+  | "copyRelativePath"
+  | "copySource"
+  | "filterFiles"
+  | "reload"
+  | "revealInFinder"
+  | "toggleSidebar";
 type DiffViewerActionHandlers = Partial<Record<DiffViewerActionId, (action?: NativeMenuAction) => boolean | void>>;
 
 let currentHandlers: DiffViewerActionHandlers | null = null;

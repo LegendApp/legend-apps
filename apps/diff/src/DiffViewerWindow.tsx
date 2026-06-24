@@ -1,4 +1,5 @@
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
+import { commandRunner } from "@legend-desktop/command-runner";
 import {
   loadGitFolderDiff,
   loadUnifiedDiffFromUrl,
@@ -467,6 +468,20 @@ function fileMatchesFilter(file: DiffFileSummary, normalizedFilter: string) {
     matches = terms.every((term) => haystack.includes(term));
   }
   return matches;
+}
+
+function getActiveDiffFile(files: readonly DiffFileSummary[], activeFileIndex: number | null) {
+  let activeFile = activeFileIndex === null
+    ? null
+    : files.find((file) => file.index === activeFileIndex) ?? null;
+  if (!activeFile) {
+    activeFile = files[0] ?? null;
+  }
+  return activeFile;
+}
+
+function getJoinedPath(basePath: string, relativePath: string) {
+  return `${basePath.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
 }
 
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
@@ -1371,6 +1386,49 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     return true;
   }, [visibleFolderPath]);
 
+  const copyText = useCallback((text: string) => {
+    commandRunner.runCommand({ command: "pbcopy", input: text })
+      .then((result) => {
+        if (result.exitCode !== 0) {
+          console.error(result.stderr || "Unable to copy to clipboard.");
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    return true;
+  }, []);
+
+  const copyCurrentSource = useCallback(() => {
+    let didCopy = false;
+    if (visibleSource) {
+      didCopy = copyText(visibleSource.value);
+    }
+    return didCopy;
+  }, [copyText, visibleSource]);
+
+  const copyCurrentFilePath = useCallback(() => {
+    let didCopy = false;
+    if (state.status === "loaded" && visibleFolderPath) {
+      const activeFile = getActiveDiffFile(state.files, activeFileIndex$.get());
+      if (activeFile) {
+        didCopy = copyText(getJoinedPath(visibleFolderPath, activeFile.path));
+      }
+    }
+    return didCopy;
+  }, [activeFileIndex$, copyText, state, visibleFolderPath]);
+
+  const copyCurrentRelativePath = useCallback(() => {
+    let didCopy = false;
+    if (state.status === "loaded") {
+      const activeFile = getActiveDiffFile(state.files, activeFileIndex$.get());
+      if (activeFile) {
+        didCopy = copyText(activeFile.path);
+      }
+    }
+    return didCopy;
+  }, [activeFileIndex$, copyText, state]);
+
   useEffect(() => {
     let frameHandle: number | null = null;
     let secondFrameHandle: number | null = null;
@@ -1478,13 +1536,17 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   }, [showSidebarControl]);
 
   useEffect(() => registerDiffViewerActionHandlers({
+    copyFilePath: copyCurrentFilePath,
+    copyRelativePath: copyCurrentRelativePath,
+    copySource: copyCurrentSource,
     filterFiles: focusFileFilter,
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
     toggleSidebar,
-  }), [focusFileFilter, reloadCurrentSource, revealCurrentFolder, toggleSidebar]);
+  }), [copyCurrentFilePath, copyCurrentRelativePath, copyCurrentSource, focusFileFilter, reloadCurrentSource, revealCurrentFolder, toggleSidebar]);
 
   useEffect(() => {
+    const hasLoadedFiles = loadedFileCount > 0;
     updateMenuItems(diffMenuOwnerId, [
       {
         enabled: state.status === "loaded",
@@ -1493,6 +1555,19 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       {
         enabled: visibleFolderPath !== null,
         id: "revealInFinder",
+      },
+      {
+        enabled: visibleSource !== null,
+        id: "copySource",
+        title: visibleSource?.kind === "github" ? "Copy Source URL" : "Copy Folder Path",
+      },
+      {
+        enabled: visibleFolderPath !== null && hasLoadedFiles,
+        id: "copyFilePath",
+      },
+      {
+        enabled: hasLoadedFiles,
+        id: "copyRelativePath",
       },
       {
         checked: showSidebarControl && !sidebarCollapsed,
@@ -1515,7 +1590,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         id: "viewBlocks",
       },
     ]);
-  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.status, viewMode, visibleFolderPath]);
+  }, [loadedFileCount, showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.status, viewMode, visibleFolderPath, visibleSource]);
 
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {

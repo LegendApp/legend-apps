@@ -5,6 +5,7 @@ import {
   saveAsTargetTitles,
   saveTargetTitles,
   settingsTargetTitles,
+  shiftModifier,
   type NativeMenuConfig,
 } from "@legend-desktop/native-menu";
 
@@ -54,6 +55,24 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         id: "revealInFinder",
         title: "Reveal in Finder",
         enabled: false,
+      },
+      { separator: true, id: "separator-file-copy" },
+      {
+        id: "copySource",
+        title: "Copy Source",
+        enabled: false,
+        shortcut: { key: "c", modifiers: commandModifier | optionModifier },
+      },
+      {
+        id: "copyFilePath",
+        title: "Copy File Path",
+        enabled: false,
+      },
+      {
+        id: "copyRelativePath",
+        title: "Copy Relative Path",
+        enabled: false,
+        shortcut: { key: "c", modifiers: commandModifier | optionModifier | shiftModifier },
       },
       { separator: true, id: "separator-file-readonly" },
       {

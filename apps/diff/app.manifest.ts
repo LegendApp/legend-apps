@@ -18,6 +18,7 @@ const manifest = {
     macos: [
       "@legend-desktop/appkit-split-view",
       "@legend-desktop/auto-updater",
+      "@legend-desktop/command-runner",
       "@legend-desktop/context-menu",
       "@legend-desktop/diff-parser",
       "@legend-desktop/drag-drop",
