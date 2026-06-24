@@ -23,6 +23,7 @@ import {
   type SyntaxStyleMap,
 } from "@legend-desktop/source-viewer";
 import { updateMenuItems } from "@legend-desktop/native-menu";
+import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
@@ -797,6 +798,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
       });
       logDiffLoadTiming(path, result.timing);
+      noteRecentDocument(path);
       if (loadRequestIdRef.current === requestId) {
         trace.setStateAt = nowMs();
         setState({

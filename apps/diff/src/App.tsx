@@ -80,6 +80,11 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
   };
 }
 
+async function openRecentDiffFolder(path: string, controller: DocumentAppController) {
+  await openDiffViewerWindow(path);
+  controller.setDocumentWindowOpen(true);
+}
+
 async function openInitialDiffViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
   const folderPath = getLaunchDiffFolder(launchArguments);
   const startedAt = nowMs();
@@ -101,6 +106,7 @@ export function App({ launchArguments }: DiffAppProps) {
     launchArguments,
     menus: diffMenuConfig,
     onInitialOpen: openInitialDiffViewer,
+    onRecentDocumentOpen: openRecentDiffFolder,
     ownerId: diffMenuOwnerId,
     reportError: reportDiffAppControllerError,
     windowIdentifier: diffViewerWindowIdentifier,
