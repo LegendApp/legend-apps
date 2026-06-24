@@ -71,6 +71,7 @@ const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffFileHeaderRowHeight = 52;
 const diffTitlebarTopInset = 52;
+const diffLoadedWindowOptionsDelayMs = 750;
 const diffScrollIdleMs = 120;
 const diffRowKindFileHeader = 0;
 const diffChangeTypeAdd = 1;
@@ -462,6 +463,12 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     sidebarWidth: 0,
   });
   const [diffPaneHeight, setDiffPaneHeight] = useState(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const splitPaneMetricsRef = useRef(splitPaneMetrics);
+  splitPaneMetricsRef.current = splitPaneMetrics;
+  const diffPaneHeightRef = useRef(diffPaneHeight);
+  diffPaneHeightRef.current = diffPaneHeight;
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
@@ -480,6 +487,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     start: number;
   } | null>(null);
   const isRenderingInitialLoadedFrame = state.status === "loaded" && sourcesMatch(loadingSource, state.source);
+  const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const sideBySideScrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sideBySideScrollingRef = useRef(false);
   const pendingSideBySideTokenRangesRef = useRef<{
@@ -494,8 +502,22 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
-  const showViewModeToolbar = state.status === "loaded" && state.files.length > 0;
+  const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
+  const showViewModeToolbar = loadedFileCount > 0;
   const showSidebarControl = showViewModeToolbar;
+
+  useEffect(() => {
+    if (state.status === "loaded" && loggedInitialLoadedFrameRef.current !== isRenderingInitialLoadedFrame) {
+      logDiffOpenTiming("viewer.initialLoadedFrame.state", {
+        isRenderingInitialLoadedFrame,
+        loadingSource,
+        rows: state.document.rowCount,
+        source: state.source,
+      });
+    }
+    loggedInitialLoadedFrameRef.current = isRenderingInitialLoadedFrame;
+  }, [isRenderingInitialLoadedFrame, loadingSource, state]);
+
   const fileByIndex = useMemo(() => {
     const startedAt = nowMs();
     if (state.status !== "loaded") {
@@ -1225,37 +1247,72 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     let frameHandle: number | null = null;
     let secondFrameHandle: number | null = null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const scheduleStartedAt = nowMs();
+    const shouldWaitForContentLayout = state.status === "loaded" && loadedFileCount > 0;
+    const isContentLayoutReady = !shouldWaitForContentLayout || diffPaneHeight > diffTitlebarTopInset;
 
-    const applyWindowOptions = () => {
-      const startedAt = nowMs();
-      setDiffViewerWindowOptions({
-        appearance: syntaxTheme.appearance,
-        backgroundColor: syntaxTheme.background,
-        source: state.source,
-        showSidebarControl,
-        showViewModeToolbar,
-        sidebarCollapsed,
-        viewMode,
-      })
-        .then(() => {
-          logDiffOpenTiming("viewer.windowOptions.finish", {
-            source: state.source,
-            setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
-          });
+    logDiffOpenTiming("viewer.windowOptions.schedule", {
+      diffPaneHeight,
+      isContentLayoutReady,
+      loadedFileCount,
+      showSidebarControl,
+      showViewModeToolbar,
+      sidebarCollapsed,
+      source: state.source,
+      status: state.status,
+      viewMode,
+    });
+
+    if (isContentLayoutReady) {
+      const applyWindowOptions = () => {
+        const startedAt = nowMs();
+        logDiffOpenTiming("viewer.windowOptions.start", {
+          diffPaneHeight,
+          loadedFileCount,
+          scheduledDelayMs: Number((startedAt - scheduleStartedAt).toFixed(1)),
+          showSidebarControl,
+          showViewModeToolbar,
+          sidebarCollapsed,
+          source: state.source,
+          status: state.status,
+          viewMode,
+        });
+        setDiffViewerWindowOptions({
+          appearance: syntaxTheme.appearance,
+          backgroundColor: syntaxTheme.background,
+          source: state.source,
+          showSidebarControl,
+          showViewModeToolbar,
+          sidebarCollapsed,
+          viewMode,
         })
-        .catch((error: unknown) => {
-          console.error(error instanceof Error ? error.message : String(error));
-        });
-    };
+          .then(() => {
+            logDiffOpenTiming("viewer.windowOptions.finish", {
+              source: state.source,
+              setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
+            });
+          })
+          .catch((error: unknown) => {
+            console.error(error instanceof Error ? error.message : String(error));
+          });
+      };
 
-    if (state.status === "loaded") {
-      frameHandle = requestAnimationFrame(() => {
-        secondFrameHandle = requestAnimationFrame(() => {
-          timeoutHandle = setTimeout(applyWindowOptions, 0);
+      if (state.status === "loaded") {
+        frameHandle = requestAnimationFrame(() => {
+          secondFrameHandle = requestAnimationFrame(() => {
+            timeoutHandle = setTimeout(applyWindowOptions, diffLoadedWindowOptionsDelayMs);
+          });
         });
-      });
+      } else {
+        applyWindowOptions();
+      }
     } else {
-      applyWindowOptions();
+      logDiffOpenTiming("viewer.windowOptions.deferred", {
+        diffPaneHeight,
+        loadedFileCount,
+        source: state.source,
+        status: state.status,
+      });
     }
 
     return () => {
@@ -1269,7 +1326,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         clearTimeout(timeoutHandle);
       }
     };
-  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.source, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
+  }, [diffPaneHeight, loadedFileCount, showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.source, state.status, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
 
   const toggleSidebar = useCallback(() => {
     if (!showSidebarControl) {
@@ -1375,16 +1432,44 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   }, [activeFileIndex$, displayTheme.colors.border, foregroundColor, mutedColor, scrollToFile]);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
-    setSplitPaneMetrics({
+    const nextMetrics = {
       contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
       contentWidth: Math.round(event.nativeEvent.contentWidth),
       sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
       sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
+    };
+    logDiffOpenTiming("viewer.splitView.resize", {
+      contentHeight: nextMetrics.contentHeight,
+      contentWidth: nextMetrics.contentWidth,
+      previousContentHeight: splitPaneMetricsRef.current.contentHeight,
+      previousContentWidth: splitPaneMetricsRef.current.contentWidth,
+      previousSidebarHeight: splitPaneMetricsRef.current.sidebarHeight,
+      previousSidebarWidth: splitPaneMetricsRef.current.sidebarWidth,
+      sidebarHeight: nextMetrics.sidebarHeight,
+      sidebarWidth: nextMetrics.sidebarWidth,
     });
+    setSplitPaneMetrics(nextMetrics);
   }, []);
 
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
-    setDiffPaneHeight(Math.round(event.nativeEvent.layout.height));
+    const nextHeight = Math.round(event.nativeEvent.layout.height);
+    logDiffOpenTiming("viewer.diffPane.layout", {
+      height: nextHeight,
+      previousHeight: diffPaneHeightRef.current,
+      rawHeight: Number(event.nativeEvent.layout.height.toFixed(1)),
+      width: Number(event.nativeEvent.layout.width.toFixed(1)),
+    });
+    setDiffPaneHeight(nextHeight);
+  }, []);
+
+  const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
+    const currentState = stateRef.current;
+    logDiffOpenTiming("viewer.sidebarList.layout", {
+      fileCount: currentState.status === "loaded" ? currentState.files.length : 0,
+      height: Number(event.nativeEvent.layout.height.toFixed(1)),
+      status: currentState.status,
+      width: Number(event.nativeEvent.layout.width.toFixed(1)),
+    });
   }, []);
 
   const getItemType = useCallback((index: number, row: DiffRenderRow | undefined) => (
@@ -1683,14 +1768,67 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   );
 
   const body = useMemo(() => {
+    const bodyStartedAt = nowMs();
     const diffListHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
+    const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffTitlebarTopInset - 8) : 0;
     const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
+    const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.body.finish", {
+          activeItemCount: activeItemIndexes.length,
+          diffListHeight,
+          diffPaneHeight,
+          durationMs: Number((nowMs() - bodyStartedAt).toFixed(1)),
+          isRenderingInitialLoadedFrame,
+          path,
+          rows: state.document.rowCount,
+          sidebarLayoutReady: isSidebarLayoutReady,
+          sidebarHeight: splitPaneMetrics.sidebarHeight,
+          sidebarListHeight,
+          sidebarWidth: splitPaneMetrics.sidebarWidth,
+          viewMode,
+          ...extra,
+        });
+      }
+    };
+
+    if (state.status === "loaded") {
+      logDiffOpenTiming("viewer.body.start", {
+        activeItemCount: activeItemIndexes.length,
+        diffListHeight,
+        diffPaneHeight,
+        isRenderingInitialLoadedFrame,
+        loadingSource,
+        rows: state.document.rowCount,
+        sidebarLayoutReady: isSidebarLayoutReady,
+        sidebarHeight: splitPaneMetrics.sidebarHeight,
+        sidebarListHeight,
+        sidebarWidth: splitPaneMetrics.sidebarWidth,
+        source: state.source,
+        viewMode,
+      });
+    }
+
     const diffContent = (() => {
       if (state.status === "loaded" && activeItemIndexes.length > 0) {
         if (diffListHeight <= 0) {
+          logDiffOpenTiming("viewer.body.diffList.deferred", {
+            activeItemCount: activeItemIndexes.length,
+            diffPaneHeight,
+            isRenderingInitialLoadedFrame,
+            rows: state.document.rowCount,
+            viewMode,
+          });
           return <View style={styles.diffPaneContent} />;
         }
 
+        logDiffOpenTiming("viewer.body.diffList.mount", {
+          activeItemCount: activeItemIndexes.length,
+          diffListHeight,
+          rows: state.document.rowCount,
+          viewMode,
+        });
         const list = viewMode === "unified" ? (
           <VirtualizedFixedDocumentList
             debugName="diff"
@@ -1861,6 +1999,17 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     })();
 
       if (state.status === "loaded" && activeItemIndexes.length > 0 && !isRenderingInitialLoadedFrame) {
+        logDiffOpenTiming("viewer.body.splitView.mount", {
+          activeItemCount: activeItemIndexes.length,
+          diffPaneHeight,
+          rows: state.document.rowCount,
+          sidebarLayoutReady: isSidebarLayoutReady,
+          sidebarCollapsed,
+          sidebarHeight: splitPaneMetrics.sidebarHeight,
+          sidebarListHeight,
+          sidebarWidth: splitPaneMetrics.sidebarWidth,
+          viewMode,
+        });
         const sidebar = (
         <View
           style={[
@@ -1873,17 +2022,23 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           ]}
         >
           <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
-          <LegendList
-            data={state.files}
-            getFixedItemSize={() => diffSidebarFileRowHeight}
-            keyExtractor={(file) => `${file.index}:${file.path}`}
-            recycleItems
-            renderItem={renderSidebarFile}
-            style={styles.sidebarList}
-          />
+          {isSidebarLayoutReady ? (
+            <LegendList
+              data={state.files}
+              getFixedItemSize={() => diffSidebarFileRowHeight}
+              keyExtractor={(file) => `${file.index}:${file.path}`}
+              onLayout={handleSidebarListLayout}
+              recycleItems
+              renderItem={renderSidebarFile}
+              style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
+            />
+          ) : (
+            <View style={styles.sidebarList} />
+          )}
         </View>
       );
 
+      logBodyFinish("split-view");
       return (
         <SidebarSplitView
           appearance={syntaxTheme.appearance}
@@ -1901,8 +2056,9 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       );
     }
 
+    logBodyFinish("content-only");
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
