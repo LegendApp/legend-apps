@@ -22,4 +22,5 @@ export type {
   DiffSideBySideRenderRow,
   DiffSyntaxStyle,
   DiffSyntaxTokenRun,
+  DiffTokenizedRowRange,
 } from "./DiffParser.nitro";

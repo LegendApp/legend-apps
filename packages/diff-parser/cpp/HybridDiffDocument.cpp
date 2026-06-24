@@ -556,6 +556,13 @@ double HybridDiffDocument::getTokenizedRowVersion() {
   return static_cast<double>(tokenizedRowVersion_.load());
 }
 
+std::vector<DiffTokenizedRowRange> HybridDiffDocument::consumeTokenizedRowRanges() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto ranges = std::move(tokenizedRowRanges_);
+  tokenizedRowRanges_.clear();
+  return ranges;
+}
+
 std::vector<DiffFileSummary> HybridDiffDocument::getFiles() {
   std::lock_guard<std::mutex> lock(mutex_);
   return files_;
@@ -576,22 +583,24 @@ DiffLoadTiming HybridDiffDocument::getTiming() {
   return timing_;
 }
 
-double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount) {
+double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) {
   stopBackgroundTokenization();
 
   const auto safeChunkRowCount = static_cast<size_t>(std::max(1.0, chunkRowCount));
+  const auto safeChunkBudget = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+      std::chrono::duration<double, std::milli>(std::max(1.0, chunkBudgetMs)));
   const auto generation = backgroundGeneration_.fetch_add(1) + 1;
   backgroundTokenizationRunning_.store(true);
   auto document = shared_cast<HybridDiffDocument>();
 
-  backgroundThread_ = std::thread([document, generation, safeChunkRowCount]() {
+  backgroundThread_ = std::thread([document, generation, safeChunkRowCount, safeChunkBudget]() {
     bool shouldContinue = true;
 
     while (shouldContinue && document->backgroundGeneration_.load() == generation) {
       bool didTokenizeChunk = false;
       {
         std::lock_guard<std::mutex> lock(document->mutex_);
-        didTokenizeChunk = document->ensureNextBackgroundTokenChunk(safeChunkRowCount);
+        didTokenizeChunk = document->ensureNextBackgroundTokenChunk(safeChunkRowCount, safeChunkBudget);
         shouldContinue = didTokenizeChunk;
       }
 
@@ -680,18 +689,27 @@ void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   }
 }
 
-bool HybridDiffDocument::ensureNextBackgroundTokenChunk(size_t chunkRowCount) {
+bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
+    size_t chunkRowCount,
+    std::chrono::steady_clock::duration chunkBudget) {
   const auto start = backgroundTokenizeRowIndex_;
-  auto tokenizedCount = 0;
+  size_t tokenizedCount = 0;
+  const auto startedAt = std::chrono::steady_clock::now();
 
   while (backgroundTokenizeRowIndex_ < rows_.size() && tokenizedCount < chunkRowCount) {
     const auto rowIndex = backgroundTokenizeRowIndex_;
     backgroundTokenizeRowIndex_ += 1;
     ensureRowTokens(rowIndex);
     tokenizedCount += 1;
+    if (tokenizedCount > 0 && std::chrono::steady_clock::now() - startedAt >= chunkBudget) {
+      break;
+    }
   }
 
   if (backgroundTokenizeRowIndex_ > start) {
+    tokenizedRowRanges_.push_back(DiffTokenizedRowRange(
+        static_cast<double>(start),
+        static_cast<double>(backgroundTokenizeRowIndex_)));
     tokenizedRowVersion_.fetch_add(1);
     return true;
   }

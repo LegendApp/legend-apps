@@ -56,6 +56,11 @@ export interface DiffSideBySideRenderRow {
   newRow: DiffRenderRow;
 }
 
+export interface DiffTokenizedRowRange {
+  start: number;
+  end: number;
+}
+
 export interface DiffLoadTiming {
   diffMs: number;
   openRepoMs: number;
@@ -93,10 +98,11 @@ export interface DiffDocument
   getPlainSideBySideRows(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow[];
   getSideBySideRows(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow[];
   getTokenizedRowVersion(): number;
+  consumeTokenizedRowRanges(): DiffTokenizedRowRange[];
   getFiles(): DiffFileSummary[];
   getStyles(): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
-  startBackgroundTokenization(chunkRowCount: number): number;
+  startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number): number;
   stopBackgroundTokenization(): number;
 }
 

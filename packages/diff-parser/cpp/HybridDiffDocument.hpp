@@ -3,6 +3,7 @@
 #include "../nitrogen/generated/shared/c++/HybridDiffDocumentSpec.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <memory>
 #include <optional>
@@ -71,10 +72,11 @@ public:
   std::vector<DiffSideBySideRenderRow> getPlainSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffSideBySideRenderRow> getSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
   double getTokenizedRowVersion() override;
+  std::vector<DiffTokenizedRowRange> consumeTokenizedRowRanges() override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxStyle> getStyles() override;
   DiffLoadTiming getTiming() override;
-  double startBackgroundTokenization(double chunkRowCount) override;
+  double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
   double stopBackgroundTokenization() override;
 
 protected:
@@ -92,7 +94,9 @@ private:
       const std::vector<double>& collapsedFileIndexes,
       bool tokenizeRows);
   void ensureRowTokens(size_t rowIndex);
-  bool ensureNextBackgroundTokenChunk(size_t chunkRowCount);
+  bool ensureNextBackgroundTokenChunk(
+      size_t chunkRowCount,
+      std::chrono::steady_clock::duration chunkBudget);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);
   std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
@@ -108,6 +112,7 @@ private:
   std::shared_ptr<DiffSyntaxState> syntaxState_;
   DiffLoadTiming timing_;
   size_t backgroundTokenizeRowIndex_ = 0;
+  std::vector<DiffTokenizedRowRange> tokenizedRowRanges_;
   std::atomic<uint64_t> backgroundGeneration_{0};
   std::atomic<uint64_t> tokenizedRowVersion_{0};
   std::atomic<bool> backgroundTokenizationRunning_{false};

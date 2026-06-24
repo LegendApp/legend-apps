@@ -26,6 +26,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
       prototype.registerHybridMethod("getPlainSideBySideRows", &HybridDiffDocumentSpec::getPlainSideBySideRows);
       prototype.registerHybridMethod("getSideBySideRows", &HybridDiffDocumentSpec::getSideBySideRows);
       prototype.registerHybridMethod("getTokenizedRowVersion", &HybridDiffDocumentSpec::getTokenizedRowVersion);
+      prototype.registerHybridMethod("consumeTokenizedRowRanges", &HybridDiffDocumentSpec::consumeTokenizedRowRanges);
       prototype.registerHybridMethod("getFiles", &HybridDiffDocumentSpec::getFiles);
       prototype.registerHybridMethod("getStyles", &HybridDiffDocumentSpec::getStyles);
       prototype.registerHybridMethod("getTiming", &HybridDiffDocumentSpec::getTiming);
