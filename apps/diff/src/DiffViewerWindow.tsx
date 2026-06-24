@@ -407,6 +407,10 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
   return indexes;
 }
 
+function createIdentityDiffRowIndexes(length: number) {
+  return new Array<number | undefined>(Math.max(0, Math.floor(length)));
+}
+
 function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {
   let low = 0;
   let high = files.length - 1;
@@ -636,7 +640,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     [collapsedFileIndexList, state, viewMode],
   );
   const sideBySideItemIndexes = useMemo(
-    () => Array.from({ length: sideBySideRowCount }, (_, index) => index),
+    () => createIdentityDiffRowIndexes(sideBySideRowCount),
     [sideBySideRowCount],
   );
   const sideBySideFileHeaders = useMemo(
