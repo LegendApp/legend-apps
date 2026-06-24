@@ -328,6 +328,24 @@ function getDirectoryPath(path: string) {
   return separatorIndex >= 0 ? path.slice(0, separatorIndex) : "";
 }
 
+function EmptyFolderIcon({ color }: { color: string }) {
+  return (
+    <View style={styles.emptyFolderIcon}>
+      <View style={[styles.emptyFolderIconTab, { borderColor: color }]} />
+      <View style={[styles.emptyFolderIconBody, { borderColor: color }]} />
+    </View>
+  );
+}
+
+function EmptyLinkIcon({ color }: { color: string }) {
+  return (
+    <View style={styles.emptyLinkIcon}>
+      <View style={[styles.emptyLinkIconRing, styles.emptyLinkIconRingLeft, { borderColor: color }]} />
+      <View style={[styles.emptyLinkIconRing, styles.emptyLinkIconRingRight, { borderColor: color }]} />
+    </View>
+  );
+}
+
 function getFileStatusIcon(status: string) {
   switch (status) {
     case "added":
@@ -1535,34 +1553,65 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       return (
         <View style={styles.empty}>
           <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-            No folder open
+            Open a diff
           </Text>
           <Text style={[styles.emptyText, { color: mutedColor }]}>
-            Open a Git folder to view its changes.
+            Choose a local Git folder or paste a GitHub PR or commit URL.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={openFolder}
+            style={({ pressed }) => [
+              styles.emptyButton,
+              styles.emptyFolderButton,
+              {
+                borderColor: displayTheme.colors.border,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <EmptyFolderIcon color={foregroundColor} />
+            <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
+              Open Folder...
+            </Text>
+          </Pressable>
+          <View style={styles.emptyDivider}>
+            <View style={[styles.emptyDividerLine, { backgroundColor: displayTheme.colors.border }]} />
+            <Text style={[styles.emptyDividerText, { color: mutedColor }]}>or</Text>
+            <View style={[styles.emptyDividerLine, { backgroundColor: displayTheme.colors.border }]} />
+          </View>
           <View style={styles.emptyUrlForm}>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={(text) => {
-                setUrlInput(text);
-                if (urlInputError) {
-                  setUrlInputError(null);
-                }
-              }}
-              onSubmitEditing={openUrl}
-              placeholder="GitHub PR or commit URL"
-              placeholderTextColor={mutedColor}
-              returnKeyType="go"
+            <View
               style={[
-                styles.emptyUrlInput,
+                styles.emptyUrlInputWrap,
                 {
                   borderColor: displayTheme.colors.border,
-                  color: foregroundColor,
                 },
               ]}
-              value={urlInput}
-            />
+            >
+              <EmptyLinkIcon color={mutedColor} />
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={(text) => {
+                  setUrlInput(text);
+                  if (urlInputError) {
+                    setUrlInputError(null);
+                  }
+                }}
+                onSubmitEditing={openUrl}
+                placeholder="https://github.com/org/repo/pull/123"
+                placeholderTextColor={mutedColor}
+                returnKeyType="go"
+                style={[
+                  styles.emptyUrlInput,
+                  {
+                    color: foregroundColor,
+                  },
+                ]}
+                value={urlInput}
+              />
+            </View>
             <Pressable
               accessibilityRole="button"
               disabled={!urlInput.trim()}
@@ -1571,12 +1620,13 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
                 styles.emptyButton,
                 styles.emptyUrlButton,
                 {
-                  borderColor: displayTheme.colors.border,
+                  backgroundColor: displayTheme.colors.primary,
+                  borderColor: displayTheme.colors.primary,
                   opacity: !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
                 },
               ]}
             >
-              <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
+              <Text style={[styles.emptyButtonText, { color: "#ffffff" }]}>
                 Open URL
               </Text>
             </Pressable>
@@ -1586,21 +1636,6 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
               {urlInputError}
             </Text>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            onPress={openFolder}
-            style={({ pressed }) => [
-              styles.emptyButton,
-              {
-                borderColor: displayTheme.colors.border,
-                opacity: pressed ? 0.72 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
-              Open Folder
-            </Text>
-          </Pressable>
         </View>
       );
     })();
@@ -1659,7 +1694,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     }
 
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -1677,53 +1712,136 @@ const styles = StyleSheet.create({
   empty: {
     alignItems: "center",
     flex: 1,
-    gap: 10,
+    gap: 14,
     justifyContent: "center",
-    padding: 32,
+    paddingHorizontal: 44,
+    paddingVertical: 40,
   },
   emptyButton: {
+    alignItems: "center",
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    marginTop: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   emptyButtonText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "600",
-    lineHeight: 18,
+    lineHeight: 22,
+  },
+  emptyDivider: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 22,
+    maxWidth: 700,
+    paddingVertical: 8,
+    width: "100%",
+  },
+  emptyDividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  emptyDividerText: {
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
+  emptyFolderButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "center",
+    marginTop: 16,
+    minHeight: 52,
+    minWidth: 240,
+    paddingHorizontal: 28,
+  },
+  emptyFolderIcon: {
+    height: 22,
+    width: 28,
+  },
+  emptyFolderIconBody: {
+    borderRadius: 3,
+    borderWidth: 2,
+    height: 16,
+    left: 0,
+    position: "absolute",
+    top: 6,
+    width: 28,
+  },
+  emptyFolderIconTab: {
+    borderBottomWidth: 0,
+    borderRadius: 3,
+    borderWidth: 2,
+    height: 8,
+    left: 2,
+    position: "absolute",
+    top: 1,
+    width: 12,
+  },
+  emptyLinkIcon: {
+    height: 22,
+    marginLeft: 2,
+    width: 26,
+  },
+  emptyLinkIconRing: {
+    borderRadius: 6,
+    borderWidth: 2,
+    height: 10,
+    position: "absolute",
+    top: 6,
+    width: 16,
+  },
+  emptyLinkIconRingLeft: {
+    left: 0,
+    transform: [{ rotate: "-38deg" }],
+  },
+  emptyLinkIconRingRight: {
+    right: 0,
+    transform: [{ rotate: "-38deg" }],
   },
   emptyText: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 17,
+    lineHeight: 26,
+    maxWidth: 560,
     textAlign: "center",
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    lineHeight: 24,
+    fontSize: 42,
+    fontWeight: "700",
+    lineHeight: 50,
   },
   emptyUrlForm: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-    maxWidth: 560,
+    gap: 10,
+    maxWidth: 700,
     width: "100%",
   },
   emptyUrlInput: {
+    flex: 1,
+    fontSize: 17,
+    height: 50,
+    lineHeight: 24,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  emptyUrlInputWrap: {
+    alignItems: "center",
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
-    fontSize: 13,
-    height: 34,
-    lineHeight: 18,
+    flexDirection: "row",
+    gap: 10,
+    height: 52,
     minWidth: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
   },
   emptyUrlButton: {
-    marginTop: 0,
+    minHeight: 52,
+    minWidth: 136,
   },
   emptyValidationText: {
     fontSize: 12,
