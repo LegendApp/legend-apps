@@ -146,9 +146,9 @@ std::vector<DiffFileSources> createFileSources(const std::vector<DiffFileSummary
   return fileSources;
 }
 
-std::string trimCarriageReturn(std::string line) {
+std::string_view trimCarriageReturn(std::string_view line) {
   if (!line.empty() && line.back() == '\r') {
-    line.pop_back();
+    line.remove_suffix(1);
   }
   return line;
 }
@@ -165,23 +165,23 @@ std::string trimWhitespace(std::string_view value) {
   return std::string(value.substr(start, end - start));
 }
 
-std::string stripQuotedPath(std::string path) {
-  path = trimWhitespace(path);
-  if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
-    path = path.substr(1, path.size() - 2);
+std::string stripQuotedPath(std::string_view path) {
+  auto normalizedPath = trimWhitespace(path);
+  if (normalizedPath.size() >= 2 && normalizedPath.front() == '"' && normalizedPath.back() == '"') {
+    normalizedPath = normalizedPath.substr(1, normalizedPath.size() - 2);
   }
-  return path;
+  return normalizedPath;
 }
 
-std::string stripGitDiffPathPrefix(std::string path) {
-  path = stripQuotedPath(std::move(path));
-  if (path.starts_with("a/") || path.starts_with("b/")) {
-    return path.substr(2);
+std::string stripGitDiffPathPrefix(std::string_view path) {
+  auto normalizedPath = stripQuotedPath(path);
+  if (normalizedPath.starts_with("a/") || normalizedPath.starts_with("b/")) {
+    return normalizedPath.substr(2);
   }
-  return path;
+  return normalizedPath;
 }
 
-std::pair<std::string, std::string> parseDiffGitPaths(const std::string& line) {
+std::pair<std::string, std::string> parseDiffGitPaths(std::string_view line) {
   constexpr auto prefix = std::string_view("diff --git ");
   const auto paths = line.substr(prefix.size());
   const auto separator = paths.find(" b/");
@@ -194,7 +194,7 @@ std::pair<std::string, std::string> parseDiffGitPaths(const std::string& line) {
   };
 }
 
-std::string parseHeaderPath(const std::string& line) {
+std::string parseHeaderPath(std::string_view line) {
   if (line.size() <= 4) {
     return "";
   }
@@ -204,19 +204,29 @@ std::string parseHeaderPath(const std::string& line) {
   return stripGitDiffPathPrefix(line.substr(4, end - 4));
 }
 
-bool parseHunkLineNumbers(const std::string& line, int& oldStart, int& newStart) {
+int parsePositiveInt(std::string_view value, size_t start) {
+  int result = 0;
+  size_t index = start;
+  while (index < value.size() && std::isdigit(static_cast<unsigned char>(value[index]))) {
+    result = result * 10 + (value[index] - '0');
+    index += 1;
+  }
+  return result;
+}
+
+bool parseHunkLineNumbers(std::string_view line, int& oldStart, int& newStart) {
   size_t index = 3;
   if (index >= line.size() || line[index] != '-') {
     return false;
   }
   index += 1;
-  oldStart = std::max(0, std::atoi(line.c_str() + index));
+  oldStart = std::max(0, parsePositiveInt(line, index));
   const auto plusIndex = line.find(" +", index);
   if (plusIndex == std::string::npos) {
     return false;
   }
   index = plusIndex + 2;
-  newStart = std::max(0, std::atoi(line.c_str() + index));
+  newStart = std::max(0, parsePositiveInt(line, index));
   return true;
 }
 
@@ -231,13 +241,13 @@ DiffTokenizedSource createUnifiedDiffSource(const std::string& path, std::vector
   return source;
 }
 
-void setSourceLine(std::vector<std::string>& lines, int lineNumber, const std::string& text) {
+void setSourceLine(std::vector<std::string>& lines, int lineNumber, std::string_view text) {
   if (lineNumber > 0) {
     const auto lineIndex = static_cast<size_t>(lineNumber - 1);
     if (lines.size() <= lineIndex) {
       lines.resize(lineIndex + 1);
     }
-    lines[lineIndex] = text;
+    lines[lineIndex] = std::string(text);
   }
 }
 
@@ -354,7 +364,7 @@ struct UnifiedDiffBuildState {
     }
   }
 
-  void appendLine(char origin, const std::string& text) {
+  void appendLine(char origin, std::string_view text) {
     if (diff.currentFileIndex < 0 || diff.currentHunkIndex < 0) {
       return;
     }
@@ -368,7 +378,7 @@ struct UnifiedDiffBuildState {
     row.oldLineNumber = -1;
     row.newLineNumber = -1;
     row.changeType = diffChangeTypeContext;
-    row.text = text;
+    row.text = std::string(text);
     row.tokens = {};
 
     if (origin == '+') {
@@ -496,10 +506,8 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
 
   while (lineStart <= diffText.size()) {
     const auto lineEnd = diffText.find('\n', lineStart);
-    const auto rawLine = lineEnd == std::string::npos
-      ? diffText.substr(lineStart)
-      : diffText.substr(lineStart, lineEnd - lineStart);
-    const auto line = trimCarriageReturn(rawLine);
+    const auto rawLineEnd = lineEnd == std::string::npos ? diffText.size() : lineEnd;
+    const auto line = trimCarriageReturn(std::string_view(diffText.data() + lineStart, rawLineEnd - lineStart));
 
     if (line.starts_with("diff --git ")) {
       const auto [oldPath, newPath] = parseDiffGitPaths(line);
