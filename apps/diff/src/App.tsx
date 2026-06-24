@@ -1,4 +1,5 @@
 import { AutoUpdater } from "@legend-desktop/auto-updater";
+import { commandRunner } from "@legend-desktop/command-runner";
 import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { LogBox } from "react-native";
@@ -73,6 +74,32 @@ async function openDiffViewerForSelectedFolder(controller: DocumentAppController
   }
 }
 
+async function openDiffViewerFromClipboard(controller: DocumentAppController) {
+  const clipboardStartedAt = nowMs();
+  const result = await commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 });
+  logDiffOpenTiming("menu.clipboard.read", {
+    clipboardMs: elapsedMs(clipboardStartedAt),
+    exitCode: result.exitCode,
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr || "Unable to read the clipboard.");
+  }
+
+  const source = normalizeDiffOpenSource(result.stdout);
+  if (!source) {
+    throw new Error("Clipboard does not contain a local path or GitHub PR or commit URL.");
+  }
+
+  const windowStartedAt = nowMs();
+  await openDiffViewerWindow(source);
+  controller.setDocumentWindowOpen(true);
+  logDiffOpenTiming("menu.clipboard.window.opened", {
+    source,
+    windowOpenMs: elapsedMs(windowStartedAt),
+  });
+}
+
 function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
   return {
     openFolder: () => {
@@ -80,6 +107,14 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
       openDiffViewerForSelectedFolder(controller)
         .then(() => {
           logDiffOpenTiming("menu.openFolder.finish", {});
+        })
+        .catch(reportDiffAppControllerError);
+    },
+    openFromClipboard: () => {
+      logDiffOpenTiming("menu.openFromClipboard", {});
+      openDiffViewerFromClipboard(controller)
+        .then(() => {
+          logDiffOpenTiming("menu.openFromClipboard.finish", {});
         })
         .catch(reportDiffAppControllerError);
     },

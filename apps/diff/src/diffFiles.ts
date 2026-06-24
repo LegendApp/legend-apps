@@ -34,7 +34,7 @@ function getLaunchArgumentValue(args: string[], name: string) {
   return value && !value.startsWith("--") ? value : null;
 }
 
-function getGithubDiffSource(value: string): DiffOpenSource | null {
+function parseUrl(value: string) {
   let url: URL | null = null;
   try {
     url = new URL(value);
@@ -42,13 +42,44 @@ function getGithubDiffSource(value: string): DiffOpenSource | null {
     url = null;
   }
 
+  if (!url && /^(github\.com|www\.github\.com|diffshub\.com|www\.diffshub\.com)\//i.test(value)) {
+    try {
+      url = new URL(`https://${value}`);
+    } catch {
+      url = null;
+    }
+  }
+
+  return url;
+}
+
+function hasUrlScheme(value: string) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value);
+}
+
+function getFileUrlPath(value: string) {
+  const url = parseUrl(value);
+  let path: string | null = null;
+  if (url?.protocol === "file:" && url.pathname) {
+    try {
+      path = decodeURIComponent(url.pathname);
+    } catch {
+      path = url.pathname;
+    }
+  }
+  return path;
+}
+
+function getGithubDiffSource(value: string): DiffOpenSource | null {
+  const url = parseUrl(value);
+
   let source: DiffOpenSource | null = null;
   if (url && (url.hostname === "github.com" || url.hostname === "www.github.com" || url.hostname === "diffshub.com" || url.hostname === "www.diffshub.com")) {
     const parts = url.pathname.split("/").filter(Boolean);
     const owner = parts[0];
     const repo = parts[1];
     const type = parts[2];
-    const identifier = parts[3]?.replace(/\.diff$/, "");
+    const identifier = parts[3]?.replace(/\.(diff|patch)$/, "");
     if (owner && repo && identifier && (type === "pull" || type === "commit")) {
       const canonicalUrl = `https://github.com/${owner}/${repo}/${type}/${identifier}`;
       source = {
@@ -67,15 +98,21 @@ export function normalizeDiffOpenSource(value: DiffOpenSource | string | null | 
   let source: DiffOpenSource | null = null;
   if (typeof value === "string") {
     const trimmedValue = value.trim();
-    source = getGithubDiffSource(trimmedValue) ?? (trimmedValue ? {
+    const fileUrlPath = getFileUrlPath(trimmedValue);
+    const folderPath = fileUrlPath ?? (!hasUrlScheme(trimmedValue) ? trimmedValue : null);
+    source = getGithubDiffSource(trimmedValue) ?? (folderPath ? {
       kind: "folder",
-      label: getFilename(trimmedValue),
-      value: trimmedValue,
+      label: getFilename(folderPath),
+      value: folderPath,
     } : null);
   } else if (value) {
     source = value;
   }
   return source;
+}
+
+export function getDiffRecentDocumentPath(source: DiffOpenSource) {
+  return source.kind === "folder" ? source.value : null;
 }
 
 export function getDiffSourceLabel(source: DiffOpenSource | null | undefined) {

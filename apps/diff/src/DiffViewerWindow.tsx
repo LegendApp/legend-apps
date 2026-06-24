@@ -48,7 +48,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
-import { getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
+import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
   isDiffViewMode,
   setDiffViewModeSetting,
@@ -1151,12 +1151,20 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
       });
       logDiffLoadTiming(nextSource.value, result.timing);
-      const recentStartedAt = nowMs();
-      noteRecentDocument(nextSource.value);
-      logDiffOpenTiming("viewer.recentDocument.noted", {
-        durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
-        requestId,
-      });
+      const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
+      if (recentDocumentPath) {
+        const recentStartedAt = nowMs();
+        noteRecentDocument(recentDocumentPath);
+        logDiffOpenTiming("viewer.recentDocument.noted", {
+          durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
+          requestId,
+        });
+      } else {
+        logDiffOpenTiming("viewer.recentDocument.skipped", {
+          requestId,
+          sourceKind: nextSource.kind,
+        });
+      }
       if (loadRequestIdRef.current === requestId) {
         const statePayloadStartedAt = nowMs();
         const nextLoadedState: DiffViewerState = {

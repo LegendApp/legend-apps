@@ -46,6 +46,12 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         shortcut: { key: "o", modifiers: commandModifier },
       },
       {
+        id: "openFromClipboard",
+        title: "Open from Clipboard",
+        enabled: true,
+        shortcut: { key: "o", modifiers: commandModifier | shiftModifier },
+      },
+      {
         id: "reload",
         title: "Reload",
         enabled: false,
