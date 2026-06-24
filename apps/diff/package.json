@@ -10,6 +10,7 @@
     "@legend-desktop/design-system": "workspace:*",
     "@legend-desktop/document-app": "0.0.0",
     "@legend-desktop/diff-parser": "workspace:*",
+    "@legend-desktop/drag-drop": "0.0.0",
     "@legend-desktop/file-dialog": "0.0.0",
     "@legend-desktop/file-system-watcher": "0.0.0",
     "@legend-desktop/native-menu": "0.0.0",

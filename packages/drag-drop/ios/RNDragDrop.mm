@@ -38,6 +38,12 @@ static NSString *RNDragDropTracksJSONFromPasteboard(NSPasteboard *pasteboard)
   }
   return tracksJson;
 }
+
+struct RNDragDropFilePayload {
+  NSMutableArray<NSString *> *directories;
+  NSMutableArray<NSString *> *files;
+  NSMutableArray<NSString *> *urls;
+};
 #endif
 
 @interface RNDragDropView () <RCTDragDropViewViewProtocol>
@@ -61,7 +67,7 @@ static NSString *RNDragDropTracksJSONFromPasteboard(NSPasteboard *pasteboard)
     _props = std::make_shared<const DragDropViewProps>();
 #if TARGET_OS_OSX
     _allowedFileTypes = RNDragDropDefaultAudioExtensions();
-    [self registerForDraggedTypes:@[NSPasteboardTypeFileURL, RNDragDropTrackPasteboardType]];
+    [self registerForDraggedTypes:@[NSPasteboardTypeFileURL, NSPasteboardTypeString, NSPasteboardTypeURL, RNDragDropTrackPasteboardType]];
 #endif
   }
   return self;
@@ -87,22 +93,51 @@ static NSString *RNDragDropTracksJSONFromPasteboard(NSPasteboard *pasteboard)
   [super updateProps:props oldProps:oldProps];
 }
 
-- (std::pair<NSArray<NSString *> *, NSArray<NSString *> *>)filesAndDirectoriesFromURLs:(NSArray<NSURL *> *)urls
+- (void)addURLString:(NSString *)urlString toPayload:(RNDragDropFilePayload *)payload
 {
-  NSMutableArray<NSString *> *files = [NSMutableArray array];
-  NSMutableArray<NSString *> *directories = [NSMutableArray array];
-  NSSet<NSString *> *extensions = [NSSet setWithArray:_allowedFileTypes ?: RNDragDropDefaultAudioExtensions()];
+  if (urlString.length > 0 && ![payload->urls containsObject:urlString]) {
+    [payload->urls addObject:urlString];
+  }
+}
 
-  for (NSURL *url in urls) {
-    NSNumber *isDirectory = nil;
-    [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
-    if (isDirectory.boolValue) {
-      [directories addObject:url.path];
-    } else if ([extensions containsObject:url.pathExtension.lowercaseString]) {
-      [files addObject:url.path];
+- (void)addPasteboardStringURLs:(NSPasteboard *)pasteboard toPayload:(RNDragDropFilePayload *)payload
+{
+  NSString *stringValue = [pasteboard stringForType:NSPasteboardTypeString];
+  if (stringValue.length > 0) {
+    NSArray<NSString *> *parts = [stringValue componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    for (NSString *part in parts) {
+      NSURL *url = [NSURL URLWithString:part];
+      if (url && (url.scheme.length > 0 || url.host.length > 0)) {
+        [self addURLString:url.absoluteString toPayload:payload];
+      }
     }
   }
-  return {files, directories};
+}
+
+- (RNDragDropFilePayload)filePayloadFromPasteboard:(NSPasteboard *)pasteboard
+{
+  RNDragDropFilePayload payload;
+  payload.directories = [NSMutableArray array];
+  payload.files = [NSMutableArray array];
+  payload.urls = [NSMutableArray array];
+  NSSet<NSString *> *extensions = [NSSet setWithArray:_allowedFileTypes ?: RNDragDropDefaultAudioExtensions()];
+  NSArray<NSURL *> *urls = [pasteboard readObjectsForClasses:@[NSURL.class] options:nil] ?: @[];
+
+  for (NSURL *url in urls) {
+    if (url.fileURL) {
+      NSNumber *isDirectory = nil;
+      [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+      if (isDirectory.boolValue) {
+        [payload.directories addObject:url.path];
+      } else if ([extensions containsObject:url.pathExtension.lowercaseString]) {
+        [payload.files addObject:url.path];
+      }
+    } else {
+      [self addURLString:url.absoluteString toPayload:&payload];
+    }
+  }
+  [self addPasteboardStringURLs:pasteboard toPayload:&payload];
+  return payload;
 }
 
 - (CGPoint)clampedLocationFromDraggingInfo:(id<NSDraggingInfo>)sender
@@ -126,9 +161,8 @@ static NSString *RNDragDropTracksJSONFromPasteboard(NSPasteboard *pasteboard)
     return NSDragOperationCopy;
   }
 
-  NSArray<NSURL *> *urls = [pasteboard readObjectsForClasses:@[NSURL.class] options:nil];
-  auto [files, directories] = [self filesAndDirectoriesFromURLs:urls ?: @[]];
-  if (files.count == 0 && directories.count == 0) {
+  RNDragDropFilePayload payload = [self filePayloadFromPasteboard:pasteboard];
+  if (payload.files.count == 0 && payload.directories.count == 0 && payload.urls.count == 0) {
     return NSDragOperationNone;
   }
 
@@ -137,8 +171,9 @@ static NSString *RNDragDropTracksJSONFromPasteboard(NSPasteboard *pasteboard)
   _currentTrackPayloadJson = @"";
   if (eventEmitter) {
     eventEmitter->onDragEnter(DragDropViewEventEmitter::OnDragEnter{
-      .directories = RNDragDropStringVector(directories),
-      .files = RNDragDropStringVector(files),
+      .directories = RNDragDropStringVector(payload.directories),
+      .files = RNDragDropStringVector(payload.files),
+      .urls = RNDragDropStringVector(payload.urls),
     });
   }
   return NSDragOperationCopy;
@@ -196,13 +231,13 @@ static NSString *RNDragDropTracksJSONFromPasteboard(NSPasteboard *pasteboard)
     return tracksJson.length > 0;
   }
 
-  NSArray<NSURL *> *urls = [pasteboard readObjectsForClasses:@[NSURL.class] options:nil];
-  auto [files, directories] = [self filesAndDirectoriesFromURLs:urls ?: @[]];
-  BOOL hasPayload = files.count > 0 || directories.count > 0;
+  RNDragDropFilePayload payload = [self filePayloadFromPasteboard:pasteboard];
+  BOOL hasPayload = payload.files.count > 0 || payload.directories.count > 0 || payload.urls.count > 0;
   if (eventEmitter && hasPayload) {
     eventEmitter->onDrop(DragDropViewEventEmitter::OnDrop{
-      .directories = RNDragDropStringVector(directories),
-      .files = RNDragDropStringVector(files),
+      .directories = RNDragDropStringVector(payload.directories),
+      .files = RNDragDropStringVector(payload.files),
+      .urls = RNDragDropStringVector(payload.urls),
     });
   }
   _isDragOver = NO;

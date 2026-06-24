@@ -10,6 +10,7 @@ import {
   type DiffSyntaxStyle,
   type DiffTokenizedRowRange,
 } from "@legend-desktop/diff-parser";
+import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
 import { watchDirectories } from "@legend-desktop/file-system-watcher";
 import {
@@ -84,6 +85,7 @@ const diffSideBySideAdaptiveRender = {
   exitDelay: 150,
   exitVelocity: 3,
 };
+const diffDropAllowedFileTypes = ["diff", "patch"];
 
 type DiffViewerWindowProps = {
   folderPath?: string;
@@ -341,6 +343,27 @@ function getDirectoryPath(path: string) {
   return separatorIndex >= 0 ? path.slice(0, separatorIndex) : "";
 }
 
+function getDroppedDiffSource(drop: DragDropFileEvent): DiffOpenSource | null {
+  const directory = drop.directories[0];
+  let source = directory ? normalizeDiffOpenSource(directory) : null;
+  if (!source) {
+    const githubUrl = drop.urls.find((url) => normalizeDiffOpenSource(url)?.kind === "github");
+    const githubSource = githubUrl ? normalizeDiffOpenSource(githubUrl) : null;
+    source = githubSource?.kind === "github" ? githubSource : null;
+  }
+  return source;
+}
+
+function getUnsupportedDropMessage(drop: DragDropFileEvent) {
+  let message = "Drop a Git folder or GitHub PR or commit URL.";
+  if (drop.files.length > 0) {
+    message = "File compare is not available yet. Drop a Git folder or GitHub PR or commit URL.";
+  } else if (drop.urls.length > 0) {
+    message = "Drop a GitHub PR or commit URL.";
+  }
+  return message;
+}
+
 function EmptyFolderIcon({ color }: { color: string }) {
   return (
     <View style={styles.emptyFolderIcon}>
@@ -452,6 +475,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const [urlInput, setUrlInput] = useState("");
   const [urlInputError, setUrlInputError] = useState<string | null>(null);
   const [loadingSource, setLoadingSource] = useState<DiffOpenSource | null>(null);
+  const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const activeFileIndex$ = useObservable<number | null>(null);
@@ -1143,6 +1167,38 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       }
     }
   }, [isLoading, loadSource, selectedSyntaxTheme, urlInput]);
+
+  const handleDragEnter = useCallback(() => {
+    setIsDropTargetActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDropTargetActive(false);
+  }, []);
+
+  const handleDrop = useCallback(({ nativeEvent }: { nativeEvent: DragDropFileEvent }) => {
+    setIsDropTargetActive(false);
+    if (!isLoading) {
+      const nextSource = getDroppedDiffSource(nativeEvent);
+      if (nextSource) {
+        loadSource(nextSource, selectedSyntaxTheme).catch((error: unknown) => {
+          setState((current) => ({
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+            folderPath: current.folderPath,
+            source: current.source,
+          }));
+        });
+      } else {
+        setState((current) => ({
+          status: "error",
+          error: getUnsupportedDropMessage(nativeEvent),
+          folderPath: current.folderPath,
+          source: current.source,
+        }));
+      }
+    }
+  }, [isLoading, loadSource, selectedSyntaxTheme]);
 
   useEffect(() => {
     const trace = loadTraceRef.current;
@@ -2061,12 +2117,37 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
-    <View style={[styles.root, { backgroundColor }]}>
+    <DragDropView
+      allowedFileTypes={diffDropAllowedFileTypes}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={[styles.root, { backgroundColor }]}
+    >
       {state.error ? (
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
       ) : null}
       {body}
-    </View>
+      {isDropTargetActive ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.dropOverlay,
+            {
+              backgroundColor: syntaxTheme.appearance === "dark" ? "rgba(88, 166, 255, 0.14)" : "rgba(9, 105, 218, 0.12)",
+              borderColor: displayTheme.colors.primary,
+            },
+          ]}
+        >
+          <Text style={[styles.dropOverlayTitle, { color: foregroundColor }]}>
+            Open Diff
+          </Text>
+          <Text style={[styles.dropOverlayText, { color: mutedColor }]}>
+            Drop a Git folder or GitHub PR or commit URL
+          </Text>
+        </View>
+      ) : null}
+    </DragDropView>
   );
 }
 
@@ -2239,6 +2320,28 @@ const styles = StyleSheet.create({
   diffPaneContent: {
     flex: 1,
     minHeight: 0,
+  },
+  dropOverlay: {
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 2,
+    bottom: 16,
+    justifyContent: "center",
+    left: 16,
+    position: "absolute",
+    right: 16,
+    top: 16,
+  },
+  dropOverlayText: {
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 20,
+  },
+  dropOverlayTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 32,
+    marginBottom: 4,
   },
   diffText: {
     flex: 1,

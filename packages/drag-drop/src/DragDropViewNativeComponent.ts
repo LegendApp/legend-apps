@@ -5,6 +5,7 @@ import type { DirectEventHandler, Double } from "react-native/Libraries/Types/Co
 export type DragDropFileEvent = {
   directories: string[];
   files: string[];
+  urls: string[];
 };
 
 export type NativeTrackDragEnterEvent = {
