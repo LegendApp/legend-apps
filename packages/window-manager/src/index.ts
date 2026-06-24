@@ -108,13 +108,30 @@ export type WindowToolbarSegment = {
   value: string;
 };
 
-export type WindowToolbarItem = {
+export type WindowToolbarItemPlacement = "leading" | "trailing";
+
+export type WindowToolbarSegmentedItem = {
   id: string;
   label?: string;
+  placement?: WindowToolbarItemPlacement;
   selectedValue?: string;
   segments: WindowToolbarSegment[];
   type: "segmented";
 };
+
+export type WindowToolbarButtonItem = {
+  bordered?: boolean;
+  enabled?: boolean;
+  id: string;
+  label?: string;
+  placement?: WindowToolbarItemPlacement;
+  systemImageName?: string;
+  tooltip?: string;
+  type: "button";
+  value?: string;
+};
+
+export type WindowToolbarItem = WindowToolbarButtonItem | WindowToolbarSegmentedItem;
 
 export type WindowOptions = {
   identifier?: string;

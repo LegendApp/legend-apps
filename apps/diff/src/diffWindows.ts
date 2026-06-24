@@ -12,11 +12,23 @@ import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type D
 import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
-export const diffSidebarTitlebarControlId = "diff-toggle-sidebar";
+export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
   blocks: "rectangle.split.2x1",
   unified: "rectangle.portrait",
 };
+
+function createDiffSidebarToolbarItem(sidebarCollapsed?: boolean) {
+  return {
+    bordered: true,
+    id: diffSidebarToolbarItemId,
+    label: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+    placement: "leading" as const,
+    systemImageName: "sidebar.left",
+    tooltip: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+    type: "button" as const,
+  };
+}
 
 function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffViewModeSetting()) {
   return {
@@ -63,18 +75,11 @@ function createDiffViewerWindowStyle({
 
   return {
     ...windowStyle,
-    titlebarControls: showSidebarControl ? [
-      {
-        id: diffSidebarTitlebarControlId,
-        label: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
-        placement: "left" as const,
-        selected: !sidebarCollapsed,
-        systemImageName: "sidebar.left",
-        tooltip: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
-        type: "button" as const,
-      },
-    ] : [],
-    toolbarItems: showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : [],
+    titlebarControls: [],
+    toolbarItems: [
+      ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
+      ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
+    ],
   };
 }
 

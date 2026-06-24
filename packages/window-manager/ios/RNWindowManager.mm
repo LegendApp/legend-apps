@@ -622,14 +622,24 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarItemIdentifiersForToolbar:(NSToolbar *)toolbar
 {
-  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [NSMutableArray arrayWithObject:NSToolbarFlexibleSpaceItemIdentifier];
+  NSMutableArray<NSToolbarItemIdentifier> *leadingIdentifiers = [NSMutableArray new];
+  NSMutableArray<NSToolbarItemIdentifier> *trailingIdentifiers = [NSMutableArray new];
   NSArray<NSDictionary *> *configs = self.toolbarItemConfigs[toolbar.identifier] ?: @[];
   for (NSDictionary *config in configs) {
     NSString *itemIdentifier = [self toolbarItemIdentifierForConfig:config];
     if (itemIdentifier.length > 0) {
-      [identifiers addObject:itemIdentifier];
+      NSString *placement = [config[@"placement"] isKindOfClass:NSString.class] ? config[@"placement"] : @"trailing";
+      if ([placement isEqualToString:@"leading"]) {
+        [leadingIdentifiers addObject:itemIdentifier];
+      } else {
+        [trailingIdentifiers addObject:itemIdentifier];
+      }
     }
   }
+  NSMutableArray<NSToolbarItemIdentifier> *identifiers = [NSMutableArray new];
+  [identifiers addObjectsFromArray:leadingIdentifiers];
+  [identifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
+  [identifiers addObjectsFromArray:trailingIdentifiers];
   return identifiers;
 }
 
@@ -700,6 +710,41 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
 
   NSString *type = [config[@"type"] isKindOfClass:NSString.class] ? config[@"type"] : nil;
+  if ([type isEqualToString:@"button"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSString *tooltip = [config[@"tooltip"] isKindOfClass:NSString.class] ? config[@"tooltip"] : label;
+    NSString *systemImageName = [config[@"systemImageName"] isKindOfClass:NSString.class] ? config[@"systemImageName"] : nil;
+    NSImage *image = nil;
+    if (systemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:label];
+      }
+    }
+
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = tooltip;
+    toolbarItem.image = image;
+    toolbarItem.target = self;
+    toolbarItem.action = @selector(toolbarButtonItemPressed:);
+    toolbarItem.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+    NSString *placement = [config[@"placement"] isKindOfClass:NSString.class] ? config[@"placement"] : @"trailing";
+    if (@available(macOS 10.15, *)) {
+      toolbarItem.bordered = LegendDictionaryHasKey(config, @"bordered") ? [config[@"bordered"] boolValue] : YES;
+    }
+    if (@available(macOS 11.0, *)) {
+      toolbarItem.navigational = [placement isEqualToString:@"leading"];
+    }
+    objc_setAssociatedObject(toolbarItem, &LegendToolbarControlMetadataKey, @{
+      @"itemId": itemId,
+      @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
+      @"windowIdentifier": toolbar.identifier ?: @"",
+    }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return toolbarItem;
+  }
+
   if (![type isEqualToString:@"segmented"]) {
     return nil;
   }
@@ -778,6 +823,26 @@ willBeInsertedIntoToolbar:(BOOL)flag
   toolbarItem.label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
   toolbarItem.paletteLabel = toolbarItem.label;
   return toolbarItem;
+}
+
+- (void)toolbarButtonItemPressed:(NSToolbarItem *)sender
+{
+  id metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+  NSString *value = [representedObject[@"value"] isKindOfClass:NSString.class]
+    ? representedObject[@"value"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarItemSelected"
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
 }
 
 - (void)toolbarSegmentedControlChanged:(NSSegmentedControl *)sender

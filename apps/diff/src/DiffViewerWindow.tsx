@@ -40,7 +40,7 @@ import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
-import { addWindowTitlebarControlPressedListener, addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
+import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
@@ -54,7 +54,7 @@ import {
   type DiffSettingsFile,
 } from "./diffSettings";
 import { registerDiffViewerActionHandlers } from "./diffViewerActions";
-import { diffSidebarTitlebarControlId, diffViewModeToolbarItemId, setDiffViewerWindowOptions } from "./diffWindows";
+import { diffSidebarToolbarItemId, diffViewModeToolbarItemId, setDiffViewerWindowOptions } from "./diffWindows";
 
 const diffInitialRowCount = 160;
 const diffInitialHighlightChunkRowCount = 40;
@@ -1103,21 +1103,12 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
 
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {
-      if (
-        event.identifier === diffViewerWindowIdentifier &&
-        event.itemId === diffViewModeToolbarItemId &&
-        isDiffViewMode(event.value)
-      ) {
-        setDiffViewModeSetting(event.value);
-      }
-    });
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    const subscription = addWindowTitlebarControlPressedListener((event) => {
-      if (event.identifier === diffViewerWindowIdentifier && event.controlId === diffSidebarTitlebarControlId) {
-        toggleSidebar();
+      if (event.identifier === diffViewerWindowIdentifier) {
+        if (event.itemId === diffSidebarToolbarItemId) {
+          toggleSidebar();
+        } else if (event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) {
+          setDiffViewModeSetting(event.value);
+        }
       }
     });
     return () => subscription.remove();
