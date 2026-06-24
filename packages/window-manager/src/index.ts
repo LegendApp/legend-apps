@@ -85,7 +85,21 @@ export type WindowStyleOptions = {
   titlebarSeparatorStyle?: "automatic" | "none" | "line" | "shadow";
   backgroundColor?: string;
   hasToolbar?: boolean;
+  titlebarControls?: WindowTitlebarControl[];
   toolbarItems?: WindowToolbarItem[];
+};
+
+export type WindowTitlebarControlPlacement = "left" | "right";
+
+export type WindowTitlebarControl = {
+  enabled?: boolean;
+  id: string;
+  label?: string;
+  placement?: WindowTitlebarControlPlacement;
+  selected?: boolean;
+  systemImageName?: string;
+  tooltip?: string;
+  type: "button";
 };
 
 export type WindowToolbarSegment = {
@@ -166,6 +180,11 @@ export type WindowToolbarItemSelectedEvent = {
   identifier: string;
   itemId: string;
   value: string;
+};
+
+export type WindowTitlebarControlPressedEvent = {
+  controlId: string;
+  identifier: string;
 };
 
 const emptySubscription = { remove() {} };
@@ -351,6 +370,13 @@ export function addWindowToolbarItemSelectedListener(listener: (event: WindowToo
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onToolbarItemSelected", listener);
 }
 
+export function addWindowTitlebarControlPressedListener(listener: (event: WindowTitlebarControlPressedEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onTitlebarControlPressed", listener);
+}
+
 export function addMainWindowMovedListener(listener: (frame: WindowFrame) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -380,6 +406,7 @@ export function useWindowManager() {
     onWindowClosed: addWindowClosedListener,
     onWindowCloseRequested: addWindowCloseRequestedListener,
     onWindowFocused: addWindowFocusedListener,
+    onWindowTitlebarControlPressed: addWindowTitlebarControlPressedListener,
     onWindowToolbarItemSelected: addWindowToolbarItemSelectedListener,
     onMainWindowMoved: addMainWindowMovedListener,
     onMainWindowResized: addMainWindowResizedListener,

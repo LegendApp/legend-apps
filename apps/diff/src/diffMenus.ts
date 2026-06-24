@@ -1,6 +1,7 @@
 import {
   commandModifier,
   openTargetTitles,
+  optionModifier,
   saveAsTargetTitles,
   saveTargetTitles,
   settingsTargetTitles,
@@ -46,6 +47,19 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         id: "hideSaveAs",
         targetTitles: saveAsTargetTitles,
         hidden: true,
+      },
+    ],
+  },
+  {
+    id: "view",
+    title: "View",
+    placement: { before: "Window" },
+    items: [
+      {
+        id: "toggleSidebar",
+        title: "Show Sidebar",
+        enabled: false,
+        shortcut: { key: "s", modifiers: commandModifier | optionModifier },
       },
     ],
   },

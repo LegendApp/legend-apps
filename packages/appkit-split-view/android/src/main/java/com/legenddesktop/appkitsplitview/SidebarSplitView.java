@@ -7,6 +7,7 @@ import android.widget.LinearLayout;
 public class SidebarSplitView extends LinearLayout {
   private double sidebarMinWidth = 180;
   private double contentMinWidth = 320;
+  private boolean sidebarCollapsed = false;
 
   public SidebarSplitView(Context context) {
     super(context);
@@ -23,11 +24,16 @@ public class SidebarSplitView extends LinearLayout {
     requestLayout();
   }
 
+  public void setSidebarCollapsed(boolean value) {
+    sidebarCollapsed = value;
+    requestLayout();
+  }
+
   @Override
   protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
     int width = MeasureSpec.getSize(widthMeasureSpec);
     int height = MeasureSpec.getSize(heightMeasureSpec);
-    int sidebarWidth = Math.max((int) sidebarMinWidth, (int) (width * 0.26));
+    int sidebarWidth = sidebarCollapsed ? 0 : Math.max((int) sidebarMinWidth, (int) (width * 0.26));
     int contentWidth = Math.max((int) contentMinWidth, width - sidebarWidth);
 
     if (sidebarWidth + contentWidth > width) {
@@ -55,7 +61,9 @@ public class SidebarSplitView extends LinearLayout {
   protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
     int width = right - left;
     int height = bottom - top;
-    int sidebarWidth = getChildCount() > 0 ? getChildAt(0).getMeasuredWidth() : Math.max((int) sidebarMinWidth, (int) (width * 0.26));
+    int sidebarWidth = sidebarCollapsed
+        ? 0
+        : getChildCount() > 0 ? getChildAt(0).getMeasuredWidth() : Math.max((int) sidebarMinWidth, (int) (width * 0.26));
 
     if (getChildCount() > 0) {
       getChildAt(0).layout(0, 0, sidebarWidth, height);

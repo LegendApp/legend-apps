@@ -213,6 +213,7 @@ static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
 }
 
 static char LegendManagedRootViewKey;
+static char LegendTitlebarControlMetadataKey;
 static char LegendToolbarControlMetadataKey;
 
 static RCTUIView *LegendManagedRootView(NSWindow *window)
@@ -402,6 +403,7 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *windows;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleNames;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSTitlebarAccessoryViewController *> *> *titlebarAccessoryControllers;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *toolbarItemConfigs;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
@@ -424,6 +426,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _windows = [NSMutableDictionary new];
     _rootViews = [NSMutableDictionary new];
     _moduleNames = [NSMutableDictionary new];
+    _titlebarAccessoryControllers = [NSMutableDictionary new];
     _toolbarItemConfigs = [NSMutableDictionary new];
     _windowBlurFilters = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
@@ -439,6 +442,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     @"onMainWindowMoved",
     @"onMainWindowResized",
     @"onWindowFocused",
+    @"onTitlebarControlPressed",
     @"onToolbarItemSelected",
   ];
 }
@@ -494,6 +498,96 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 }
 
 #if TARGET_OS_OSX
+- (void)removeTitlebarControlsForIdentifier:(NSString *)identifier fromWindow:(NSWindow *)window
+{
+  NSArray<NSTitlebarAccessoryViewController *> *controllers = self.titlebarAccessoryControllers[identifier] ?: @[];
+  for (NSTitlebarAccessoryViewController *controller in controllers) {
+    NSUInteger index = [window.titlebarAccessoryViewControllers indexOfObjectIdenticalTo:controller];
+    if (index != NSNotFound) {
+      [window removeTitlebarAccessoryViewControllerAtIndex:index];
+    }
+  }
+  [self.titlebarAccessoryControllers removeObjectForKey:identifier];
+}
+
+- (void)applyTitlebarControlsFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (!LegendDictionaryHasKey(windowStyle, @"titlebarControls")) {
+    return;
+  }
+
+  [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
+
+  NSArray *titlebarControls = [windowStyle[@"titlebarControls"] isKindOfClass:NSArray.class]
+    ? windowStyle[@"titlebarControls"]
+    : @[];
+  NSMutableArray<NSTitlebarAccessoryViewController *> *controllers = [NSMutableArray new];
+
+  for (id controlCandidate in titlebarControls) {
+    if (![controlCandidate isKindOfClass:NSDictionary.class]) {
+      continue;
+    }
+
+    NSDictionary *control = (NSDictionary *)controlCandidate;
+    NSString *type = [control[@"type"] isKindOfClass:NSString.class] ? control[@"type"] : nil;
+    NSString *controlId = [control[@"id"] isKindOfClass:NSString.class] ? control[@"id"] : nil;
+    if (![type isEqualToString:@"button"] || controlId.length == 0) {
+      continue;
+    }
+
+    NSString *label = [control[@"label"] isKindOfClass:NSString.class] ? control[@"label"] : controlId;
+    NSString *systemImageName = [control[@"systemImageName"] isKindOfClass:NSString.class] ? control[@"systemImageName"] : nil;
+    NSImage *image = nil;
+    if (systemImageName.length > 0) {
+      if (@available(macOS 11.0, *)) {
+        image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:label];
+      }
+    }
+
+    NSButton *button = [NSButton buttonWithTitle:image ? @"" : label target:self action:@selector(titlebarControlPressed:)];
+    button.bezelStyle = NSBezelStyleTexturedRounded;
+    button.buttonType = NSButtonTypeToggle;
+    button.controlSize = NSControlSizeSmall;
+    button.enabled = LegendDictionaryHasKey(control, @"enabled") ? [control[@"enabled"] boolValue] : YES;
+    button.image = image;
+    button.imagePosition = image ? NSImageOnly : NSNoImage;
+    button.state = [control[@"selected"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+    button.toolTip = [control[@"tooltip"] isKindOfClass:NSString.class] ? control[@"tooltip"] : label;
+    button.frame = NSMakeRect(0, 0, image ? 30 : MAX(72, button.fittingSize.width + 12), 24);
+    objc_setAssociatedObject(button, &LegendTitlebarControlMetadataKey, @{
+      @"controlId": controlId,
+      @"windowIdentifier": identifier ?: @"",
+    }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    NSTitlebarAccessoryViewController *controller = [NSTitlebarAccessoryViewController new];
+    controller.view = button;
+    NSString *placement = [control[@"placement"] isKindOfClass:NSString.class] ? control[@"placement"] : @"left";
+    controller.layoutAttribute = [placement isEqualToString:@"right"] ? NSLayoutAttributeRight : NSLayoutAttributeLeft;
+    [window addTitlebarAccessoryViewController:controller];
+    [controllers addObject:controller];
+  }
+
+  self.titlebarAccessoryControllers[identifier] = controllers;
+}
+
+- (void)titlebarControlPressed:(NSButton *)sender
+{
+  id metadata = objc_getAssociatedObject(sender, &LegendTitlebarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *controlId = [representedObject[@"controlId"] isKindOfClass:NSString.class]
+    ? representedObject[@"controlId"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onTitlebarControlPressed"
+                           body:@{@"identifier": identifier, @"controlId": controlId}];
+}
+
 - (NSString *)toolbarItemIdentifierForConfig:(NSDictionary *)config
 {
   NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : nil;
@@ -930,6 +1024,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
       LegendApplyToolbarStyle(existingWindow, toolbarStyle);
       LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
+      [self applyTitlebarControlsFromOptions:options toWindow:existingWindow identifier:identifier];
       [self applyToolbarItemsFromOptions:options toWindow:existingWindow identifier:identifier];
       LegendApplyWindowAppearance(existingWindow, appearance);
       LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
@@ -1028,6 +1123,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     LegendApplyToolbarStyle(window, toolbarStyle);
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+    [self applyTitlebarControlsFromOptions:options toWindow:window identifier:identifier];
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:identifier];
     LegendApplyWindowAppearance(window, appearance);
     LegendApplyWindowBackgroundColor(window, backgroundColor);
@@ -1216,6 +1312,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
     LegendApplyWindowOptions(mainWindow, options);
+    [self applyTitlebarControlsFromOptions:options toWindow:mainWindow identifier:@"main"];
     [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];
     resolve([self successJson]);
   });
@@ -1240,6 +1337,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
     LegendApplyWindowOptions(window, options);
+    [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
     RCTUIView *rootView = self.rootViews[targetIdentifier];
     LegendSizeRootViewToWindow(rootView, window);
@@ -1497,9 +1595,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
 - (void)handleWindowClosedForIdentifier:(NSString *)identifier
 {
   NSString *moduleName = self.moduleNames[identifier] ?: @"";
+  NSWindow *window = (NSWindow *)self.windows[identifier];
   CIFilter *blurFilter = self.windowBlurFilters[identifier];
   if (blurFilter) {
-    NSWindow *window = (NSWindow *)self.windows[identifier];
     RCTUIView *rootView = self.rootViews[identifier];
     NSView *contentView = window.contentView ?: rootView;
     if (contentView.layer) {
@@ -1515,6 +1613,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
   }
   [self.windowBlurFilters removeObjectForKey:identifier];
+  if (window) {
+    [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
+  } else {
+    [self.titlebarAccessoryControllers removeObjectForKey:identifier];
+  }
   [self.closeRequestIdentifiers removeObject:identifier];
   [self.windows removeObjectForKey:identifier];
   [self.rootViews removeObjectForKey:identifier];

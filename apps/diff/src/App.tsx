@@ -5,6 +5,7 @@ import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
+import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 LogBox.ignoreLogs([
@@ -75,6 +76,7 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
     settings: () => {
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
     },
+    toggleSidebar: dispatchDiffViewerAction,
   };
 }
 

@@ -8,6 +8,7 @@ export type NativeMenuShortcut = {
 };
 
 export const commandModifier = 1 << 20;
+export const optionModifier = 1 << 19;
 export const shiftModifier = 1 << 17;
 export const settingsTargetTitles = ["Settings...", "Settings…", "Preferences...", "Preferences…"];
 export const openTargetTitles = ["Open", "Open...", "Open…"];

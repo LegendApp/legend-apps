@@ -27,6 +27,7 @@ export interface SidebarSplitViewProps extends ViewProps {
   className?: string;
   contentMinWidth?: number;
   onSplitViewDidResize?: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void | Promise<void>;
+  sidebarCollapsed?: boolean;
   sidebarMinWidth?: number;
 }
 
@@ -35,6 +36,7 @@ export function SidebarSplitView({
   children,
   contentMinWidth = 320,
   onSplitViewDidResize,
+  sidebarCollapsed = false,
   sidebarMinWidth = 180,
   style,
   ...props
@@ -79,6 +81,7 @@ export function SidebarSplitView({
       appearance,
       contentMinWidth,
       onSplitViewDidResize: handleSplitViewResize,
+      sidebarCollapsed,
       sidebarMinWidth,
       style: [styles.root, style],
       ...props,
@@ -90,10 +93,10 @@ export function SidebarSplitView({
         style: [
           styles.pane,
           {
-            flex: paneMetrics.sidebarWidth ? 0 : 1,
+            flex: sidebarCollapsed || paneMetrics.sidebarWidth ? 0 : 1,
             height: paneMetrics.sidebarHeight || undefined,
             minHeight: paneMetrics.sidebarHeight || undefined,
-            width: paneMetrics.sidebarWidth || undefined,
+            width: sidebarCollapsed ? 0 : paneMetrics.sidebarWidth || undefined,
           },
         ],
       },

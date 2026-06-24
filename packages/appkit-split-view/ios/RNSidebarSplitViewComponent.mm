@@ -47,6 +47,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   LayoutMetrics _contentReactLayoutMetrics;
   CGFloat _sidebarMinWidth;
   CGFloat _contentMinWidth;
+  BOOL _sidebarCollapsed;
   CGFloat _lastSidebarWidth;
   CGFloat _lastContentWidth;
   CGFloat _lastHeight;
@@ -68,6 +69,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
     _sidebarMinWidth = 180;
     _contentMinWidth = 320;
+    _sidebarCollapsed = NO;
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
     _lastHeight = -1;
@@ -84,7 +86,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 
     _sidebarItem = [NSSplitViewItem sidebarWithViewController:_sidebarViewController];
     _contentItem = [NSSplitViewItem splitViewItemWithViewController:_contentViewController];
-    _sidebarItem.canCollapse = NO;
+    _sidebarItem.canCollapse = YES;
     _contentItem.canCollapse = NO;
     [self updateSplitItemSizing];
 
@@ -131,6 +133,13 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   _sidebarItem.minimumThickness = MAX(120, _sidebarMinWidth);
   _sidebarItem.preferredThicknessFraction = 0.26;
   _contentItem.minimumThickness = MAX(240, _contentMinWidth);
+}
+
+- (void)updateSidebarCollapsed
+{
+  if (_sidebarItem.collapsed != _sidebarCollapsed) {
+    _sidebarItem.collapsed = _sidebarCollapsed;
+  }
 }
 
 - (void)applyAppearance
@@ -210,7 +219,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   height = MAX(sidebarHeight, contentHeight);
   CGRect bounds = [self currentLayoutBounds];
 
-  if (sidebarWidth <= 0 || contentWidth <= 0 || height <= 0 ||
+  if (contentWidth <= 0 || height <= 0 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
     return;
   }
@@ -252,7 +261,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 
 - (void)applyDividerPositionForBounds:(CGRect)bounds
 {
-  if (bounds.size.width <= 0 || _splitViewController.splitView.subviews.count < 2) {
+  if (_sidebarCollapsed || bounds.size.width <= 0 || _splitViewController.splitView.subviews.count < 2) {
     return;
   }
 
@@ -271,6 +280,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   CGRect bounds = [self currentLayoutBounds];
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
+  [self updateSidebarCollapsed];
   [self applyDividerPositionForBounds:bounds];
   [_splitViewController.splitView adjustSubviews];
   [_splitViewController.view layoutSubtreeIfNeeded];
@@ -371,10 +381,12 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   }
   _sidebarMinWidth = newProps.sidebarMinWidth;
   _contentMinWidth = newProps.contentMinWidth;
+  _sidebarCollapsed = newProps.sidebarCollapsed;
   if (![_appearanceName isEqualToString:nextAppearanceName]) {
     _appearanceName = nextAppearanceName;
     [self applyAppearance];
   }
+  [self updateSidebarCollapsed];
   [self updateSplitItemSizing];
 #endif
 
@@ -455,11 +467,13 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   _contentReactLayoutMetrics = EmptyLayoutMetrics;
   _sidebarMinWidth = 180;
   _contentMinWidth = 320;
+  _sidebarCollapsed = NO;
   _lastSidebarWidth = -1;
   _lastContentWidth = -1;
   _lastHeight = -1;
   _appearanceName = @"system";
   [self applyAppearance];
+  [self updateSidebarCollapsed];
   [self updateSplitItemSizing];
 #else
   for (UIView *subview in _sidebarContainer.subviews) {

@@ -12,6 +12,7 @@ import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type D
 import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
+export const diffSidebarTitlebarControlId = "diff-toggle-sidebar";
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
   blocks: "rectangle.split.2x1",
   unified: "rectangle.portrait",
@@ -34,12 +35,16 @@ function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffView
 function createDiffViewerWindowStyle({
   appearance,
   includeFrame,
+  showSidebarControl,
   showViewModeToolbar,
+  sidebarCollapsed,
   viewMode,
 }: {
   appearance?: "dark" | "light";
   includeFrame: boolean;
+  showSidebarControl?: boolean;
   showViewModeToolbar?: boolean;
+  sidebarCollapsed?: boolean;
   viewMode?: DiffViewMode;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
@@ -58,6 +63,17 @@ function createDiffViewerWindowStyle({
 
   return {
     ...windowStyle,
+    titlebarControls: showSidebarControl ? [
+      {
+        id: diffSidebarTitlebarControlId,
+        label: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+        placement: "left" as const,
+        selected: !sidebarCollapsed,
+        systemImageName: "sidebar.left",
+        tooltip: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+        type: "button" as const,
+      },
+    ] : [],
     toolbarItems: showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : [],
   };
 }
@@ -128,13 +144,17 @@ export function setDiffViewerWindowOptions({
   appearance,
   backgroundColor,
   folderPath,
+  showSidebarControl,
   showViewModeToolbar,
+  sidebarCollapsed,
   viewMode,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
   folderPath: string | null;
+  showSidebarControl: boolean;
   showViewModeToolbar: boolean;
+  sidebarCollapsed: boolean;
   viewMode: DiffViewMode;
 }) {
   const startedAt = nowMs();
@@ -144,7 +164,9 @@ export function setDiffViewerWindowOptions({
     windowStyle: createDiffViewerWindowStyle({
       appearance,
       includeFrame: false,
+      showSidebarControl,
       showViewModeToolbar,
+      sidebarCollapsed,
       viewMode,
     }),
   }).then((result) => {
