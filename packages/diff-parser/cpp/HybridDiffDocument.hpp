@@ -2,10 +2,12 @@
 
 #include "../nitrogen/generated/shared/c++/HybridDiffDocumentSpec.hpp"
 
+#include <atomic>
 #include <mutex>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace margelo::nitro::legenddesktop::diffparser {
@@ -55,6 +57,7 @@ public:
       std::string headTreeOid,
       std::string theme,
       DiffLoadTiming timing);
+  ~HybridDiffDocument() override;
 
   double getRowCount() override;
   double getFileCount() override;
@@ -67,9 +70,12 @@ public:
   DiffSideBySideRenderRow getSideBySideRow(double index, const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffSideBySideRenderRow> getPlainSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffSideBySideRenderRow> getSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) override;
+  double getTokenizedRowVersion() override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxStyle> getStyles() override;
   DiffLoadTiming getTiming() override;
+  double startBackgroundTokenization(double chunkRowCount) override;
+  double stopBackgroundTokenization() override;
 
 protected:
   size_t getExternalMemorySize() noexcept override;
@@ -86,6 +92,7 @@ private:
       const std::vector<double>& collapsedFileIndexes,
       bool tokenizeRows);
   void ensureRowTokens(size_t rowIndex);
+  bool ensureNextBackgroundTokenChunk(size_t chunkRowCount);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);
   std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
@@ -100,6 +107,11 @@ private:
   std::string theme_;
   std::shared_ptr<DiffSyntaxState> syntaxState_;
   DiffLoadTiming timing_;
+  size_t backgroundTokenizeRowIndex_ = 0;
+  std::atomic<uint64_t> backgroundGeneration_{0};
+  std::atomic<uint64_t> tokenizedRowVersion_{0};
+  std::atomic<bool> backgroundTokenizationRunning_{false};
+  std::thread backgroundThread_;
   mutable std::mutex mutex_;
 };
 

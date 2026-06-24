@@ -92,9 +92,12 @@ export interface DiffDocument
   getSideBySideRow(index: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow;
   getPlainSideBySideRows(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow[];
   getSideBySideRows(start: number, count: number, collapsedFileIndexes: number[]): DiffSideBySideRenderRow[];
+  getTokenizedRowVersion(): number;
   getFiles(): DiffFileSummary[];
   getStyles(): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
+  startBackgroundTokenization(chunkRowCount: number): number;
+  stopBackgroundTokenization(): number;
 }
 
 export interface DiffParser

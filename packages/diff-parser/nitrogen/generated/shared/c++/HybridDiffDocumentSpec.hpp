@@ -75,9 +75,12 @@ namespace margelo::nitro::legenddesktop::diffparser {
       virtual DiffSideBySideRenderRow getSideBySideRow(double index, const std::vector<double>& collapsedFileIndexes) = 0;
       virtual std::vector<DiffSideBySideRenderRow> getPlainSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
       virtual std::vector<DiffSideBySideRenderRow> getSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes) = 0;
+      virtual double getTokenizedRowVersion() = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
       virtual std::vector<DiffSyntaxStyle> getStyles() = 0;
       virtual DiffLoadTiming getTiming() = 0;
+      virtual double startBackgroundTokenization(double chunkRowCount) = 0;
+      virtual double stopBackgroundTokenization() = 0;
 
     protected:
       // Hybrid Setup

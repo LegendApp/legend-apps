@@ -3,6 +3,7 @@
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -321,6 +322,10 @@ HybridDiffDocument::HybridDiffDocument(
   sideBySideLines_ = createSideBySideLines(rows_);
 }
 
+HybridDiffDocument::~HybridDiffDocument() {
+  stopBackgroundTokenization();
+}
+
 double HybridDiffDocument::getRowCount() {
   std::lock_guard<std::mutex> lock(mutex_);
   return static_cast<double>(rows_.size());
@@ -547,6 +552,10 @@ std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRows(
   return getSideBySideRowsForRange(start, count, collapsedFileIndexes, true);
 }
 
+double HybridDiffDocument::getTokenizedRowVersion() {
+  return static_cast<double>(tokenizedRowVersion_.load());
+}
+
 std::vector<DiffFileSummary> HybridDiffDocument::getFiles() {
   std::lock_guard<std::mutex> lock(mutex_);
   return files_;
@@ -565,6 +574,53 @@ std::vector<DiffSyntaxStyle> HybridDiffDocument::getStyles() {
 DiffLoadTiming HybridDiffDocument::getTiming() {
   std::lock_guard<std::mutex> lock(mutex_);
   return timing_;
+}
+
+double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount) {
+  stopBackgroundTokenization();
+
+  const auto safeChunkRowCount = static_cast<size_t>(std::max(1.0, chunkRowCount));
+  const auto generation = backgroundGeneration_.fetch_add(1) + 1;
+  backgroundTokenizationRunning_.store(true);
+  auto document = shared_cast<HybridDiffDocument>();
+
+  backgroundThread_ = std::thread([document, generation, safeChunkRowCount]() {
+    bool shouldContinue = true;
+
+    while (shouldContinue && document->backgroundGeneration_.load() == generation) {
+      bool didTokenizeChunk = false;
+      {
+        std::lock_guard<std::mutex> lock(document->mutex_);
+        didTokenizeChunk = document->ensureNextBackgroundTokenChunk(safeChunkRowCount);
+        shouldContinue = didTokenizeChunk;
+      }
+
+      if (shouldContinue && didTokenizeChunk) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    }
+
+    if (document->backgroundGeneration_.load() == generation) {
+      document->backgroundTokenizationRunning_.store(false);
+    }
+  });
+
+  return getTokenizedRowVersion();
+}
+
+double HybridDiffDocument::stopBackgroundTokenization() {
+  backgroundGeneration_.fetch_add(1);
+  backgroundTokenizationRunning_.store(false);
+
+  if (backgroundThread_.joinable()) {
+    if (backgroundThread_.get_id() == std::this_thread::get_id()) {
+      backgroundThread_.detach();
+    } else {
+      backgroundThread_.join();
+    }
+  }
+
+  return getTokenizedRowVersion();
 }
 
 size_t HybridDiffDocument::getExternalMemorySize() noexcept {
@@ -622,6 +678,25 @@ void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   } else {
     row.tokens = tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
   }
+}
+
+bool HybridDiffDocument::ensureNextBackgroundTokenChunk(size_t chunkRowCount) {
+  const auto start = backgroundTokenizeRowIndex_;
+  auto tokenizedCount = 0;
+
+  while (backgroundTokenizeRowIndex_ < rows_.size() && tokenizedCount < chunkRowCount) {
+    const auto rowIndex = backgroundTokenizeRowIndex_;
+    backgroundTokenizeRowIndex_ += 1;
+    ensureRowTokens(rowIndex);
+    tokenizedCount += 1;
+  }
+
+  if (backgroundTokenizeRowIndex_ > start) {
+    tokenizedRowVersion_.fetch_add(1);
+    return true;
+  }
+
+  return false;
 }
 
 DiffTokenizedSource& HybridDiffDocument::ensureSourceLoaded(DiffFileSources& sources, bool oldSource) {
