@@ -9,6 +9,7 @@ import {
   type DiffSyntaxStyle,
   type DiffTokenizedRowRange,
 } from "@legend-desktop/diff-parser";
+import { revealInFinder } from "@legend-desktop/file-dialog";
 import { watchDirectories } from "@legend-desktop/file-system-watcher";
 import {
   createSyntaxStyleMap,
@@ -934,6 +935,38 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     };
   }, [loadFolder, selectedSyntaxTheme, visibleFolderPath]);
 
+  const reloadCurrentFolder = useCallback(() => {
+    if (state.status !== "loaded") {
+      return false;
+    }
+
+    loadFolder(state.folderPath, selectedSyntaxTheme).catch((error: unknown) => {
+      setState((current) => ({
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+        folderPath: current.folderPath,
+      }));
+    });
+    return true;
+  }, [loadFolder, selectedSyntaxTheme, state]);
+
+  const revealCurrentFolder = useCallback(() => {
+    if (!visibleFolderPath) {
+      return false;
+    }
+
+    revealInFinder(visibleFolderPath)
+      .then((didReveal) => {
+        if (!didReveal) {
+          console.error("Unable to reveal folder in Finder.");
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    return true;
+  }, [visibleFolderPath]);
+
   useEffect(() => {
     let frameHandle: number | null = null;
     let secondFrameHandle: number | null = null;
@@ -994,19 +1027,39 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   }, [showSidebarControl]);
 
   useEffect(() => registerDiffViewerActionHandlers({
+    reload: reloadCurrentFolder,
+    revealInFinder: revealCurrentFolder,
     toggleSidebar,
-  }), [toggleSidebar]);
+  }), [reloadCurrentFolder, revealCurrentFolder, toggleSidebar]);
 
   useEffect(() => {
     updateMenuItems(diffMenuOwnerId, [
+      {
+        enabled: state.status === "loaded",
+        id: "reload",
+      },
+      {
+        enabled: visibleFolderPath !== null,
+        id: "revealInFinder",
+      },
       {
         checked: showSidebarControl && !sidebarCollapsed,
         enabled: showSidebarControl,
         id: "toggleSidebar",
         title: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
       },
+      {
+        checked: viewMode === "unified",
+        enabled: showViewModeToolbar,
+        id: "viewUnified",
+      },
+      {
+        checked: viewMode === "blocks",
+        enabled: showViewModeToolbar,
+        id: "viewBlocks",
+      },
     ]);
-  }, [showSidebarControl, sidebarCollapsed]);
+  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.status, viewMode, visibleFolderPath]);
 
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {

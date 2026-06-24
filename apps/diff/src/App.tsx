@@ -4,6 +4,7 @@ import { LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
+import { setDiffViewModeSetting } from "./diffSettings";
 import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
@@ -76,7 +77,15 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
     settings: () => {
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
     },
+    reload: dispatchDiffViewerAction,
+    revealInFinder: dispatchDiffViewerAction,
     toggleSidebar: dispatchDiffViewerAction,
+    viewBlocks: () => {
+      setDiffViewModeSetting("blocks");
+    },
+    viewUnified: () => {
+      setDiffViewModeSetting("unified");
+    },
   };
 }
 
