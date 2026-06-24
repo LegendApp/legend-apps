@@ -22,6 +22,7 @@
     "@legend-desktop/virtualized-document": "workspace:*",
     "@legend-desktop/window-manager": "0.0.0",
     "@legend-desktop/windows": "0.0.0",
+    "@legendapp/list": "catalog:",
     "@legendapp/state": "catalog:"
   }
 }

@@ -36,10 +36,14 @@ import {
   type VirtualizedFixedDocumentListRef,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
+import {
+  LegendList,
+  type LegendListRenderItemProps,
+} from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
@@ -72,6 +76,7 @@ const diffChangeTypeAdd = 1;
 const diffChangeTypeRemove = 2;
 const diffSideBySideGutterWidth = 44;
 const diffSideBySideHorizontalPadding = 12;
+const diffSidebarFileRowHeight = 46;
 const diffSideBySideAdaptiveRender = {
   enterVelocity: 8,
   exitDelay: 150,
@@ -1174,6 +1179,24 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     }
   }, [sideBySideListIndexByRowIndex, viewMode, visibleListIndexByRowIndex]);
 
+  const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
+    const directory = getDirectoryPath(file.path);
+    const statusIcon = getFileStatusIcon(file.status);
+
+    return (
+      <DiffSidebarFileRow
+        activeFileIndex$={activeFileIndex$}
+        borderColor={displayTheme.colors.border}
+        directory={directory}
+        file={file}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        onPress={() => scrollToFile(file)}
+        statusIcon={statusIcon}
+      />
+    );
+  }, [activeFileIndex$, displayTheme.colors.border, foregroundColor, mutedColor, scrollToFile]);
+
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     setSplitPaneMetrics({
       contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
@@ -1673,26 +1696,14 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           ]}
         >
           <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
-          <ScrollView style={styles.sidebarList}>
-            {state.files.map((file) => {
-              const directory = getDirectoryPath(file.path);
-              const statusIcon = getFileStatusIcon(file.status);
-
-              return (
-                <DiffSidebarFileRow
-                  activeFileIndex$={activeFileIndex$}
-                  borderColor={displayTheme.colors.border}
-                  directory={directory}
-                  file={file}
-                  foregroundColor={foregroundColor}
-                  key={`${file.index}:${file.path}`}
-                  mutedColor={mutedColor}
-                  onPress={() => scrollToFile(file)}
-                  statusIcon={statusIcon}
-                />
-              );
-            })}
-          </ScrollView>
+          <LegendList
+            data={state.files}
+            getFixedItemSize={() => diffSidebarFileRowHeight}
+            keyExtractor={(file) => `${file.index}:${file.path}`}
+            recycleItems
+            renderItem={renderSidebarFile}
+            style={styles.sidebarList}
+          />
         </View>
       );
 
@@ -2040,7 +2051,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
-    minHeight: 34,
+    height: diffSidebarFileRowHeight,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
