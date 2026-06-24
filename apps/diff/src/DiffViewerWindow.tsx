@@ -64,6 +64,7 @@ const diffInitialRowCount = 160;
 const diffInitialHighlightChunkRowCount = 40;
 const diffBackgroundTokenizeChunkBudgetMs = 3;
 const diffBackgroundTokenizeChunkRowCount = 16;
+const diffBackgroundTokenizeMaxRowCount = 100_000;
 const diffBackgroundTokenizePollMs = 80;
 const diffBackgroundTokenizeStartDelayMs = 160;
 const diffLineOverscan = 240;
@@ -410,7 +411,8 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
 }
 
 function createIdentityDiffRowIndexes(length: number) {
-  return new Array<number | undefined>(Math.max(0, Math.floor(length)));
+  const count = Math.max(0, Math.floor(length));
+  return Array.from({ length: count }, (_, index) => index);
 }
 
 function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {
@@ -814,6 +816,14 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   useEffect(() => {
     if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
       const document = state.document;
+      if (sideBySideRowCount > diffBackgroundTokenizeMaxRowCount) {
+        logDiffOpenTiming("viewer.backgroundTokenize.skipped", {
+          maxRows: diffBackgroundTokenizeMaxRowCount,
+          rows: sideBySideRowCount,
+        });
+        return undefined;
+      }
+
       let intervalHandle: ReturnType<typeof setInterval> | null = null;
       const startTimeoutHandle = setTimeout(() => {
         document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs);
