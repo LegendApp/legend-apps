@@ -40,7 +40,7 @@ struct DiffFileSources {
 
 struct DiffSideBySideLine {
   double index = 0;
-  std::string kind;
+  double kind = 0;
   double fileIndex = -1;
   double hunkIndex = -1;
   double sourceStart = 0;

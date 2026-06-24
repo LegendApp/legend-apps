@@ -29,6 +29,10 @@ constexpr double diffRowKindLine = 2;
 constexpr double diffChangeTypeAdd = 1;
 constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
+constexpr double sideBySideKindFileHeader = 0;
+constexpr double sideBySideKindContext = 1;
+constexpr double sideBySideKindChange = 2;
+constexpr double sideBySideKindLine = 3;
 
 struct GitRepositoryDeleter {
   void operator()(git_repository* repo) const {
@@ -179,7 +183,7 @@ double getSideBySideSourceEnd(double oldRowIndex, double newRowIndex, double fal
 
 DiffSideBySideLine createSideBySideLine(
     double index,
-    std::string kind,
+    double kind,
     double fileIndex,
     double hunkIndex,
     double oldRowIndex,
@@ -194,6 +198,19 @@ DiffSideBySideLine createSideBySideLine(
       .oldRowIndex = oldRowIndex,
       .newRowIndex = newRowIndex,
   };
+}
+
+std::string sideBySideKindString(double kind) {
+  if (kind == sideBySideKindFileHeader) {
+    return "file-header";
+  }
+  if (kind == sideBySideKindContext) {
+    return "context";
+  }
+  if (kind == sideBySideKindChange) {
+    return "change";
+  }
+  return "line";
 }
 
 DiffRenderRow createEmptyRenderRow() {
@@ -221,10 +238,10 @@ std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRend
   double currentFileIndex = -1;
   double currentHunkIndex = -1;
 
-  auto pushLine = [&](std::string kind, double fileIndex, double hunkIndex, double oldRowIndex, double newRowIndex) {
+  auto pushLine = [&](double kind, double fileIndex, double hunkIndex, double oldRowIndex, double newRowIndex) {
     lines.push_back(createSideBySideLine(
         static_cast<double>(lines.size()),
-        std::move(kind),
+        kind,
         fileIndex,
         hunkIndex,
         oldRowIndex,
@@ -234,7 +251,7 @@ std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRend
   auto flushContextRows = [&]() {
     if (!contextRows.empty()) {
       for (const auto* row : contextRows) {
-        pushLine("context", row->fileIndex, row->hunkIndex, row->index, row->index);
+        pushLine(sideBySideKindContext, row->fileIndex, row->hunkIndex, row->index, row->index);
       }
       contextRows.clear();
     }
@@ -246,7 +263,7 @@ std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRend
       const auto* firstRow = !removedRows.empty() ? removedRows.front() : addedRows.front();
       for (size_t index = 0; index < lineCount; index += 1) {
         pushLine(
-            "change",
+            sideBySideKindChange,
             firstRow->fileIndex,
             firstRow->hunkIndex,
             index < removedRows.size() ? removedRows[index]->index : emptySideBySideRowIndex,
@@ -267,7 +284,7 @@ std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRend
       flushRows();
       currentFileIndex = row.fileIndex;
       currentHunkIndex = row.hunkIndex;
-      pushLine("file-header", row.fileIndex, row.hunkIndex, row.index, row.index);
+      pushLine(sideBySideKindFileHeader, row.fileIndex, row.hunkIndex, row.index, row.index);
     } else {
       if (currentFileIndex != row.fileIndex || currentHunkIndex != row.hunkIndex) {
         flushRows();
@@ -313,7 +330,7 @@ bool hasCollapsedFileIndexes(const std::unordered_set<int>& collapsedFileIndexes
 bool shouldIncludeSideBySideLine(
     const DiffSideBySideLine& line,
     const std::unordered_set<int>& collapsedFileIndexes) {
-  return line.kind == "file-header" || !collapsedFileIndexes.contains(static_cast<int>(line.fileIndex));
+  return line.kind == sideBySideKindFileHeader || !collapsedFileIndexes.contains(static_cast<int>(line.fileIndex));
 }
 
 } // namespace
@@ -409,7 +426,7 @@ std::vector<DiffSideBySideFileHeader> HybridDiffDocument::getSideBySideFileHeade
 
   for (const auto& line : sideBySideLines_) {
     if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
-      if (line.kind == "file-header") {
+      if (line.kind == sideBySideKindFileHeader) {
         fileHeaders.push_back(DiffSideBySideFileHeader(
             line.fileIndex,
             line.sourceStart,
@@ -464,7 +481,7 @@ DiffSideBySideRenderRow HybridDiffDocument::createSideBySideRenderRow(const Diff
 
   return DiffSideBySideRenderRow(
       index,
-      line.kind,
+      sideBySideKindString(line.kind),
       line.fileIndex,
       line.hunkIndex,
       line.sourceStart,
@@ -489,7 +506,7 @@ DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRowForIndex(
     if (safeIndex < sideBySideLines_.size()) {
       return createSideBySideRenderRow(sideBySideLines_[safeIndex], static_cast<double>(safeIndex), tokenizeRows);
     }
-    return createSideBySideRenderRow(createSideBySideLine(index, "line", -1, -1, -1, -1), index, tokenizeRows);
+    return createSideBySideRenderRow(createSideBySideLine(index, sideBySideKindLine, -1, -1, -1, -1), index, tokenizeRows);
   }
 
   size_t logicalIndex = 0;
@@ -502,7 +519,7 @@ DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRowForIndex(
     }
   }
 
-  return createSideBySideRenderRow(createSideBySideLine(index, "line", -1, -1, -1, -1), index, tokenizeRows);
+  return createSideBySideRenderRow(createSideBySideLine(index, sideBySideKindLine, -1, -1, -1, -1), index, tokenizeRows);
 }
 
 std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRowsForRange(
@@ -661,9 +678,6 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
     size += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();
   }
   size += sideBySideLines_.capacity() * sizeof(DiffSideBySideLine);
-  for (const auto& line : sideBySideLines_) {
-    size += line.kind.capacity();
-  }
   for (const auto& sources : fileSources_) {
     size += sources.oldPath.capacity() + sources.newPath.capacity() + sources.status.capacity();
     for (const auto* source : {&sources.oldSource, &sources.newSource}) {
