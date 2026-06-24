@@ -535,7 +535,7 @@ DiffSideBySideRenderRow HybridDiffDocument::getPlainSideBySideRow(
 DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRow(
     double index,
     const std::vector<double>& collapsedFileIndexes) {
-  return getSideBySideRowForIndex(index, collapsedFileIndexes, true);
+  return getSideBySideRowForIndex(index, collapsedFileIndexes, false);
 }
 
 std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getPlainSideBySideRows(
@@ -549,7 +549,7 @@ std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRows(
     double start,
     double count,
     const std::vector<double>& collapsedFileIndexes) {
-  return getSideBySideRowsForRange(start, count, collapsedFileIndexes, true);
+  return getSideBySideRowsForRange(start, count, collapsedFileIndexes, false);
 }
 
 double HybridDiffDocument::getTokenizedRowVersion() {
