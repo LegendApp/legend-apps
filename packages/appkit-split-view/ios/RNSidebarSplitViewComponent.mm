@@ -96,6 +96,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
     }
 
     _splitViewController = [NSSplitViewController new];
+    _splitViewController.minimumThicknessForInlineSidebars = 0;
     _splitViewController.splitView.vertical = YES;
     _splitViewController.splitView.dividerStyle = NSSplitViewDividerStyleThin;
     _splitViewController.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
