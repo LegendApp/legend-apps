@@ -79,6 +79,12 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         enabled: false,
         shortcut: { key: "s", modifiers: commandModifier | optionModifier },
       },
+      {
+        id: "filterFiles",
+        title: "Filter Files",
+        enabled: false,
+        shortcut: { key: "f", modifiers: commandModifier },
+      },
       { separator: true, id: "separator-view-mode" },
       {
         id: "viewUnified",

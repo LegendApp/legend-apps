@@ -459,6 +459,16 @@ function getFilePathContext(file: DiffFileSummary, directory: string) {
   return context;
 }
 
+function fileMatchesFilter(file: DiffFileSummary, normalizedFilter: string) {
+  let matches = true;
+  if (normalizedFilter) {
+    const haystack = `${file.path} ${file.oldPath} ${file.status}`.toLowerCase();
+    const terms = normalizedFilter.split(/\s+/).filter(Boolean);
+    matches = terms.every((term) => haystack.includes(term));
+  }
+  return matches;
+}
+
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
   const indexes: number[] = [];
 
@@ -527,6 +537,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [urlInput, setUrlInput] = useState("");
   const [urlInputError, setUrlInputError] = useState<string | null>(null);
+  const [fileFilter, setFileFilter] = useState("");
   const [loadingSource, setLoadingSource] = useState<DiffOpenSource | null>(null);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -547,6 +558,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const diffPaneHeightRef = useRef(diffPaneHeight);
   diffPaneHeightRef.current = diffPaneHeight;
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
+  const fileFilterInputRef = useRef<TextInput | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
@@ -582,6 +594,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
   const showViewModeToolbar = loadedFileCount > 0;
   const showSidebarControl = showViewModeToolbar;
+  const normalizedFileFilter = fileFilter.trim().toLowerCase();
 
   useEffect(() => {
     if (state.status === "loaded" && loggedInitialLoadedFrameRef.current !== isRenderingInitialLoadedFrame) {
@@ -643,6 +656,12 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       return nextSnapshot;
     },
     [state],
+  );
+  const filteredSidebarFiles = useMemo(
+    () => state.status === "loaded"
+      ? state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter))
+      : [],
+    [normalizedFileFilter, state],
   );
   const listExtraData = useMemo(
     () => ({
@@ -1446,11 +1465,24 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     return true;
   }, [showSidebarControl]);
 
+  const focusFileFilter = useCallback(() => {
+    if (!showSidebarControl) {
+      return false;
+    }
+
+    setSidebarCollapsed(false);
+    requestAnimationFrame(() => {
+      fileFilterInputRef.current?.focus();
+    });
+    return true;
+  }, [showSidebarControl]);
+
   useEffect(() => registerDiffViewerActionHandlers({
+    filterFiles: focusFileFilter,
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
     toggleSidebar,
-  }), [reloadCurrentSource, revealCurrentFolder, toggleSidebar]);
+  }), [focusFileFilter, reloadCurrentSource, revealCurrentFolder, toggleSidebar]);
 
   useEffect(() => {
     updateMenuItems(diffMenuOwnerId, [
@@ -1467,6 +1499,10 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
         enabled: showSidebarControl,
         id: "toggleSidebar",
         title: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+      },
+      {
+        enabled: showSidebarControl,
+        id: "filterFiles",
       },
       {
         checked: viewMode === "unified",
@@ -1898,7 +1934,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     const bodyStartedAt = nowMs();
     const diffListHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
     const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffTitlebarTopInset - 8) : 0;
+    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffTitlebarTopInset - 70) : 0;
     const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
     const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
       if (state.status === "loaded") {
@@ -2149,16 +2185,37 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           ]}
         >
           <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
-          {isSidebarLayoutReady ? (
-            <LegendList
-              data={state.files}
-              getFixedItemSize={() => diffSidebarFileRowHeight}
-              keyExtractor={(file) => `${file.index}:${file.path}`}
-              onLayout={handleSidebarListLayout}
-              recycleItems
-              renderItem={renderSidebarFile}
-              style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
+          <View style={[styles.sidebarFilter, { borderColor: displayTheme.colors.border }]}>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setFileFilter}
+              placeholder="Filter files"
+              placeholderTextColor={mutedColor}
+              ref={fileFilterInputRef}
+              returnKeyType="search"
+              style={[styles.sidebarFilterInput, { color: foregroundColor }]}
+              value={fileFilter}
             />
+          </View>
+          {isSidebarLayoutReady ? (
+            filteredSidebarFiles.length > 0 ? (
+              <LegendList
+                data={filteredSidebarFiles}
+                getFixedItemSize={() => diffSidebarFileRowHeight}
+                keyExtractor={(file) => `${file.index}:${file.path}`}
+                onLayout={handleSidebarListLayout}
+                recycleItems
+                renderItem={renderSidebarFile}
+                style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
+              />
+            ) : (
+              <View style={[styles.sidebarEmpty, { height: sidebarListHeight, minHeight: sidebarListHeight }]}>
+                <Text style={[styles.sidebarEmptyText, { color: mutedColor }]}>
+                  No files
+                </Text>
+              </View>
+            )
           ) : (
             <View style={styles.sidebarList} />
           )}
@@ -2185,7 +2242,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
 
     logBodyFinish("content-only");
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <DragDropView
@@ -2587,6 +2644,29 @@ const styles = StyleSheet.create({
   sidebarFileTextGroup: {
     flex: 1,
     minWidth: 0,
+  },
+  sidebarFilter: {
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 28,
+    justifyContent: "center",
+    marginBottom: 8,
+    marginHorizontal: 10,
+    paddingHorizontal: 8,
+  },
+  sidebarFilterInput: {
+    fontSize: 12,
+    height: 26,
+    lineHeight: 16,
+    padding: 0,
+  },
+  sidebarEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sidebarEmptyText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   sidebarList: {
     flex: 1,
