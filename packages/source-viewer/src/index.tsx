@@ -322,7 +322,7 @@ export function TokenizedText({
         const text = line.text.slice(token.startColumn, token.startColumn + token.length);
         return (
           <Text
-            key={`${line.index}:${token.startColumn}:${tokenIndex}`}
+            key={tokenIndex}
             style={{
               color: tokenStyle?.foreground || foregroundColor,
               fontStyle: tokenStyle?.fontStyle === 1 || tokenStyle?.fontStyle === 3 ? "italic" : "normal",

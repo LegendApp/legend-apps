@@ -33,7 +33,7 @@ import {
 } from "@legend-desktop/virtualized-document";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffViewerWindowIdentifier } from "./appConstants";
@@ -95,6 +95,114 @@ type SideBySideTokenStyleState = {
   styleCount: number;
   tokenStyleById: SyntaxStyleMap;
 };
+
+type DiffSideBySideLineProps = {
+  fontFamily: string;
+  fontSize: number;
+  foregroundColor: string;
+  mutedColor: string;
+  row: DiffRenderRow;
+  rowHeight: number;
+  rowVisible: boolean;
+  side: "new" | "old";
+  tokenStyleById: SyntaxStyleMap;
+};
+
+function areDiffRenderRowsEqual(previousRow: DiffRenderRow, nextRow: DiffRenderRow) {
+  let areEqual = previousRow === nextRow;
+  if (!areEqual) {
+    areEqual = previousRow.index === nextRow.index
+      && previousRow.kind === nextRow.kind
+      && previousRow.fileIndex === nextRow.fileIndex
+      && previousRow.hunkIndex === nextRow.hunkIndex
+      && previousRow.oldLineNumber === nextRow.oldLineNumber
+      && previousRow.newLineNumber === nextRow.newLineNumber
+      && previousRow.changeType === nextRow.changeType
+      && previousRow.text === nextRow.text
+      && previousRow.tokens.length === nextRow.tokens.length;
+
+    if (areEqual) {
+      for (let tokenIndex = 0; tokenIndex < previousRow.tokens.length; tokenIndex += 1) {
+        const previousToken = previousRow.tokens[tokenIndex];
+        const nextToken = nextRow.tokens[tokenIndex];
+        if (
+          previousToken.startColumn !== nextToken.startColumn
+          || previousToken.length !== nextToken.length
+          || previousToken.styleId !== nextToken.styleId
+        ) {
+          areEqual = false;
+          break;
+        }
+      }
+    }
+  }
+  return areEqual;
+}
+
+function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
+  const sharedPropsAreEqual = previousProps.fontFamily === nextProps.fontFamily
+    && previousProps.fontSize === nextProps.fontSize
+    && previousProps.foregroundColor === nextProps.foregroundColor
+    && previousProps.mutedColor === nextProps.mutedColor
+    && previousProps.rowHeight === nextProps.rowHeight
+    && previousProps.rowVisible === nextProps.rowVisible
+    && previousProps.side === nextProps.side
+    && previousProps.tokenStyleById === nextProps.tokenStyleById;
+
+  return sharedPropsAreEqual
+    && (!nextProps.rowVisible || areDiffRenderRowsEqual(previousProps.row, nextProps.row));
+}
+
+const DiffSideBySideLine = memo(function DiffSideBySideLine({
+  fontFamily,
+  fontSize,
+  foregroundColor,
+  mutedColor,
+  row,
+  rowHeight,
+  rowVisible,
+  side,
+  tokenStyleById,
+}: DiffSideBySideLineProps) {
+  const visibleRow = rowVisible ? row : undefined;
+  const isRemove = side === "old" && visibleRow?.changeType === diffChangeTypeRemove;
+  const isAdd = side === "new" && visibleRow?.changeType === diffChangeTypeAdd;
+  const isChanged = isRemove || isAdd;
+  const marker = isRemove ? "-" : isAdd ? "+" : " ";
+  const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
+  const rowBackgroundColor = isAdd
+    ? "#17351f"
+    : isRemove
+      ? "#3a1d24"
+      : "transparent";
+  const textColor = isChanged ? foregroundColor : "#c9d1d9";
+  const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
+
+  return (
+    <View
+      style={[
+        styles.sideLine,
+        {
+          backgroundColor: rowBackgroundColor,
+          height: rowHeight,
+        },
+      ]}
+    >
+      <Text selectable={false} style={[styles.sideLineNumber, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+        {lineNumber !== undefined && lineNumber >= 0 ? lineNumber : ""}
+      </Text>
+      <Text selectable={false} style={[styles.sideMarker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+        {visibleRow ? marker : ""}
+      </Text>
+      <TokenizedText
+        foregroundColor={textColor}
+        line={visibleRow}
+        style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
+        tokenStyleById={tokenStyleById}
+      />
+    </View>
+  );
+}, areDiffSideBySideLinePropsEqual);
 
 type DiffViewerState =
   | {
@@ -1078,7 +1186,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   const getSideBySideItemType = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
     const kind = row?.kind ?? (sideBySideFileHeaderIndexes.has(index) ? "file-header" : "line");
-    return kind === "file-header" ? "file-header" : `side-by-side-${kind}`;
+    return kind === "file-header" ? "file-header" : "side-by-side-line";
   }, [sideBySideFileHeaderIndexes]);
 
   const getSideBySideItemSize = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
@@ -1090,60 +1198,6 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
     return sideBySideFileHeaderIndexes.has(index) ? diffFileHeaderRowHeight : rowHeight;
   }, [rowHeight, sideBySideFileHeaderIndexes]);
-
-  const renderSideBySideLine = useCallback(({
-    row,
-    rowVisible,
-    rowIndex,
-    side,
-    tokenStyleById,
-  }: {
-    row: DiffRenderRow;
-    rowVisible: boolean;
-    rowIndex: number;
-    side: "new" | "old";
-    tokenStyleById: SyntaxStyleMap;
-  }) => {
-    const visibleRow = rowVisible ? row : undefined;
-    const isRemove = side === "old" && visibleRow?.changeType === diffChangeTypeRemove;
-    const isAdd = side === "new" && visibleRow?.changeType === diffChangeTypeAdd;
-    const isChanged = isRemove || isAdd;
-    const marker = isRemove ? "-" : isAdd ? "+" : " ";
-    const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
-    const rowBackgroundColor = isAdd
-      ? "#17351f"
-      : isRemove
-        ? "#3a1d24"
-        : "transparent";
-    const textColor = isChanged ? foregroundColor : "#c9d1d9";
-    const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
-
-    return (
-      <View
-        key={`${side}:${rowIndex}:${visibleRow?.index ?? "empty"}`}
-        style={[
-          styles.sideLine,
-          {
-            backgroundColor: rowBackgroundColor,
-            height: rowHeight,
-          },
-        ]}
-      >
-        <Text selectable={false} style={[styles.sideLineNumber, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-          {lineNumber !== undefined && lineNumber >= 0 ? lineNumber : ""}
-        </Text>
-        <Text selectable={false} style={[styles.sideMarker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-          {visibleRow ? marker : ""}
-        </Text>
-        <TokenizedText
-          foregroundColor={textColor}
-          line={visibleRow}
-          style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-          tokenStyleById={tokenStyleById}
-        />
-      </View>
-    );
-  }, [fontFamily, fontSize, foregroundColor, mutedColor, rowHeight]);
 
   const renderSideBySideRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
@@ -1215,29 +1269,37 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
       return (
         <View style={[styles.sideBySideRow, { height: rowHeight }]}>
           <View style={styles.sidePane}>
-            {renderSideBySideLine({
-              row: row.oldRow,
-              rowVisible: row.oldRowVisible,
-              rowIndex: index,
-              side: "old",
-              tokenStyleById: sideBySideTokenStyleById,
-            })}
+            <DiffSideBySideLine
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              foregroundColor={foregroundColor}
+              mutedColor={mutedColor}
+              row={row.oldRow}
+              rowHeight={rowHeight}
+              rowVisible={row.oldRowVisible}
+              side="old"
+              tokenStyleById={sideBySideTokenStyleById}
+            />
           </View>
           <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
           </View>
           <View style={styles.sidePane}>
-            {renderSideBySideLine({
-              row: row.newRowEqualsOldRow ? row.oldRow : row.newRow,
-              rowVisible: row.newRowVisible,
-              rowIndex: index,
-              side: "new",
-              tokenStyleById: sideBySideTokenStyleById,
-            })}
+            <DiffSideBySideLine
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              foregroundColor={foregroundColor}
+              mutedColor={mutedColor}
+              row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
+              rowHeight={rowHeight}
+              rowVisible={row.newRowVisible}
+              side="new"
+              tokenStyleById={sideBySideTokenStyleById}
+            />
           </View>
         </View>
       );
     },
-    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, renderSideBySideLine, rowHeight, sideBySideTokenStyleState, state, toggleFileCollapsed, tokenStyleById],
+    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, sideBySideTokenStyleState, state, toggleFileCollapsed, tokenStyleById],
   );
 
   const body = useMemo(() => {
