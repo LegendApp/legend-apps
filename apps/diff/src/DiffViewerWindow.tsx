@@ -25,6 +25,7 @@ import {
   useVirtualizedDocumentRows,
   VirtualizedFixedDocumentList,
   type VirtualizedDocumentRequestOptions,
+  type VirtualizedDocumentRequestReason,
   type VirtualizedDocumentSnapshot,
   type VirtualizedFixedDocumentListRef,
   type VirtualizedFixedDocumentListRenderRowProps,
@@ -50,10 +51,13 @@ import { diffViewModeToolbarItemId, setDiffViewerWindowOptions } from "./diffWin
 
 const diffInitialRowCount = 160;
 const diffInitialHighlightChunkRowCount = 40;
+const diffBackgroundTokenizeChunkRowCount = 80;
+const diffBackgroundTokenizePollMs = 80;
 const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffFileHeaderRowHeight = 52;
 const diffTitlebarTopInset = 52;
+const diffScrollIdleMs = 120;
 const diffRowKindFileHeader = 0;
 const diffChangeTypeAdd = 1;
 const diffChangeTypeRemove = 2;
@@ -278,6 +282,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const activeFileIndex$ = useObservable<number | null>(null);
+  const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
   const [splitPaneMetrics, setSplitPaneMetrics] = useState({
     contentHeight: 0,
     contentWidth: 0,
@@ -295,6 +300,14 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     document: DiffDocument;
     start: number;
   } | null>(null);
+  const sideBySideVisibleRangeRef = useRef<{
+    count: number;
+    document: DiffDocument;
+    start: number;
+  } | null>(null);
+  const sideBySideScrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sideBySideScrollingRef = useRef(false);
+  const pendingSideBySideTokenInvalidationRef = useRef<DiffDocument | null>(null);
   const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const visibleFolderPath = state.folderPath;
   const backgroundColor = syntaxTheme.background;
@@ -381,6 +394,23 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           }
     ));
   }, []);
+  const bumpSideBySideRowVersion = useCallback((rowIndex: number) => {
+    const key = String(rowIndex);
+    sideBySideRowVersions$[key].set((sideBySideRowVersions$[key].peek() ?? 0) + 1);
+  }, [sideBySideRowVersions$]);
+  const flushSideBySideTokenInvalidation = useCallback((document: DiffDocument) => {
+    const visibleRange = sideBySideVisibleRangeRef.current;
+    if (visibleRange?.document === document) {
+      refreshSideBySideTokenStyles(document);
+      const end = visibleRange.start + visibleRange.count;
+      for (let index = visibleRange.start; index < end; index += 1) {
+        bumpSideBySideRowVersion(index);
+      }
+    }
+    if (pendingSideBySideTokenInvalidationRef.current === document) {
+      pendingSideBySideTokenInvalidationRef.current = null;
+    }
+  }, [bumpSideBySideRowVersion, refreshSideBySideTokenStyles]);
   const fileHeaderRowIndexes = useMemo(() => {
     if (state.status !== "loaded") {
       return new Set<number>();
@@ -443,6 +473,14 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
   useEffect(() => {
     highlightedVisibleRangeRef.current = null;
+    sideBySideVisibleRangeRef.current = null;
+    pendingSideBySideTokenInvalidationRef.current = null;
+    sideBySideScrollingRef.current = false;
+    sideBySideRowVersions$.set({});
+    if (sideBySideScrollIdleTimeoutRef.current) {
+      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
+      sideBySideScrollIdleTimeoutRef.current = null;
+    }
     clearHighlightTimeouts();
     if (state.status === "loaded") {
       activeFileIndex$.set(state.files[0]?.index ?? null);
@@ -450,9 +488,40 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     } else {
       activeFileIndex$.set(null);
     }
-  }, [activeFileIndex$, clearHighlightTimeouts, state.status === "loaded" ? state.document : null]);
+  }, [activeFileIndex$, clearHighlightTimeouts, sideBySideRowVersions$, state.status === "loaded" ? state.document : null]);
 
   useEffect(() => clearHighlightTimeouts, [clearHighlightTimeouts]);
+
+  useEffect(() => () => {
+    if (sideBySideScrollIdleTimeoutRef.current) {
+      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
+      sideBySideScrollIdleTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (state.status === "loaded") {
+      const document = state.document;
+      let lastTokenizedRowVersion = document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount);
+      const intervalHandle = setInterval(() => {
+        const nextTokenizedRowVersion = document.getTokenizedRowVersion();
+        if (nextTokenizedRowVersion !== lastTokenizedRowVersion) {
+          lastTokenizedRowVersion = nextTokenizedRowVersion;
+          if (sideBySideScrollingRef.current) {
+            pendingSideBySideTokenInvalidationRef.current = document;
+          } else {
+            flushSideBySideTokenInvalidation(document);
+          }
+        }
+      }, diffBackgroundTokenizePollMs);
+
+      return () => {
+        clearInterval(intervalHandle);
+        document.stopBackgroundTokenization();
+      };
+    }
+    return undefined;
+  }, [flushSideBySideTokenInvalidation, state.status === "loaded" ? state.document : null]);
 
   const scheduleVisibleHighlight = useCallback((start: number, count: number, reason: string) => {
     if (state.status === "loaded") {
@@ -949,6 +1018,32 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
   }, [activeFileIndex$, collapsedFileIndexList, state]);
 
+  const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
+    if (state.status === "loaded") {
+      sideBySideVisibleRangeRef.current = {
+        count,
+        document: state.document,
+        start,
+      };
+
+      if (reason === "scroll") {
+        sideBySideScrollingRef.current = true;
+        if (sideBySideScrollIdleTimeoutRef.current) {
+          clearTimeout(sideBySideScrollIdleTimeoutRef.current);
+        }
+        sideBySideScrollIdleTimeoutRef.current = setTimeout(() => {
+          sideBySideScrollingRef.current = false;
+          sideBySideScrollIdleTimeoutRef.current = null;
+          if (pendingSideBySideTokenInvalidationRef.current === state.document) {
+            flushSideBySideTokenInvalidation(state.document);
+          }
+        }, diffScrollIdleMs);
+      } else if (pendingSideBySideTokenInvalidationRef.current === state.document) {
+        flushSideBySideTokenInvalidation(state.document);
+      }
+    }
+  }, [flushSideBySideTokenInvalidation, state]);
+
   const getSideBySideItemType = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
     const kind = row?.kind ?? (sideBySideFileHeaderIndexes.has(index) ? "file-header" : "line");
     return kind === "file-header" ? "file-header" : `side-by-side-${kind}`;
@@ -1155,8 +1250,10 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
             lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
             listRef={listRef}
             onTopItemChanged={handleSideBySideTopItemChanged}
+            onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
             overscanRequestDelayMs={diffOverscanRequestDelayMs}
             requestRange={requestSideBySideRange}
+            rowVersions$={sideBySideRowVersions$}
             rowHeight={rowHeight}
             rowsVersion={0}
             renderRow={renderSideBySideRow}
@@ -1272,7 +1369,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     }
 
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sideBySideItemIndexes, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, viewMode, visibleFolderPath, visibleItemIndexes]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
