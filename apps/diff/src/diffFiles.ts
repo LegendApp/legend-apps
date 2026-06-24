@@ -43,7 +43,7 @@ function getGithubDiffSource(value: string): DiffOpenSource | null {
   }
 
   let source: DiffOpenSource | null = null;
-  if (url && (url.hostname === "github.com" || url.hostname === "www.github.com")) {
+  if (url && (url.hostname === "github.com" || url.hostname === "www.github.com" || url.hostname === "diffshub.com" || url.hostname === "www.diffshub.com")) {
     const parts = url.pathname.split("/").filter(Boolean);
     const owner = parts[0];
     const repo = parts[1];
