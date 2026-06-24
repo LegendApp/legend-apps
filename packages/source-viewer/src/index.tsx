@@ -3,8 +3,10 @@ import {
   useEffect,
   useRef,
   type ReactElement,
+  type ComponentType,
+  type ReactNode,
 } from "react";
-import { StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from "react-native";
 import type { SyntaxDocument, SyntaxHighlightTiming, SyntaxRenderLine, SyntaxStyle } from "@legend-desktop/syntax-parser";
 import {
   useVirtualizedDocumentRows,
@@ -24,6 +26,67 @@ export const sourceViewerLineOverscan = 160;
 export const sourceViewerOverscanRequestDelayMs = 80;
 
 export type SyntaxStyleMap = Map<number, SyntaxStyle>;
+
+// Keep this narrow: source-viewer code rows only, not a general replacement for React Native Text.
+export type LightTextProps = {
+  allowFontScaling?: boolean;
+  children?: ReactNode;
+  ellipsizeMode?: TextProps["ellipsizeMode"];
+  numberOfLines?: number;
+  selectable?: boolean;
+  style?: StyleProp<TextStyle>;
+};
+
+type NativeTextModule = {
+  NativeText?: ComponentType<LightTextProps>;
+  NativeVirtualText?: ComponentType<LightTextProps>;
+};
+
+function resolveNativeTextComponents() {
+  try {
+    const nativeTextModule = require("react-native/Libraries/Text/TextNativeComponent") as NativeTextModule;
+    const NativeTextComponent = nativeTextModule.NativeText ?? Text;
+    return {
+      NativeTextComponent,
+      NativeVirtualTextComponent: nativeTextModule.NativeVirtualText ?? NativeTextComponent,
+    };
+  } catch {
+    return {
+      NativeTextComponent: Text,
+      NativeVirtualTextComponent: Text,
+    };
+  }
+}
+
+const { NativeTextComponent, NativeVirtualTextComponent } = resolveNativeTextComponents();
+
+function normalizeNumberOfLines(numberOfLines: number | undefined) {
+  return numberOfLines != null && !(numberOfLines >= 0) ? 0 : numberOfLines;
+}
+
+export function LightText({
+  allowFontScaling = true,
+  ellipsizeMode = "tail",
+  numberOfLines,
+  ...props
+}: LightTextProps) {
+  return (
+    <NativeTextComponent
+      allowFontScaling={allowFontScaling}
+      ellipsizeMode={ellipsizeMode}
+      numberOfLines={normalizeNumberOfLines(numberOfLines)}
+      {...props}
+    />
+  );
+}
+
+export function LightInlineText({ children, style }: Pick<LightTextProps, "children" | "style">) {
+  return (
+    <NativeVirtualTextComponent style={style}>
+      {children}
+    </NativeVirtualTextComponent>
+  );
+}
 
 export type AfterEffectTiming = {
   frameAt: number;
@@ -299,6 +362,7 @@ export function SourceDocumentView({
 }
 
 export type TokenizedTextProps = {
+  adaptiveRender?: "light" | "normal";
   foregroundColor: string;
   line?: SyntaxRenderLine;
   numberOfLines?: number;
@@ -308,6 +372,7 @@ export type TokenizedTextProps = {
 };
 
 export function TokenizedText({
+  adaptiveRender = "normal",
   foregroundColor,
   line,
   numberOfLines = 1,
@@ -316,12 +381,12 @@ export function TokenizedText({
   tokenStyleById,
 }: TokenizedTextProps) {
   return (
-    <Text numberOfLines={numberOfLines} selectable={selectable} style={[styles.sourceText, { color: foregroundColor }, style]}>
-      {line && line.tokens.length === 0 ? line.text : line?.tokens.map((token, tokenIndex) => {
+    <LightText numberOfLines={numberOfLines} selectable={selectable} style={[styles.sourceText, { color: foregroundColor }, style]}>
+      {adaptiveRender === "light" || (line && line.tokens.length === 0) ? line?.text : line?.tokens.map((token, tokenIndex) => {
         const tokenStyle = tokenStyleById.get(token.styleId);
         const text = line.text.slice(token.startColumn, token.startColumn + token.length);
         return (
-          <Text
+          <LightInlineText
             key={tokenIndex}
             style={{
               color: tokenStyle?.foreground || foregroundColor,
@@ -330,10 +395,10 @@ export function TokenizedText({
             }}
           >
             {text}
-          </Text>
+          </LightInlineText>
         );
       })}
-    </Text>
+    </LightText>
   );
 }
 
@@ -364,9 +429,9 @@ export function SourceLineRow({
 }: SourceLineRowProps) {
   return (
     <View onLayout={onLayout} style={[styles.sourceLineRow, rowStyle]}>
-      <Text selectable={false} style={[styles.lineNumber, { color: mutedColor }, lineNumberStyle]}>
+      <LightText selectable={false} style={[styles.lineNumber, { color: mutedColor }, lineNumberStyle]}>
         {lineNumber}
-      </Text>
+      </LightText>
       <TokenizedText
         foregroundColor={foregroundColor}
         line={line}

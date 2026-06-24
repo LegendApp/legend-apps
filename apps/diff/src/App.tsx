@@ -1,10 +1,15 @@
 import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+import { LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getLaunchDiffFolder, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
+
+LogBox.ignoreLogs([
+  "Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Text/TextNativeComponent')",
+]);
 
 registerDiffWindows();
 logDiffOpenTiming("app.module", {

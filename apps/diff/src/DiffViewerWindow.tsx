@@ -13,6 +13,7 @@ import { watchDirectories } from "@legend-desktop/file-system-watcher";
 import {
   createSyntaxStyleMap,
   elapsedMs,
+  LightText,
   measureAfterEffect,
   nowMs,
   sourceViewerCodeFontFamily,
@@ -66,6 +67,11 @@ const diffChangeTypeAdd = 1;
 const diffChangeTypeRemove = 2;
 const diffSideBySideGutterWidth = 44;
 const diffSideBySideHorizontalPadding = 12;
+const diffSideBySideAdaptiveRender = {
+  enterVelocity: 8,
+  exitDelay: 150,
+  exitVelocity: 3,
+};
 
 type DiffViewerWindowProps = {
   folderPath?: string;
@@ -97,6 +103,7 @@ type SideBySideTokenStyleState = {
 };
 
 type DiffSideBySideLineProps = {
+  adaptiveRender: "light" | "normal";
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
@@ -140,7 +147,8 @@ function areDiffRenderRowsEqual(previousRow: DiffRenderRow, nextRow: DiffRenderR
 }
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
-  const sharedPropsAreEqual = previousProps.fontFamily === nextProps.fontFamily
+  const sharedPropsAreEqual = previousProps.adaptiveRender === nextProps.adaptiveRender
+    && previousProps.fontFamily === nextProps.fontFamily
     && previousProps.fontSize === nextProps.fontSize
     && previousProps.foregroundColor === nextProps.foregroundColor
     && previousProps.mutedColor === nextProps.mutedColor
@@ -154,6 +162,7 @@ function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps,
 }
 
 const DiffSideBySideLine = memo(function DiffSideBySideLine({
+  adaptiveRender,
   fontFamily,
   fontSize,
   foregroundColor,
@@ -188,13 +197,14 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
         },
       ]}
     >
-      <Text selectable={false} style={[styles.sideLineNumber, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+      <LightText selectable={false} style={[styles.sideLineNumber, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
         {lineNumber !== undefined && lineNumber >= 0 ? lineNumber : ""}
-      </Text>
-      <Text selectable={false} style={[styles.sideMarker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+      </LightText>
+      <LightText selectable={false} style={[styles.sideMarker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
         {visibleRow ? marker : ""}
-      </Text>
+      </LightText>
       <TokenizedText
+        adaptiveRender={adaptiveRender}
         foregroundColor={textColor}
         line={visibleRow}
         style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
@@ -1029,7 +1039,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   ), [getItemType, rowHeight]);
 
   const renderRow = useCallback(
-    ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
+    ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
       const fileHeaderLineHeight = Math.max(18, fontSize + 8);
       const changeType = row?.changeType ?? 0;
       const isAdd = changeType === diffChangeTypeAdd;
@@ -1106,16 +1116,17 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
 
       return (
         <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
-          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+          <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
             {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
-          </Text>
-          <Text selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+          </LightText>
+          <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
             {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
-          </Text>
-          <Text selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+          </LightText>
+          <LightText selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
             {isFileHeader ? "" : marker}
-          </Text>
+          </LightText>
           <TokenizedText
+            adaptiveRender={adaptiveRender}
             foregroundColor={textColor}
             line={row}
             style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
@@ -1200,7 +1211,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
   }, [rowHeight, sideBySideFileHeaderIndexes]);
 
   const renderSideBySideRow = useCallback(
-    ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
+    ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
       if (!row) {
         return <View style={{ height: rowHeight }} />;
       }
@@ -1270,6 +1281,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
         <View style={[styles.sideBySideRow, { height: rowHeight }]}>
           <View style={styles.sidePane}>
             <DiffSideBySideLine
+              adaptiveRender={adaptiveRender}
               fontFamily={fontFamily}
               fontSize={fontSize}
               foregroundColor={foregroundColor}
@@ -1285,6 +1297,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           </View>
           <View style={styles.sidePane}>
             <DiffSideBySideLine
+              adaptiveRender={adaptiveRender}
               fontFamily={fontFamily}
               fontSize={fontSize}
               foregroundColor={foregroundColor}
@@ -1334,6 +1347,7 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
           />
         ) : (
           <VirtualizedFixedDocumentList
+            adaptiveRender={diffSideBySideAdaptiveRender}
             debugName={`diff-${viewMode}`}
             key={viewMode}
             extraData={listExtraData}

@@ -1,4 +1,11 @@
-import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
+import {
+  LegendList,
+  type AdaptiveRender,
+  type AdaptiveRenderConfig,
+  type LegendListRef,
+  type LegendListRenderItemProps,
+  useAdaptiveRender,
+} from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
@@ -57,12 +64,14 @@ type InternalRowsState<TDocument, TRow, TStyle, TTiming> = {
 };
 
 export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
+  adaptiveRender: AdaptiveRender;
   index: number;
   listIndex: number;
   row: TRow | undefined;
 };
 
 type VirtualizedFixedDocumentListRowProps<TRow> = {
+  adaptiveRenderEnabled: boolean;
   debugName?: string;
   getRow?: (index: number) => TRow | undefined;
   index: number;
@@ -74,6 +83,7 @@ type VirtualizedFixedDocumentListRowProps<TRow> = {
 };
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
+  adaptiveRender?: AdaptiveRenderConfig;
   debugName?: string;
   extraData?: unknown;
   getItemSize?: (index: number, row: TRow | undefined) => number;
@@ -185,6 +195,7 @@ function bumpRowVersion(rowVersions$: Observable<Record<string, number>>, rowInd
 }
 
 function VirtualizedFixedDocumentListRowContent<TRow>({
+  adaptiveRenderEnabled,
   debugName,
   getRow,
   index,
@@ -193,9 +204,12 @@ function VirtualizedFixedDocumentListRowContent<TRow>({
   renderRow,
   rowCache,
 }: Omit<VirtualizedFixedDocumentListRowProps<TRow>, "rowVersions$">) {
+  const adaptiveRender = useAdaptiveRender();
+  const effectiveAdaptiveRender = adaptiveRenderEnabled ? adaptiveRender : "normal";
   const row = getRow?.(index) ?? rowCache?.get(index);
   recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
   return renderRow({
+    adaptiveRender: effectiveAdaptiveRender,
     index,
     listIndex,
     row,
@@ -379,6 +393,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 }
 
 export function VirtualizedFixedDocumentList<TRow>({
+  adaptiveRender,
   debugName,
   extraData,
   getRow,
@@ -566,6 +581,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   const renderItem = useCallback(
     ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => {
       const rowProps = {
+        adaptiveRenderEnabled: adaptiveRender !== undefined,
         debugName,
         getRow,
         index,
@@ -584,7 +600,7 @@ export function VirtualizedFixedDocumentList<TRow>({
         <VirtualizedFixedDocumentListRowContent {...rowProps} />
       );
     },
-    [debugName, getRow, renderRow, rowCache, rowVersionsProp$],
+    [adaptiveRender, debugName, getRow, renderRow, rowCache, rowVersionsProp$],
   );
 
   const getFixedItemSize = useCallback((index: number) => (
@@ -599,6 +615,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     <LegendList
       data={itemIndexes}
       extraData={listExtraData}
+      experimental_adaptiveRender={adaptiveRender}
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
       keyExtractor={(index) => String(index)}
