@@ -860,7 +860,6 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           syntaxTheme: syntaxThemeName,
           timing: result.timing,
         });
-        setLoadingSource((current) => sourcesMatch(current, nextSource) ? null : current);
         logDiffOpenTiming("viewer.load.setLoaded", {
           requestId,
           setStateMs: Number((nowMs() - trace.setStateAt).toFixed(1)),
@@ -947,6 +946,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       loggedTraceDocumentRef.current = state.document;
       const effectAt = nowMs();
       measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
+        setLoadingSource((current) => sourcesMatch(current, state.source) ? null : current);
         logDiffOpenTiming("viewer.ui.loaded", {
           effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
           effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
