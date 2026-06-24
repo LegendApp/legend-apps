@@ -379,7 +379,7 @@ function getFileStatusIcon(status: string) {
   }
 }
 
-function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly number[]) {
+function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
   const indexes: number[] = [];
 
   if (files.length > 0) {
@@ -399,7 +399,9 @@ function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapse
       }
     }
   } else {
-    indexes.push(...fallbackItemIndexes);
+    fallbackItemIndexes.forEach((rowIndex, listIndex) => {
+      indexes.push(rowIndex ?? listIndex);
+    });
   }
 
   return indexes;
@@ -613,7 +615,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
 
     const indexes = new Map<number, number>();
     visibleItemIndexes.forEach((rowIndex, listIndex) => {
-      indexes.set(rowIndex, listIndex);
+      indexes.set(rowIndex ?? listIndex, listIndex);
     });
     return indexes;
   }, [collapsedFileIndexes, visibleItemIndexes]);

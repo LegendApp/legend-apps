@@ -44,7 +44,7 @@ export type UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming> 
 };
 
 export type VirtualizedDocumentRowsState<TRow, TStyle, TTiming> = {
-  itemIndexes: number[];
+  itemIndexes: Array<number | undefined>;
   itemCount: number;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
   rowCache: Map<number, TRow>;
@@ -89,7 +89,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   getItemSize?: (index: number, row: TRow | undefined) => number;
   getItemType?: (index: number, row: TRow | undefined) => string | undefined;
   initialRequestRowCount?: number;
-  itemIndexes: number[];
+  itemIndexes: Array<number | undefined>;
   listRef?: Ref<LegendListRef>;
   onInitialRowsRequested?: (start: number, count: number) => void;
   onTopItemChanged?: (index: number, listIndex: number) => void;
@@ -226,14 +226,18 @@ function VirtualizedFixedDocumentListVersionedRow<TRow>({
   return <VirtualizedFixedDocumentListRowContent {...props} />;
 }
 
-function getDocumentRangeForListRange(itemIndexes: readonly number[], start: number, count: number) {
+function createIdentityIndexArray(length: number) {
+  return new Array<number | undefined>(Math.max(0, Math.floor(length)));
+}
+
+function getDocumentRangeForListRange(itemIndexes: readonly (number | undefined)[], start: number, count: number) {
   const safeListStart = Math.max(0, Math.floor(start));
   const safeListEnd = Math.min(itemIndexes.length, safeListStart + Math.max(0, Math.ceil(count)));
   let requestStart = Number.POSITIVE_INFINITY;
   let requestEnd = Number.NEGATIVE_INFINITY;
 
   for (let listIndex = safeListStart; listIndex < safeListEnd; listIndex += 1) {
-    const itemIndex = itemIndexes[listIndex];
+    const itemIndex = itemIndexes[listIndex] ?? listIndex;
     if (Number.isFinite(itemIndex)) {
       requestStart = Math.min(requestStart, itemIndex);
       requestEnd = Math.max(requestEnd, itemIndex + 1);
@@ -376,7 +380,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   }, [debugName, getRowIndex, getRows, getStyles, getTiming, rowVersions$]);
 
   const itemIndexes = useMemo(
-    () => Array.from({ length: activeRowsState.itemCount }, (_, index) => index),
+    () => createIdentityIndexArray(activeRowsState.itemCount),
     [activeRowsState.itemCount],
   );
 
@@ -458,7 +462,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     if (onTopItemChanged) {
       const topListIndex = internalListRef.current?.getState().start;
       if (topListIndex !== undefined && topListIndex >= 0) {
-        const topItemIndex = itemIndexes[topListIndex];
+        const topItemIndex = itemIndexes[topListIndex] ?? topListIndex;
         const lastTopItem = lastTopItemRef.current;
         if (
           topItemIndex !== undefined &&
@@ -579,7 +583,8 @@ export function VirtualizedFixedDocumentList<TRow>({
   }, [debugName, emitTopItemChanged, requestLegendListRange, requestVisibleRange]);
 
   const renderItem = useCallback(
-    ({ index: listIndex, item: index }: LegendListRenderItemProps<number>) => {
+    ({ index: listIndex, item }: LegendListRenderItemProps<number | undefined>) => {
+      const index = item ?? listIndex;
       const rowProps = {
         adaptiveRenderEnabled: adaptiveRender !== undefined,
         debugName,
@@ -603,13 +608,15 @@ export function VirtualizedFixedDocumentList<TRow>({
     [adaptiveRender, debugName, getRow, renderRow, rowCache, rowVersionsProp$],
   );
 
-  const getFixedItemSize = useCallback((index: number) => (
-    getItemSize?.(index, rowCache?.get(index)) ?? rowHeight
-  ), [getItemSize, rowCache, rowHeight]);
+  const getFixedItemSize = useCallback((item: number | undefined, listIndex: number) => {
+    const index = item ?? listIndex;
+    return getItemSize?.(index, rowCache?.get(index)) ?? rowHeight;
+  }, [getItemSize, rowCache, rowHeight]);
 
-  const getLegendItemType = useCallback((index: number) => (
-    getItemType?.(index, rowCache?.get(index))
-  ), [getItemType, rowCache]);
+  const getLegendItemType = useCallback((item: number | undefined, listIndex: number) => {
+    const index = item ?? listIndex;
+    return getItemType?.(index, rowCache?.get(index));
+  }, [getItemType, rowCache]);
 
   return (
     <LegendList
@@ -618,7 +625,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       experimental_adaptiveRender={adaptiveRender}
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
-      keyExtractor={(index) => String(index)}
+      keyExtractor={(item, index) => String(item ?? index)}
       ref={setListRef}
       onLayout={handleLayout}
       onScroll={handleScroll}
