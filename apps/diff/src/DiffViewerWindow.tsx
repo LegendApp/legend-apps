@@ -39,7 +39,7 @@ import {
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
@@ -308,6 +308,10 @@ function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
 }
 
+function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource) {
+  return left?.kind === right.kind && left.value === right.value;
+}
+
 function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
   logDiffOpenTiming("viewer.native.loaded", {
     copyFilesMs: Number(timing.copyFilesMs.toFixed(1)),
@@ -431,6 +435,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [urlInput, setUrlInput] = useState("");
   const [urlInputError, setUrlInputError] = useState<string | null>(null);
+  const [loadingSource, setLoadingSource] = useState<DiffOpenSource | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const activeFileIndex$ = useObservable<number | null>(null);
@@ -447,6 +452,8 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
   const [sideBySideTokenStyleState, setSideBySideTokenStyleState] = useState<SideBySideTokenStyleState | null>(null);
+  const isLoading = loadingSource !== null;
+  const isLoadingGithub = loadingSource?.kind === "github";
   const highlightedVisibleRangeRef = useRef<{
     count: number;
     document: DiffDocument;
@@ -804,6 +811,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       setStateAt: loadStartedAt,
     };
     loadTraceRef.current = trace;
+    setLoadingSource(nextSource);
     logDiffOpenTiming("viewer.load.start", {
       source: nextSource,
       requestId,
@@ -852,6 +860,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           syntaxTheme: syntaxThemeName,
           timing: result.timing,
         });
+        setLoadingSource((current) => sourcesMatch(current, nextSource) ? null : current);
         logDiffOpenTiming("viewer.load.setLoaded", {
           requestId,
           setStateMs: Number((nowMs() - trace.setStateAt).toFixed(1)),
@@ -865,6 +874,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     } catch (error) {
       if (loadRequestIdRef.current === requestId) {
         loadTraceRef.current = null;
+        setLoadingSource((current) => sourcesMatch(current, nextSource) ? null : current);
         setState({
           status: "error",
           error: error instanceof Error ? error.message : String(error),
@@ -891,41 +901,45 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   }, [folderPath, loadSource, selectedSyntaxTheme, source]);
 
   const openFolder = useCallback(async () => {
-    try {
-      const dialogStartedAt = nowMs();
-      logDiffOpenTiming("viewer.dialog.start", {
-        currentFolderPath: state.folderPath,
-      });
-      const path = await openDiffFolderDialog();
-      logDiffOpenTiming("viewer.dialog.finish", {
-        dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
-        path,
-      });
-      if (path) {
-        const nextSource = normalizeDiffOpenSource(path);
-        if (nextSource) {
-          await loadSource(nextSource, selectedSyntaxTheme);
+    if (!isLoading) {
+      try {
+        const dialogStartedAt = nowMs();
+        logDiffOpenTiming("viewer.dialog.start", {
+          currentFolderPath: state.folderPath,
+        });
+        const path = await openDiffFolderDialog();
+        logDiffOpenTiming("viewer.dialog.finish", {
+          dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
+          path,
+        });
+        if (path) {
+          const nextSource = normalizeDiffOpenSource(path);
+          if (nextSource) {
+            await loadSource(nextSource, selectedSyntaxTheme);
+          }
         }
+      } catch (error) {
+        setState((current) => ({
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+          folderPath: current.folderPath,
+          source: current.source,
+        }));
       }
-    } catch (error) {
-      setState((current) => ({
-        status: "error",
-        error: error instanceof Error ? error.message : String(error),
-        folderPath: current.folderPath,
-        source: current.source,
-      }));
     }
-  }, [loadSource, selectedSyntaxTheme, state.folderPath]);
+  }, [isLoading, loadSource, selectedSyntaxTheme, state.folderPath]);
 
   const openUrl = useCallback(async () => {
-    const nextSource = normalizeDiffOpenSource(urlInput);
-    if (nextSource?.kind === "github") {
-      setUrlInputError(null);
-      await loadSource(nextSource, selectedSyntaxTheme);
-    } else {
-      setUrlInputError("Enter a GitHub PR or commit URL.");
+    if (!isLoading) {
+      const nextSource = normalizeDiffOpenSource(urlInput);
+      if (nextSource?.kind === "github") {
+        setUrlInputError(null);
+        await loadSource(nextSource, selectedSyntaxTheme);
+      } else {
+        setUrlInputError("Enter a GitHub PR or commit URL.");
+      }
     }
-  }, [loadSource, selectedSyntaxTheme, urlInput]);
+  }, [isLoading, loadSource, selectedSyntaxTheme, urlInput]);
 
   useEffect(() => {
     const trace = loadTraceRef.current;
@@ -1560,13 +1574,14 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
           </Text>
           <Pressable
             accessibilityRole="button"
+            disabled={isLoading}
             onPress={openFolder}
             style={({ pressed }) => [
               styles.emptyButton,
               styles.emptyFolderButton,
               {
                 borderColor: displayTheme.colors.border,
-                opacity: pressed ? 0.72 : 1,
+                opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
               },
             ]}
           >
@@ -1614,7 +1629,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
             </View>
             <Pressable
               accessibilityRole="button"
-              disabled={!urlInput.trim()}
+              disabled={isLoading || !urlInput.trim()}
               onPress={openUrl}
               style={({ pressed }) => [
                 styles.emptyButton,
@@ -1622,13 +1637,18 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
                 {
                   backgroundColor: displayTheme.colors.primary,
                   borderColor: displayTheme.colors.primary,
-                  opacity: !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                  opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
                 },
               ]}
             >
-              <Text style={[styles.emptyButtonText, { color: "#ffffff" }]}>
-                Open URL
-              </Text>
+              <View style={styles.emptyButtonContent}>
+                {isLoadingGithub ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : null}
+                <Text style={[styles.emptyButtonText, { color: "#ffffff" }]}>
+                  {isLoadingGithub ? "Downloading..." : "Open URL"}
+                </Text>
+              </View>
             </Pressable>
           </View>
           {urlInputError ? (
@@ -1694,7 +1714,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
     }
 
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, listExtraData, mutedColor, openFolder, openUrl, renderRow, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -1724,6 +1744,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 18,
     paddingVertical: 10,
+  },
+  emptyButtonContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
   },
   emptyButtonText: {
     fontSize: 16,
