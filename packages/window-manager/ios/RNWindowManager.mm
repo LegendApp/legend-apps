@@ -545,23 +545,33 @@ RCT_EXPORT_MODULE(NativeWindowManager)
       }
     }
 
-    NSButton *button = [NSButton buttonWithTitle:image ? @"" : label target:self action:@selector(titlebarControlPressed:)];
-    button.bezelStyle = NSBezelStyleTexturedRounded;
-    button.buttonType = NSButtonTypeToggle;
-    button.controlSize = NSControlSizeSmall;
-    button.enabled = LegendDictionaryHasKey(control, @"enabled") ? [control[@"enabled"] boolValue] : YES;
-    button.image = image;
-    button.imagePosition = image ? NSImageOnly : NSNoImage;
-    button.state = [control[@"selected"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
-    button.toolTip = [control[@"tooltip"] isKindOfClass:NSString.class] ? control[@"tooltip"] : label;
-    button.frame = NSMakeRect(0, 0, image ? 30 : MAX(72, button.fittingSize.width + 12), 24);
-    objc_setAssociatedObject(button, &LegendTitlebarControlMetadataKey, @{
+    NSSegmentedControl *segmentedControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    segmentedControl.segmentCount = 1;
+    segmentedControl.segmentStyle = NSSegmentStyleSeparated;
+    segmentedControl.trackingMode = NSSegmentSwitchTrackingMomentary;
+    segmentedControl.target = self;
+    segmentedControl.action = @selector(titlebarControlPressed:);
+    segmentedControl.controlSize = NSControlSizeRegular;
+    [segmentedControl setEnabled:LegendDictionaryHasKey(control, @"enabled") ? [control[@"enabled"] boolValue] : YES forSegment:0];
+    if (image) {
+      [segmentedControl setImage:image forSegment:0];
+      [segmentedControl setImageScaling:NSImageScaleProportionallyDown forSegment:0];
+    } else {
+      [segmentedControl setLabel:label forSegment:0];
+    }
+    if (@available(macOS 10.13, *)) {
+      [segmentedControl setToolTip:[control[@"tooltip"] isKindOfClass:NSString.class] ? control[@"tooltip"] : label forSegment:0];
+    }
+    CGFloat segmentWidth = image ? 36 : MAX(84, [label sizeWithAttributes:@{NSFontAttributeName: segmentedControl.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize]}].width + 24);
+    [segmentedControl setWidth:segmentWidth forSegment:0];
+    segmentedControl.frame = NSMakeRect(0, 0, segmentWidth, MAX(28, segmentedControl.fittingSize.height));
+    objc_setAssociatedObject(segmentedControl, &LegendTitlebarControlMetadataKey, @{
       @"controlId": controlId,
       @"windowIdentifier": identifier ?: @"",
     }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     NSTitlebarAccessoryViewController *controller = [NSTitlebarAccessoryViewController new];
-    controller.view = button;
+    controller.view = segmentedControl;
     NSString *placement = [control[@"placement"] isKindOfClass:NSString.class] ? control[@"placement"] : @"left";
     controller.layoutAttribute = [placement isEqualToString:@"right"] ? NSLayoutAttributeRight : NSLayoutAttributeLeft;
     [window addTitlebarAccessoryViewController:controller];
@@ -571,7 +581,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   self.titlebarAccessoryControllers[identifier] = controllers;
 }
 
-- (void)titlebarControlPressed:(NSButton *)sender
+- (void)titlebarControlPressed:(id)sender
 {
   id metadata = objc_getAssociatedObject(sender, &LegendTitlebarControlMetadataKey);
   NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
