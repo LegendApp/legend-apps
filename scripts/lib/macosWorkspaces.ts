@@ -51,6 +51,10 @@ export function getMacOSDevDerivedDataPath(workspaceDir: string) {
   return path.join(workspaceDir, "build", "xcodebuild-dev");
 }
 
+export function getMacOSReleaseDerivedDataPath(workspaceDir: string, arch: "arm" | "x86") {
+  return path.join(workspaceDir, "build", `xcodebuild-release-${arch}`);
+}
+
 export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: string) {
   const workspaceDir = getMacOSReleaseWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });

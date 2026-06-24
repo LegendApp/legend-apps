@@ -9,6 +9,7 @@ import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
 import {
   ensureMacOSDevWorkspace,
   getMacOSDevDerivedDataPath,
+  getMacOSReleaseDerivedDataPath,
   getMacOSEnv,
   getMacOSReleaseWorkspaceDir,
 } from "./lib/macosWorkspaces";
@@ -22,7 +23,10 @@ const openOptionSpecs: OptionSpecs = {
   "--print": "boolean",
   "--port": "value",
   "--release": "boolean",
+  "--arch": "value",
 };
+
+type MacOSBuildArch = "arm" | "x86";
 
 function readMode(args: string[]) {
   if (args.includes("--release")) {
@@ -32,6 +36,22 @@ function readMode(args: string[]) {
   const modeIndex = args.findIndex((arg) => arg === "--mode" || arg === "--configuration");
   const mode = modeIndex >= 0 ? args[modeIndex + 1] : undefined;
   return mode === "Release" ? "Release" : "Debug";
+}
+
+function readMacOSBuildArch(args: string[]): MacOSBuildArch {
+  const archEqualsArg = args.find((arg) => arg.startsWith("--arch="));
+  const archIndex = args.findIndex((arg) => arg === "--arch");
+  const arch = archEqualsArg
+    ? archEqualsArg.slice("--arch=".length)
+    : archIndex >= 0
+      ? args[archIndex + 1]
+      : "arm";
+
+  if (arch !== "arm" && arch !== "x86") {
+    throw new Error(`Invalid macOS release architecture "${arch}". Expected "arm" or "x86".`);
+  }
+
+  return arch;
 }
 
 function shouldPrintOnly(args: string[]) {
@@ -49,7 +69,7 @@ function parseBuildSettings(output: string) {
   }>;
 }
 
-function getBuiltMacAppPath(workspaceDir: string, mode: string) {
+function getBuiltMacAppPath(workspaceDir: string, mode: string, arch: MacOSBuildArch) {
   const macosWorkspace = path.join(workspaceDir, macOSWorkspaceName);
   const buildSettingsArgs = [
     "-workspace",
@@ -62,7 +82,7 @@ function getBuiltMacAppPath(workspaceDir: string, mode: string) {
     "-json",
   ];
   const args = mode === "Release"
-    ? buildSettingsArgs
+    ? [...buildSettingsArgs, "-derivedDataPath", getMacOSReleaseDerivedDataPath(workspaceDir, arch)]
     : [...buildSettingsArgs, "-derivedDataPath", getMacOSDevDerivedDataPath(workspaceDir)];
   const result = spawnSync(
     "xcodebuild",
@@ -114,12 +134,13 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
   assertSupportedPlatform(manifest, platform);
 
   const mode = readMode(runnerArgs);
+  const arch = readMacOSBuildArch(runnerArgs);
   const graphMode = mode === "Release" ? "release" : "dev";
   const generated = writeGeneratedConfig(manifest, platform, graphMode);
   const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : ensureMacOSDevWorkspace(manifest);
   const metroPort = mode === "Release" ? undefined : resolveDevServerPort(appId, runnerArgs);
 
-  const appPath = getBuiltMacAppPath(workspaceDir, mode);
+  const appPath = getBuiltMacAppPath(workspaceDir, mode, arch);
 
   if (!fs.existsSync(appPath)) {
     throw new Error(`No built macOS app found at ${appPath}. Run bun run ${appId} macos first.`);
