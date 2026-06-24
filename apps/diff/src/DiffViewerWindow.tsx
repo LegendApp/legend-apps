@@ -1138,26 +1138,36 @@ export function DiffViewerWindow({ folderPath }: DiffViewerWindowProps) {
     [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fileHeaderRowIndexes, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, toggleFileCollapsed, tokenStyleById],
   );
 
-  const requestSideBySideRange = useCallback((_lineStart: number, _lineCount: number, _options?: VirtualizedDocumentRequestOptions) => {
-    // Blocks rows materialize directly from native during render. Keep range requests side-effect free so
-    // scroll-driven requests never update React state.
-  }, []);
+  const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
+    if (state.status === "loaded" && options?.reason !== "scroll") {
+      const start = Math.max(0, Math.floor(lineStart));
+      const count = Math.max(0, Math.ceil(lineCount));
+      if (count > 0) {
+        state.document.getSideBySideRows(start, count, collapsedFileIndexList);
+        refreshSideBySideTokenStyles(state.document);
+        const end = Math.min(sideBySideRowCount, start + count);
+        for (let index = start; index < end; index += 1) {
+          bumpSideBySideRowVersion(index);
+        }
+      }
+    }
+    // Scroll-driven requests stay side-effect free so scrolling never updates React state.
+  }, [bumpSideBySideRowVersion, collapsedFileIndexList, refreshSideBySideTokenStyles, sideBySideRowCount, state]);
 
   const getSideBySideRow = useCallback((index: number) => (
     state.status === "loaded"
-      ? state.document.getSideBySideRow(index, collapsedFileIndexList)
+      ? state.document.getPlainSideBySideRow(index, collapsedFileIndexList)
       : undefined
   ), [collapsedFileIndexList, state]);
 
   useEffect(() => {
     if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
       const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
-      state.document.getSideBySideRows(0, initialCount, collapsedFileIndexList);
-      refreshSideBySideTokenStyles(state.document);
+      requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
     } else if (viewMode === "unified") {
       setSideBySideTokenStyleState(null);
     }
-  }, [collapsedFileIndexList, diffPaneHeight, refreshSideBySideTokenStyles, rowHeight, sideBySideRowCount, state, viewMode]);
+  }, [diffPaneHeight, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
 
   const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
     if (state.status === "loaded") {
