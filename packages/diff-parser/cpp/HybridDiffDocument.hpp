@@ -26,10 +26,12 @@ struct DiffTokenizedSource {
 };
 
 struct DiffFileSources {
+  double fileIndex = -1;
   std::string oldPath;
   std::string newPath;
   std::string status;
   bool isBinary = false;
+  bool isUnifiedDiff = false;
   bool oldSourceLoaded = false;
   bool newSourceLoaded = false;
   DiffTokenizedSource oldSource;
@@ -98,6 +100,7 @@ private:
       size_t chunkRowCount,
       std::chrono::steady_clock::duration chunkBudget);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
+  DiffTokenizedSource makeUnifiedDiffSource(const DiffFileSources& sources, bool oldSource);
   void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);
   std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
 

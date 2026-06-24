@@ -54,16 +54,30 @@ struct GitBlobDeleter {
   }
 };
 
-DiffTokenizedSource makeTokenizedSource(const std::string& path, const std::string& source) {
+DiffTokenizedSource makeTokenizedSource(const std::string& path, std::vector<std::string> lines) {
   DiffTokenizedSource tokenizedSource;
   tokenizedSource.language = syntaxparser::getSyntaxLanguageForPath(path);
   tokenizedSource.enabled = !tokenizedSource.language.empty();
   if (tokenizedSource.enabled) {
-    tokenizedSource.lines = syntaxparser::splitSyntaxLines(source);
+    tokenizedSource.lines = std::move(lines);
     tokenizedSource.tokenCache.resize(tokenizedSource.lines.size());
     tokenizedSource.state = std::make_shared<DiffTokenizedSourceState>();
   }
   return tokenizedSource;
+}
+
+DiffTokenizedSource makeTokenizedSource(const std::string& path, const std::string& source) {
+  return makeTokenizedSource(path, syntaxparser::splitSyntaxLines(source));
+}
+
+void setSourceLine(std::vector<std::string>& lines, double lineNumber, const std::string& text) {
+  if (lineNumber > 0) {
+    const auto lineIndex = static_cast<size_t>(lineNumber - 1);
+    if (lines.size() <= lineIndex) {
+      lines.resize(lineIndex + 1);
+    }
+    lines[lineIndex] = text;
+  }
 }
 
 std::string readFileText(const std::filesystem::path& path) {
@@ -730,7 +744,9 @@ DiffTokenizedSource& HybridDiffDocument::ensureSourceLoaded(DiffFileSources& sou
       const auto& path = oldSource ? sources.oldPath : sources.newPath;
       const bool canReadOldSource = oldSource && sources.status != "added" && sources.status != "untracked";
       const bool canReadNewSource = !oldSource && sources.status != "deleted";
-      if (canReadOldSource) {
+      if (sources.isUnifiedDiff) {
+        source = makeUnifiedDiffSource(sources, oldSource);
+      } else if (canReadOldSource) {
         source = makeTokenizedSource(path, readHeadBlobText(repositoryPath_, headTreeOid_, path));
       } else if (canReadNewSource) {
         source = makeTokenizedSource(path, readWorkdirFileText(workdirPath_, path));
@@ -738,6 +754,25 @@ DiffTokenizedSource& HybridDiffDocument::ensureSourceLoaded(DiffFileSources& sou
     }
   }
   return source;
+}
+
+DiffTokenizedSource HybridDiffDocument::makeUnifiedDiffSource(const DiffFileSources& sources, bool oldSource) {
+  const auto& path = oldSource ? sources.oldPath : sources.newPath;
+  const auto fileIndex = static_cast<size_t>(std::max(0.0, sources.fileIndex));
+  std::vector<std::string> lines;
+  if (sources.fileIndex >= 0 && fileIndex < files_.size()) {
+    const auto& file = files_[fileIndex];
+    const auto start = static_cast<size_t>(std::max(0.0, file.rowStart));
+    const auto count = static_cast<size_t>(std::max(0.0, file.rowCount));
+    const auto end = std::min(rows_.size(), start + count);
+    for (size_t rowIndex = start; rowIndex < end; rowIndex += 1) {
+      const auto& row = rows_[rowIndex];
+      if (row.kind == diffRowKindLine) {
+        setSourceLine(lines, oldSource ? row.oldLineNumber : row.newLineNumber, row.text);
+      }
+    }
+  }
+  return makeTokenizedSource(path, std::move(lines));
 }
 
 void HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive) {

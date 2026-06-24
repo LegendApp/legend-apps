@@ -137,6 +137,7 @@ std::vector<DiffFileSources> createFileSources(const std::vector<DiffFileSummary
   fileSources.reserve(files.size());
   for (const auto& file : files) {
     DiffFileSources sources;
+    sources.fileIndex = file.index;
     sources.oldPath = file.oldPath;
     sources.newPath = file.path;
     sources.status = file.status;
@@ -230,27 +231,6 @@ bool parseHunkLineNumbers(std::string_view line, int& oldStart, int& newStart) {
   return true;
 }
 
-DiffTokenizedSource createUnifiedDiffSource(const std::string& path, std::vector<std::string> lines) {
-  DiffTokenizedSource source;
-  source.language = syntaxparser::getSyntaxLanguageForPath(path);
-  source.enabled = !source.language.empty();
-  source.lines = std::move(lines);
-  if (source.enabled) {
-    source.tokenCache.resize(source.lines.size());
-  }
-  return source;
-}
-
-void setSourceLine(std::vector<std::string>& lines, int lineNumber, std::string_view text) {
-  if (lineNumber > 0) {
-    const auto lineIndex = static_cast<size_t>(lineNumber - 1);
-    if (lines.size() <= lineIndex) {
-      lines.resize(lineIndex + 1);
-    }
-    lines[lineIndex] = std::string(text);
-  }
-}
-
 struct DiffBuildState {
   std::vector<DiffFileSummary> files;
   std::vector<DiffRenderRow> rows;
@@ -270,8 +250,6 @@ struct DiffBuildState {
 struct UnifiedDiffBuildState {
   DiffBuildState diff;
   std::vector<DiffFileSources> fileSources;
-  std::vector<std::string> currentOldLines;
-  std::vector<std::string> currentNewLines;
   std::string currentOldPath;
   std::string currentNewPath;
 
@@ -302,13 +280,8 @@ struct UnifiedDiffBuildState {
             ? "renamed"
             : "modified";
       sources.status = file.status;
-      sources.oldSource = createUnifiedDiffSource(file.oldPath, std::move(currentOldLines));
-      sources.newSource = createUnifiedDiffSource(file.path, std::move(currentNewLines));
-      sources.oldSourceLoaded = true;
-      sources.newSourceLoaded = true;
+      sources.isUnifiedDiff = true;
     }
-    currentOldLines.clear();
-    currentNewLines.clear();
     currentOldPath.clear();
     currentNewPath.clear();
   }
@@ -337,10 +310,12 @@ struct UnifiedDiffBuildState {
     diff.files.push_back(std::move(file));
 
     DiffFileSources sources;
+    sources.fileIndex = fileIndex;
     sources.oldPath = oldPath;
     sources.newPath = newPath;
     sources.status = "modified";
     sources.isBinary = false;
+    sources.isUnifiedDiff = true;
     fileSources.push_back(std::move(sources));
 
     DiffRenderRow row;
@@ -384,20 +359,16 @@ struct UnifiedDiffBuildState {
     if (origin == '+') {
       row.newLineNumber = diff.currentNewLine;
       row.changeType = diffChangeTypeAdd;
-      setSourceLine(currentNewLines, diff.currentNewLine, text);
       diff.currentNewLine += 1;
       file.additions += 1;
     } else if (origin == '-') {
       row.oldLineNumber = diff.currentOldLine;
       row.changeType = diffChangeTypeRemove;
-      setSourceLine(currentOldLines, diff.currentOldLine, text);
       diff.currentOldLine += 1;
       file.deletions += 1;
     } else {
       row.oldLineNumber = diff.currentOldLine;
       row.newLineNumber = diff.currentNewLine;
-      setSourceLine(currentOldLines, diff.currentOldLine, text);
-      setSourceLine(currentNewLines, diff.currentNewLine, text);
       diff.currentOldLine += 1;
       diff.currentNewLine += 1;
     }
