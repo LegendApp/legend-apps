@@ -200,6 +200,10 @@ std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRend
   std::vector<const DiffRenderRow*> contextRows;
   std::vector<const DiffRenderRow*> removedRows;
   std::vector<const DiffRenderRow*> addedRows;
+  lines.reserve(rows.size());
+  contextRows.reserve(128);
+  removedRows.reserve(128);
+  addedRows.reserve(128);
   double currentFileIndex = -1;
   double currentHunkIndex = -1;
 
