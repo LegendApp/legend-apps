@@ -264,8 +264,28 @@ function VirtualizedFixedDocumentListVersionedRow<TRow>({
   return <VirtualizedFixedDocumentListRowContent {...props} />;
 }
 
+function isArrayIndexProperty(property: string | symbol) {
+  if (typeof property !== "string" || property.length === 0) {
+    return false;
+  }
+
+  const index = Number(property);
+  return Number.isInteger(index) && index >= 0 && String(index) === property;
+}
+
 function createIdentityIndexArray(length: number) {
-  return new Array<number | undefined>(Math.max(0, Math.floor(length)));
+  const count = Math.max(0, Math.floor(length));
+  const target = new Array<number | undefined>(count);
+
+  return new Proxy(target, {
+    get(array, property, receiver) {
+      if (isArrayIndexProperty(property)) {
+        const index = Number(property);
+        return index < count ? index : undefined;
+      }
+      return Reflect.get(array, property, receiver);
+    },
+  });
 }
 
 function getDocumentRangeForListRange(itemIndexes: readonly (number | undefined)[], start: number, count: number) {
