@@ -117,6 +117,16 @@ type DiffSplitPaneMetrics = {
   sidebarWidth: number;
 };
 
+type DiffVisibleSourceModel = {
+  loadedFileCount: number;
+  showSidebarControl: boolean;
+  showViewModeToolbar: boolean;
+  toolbarSource: DiffOpenSource | null;
+  visibleFolderPath: string | null;
+  visibleSource: DiffOpenSource | null;
+  visibleSourceLabel: string;
+};
+
 type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
   borderColor: string;
@@ -879,6 +889,25 @@ function getJoinedPath(basePath: string, relativePath: string) {
   return `${basePath.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
 }
 
+function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource: DiffOpenSource | null): DiffVisibleSourceModel {
+  const visibleSource = state.source;
+  const visibleFolderPath = visibleSource?.kind === "folder" ? visibleSource.value : null;
+  const visibleSourceLabel = getDiffSourceLabel(visibleSource);
+  const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
+  const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? visibleSource : null);
+  const showViewModeToolbar = toolbarSource !== null;
+  const showSidebarControl = showViewModeToolbar;
+  return {
+    loadedFileCount,
+    showSidebarControl,
+    showViewModeToolbar,
+    toolbarSource,
+    visibleFolderPath,
+    visibleSource,
+    visibleSourceLabel,
+  };
+}
+
 function DiffErrorPanel({
   borderColor,
   dangerColor,
@@ -1479,16 +1508,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   } | null>(null);
   const collapsedFileIndexListRef = useRef<number[]>([]);
   const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-  const visibleSource = state.source;
-  const visibleFolderPath = visibleSource?.kind === "folder" ? visibleSource.value : null;
-  const visibleSourceLabel = getDiffSourceLabel(visibleSource);
+  const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
+  const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
-  const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
-  const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? visibleSource : null);
-  const showViewModeToolbar = toolbarSource !== null;
-  const showSidebarControl = showViewModeToolbar;
   const normalizedFileFilter = fileFilter.trim().toLowerCase();
 
   useObserveEffect(() => {
