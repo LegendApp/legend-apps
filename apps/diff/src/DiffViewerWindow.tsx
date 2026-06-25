@@ -1422,12 +1422,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   });
   const [diffPaneHeight, setDiffPaneHeight] = useState(0);
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const splitPaneMetricsRef = useRef(splitPaneMetrics);
-  splitPaneMetricsRef.current = splitPaneMetrics;
-  const diffPaneHeightRef = useRef(diffPaneHeight);
-  diffPaneHeightRef.current = diffPaneHeight;
   const setViewerState = useCallback((nextState: DiffViewerState) => {
     state$.set(nextState);
     setState(nextState);
@@ -2656,10 +2650,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     logDiffOpenTiming("viewer.splitView.resize", {
       contentHeight: nextMetrics.contentHeight,
       contentWidth: nextMetrics.contentWidth,
-      previousContentHeight: splitPaneMetricsRef.current.contentHeight,
-      previousContentWidth: splitPaneMetricsRef.current.contentWidth,
-      previousSidebarHeight: splitPaneMetricsRef.current.sidebarHeight,
-      previousSidebarWidth: splitPaneMetricsRef.current.sidebarWidth,
+      previousContentHeight: splitPaneMetrics$.peek().contentHeight,
+      previousContentWidth: splitPaneMetrics$.peek().contentWidth,
+      previousSidebarHeight: splitPaneMetrics$.peek().sidebarHeight,
+      previousSidebarWidth: splitPaneMetrics$.peek().sidebarWidth,
       sidebarHeight: nextMetrics.sidebarHeight,
       sidebarWidth: nextMetrics.sidebarWidth,
     });
@@ -2670,7 +2664,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     const nextHeight = Math.round(event.nativeEvent.layout.height);
     logDiffOpenTiming("viewer.diffPane.layout", {
       height: nextHeight,
-      previousHeight: diffPaneHeightRef.current,
+      previousHeight: diffPaneHeight$.peek(),
       rawHeight: Number(event.nativeEvent.layout.height.toFixed(1)),
       width: Number(event.nativeEvent.layout.width.toFixed(1)),
     });
@@ -2678,7 +2672,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, []);
 
   const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
-    const currentState = stateRef.current;
+    const currentState = state$.peek();
     logDiffOpenTiming("viewer.sidebarList.layout", {
       fileCount: currentState.status === "loaded" ? currentState.files.length : 0,
       height: Number(event.nativeEvent.layout.height.toFixed(1)),
