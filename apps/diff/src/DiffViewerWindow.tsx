@@ -1532,6 +1532,289 @@ function useDiffWindowToolbarItems({
   }, [toggleSidebar]);
 }
 
+function useDiffLoadedModel({
+  collapsedFileIndexes,
+  fontFamily,
+  fontSize,
+  normalizedFileFilter,
+  rowHeight,
+  state,
+  viewMode,
+}: {
+  collapsedFileIndexes: ReadonlySet<number>;
+  fontFamily: string;
+  fontSize: number;
+  normalizedFileFilter: string;
+  rowHeight: number;
+  state: DiffViewerState;
+  viewMode: DiffSettingsFile["viewMode"];
+}) {
+  const fileByIndex = useMemo(() => {
+    const startedAt = nowMs();
+    if (state.status !== "loaded") {
+      return new Map<number, DiffFileSummary>();
+    }
+    const map = new Map(state.files.map((file) => [file.index, file]));
+    logDiffOpenTiming("viewer.derive.fileByIndex", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      files: state.files.length,
+      rows: state.document.rowCount,
+    });
+    return map;
+  }, [state]);
+  const fileByRowStart = useMemo(() => {
+    const startedAt = nowMs();
+    if (state.status !== "loaded") {
+      return new Map<number, DiffFileSummary>();
+    }
+    const map = new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
+    logDiffOpenTiming("viewer.derive.fileByRowStart", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      files: state.files.length,
+      rows: state.document.rowCount,
+    });
+    return map;
+  }, [state]);
+  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
+    () => {
+      const startedAt = nowMs();
+      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
+      if (state.status === "loaded") {
+        nextSnapshot = {
+          document: state.document,
+          initialRows: state.initialRows,
+          itemCount: state.document.rowCount,
+          styles: state.styles,
+          timing: state.timing,
+        };
+        logDiffOpenTiming("viewer.derive.snapshot", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          initialRows: state.initialRows.length,
+          rows: state.document.rowCount,
+          styles: state.styles.length,
+        });
+      }
+      return nextSnapshot;
+    },
+    [state],
+  );
+  const filteredSidebarFiles = useMemo(
+    () => state.status === "loaded"
+      ? state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter))
+      : [],
+    [normalizedFileFilter, state],
+  );
+  const listExtraData = useMemo(
+    () => ({
+      fontFamily,
+      fontSize,
+      rowHeight,
+    }),
+    [fontFamily, fontSize, rowHeight],
+  );
+  const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
+  const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+    const startedAt = nowMs();
+    const shouldHighlight = options?.reason === "highlight";
+    const rows = shouldHighlight
+      ? document.getRows(start, count)
+      : document.getPlainRows(start, count);
+    logDiffOpenTiming("viewer.rowsFetched", {
+      count,
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      reason: options?.reason ?? "unknown",
+      rows: rows.length,
+      start,
+      tokenized: shouldHighlight,
+    });
+    return rows;
+  }, []);
+  const getStyles = useCallback((document: DiffDocument) => {
+    const startedAt = nowMs();
+    const styles = document.getStyles();
+    logDiffOpenTiming("viewer.stylesFetched", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      styles: styles.length,
+    });
+    return styles;
+  }, []);
+  const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
+  const diffRows = useVirtualizedDocumentRows({
+    debugName: "diff",
+    getRowIndex,
+    getRows,
+    getStyles,
+    getTiming,
+    snapshot,
+  });
+  const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
+  const fileHeaderRowIndexes = useMemo(() => {
+    const startedAt = nowMs();
+    if (state.status !== "loaded") {
+      return new Set<number>();
+    }
+    const indexes = new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
+    logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", {
+      durationMs: Number((nowMs() - startedAt).toFixed(1)),
+      files: state.files.length,
+      rows: state.document.rowCount,
+    });
+    return indexes;
+  }, [state]);
+  const visibleItemIndexes = useMemo(
+    () => {
+      const startedAt = nowMs();
+      const indexes = state.status === "loaded" && collapsedFileIndexes.size > 0
+        ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
+        : diffRows.itemIndexes;
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.visibleItemIndexes", {
+          collapsedFiles: collapsedFileIndexes.size,
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          items: indexes.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
+    [collapsedFileIndexes, diffRows.itemIndexes, state],
+  );
+  const visibleListIndexByRowIndex = useMemo(() => {
+    const startedAt = nowMs();
+    let indexes: Map<number, number> | null = null;
+    if (collapsedFileIndexes.size > 0) {
+      indexes = new Map<number, number>();
+      visibleItemIndexes.forEach((rowIndex, listIndex) => {
+        indexes?.set(rowIndex ?? listIndex, listIndex);
+      });
+    }
+    if (state.status === "loaded") {
+      logDiffOpenTiming("viewer.derive.visibleListIndexByRowIndex", {
+        collapsedFiles: collapsedFileIndexes.size,
+        durationMs: Number((nowMs() - startedAt).toFixed(1)),
+        eagerMap: indexes !== null,
+        items: visibleItemIndexes.length,
+        rows: state.document.rowCount,
+      });
+    }
+    return indexes;
+  }, [collapsedFileIndexes, state, visibleItemIndexes]);
+  const getVisibleListIndex = useCallback((rowIndex: number) => (
+    visibleListIndexByRowIndex
+      ? visibleListIndexByRowIndex.get(rowIndex)
+      : rowIndex >= 0 && rowIndex < visibleItemIndexes.length
+        ? rowIndex
+        : undefined
+  ), [visibleItemIndexes.length, visibleListIndexByRowIndex]);
+  const collapsedFileIndexList = useMemo(
+    () => Array.from(collapsedFileIndexes).sort((left, right) => left - right),
+    [collapsedFileIndexes],
+  );
+  const sideBySideRowCount = useMemo(
+    () => {
+      const startedAt = nowMs();
+      const count = state.status === "loaded" && viewMode !== "unified"
+        ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
+        : 0;
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideRowCount", {
+          collapsedFiles: collapsedFileIndexList.length,
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          rows: state.document.rowCount,
+          sideBySideRows: count,
+          viewMode,
+        });
+      }
+      return count;
+    },
+    [collapsedFileIndexList, state, viewMode],
+  );
+  const sideBySideItemIndexes = useMemo(
+    () => {
+      const startedAt = nowMs();
+      const indexes = createIdentityDiffRowIndexes(sideBySideRowCount);
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          items: indexes.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
+    [sideBySideRowCount, state],
+  );
+  const sideBySideFileHeaders = useMemo(
+    () => {
+      const startedAt = nowMs();
+      const headers = state.status === "loaded" && viewMode !== "unified"
+        ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
+        : [];
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", {
+          collapsedFiles: collapsedFileIndexList.length,
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          files: headers.length,
+          rows: state.document.rowCount,
+          viewMode,
+        });
+      }
+      return headers;
+    },
+    [collapsedFileIndexList, state, viewMode],
+  );
+  const sideBySideFileHeaderIndexes = useMemo(
+    () => {
+      const startedAt = nowMs();
+      const indexes = new Set(sideBySideFileHeaders.map((header) => header.listIndex));
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          files: sideBySideFileHeaders.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
+    [sideBySideFileHeaders, state],
+  );
+  const sideBySideListIndexByRowIndex = useMemo(
+    () => {
+      const startedAt = nowMs();
+      const indexes = new Map<number, number>();
+      sideBySideFileHeaders.forEach((header) => {
+        indexes.set(header.sourceStart, header.listIndex);
+      });
+      if (state.status === "loaded") {
+        logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", {
+          durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          files: sideBySideFileHeaders.length,
+          rows: state.document.rowCount,
+        });
+      }
+      return indexes;
+    },
+    [sideBySideFileHeaders, state],
+  );
+
+  return {
+    collapsedFileIndexList,
+    diffRows,
+    fileByIndex,
+    fileByRowStart,
+    fileHeaderRowIndexes,
+    filteredSidebarFiles,
+    getVisibleListIndex,
+    listExtraData,
+    sideBySideFileHeaderIndexes,
+    sideBySideItemIndexes,
+    sideBySideListIndexByRowIndex,
+    sideBySideRowCount,
+    tokenStyleById,
+    visibleItemIndexes,
+  };
+}
+
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
   const indexes: number[] = [];
 
@@ -1721,105 +2004,31 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     loggedInitialLoadedFrameRef.current = currentIsRenderingInitialLoadedFrame;
   });
 
-  const fileByIndex = useMemo(() => {
-    const startedAt = nowMs();
-    if (state.status !== "loaded") {
-      return new Map<number, DiffFileSummary>();
-    }
-    const map = new Map(state.files.map((file) => [file.index, file]));
-    logDiffOpenTiming("viewer.derive.fileByIndex", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      files: state.files.length,
-      rows: state.document.rowCount,
-    });
-    return map;
-  }, [state]);
-  const fileByRowStart = useMemo(() => {
-    const startedAt = nowMs();
-    if (state.status !== "loaded") {
-      return new Map<number, DiffFileSummary>();
-    }
-    const map = new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
-    logDiffOpenTiming("viewer.derive.fileByRowStart", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      files: state.files.length,
-      rows: state.document.rowCount,
-    });
-    return map;
-  }, [state]);
-  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
-    () => {
-      const startedAt = nowMs();
-      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
-      if (state.status === "loaded") {
-        nextSnapshot = {
-          document: state.document,
-          initialRows: state.initialRows,
-          itemCount: state.document.rowCount,
-          styles: state.styles,
-          timing: state.timing,
-        };
-        logDiffOpenTiming("viewer.derive.snapshot", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          initialRows: state.initialRows.length,
-          rows: state.document.rowCount,
-          styles: state.styles.length,
-        });
-      }
-      return nextSnapshot;
-    },
-    [state],
-  );
-  const filteredSidebarFiles = useMemo(
-    () => state.status === "loaded"
-      ? state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter))
-      : [],
-    [normalizedFileFilter, state],
-  );
-  const listExtraData = useMemo(
-    () => ({
-      fontFamily,
-      fontSize,
-      rowHeight,
-    }),
-    [fontFamily, fontSize, rowHeight],
-  );
-  const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
-  const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    const startedAt = nowMs();
-    const shouldHighlight = options?.reason === "highlight";
-    const rows = shouldHighlight
-      ? document.getRows(start, count)
-      : document.getPlainRows(start, count);
-    logDiffOpenTiming("viewer.rowsFetched", {
-      count,
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      reason: options?.reason ?? "unknown",
-      rows: rows.length,
-      start,
-      tokenized: shouldHighlight,
-    });
-    return rows;
-  }, []);
-  const getStyles = useCallback((document: DiffDocument) => {
-    const startedAt = nowMs();
-    const styles = document.getStyles();
-    logDiffOpenTiming("viewer.stylesFetched", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      styles: styles.length,
-    });
-    return styles;
-  }, []);
-  const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
-  const diffRows = useVirtualizedDocumentRows({
-    debugName: "diff",
-    getRowIndex,
-    getRows,
-    getStyles,
-    getTiming,
-    snapshot,
+  const {
+    collapsedFileIndexList,
+    diffRows,
+    fileByIndex,
+    fileByRowStart,
+    fileHeaderRowIndexes,
+    filteredSidebarFiles,
+    getVisibleListIndex,
+    listExtraData,
+    sideBySideFileHeaderIndexes,
+    sideBySideItemIndexes,
+    sideBySideListIndexByRowIndex,
+    sideBySideRowCount,
+    tokenStyleById,
+    visibleItemIndexes,
+  } = useDiffLoadedModel({
+    collapsedFileIndexes,
+    fontFamily,
+    fontSize,
+    normalizedFileFilter,
+    rowHeight,
+    state,
+    viewMode,
   });
-  const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
+  collapsedFileIndexListRef.current = collapsedFileIndexList;
   const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
     const styles = document.getStyles();
     setSideBySideTokenStyleState((current) => (
@@ -1860,155 +2069,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       pendingSideBySideTokenRangesRef.current = null;
     }
   }, [bumpSideBySideRowVersion, refreshSideBySideTokenStyles]);
-  const fileHeaderRowIndexes = useMemo(() => {
-    const startedAt = nowMs();
-    if (state.status !== "loaded") {
-      return new Set<number>();
-    }
-    const indexes = new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
-    logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      files: state.files.length,
-      rows: state.document.rowCount,
-    });
-    return indexes;
-  }, [state]);
-  const visibleItemIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = state.status === "loaded" && collapsedFileIndexes.size > 0
-        ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
-        : diffRows.itemIndexes;
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.visibleItemIndexes", {
-          collapsedFiles: collapsedFileIndexes.size,
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          items: indexes.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [collapsedFileIndexes, diffRows.itemIndexes, state],
-  );
-  const visibleListIndexByRowIndex = useMemo(() => {
-    const startedAt = nowMs();
-    let indexes: Map<number, number> | null = null;
-    if (collapsedFileIndexes.size > 0) {
-      indexes = new Map<number, number>();
-      visibleItemIndexes.forEach((rowIndex, listIndex) => {
-        indexes?.set(rowIndex ?? listIndex, listIndex);
-      });
-    }
-    if (state.status === "loaded") {
-      logDiffOpenTiming("viewer.derive.visibleListIndexByRowIndex", {
-        collapsedFiles: collapsedFileIndexes.size,
-        durationMs: Number((nowMs() - startedAt).toFixed(1)),
-        eagerMap: indexes !== null,
-        items: visibleItemIndexes.length,
-        rows: state.document.rowCount,
-      });
-    }
-    return indexes;
-  }, [collapsedFileIndexes, state, visibleItemIndexes]);
-  const getVisibleListIndex = useCallback((rowIndex: number) => (
-    visibleListIndexByRowIndex
-      ? visibleListIndexByRowIndex.get(rowIndex)
-      : rowIndex >= 0 && rowIndex < visibleItemIndexes.length
-        ? rowIndex
-        : undefined
-  ), [visibleItemIndexes.length, visibleListIndexByRowIndex]);
-  const collapsedFileIndexList = useMemo(
-    () => Array.from(collapsedFileIndexes).sort((left, right) => left - right),
-    [collapsedFileIndexes],
-  );
-  collapsedFileIndexListRef.current = collapsedFileIndexList;
-  const sideBySideRowCount = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const count = state.status === "loaded" && viewMode !== "unified"
-        ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
-        : 0;
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideRowCount", {
-          collapsedFiles: collapsedFileIndexList.length,
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          rows: state.document.rowCount,
-          sideBySideRows: count,
-          viewMode,
-        });
-      }
-      return count;
-    },
-    [collapsedFileIndexList, state, viewMode],
-  );
-  const sideBySideItemIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = createIdentityDiffRowIndexes(sideBySideRowCount);
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          items: indexes.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [sideBySideRowCount, state],
-  );
-  const sideBySideFileHeaders = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const headers = state.status === "loaded" && viewMode !== "unified"
-        ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
-        : [];
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", {
-          collapsedFiles: collapsedFileIndexList.length,
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: headers.length,
-          rows: state.document.rowCount,
-          viewMode,
-        });
-      }
-      return headers;
-    },
-    [collapsedFileIndexList, state, viewMode],
-  );
-  const sideBySideFileHeaderIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = new Set(sideBySideFileHeaders.map((header) => header.listIndex));
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: sideBySideFileHeaders.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [sideBySideFileHeaders, state],
-  );
-  const sideBySideListIndexByRowIndex = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = new Map<number, number>();
-      sideBySideFileHeaders.forEach((header) => {
-        indexes.set(header.sourceStart, header.listIndex);
-      });
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: sideBySideFileHeaders.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [sideBySideFileHeaders, state],
-  );
   const clearHighlightTimeouts = useCallback(() => {
     for (const timeoutHandle of highlightTimeoutHandlesRef.current) {
       clearTimeout(timeoutHandle);
