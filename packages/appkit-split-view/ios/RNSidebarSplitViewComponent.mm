@@ -380,6 +380,10 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   if (nextAppearanceName.length == 0) {
     nextAppearanceName = @"system";
   }
+  BOOL shouldRelayout =
+    fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
+    fabs(_contentMinWidth - newProps.contentMinWidth) >= 0.5 ||
+    _sidebarCollapsed != newProps.sidebarCollapsed;
   _sidebarMinWidth = newProps.sidebarMinWidth;
   _contentMinWidth = newProps.contentMinWidth;
   _sidebarCollapsed = newProps.sidebarCollapsed;
@@ -392,6 +396,15 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 #endif
 
   [super updateProps:props oldProps:oldProps];
+
+#if TARGET_OS_OSX
+  if (shouldRelayout) {
+    _lastSidebarWidth = -1;
+    _lastContentWidth = -1;
+    _lastHeight = -1;
+    [self layoutSplitView];
+  }
+#endif
 }
 
 - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
