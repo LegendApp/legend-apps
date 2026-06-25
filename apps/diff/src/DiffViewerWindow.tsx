@@ -142,6 +142,7 @@ type DiffFileHeaderRowProps = {
 
 type DiffUnifiedRowProps = {
   adaptiveRender: "light" | "normal";
+  collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
   renderContext$: Observable<DiffRenderContext>;
   row: DiffRenderRow | undefined;
@@ -149,6 +150,7 @@ type DiffUnifiedRowProps = {
 
 type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
+  collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
   renderContext$: Observable<DiffRenderContext>;
   row: DiffSideBySideRenderRow | undefined;
@@ -156,7 +158,6 @@ type DiffSideBySideRowProps = {
 
 type DiffRenderContext = {
   borderColor: string;
-  collapsedFileIndexes: ReadonlySet<number>;
   fileByIndex: ReadonlyMap<number, DiffFileSummary>;
   fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
   fileHeaderRowIndexes: ReadonlySet<number>;
@@ -227,6 +228,7 @@ function areOptionalDiffRenderRowsEqual(previousRow: DiffRenderRow | undefined, 
 
 function areDiffUnifiedRowPropsEqual(previousProps: DiffUnifiedRowProps, nextProps: DiffUnifiedRowProps) {
   return previousProps.adaptiveRender === nextProps.adaptiveRender
+    && previousProps.collapsedFileIndexes$ === nextProps.collapsedFileIndexes$
     && previousProps.index === nextProps.index
     && previousProps.renderContext$ === nextProps.renderContext$
     && areOptionalDiffRenderRowsEqual(previousProps.row, nextProps.row);
@@ -256,6 +258,7 @@ function areOptionalDiffSideBySideRowsEqual(previousRow: DiffSideBySideRenderRow
 
 function areDiffSideBySideRowPropsEqual(previousProps: DiffSideBySideRowProps, nextProps: DiffSideBySideRowProps) {
   return previousProps.adaptiveRender === nextProps.adaptiveRender
+    && previousProps.collapsedFileIndexes$ === nextProps.collapsedFileIndexes$
     && previousProps.index === nextProps.index
     && previousProps.renderContext$ === nextProps.renderContext$
     && areOptionalDiffSideBySideRowsEqual(previousProps.row, nextProps.row);
@@ -263,7 +266,6 @@ function areDiffSideBySideRowPropsEqual(previousProps: DiffSideBySideRowProps, n
 
 function areDiffRenderContextsEqual(previousContext: DiffRenderContext, nextContext: DiffRenderContext) {
   return previousContext.borderColor === nextContext.borderColor
-    && previousContext.collapsedFileIndexes === nextContext.collapsedFileIndexes
     && previousContext.fileByIndex === nextContext.fileByIndex
     && previousContext.fileByRowStart === nextContext.fileByRowStart
     && previousContext.fileHeaderRowIndexes === nextContext.fileHeaderRowIndexes
@@ -416,13 +418,13 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
 
 const DiffUnifiedRow = memo(function DiffUnifiedRow({
   adaptiveRender,
+  collapsedFileIndexes$,
   index,
   renderContext$,
   row,
 }: DiffUnifiedRowProps) {
   const {
     borderColor,
-    collapsedFileIndexes,
     fileByIndex,
     fileByRowStart,
     fileHeaderRowIndexes,
@@ -434,6 +436,7 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
     tokenStyleById,
     toggleFileCollapsed,
   } = useValue(renderContext$);
+  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const changeType = row?.changeType ?? 0;
   const isAdd = changeType === diffChangeTypeAdd;
   const isRemove = changeType === diffChangeTypeRemove;
@@ -494,13 +497,13 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
 
 const DiffSideBySideRow = memo(function DiffSideBySideRow({
   adaptiveRender,
+  collapsedFileIndexes$,
   index,
   renderContext$,
   row,
 }: DiffSideBySideRowProps) {
   const {
     borderColor,
-    collapsedFileIndexes,
     fileByIndex,
     fileByRowStart,
     fontFamily,
@@ -511,6 +514,7 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
     sideBySideTokenStyleById,
     toggleFileCollapsed,
   } = useValue(renderContext$);
+  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
 
   if (!row) {
     return <View style={{ height: rowHeight }} />;
@@ -1242,13 +1246,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const [loadingSource, setLoadingSource] = useState<DiffOpenSource | null>(null);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
   const state$ = useObservable<DiffViewerState>(emptyState);
   const urlInput$ = useObservable("");
   const openError$ = useObservable<DiffRecoverableError | null>(null);
   const documentError$ = useObservable<DiffRecoverableError | null>(null);
   const loadingSource$ = useObservable<DiffOpenSource | null>(null);
   const sidebarCollapsed$ = useObservable(false);
+  const collapsedFileIndexes$ = useObservable<Set<number>>(new Set());
   const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>({
     contentHeight: 0,
     contentWidth: 0,
@@ -1265,6 +1269,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     sidebarWidth: 0,
   });
   const [diffPaneHeight, setDiffPaneHeight] = useState(0);
+  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const stateRef = useRef(state);
   stateRef.current = state;
   const splitPaneMetricsRef = useRef(splitPaneMetrics);
@@ -1305,6 +1310,15 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       return nextSidebarCollapsed;
     });
   }, []);
+  const setCollapsedFileIndexesValue = useCallback((nextValue: SetStateAction<Set<number>>) => {
+    const currentIndexes = collapsedFileIndexes$.peek();
+    const nextIndexes = typeof nextValue === "function"
+      ? nextValue(currentIndexes)
+      : nextValue;
+    if (nextIndexes !== currentIndexes) {
+      collapsedFileIndexes$.set(nextIndexes);
+    }
+  }, [collapsedFileIndexes$]);
   const setSplitPaneMetricsValue = useCallback((nextMetrics: DiffSplitPaneMetrics) => {
     splitPaneMetrics$.set(nextMetrics);
     setSplitPaneMetrics(nextMetrics);
@@ -1677,11 +1691,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     clearHighlightTimeouts();
     if (state.status === "loaded") {
       activeFileIndex$.set(state.files[0]?.index ?? null);
-      setCollapsedFileIndexes((current) => current.size > 0 ? new Set() : current);
+      setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
     } else {
       activeFileIndex$.set(null);
     }
-  }, [activeFileIndex$, clearHighlightTimeouts, sideBySideRowVersions$, state.status === "loaded" ? state.document : null]);
+  }, [activeFileIndex$, clearHighlightTimeouts, setCollapsedFileIndexesValue, sideBySideRowVersions$, state.status === "loaded" ? state.document : null]);
 
   useEffect(() => clearHighlightTimeouts, [clearHighlightTimeouts]);
 
@@ -2466,7 +2480,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, []);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
-    setCollapsedFileIndexes((current) => {
+    setCollapsedFileIndexesValue((current) => {
       const next = new Set(current);
       if (next.has(fileIndex)) {
         next.delete(fileIndex);
@@ -2475,13 +2489,12 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
       return next;
     });
-  }, []);
+  }, [setCollapsedFileIndexesValue]);
   const currentSideBySideTokenStyleById = state.status === "loaded" && sideBySideTokenStyleState?.document === state.document
     ? sideBySideTokenStyleState.tokenStyleById
     : tokenStyleById;
   const renderContext$ = useObservable<DiffRenderContext>({
     borderColor: displayTheme.colors.border,
-    collapsedFileIndexes,
     fileByIndex,
     fileByRowStart,
     fileHeaderRowIndexes,
@@ -2497,7 +2510,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     const nextContext: DiffRenderContext = {
       borderColor: displayTheme.colors.border,
-      collapsedFileIndexes,
       fileByIndex,
       fileByRowStart,
       fileHeaderRowIndexes,
@@ -2513,7 +2525,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     if (!areDiffRenderContextsEqual(renderContext$.peek(), nextContext)) {
       renderContext$.set(nextContext);
     }
-  }, [collapsedFileIndexes, currentSideBySideTokenStyleById, displayTheme.colors.border, fileByIndex, fileByRowStart, fileHeaderRowIndexes, fontFamily, fontSize, foregroundColor, mutedColor, renderContext$, rowHeight, tokenStyleById, toggleFileCollapsed]);
+  }, [currentSideBySideTokenStyleById, displayTheme.colors.border, fileByIndex, fileByRowStart, fileHeaderRowIndexes, fontFamily, fontSize, foregroundColor, mutedColor, renderContext$, rowHeight, tokenStyleById, toggleFileCollapsed]);
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
@@ -2600,12 +2612,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => (
       <DiffUnifiedRow
         adaptiveRender={adaptiveRender}
+        collapsedFileIndexes$={collapsedFileIndexes$}
         index={index}
         renderContext$={renderContext$}
         row={row}
       />
     ),
-    [renderContext$],
+    [collapsedFileIndexes$, renderContext$],
   );
 
   const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
@@ -2694,12 +2707,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => (
       <DiffSideBySideRow
         adaptiveRender={adaptiveRender}
+        collapsedFileIndexes$={collapsedFileIndexes$}
         index={index}
         renderContext$={renderContext$}
         row={row}
       />
     ),
-    [renderContext$],
+    [collapsedFileIndexes$, renderContext$],
   );
 
   const handleUrlInputChange = useCallback((text: string) => {
