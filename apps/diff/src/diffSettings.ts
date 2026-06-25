@@ -2,8 +2,7 @@ import { createObservableSettings } from "@legend-desktop/storage";
 import {
   defaultSyntaxThemeName,
   getSyntaxTheme,
-  isBundledSyntaxThemeName,
-  type BundledSyntaxThemeName,
+  normalizeSyntaxThemeName,
   type SyntaxTheme,
 } from "@legend-desktop/syntax-parser";
 import { useValue } from "@legendapp/state/react";
@@ -11,7 +10,7 @@ import { useValue } from "@legendapp/state/react";
 export type DiffSettingsFile = {
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
-  syntaxTheme: BundledSyntaxThemeName;
+  syntaxTheme: string;
   viewMode?: DiffViewMode;
 };
 
@@ -68,8 +67,7 @@ const diffSettings = createObservableSettings({
     },
     syntaxTheme: {
       defaultValue: defaultSyntaxThemeName,
-      normalize: (syntaxTheme): BundledSyntaxThemeName =>
-        isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : defaultSyntaxThemeName,
+      normalize: normalizeSyntaxThemeName,
     },
     viewMode: {
       defaultValue: defaultDiffViewMode,
@@ -84,7 +82,7 @@ const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
 
-export function getDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
+export function getDiffSyntaxThemeSetting(): string {
   return syntaxThemeSetting.get();
 }
 
@@ -112,9 +110,9 @@ export function useDiffFontSizeSetting(): number {
   return normalizeDiffFontSize(useValue(diffSettings$.fontSize));
 }
 
-export function useDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
+export function useDiffSyntaxThemeSetting(): string {
   const syntaxTheme = useValue(diffSettings$.syntaxTheme);
-  return isBundledSyntaxThemeName(syntaxTheme) ? syntaxTheme : defaultSyntaxThemeName;
+  return normalizeSyntaxThemeName(syntaxTheme);
 }
 
 export function useDiffSyntaxTheme(): SyntaxTheme {
@@ -125,7 +123,7 @@ export function useDiffViewModeSetting(): DiffViewMode {
   return normalizeDiffViewMode(useValue(diffSettings$.viewMode));
 }
 
-export function setDiffSyntaxThemeSetting(syntaxTheme: BundledSyntaxThemeName) {
+export function setDiffSyntaxThemeSetting(syntaxTheme: string) {
   syntaxThemeSetting.set(syntaxTheme);
 }
 

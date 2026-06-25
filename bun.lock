@@ -526,6 +526,9 @@
     "packages/syntax-parser": {
       "name": "@legend-desktop/syntax-parser",
       "version": "0.0.0",
+      "dependencies": {
+        "@legend-desktop/storage": "workspace:*",
+      },
       "devDependencies": {
         "nitrogen": "0.35.6",
         "react-native-nitro-modules": "0.35.6",

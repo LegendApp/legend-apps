@@ -4,6 +4,7 @@ import {
   type DocumentAppController,
 } from "@legend-desktop/document-app";
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+import { initializeSyntaxAssetsSync } from "@legend-desktop/syntax-parser";
 import { closeWindow } from "@legend-desktop/window-manager";
 import { useEffect } from "react";
 import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
@@ -15,6 +16,7 @@ import { focusCodeViewerWindow, openCodeSettingsWindow, openCodeViewerWindow, re
 import { requestCodeViewerFile } from "./codeViewerRequests";
 
 registerCodeWindows();
+initializeSyntaxAssetsSync();
 installCodeBenchmarkHook();
 warmCodeSyntaxHighlighters().catch(reportCodeAppControllerError);
 

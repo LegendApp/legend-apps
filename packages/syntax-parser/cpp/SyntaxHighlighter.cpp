@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <limits.h>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -29,6 +31,11 @@ struct GrammarConfig {
   std::vector<std::string> grammarFiles;
 };
 
+struct SyntaxAssetRoots {
+  std::filesystem::path applicationSupportRoot;
+  std::filesystem::path bundledRoot;
+};
+
 struct HighlighterCacheEntry {
   std::condition_variable cv;
   std::shared_ptr<TextMateHighlighterContext> context;
@@ -46,17 +53,32 @@ int getForegroundId(uint32_t metadata) {
   return static_cast<int>((metadata & foregroundMask) >> foregroundOffset);
 }
 
-std::filesystem::path packageRoot() {
-  auto current = std::filesystem::path(__FILE__);
-  return current.parent_path().parent_path();
-}
-
 bool canReadFile(const std::filesystem::path& path) {
   std::ifstream input(path, std::ios::binary);
   return static_cast<bool>(input);
 }
 
 #ifdef __APPLE__
+std::string stringFromCFString(CFStringRef string) {
+  if (!string) {
+    return {};
+  }
+
+  char buffer[PATH_MAX];
+  if (CFStringGetCString(string, buffer, sizeof(buffer), kCFStringEncodingUTF8)) {
+    return std::string(buffer);
+  }
+
+  const CFIndex length = CFStringGetLength(string);
+  const CFIndex maxSize = CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+  std::string value(static_cast<size_t>(maxSize), '\0');
+  if (!CFStringGetCString(string, value.data(), maxSize, kCFStringEncodingUTF8)) {
+    return {};
+  }
+  value.resize(std::char_traits<char>::length(value.c_str()));
+  return value;
+}
+
 std::filesystem::path pathFromUrl(CFURLRef url) {
   if (!url) {
     return {};
@@ -67,6 +89,51 @@ std::filesystem::path pathFromUrl(CFURLRef url) {
     return {};
   }
   return std::filesystem::path(reinterpret_cast<const char*>(buffer));
+}
+
+std::string applicationSupportFolderName() {
+  CFBundleRef mainBundle = CFBundleGetMainBundle();
+  if (!mainBundle) {
+    return "Legend Desktop";
+  }
+
+  CFDictionaryRef info = CFBundleGetInfoDictionary(mainBundle);
+  CFStringRef displayName = nullptr;
+  CFStringRef bundleName = nullptr;
+
+  if (info) {
+    const void* displayValue = CFDictionaryGetValue(info, CFSTR("CFBundleDisplayName"));
+    if (displayValue && CFGetTypeID(static_cast<CFTypeRef>(displayValue)) == CFStringGetTypeID()) {
+      displayName = static_cast<CFStringRef>(displayValue);
+    }
+
+    const void* bundleValue = CFDictionaryGetValue(info, kCFBundleNameKey);
+    if (bundleValue && CFGetTypeID(static_cast<CFTypeRef>(bundleValue)) == CFStringGetTypeID()) {
+      bundleName = static_cast<CFStringRef>(bundleValue);
+    }
+  }
+
+  const auto displayNameString = stringFromCFString(displayName);
+  if (!displayNameString.empty()) {
+    return displayNameString;
+  }
+
+  const auto bundleNameString = stringFromCFString(bundleName);
+  if (!bundleNameString.empty()) {
+    return bundleNameString;
+  }
+
+  const auto bundleIdentifierString = stringFromCFString(CFBundleGetIdentifier(mainBundle));
+  return bundleIdentifierString.empty() ? "Legend Desktop" : bundleIdentifierString;
+}
+
+std::filesystem::path applicationSupportRoot() {
+  const char* home = std::getenv("HOME");
+  if (!home || home[0] == '\0') {
+    return {};
+  }
+
+  return std::filesystem::path(home) / "Library" / "Application Support" / applicationSupportFolderName();
 }
 
 std::filesystem::path resourceBundleRoot(const char* bundleName) {
@@ -105,22 +172,39 @@ std::filesystem::path resourceBundleRoot(const char* bundleName) {
 }
 #endif
 
-std::filesystem::path syntaxAssetRoot(
-    const std::filesystem::path& sourceRoot,
-    const char* resourceBundleName,
-    const char* sentinelFileName) {
-  if (canReadFile(sourceRoot / sentinelFileName)) {
-    return sourceRoot;
-  }
-
+SyntaxAssetRoots syntaxAssetRoots(const char* resourceBundleName, const char* assetFolderName) {
+  SyntaxAssetRoots roots;
 #ifdef __APPLE__
-  const auto bundledRoot = resourceBundleRoot(resourceBundleName);
-  if (!bundledRoot.empty() && canReadFile(bundledRoot / sentinelFileName)) {
-    return bundledRoot;
+  const auto supportRoot = applicationSupportRoot();
+  if (!supportRoot.empty()) {
+    roots.applicationSupportRoot = supportRoot / "syntax-assets" / assetFolderName;
   }
-#endif
+  if (!roots.applicationSupportRoot.empty()) {
+    std::error_code error;
+    std::filesystem::create_directories(roots.applicationSupportRoot, error);
+  }
 
-  return sourceRoot;
+  roots.bundledRoot = resourceBundleRoot(resourceBundleName);
+#endif
+  return roots;
+}
+
+std::filesystem::path resolveSyntaxAssetFile(const SyntaxAssetRoots& roots, const std::string& filename) {
+  if (!roots.applicationSupportRoot.empty()) {
+    const auto applicationSupportPath = roots.applicationSupportRoot / filename;
+    if (canReadFile(applicationSupportPath)) {
+      return applicationSupportPath;
+    }
+  }
+
+  if (!roots.bundledRoot.empty()) {
+    const auto bundledPath = roots.bundledRoot / filename;
+    if (canReadFile(bundledPath)) {
+      return bundledPath;
+    }
+  }
+
+  return roots.applicationSupportRoot.empty() ? std::filesystem::path(filename) : roots.applicationSupportRoot / filename;
 }
 
 std::string readTextFile(const std::filesystem::path& path) {
@@ -723,9 +807,9 @@ void addStyle(
 std::shared_ptr<TextMateHighlighterContext> createHighlighterContext(
     const GrammarConfig& grammarConfig,
     const std::string& theme,
-    const std::filesystem::path& grammarsRoot,
-    const std::filesystem::path& themesRoot) {
-  const auto themeJson = readTextFile(themesRoot / getThemeFileName(theme));
+    const SyntaxAssetRoots& grammarsRoot,
+    const SyntaxAssetRoots& themesRoot) {
+  const auto themeJson = readTextFile(resolveSyntaxAssetFile(themesRoot, getThemeFileName(theme)));
 
   TextMateOnigLib onig = textmate_oniglib_create();
   if (!onig) {
@@ -739,7 +823,7 @@ std::shared_ptr<TextMateHighlighterContext> createHighlighterContext(
   }
 
   for (const auto& grammarFile : grammarConfig.grammarFiles) {
-    const auto grammarPath = grammarsRoot / grammarFile;
+    const auto grammarPath = resolveSyntaxAssetFile(grammarsRoot, grammarFile);
     if (!textmate_registry_add_grammar_from_file(registry, grammarPath.string().c_str())) {
       textmate_registry_dispose(registry);
       textmate_oniglib_dispose(onig);
@@ -775,11 +859,8 @@ SyntaxHighlighterWarmupResult createWarmedHighlighterContext(
     const std::string& language,
     const std::string& theme) {
   const auto startedAt = SyntaxClock::now();
-  const auto root = packageRoot();
-  const auto sourceGrammarsRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw";
-  const auto sourceThemesRoot = root / "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes";
-  const auto grammarsRoot = syntaxAssetRoot(sourceGrammarsRoot, "RNSyntaxParserGrammars", "typescript.json");
-  const auto themesRoot = syntaxAssetRoot(sourceThemesRoot, "RNSyntaxParserThemes", "github-dark-dimmed.json");
+  const auto grammarsRoot = syntaxAssetRoots("RNSyntaxParserGrammars", "grammars");
+  const auto themesRoot = syntaxAssetRoots("RNSyntaxParserThemes", "themes");
   auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
   const auto contextReadyAt = SyntaxClock::now();
 
@@ -991,6 +1072,7 @@ SyntaxHighlighterWarmupResult warmHighlighterContext(
         std::lock_guard<std::mutex> lock(cacheMutex);
         entry->error = error.what();
         entry->failed = true;
+        contextCache.erase(key);
       }
       entry->cv.notify_all();
       throw;

@@ -3,6 +3,8 @@
 #include "HybridSyntaxDocument.hpp"
 #include "SyntaxHighlighter.hpp"
 
+#include <exception>
+
 namespace margelo::nitro::legenddesktop::syntaxparser {
 
 HybridSyntaxParser::HybridSyntaxParser() : HybridObject(TAG) {}
@@ -63,7 +65,12 @@ std::shared_ptr<Promise<SyntaxFileLoadResult>> HybridSyntaxParser::loadCodeFile(
     double initialLineCount) {
   return Promise<SyntaxFileLoadResult>::async([filePath, language, theme, initialLineCount]() -> SyntaxFileLoadResult {
     const auto startedAt = SyntaxClock::now();
-    auto document = HybridSyntaxDocument::loadFile(filePath, language, theme);
+    std::shared_ptr<HybridSyntaxDocument> document;
+    try {
+      document = HybridSyntaxDocument::loadFile(filePath, language, theme);
+    } catch (const std::exception&) {
+      document = HybridSyntaxDocument::loadPlainFile(filePath);
+    }
     const auto initialLinesStartedAt = SyntaxClock::now();
     SyntaxFileLoadResult result;
     result.document = document;

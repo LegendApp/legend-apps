@@ -14,8 +14,10 @@ Pod::Spec.new do |s|
   s.source_files = "cpp/**/*.{h,hpp,cpp}"
   s.preserve_paths = "vendor/TextMateLib/**/*"
   s.resource_bundles = {
-    "RNSyntaxParserGrammars" => "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/raw/*.json",
-    "RNSyntaxParserThemes" => "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/*.json",
+    "RNSyntaxParserThemes" => [
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-dark-dimmed.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json",
+    ],
   }
   s.vendored_libraries = [
     "vendor/TextMateLib/packages/tml-cpp/build/libtml.a",

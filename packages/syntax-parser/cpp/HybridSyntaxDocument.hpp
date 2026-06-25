@@ -47,6 +47,7 @@ public:
       const std::string& filePath,
       const std::string& language,
       const std::string& theme);
+  static std::shared_ptr<HybridSyntaxDocument> loadPlainFile(const std::string& filePath);
 
   double getLineCount() override;
   double getSourceSize() override;

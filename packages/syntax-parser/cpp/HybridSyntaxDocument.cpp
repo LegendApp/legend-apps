@@ -205,6 +205,22 @@ std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadFile(
       elapsedSyntaxMs(indexedAt, contextReadyAt));
 }
 
+std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadPlainFile(const std::string& filePath) {
+  const auto startedAt = SyntaxClock::now();
+  auto source = readFileSource(filePath);
+  const auto mappedAt = SyntaxClock::now();
+  auto lines = indexLines(*source);
+  const auto indexedAt = SyntaxClock::now();
+  return std::make_shared<HybridSyntaxDocument>(
+      normalizeFilePath(filePath),
+      std::move(source),
+      nullptr,
+      std::move(lines),
+      elapsedSyntaxMs(startedAt, mappedAt),
+      elapsedSyntaxMs(mappedAt, indexedAt),
+      0);
+}
+
 double HybridSyntaxDocument::getLineCount() {
   std::lock_guard<std::mutex> lock(mutex_);
   return static_cast<double>(lines_.size());
@@ -245,6 +261,18 @@ std::vector<SyntaxRenderLine> HybridSyntaxDocument::getRenderLines(double start,
   }
 
   const auto end = std::min(lines_.size(), safeStart + safeCount);
+  if (!context_) {
+    std::vector<SyntaxRenderLine> renderLines;
+    renderLines.reserve(end - safeStart);
+    for (size_t index = safeStart; index < end; index += 1) {
+      renderLines.push_back(SyntaxRenderLine(
+          static_cast<double>(index),
+          lineText(index),
+          {}));
+    }
+    return renderLines;
+  }
+
   ensureTokenized(end);
 
   std::vector<SyntaxRenderLine> renderLines;
@@ -290,6 +318,9 @@ void HybridSyntaxDocument::setInitialLoadTiming(double initialLinesMs, double to
 
 double HybridSyntaxDocument::startBackgroundTokenization(double chunkLineCount) {
   stopBackgroundTokenization();
+  if (!context_) {
+    return getTokenizedLineCount();
+  }
 
   const auto safeChunkLineCount = static_cast<size_t>(std::max(1.0, chunkLineCount));
   const auto generation = backgroundGeneration_.fetch_add(1) + 1;
@@ -351,7 +382,7 @@ size_t HybridSyntaxDocument::getExternalMemorySize() noexcept {
 
 void HybridSyntaxDocument::ensureTokenized(size_t endExclusive) {
   const auto end = std::min(lines_.size(), endExclusive);
-  if (tokenizedLineCount_ < end) {
+  if (context_ && tokenizedLineCount_ < end) {
     const auto startedAt = SyntaxClock::now();
     std::lock_guard<std::mutex> contextLock(context_->mutex);
 

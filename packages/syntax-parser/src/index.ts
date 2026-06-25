@@ -1,4 +1,5 @@
 import { NitroModules } from "react-native-nitro-modules";
+import { defaultSyntaxThemeName } from "./syntaxAssets";
 import type { SyntaxHighlightTiming, SyntaxParser } from "./SyntaxParser.nitro";
 
 let syntaxParser: SyntaxParser | undefined;
@@ -24,11 +25,11 @@ export type WarmSyntaxHighlightersOptions = {
   theme: string;
 };
 
-export function highlightString(source: string, language = "typescript", theme = "github-dark") {
+export function highlightString(source: string, language = "typescript", theme = defaultSyntaxThemeName) {
   return getSyntaxParser().highlightString(source, language, theme);
 }
 
-export function warmSyntaxHighlighter(language = "typescript", theme = "github-dark") {
+export function warmSyntaxHighlighter(language = "typescript", theme = defaultSyntaxThemeName) {
   return getSyntaxParser().warmSyntaxHighlighter(language, theme);
 }
 
@@ -72,7 +73,7 @@ export function warmSyntaxHighlighters({
 export function loadCodeFile(
   filePath: string,
   language = "typescript",
-  theme = "github-dark",
+  theme = defaultSyntaxThemeName,
   initialLineCount = 200,
 ) {
   return getSyntaxParser().loadCodeFile(filePath, language, theme, initialLineCount);
@@ -81,12 +82,28 @@ export function loadCodeFile(
 export {
   bundledSyntaxThemes,
   defaultSyntaxThemeName,
+  ensureSyntaxGrammar,
+  ensureSyntaxTheme,
+  getAvailableSyntaxGrammars,
+  getAvailableSyntaxThemes,
+  getSyntaxAssetDirectoryUri,
+  getSyntaxAssetStorage,
   getSyntaxTheme,
-  isBundledSyntaxThemeName,
+  initializeSyntaxAssetsSync,
+  isAvailableSyntaxThemeName,
+  isSyntaxGrammarInstalled,
+  isSyntaxThemeInstalled,
+  normalizeSyntaxThemeName,
+  removeSyntaxAsset,
   type BundledSyntaxThemeName,
+  type SyntaxAssetEntry,
+  type SyntaxAssetKind,
+  type SyntaxAssetStatus,
+  type SyntaxGrammarAssetEntry,
   type SyntaxTheme,
   type SyntaxThemeAppearance,
-} from "./syntaxThemes";
+  type SyntaxThemeAssetEntry,
+} from "./syntaxAssets";
 
 export type {
   SyntaxDocument,

@@ -1,4 +1,4 @@
-import { warmSyntaxHighlighters } from "@legend-desktop/syntax-parser";
+import { isSyntaxGrammarInstalled, warmSyntaxHighlighters } from "@legend-desktop/syntax-parser";
 import { getDiffSyntaxThemeSetting } from "./diffSettings";
 
 const defaultDiffWarmupLanguages = [
@@ -10,10 +10,15 @@ const defaultDiffWarmupLanguages = [
 ];
 
 export function warmDiffSyntaxHighlighters(languages = defaultDiffWarmupLanguages) {
+  const installedLanguages = languages.filter(isSyntaxGrammarInstalled);
+  if (installedLanguages.length === 0) {
+    return Promise.resolve([]);
+  }
+
   const syntaxTheme = getDiffSyntaxThemeSetting();
   return warmSyntaxHighlighters({
     label: "DiffViewer",
-    languages,
+    languages: installedLanguages,
     theme: syntaxTheme,
   });
 }
