@@ -46,7 +46,7 @@ import {
 } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
@@ -617,6 +617,228 @@ function DiffErrorPanel({
           </View>
         ) : null}
       </View>
+    </View>
+  );
+}
+
+function DiffDocumentErrorBody({
+  borderColor,
+  dangerColor,
+  documentError,
+  foregroundColor,
+  mutedColor,
+  onDismiss,
+  onOpenSystemSettings,
+  onRetry,
+}: {
+  borderColor: string;
+  dangerColor: string;
+  documentError: DiffRecoverableError | null;
+  foregroundColor: string;
+  mutedColor: string;
+  onDismiss: () => void;
+  onOpenSystemSettings: () => void;
+  onRetry: () => boolean;
+}) {
+  return documentError ? (
+    <View style={styles.documentError}>
+      <DiffErrorPanel
+        borderColor={borderColor}
+        chooseFolderLabel={documentError.kind === "permission" ? "Choose Another Folder" : undefined}
+        dangerColor={dangerColor}
+        error={documentError}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        onDismiss={onDismiss}
+        onOpenSystemSettings={documentError.kind === "permission" ? onOpenSystemSettings : undefined}
+        onRetry={documentError.kind !== "permission" && documentError.source ? onRetry : undefined}
+      />
+    </View>
+  ) : null;
+}
+
+function DiffFatalBody({
+  borderColor,
+  dangerColor,
+  error,
+  foregroundColor,
+  mutedColor,
+  onChooseFolder,
+}: {
+  borderColor: string;
+  dangerColor: string;
+  error: DiffFatalError;
+  foregroundColor: string;
+  mutedColor: string;
+  onChooseFolder: () => void;
+}) {
+  return (
+    <View style={styles.empty}>
+      <DiffErrorPanel
+        borderColor={borderColor}
+        dangerColor={dangerColor}
+        error={error}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        onChooseFolder={onChooseFolder}
+      />
+    </View>
+  );
+}
+
+function DiffNoChangesBody({
+  documentErrorBody,
+  foregroundColor,
+  mutedColor,
+  visibleSourceLabel,
+}: {
+  documentErrorBody: ReactNode;
+  foregroundColor: string;
+  mutedColor: string;
+  visibleSourceLabel: string;
+}) {
+  return (
+    <View style={styles.empty}>
+      {documentErrorBody}
+      <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
+        No changes
+      </Text>
+      <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
+        {visibleSourceLabel}
+      </Text>
+    </View>
+  );
+}
+
+function DiffOpenBody({
+  borderColor,
+  dangerColor,
+  foregroundColor,
+  isLoading,
+  isLoadingGithub,
+  mutedColor,
+  onChangeUrlInput,
+  onChooseFolder,
+  onDismissOpenError,
+  onOpenPermissionSettings,
+  onOpenUrl,
+  onRetryOpenError,
+  openError,
+  primaryColor,
+  urlInput,
+  urlInputError,
+  urlInputRef,
+}: {
+  borderColor: string;
+  dangerColor: string;
+  foregroundColor: string;
+  isLoading: boolean;
+  isLoadingGithub: boolean;
+  mutedColor: string;
+  onChangeUrlInput: (text: string) => void;
+  onChooseFolder: () => void;
+  onDismissOpenError: () => void;
+  onOpenPermissionSettings: () => void;
+  onOpenUrl: () => void;
+  onRetryOpenError: () => void;
+  openError: DiffRecoverableError | null;
+  primaryColor: string;
+  urlInput: string;
+  urlInputError: string | null;
+  urlInputRef: RefObject<TextInput | null>;
+}) {
+  return (
+    <View style={styles.empty}>
+      <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
+        Open a diff
+      </Text>
+      <Text style={[styles.emptyText, { color: mutedColor }]}>
+        Choose a local Git folder or paste a GitHub PR or commit URL.
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        disabled={isLoading}
+        onPress={onChooseFolder}
+        style={({ pressed }) => [
+          styles.emptyButton,
+          styles.emptyFolderButton,
+          {
+            borderColor,
+            opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
+          },
+        ]}
+      >
+        <SFSymbol color={foregroundColor} name="folder" size={24} />
+        <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
+          Open Folder...
+        </Text>
+      </Pressable>
+      <View style={styles.emptyDivider}>
+        <View style={[styles.emptyDividerLine, { backgroundColor: borderColor }]} />
+        <Text style={[styles.emptyDividerText, { color: mutedColor }]}>or</Text>
+        <View style={[styles.emptyDividerLine, { backgroundColor: borderColor }]} />
+      </View>
+      <View style={styles.emptyUrlForm}>
+        <View style={[styles.emptyUrlInputWrap, { borderColor }]}>
+          <SFSymbol color={mutedColor} name="link" size={19} />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={onChangeUrlInput}
+            onSubmitEditing={onOpenUrl}
+            placeholder="https://github.com/org/repo/pull/123"
+            placeholderTextColor={mutedColor}
+            ref={urlInputRef}
+            returnKeyType="go"
+            style={[styles.emptyUrlInput, { color: foregroundColor }]}
+            value={urlInput}
+          />
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          disabled={isLoading || !urlInput.trim()}
+          onPress={onOpenUrl}
+          style={({ pressed }) => [
+            styles.emptyButton,
+            styles.emptyUrlButton,
+            {
+              backgroundColor: primaryColor,
+              borderColor: primaryColor,
+              opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+            },
+          ]}
+        >
+          <View style={styles.emptyButtonContent}>
+            {isLoadingGithub ? (
+              <ActivityIndicator color="#ffffff" size="small" />
+            ) : null}
+            <Text style={[styles.emptyButtonText, { color: "#ffffff" }]}>
+              {isLoadingGithub ? "Downloading..." : "Open URL"}
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+      {urlInputError ? (
+        <Text style={[styles.emptyValidationText, { color: dangerColor }]}>
+          {urlInputError}
+        </Text>
+      ) : null}
+      {openError ? (
+        <View style={styles.emptyOpenError}>
+          <DiffErrorPanel
+            borderColor={borderColor}
+            chooseFolderLabel={openError.kind === "permission" ? "Choose Another Folder" : undefined}
+            dangerColor={dangerColor}
+            error={openError}
+            foregroundColor={foregroundColor}
+            mutedColor={mutedColor}
+            onChooseFolder={onChooseFolder}
+            onDismiss={onDismissOpenError}
+            onOpenSystemSettings={openError.kind === "permission" ? onOpenPermissionSettings : undefined}
+            onRetry={openError.kind !== "permission" && openError.source ? onRetryOpenError : undefined}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -2303,6 +2525,20 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, sideBySideTokenStyleState, state, toggleFileCollapsed, tokenStyleById],
   );
 
+  const handleUrlInputChange = useCallback((text: string) => {
+    setUrlInputValue(text);
+    if (urlInputError) {
+      setUrlInputError(null);
+    }
+    if (openError) {
+      setOpenErrorValue(null);
+    }
+  }, [openError, urlInputError]);
+
+  const dismissOpenError = useCallback(() => {
+    setOpenErrorValue(null);
+  }, []);
+
   const body = useMemo(() => {
     const bodyStartedAt = nowMs();
     const diffContentHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
@@ -2334,34 +2570,29 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         });
       }
     };
-    const renderDocumentError = () => documentError ? (
-      <View style={styles.documentError}>
-        <DiffErrorPanel
-          borderColor={displayTheme.colors.border}
-          chooseFolderLabel={documentError.kind === "permission" ? "Choose Another Folder" : undefined}
-          dangerColor={displayTheme.colors.danger}
-          error={documentError}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          onDismiss={dismissDocumentError}
-          onOpenSystemSettings={documentError.kind === "permission" ? openPermissionSettings : undefined}
-          onRetry={documentError.kind !== "permission" && documentError.source ? reloadCurrentSource : undefined}
-        />
-      </View>
-    ) : null;
+    const documentErrorBody = (
+      <DiffDocumentErrorBody
+        borderColor={displayTheme.colors.border}
+        dangerColor={displayTheme.colors.danger}
+        documentError={documentError}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        onDismiss={dismissDocumentError}
+        onOpenSystemSettings={openPermissionSettings}
+        onRetry={reloadCurrentSource}
+      />
+    );
 
     if (state.status === "fatal") {
       return (
-        <View style={styles.empty}>
-          <DiffErrorPanel
-            borderColor={displayTheme.colors.border}
-            dangerColor={displayTheme.colors.danger}
-            error={state.error}
-            foregroundColor={foregroundColor}
-            mutedColor={mutedColor}
-            onChooseFolder={openFolder}
-          />
-        </View>
+        <DiffFatalBody
+          borderColor={displayTheme.colors.border}
+          dangerColor={displayTheme.colors.danger}
+          error={state.error}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          onChooseFolder={openFolder}
+        />
       );
     }
 
@@ -2456,7 +2687,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
               },
             ]}
           >
-            {renderDocumentError()}
+            {documentErrorBody}
             {list}
           </View>
         );
@@ -2464,131 +2695,35 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
       if (state.status === "loaded") {
         return (
-          <View style={styles.empty}>
-            {renderDocumentError()}
-            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-              No changes
-            </Text>
-            <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
-              {visibleSourceLabel}
-            </Text>
-          </View>
+          <DiffNoChangesBody
+            documentErrorBody={documentErrorBody}
+            foregroundColor={foregroundColor}
+            mutedColor={mutedColor}
+            visibleSourceLabel={visibleSourceLabel}
+          />
         );
       }
 
       return (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-            Open a diff
-          </Text>
-          <Text style={[styles.emptyText, { color: mutedColor }]}>
-            Choose a local Git folder or paste a GitHub PR or commit URL.
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            disabled={isLoading}
-            onPress={openFolder}
-            style={({ pressed }) => [
-              styles.emptyButton,
-              styles.emptyFolderButton,
-              {
-                borderColor: displayTheme.colors.border,
-                opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
-              },
-            ]}
-          >
-            <SFSymbol color={foregroundColor} name="folder" size={24} />
-            <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
-              Open Folder...
-            </Text>
-          </Pressable>
-          <View style={styles.emptyDivider}>
-            <View style={[styles.emptyDividerLine, { backgroundColor: displayTheme.colors.border }]} />
-            <Text style={[styles.emptyDividerText, { color: mutedColor }]}>or</Text>
-            <View style={[styles.emptyDividerLine, { backgroundColor: displayTheme.colors.border }]} />
-          </View>
-          <View style={styles.emptyUrlForm}>
-            <View
-              style={[
-                styles.emptyUrlInputWrap,
-                {
-                  borderColor: displayTheme.colors.border,
-                },
-              ]}
-            >
-              <SFSymbol color={mutedColor} name="link" size={19} />
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={(text) => {
-                  setUrlInputValue(text);
-                  if (urlInputError) {
-                    setUrlInputError(null);
-                  }
-                  if (openError) {
-                    setOpenErrorValue(null);
-                  }
-                }}
-                onSubmitEditing={openUrl}
-                placeholder="https://github.com/org/repo/pull/123"
-                placeholderTextColor={mutedColor}
-                ref={urlInputRef}
-                returnKeyType="go"
-                style={[
-                  styles.emptyUrlInput,
-                  {
-                    color: foregroundColor,
-                  },
-                ]}
-                value={urlInput}
-              />
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isLoading || !urlInput.trim()}
-              onPress={openUrl}
-              style={({ pressed }) => [
-                styles.emptyButton,
-                styles.emptyUrlButton,
-                {
-                  backgroundColor: displayTheme.colors.primary,
-                  borderColor: displayTheme.colors.primary,
-                  opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
-                },
-              ]}
-            >
-              <View style={styles.emptyButtonContent}>
-                {isLoadingGithub ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : null}
-                <Text style={[styles.emptyButtonText, { color: "#ffffff" }]}>
-                  {isLoadingGithub ? "Downloading..." : "Open URL"}
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-          {urlInputError ? (
-            <Text style={[styles.emptyValidationText, { color: displayTheme.colors.danger }]}>
-              {urlInputError}
-            </Text>
-          ) : null}
-          {openError ? (
-            <View style={styles.emptyOpenError}>
-              <DiffErrorPanel
-                borderColor={displayTheme.colors.border}
-                chooseFolderLabel={openError.kind === "permission" ? "Choose Another Folder" : undefined}
-                dangerColor={displayTheme.colors.danger}
-                error={openError}
-                foregroundColor={foregroundColor}
-                mutedColor={mutedColor}
-                onChooseFolder={openFolder}
-                onDismiss={() => setOpenErrorValue(null)}
-                onOpenSystemSettings={openError.kind === "permission" ? openPermissionSettings : undefined}
-                onRetry={openError.kind !== "permission" && openError.source ? retryOpenError : undefined}
-              />
-            </View>
-          ) : null}
-        </View>
+        <DiffOpenBody
+          borderColor={displayTheme.colors.border}
+          dangerColor={displayTheme.colors.danger}
+          foregroundColor={foregroundColor}
+          isLoading={isLoading}
+          isLoadingGithub={isLoadingGithub}
+          mutedColor={mutedColor}
+          onChangeUrlInput={handleUrlInputChange}
+          onChooseFolder={openFolder}
+          onDismissOpenError={dismissOpenError}
+          onOpenPermissionSettings={openPermissionSettings}
+          onOpenUrl={openUrl}
+          onRetryOpenError={retryOpenError}
+          openError={openError}
+          primaryColor={displayTheme.colors.primary}
+          urlInput={urlInput}
+          urlInputError={urlInputError}
+          urlInputRef={urlInputRef}
+        />
       );
     })();
 
@@ -2667,7 +2802,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
     logBodyFinish("content-only");
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, dismissDocumentError, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, documentError, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openError, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, retryOpenError, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, dismissDocumentError, dismissOpenError, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, documentError, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleUrlInputChange, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openError, openFolder, openPermissionSettings, openUrl, reloadCurrentSource, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, retryOpenError, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <DragDropView
