@@ -1606,14 +1606,9 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
-  const [urlInput, setUrlInput] = useState("");
   const [urlInputError, setUrlInputError] = useState<string | null>(null);
-  const [openError, setOpenError] = useState<DiffRecoverableError | null>(null);
-  const [documentError, setDocumentError] = useState<DiffRecoverableError | null>(null);
   const [fileFilter, setFileFilter] = useState("");
-  const [loadingSource, setLoadingSource] = useState<DiffOpenSource | null>(null);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const state$ = useObservable<DiffViewerState>(emptyState);
   const urlInput$ = useObservable("");
   const openError$ = useObservable<DiffRecoverableError | null>(null);
@@ -1630,13 +1625,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const diffPaneHeight$ = useObservable(0);
   const activeFileIndex$ = useObservable<number | null>(null);
   const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
-  const [splitPaneMetrics, setSplitPaneMetrics] = useState({
-    contentHeight: 0,
-    contentWidth: 0,
-    sidebarHeight: 0,
-    sidebarWidth: 0,
-  });
-  const [diffPaneHeight, setDiffPaneHeight] = useState(0);
+  const urlInput = useValue(urlInput$);
+  const openError = useValue(openError$);
+  const documentError = useValue(documentError$);
+  const loadingSource = useValue(loadingSource$);
+  const sidebarCollapsed = useValue(sidebarCollapsed$);
+  const splitPaneMetrics = useValue(splitPaneMetrics$);
+  const diffPaneHeight = useValue(diffPaneHeight$);
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const setViewerState = useCallback((nextState: DiffViewerState) => {
     state$.set(nextState);
@@ -1644,34 +1639,31 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, []);
   const setUrlInputValue = useCallback((nextValue: string) => {
     urlInput$.set(nextValue);
-    setUrlInput(nextValue);
-  }, []);
+  }, [urlInput$]);
   const setOpenErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
     openError$.set(nextError);
-    setOpenError(nextError);
-  }, []);
+  }, [openError$]);
   const setDocumentErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
     documentError$.set(nextError);
-    setDocumentError(nextError);
-  }, []);
+  }, [documentError$]);
   const setLoadingSourceValue = useCallback((nextValue: SetStateAction<DiffOpenSource | null>) => {
-    setLoadingSource((current) => {
-      const nextLoadingSource = typeof nextValue === "function"
-        ? nextValue(current)
-        : nextValue;
+    const currentLoadingSource = loadingSource$.peek();
+    const nextLoadingSource = typeof nextValue === "function"
+      ? nextValue(currentLoadingSource)
+      : nextValue;
+    if (nextLoadingSource !== currentLoadingSource) {
       loadingSource$.set(nextLoadingSource);
-      return nextLoadingSource;
-    });
-  }, []);
+    }
+  }, [loadingSource$]);
   const setSidebarCollapsedValue = useCallback((nextValue: SetStateAction<boolean>) => {
-    setSidebarCollapsed((current) => {
-      const nextSidebarCollapsed = typeof nextValue === "function"
-        ? nextValue(current)
-        : nextValue;
+    const currentSidebarCollapsed = sidebarCollapsed$.peek();
+    const nextSidebarCollapsed = typeof nextValue === "function"
+      ? nextValue(currentSidebarCollapsed)
+      : nextValue;
+    if (nextSidebarCollapsed !== currentSidebarCollapsed) {
       sidebarCollapsed$.set(nextSidebarCollapsed);
-      return nextSidebarCollapsed;
-    });
-  }, []);
+    }
+  }, [sidebarCollapsed$]);
   const setCollapsedFileIndexesValue = useCallback((nextValue: SetStateAction<Set<number>>) => {
     const currentIndexes = collapsedFileIndexes$.peek();
     const nextIndexes = typeof nextValue === "function"
@@ -1683,12 +1675,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, [collapsedFileIndexes$]);
   const setSplitPaneMetricsValue = useCallback((nextMetrics: DiffSplitPaneMetrics) => {
     splitPaneMetrics$.set(nextMetrics);
-    setSplitPaneMetrics(nextMetrics);
-  }, []);
+  }, [splitPaneMetrics$]);
   const setDiffPaneHeightValue = useCallback((nextHeight: number) => {
     diffPaneHeight$.set(nextHeight);
-    setDiffPaneHeight(nextHeight);
-  }, []);
+  }, [diffPaneHeight$]);
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
   const fileFilterInputRef = useRef<TextInputSearchRef | null>(null);
   const urlInputRef = useRef<TextInput | null>(null);
