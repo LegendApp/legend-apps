@@ -75,6 +75,7 @@ const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffFileHeaderRowHeight = 52;
 const diffTitlebarTopInset = 52;
+const diffSidebarTopInset = 40;
 const diffDocumentErrorHeight = 78;
 const diffDocumentPermissionErrorHeight = 134;
 const diffLoadedWindowOptionsDelayMs = 750;
@@ -2193,7 +2194,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       : 0;
     const diffListHeight = Math.max(0, diffContentHeight - documentErrorHeight);
     const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffTitlebarTopInset - 70) : 0;
+    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
     const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
     const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
       if (state.status === "loaded") {
@@ -2909,7 +2910,7 @@ const styles = StyleSheet.create({
   sidebar: {
     flex: 1,
     paddingBottom: 8,
-    paddingTop: diffTitlebarTopInset,
+    paddingTop: diffSidebarTopInset,
   },
   sidebarFile: {
     alignItems: "center",
