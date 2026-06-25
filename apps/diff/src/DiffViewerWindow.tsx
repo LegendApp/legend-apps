@@ -89,7 +89,7 @@ const diffSideBySideGutterWidth = 44;
 const diffSideBySideHorizontalPadding = 12;
 const diffSidebarFileRowHeight = 46;
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
-const diffSideBySideAdaptiveRender = {
+const diffAdaptiveRender = {
   enterVelocity: 8,
   exitDelay: 150,
   exitVelocity: 3,
@@ -2832,6 +2832,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         });
         const list = viewMode === "unified" ? (
           <VirtualizedFixedDocumentList
+            adaptiveRender={diffAdaptiveRender}
             debugName="diff"
             key="unified"
             extraData={listExtraData}
@@ -2853,7 +2854,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
           />
         ) : (
           <VirtualizedFixedDocumentList
-            adaptiveRender={diffSideBySideAdaptiveRender}
+            adaptiveRender={diffAdaptiveRender}
             debugName={`diff-${viewMode}`}
             key={viewMode}
             extraData={listExtraData}
