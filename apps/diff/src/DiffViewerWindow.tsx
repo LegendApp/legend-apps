@@ -34,6 +34,7 @@ import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
   VirtualizedFixedDocumentList,
+  type VirtualizedDocumentRowsState,
   type VirtualizedDocumentRequestOptions,
   type VirtualizedDocumentRequestReason,
   type VirtualizedDocumentSnapshot,
@@ -46,7 +47,7 @@ import {
 } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type SetStateAction } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
@@ -534,10 +535,59 @@ type DiffViewerState =
     folderPath: string | null;
     source: DiffOpenSource | null;
   };
+type DiffLoadedState = Extract<DiffViewerState, { status: "loaded" }>;
 
 type DiffFatalError = {
   message: string;
   title: string;
+};
+
+type DiffLoadedBodyProps = {
+  activeItemIndexes: readonly (number | undefined)[];
+  diffContentHeight: number;
+  diffListHeight: number;
+  diffPaneHeight: number;
+  diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
+  documentErrorBody: ReactNode;
+  fileFilter: string;
+  fileFilterInputRef: RefObject<TextInputSearchRef | null>;
+  filteredSidebarFiles: readonly DiffFileSummary[];
+  getItemSize: (index: number, row: DiffRenderRow | undefined) => number;
+  getItemType: (index: number, row: DiffRenderRow | undefined) => string;
+  getSideBySideItemSize: (index: number, row: DiffSideBySideRenderRow | undefined) => number;
+  getSideBySideItemType: (index: number, row: DiffSideBySideRenderRow | undefined) => string;
+  getSideBySideRow: (index: number) => DiffSideBySideRenderRow | undefined;
+  handleDiffPaneLayout: (event: LayoutChangeEvent) => void;
+  handleSidebarListLayout: (event: LayoutChangeEvent) => void;
+  handleSideBySideTopItemChanged: (lineIndex: number) => void;
+  handleSideBySideVisibleRowsRequested: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
+  handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
+  handleTopItemChanged: (rowIndex: number) => void;
+  handleVisibleRowsRequested: (start: number, count: number, reason: string) => void;
+  isRenderingInitialLoadedFrame: boolean;
+  listExtraData: {
+    fontFamily: string;
+    fontSize: number;
+    rowHeight: number;
+  };
+  listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
+  loadingSource: DiffOpenSource | null;
+  mutedColor: string;
+  renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
+  renderSidebarFile: (props: LegendListRenderItemProps<DiffFileSummary>) => ReactElement;
+  renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
+  requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
+  rowHeight: number;
+  setFileFilter: (filter: string) => void;
+  sidebarCollapsed: boolean;
+  sidebarListHeight: number;
+  sideBySideItemIndexes: Array<number | undefined>;
+  sideBySideRowVersions$: Observable<Record<string, number>>;
+  splitPaneMetrics: DiffSplitPaneMetrics;
+  state: DiffLoadedState;
+  syntaxAppearance: "dark" | "light";
+  viewMode: DiffSettingsFile["viewMode"];
+  visibleItemIndexes: Array<number | undefined>;
 };
 
 type DiffRecoverableError = {
@@ -1126,6 +1176,246 @@ function DiffOpenBody({
       ) : null}
     </View>
   );
+}
+
+function DiffLoadedBody({
+  activeItemIndexes,
+  diffContentHeight,
+  diffListHeight,
+  diffPaneHeight,
+  diffRows,
+  documentErrorBody,
+  fileFilter,
+  fileFilterInputRef,
+  filteredSidebarFiles,
+  getItemSize,
+  getItemType,
+  getSideBySideItemSize,
+  getSideBySideItemType,
+  getSideBySideRow,
+  handleDiffPaneLayout,
+  handleSidebarListLayout,
+  handleSideBySideTopItemChanged,
+  handleSideBySideVisibleRowsRequested,
+  handleSplitViewResize,
+  handleTopItemChanged,
+  handleVisibleRowsRequested,
+  isRenderingInitialLoadedFrame,
+  listExtraData,
+  listRef,
+  loadingSource,
+  mutedColor,
+  renderRow,
+  renderSidebarFile,
+  renderSideBySideRow,
+  requestSideBySideRange,
+  rowHeight,
+  setFileFilter,
+  sidebarCollapsed,
+  sidebarListHeight,
+  sideBySideItemIndexes,
+  sideBySideRowVersions$,
+  splitPaneMetrics,
+  state,
+  syntaxAppearance,
+  viewMode,
+  visibleItemIndexes,
+}: DiffLoadedBodyProps) {
+  const bodyStartedAt = nowMs();
+  const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+
+  logDiffOpenTiming("viewer.body.start", {
+    activeItemCount: activeItemIndexes.length,
+    diffListHeight,
+    diffPaneHeight,
+    isRenderingInitialLoadedFrame,
+    loadingSource,
+    rows: state.document.rowCount,
+    sidebarLayoutReady: isSidebarLayoutReady,
+    sidebarHeight: splitPaneMetrics.sidebarHeight,
+    sidebarListHeight,
+    sidebarWidth: splitPaneMetrics.sidebarWidth,
+    source: state.source,
+    viewMode,
+  });
+
+  const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
+    logDiffOpenTiming("viewer.body.finish", {
+      activeItemCount: activeItemIndexes.length,
+      diffListHeight,
+      diffPaneHeight,
+      durationMs: Number((nowMs() - bodyStartedAt).toFixed(1)),
+      isRenderingInitialLoadedFrame,
+      path,
+      rows: state.document.rowCount,
+      sidebarLayoutReady: isSidebarLayoutReady,
+      sidebarHeight: splitPaneMetrics.sidebarHeight,
+      sidebarListHeight,
+      sidebarWidth: splitPaneMetrics.sidebarWidth,
+      viewMode,
+      ...extra,
+    });
+  };
+
+  if (activeItemIndexes.length === 0) {
+    logBodyFinish("no-changes");
+    return null;
+  }
+
+  let diffContent: ReactElement;
+  if (diffListHeight <= 0) {
+    logDiffOpenTiming("viewer.body.diffList.deferred", {
+      activeItemCount: activeItemIndexes.length,
+      diffPaneHeight,
+      isRenderingInitialLoadedFrame,
+      rows: state.document.rowCount,
+      viewMode,
+    });
+    diffContent = <View style={styles.diffPaneContent} />;
+  } else {
+    logDiffOpenTiming("viewer.body.diffList.mount", {
+      activeItemCount: activeItemIndexes.length,
+      diffListHeight,
+      rows: state.document.rowCount,
+      viewMode,
+    });
+    const list = viewMode === "unified" ? (
+      <VirtualizedFixedDocumentList
+        adaptiveRender={diffAdaptiveRender}
+        debugName="diff"
+        key="unified"
+        extraData={listExtraData}
+        itemIndexes={visibleItemIndexes}
+        getItemSize={getItemSize}
+        getItemType={getItemType}
+        lineOverscan={diffLineOverscan}
+        listRef={listRef}
+        onTopItemChanged={handleTopItemChanged}
+        onVisibleRowsRequested={handleVisibleRowsRequested}
+        overscanRequestDelayMs={diffOverscanRequestDelayMs}
+        requestRange={diffRows.requestRange}
+        rowCache={diffRows.rowCache}
+        rowVersions$={diffRows.rowVersions$}
+        rowHeight={rowHeight}
+        rowsVersion={diffRows.rowsVersion}
+        renderRow={renderRow}
+        style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
+      />
+    ) : (
+      <VirtualizedFixedDocumentList
+        adaptiveRender={diffAdaptiveRender}
+        debugName={`diff-${viewMode}`}
+        key={viewMode}
+        extraData={listExtraData}
+        itemIndexes={sideBySideItemIndexes}
+        getItemSize={getSideBySideItemSize}
+        getItemType={getSideBySideItemType}
+        getRow={getSideBySideRow}
+        lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
+        listRef={listRef}
+        onTopItemChanged={handleSideBySideTopItemChanged}
+        onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
+        overscanRequestDelayMs={diffOverscanRequestDelayMs}
+        requestRange={requestSideBySideRange}
+        rowVersions$={sideBySideRowVersions$}
+        rowHeight={rowHeight}
+        rowsVersion={0}
+        renderRow={renderSideBySideRow}
+        style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
+      />
+    );
+
+    diffContent = (
+      <View
+        style={[
+          styles.diffPaneContent,
+          {
+            height: diffContentHeight,
+            minHeight: diffContentHeight,
+          },
+        ]}
+      >
+        {documentErrorBody}
+        {list}
+      </View>
+    );
+  }
+
+  if (!isRenderingInitialLoadedFrame) {
+    logDiffOpenTiming("viewer.body.splitView.mount", {
+      activeItemCount: activeItemIndexes.length,
+      diffPaneHeight,
+      rows: state.document.rowCount,
+      sidebarLayoutReady: isSidebarLayoutReady,
+      sidebarCollapsed,
+      sidebarHeight: splitPaneMetrics.sidebarHeight,
+      sidebarListHeight,
+      sidebarWidth: splitPaneMetrics.sidebarWidth,
+      viewMode,
+    });
+    const sidebar = (
+      <View
+        style={[
+          styles.sidebar,
+          {
+            height: splitPaneMetrics.sidebarHeight || undefined,
+            minHeight: splitPaneMetrics.sidebarHeight || undefined,
+            width: splitPaneMetrics.sidebarWidth || undefined,
+          },
+        ]}
+      >
+        <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
+        <TextInputSearch
+          defaultValue={fileFilter}
+          onChangeText={setFileFilter}
+          placeholder="Filter files"
+          ref={fileFilterInputRef}
+          style={styles.sidebarFilter}
+        />
+        {isSidebarLayoutReady ? (
+          filteredSidebarFiles.length > 0 ? (
+            <LegendList
+              data={filteredSidebarFiles}
+              getFixedItemSize={() => diffSidebarFileRowHeight}
+              keyExtractor={(file) => `${file.index}:${file.path}`}
+              onLayout={handleSidebarListLayout}
+              recycleItems
+              renderItem={renderSidebarFile}
+              style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
+            />
+          ) : (
+            <View style={[styles.sidebarEmpty, { height: sidebarListHeight, minHeight: sidebarListHeight }]}>
+              <Text style={[styles.sidebarEmptyText, { color: mutedColor }]}>
+                No files
+              </Text>
+            </View>
+          )
+        ) : (
+          <View style={styles.sidebarList} />
+        )}
+      </View>
+    );
+
+    logBodyFinish("split-view");
+    return (
+      <SidebarSplitView
+        appearance={syntaxAppearance}
+        contentMinWidth={420}
+        onSplitViewDidResize={handleSplitViewResize}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarMinWidth={180}
+        style={styles.content}
+      >
+        {sidebar}
+        <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
+          {diffContent}
+        </View>
+      </SidebarSplitView>
+    );
+  }
+
+  logBodyFinish("content-only");
+  return diffContent;
 }
 
 type DiffLoadSource = (source: DiffOpenSource, syntaxTheme: ReturnType<typeof getDiffSyntaxThemeSetting>) => Promise<void>;
@@ -2738,7 +3028,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, []);
 
   const body = useMemo(() => {
-    const bodyStartedAt = nowMs();
     const diffContentHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
     const documentErrorHeight = documentError
       ? documentError.kind === "permission"
@@ -2749,25 +3038,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
     const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
     const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
-    const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.body.finish", {
-          activeItemCount: activeItemIndexes.length,
-          diffListHeight,
-          diffPaneHeight,
-          durationMs: Number((nowMs() - bodyStartedAt).toFixed(1)),
-          isRenderingInitialLoadedFrame,
-          path,
-          rows: state.document.rowCount,
-          sidebarLayoutReady: isSidebarLayoutReady,
-          sidebarHeight: splitPaneMetrics.sidebarHeight,
-          sidebarListHeight,
-          sidebarWidth: splitPaneMetrics.sidebarWidth,
-          viewMode,
-          ...extra,
-        });
-      }
-    };
     const documentErrorBody = (
       <DiffDocumentErrorBody
         borderColor={displayTheme.colors.border}
@@ -2795,104 +3065,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     }
 
     if (state.status === "loaded") {
-      logDiffOpenTiming("viewer.body.start", {
-        activeItemCount: activeItemIndexes.length,
-        diffListHeight,
-        diffPaneHeight,
-        isRenderingInitialLoadedFrame,
-        loadingSource,
-        rows: state.document.rowCount,
-        sidebarLayoutReady: isSidebarLayoutReady,
-        sidebarHeight: splitPaneMetrics.sidebarHeight,
-        sidebarListHeight,
-        sidebarWidth: splitPaneMetrics.sidebarWidth,
-        source: state.source,
-        viewMode,
-      });
-    }
-
-    const diffContent = (() => {
-      if (state.status === "loaded" && activeItemIndexes.length > 0) {
-        if (diffListHeight <= 0) {
-          logDiffOpenTiming("viewer.body.diffList.deferred", {
-            activeItemCount: activeItemIndexes.length,
-            diffPaneHeight,
-            isRenderingInitialLoadedFrame,
-            rows: state.document.rowCount,
-            viewMode,
-          });
-          return <View style={styles.diffPaneContent} />;
-        }
-
-        logDiffOpenTiming("viewer.body.diffList.mount", {
-          activeItemCount: activeItemIndexes.length,
-          diffListHeight,
-          rows: state.document.rowCount,
-          viewMode,
-        });
-        const list = viewMode === "unified" ? (
-          <VirtualizedFixedDocumentList
-            adaptiveRender={diffAdaptiveRender}
-            debugName="diff"
-            key="unified"
-            extraData={listExtraData}
-            itemIndexes={visibleItemIndexes}
-            getItemSize={getItemSize}
-            getItemType={getItemType}
-            lineOverscan={diffLineOverscan}
-            listRef={listRef}
-            onTopItemChanged={handleTopItemChanged}
-            onVisibleRowsRequested={handleVisibleRowsRequested}
-            overscanRequestDelayMs={diffOverscanRequestDelayMs}
-            requestRange={diffRows.requestRange}
-            rowCache={diffRows.rowCache}
-            rowVersions$={diffRows.rowVersions$}
-            rowHeight={rowHeight}
-            rowsVersion={diffRows.rowsVersion}
-            renderRow={renderRow}
-            style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
-          />
-        ) : (
-          <VirtualizedFixedDocumentList
-            adaptiveRender={diffAdaptiveRender}
-            debugName={`diff-${viewMode}`}
-            key={viewMode}
-            extraData={listExtraData}
-            itemIndexes={sideBySideItemIndexes}
-            getItemSize={getSideBySideItemSize}
-            getItemType={getSideBySideItemType}
-            getRow={getSideBySideRow}
-            lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
-            listRef={listRef}
-            onTopItemChanged={handleSideBySideTopItemChanged}
-            onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
-            overscanRequestDelayMs={diffOverscanRequestDelayMs}
-            requestRange={requestSideBySideRange}
-            rowVersions$={sideBySideRowVersions$}
-            rowHeight={rowHeight}
-            rowsVersion={0}
-            renderRow={renderSideBySideRow}
-            style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
-          />
-        );
-
-        return (
-          <View
-            style={[
-              styles.diffPaneContent,
-              {
-                height: diffContentHeight,
-                minHeight: diffContentHeight,
-              },
-            ]}
-          >
-            {documentErrorBody}
-            {list}
-          </View>
-        );
-      }
-
-      if (state.status === "loaded") {
+      if (activeItemIndexes.length === 0) {
         return (
           <DiffNoChangesBody
             documentErrorBody={documentErrorBody}
@@ -2904,104 +3077,74 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
 
       return (
-        <DiffOpenBody
-          borderColor={displayTheme.colors.border}
-          dangerColor={displayTheme.colors.danger}
-          foregroundColor={foregroundColor}
-          isLoading={isLoading}
-          isLoadingGithub={isLoadingGithub}
+        <DiffLoadedBody
+          activeItemIndexes={activeItemIndexes}
+          diffContentHeight={diffContentHeight}
+          diffListHeight={diffListHeight}
+          diffPaneHeight={diffPaneHeight}
+          diffRows={diffRows}
+          documentErrorBody={documentErrorBody}
+          fileFilter={fileFilter}
+          fileFilterInputRef={fileFilterInputRef}
+          filteredSidebarFiles={filteredSidebarFiles}
+          getItemSize={getItemSize}
+          getItemType={getItemType}
+          getSideBySideItemSize={getSideBySideItemSize}
+          getSideBySideItemType={getSideBySideItemType}
+          getSideBySideRow={getSideBySideRow}
+          handleDiffPaneLayout={handleDiffPaneLayout}
+          handleSidebarListLayout={handleSidebarListLayout}
+          handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
+          handleSideBySideVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
+          handleSplitViewResize={handleSplitViewResize}
+          handleTopItemChanged={handleTopItemChanged}
+          handleVisibleRowsRequested={handleVisibleRowsRequested}
+          isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
+          listExtraData={listExtraData}
+          listRef={listRef}
+          loadingSource={loadingSource}
           mutedColor={mutedColor}
-          onChangeUrlInput={handleUrlInputChange}
-          onChooseFolder={openFolder}
-          onDismissOpenError={dismissOpenError}
-          onOpenPermissionSettings={openPermissionSettings}
-          onOpenUrl={openUrl}
-          onRetryOpenError={retryOpenError}
-          openError={openError}
-          primaryColor={displayTheme.colors.primary}
-          urlInput={urlInput}
-          urlInputError={urlInputError}
-          urlInputRef={urlInputRef}
-        />
-      );
-    })();
-
-      if (state.status === "loaded" && activeItemIndexes.length > 0 && !isRenderingInitialLoadedFrame) {
-        logDiffOpenTiming("viewer.body.splitView.mount", {
-          activeItemCount: activeItemIndexes.length,
-          diffPaneHeight,
-          rows: state.document.rowCount,
-          sidebarLayoutReady: isSidebarLayoutReady,
-          sidebarCollapsed,
-          sidebarHeight: splitPaneMetrics.sidebarHeight,
-          sidebarListHeight,
-          sidebarWidth: splitPaneMetrics.sidebarWidth,
-          viewMode,
-        });
-        const sidebar = (
-        <View
-          style={[
-            styles.sidebar,
-            {
-              height: splitPaneMetrics.sidebarHeight || undefined,
-              minHeight: splitPaneMetrics.sidebarHeight || undefined,
-              width: splitPaneMetrics.sidebarWidth || undefined,
-            },
-          ]}
-        >
-          <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
-          <TextInputSearch
-            defaultValue={fileFilter}
-            onChangeText={setFileFilter}
-            placeholder="Filter files"
-            ref={fileFilterInputRef}
-            style={styles.sidebarFilter}
-          />
-          {isSidebarLayoutReady ? (
-            filteredSidebarFiles.length > 0 ? (
-              <LegendList
-                data={filteredSidebarFiles}
-                getFixedItemSize={() => diffSidebarFileRowHeight}
-                keyExtractor={(file) => `${file.index}:${file.path}`}
-                onLayout={handleSidebarListLayout}
-                recycleItems
-                renderItem={renderSidebarFile}
-                style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
-              />
-            ) : (
-              <View style={[styles.sidebarEmpty, { height: sidebarListHeight, minHeight: sidebarListHeight }]}>
-                <Text style={[styles.sidebarEmptyText, { color: mutedColor }]}>
-                  No files
-                </Text>
-              </View>
-            )
-          ) : (
-            <View style={styles.sidebarList} />
-          )}
-        </View>
-      );
-
-      logBodyFinish("split-view");
-      return (
-        <SidebarSplitView
-          appearance={syntaxTheme.appearance}
-          contentMinWidth={420}
-          onSplitViewDidResize={handleSplitViewResize}
+          renderRow={renderRow}
+          renderSidebarFile={renderSidebarFile}
+          renderSideBySideRow={renderSideBySideRow}
+          requestSideBySideRange={requestSideBySideRange}
+          rowHeight={rowHeight}
+          setFileFilter={setFileFilter}
           sidebarCollapsed={sidebarCollapsed}
-          sidebarMinWidth={180}
-          style={styles.content}
-        >
-          {sidebar}
-          <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
-            {diffContent}
-          </View>
-        </SidebarSplitView>
+          sidebarListHeight={sidebarListHeight}
+          sideBySideItemIndexes={sideBySideItemIndexes}
+          sideBySideRowVersions$={sideBySideRowVersions$}
+          splitPaneMetrics={splitPaneMetrics}
+          state={state}
+          syntaxAppearance={syntaxTheme.appearance}
+          viewMode={viewMode}
+          visibleItemIndexes={visibleItemIndexes}
+        />
       );
     }
 
-    logBodyFinish("content-only");
-    return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, dismissDocumentError, dismissOpenError, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, documentError, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleUrlInputChange, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openError, openFolder, openPermissionSettings, openUrl, reloadCurrentSource, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, retryOpenError, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+    return (
+      <DiffOpenBody
+        borderColor={displayTheme.colors.border}
+        dangerColor={displayTheme.colors.danger}
+        foregroundColor={foregroundColor}
+        isLoading={isLoading}
+        isLoadingGithub={isLoadingGithub}
+        mutedColor={mutedColor}
+        onChangeUrlInput={handleUrlInputChange}
+        onChooseFolder={openFolder}
+        onDismissOpenError={dismissOpenError}
+        onOpenPermissionSettings={openPermissionSettings}
+        onOpenUrl={openUrl}
+        onRetryOpenError={retryOpenError}
+        openError={openError}
+        primaryColor={displayTheme.colors.primary}
+        urlInput={urlInput}
+        urlInputError={urlInputError}
+        urlInputRef={urlInputRef}
+      />
+    );
+  }, [diffPaneHeight, diffRows, dismissDocumentError, dismissOpenError, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, documentError, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleUrlInputChange, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openError, openFolder, openPermissionSettings, openUrl, reloadCurrentSource, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, retryOpenError, rowHeight, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <DragDropView
