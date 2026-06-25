@@ -46,6 +46,13 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         shortcut: { key: "o", modifiers: commandModifier },
       },
       {
+        id: "openUrl",
+        title: "Open URL...",
+        enabled: true,
+        placement: { before: "Open Recent" },
+        shortcut: { key: "l", modifiers: commandModifier },
+      },
+      {
         id: "openFromClipboard",
         title: "Open from Clipboard",
         enabled: true,

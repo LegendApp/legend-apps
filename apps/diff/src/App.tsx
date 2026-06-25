@@ -74,6 +74,15 @@ async function openDiffViewerForSelectedFolder(controller: DocumentAppController
   }
 }
 
+async function openDiffViewerForUrl(controller: DocumentAppController) {
+  const windowStartedAt = nowMs();
+  await openDiffViewerWindow(null, { focusUrlInput: true });
+  controller.setDocumentWindowOpen(true);
+  logDiffOpenTiming("menu.url.window.opened", {
+    windowOpenMs: elapsedMs(windowStartedAt),
+  });
+}
+
 async function openDiffViewerFromClipboard(controller: DocumentAppController) {
   const clipboardStartedAt = nowMs();
   const result = await commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 });
@@ -107,6 +116,14 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
       openDiffViewerForSelectedFolder(controller)
         .then(() => {
           logDiffOpenTiming("menu.openFolder.finish", {});
+        })
+        .catch(reportDiffAppControllerError);
+    },
+    openUrl: () => {
+      logDiffOpenTiming("menu.openUrl", {});
+      openDiffViewerForUrl(controller)
+        .then(() => {
+          logDiffOpenTiming("menu.openUrl.finish", {});
         })
         .catch(reportDiffAppControllerError);
     },

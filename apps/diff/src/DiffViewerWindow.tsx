@@ -89,6 +89,7 @@ const diffSideBySideAdaptiveRender = {
 const diffDropAllowedFileTypes = ["diff", "patch"];
 
 type DiffViewerWindowProps = {
+  focusUrlInputRequestId?: number;
   folderPath?: string;
   source?: DiffOpenSource;
 };
@@ -539,7 +540,7 @@ function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number
   return files.length > 0 ? files[Math.max(0, Math.min(files.length - 1, high))].index : null;
 }
 
-export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) {
+export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
   const fontFamily = useDiffFontFamilySetting();
@@ -574,6 +575,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
   diffPaneHeightRef.current = diffPaneHeight;
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
   const fileFilterInputRef = useRef<TextInput | null>(null);
+  const urlInputRef = useRef<TextInput | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
@@ -1221,6 +1223,22 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
       loadSource(initialSource, selectedSyntaxTheme);
     }
   }, [folderPath, loadSource, selectedSyntaxTheme, source]);
+
+  useEffect(() => {
+    const shouldFocusUrlInput = typeof focusUrlInputRequestId === "number" && !source && !folderPath;
+    if (shouldFocusUrlInput) {
+      loadRequestIdRef.current += 1;
+      loadTraceRef.current = null;
+      setLoadingSource(null);
+      setState(emptyState);
+      setUrlInput("");
+      setUrlInputError(null);
+      setFileFilter("");
+      requestAnimationFrame(() => {
+        urlInputRef.current?.focus();
+      });
+    }
+  }, [focusUrlInputRequestId, folderPath, source]);
 
   const openFolder = useCallback(async () => {
     if (!isLoading) {
@@ -2201,6 +2219,7 @@ export function DiffViewerWindow({ folderPath, source }: DiffViewerWindowProps) 
                 onSubmitEditing={openUrl}
                 placeholder="https://github.com/org/repo/pull/123"
                 placeholderTextColor={mutedColor}
+                ref={urlInputRef}
                 returnKeyType="go"
                 style={[
                   styles.emptyUrlInput,

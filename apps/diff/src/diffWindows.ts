@@ -13,6 +13,7 @@ import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
 export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
+let diffViewerUrlFocusRequestId = 0;
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
   blocks: "rectangle.split.2x1",
   unified: "rectangle.portrait",
@@ -104,6 +105,10 @@ const DiffWindowsNavigator = createWindowsNavigator(diffWindowsConfig);
 
 type DiffWindow = keyof typeof diffWindowsConfig;
 
+type DiffViewerWindowOpenOptions = {
+  focusUrlInput?: boolean;
+};
+
 export function registerDiffWindows() {
   // Importing this module registers the windows above.
 }
@@ -116,21 +121,30 @@ function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
 }
 
-export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null) {
+export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null, options: DiffViewerWindowOpenOptions = {}) {
   const source = normalizeDiffOpenSource(sourceInput);
+  const focusUrlInputRequestId = options.focusUrlInput ? ++diffViewerUrlFocusRequestId : undefined;
+  const initialProperties = source || options.focusUrlInput
+    ? {
+        ...(source ? { source } : {}),
+        ...(focusUrlInputRequestId ? { focusUrlInputRequestId } : {}),
+      }
+    : undefined;
   const startedAt = nowMs();
   logDiffOpenTiming("window.open.start", {
+    focusUrlInput: options.focusUrlInput === true,
     source,
   });
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
-    initialProperties: source ? { source } : undefined,
+    initialProperties,
     representedURL: source?.value,
     title: getDiffSourceLabel(source),
     transparentBackground: true,
     windowStyle: createDiffViewerWindowStyle({ includeFrame: true, showViewModeToolbar: false }),
   }).then((result) => {
     logDiffOpenTiming("window.open.finish", {
+      focusUrlInput: options.focusUrlInput === true,
       source,
       windowOpenMs: Number((nowMs() - startedAt).toFixed(1)),
     });
