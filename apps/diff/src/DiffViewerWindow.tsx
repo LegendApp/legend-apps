@@ -872,6 +872,21 @@ function useLatestValueRef<T>(value: T) {
   return valueRef;
 }
 
+function useDiffViewerState() {
+  const [state, setState] = useState<DiffViewerState>(emptyState);
+  const state$ = useObservable<DiffViewerState>(emptyState);
+  const setViewerState = useCallback((nextState: DiffViewerState) => {
+    state$.set(nextState);
+    setState(nextState);
+  }, [state$]);
+
+  return {
+    setViewerState,
+    state,
+    state$,
+  };
+}
+
 function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource: DiffOpenSource | null): DiffVisibleSourceModel {
   const visibleSource = state.source;
   const visibleFolderPath = visibleSource?.kind === "folder" ? visibleSource.value : null;
@@ -2130,9 +2145,8 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
-  const [state, setState] = useState<DiffViewerState>(emptyState);
+  const { setViewerState, state, state$ } = useDiffViewerState();
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
-  const state$ = useObservable<DiffViewerState>(emptyState);
   const urlInput$ = useObservable("");
   const urlInputError$ = useObservable<string | null>(null);
   const openError$ = useObservable<DiffRecoverableError | null>(null);
@@ -2157,10 +2171,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const diffPaneHeight = useValue(diffPaneHeight$);
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
-  const setViewerState = useCallback((nextState: DiffViewerState) => {
-    state$.set(nextState);
-    setState(nextState);
-  }, []);
   const setUrlInputValue = useCallback((nextValue: string) => {
     urlInput$.set(nextValue);
   }, [urlInput$]);
