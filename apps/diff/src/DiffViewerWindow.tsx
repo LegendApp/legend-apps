@@ -590,7 +590,8 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
   const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
-  const showViewModeToolbar = loadedFileCount > 0;
+  const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? visibleSource : null);
+  const showViewModeToolbar = toolbarSource !== null;
   const showSidebarControl = showViewModeToolbar;
   const normalizedFileFilter = fileFilter.trim().toLowerCase();
 
@@ -1437,21 +1438,40 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, [activeFileIndex$, copyText, state]);
 
   useEffect(() => {
+    if (toolbarSource) {
+      setDiffViewerWindowOptions({
+        appearance: syntaxTheme.appearance,
+        backgroundColor: syntaxTheme.background,
+        includeToolbarItems: true,
+        source: toolbarSource,
+        showSidebarControl,
+        showViewModeToolbar,
+        sidebarCollapsed,
+        viewMode,
+      }).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    }
+  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, syntaxTheme.appearance, syntaxTheme.background, toolbarSource, viewMode]);
+
+  useEffect(() => {
     let frameHandle: number | null = null;
     let secondFrameHandle: number | null = null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     const scheduleStartedAt = nowMs();
     const shouldWaitForContentLayout = state.status === "loaded" && loadedFileCount > 0;
     const isContentLayoutReady = !shouldWaitForContentLayout || diffPaneHeight > diffTitlebarTopInset;
+    const includeToolbarItems = toolbarSource === null;
 
     logDiffOpenTiming("viewer.windowOptions.schedule", {
       diffPaneHeight,
+      includeToolbarItems,
       isContentLayoutReady,
       loadedFileCount,
       showSidebarControl,
       showViewModeToolbar,
       sidebarCollapsed,
-      source: state.source,
+      source: toolbarSource ?? state.source,
       status: state.status,
       viewMode,
     });
@@ -1466,14 +1486,15 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
           showSidebarControl,
           showViewModeToolbar,
           sidebarCollapsed,
-          source: state.source,
+          source: toolbarSource ?? state.source,
           status: state.status,
           viewMode,
         });
         setDiffViewerWindowOptions({
           appearance: syntaxTheme.appearance,
           backgroundColor: syntaxTheme.background,
-          source: state.source,
+          includeToolbarItems,
+          source: toolbarSource ?? state.source,
           showSidebarControl,
           showViewModeToolbar,
           sidebarCollapsed,
@@ -1481,7 +1502,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         })
           .then(() => {
             logDiffOpenTiming("viewer.windowOptions.finish", {
-              source: state.source,
+              source: toolbarSource ?? state.source,
               setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
             });
           })
@@ -1503,7 +1524,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       logDiffOpenTiming("viewer.windowOptions.deferred", {
         diffPaneHeight,
         loadedFileCount,
-        source: state.source,
+        source: toolbarSource ?? state.source,
         status: state.status,
       });
     }
@@ -1519,7 +1540,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         clearTimeout(timeoutHandle);
       }
     };
-  }, [diffPaneHeight, loadedFileCount, showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.source, state.status, syntaxTheme.appearance, syntaxTheme.background, viewMode]);
+  }, [diffPaneHeight, loadedFileCount, showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.source, state.status, syntaxTheme.appearance, syntaxTheme.background, toolbarSource, viewMode]);
 
   const toggleSidebar = useCallback(() => {
     if (!showSidebarControl) {

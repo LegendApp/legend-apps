@@ -48,6 +48,7 @@ function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffView
 function createDiffViewerWindowStyle({
   appearance,
   includeFrame,
+  includeToolbarItems = true,
   showSidebarControl,
   showViewModeToolbar,
   sidebarCollapsed,
@@ -55,6 +56,7 @@ function createDiffViewerWindowStyle({
 }: {
   appearance?: "dark" | "light";
   includeFrame: boolean;
+  includeToolbarItems?: boolean;
   showSidebarControl?: boolean;
   showViewModeToolbar?: boolean;
   sidebarCollapsed?: boolean;
@@ -77,10 +79,14 @@ function createDiffViewerWindowStyle({
   return {
     ...windowStyle,
     titlebarControls: [],
-    toolbarItems: [
-      ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
-      ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
-    ],
+    ...(includeToolbarItems
+      ? {
+          toolbarItems: [
+            ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
+            ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
+          ],
+        }
+      : {}),
   };
 }
 
@@ -123,6 +129,7 @@ function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
 
 export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null, options: DiffViewerWindowOpenOptions = {}) {
   const source = normalizeDiffOpenSource(sourceInput);
+  const shouldShowSourceToolbar = source !== null;
   const focusUrlInputRequestId = options.focusUrlInput ? ++diffViewerUrlFocusRequestId : undefined;
   const initialProperties = source || options.focusUrlInput
     ? {
@@ -141,7 +148,11 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     representedURL: source?.value,
     title: getDiffSourceLabel(source),
     transparentBackground: true,
-    windowStyle: createDiffViewerWindowStyle({ includeFrame: true, showViewModeToolbar: false }),
+    windowStyle: createDiffViewerWindowStyle({
+      includeFrame: true,
+      showSidebarControl: shouldShowSourceToolbar,
+      showViewModeToolbar: shouldShowSourceToolbar,
+    }),
   }).then((result) => {
     logDiffOpenTiming("window.open.finish", {
       focusUrlInput: options.focusUrlInput === true,
@@ -168,6 +179,7 @@ export function setDiffViewerWindowOptions({
   showViewModeToolbar,
   sidebarCollapsed,
   viewMode,
+  includeToolbarItems,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
@@ -176,6 +188,7 @@ export function setDiffViewerWindowOptions({
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
   viewMode: DiffViewMode;
+  includeToolbarItems?: boolean;
 }) {
   const startedAt = nowMs();
   return setWindowOptions(diffViewerWindowIdentifier, {
@@ -184,6 +197,7 @@ export function setDiffViewerWindowOptions({
     windowStyle: createDiffViewerWindowStyle({
       appearance,
       includeFrame: false,
+      includeToolbarItems,
       showSidebarControl,
       showViewModeToolbar,
       sidebarCollapsed,
