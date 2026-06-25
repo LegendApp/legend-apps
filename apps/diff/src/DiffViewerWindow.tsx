@@ -1812,6 +1812,220 @@ function useDiffLoadedModel({
   };
 }
 
+function useDiffSideBySideRuntime({
+  activeFileIndex$,
+  collapsedFileIndexListRef,
+  diffPaneHeight,
+  rowHeight,
+  sideBySideRowCount,
+  state,
+  state$,
+  viewMode,
+}: {
+  activeFileIndex$: Observable<number | null>;
+  collapsedFileIndexListRef: RefObject<number[]>;
+  diffPaneHeight: number;
+  rowHeight: number;
+  sideBySideRowCount: number;
+  state: DiffViewerState;
+  state$: Observable<DiffViewerState>;
+  viewMode: DiffSettingsFile["viewMode"];
+}) {
+  const [sideBySideTokenStyleState, setSideBySideTokenStyleState] = useState<SideBySideTokenStyleState | null>(null);
+  const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
+  const sideBySideVisibleRangeRef = useRef<{
+    count: number;
+    document: DiffDocument;
+    start: number;
+  } | null>(null);
+  const sideBySideScrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sideBySideScrollingRef = useRef(false);
+  const pendingSideBySideTokenRangesRef = useRef<{
+    document: DiffDocument;
+    ranges: DiffTokenizedRowRange[];
+  } | null>(null);
+  const sideBySideRowCountRef = useLatestValueRef(sideBySideRowCount);
+  const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
+    const styles = document.getStyles();
+    setSideBySideTokenStyleState((current) => (
+      current?.document === document && current.styleCount === styles.length
+        ? current
+        : {
+            document,
+            styleCount: styles.length,
+            tokenStyleById: createSyntaxStyleMap(styles),
+          }
+    ));
+  }, []);
+  const bumpSideBySideRowVersion = useCallback((rowIndex: number) => {
+    const key = String(rowIndex);
+    sideBySideRowVersions$[key].set((sideBySideRowVersions$[key].peek() ?? 0) + 1);
+  }, [sideBySideRowVersions$]);
+  const flushSideBySideTokenInvalidation = useCallback((document: DiffDocument, ranges: readonly DiffTokenizedRowRange[]) => {
+    const visibleRange = sideBySideVisibleRangeRef.current;
+    if (visibleRange?.document === document && ranges.length > 0) {
+      refreshSideBySideTokenStyles(document);
+      const end = visibleRange.start + visibleRange.count;
+      for (let index = visibleRange.start; index < end; index += 1) {
+        const row = document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current);
+        const oldRowIndex = row.oldRowVisible ? row.oldRow.index : -1;
+        const newRowIndex = row.newRowVisible ? row.newRow.index : -1;
+        const overlapsTokenizedRange = ranges.some((range) => (
+          (oldRowIndex >= range.start && oldRowIndex < range.end) ||
+          (newRowIndex >= range.start && newRowIndex < range.end)
+        ));
+        if (overlapsTokenizedRange) {
+          bumpSideBySideRowVersion(index);
+        }
+      }
+      if (pendingSideBySideTokenRangesRef.current?.document === document) {
+        pendingSideBySideTokenRangesRef.current = null;
+      }
+    } else if (visibleRange && visibleRange.document !== document && pendingSideBySideTokenRangesRef.current?.document === document) {
+      pendingSideBySideTokenRangesRef.current = null;
+    }
+  }, [bumpSideBySideRowVersion, collapsedFileIndexListRef, refreshSideBySideTokenStyles]);
+  const resetSideBySideRuntime = useCallback(() => {
+    sideBySideVisibleRangeRef.current = null;
+    pendingSideBySideTokenRangesRef.current = null;
+    sideBySideScrollingRef.current = false;
+    sideBySideRowVersions$.set({});
+    if (sideBySideScrollIdleTimeoutRef.current) {
+      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
+      sideBySideScrollIdleTimeoutRef.current = null;
+    }
+  }, [sideBySideRowVersions$]);
+  const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded" && options?.reason !== "scroll") {
+      const start = Math.max(0, Math.floor(lineStart));
+      const count = Math.max(0, Math.ceil(lineCount));
+      if (count > 0) {
+        currentState.document.getSideBySideRows(start, count, collapsedFileIndexListRef.current);
+        refreshSideBySideTokenStyles(currentState.document);
+        const end = Math.min(sideBySideRowCountRef.current, start + count);
+        for (let index = start; index < end; index += 1) {
+          bumpSideBySideRowVersion(index);
+        }
+      }
+    }
+    // Scroll-driven requests stay side-effect free so scrolling never updates React state.
+  }, [bumpSideBySideRowVersion, collapsedFileIndexListRef, refreshSideBySideTokenStyles, state$, sideBySideRowCountRef]);
+  const getSideBySideRow = useCallback((index: number) => {
+    const currentState = state$.peek();
+    return currentState.status === "loaded"
+      ? currentState.document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current)
+      : undefined;
+  }, [collapsedFileIndexListRef, state$]);
+  const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
+      const row = currentState.document.getPlainSideBySideRow(lineIndex, collapsedFileIndexListRef.current);
+      const nextFileIndex = findFileIndexForRow(currentState.files, row.sourceStart);
+      if (activeFileIndex$.peek() !== nextFileIndex) {
+        activeFileIndex$.set(nextFileIndex);
+      }
+    }
+  }, [activeFileIndex$, collapsedFileIndexListRef, state$]);
+  const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
+      sideBySideVisibleRangeRef.current = {
+        count,
+        document: currentState.document,
+        start,
+      };
+
+      if (reason === "scroll") {
+        sideBySideScrollingRef.current = true;
+        if (sideBySideScrollIdleTimeoutRef.current) {
+          clearTimeout(sideBySideScrollIdleTimeoutRef.current);
+        }
+        sideBySideScrollIdleTimeoutRef.current = setTimeout(() => {
+          sideBySideScrollingRef.current = false;
+          sideBySideScrollIdleTimeoutRef.current = null;
+          if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
+            flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
+          }
+        }, diffScrollIdleMs);
+      } else if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
+        flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
+      }
+    }
+  }, [flushSideBySideTokenInvalidation, state$]);
+
+  useEffect(() => () => {
+    if (sideBySideScrollIdleTimeoutRef.current) {
+      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
+      sideBySideScrollIdleTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
+      const document = state.document;
+      if (sideBySideRowCount > diffBackgroundTokenizeMaxRowCount) {
+        logDiffOpenTiming("viewer.backgroundTokenize.skipped", {
+          maxRows: diffBackgroundTokenizeMaxRowCount,
+          rows: sideBySideRowCount,
+        });
+        return undefined;
+      }
+
+      let intervalHandle: ReturnType<typeof setInterval> | null = null;
+      const startTimeoutHandle = setTimeout(() => {
+        document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs);
+        intervalHandle = setInterval(() => {
+          const ranges = document.consumeTokenizedRowRanges();
+          if (ranges.length > 0) {
+            const pendingRanges = pendingSideBySideTokenRangesRef.current;
+            const nextRanges = pendingRanges?.document === document
+              ? [...pendingRanges.ranges, ...ranges]
+              : ranges;
+
+            pendingSideBySideTokenRangesRef.current = {
+              document,
+              ranges: nextRanges,
+            };
+
+            if (!sideBySideScrollingRef.current) {
+              flushSideBySideTokenInvalidation(document, nextRanges);
+            }
+          }
+        }, diffBackgroundTokenizePollMs);
+      }, diffBackgroundTokenizeStartDelayMs);
+
+      return () => {
+        clearTimeout(startTimeoutHandle);
+        if (intervalHandle) {
+          clearInterval(intervalHandle);
+        }
+        document.stopBackgroundTokenization();
+      };
+    }
+    return undefined;
+  }, [diffPaneHeight, flushSideBySideTokenInvalidation, sideBySideRowCount, state.status === "loaded" ? state.document : null, viewMode]);
+
+  useEffect(() => {
+    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
+      const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
+      requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
+    } else if (viewMode === "unified") {
+      setSideBySideTokenStyleState(null);
+    }
+  }, [diffPaneHeight, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
+
+  return {
+    getSideBySideRow,
+    handleSideBySideTopItemChanged,
+    handleSideBySideVisibleRowsRequested,
+    requestSideBySideRange,
+    resetSideBySideRuntime,
+    sideBySideRowVersions$,
+    sideBySideTokenStyleState,
+  };
+}
+
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
   const indexes: number[] = [];
 
@@ -1894,7 +2108,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   });
   const diffPaneHeight$ = useObservable(0);
   const activeFileIndex$ = useObservable<number | null>(null);
-  const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
   const urlInput = useValue(urlInput$);
   const urlInputError = useValue(urlInputError$);
   const openError = useValue(openError$);
@@ -1959,7 +2172,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
-  const [sideBySideTokenStyleState, setSideBySideTokenStyleState] = useState<SideBySideTokenStyleState | null>(null);
   const isLoading = loadingSource !== null;
   const isLoadingGithub = loadingSource?.kind === "github";
   const highlightedVisibleRangeRef = useRef<{
@@ -1967,19 +2179,8 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     document: DiffDocument;
     start: number;
   } | null>(null);
-  const sideBySideVisibleRangeRef = useRef<{
-    count: number;
-    document: DiffDocument;
-    start: number;
-  } | null>(null);
   const isRenderingInitialLoadedFrame = state.status === "loaded" && sourcesMatch(loadingSource, state.source);
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
-  const sideBySideScrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sideBySideScrollingRef = useRef(false);
-  const pendingSideBySideTokenRangesRef = useRef<{
-    document: DiffDocument;
-    ranges: DiffTokenizedRowRange[];
-  } | null>(null);
   const collapsedFileIndexListRef = useRef<number[]>([]);
   const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
@@ -2028,48 +2229,25 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   collapsedFileIndexListRef.current = collapsedFileIndexList;
   const getVisibleListIndexRef = useLatestValueRef(getVisibleListIndex);
   const sideBySideListIndexByRowIndexRef = useLatestValueRef(sideBySideListIndexByRowIndex);
-  const sideBySideRowCountRef = useLatestValueRef(sideBySideRowCount);
   const viewModeRef = useLatestValueRef(viewMode);
-  const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
-    const styles = document.getStyles();
-    setSideBySideTokenStyleState((current) => (
-      current?.document === document && current.styleCount === styles.length
-        ? current
-        : {
-            document,
-            styleCount: styles.length,
-            tokenStyleById: createSyntaxStyleMap(styles),
-          }
-    ));
-  }, []);
-  const bumpSideBySideRowVersion = useCallback((rowIndex: number) => {
-    const key = String(rowIndex);
-    sideBySideRowVersions$[key].set((sideBySideRowVersions$[key].peek() ?? 0) + 1);
-  }, [sideBySideRowVersions$]);
-  const flushSideBySideTokenInvalidation = useCallback((document: DiffDocument, ranges: readonly DiffTokenizedRowRange[]) => {
-    const visibleRange = sideBySideVisibleRangeRef.current;
-    if (visibleRange?.document === document && ranges.length > 0) {
-      refreshSideBySideTokenStyles(document);
-      const end = visibleRange.start + visibleRange.count;
-      for (let index = visibleRange.start; index < end; index += 1) {
-        const row = document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current);
-        const oldRowIndex = row.oldRowVisible ? row.oldRow.index : -1;
-        const newRowIndex = row.newRowVisible ? row.newRow.index : -1;
-        const overlapsTokenizedRange = ranges.some((range) => (
-          (oldRowIndex >= range.start && oldRowIndex < range.end) ||
-          (newRowIndex >= range.start && newRowIndex < range.end)
-        ));
-        if (overlapsTokenizedRange) {
-          bumpSideBySideRowVersion(index);
-        }
-      }
-      if (pendingSideBySideTokenRangesRef.current?.document === document) {
-        pendingSideBySideTokenRangesRef.current = null;
-      }
-    } else if (visibleRange && visibleRange.document !== document && pendingSideBySideTokenRangesRef.current?.document === document) {
-      pendingSideBySideTokenRangesRef.current = null;
-    }
-  }, [bumpSideBySideRowVersion, refreshSideBySideTokenStyles]);
+  const {
+    getSideBySideRow,
+    handleSideBySideTopItemChanged,
+    handleSideBySideVisibleRowsRequested,
+    requestSideBySideRange,
+    resetSideBySideRuntime,
+    sideBySideRowVersions$,
+    sideBySideTokenStyleState,
+  } = useDiffSideBySideRuntime({
+    activeFileIndex$,
+    collapsedFileIndexListRef,
+    diffPaneHeight,
+    rowHeight,
+    sideBySideRowCount,
+    state,
+    state$,
+    viewMode,
+  });
   const clearHighlightTimeouts = useCallback(() => {
     for (const timeoutHandle of highlightTimeoutHandlesRef.current) {
       clearTimeout(timeoutHandle);
@@ -2079,14 +2257,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   useEffect(() => {
     highlightedVisibleRangeRef.current = null;
-    sideBySideVisibleRangeRef.current = null;
-    pendingSideBySideTokenRangesRef.current = null;
-    sideBySideScrollingRef.current = false;
-    sideBySideRowVersions$.set({});
-    if (sideBySideScrollIdleTimeoutRef.current) {
-      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
-      sideBySideScrollIdleTimeoutRef.current = null;
-    }
+    resetSideBySideRuntime();
     clearHighlightTimeouts();
     if (state.status === "loaded") {
       activeFileIndex$.set(state.files[0]?.index ?? null);
@@ -2094,61 +2265,9 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     } else {
       activeFileIndex$.set(null);
     }
-  }, [activeFileIndex$, clearHighlightTimeouts, setCollapsedFileIndexesValue, sideBySideRowVersions$, state.status === "loaded" ? state.document : null]);
+  }, [activeFileIndex$, clearHighlightTimeouts, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
 
   useEffect(() => clearHighlightTimeouts, [clearHighlightTimeouts]);
-
-  useEffect(() => () => {
-    if (sideBySideScrollIdleTimeoutRef.current) {
-      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
-      sideBySideScrollIdleTimeoutRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
-      const document = state.document;
-      if (sideBySideRowCount > diffBackgroundTokenizeMaxRowCount) {
-        logDiffOpenTiming("viewer.backgroundTokenize.skipped", {
-          maxRows: diffBackgroundTokenizeMaxRowCount,
-          rows: sideBySideRowCount,
-        });
-        return undefined;
-      }
-
-      let intervalHandle: ReturnType<typeof setInterval> | null = null;
-      const startTimeoutHandle = setTimeout(() => {
-        document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs);
-        intervalHandle = setInterval(() => {
-          const ranges = document.consumeTokenizedRowRanges();
-          if (ranges.length > 0) {
-            const pendingRanges = pendingSideBySideTokenRangesRef.current;
-            const nextRanges = pendingRanges?.document === document
-              ? [...pendingRanges.ranges, ...ranges]
-              : ranges;
-
-            pendingSideBySideTokenRangesRef.current = {
-              document,
-              ranges: nextRanges,
-            };
-
-            if (!sideBySideScrollingRef.current) {
-              flushSideBySideTokenInvalidation(document, nextRanges);
-            }
-          }
-        }, diffBackgroundTokenizePollMs);
-      }, diffBackgroundTokenizeStartDelayMs);
-
-      return () => {
-        clearTimeout(startTimeoutHandle);
-        if (intervalHandle) {
-          clearInterval(intervalHandle);
-        }
-        document.stopBackgroundTokenization();
-      };
-    }
-    return undefined;
-  }, [diffPaneHeight, flushSideBySideTokenInvalidation, sideBySideRowCount, state.status === "loaded" ? state.document : null, viewMode]);
 
   const scheduleVisibleHighlight = useCallback((start: number, count: number, reason: string) => {
     const currentState = state$.peek();
@@ -2956,77 +3075,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     ),
     [collapsedFileIndexes$, renderFields],
   );
-
-  const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded" && options?.reason !== "scroll") {
-      const start = Math.max(0, Math.floor(lineStart));
-      const count = Math.max(0, Math.ceil(lineCount));
-      if (count > 0) {
-        currentState.document.getSideBySideRows(start, count, collapsedFileIndexListRef.current);
-        refreshSideBySideTokenStyles(currentState.document);
-        const end = Math.min(sideBySideRowCountRef.current, start + count);
-        for (let index = start; index < end; index += 1) {
-          bumpSideBySideRowVersion(index);
-        }
-      }
-    }
-    // Scroll-driven requests stay side-effect free so scrolling never updates React state.
-  }, [bumpSideBySideRowVersion, refreshSideBySideTokenStyles]);
-
-  const getSideBySideRow = useCallback((index: number) => {
-    const currentState = state$.peek();
-    return currentState.status === "loaded"
-      ? currentState.document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current)
-      : undefined;
-  }, []);
-
-  useEffect(() => {
-    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
-      const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
-      requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
-    } else if (viewMode === "unified") {
-      setSideBySideTokenStyleState(null);
-    }
-  }, [diffPaneHeight, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
-
-  const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      const row = currentState.document.getPlainSideBySideRow(lineIndex, collapsedFileIndexListRef.current);
-      const nextFileIndex = findFileIndexForRow(currentState.files, row.sourceStart);
-      if (activeFileIndex$.peek() !== nextFileIndex) {
-        activeFileIndex$.set(nextFileIndex);
-      }
-    }
-  }, []);
-
-  const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      sideBySideVisibleRangeRef.current = {
-        count,
-        document: currentState.document,
-        start,
-      };
-
-      if (reason === "scroll") {
-        sideBySideScrollingRef.current = true;
-        if (sideBySideScrollIdleTimeoutRef.current) {
-          clearTimeout(sideBySideScrollIdleTimeoutRef.current);
-        }
-        sideBySideScrollIdleTimeoutRef.current = setTimeout(() => {
-          sideBySideScrollingRef.current = false;
-          sideBySideScrollIdleTimeoutRef.current = null;
-          if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
-            flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
-          }
-        }, diffScrollIdleMs);
-      } else if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
-        flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
-      }
-    }
-  }, [flushSideBySideTokenInvalidation]);
 
   const getSideBySideItemType = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
     const kind = row?.kind ?? (sideBySideFileHeaderIndexes.has(index) ? "file-header" : "line");
