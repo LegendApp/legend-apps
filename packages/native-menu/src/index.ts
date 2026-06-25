@@ -7,6 +7,11 @@ export type NativeMenuShortcut = {
   modifiers?: number;
 };
 
+export type NativeMenuItemPlacement = {
+  before?: string;
+  after?: string;
+};
+
 export const commandModifier = 1 << 20;
 export const optionModifier = 1 << 19;
 export const shiftModifier = 1 << 17;
@@ -24,6 +29,7 @@ export type NativeMenuItem = {
   enabled?: boolean;
   checked?: boolean;
   hidden?: boolean;
+  placement?: NativeMenuItemPlacement;
   separator?: boolean;
   shortcut?: NativeMenuShortcut | null;
   payload?: Record<string, unknown>;

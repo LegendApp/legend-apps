@@ -464,11 +464,52 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
   return windowIndex >= 0 ? windowIndex : mainMenu.numberOfItems;
 }
 
+- (NSInteger)indexOfItemMatchingTitle:(NSString *)title inMenu:(NSMenu *)menu
+{
+  if (title.length == 0) {
+    return -1;
+  }
+
+  NSString *normalizedTitle = [self normalizedMenuTitle:title];
+  for (NSInteger index = 0; index < menu.numberOfItems; index += 1) {
+    NSMenuItem *item = [menu itemAtIndex:index];
+    if ([[self normalizedMenuTitle:item.title ?: @""] isEqualToString:normalizedTitle]) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+- (NSInteger)insertionIndexForItemConfig:(NSDictionary *)config inMenu:(NSMenu *)menu
+{
+  NSDictionary *placement = [config[@"placement"] isKindOfClass:[NSDictionary class]] ? config[@"placement"] : nil;
+  NSString *before = [placement[@"before"] isKindOfClass:[NSString class]] ? placement[@"before"] : nil;
+  NSString *after = [placement[@"after"] isKindOfClass:[NSString class]] ? placement[@"after"] : nil;
+
+  if (before.length > 0) {
+    NSInteger index = [self indexOfItemMatchingTitle:before inMenu:menu];
+    if (index >= 0) {
+      return index;
+    }
+  }
+
+  if (after.length > 0) {
+    NSInteger index = [self indexOfItemMatchingTitle:after inMenu:menu];
+    if (index >= 0) {
+      return MIN(index + 1, menu.numberOfItems);
+    }
+  }
+
+  return menu.numberOfItems;
+}
+
 - (NSMenuItem *)appendItem:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId toMenu:(NSMenu *)menu
 {
+  NSInteger insertionIndex = [self insertionIndexForItemConfig:config inMenu:menu];
   if ([config[@"separator"] boolValue]) {
     NSMenuItem *separator = [NSMenuItem separatorItem];
-    [menu addItem:separator];
+    [menu insertItem:separator atIndex:insertionIndex];
     return separator;
   }
 
@@ -482,7 +523,7 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
   item.target = self;
   item.representedObject = [self representedObjectForConfig:config ownerId:ownerId menuId:menuId];
   [self applyItemConfig:config toMenuItem:item];
-  [menu addItem:item];
+  [menu insertItem:item atIndex:insertionIndex];
   self.menuItemsByKey[[self itemKeyForOwner:ownerId itemId:itemId]] = item;
   return item;
 }
