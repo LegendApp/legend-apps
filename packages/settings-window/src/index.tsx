@@ -55,7 +55,7 @@ export function createSettingsWindowOptions({
     transparentBackground,
     windowStyle: {
       hasToolbar: true,
-      height: 800,
+      height: 520,
       mask: [
         WindowStyleMask.Titled,
         WindowStyleMask.Closable,
@@ -63,13 +63,13 @@ export function createSettingsWindowOptions({
         WindowStyleMask.FullSizeContentView,
         WindowStyleMask.UnifiedTitleAndToolbar,
       ],
-      minHeight: 600,
+      minHeight: 420,
       minWidth: 600,
       titlebarAppearsTransparent: true,
       titlebarSeparatorStyle: "none",
       titleVisibility: "visible",
       toolbarStyle: "unified",
-      width: 800,
+      width: 680,
       ...(windowStyle ?? {}),
     },
   };
@@ -95,7 +95,7 @@ export function SettingsWindow<PageId extends string = string>({
   appearance = "system",
   backgroundClassName = "bg-background",
   contentBackgroundClassName = backgroundClassName,
-  contentMinWidth = 360,
+  contentMinWidth = 340,
   defaultPageId,
   initialPage,
   pages,
@@ -245,7 +245,7 @@ interface SettingsSectionProps {
 }
 
 export function SettingsSection({
-  card = true,
+  card = false,
   children,
   className,
   contentClassName,
@@ -254,19 +254,19 @@ export function SettingsSection({
   headerRight,
   title,
 }: SettingsSectionProps) {
-  const containerClassName = cn("flex flex-col gap-6", !first && "mt-6", className);
+  const containerClassName = cn("flex flex-col gap-3", !first && "mt-7", className);
   const content = (
     <>
       <View className="flex-row items-start justify-between gap-4">
-        <View className="flex-1 flex-col gap-1.5">
-          <Text className="text-xl font-semibold text-text-primary leading-tight">{title}</Text>
+        <View className="flex-1 flex-col gap-1">
+          <Text className="font-semibold text-text-primary leading-tight" style={styles.sectionTitle}>{title}</Text>
           {description ? (
-            <Text className="text-sm leading-relaxed text-text-secondary">{description}</Text>
+            <Text className="leading-relaxed text-text-secondary" style={styles.sectionDescription}>{description}</Text>
           ) : null}
         </View>
         {headerRight ? <View className="flex-none ml-4">{headerRight}</View> : null}
       </View>
-      {children ? <View className={cn("flex flex-col gap-5", contentClassName)}>{children}</View> : null}
+      {children ? <View className={cn("flex flex-col", contentClassName)}>{children}</View> : null}
     </>
   );
 
@@ -284,7 +284,7 @@ interface SettingsCardProps {
 
 export function SettingsCard({ children, className }: SettingsCardProps) {
   return (
-    <View className={cn("rounded-2xl border border-border-primary bg-background-secondary p-6 shadow-xl", className)}>
+    <View className={cn("rounded-lg border border-border-primary bg-background-secondary p-3", className)}>
       {children}
     </View>
   );
@@ -314,16 +314,16 @@ export function SettingsRow({
   return (
     <View
       className={cn(
-        "flex-row justify-between gap-6 rounded-xl border border-border-primary bg-background-tertiary px-5 py-4",
+        "flex-row justify-between gap-5 border-b border-border px-1 py-2.5",
         align === "center" ? "items-center" : "items-start",
         disabled ? "opacity-60" : "",
         className,
       )}
     >
-      <View className={cn("min-w-0 flex-1 flex-col gap-1.5 pr-6", contentClassName)} style={styles.rowText}>
-        <Text className="text-base font-semibold text-text-primary leading-tight">{title}</Text>
+      <View className={cn("min-w-0 flex-1 flex-col gap-1 pr-6", contentClassName)} style={styles.rowText}>
+        <Text className="text-text-primary leading-tight" style={styles.rowTitle}>{title}</Text>
         {description ? (
-          <Text className="text-sm leading-relaxed text-text-secondary">{description}</Text>
+          <Text className="leading-relaxed text-text-secondary" style={styles.rowDescription}>{description}</Text>
         ) : null}
       </View>
       <View className={cn("max-w-full flex-shrink", controlWrapperClassName)} style={styles.rowControl}>
@@ -344,7 +344,8 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     flexDirection: "column",
     maxWidth: 896,
-    paddingHorizontal: 24,
+    paddingBottom: 28,
+    paddingHorizontal: 30,
     paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
     width: "100%",
   },
@@ -356,11 +357,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rowControl: {
-    flexShrink: 1,
+    alignItems: "flex-end",
+    flexShrink: 0,
     maxWidth: "100%",
+  },
+  rowDescription: {
+    fontSize: 12,
   },
   rowText: {
     minWidth: 0,
+  },
+  rowTitle: {
+    fontSize: 13,
+  },
+  sectionDescription: {
+    fontSize: 12,
+  },
+  sectionTitle: {
+    fontSize: 13,
   },
   sidebarContent: {
     paddingHorizontal: 8,

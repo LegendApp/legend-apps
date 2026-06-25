@@ -38,6 +38,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/native-select",
+    root: path.join(packagesDir, "native-select"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/recent-documents",
     root: path.join(packagesDir, "recent-documents"),
     platforms: ["macos", "ios", "android"],

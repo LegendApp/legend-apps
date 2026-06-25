@@ -1,4 +1,4 @@
-import { SegmentedOptions, SelectControl } from "@legend-desktop/design-system";
+import { SelectControl } from "@legend-desktop/design-system";
 import {
   SettingsPage,
   SettingsRow,
@@ -53,7 +53,8 @@ function AppearanceSettingsPage() {
         <SettingsRow
           align="center"
           control={(
-            <SegmentedOptions
+            <SelectControl
+              accessibilityLabel="Diff font size"
               onChange={setDiffFontSizeSetting}
               options={diffFontSizeSettingOptions}
               value={fontSize}

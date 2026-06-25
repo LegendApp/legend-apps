@@ -1,5 +1,7 @@
 import { cn } from "@legend-desktop/classnames";
-import { Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
+import { NativeSelect } from "@legend-desktop/native-select";
+import { useCallback, useMemo } from "react";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
 type OptionValue = string | number;
@@ -65,13 +67,14 @@ export function SegmentedOptions<Value extends OptionValue>({
   );
 }
 
-export type SelectOption<Value extends string = string> = {
+export type SelectOption<Value extends OptionValue = string> = {
   label: string;
   value: Value;
 };
 
-export type SelectControlProps<Value extends string = string> = {
+export type SelectControlProps<Value extends OptionValue = string> = {
   accessibilityLabel?: string;
+  disabled?: boolean;
   onChange: (value: Value) => void;
   options: readonly SelectOption<Value>[];
   value: Value;
@@ -103,36 +106,65 @@ function getContextMenuLocation(event: GestureResponderEvent) {
   });
 }
 
-export function SelectControl<Value extends string = string>({
+export function SelectControl<Value extends OptionValue = string>({
   accessibilityLabel,
+  disabled = false,
   onChange,
   options,
   value,
 }: SelectControlProps<Value>) {
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
+  const nativeOptions = useMemo(() => options.map((option) => ({
+    label: option.label,
+    value: String(option.value),
+  })), [options]);
+  const nativeValue = String(value);
+  const handleNativeChange = useCallback((nextValue: string) => {
+    const selected = options.find((option) => String(option.value) === nextValue);
+    if (selected) {
+      onChange(selected.value);
+    }
+  }, [onChange, options]);
 
   const handlePress = async (event: GestureResponderEvent) => {
-    const location = await getContextMenuLocation(event);
-    const { showContextMenu } = await import("@legend-desktop/context-menu");
-    const selected = await showContextMenu(
-      options.map((option) => ({
-        id: option.value,
-        title: option.value === value ? `* ${option.label}` : option.label,
-      })),
-      location,
-    );
-
-    if (selected && options.some((option) => option.value === selected)) {
-      onChange(selected as Value);
+    if (!disabled) {
+      const location = await getContextMenuLocation(event);
+      const { showContextMenu } = await import("@legend-desktop/context-menu");
+      const selected = await showContextMenu(
+        options.map((option) => ({
+          id: String(option.value),
+          title: option.value === value ? `* ${option.label}` : option.label,
+        })),
+        location,
+      );
+      const selectedOption = selected ? options.find((option) => String(option.value) === selected) : null;
+      if (selectedOption) {
+        onChange(selectedOption.value);
+      }
     }
   };
+
+  if (Platform.OS === "macos") {
+    return (
+      <NativeSelect
+        accessibilityLabel={accessibilityLabel}
+        enabled={!disabled}
+        onChange={handleNativeChange}
+        options={nativeOptions}
+        style={styles.nativeSelect}
+        value={nativeValue}
+      />
+    );
+  }
 
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       className="h-9 min-w-56 flex-row items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 hover:bg-surface-muted active:bg-surface-muted"
+      disabled={disabled}
       onPress={handlePress}
+      style={disabled ? styles.disabled : null}
     >
       <Text className="min-w-0 flex-1 text-foreground" numberOfLines={1} style={styles.selectText}>
         {selectedOption?.label ?? value}
@@ -200,6 +232,13 @@ export function ColorValueInput({ label, onChange, value }: ColorValueInputProps
 }
 
 const styles = StyleSheet.create({
+  disabled: {
+    opacity: 0.6,
+  },
+  nativeSelect: {
+    height: 28,
+    minWidth: 180,
+  },
   radioOptionText: {
     fontSize: 13,
     fontWeight: "500",

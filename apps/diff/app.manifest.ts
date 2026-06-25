@@ -25,6 +25,7 @@ const manifest = {
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/native-menu",
+      "@legend-desktop/native-select",
       "@legend-desktop/recent-documents",
       "@legend-desktop/sf-symbol",
       "@legend-desktop/storage",

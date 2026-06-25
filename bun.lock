@@ -60,6 +60,7 @@
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
+        "@legend-desktop/native-select": "workspace:*",
         "@legend-desktop/recent-documents": "0.0.0",
         "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
@@ -266,6 +267,7 @@
       "dependencies": {
         "@legend-desktop/classnames": "0.0.0",
         "@legend-desktop/context-menu": "0.0.0",
+        "@legend-desktop/native-select": "workspace:*",
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
@@ -433,6 +435,14 @@
     },
     "packages/native-menu": {
       "name": "@legend-desktop/native-menu",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/native-select": {
+      "name": "@legend-desktop/native-select",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -1005,6 +1015,8 @@
     "@legend-desktop/media-tags": ["@legend-desktop/media-tags@workspace:packages/media-tags"],
 
     "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
+
+    "@legend-desktop/native-select": ["@legend-desktop/native-select@workspace:packages/native-select"],
 
     "@legend-desktop/recent-documents": ["@legend-desktop/recent-documents@workspace:packages/recent-documents"],
 
