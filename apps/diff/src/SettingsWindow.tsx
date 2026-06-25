@@ -36,7 +36,7 @@ function AppearanceSettingsPage() {
     <SettingsPage>
       <SettingsSection
         first
-        title="Text"
+        title={null}
       >
         <SettingsRow
           align="center"
@@ -62,11 +62,14 @@ function AppearanceSettingsPage() {
           )}
           title="Font size"
         />
+        <SyntaxThemeSelectorSection
+          description={null}
+          onThemeChange={setDiffSyntaxThemeSetting}
+          rowDescription={null}
+          selectedTheme={selectedSyntaxTheme}
+          title={null}
+        />
       </SettingsSection>
-      <SyntaxThemeSelectorSection
-        onThemeChange={setDiffSyntaxThemeSetting}
-        selectedTheme={selectedSyntaxTheme}
-      />
     </SettingsPage>
   );
 }

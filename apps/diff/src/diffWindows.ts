@@ -103,7 +103,7 @@ const diffWindowsConfig = {
   [diffSettingsWindowModuleName]: {
     component: SettingsWindow,
     identifier: diffSettingsWindowIdentifier,
-    options: createSettingsWindowOptions(),
+    options: createSettingsWindowOptions({ title: "Appearance" }),
   },
 } satisfies WindowsConfig;
 

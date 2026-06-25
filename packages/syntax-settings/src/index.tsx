@@ -6,13 +6,13 @@ import {
 } from "@legend-desktop/syntax-parser";
 
 export type SyntaxThemeSelectorSectionProps = {
-  description?: string;
+  description?: string | null;
   first?: boolean;
   onThemeChange: (theme: BundledSyntaxThemeName) => void;
-  rowDescription?: string;
+  rowDescription?: string | null;
   rowTitle?: string;
   selectedTheme: BundledSyntaxThemeName;
-  title?: string;
+  title?: string | null;
 };
 
 export const syntaxThemeOptions = bundledSyntaxThemes.map((theme) => ({
@@ -29,27 +29,35 @@ export function SyntaxThemeSelectorSection({
   selectedTheme,
   title = "Source",
 }: SyntaxThemeSelectorSectionProps) {
+  const row = (
+    <SettingsRow
+      align="center"
+      control={(
+        <SelectControl
+          accessibilityLabel={rowTitle}
+          onChange={onThemeChange}
+          options={syntaxThemeOptions}
+          value={selectedTheme}
+        />
+      )}
+      description={rowDescription ?? undefined}
+      title={rowTitle}
+    />
+  );
+
+  if (!title && !description) {
+    return row;
+  }
+
   return (
     <SettingsSection
       card={false}
       contentClassName="gap-3"
-      description={description}
+      description={description ?? undefined}
       first={first}
       title={title}
     >
-      <SettingsRow
-        align="center"
-        control={(
-          <SelectControl
-            accessibilityLabel={rowTitle}
-            onChange={onThemeChange}
-            options={syntaxThemeOptions}
-            value={selectedTheme}
-          />
-        )}
-        description={rowDescription}
-        title={rowTitle}
-      />
+      {row}
     </SettingsSection>
   );
 }
