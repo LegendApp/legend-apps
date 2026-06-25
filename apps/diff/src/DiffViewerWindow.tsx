@@ -142,6 +142,19 @@ type DiffFileHeaderRowProps = {
 
 type DiffUnifiedRowProps = {
   adaptiveRender: "light" | "normal";
+  index: number;
+  renderContext$: Observable<DiffRenderContext>;
+  row: DiffRenderRow | undefined;
+};
+
+type DiffSideBySideRowProps = {
+  adaptiveRender: "light" | "normal";
+  index: number;
+  renderContext$: Observable<DiffRenderContext>;
+  row: DiffSideBySideRenderRow | undefined;
+};
+
+type DiffRenderContext = {
   borderColor: string;
   collapsedFileIndexes: ReadonlySet<number>;
   fileByIndex: ReadonlyMap<number, DiffFileSummary>;
@@ -150,29 +163,11 @@ type DiffUnifiedRowProps = {
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
-  index: number;
   mutedColor: string;
-  onToggleFileCollapsed: (fileIndex: number) => void;
-  row: DiffRenderRow | undefined;
   rowHeight: number;
+  sideBySideTokenStyleById: SyntaxStyleMap;
   tokenStyleById: SyntaxStyleMap;
-};
-
-type DiffSideBySideRowProps = {
-  adaptiveRender: "light" | "normal";
-  borderColor: string;
-  collapsedFileIndexes: ReadonlySet<number>;
-  fileByIndex: ReadonlyMap<number, DiffFileSummary>;
-  fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  index: number;
-  mutedColor: string;
-  onToggleFileCollapsed: (fileIndex: number) => void;
-  row: DiffSideBySideRenderRow | undefined;
-  rowHeight: number;
-  tokenStyleById: SyntaxStyleMap;
+  toggleFileCollapsed: (fileIndex: number) => void;
 };
 
 type SideBySideTokenStyleState = {
@@ -232,19 +227,8 @@ function areOptionalDiffRenderRowsEqual(previousRow: DiffRenderRow | undefined, 
 
 function areDiffUnifiedRowPropsEqual(previousProps: DiffUnifiedRowProps, nextProps: DiffUnifiedRowProps) {
   return previousProps.adaptiveRender === nextProps.adaptiveRender
-    && previousProps.borderColor === nextProps.borderColor
-    && previousProps.collapsedFileIndexes === nextProps.collapsedFileIndexes
-    && previousProps.fileByIndex === nextProps.fileByIndex
-    && previousProps.fileByRowStart === nextProps.fileByRowStart
-    && previousProps.fileHeaderRowIndexes === nextProps.fileHeaderRowIndexes
-    && previousProps.fontFamily === nextProps.fontFamily
-    && previousProps.fontSize === nextProps.fontSize
-    && previousProps.foregroundColor === nextProps.foregroundColor
     && previousProps.index === nextProps.index
-    && previousProps.mutedColor === nextProps.mutedColor
-    && previousProps.onToggleFileCollapsed === nextProps.onToggleFileCollapsed
-    && previousProps.rowHeight === nextProps.rowHeight
-    && previousProps.tokenStyleById === nextProps.tokenStyleById
+    && previousProps.renderContext$ === nextProps.renderContext$
     && areOptionalDiffRenderRowsEqual(previousProps.row, nextProps.row);
 }
 
@@ -272,19 +256,25 @@ function areOptionalDiffSideBySideRowsEqual(previousRow: DiffSideBySideRenderRow
 
 function areDiffSideBySideRowPropsEqual(previousProps: DiffSideBySideRowProps, nextProps: DiffSideBySideRowProps) {
   return previousProps.adaptiveRender === nextProps.adaptiveRender
-    && previousProps.borderColor === nextProps.borderColor
-    && previousProps.collapsedFileIndexes === nextProps.collapsedFileIndexes
-    && previousProps.fileByIndex === nextProps.fileByIndex
-    && previousProps.fileByRowStart === nextProps.fileByRowStart
-    && previousProps.fontFamily === nextProps.fontFamily
-    && previousProps.fontSize === nextProps.fontSize
-    && previousProps.foregroundColor === nextProps.foregroundColor
     && previousProps.index === nextProps.index
-    && previousProps.mutedColor === nextProps.mutedColor
-    && previousProps.onToggleFileCollapsed === nextProps.onToggleFileCollapsed
-    && previousProps.rowHeight === nextProps.rowHeight
-    && previousProps.tokenStyleById === nextProps.tokenStyleById
+    && previousProps.renderContext$ === nextProps.renderContext$
     && areOptionalDiffSideBySideRowsEqual(previousProps.row, nextProps.row);
+}
+
+function areDiffRenderContextsEqual(previousContext: DiffRenderContext, nextContext: DiffRenderContext) {
+  return previousContext.borderColor === nextContext.borderColor
+    && previousContext.collapsedFileIndexes === nextContext.collapsedFileIndexes
+    && previousContext.fileByIndex === nextContext.fileByIndex
+    && previousContext.fileByRowStart === nextContext.fileByRowStart
+    && previousContext.fileHeaderRowIndexes === nextContext.fileHeaderRowIndexes
+    && previousContext.fontFamily === nextContext.fontFamily
+    && previousContext.fontSize === nextContext.fontSize
+    && previousContext.foregroundColor === nextContext.foregroundColor
+    && previousContext.mutedColor === nextContext.mutedColor
+    && previousContext.rowHeight === nextContext.rowHeight
+    && previousContext.sideBySideTokenStyleById === nextContext.sideBySideTokenStyleById
+    && previousContext.tokenStyleById === nextContext.tokenStyleById
+    && previousContext.toggleFileCollapsed === nextContext.toggleFileCollapsed;
 }
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
@@ -426,21 +416,24 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
 
 const DiffUnifiedRow = memo(function DiffUnifiedRow({
   adaptiveRender,
-  borderColor,
-  collapsedFileIndexes,
-  fileByIndex,
-  fileByRowStart,
-  fileHeaderRowIndexes,
-  fontFamily,
-  fontSize,
-  foregroundColor,
   index,
-  mutedColor,
-  onToggleFileCollapsed,
+  renderContext$,
   row,
-  rowHeight,
-  tokenStyleById,
 }: DiffUnifiedRowProps) {
+  const {
+    borderColor,
+    collapsedFileIndexes,
+    fileByIndex,
+    fileByRowStart,
+    fileHeaderRowIndexes,
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    mutedColor,
+    rowHeight,
+    tokenStyleById,
+    toggleFileCollapsed,
+  } = useValue(renderContext$);
   const changeType = row?.changeType ?? 0;
   const isAdd = changeType === diffChangeTypeAdd;
   const isRemove = changeType === diffChangeTypeRemove;
@@ -472,7 +465,7 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
         foregroundColor={foregroundColor}
         isCollapsed={collapsedFileIndexes.has(fileIndex)}
         mutedColor={mutedColor}
-        onToggleFileCollapsed={onToggleFileCollapsed}
+        onToggleFileCollapsed={toggleFileCollapsed}
       />
     );
   }
@@ -501,20 +494,24 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
 
 const DiffSideBySideRow = memo(function DiffSideBySideRow({
   adaptiveRender,
-  borderColor,
-  collapsedFileIndexes,
-  fileByIndex,
-  fileByRowStart,
-  fontFamily,
-  fontSize,
-  foregroundColor,
   index,
-  mutedColor,
-  onToggleFileCollapsed,
+  renderContext$,
   row,
-  rowHeight,
-  tokenStyleById,
 }: DiffSideBySideRowProps) {
+  const {
+    borderColor,
+    collapsedFileIndexes,
+    fileByIndex,
+    fileByRowStart,
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    mutedColor,
+    rowHeight,
+    sideBySideTokenStyleById,
+    toggleFileCollapsed,
+  } = useValue(renderContext$);
+
   if (!row) {
     return <View style={{ height: rowHeight }} />;
   }
@@ -533,7 +530,7 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
         foregroundColor={foregroundColor}
         isCollapsed={collapsedFileIndexes.has(fileIndex)}
         mutedColor={mutedColor}
-        onToggleFileCollapsed={onToggleFileCollapsed}
+        onToggleFileCollapsed={toggleFileCollapsed}
       />
     );
   }
@@ -551,7 +548,7 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
           rowHeight={rowHeight}
           rowVisible={row.oldRowVisible}
           side="old"
-          tokenStyleById={tokenStyleById}
+          tokenStyleById={sideBySideTokenStyleById}
         />
       </View>
       <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
@@ -567,7 +564,7 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
           rowHeight={rowHeight}
           rowVisible={row.newRowVisible}
           side="new"
-          tokenStyleById={tokenStyleById}
+          tokenStyleById={sideBySideTokenStyleById}
         />
       </View>
     </View>
@@ -2479,6 +2476,44 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       return next;
     });
   }, []);
+  const currentSideBySideTokenStyleById = state.status === "loaded" && sideBySideTokenStyleState?.document === state.document
+    ? sideBySideTokenStyleState.tokenStyleById
+    : tokenStyleById;
+  const renderContext$ = useObservable<DiffRenderContext>({
+    borderColor: displayTheme.colors.border,
+    collapsedFileIndexes,
+    fileByIndex,
+    fileByRowStart,
+    fileHeaderRowIndexes,
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    mutedColor,
+    rowHeight,
+    sideBySideTokenStyleById: currentSideBySideTokenStyleById,
+    tokenStyleById,
+    toggleFileCollapsed,
+  });
+  useEffect(() => {
+    const nextContext: DiffRenderContext = {
+      borderColor: displayTheme.colors.border,
+      collapsedFileIndexes,
+      fileByIndex,
+      fileByRowStart,
+      fileHeaderRowIndexes,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      mutedColor,
+      rowHeight,
+      sideBySideTokenStyleById: currentSideBySideTokenStyleById,
+      tokenStyleById,
+      toggleFileCollapsed,
+    };
+    if (!areDiffRenderContextsEqual(renderContext$.peek(), nextContext)) {
+      renderContext$.set(nextContext);
+    }
+  }, [collapsedFileIndexes, currentSideBySideTokenStyleById, displayTheme.colors.border, fileByIndex, fileByRowStart, fileHeaderRowIndexes, fontFamily, fontSize, foregroundColor, mutedColor, renderContext$, rowHeight, tokenStyleById, toggleFileCollapsed]);
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
@@ -2565,23 +2600,12 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => (
       <DiffUnifiedRow
         adaptiveRender={adaptiveRender}
-        borderColor={displayTheme.colors.border}
-        collapsedFileIndexes={collapsedFileIndexes}
-        fileByIndex={fileByIndex}
-        fileByRowStart={fileByRowStart}
-        fileHeaderRowIndexes={fileHeaderRowIndexes}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        foregroundColor={foregroundColor}
         index={index}
-        mutedColor={mutedColor}
-        onToggleFileCollapsed={toggleFileCollapsed}
+        renderContext$={renderContext$}
         row={row}
-        rowHeight={rowHeight}
-        tokenStyleById={tokenStyleById}
       />
     ),
-    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fileHeaderRowIndexes, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, toggleFileCollapsed, tokenStyleById],
+    [renderContext$],
   );
 
   const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
@@ -2667,31 +2691,15 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, [rowHeight, sideBySideFileHeaderIndexes]);
 
   const renderSideBySideRow = useCallback(
-    ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
-      const sideBySideTokenStyleById = state.status === "loaded" && sideBySideTokenStyleState?.document === state.document
-        ? sideBySideTokenStyleState.tokenStyleById
-        : tokenStyleById;
-
-      return (
-        <DiffSideBySideRow
-          adaptiveRender={adaptiveRender}
-          borderColor={displayTheme.colors.border}
-          collapsedFileIndexes={collapsedFileIndexes}
-          fileByIndex={fileByIndex}
-          fileByRowStart={fileByRowStart}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          index={index}
-          mutedColor={mutedColor}
-          onToggleFileCollapsed={toggleFileCollapsed}
-          row={row}
-          rowHeight={rowHeight}
-          tokenStyleById={sideBySideTokenStyleById}
-        />
-      );
-    },
-    [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, sideBySideTokenStyleState, state, toggleFileCollapsed, tokenStyleById],
+    ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => (
+      <DiffSideBySideRow
+        adaptiveRender={adaptiveRender}
+        index={index}
+        renderContext$={renderContext$}
+        row={row}
+      />
+    ),
+    [renderContext$],
   );
 
   const handleUrlInputChange = useCallback((text: string) => {
