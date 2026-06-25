@@ -1880,11 +1880,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
-  const [urlInputError, setUrlInputError] = useState<string | null>(null);
   const [fileFilter, setFileFilter] = useState("");
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const state$ = useObservable<DiffViewerState>(emptyState);
   const urlInput$ = useObservable("");
+  const urlInputError$ = useObservable<string | null>(null);
   const openError$ = useObservable<DiffRecoverableError | null>(null);
   const documentError$ = useObservable<DiffRecoverableError | null>(null);
   const loadingSource$ = useObservable<DiffOpenSource | null>(null);
@@ -1900,6 +1900,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const activeFileIndex$ = useObservable<number | null>(null);
   const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
   const urlInput = useValue(urlInput$);
+  const urlInputError = useValue(urlInputError$);
   const openError = useValue(openError$);
   const documentError = useValue(documentError$);
   const loadingSource = useValue(loadingSource$);
@@ -1914,6 +1915,9 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const setUrlInputValue = useCallback((nextValue: string) => {
     urlInput$.set(nextValue);
   }, [urlInput$]);
+  const setUrlInputErrorValue = useCallback((nextError: string | null) => {
+    urlInputError$.set(nextError);
+  }, [urlInputError$]);
   const setOpenErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
     openError$.set(nextError);
   }, [openError$]);
@@ -2029,6 +2033,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     viewMode,
   });
   collapsedFileIndexListRef.current = collapsedFileIndexList;
+  const getVisibleListIndex$ = useSyncedObservableValue(getVisibleListIndex);
+  const sideBySideListIndexByRowIndex$ = useSyncedObservableValue(sideBySideListIndexByRowIndex);
+  const sideBySideRowCount$ = useSyncedObservableValue(sideBySideRowCount);
+  const viewMode$ = useSyncedObservableValue(viewMode);
   const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
     const styles = document.getStyles();
     setSideBySideTokenStyleState((current) => (
@@ -2150,21 +2158,22 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, [diffPaneHeight, flushSideBySideTokenInvalidation, sideBySideRowCount, state.status === "loaded" ? state.document : null, viewMode]);
 
   const scheduleVisibleHighlight = useCallback((start: number, count: number, reason: string) => {
-    if (state.status === "loaded") {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
       const safeStart = Math.max(0, Math.floor(start));
       const safeCount = Math.min(
         Math.max(0, Math.ceil(count)),
-        Math.max(0, state.document.rowCount - safeStart),
+        Math.max(0, currentState.document.rowCount - safeStart),
       );
       const highlightedRange = highlightedVisibleRangeRef.current;
-      const isAlreadyHighlighted = highlightedRange?.document === state.document
+      const isAlreadyHighlighted = highlightedRange?.document === currentState.document
         && highlightedRange.start === safeStart
         && highlightedRange.count === safeCount;
 
       if (safeCount > 0 && !isAlreadyHighlighted) {
         highlightedVisibleRangeRef.current = {
           count: safeCount,
-          document: state.document,
+          document: currentState.document,
           start: safeStart,
         };
         clearHighlightTimeouts();
@@ -2178,7 +2187,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         const scheduleHighlightChunk = (chunkStart: number) => {
           const timeoutHandle = setTimeout(() => {
             highlightTimeoutHandlesRef.current.delete(timeoutHandle);
-            if (highlightedVisibleRangeRef.current?.document === state.document) {
+            if (highlightedVisibleRangeRef.current?.document === currentState.document) {
               const chunkOffset = chunkStart - safeStart;
               const chunkCount = Math.min(diffInitialHighlightChunkRowCount, safeCount - chunkOffset);
               if (chunkCount > 0) {
@@ -2208,20 +2217,21 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         highlightTimeoutHandlesRef.current.add(timeoutHandle);
       }
     }
-  }, [clearHighlightTimeouts, diffRows.requestRange, state]);
+  }, [clearHighlightTimeouts, diffRows.requestRange]);
 
   const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: string) => {
     scheduleVisibleHighlight(start, count, reason);
   }, [scheduleVisibleHighlight]);
 
   const handleTopItemChanged = useCallback((rowIndex: number) => {
-    if (state.status === "loaded") {
-      const nextFileIndex = findFileIndexForRow(state.files, rowIndex);
-      if (activeFileIndex$.get() !== nextFileIndex) {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
+      const nextFileIndex = findFileIndexForRow(currentState.files, rowIndex);
+      if (activeFileIndex$.peek() !== nextFileIndex) {
         activeFileIndex$.set(nextFileIndex);
       }
     }
-  }, [activeFileIndex$, state]);
+  }, []);
 
   useEffect(() => {
     logDiffOpenTiming("viewer.renderCommitted", {
@@ -2400,7 +2410,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       setOpenErrorValue(null);
       setDocumentErrorValue(null);
       setUrlInputValue("");
-      setUrlInputError(null);
+      setUrlInputErrorValue(null);
       setFileFilter("");
       requestAnimationFrame(() => {
         urlInputRef.current?.focus();
@@ -2449,10 +2459,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       const nextSource = normalizeDiffOpenSource(urlInput$.peek());
       if (nextSource?.kind === "github") {
         setOpenErrorValue(null);
-        setUrlInputError(null);
+        setUrlInputErrorValue(null);
         await loadSource(nextSource, getDiffSyntaxThemeSetting());
       } else {
-        setUrlInputError("Enter a GitHub PR or commit URL.");
+        setUrlInputErrorValue("Enter a GitHub PR or commit URL.");
       }
     }
   }, []);
@@ -2863,9 +2873,9 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const listIndex = viewMode === "unified"
-      ? getVisibleListIndex(rowStart)
-      : sideBySideListIndexByRowIndex.get(rowStart);
+    const listIndex = viewMode$.peek() === "unified"
+      ? getVisibleListIndex$.peek()(rowStart)
+      : sideBySideListIndexByRowIndex$.peek().get(rowStart);
     if (listIndex !== undefined) {
       listRef.current?.scrollToIndex({
         animated: true,
@@ -2875,7 +2885,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         console.error(error instanceof Error ? error.message : String(error));
       });
     }
-  }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
+  }, []);
 
   const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
     const statusPresentation = getFileStatusPresentation(file);
@@ -2956,26 +2966,28 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   );
 
   const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
-    if (state.status === "loaded" && options?.reason !== "scroll") {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded" && options?.reason !== "scroll") {
       const start = Math.max(0, Math.floor(lineStart));
       const count = Math.max(0, Math.ceil(lineCount));
       if (count > 0) {
-        state.document.getSideBySideRows(start, count, collapsedFileIndexList);
-        refreshSideBySideTokenStyles(state.document);
-        const end = Math.min(sideBySideRowCount, start + count);
+        currentState.document.getSideBySideRows(start, count, collapsedFileIndexListRef.current);
+        refreshSideBySideTokenStyles(currentState.document);
+        const end = Math.min(sideBySideRowCount$.peek(), start + count);
         for (let index = start; index < end; index += 1) {
           bumpSideBySideRowVersion(index);
         }
       }
     }
     // Scroll-driven requests stay side-effect free so scrolling never updates React state.
-  }, [bumpSideBySideRowVersion, collapsedFileIndexList, refreshSideBySideTokenStyles, sideBySideRowCount, state]);
+  }, [bumpSideBySideRowVersion, refreshSideBySideTokenStyles]);
 
-  const getSideBySideRow = useCallback((index: number) => (
-    state.status === "loaded"
-      ? state.document.getPlainSideBySideRow(index, collapsedFileIndexList)
-      : undefined
-  ), [collapsedFileIndexList, state]);
+  const getSideBySideRow = useCallback((index: number) => {
+    const currentState = state$.peek();
+    return currentState.status === "loaded"
+      ? currentState.document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current)
+      : undefined;
+  }, []);
 
   useEffect(() => {
     if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
@@ -2987,20 +2999,22 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, [diffPaneHeight, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
 
   const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
-    if (state.status === "loaded") {
-      const row = state.document.getPlainSideBySideRow(lineIndex, collapsedFileIndexList);
-      const nextFileIndex = findFileIndexForRow(state.files, row.sourceStart);
-      if (activeFileIndex$.get() !== nextFileIndex) {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
+      const row = currentState.document.getPlainSideBySideRow(lineIndex, collapsedFileIndexListRef.current);
+      const nextFileIndex = findFileIndexForRow(currentState.files, row.sourceStart);
+      if (activeFileIndex$.peek() !== nextFileIndex) {
         activeFileIndex$.set(nextFileIndex);
       }
     }
-  }, [activeFileIndex$, collapsedFileIndexList, state]);
+  }, []);
 
   const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
-    if (state.status === "loaded") {
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
       sideBySideVisibleRangeRef.current = {
         count,
-        document: state.document,
+        document: currentState.document,
         start,
       };
 
@@ -3012,15 +3026,15 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         sideBySideScrollIdleTimeoutRef.current = setTimeout(() => {
           sideBySideScrollingRef.current = false;
           sideBySideScrollIdleTimeoutRef.current = null;
-          if (pendingSideBySideTokenRangesRef.current?.document === state.document) {
-            flushSideBySideTokenInvalidation(state.document, pendingSideBySideTokenRangesRef.current.ranges);
+          if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
+            flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
           }
         }, diffScrollIdleMs);
-      } else if (pendingSideBySideTokenRangesRef.current?.document === state.document) {
-        flushSideBySideTokenInvalidation(state.document, pendingSideBySideTokenRangesRef.current.ranges);
+      } else if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
+        flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
       }
     }
-  }, [flushSideBySideTokenInvalidation, state]);
+  }, [flushSideBySideTokenInvalidation]);
 
   const getSideBySideItemType = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
     const kind = row?.kind ?? (sideBySideFileHeaderIndexes.has(index) ? "file-header" : "line");
@@ -3052,13 +3066,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const handleUrlInputChange = useCallback((text: string) => {
     setUrlInputValue(text);
-    if (urlInputError) {
-      setUrlInputError(null);
+    if (urlInputError$.peek()) {
+      setUrlInputErrorValue(null);
     }
-    if (openError) {
+    if (openError$.peek()) {
       setOpenErrorValue(null);
     }
-  }, [openError, urlInputError]);
+  }, []);
 
   const dismissOpenError = useCallback(() => {
     setOpenErrorValue(null);
