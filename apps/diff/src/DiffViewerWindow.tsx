@@ -2185,7 +2185,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
               },
             ]}
           >
-            <SFSymbol color={foregroundColor} name="folder" size={28} />
+            <SFSymbol color={foregroundColor} name="folder" size={24} />
             <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
               Open Folder...
             </Text>
@@ -2204,7 +2204,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
                 },
               ]}
             >
-              <SFSymbol color={mutedColor} name="link" size={22} />
+              <SFSymbol color={mutedColor} name="link" size={19} />
               <TextInput
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -2385,18 +2385,18 @@ const styles = StyleSheet.create({
   empty: {
     alignItems: "center",
     flex: 1,
-    gap: 14,
+    gap: 12,
     justifyContent: "center",
-    paddingHorizontal: 44,
-    paddingVertical: 40,
+    paddingHorizontal: 40,
+    paddingVertical: 36,
   },
   emptyButton: {
     alignItems: "center",
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   emptyButtonContent: {
     alignItems: "center",
@@ -2405,16 +2405,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   emptyDivider: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 22,
-    maxWidth: 700,
-    paddingVertical: 8,
+    gap: 18,
+    maxWidth: 620,
+    paddingVertical: 6,
     width: "100%",
   },
   emptyDividerLine: {
@@ -2422,46 +2422,46 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
   },
   emptyDividerText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
-    lineHeight: 20,
+    lineHeight: 18,
   },
   emptyFolderButton: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     justifyContent: "center",
-    marginTop: 16,
-    minHeight: 52,
-    minWidth: 240,
-    paddingHorizontal: 28,
+    marginTop: 12,
+    minHeight: 46,
+    minWidth: 220,
+    paddingHorizontal: 24,
   },
   emptyText: {
-    fontSize: 17,
-    lineHeight: 26,
-    maxWidth: 560,
+    fontSize: 15,
+    lineHeight: 23,
+    maxWidth: 520,
     textAlign: "center",
   },
   emptyTitle: {
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: "700",
-    lineHeight: 50,
+    lineHeight: 44,
   },
   emptyUrlForm: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    maxWidth: 700,
+    gap: 8,
+    maxWidth: 620,
     width: "100%",
   },
   emptyUrlInput: {
     flex: 1,
-    fontSize: 17,
-    height: 50,
-    lineHeight: 24,
+    fontSize: 15,
+    height: 44,
+    lineHeight: 22,
     minWidth: 0,
     paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   emptyUrlInputWrap: {
     alignItems: "center",
@@ -2469,14 +2469,14 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
-    gap: 10,
-    height: 52,
+    gap: 8,
+    height: 46,
     minWidth: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   emptyUrlButton: {
-    minHeight: 52,
-    minWidth: 136,
+    minHeight: 46,
+    minWidth: 122,
   },
   emptyValidationText: {
     fontSize: 12,
