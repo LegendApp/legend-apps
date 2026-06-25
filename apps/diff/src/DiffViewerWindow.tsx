@@ -3084,103 +3084,96 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     setOpenErrorValue(null);
   }, []);
 
-  const body = useMemo(() => {
-    const diffContentHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
-    const documentErrorHeight = documentError
-      ? documentError.kind === "permission"
-        ? diffDocumentPermissionErrorHeight
-        : diffDocumentErrorHeight
-      : 0;
-    const diffListHeight = Math.max(0, diffContentHeight - documentErrorHeight);
-    const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
-    const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
-    const documentErrorBody = (
-      <DiffDocumentErrorBody
+  const diffContentHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
+  const documentErrorHeight = documentError
+    ? documentError.kind === "permission"
+      ? diffDocumentPermissionErrorHeight
+      : diffDocumentErrorHeight
+    : 0;
+  const diffListHeight = Math.max(0, diffContentHeight - documentErrorHeight);
+  const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
+  const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
+  const documentErrorBody = (
+    <DiffDocumentErrorBody
+      borderColor={displayTheme.colors.border}
+      dangerColor={displayTheme.colors.danger}
+      documentError={documentError}
+      foregroundColor={foregroundColor}
+      mutedColor={mutedColor}
+      onDismiss={dismissDocumentError}
+      onOpenSystemSettings={openPermissionSettings}
+      onRetry={reloadCurrentSource}
+    />
+  );
+  let body: ReactNode;
+
+  if (state.status === "fatal") {
+    body = (
+      <DiffFatalBody
         borderColor={displayTheme.colors.border}
         dangerColor={displayTheme.colors.danger}
-        documentError={documentError}
+        error={state.error}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
-        onDismiss={dismissDocumentError}
-        onOpenSystemSettings={openPermissionSettings}
-        onRetry={reloadCurrentSource}
+        onChooseFolder={openFolder}
       />
     );
-
-    if (state.status === "fatal") {
-      return (
-        <DiffFatalBody
-          borderColor={displayTheme.colors.border}
-          dangerColor={displayTheme.colors.danger}
-          error={state.error}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          onChooseFolder={openFolder}
-        />
-      );
-    }
-
-    if (state.status === "loaded") {
-      if (activeItemIndexes.length === 0) {
-        return (
-          <DiffNoChangesBody
-            documentErrorBody={documentErrorBody}
-            foregroundColor={foregroundColor}
-            mutedColor={mutedColor}
-            visibleSourceLabel={visibleSourceLabel}
-          />
-        );
-      }
-
-      return (
-        <DiffLoadedBody
-          activeItemIndexes={activeItemIndexes}
-          diffContentHeight={diffContentHeight}
-          diffListHeight={diffListHeight}
-          diffPaneHeight={diffPaneHeight}
-          diffRows={diffRows}
-          documentErrorBody={documentErrorBody}
-          fileFilter={fileFilter}
-          fileFilterInputRef={fileFilterInputRef}
-          filteredSidebarFiles={filteredSidebarFiles}
-          getItemSize={getItemSize}
-          getItemType={getItemType}
-          getSideBySideItemSize={getSideBySideItemSize}
-          getSideBySideItemType={getSideBySideItemType}
-          getSideBySideRow={getSideBySideRow}
-          handleDiffPaneLayout={handleDiffPaneLayout}
-          handleSidebarListLayout={handleSidebarListLayout}
-          handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
-          handleSideBySideVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
-          handleSplitViewResize={handleSplitViewResize}
-          handleTopItemChanged={handleTopItemChanged}
-          handleVisibleRowsRequested={handleVisibleRowsRequested}
-          isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
-          listExtraData={listExtraData}
-          listRef={listRef}
-          loadingSource={loadingSource}
-          mutedColor={mutedColor}
-          renderRow={renderRow}
-          renderSidebarFile={renderSidebarFile}
-          renderSideBySideRow={renderSideBySideRow}
-          requestSideBySideRange={requestSideBySideRange}
-          rowHeight={rowHeight}
-          setFileFilter={setFileFilter}
-          sidebarCollapsed={sidebarCollapsed}
-          sidebarListHeight={sidebarListHeight}
-          sideBySideItemIndexes={sideBySideItemIndexes}
-          sideBySideRowVersions$={sideBySideRowVersions$}
-          splitPaneMetrics={splitPaneMetrics}
-          state={state}
-          syntaxAppearance={syntaxTheme.appearance}
-          viewMode={viewMode}
-          visibleItemIndexes={visibleItemIndexes}
-        />
-      );
-    }
-
-    return (
+  } else if (state.status === "loaded") {
+    body = activeItemIndexes.length === 0 ? (
+      <DiffNoChangesBody
+        documentErrorBody={documentErrorBody}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        visibleSourceLabel={visibleSourceLabel}
+      />
+    ) : (
+      <DiffLoadedBody
+        activeItemIndexes={activeItemIndexes}
+        diffContentHeight={diffContentHeight}
+        diffListHeight={diffListHeight}
+        diffPaneHeight={diffPaneHeight}
+        diffRows={diffRows}
+        documentErrorBody={documentErrorBody}
+        fileFilter={fileFilter}
+        fileFilterInputRef={fileFilterInputRef}
+        filteredSidebarFiles={filteredSidebarFiles}
+        getItemSize={getItemSize}
+        getItemType={getItemType}
+        getSideBySideItemSize={getSideBySideItemSize}
+        getSideBySideItemType={getSideBySideItemType}
+        getSideBySideRow={getSideBySideRow}
+        handleDiffPaneLayout={handleDiffPaneLayout}
+        handleSidebarListLayout={handleSidebarListLayout}
+        handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
+        handleSideBySideVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
+        handleSplitViewResize={handleSplitViewResize}
+        handleTopItemChanged={handleTopItemChanged}
+        handleVisibleRowsRequested={handleVisibleRowsRequested}
+        isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
+        listExtraData={listExtraData}
+        listRef={listRef}
+        loadingSource={loadingSource}
+        mutedColor={mutedColor}
+        renderRow={renderRow}
+        renderSidebarFile={renderSidebarFile}
+        renderSideBySideRow={renderSideBySideRow}
+        requestSideBySideRange={requestSideBySideRange}
+        rowHeight={rowHeight}
+        setFileFilter={setFileFilter}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarListHeight={sidebarListHeight}
+        sideBySideItemIndexes={sideBySideItemIndexes}
+        sideBySideRowVersions$={sideBySideRowVersions$}
+        splitPaneMetrics={splitPaneMetrics}
+        state={state}
+        syntaxAppearance={syntaxTheme.appearance}
+        viewMode={viewMode}
+        visibleItemIndexes={visibleItemIndexes}
+      />
+    );
+  } else {
+    body = (
       <DiffOpenBody
         borderColor={displayTheme.colors.border}
         dangerColor={displayTheme.colors.danger}
@@ -3201,7 +3194,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         urlInputRef={urlInputRef}
       />
     );
-  }, [diffPaneHeight, diffRows, dismissDocumentError, dismissOpenError, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, documentError, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleUrlInputChange, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openError, openFolder, openPermissionSettings, openUrl, reloadCurrentSource, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, retryOpenError, rowHeight, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleItemIndexes, visibleSourceLabel]);
+  }
 
   return (
     <DragDropView
