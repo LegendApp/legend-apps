@@ -133,6 +133,13 @@ type RenderItemDebugBatch = {
   present: number;
 };
 
+type CallbackDebugBatch = {
+  count: number;
+  first: number | null;
+  last: number | null;
+  totalMs: number;
+};
+
 function recordRenderItemDebug(debugName: string | undefined, batchRef: { current: RenderItemDebugBatch | null }, index: number, hasRow: boolean) {
   if (__DEV__ && debugName) {
     batchRef.current ??= {
@@ -158,6 +165,37 @@ function recordRenderItemDebug(debugName: string | undefined, batchRef: { curren
         batchRef.current = null;
         if (completedBatch) {
           debugLog(debugName, "list.renderItemFrame", completedBatch as unknown as Record<string, unknown>);
+        }
+      });
+    }
+  }
+}
+
+function recordCallbackDebug(debugName: string | undefined, event: string, batchRef: { current: CallbackDebugBatch | null }, index: number, startedAt: number) {
+  if (__DEV__ && debugName) {
+    batchRef.current ??= {
+      count: 0,
+      first: null,
+      last: null,
+      totalMs: 0,
+    };
+    const batch = batchRef.current;
+    batch.count += 1;
+    batch.first = batch.first === null ? index : Math.min(batch.first, index);
+    batch.last = batch.last === null ? index : Math.max(batch.last, index);
+    batch.totalMs += debugNowMs() - startedAt;
+
+    if (batch.count === 1) {
+      requestAnimationFrame(() => {
+        const completedBatch = batchRef.current;
+        batchRef.current = null;
+        if (completedBatch) {
+          debugLog(debugName, event, {
+            count: completedBatch.count,
+            first: completedBatch.first,
+            last: completedBatch.last,
+            totalMs: Number(completedBatch.totalMs.toFixed(1)),
+          });
         }
       });
     }
@@ -422,7 +460,19 @@ export function VirtualizedFixedDocumentList<TRow>({
 }: VirtualizedFixedDocumentListProps<TRow>) {
   const hasRequestedInitialRangeRef = useRef(false);
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountStartedAtRef = useRef(debugNowMs());
+  const hasLoggedFirstCommitRef = useRef(false);
+  const hasLoggedFirstLegendListRef = useRef(false);
+  const hasLoggedFirstLayoutRef = useRef(false);
+  const hasLoggedFirstRenderItemRef = useRef(false);
+  const hasLoggedFirstGetItemSizeRef = useRef(false);
+  const hasLoggedFirstGetItemTypeRef = useRef(false);
+  const hasLoggedFirstKeyExtractorRef = useRef(false);
   const renderItemBatchRef = useRef<RenderItemDebugBatch | null>(null);
+  const getItemSizeBatchRef = useRef<CallbackDebugBatch | null>(null);
+  const getItemTypeBatchRef = useRef<CallbackDebugBatch | null>(null);
+  const keyExtractorBatchRef = useRef<CallbackDebugBatch | null>(null);
+  const renderItemCallbackBatchRef = useRef<CallbackDebugBatch | null>(null);
   const renderCountRef = useRef(0);
   const internalListRef = useRef<LegendListRef | null>(null);
   const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
@@ -437,9 +487,28 @@ export function VirtualizedFixedDocumentList<TRow>({
   renderCountRef.current += 1;
   debugLog(debugName, "list.render", {
     cacheSize: rowCache?.size ?? 0,
+    elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
     itemCount: itemIndexes.length,
     renderCount: renderCountRef.current,
     rowsVersion,
+  });
+
+  useEffect(() => {
+    if (!hasLoggedFirstCommitRef.current) {
+      hasLoggedFirstCommitRef.current = true;
+      debugLog(debugName, "list.commit.first", {
+        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        itemCount: itemIndexes.length,
+        rowsVersion,
+      });
+    } else {
+      debugLog(debugName, "list.commit", {
+        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        itemCount: itemIndexes.length,
+        renderCount: renderCountRef.current,
+        rowsVersion,
+      });
+    }
   });
 
   useEffect(() => () => {
@@ -450,6 +519,19 @@ export function VirtualizedFixedDocumentList<TRow>({
   }, []);
 
   const setListRef = useCallback((list: LegendListRef | null) => {
+    if (list && !hasLoggedFirstLegendListRef.current) {
+      hasLoggedFirstLegendListRef.current = true;
+      debugLog(debugName, "list.legendRef.first", {
+        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        itemCount: itemIndexes.length,
+      });
+    } else {
+      debugLog(debugName, "list.legendRef", {
+        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        hasRef: list !== null,
+        itemCount: itemIndexes.length,
+      });
+    }
     internalListRef.current = list;
     if (typeof listRef === "function") {
       listRef(list);
@@ -539,7 +621,17 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
+    const eventName = hasLoggedFirstLayoutRef.current ? "list.layout" : "list.layout.first";
+    hasLoggedFirstLayoutRef.current = true;
     debugLog(debugName, "list.layout", {
+      elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+      height,
+      initialAlreadyRequested: hasRequestedInitialRangeRef.current,
+      itemCount: itemIndexes.length,
+      rowsVersion,
+    });
+    debugLog(debugName, eventName, {
+      elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
       itemCount: itemIndexes.length,
@@ -584,7 +676,16 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const renderItem = useCallback(
     ({ index: listIndex, item }: LegendListRenderItemProps<number | undefined>) => {
+      const renderItemStartedAt = debugNowMs();
       const index = item ?? listIndex;
+      if (!hasLoggedFirstRenderItemRef.current) {
+        hasLoggedFirstRenderItemRef.current = true;
+        debugLog(debugName, "list.renderItemCallback.first", {
+          elapsedSinceMountMs: Number((renderItemStartedAt - mountStartedAtRef.current).toFixed(1)),
+          index,
+          listIndex,
+        });
+      }
       const rowProps = {
         adaptiveRenderEnabled: adaptiveRender !== undefined,
         debugName,
@@ -596,7 +697,7 @@ export function VirtualizedFixedDocumentList<TRow>({
         rowCache,
       };
 
-      return rowVersionsProp$ ? (
+      const renderedItem = rowVersionsProp$ ? (
         <VirtualizedFixedDocumentListVersionedRow
           {...rowProps}
           rowVersions$={rowVersionsProp$}
@@ -604,19 +705,58 @@ export function VirtualizedFixedDocumentList<TRow>({
       ) : (
         <VirtualizedFixedDocumentListRowContent {...rowProps} />
       );
+      recordCallbackDebug(debugName, "list.renderItemCallbackFrame", renderItemCallbackBatchRef, index, renderItemStartedAt);
+      return renderedItem;
     },
     [adaptiveRender, debugName, getRow, renderRow, rowCache, rowVersionsProp$],
   );
 
   const getFixedItemSize = useCallback((item: number | undefined, listIndex: number) => {
+    const startedAt = debugNowMs();
     const index = item ?? listIndex;
-    return getItemSize?.(index, rowCache?.get(index)) ?? rowHeight;
-  }, [getItemSize, rowCache, rowHeight]);
+    if (!hasLoggedFirstGetItemSizeRef.current) {
+      hasLoggedFirstGetItemSizeRef.current = true;
+      debugLog(debugName, "list.getFixedItemSize.first", {
+        elapsedSinceMountMs: Number((startedAt - mountStartedAtRef.current).toFixed(1)),
+        index,
+        listIndex,
+      });
+    }
+    const size = getItemSize?.(index, rowCache?.get(index)) ?? rowHeight;
+    recordCallbackDebug(debugName, "list.getFixedItemSizeFrame", getItemSizeBatchRef, index, startedAt);
+    return size;
+  }, [debugName, getItemSize, rowCache, rowHeight]);
 
   const getLegendItemType = useCallback((item: number | undefined, listIndex: number) => {
+    const startedAt = debugNowMs();
     const index = item ?? listIndex;
-    return getItemType?.(index, rowCache?.get(index));
-  }, [getItemType, rowCache]);
+    if (!hasLoggedFirstGetItemTypeRef.current) {
+      hasLoggedFirstGetItemTypeRef.current = true;
+      debugLog(debugName, "list.getItemType.first", {
+        elapsedSinceMountMs: Number((startedAt - mountStartedAtRef.current).toFixed(1)),
+        index,
+        listIndex,
+      });
+    }
+    const itemType = getItemType?.(index, rowCache?.get(index));
+    recordCallbackDebug(debugName, "list.getItemTypeFrame", getItemTypeBatchRef, index, startedAt);
+    return itemType;
+  }, [debugName, getItemType, rowCache]);
+
+  const keyExtractor = useCallback((item: number | undefined, index: number) => {
+    const startedAt = debugNowMs();
+    const key = String(item ?? index);
+    if (!hasLoggedFirstKeyExtractorRef.current) {
+      hasLoggedFirstKeyExtractorRef.current = true;
+      debugLog(debugName, "list.keyExtractor.first", {
+        elapsedSinceMountMs: Number((startedAt - mountStartedAtRef.current).toFixed(1)),
+        index: item ?? index,
+        listIndex: index,
+      });
+    }
+    recordCallbackDebug(debugName, "list.keyExtractorFrame", keyExtractorBatchRef, item ?? index, startedAt);
+    return key;
+  }, [debugName]);
 
   return (
     <LegendList
@@ -625,7 +765,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       experimental_adaptiveRender={adaptiveRender}
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
-      keyExtractor={(item, index) => String(item ?? index)}
+      keyExtractor={keyExtractor}
       ref={setListRef}
       onLayout={handleLayout}
       onScroll={handleScroll}
