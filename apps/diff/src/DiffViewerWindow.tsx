@@ -200,80 +200,6 @@ type DiffSideBySideLineProps = {
   tokenStyleById: SyntaxStyleMap;
 };
 
-function areDiffRenderRowsEqual(previousRow: DiffRenderRow, nextRow: DiffRenderRow) {
-  let areEqual = previousRow === nextRow;
-  if (!areEqual) {
-    areEqual = previousRow.index === nextRow.index
-      && previousRow.kind === nextRow.kind
-      && previousRow.fileIndex === nextRow.fileIndex
-      && previousRow.hunkIndex === nextRow.hunkIndex
-      && previousRow.oldLineNumber === nextRow.oldLineNumber
-      && previousRow.newLineNumber === nextRow.newLineNumber
-      && previousRow.changeType === nextRow.changeType
-      && previousRow.text === nextRow.text
-      && previousRow.tokens.length === nextRow.tokens.length;
-
-    if (areEqual) {
-      for (let tokenIndex = 0; tokenIndex < previousRow.tokens.length; tokenIndex += 1) {
-        const previousToken = previousRow.tokens[tokenIndex];
-        const nextToken = nextRow.tokens[tokenIndex];
-        if (
-          previousToken.startColumn !== nextToken.startColumn
-          || previousToken.length !== nextToken.length
-          || previousToken.styleId !== nextToken.styleId
-        ) {
-          areEqual = false;
-          break;
-        }
-      }
-    }
-  }
-  return areEqual;
-}
-
-function areOptionalDiffRenderRowsEqual(previousRow: DiffRenderRow | undefined, nextRow: DiffRenderRow | undefined) {
-  return previousRow === nextRow
-    || Boolean(previousRow && nextRow && areDiffRenderRowsEqual(previousRow, nextRow));
-}
-
-function areDiffUnifiedRowPropsEqual(previousProps: DiffUnifiedRowProps, nextProps: DiffUnifiedRowProps) {
-  return previousProps.adaptiveRender === nextProps.adaptiveRender
-    && previousProps.collapsedFileIndexes$ === nextProps.collapsedFileIndexes$
-    && previousProps.index === nextProps.index
-    && previousProps.renderContext$ === nextProps.renderContext$
-    && areOptionalDiffRenderRowsEqual(previousProps.row, nextProps.row);
-}
-
-function areDiffSideBySideRenderRowsEqual(previousRow: DiffSideBySideRenderRow, nextRow: DiffSideBySideRenderRow) {
-  return previousRow === nextRow
-    || (
-      previousRow.index === nextRow.index
-      && previousRow.kind === nextRow.kind
-      && previousRow.fileIndex === nextRow.fileIndex
-      && previousRow.hunkIndex === nextRow.hunkIndex
-      && previousRow.sourceStart === nextRow.sourceStart
-      && previousRow.sourceEnd === nextRow.sourceEnd
-      && previousRow.oldRowVisible === nextRow.oldRowVisible
-      && previousRow.newRowVisible === nextRow.newRowVisible
-      && previousRow.newRowEqualsOldRow === nextRow.newRowEqualsOldRow
-      && areDiffRenderRowsEqual(previousRow.oldRow, nextRow.oldRow)
-      && areDiffRenderRowsEqual(previousRow.newRow, nextRow.newRow)
-    );
-}
-
-function areOptionalDiffSideBySideRowsEqual(previousRow: DiffSideBySideRenderRow | undefined, nextRow: DiffSideBySideRenderRow | undefined) {
-  return previousRow === nextRow
-    || Boolean(previousRow && nextRow && areDiffSideBySideRenderRowsEqual(previousRow, nextRow));
-}
-
-function areDiffSideBySideRowPropsEqual(previousProps: DiffSideBySideRowProps, nextProps: DiffSideBySideRowProps) {
-  return previousProps.adaptiveRender === nextProps.adaptiveRender
-    && previousProps.collapsedFileIndexes$ === nextProps.collapsedFileIndexes$
-    && previousProps.index === nextProps.index
-    && previousProps.renderContext$ === nextProps.renderContext$
-    && areOptionalDiffSideBySideRowsEqual(previousProps.row, nextProps.row);
-}
-
 function areDiffRenderContextsEqual(previousContext: DiffRenderContext, nextContext: DiffRenderContext) {
   return previousContext.borderColor === nextContext.borderColor
     && previousContext.fileByIndex === nextContext.fileByIndex
@@ -301,7 +227,7 @@ function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps,
     && previousProps.tokenStyleById === nextProps.tokenStyleById;
 
   return sharedPropsAreEqual
-    && (!nextProps.rowVisible || areDiffRenderRowsEqual(previousProps.row, nextProps.row));
+    && (!nextProps.rowVisible || previousProps.row === nextProps.row);
 }
 
 const DiffSideBySideLine = memo(function DiffSideBySideLine({
@@ -503,7 +429,7 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
       />
     </View>
   );
-}, areDiffUnifiedRowPropsEqual);
+});
 
 const DiffSideBySideRow = memo(function DiffSideBySideRow({
   adaptiveRender,
@@ -583,7 +509,7 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
       </View>
     </View>
   );
-}, areDiffSideBySideRowPropsEqual);
+});
 
 type DiffViewerState =
   | {
