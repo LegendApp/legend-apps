@@ -128,6 +128,21 @@ type DiffVisibleSourceModel = {
   visibleSourceLabel: string;
 };
 
+type DiffWindowOptionsModel = {
+  appearance: "dark" | "light";
+  backgroundColor: string;
+  diffPaneHeight: number;
+  isContentLayoutReady: boolean;
+  loadedFileCount: number;
+  showSidebarControl: boolean;
+  showViewModeToolbar: boolean;
+  sidebarCollapsed: boolean;
+  source: DiffOpenSource | null;
+  status: DiffViewerState["status"];
+  toolbarSource: DiffOpenSource | null;
+  viewMode: ReturnType<typeof getDiffViewModeSetting>;
+};
+
 type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
   borderColor: string;
@@ -560,7 +575,7 @@ type DiffLoadedBodyProps = {
   splitPaneMetrics: DiffSplitPaneMetrics;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
-  viewMode: DiffSettingsFile["viewMode"];
+  viewMode: ReturnType<typeof getDiffViewModeSetting>;
   visibleItemIndexes: Array<number | undefined>;
 };
 
@@ -873,6 +888,42 @@ function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource: DiffOp
     visibleFolderPath,
     visibleSource,
     visibleSourceLabel,
+  };
+}
+
+function getDiffWindowOptionsModel({
+  diffPaneHeight,
+  loadingSource,
+  sidebarCollapsed,
+  state,
+  syntaxTheme,
+  viewMode,
+}: {
+  diffPaneHeight: number;
+  loadingSource: DiffOpenSource | null;
+  sidebarCollapsed: boolean;
+  state: DiffViewerState;
+  syntaxTheme: ReturnType<typeof getDiffSyntaxTheme>;
+  viewMode: ReturnType<typeof getDiffViewModeSetting>;
+}): DiffWindowOptionsModel {
+  const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
+  const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? state.source : null);
+  const showViewModeToolbar = toolbarSource !== null;
+  const shouldWaitForContentLayout = state.status === "loaded" && loadedFileCount > 0;
+
+  return {
+    appearance: syntaxTheme.appearance,
+    backgroundColor: syntaxTheme.background,
+    diffPaneHeight,
+    isContentLayoutReady: !shouldWaitForContentLayout || diffPaneHeight > diffTitlebarTopInset,
+    loadedFileCount,
+    showSidebarControl: showViewModeToolbar,
+    showViewModeToolbar,
+    sidebarCollapsed,
+    source: toolbarSource ?? state.source,
+    status: state.status,
+    toolbarSource,
+    viewMode,
   };
 }
 
@@ -2755,89 +2806,76 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, []);
 
   useObserveEffect(() => {
-    const currentState = state$.get();
-    const currentLoadingSource = loadingSource$.get();
-    const currentSyntaxTheme = getDiffSyntaxTheme();
-    const currentViewMode = getDiffViewModeSetting();
-    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
-    const currentShowViewModeToolbar = currentToolbarSource !== null;
-    const currentShowSidebarControl = currentShowViewModeToolbar;
-    if (currentToolbarSource) {
-      setDiffViewerWindowOptions({
-        appearance: currentSyntaxTheme.appearance,
-        backgroundColor: currentSyntaxTheme.background,
-        includeToolbarItems: true,
-        source: currentToolbarSource,
-        showSidebarControl: currentShowSidebarControl,
-        showViewModeToolbar: currentShowViewModeToolbar,
-        sidebarCollapsed: sidebarCollapsed$.get(),
-        viewMode: currentViewMode,
-      }).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-    }
-  });
-
-  useObserveEffect(() => {
     let frameHandle: number | null = null;
     let secondFrameHandle: number | null = null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     const scheduleStartedAt = nowMs();
-    const currentState = state$.get();
-    const currentLoadingSource = loadingSource$.get();
-    const currentSyntaxTheme = getDiffSyntaxTheme();
-    const currentViewMode = getDiffViewModeSetting();
-    const currentDiffPaneHeight = diffPaneHeight$.get();
-    const currentSidebarCollapsed = sidebarCollapsed$.get();
-    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
-    const currentShowViewModeToolbar = currentToolbarSource !== null;
-    const currentShowSidebarControl = currentShowViewModeToolbar;
-    const shouldWaitForContentLayout = currentState.status === "loaded" && currentLoadedFileCount > 0;
-    const isContentLayoutReady = !shouldWaitForContentLayout || currentDiffPaneHeight > diffTitlebarTopInset;
-    const includeToolbarItems = currentToolbarSource === null;
-
-    logDiffOpenTiming("viewer.windowOptions.schedule", {
-      diffPaneHeight: currentDiffPaneHeight,
-      includeToolbarItems,
-      isContentLayoutReady,
-      loadedFileCount: currentLoadedFileCount,
-      showSidebarControl: currentShowSidebarControl,
-      showViewModeToolbar: currentShowViewModeToolbar,
-      sidebarCollapsed: currentSidebarCollapsed,
-      source: currentToolbarSource ?? currentState.source,
-      status: currentState.status,
-      viewMode: currentViewMode,
+    const windowOptionsModel = getDiffWindowOptionsModel({
+      diffPaneHeight: diffPaneHeight$.get(),
+      loadingSource: loadingSource$.get(),
+      sidebarCollapsed: sidebarCollapsed$.get(),
+      state: state$.get(),
+      syntaxTheme: getDiffSyntaxTheme(),
+      viewMode: getDiffViewModeSetting(),
     });
 
-    if (isContentLayoutReady) {
+    if (windowOptionsModel.toolbarSource) {
+      setDiffViewerWindowOptions({
+        appearance: windowOptionsModel.appearance,
+        backgroundColor: windowOptionsModel.backgroundColor,
+        includeToolbarItems: true,
+        source: windowOptionsModel.toolbarSource,
+        showSidebarControl: windowOptionsModel.showSidebarControl,
+        showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
+        sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
+        viewMode: windowOptionsModel.viewMode,
+      }).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    }
+
+    const includeToolbarItems = windowOptionsModel.toolbarSource === null;
+
+    logDiffOpenTiming("viewer.windowOptions.schedule", {
+      diffPaneHeight: windowOptionsModel.diffPaneHeight,
+      includeToolbarItems,
+      isContentLayoutReady: windowOptionsModel.isContentLayoutReady,
+      loadedFileCount: windowOptionsModel.loadedFileCount,
+      showSidebarControl: windowOptionsModel.showSidebarControl,
+      showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
+      sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
+      source: windowOptionsModel.source,
+      status: windowOptionsModel.status,
+      viewMode: windowOptionsModel.viewMode,
+    });
+
+    if (windowOptionsModel.isContentLayoutReady) {
       const applyWindowOptions = () => {
         const startedAt = nowMs();
         logDiffOpenTiming("viewer.windowOptions.start", {
-          diffPaneHeight: currentDiffPaneHeight,
-          loadedFileCount: currentLoadedFileCount,
+          diffPaneHeight: windowOptionsModel.diffPaneHeight,
+          loadedFileCount: windowOptionsModel.loadedFileCount,
           scheduledDelayMs: Number((startedAt - scheduleStartedAt).toFixed(1)),
-          showSidebarControl: currentShowSidebarControl,
-          showViewModeToolbar: currentShowViewModeToolbar,
-          sidebarCollapsed: currentSidebarCollapsed,
-          source: currentToolbarSource ?? currentState.source,
-          status: currentState.status,
-          viewMode: currentViewMode,
+          showSidebarControl: windowOptionsModel.showSidebarControl,
+          showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
+          sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
+          source: windowOptionsModel.source,
+          status: windowOptionsModel.status,
+          viewMode: windowOptionsModel.viewMode,
         });
         setDiffViewerWindowOptions({
-          appearance: currentSyntaxTheme.appearance,
-          backgroundColor: currentSyntaxTheme.background,
+          appearance: windowOptionsModel.appearance,
+          backgroundColor: windowOptionsModel.backgroundColor,
           includeToolbarItems,
-          source: currentToolbarSource ?? currentState.source,
-          showSidebarControl: currentShowSidebarControl,
-          showViewModeToolbar: currentShowViewModeToolbar,
-          sidebarCollapsed: currentSidebarCollapsed,
-          viewMode: currentViewMode,
+          source: windowOptionsModel.source,
+          showSidebarControl: windowOptionsModel.showSidebarControl,
+          showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
+          sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
+          viewMode: windowOptionsModel.viewMode,
         })
           .then(() => {
             logDiffOpenTiming("viewer.windowOptions.finish", {
-              source: currentToolbarSource ?? currentState.source,
+              source: windowOptionsModel.source,
               setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
             });
           })
@@ -2846,7 +2884,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
           });
       };
 
-      if (currentState.status === "loaded") {
+      if (windowOptionsModel.status === "loaded") {
         frameHandle = requestAnimationFrame(() => {
           secondFrameHandle = requestAnimationFrame(() => {
             timeoutHandle = setTimeout(applyWindowOptions, diffLoadedWindowOptionsDelayMs);
@@ -2857,10 +2895,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
     } else {
       logDiffOpenTiming("viewer.windowOptions.deferred", {
-        diffPaneHeight: currentDiffPaneHeight,
-        loadedFileCount: currentLoadedFileCount,
-        source: currentToolbarSource ?? currentState.source,
-        status: currentState.status,
+        diffPaneHeight: windowOptionsModel.diffPaneHeight,
+        loadedFileCount: windowOptionsModel.loadedFileCount,
+        source: windowOptionsModel.source,
+        status: windowOptionsModel.status,
       });
     }
 
