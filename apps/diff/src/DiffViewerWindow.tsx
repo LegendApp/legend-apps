@@ -1173,6 +1173,129 @@ function DiffOpenBody({
   );
 }
 
+type DiffLoadSource = (source: DiffOpenSource, syntaxTheme: ReturnType<typeof getDiffSyntaxThemeSetting>) => Promise<void>;
+
+function useDiffSourceRefreshEffects({
+  loadSource,
+  setDocumentErrorValue,
+  state$,
+}: {
+  loadSource: DiffLoadSource;
+  setDocumentErrorValue: (nextError: DiffRecoverableError | null) => void;
+  state$: Observable<DiffViewerState>;
+}) {
+  useDiffSourceRefreshEffects({
+    loadSource,
+    setDocumentErrorValue,
+    state$,
+  });
+}
+
+function useDiffWindowOptionsSync({
+  diffPaneHeight$,
+  loadingSource$,
+  sidebarCollapsed$,
+  state$,
+}: {
+  diffPaneHeight$: Observable<number>;
+  loadingSource$: Observable<DiffOpenSource | null>;
+  sidebarCollapsed$: Observable<boolean>;
+  state$: Observable<DiffViewerState>;
+}) {
+  useDiffWindowOptionsSync({
+    diffPaneHeight$,
+    loadingSource$,
+    sidebarCollapsed$,
+    state$,
+  });
+}
+
+function useDiffNativeMenuItems({
+  loadingSource$,
+  sidebarCollapsed$,
+  state$,
+}: {
+  loadingSource$: Observable<DiffOpenSource | null>;
+  sidebarCollapsed$: Observable<boolean>;
+  state$: Observable<DiffViewerState>;
+}) {
+  useObserveEffect(() => {
+    const currentState = state$.get();
+    const currentViewMode = getDiffViewModeSetting();
+    const currentLoadingSource = loadingSource$.get();
+    const currentSidebarCollapsed = sidebarCollapsed$.get();
+    const currentVisibleSource = currentState.source;
+    const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
+    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentVisibleSource : null);
+    const currentShowViewModeToolbar = currentToolbarSource !== null;
+    const currentShowSidebarControl = currentShowViewModeToolbar;
+    const hasLoadedFiles = currentLoadedFileCount > 0;
+    updateMenuItems(diffMenuOwnerId, [
+      {
+        enabled: currentState.status === "loaded",
+        id: "reload",
+      },
+      {
+        enabled: currentVisibleFolderPath !== null,
+        id: "revealInFinder",
+      },
+      {
+        enabled: currentVisibleSource !== null,
+        id: "copySource",
+        title: currentVisibleSource?.kind === "github" ? "Copy Source URL" : "Copy Folder Path",
+      },
+      {
+        enabled: currentVisibleFolderPath !== null && hasLoadedFiles,
+        id: "copyFilePath",
+      },
+      {
+        enabled: hasLoadedFiles,
+        id: "copyRelativePath",
+      },
+      {
+        checked: currentShowSidebarControl && !currentSidebarCollapsed,
+        enabled: currentShowSidebarControl,
+        id: "toggleSidebar",
+        title: currentSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+      },
+      {
+        enabled: currentShowSidebarControl,
+        id: "filterFiles",
+      },
+      {
+        checked: currentViewMode === "unified",
+        enabled: currentShowViewModeToolbar,
+        id: "viewUnified",
+      },
+      {
+        checked: currentViewMode === "blocks",
+        enabled: currentShowViewModeToolbar,
+        id: "viewBlocks",
+      },
+    ]);
+  });
+}
+
+function useDiffWindowToolbarItems({
+  toggleSidebar,
+}: {
+  toggleSidebar: () => boolean;
+}) {
+  useEffect(() => {
+    const subscription = addWindowToolbarItemSelectedListener((event) => {
+      if (event.identifier === diffViewerWindowIdentifier) {
+        if (event.itemId === diffSidebarToolbarItemId) {
+          toggleSidebar();
+        } else if (event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) {
+          setDiffViewModeSetting(event.value);
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [toggleSidebar]);
+}
+
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
   const indexes: number[] = [];
 
@@ -2409,75 +2532,15 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     toggleSidebar,
   }), []);
 
-  useObserveEffect(() => {
-    const currentState = state$.get();
-    const currentViewMode = getDiffViewModeSetting();
-    const currentLoadingSource = loadingSource$.get();
-    const currentSidebarCollapsed = sidebarCollapsed$.get();
-    const currentVisibleSource = currentState.source;
-    const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
-    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentVisibleSource : null);
-    const currentShowViewModeToolbar = currentToolbarSource !== null;
-    const currentShowSidebarControl = currentShowViewModeToolbar;
-    const hasLoadedFiles = currentLoadedFileCount > 0;
-    updateMenuItems(diffMenuOwnerId, [
-      {
-        enabled: currentState.status === "loaded",
-        id: "reload",
-      },
-      {
-        enabled: currentVisibleFolderPath !== null,
-        id: "revealInFinder",
-      },
-      {
-        enabled: currentVisibleSource !== null,
-        id: "copySource",
-        title: currentVisibleSource?.kind === "github" ? "Copy Source URL" : "Copy Folder Path",
-      },
-      {
-        enabled: currentVisibleFolderPath !== null && hasLoadedFiles,
-        id: "copyFilePath",
-      },
-      {
-        enabled: hasLoadedFiles,
-        id: "copyRelativePath",
-      },
-      {
-        checked: currentShowSidebarControl && !currentSidebarCollapsed,
-        enabled: currentShowSidebarControl,
-        id: "toggleSidebar",
-        title: currentSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
-      },
-      {
-        enabled: currentShowSidebarControl,
-        id: "filterFiles",
-      },
-      {
-        checked: currentViewMode === "unified",
-        enabled: currentShowViewModeToolbar,
-        id: "viewUnified",
-      },
-      {
-        checked: currentViewMode === "blocks",
-        enabled: currentShowViewModeToolbar,
-        id: "viewBlocks",
-      },
-    ]);
+  useDiffNativeMenuItems({
+    loadingSource$,
+    sidebarCollapsed$,
+    state$,
   });
 
-  useEffect(() => {
-    const subscription = addWindowToolbarItemSelectedListener((event) => {
-      if (event.identifier === diffViewerWindowIdentifier) {
-        if (event.itemId === diffSidebarToolbarItemId) {
-          toggleSidebar();
-        } else if (event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) {
-          setDiffViewModeSetting(event.value);
-        }
-      }
-    });
-    return () => subscription.remove();
-  }, []);
+  useDiffWindowToolbarItems({
+    toggleSidebar,
+  });
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
     setCollapsedFileIndexesValue((current) => {
