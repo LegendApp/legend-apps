@@ -47,7 +47,7 @@ import {
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
@@ -75,6 +75,8 @@ const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffFileHeaderRowHeight = 52;
 const diffTitlebarTopInset = 52;
+const diffDocumentErrorHeight = 78;
+const diffDocumentPermissionErrorHeight = 134;
 const diffLoadedWindowOptionsDelayMs = 750;
 const diffScrollIdleMs = 120;
 const diffRowKindFileHeader = 0;
@@ -83,6 +85,7 @@ const diffChangeTypeRemove = 2;
 const diffSideBySideGutterWidth = 44;
 const diffSideBySideHorizontalPadding = 12;
 const diffSidebarFileRowHeight = 46;
+const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffSideBySideAdaptiveRender = {
   enterVelocity: 8,
   exitDelay: 150,
@@ -235,13 +238,11 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
 type DiffViewerState =
   | {
     status: "empty";
-    error: null;
     folderPath: null;
     source: null;
   }
   | {
     status: "loaded";
-    error: null;
     folderPath: string;
     source: DiffOpenSource;
     document: DiffDocument;
@@ -252,15 +253,27 @@ type DiffViewerState =
     timing: DiffLoadTiming;
   }
   | {
-    status: "error";
-    error: string;
+    status: "fatal";
+    error: DiffFatalError;
     folderPath: string | null;
     source: DiffOpenSource | null;
   };
 
+type DiffFatalError = {
+  message: string;
+  title: string;
+};
+
+type DiffRecoverableError = {
+  kind?: "generic" | "permission";
+  message: string;
+  recoverySteps?: string[];
+  source: DiffOpenSource | null;
+  title: string;
+};
+
 const emptyState: DiffViewerState = {
   status: "empty",
-  error: null,
   folderPath: null,
   source: null,
 };
@@ -367,6 +380,65 @@ function getUnsupportedDropMessage(drop: DragDropFileEvent) {
   return message;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isPermissionDeniedMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+  return normalizedMessage.includes("operation not permitted")
+    || normalizedMessage.includes("permission denied")
+    || normalizedMessage.includes("eperm");
+}
+
+function getPermissionFolderLabel(source: DiffOpenSource | null, message: string) {
+  let folderLabel = "this folder";
+  const path = source?.kind === "folder" ? source.value : message;
+  const protectedFolders = ["Documents", "Desktop", "Downloads"];
+  const matchedFolder = protectedFolders.find((folder) => path.includes(`/${folder}/`) || path.endsWith(`/${folder}`));
+  if (matchedFolder) {
+    folderLabel = `your ${matchedFolder} folder`;
+  }
+  return folderLabel;
+}
+
+function createPermissionDeniedError(source: DiffOpenSource | null, message: string): DiffRecoverableError {
+  const folderLabel = getPermissionFolderLabel(source, message);
+  return {
+    kind: "permission",
+    message: `Access to ${folderLabel} was denied. Allow Legend Diff in System Settings, or choose a different folder.`,
+    recoverySteps: [
+      "Open Privacy & Security in System Settings.",
+      "Go to Files and Folders.",
+      "Allow Legend Diff to access the folder, then try opening it again.",
+    ],
+    source,
+    title: "Legend Diff can't access this folder",
+  };
+}
+
+function createOpenError(source: DiffOpenSource | null, message: string): DiffRecoverableError {
+  return source?.kind === "folder" && isPermissionDeniedMessage(message)
+    ? createPermissionDeniedError(source, message)
+    : {
+      kind: "generic",
+      message,
+      source,
+      title: source?.kind === "github" ? "Couldn't open URL" : "Couldn't open repository",
+    };
+}
+
+function createRefreshError(source: DiffOpenSource | null, message: string): DiffRecoverableError {
+  return source?.kind === "folder" && isPermissionDeniedMessage(message)
+    ? createPermissionDeniedError(source, message)
+    : {
+      kind: "generic",
+      message,
+      source,
+      title: "Couldn't refresh changes",
+    };
+}
+
 function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "status"> | null | undefined) {
   const status = file?.status ?? "unknown";
   let presentation = {
@@ -467,6 +539,78 @@ function getJoinedPath(basePath: string, relativePath: string) {
   return `${basePath.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
 }
 
+function DiffErrorPanel({
+  borderColor,
+  dangerColor,
+  error,
+  foregroundColor,
+  mutedColor,
+  onChooseFolder,
+  chooseFolderLabel = "Choose Folder",
+  onDismiss,
+  onOpenSystemSettings,
+  onRetry,
+}: {
+  borderColor: string;
+  chooseFolderLabel?: string;
+  dangerColor: string;
+  error: DiffRecoverableError | DiffFatalError;
+  foregroundColor: string;
+  mutedColor: string;
+  onChooseFolder?: () => void;
+  onDismiss?: () => void;
+  onOpenSystemSettings?: () => void;
+  onRetry?: () => void;
+}) {
+  const recoverySteps = "recoverySteps" in error ? error.recoverySteps : undefined;
+  return (
+    <View style={[styles.errorPanel, { borderColor }]}>
+      <View style={[styles.errorPanelAccent, { backgroundColor: dangerColor }]} />
+      <View style={styles.errorPanelBody}>
+        <Text style={[styles.errorPanelTitle, { color: foregroundColor }]}>
+          {error.title}
+        </Text>
+        <Text style={[styles.errorPanelMessage, { color: mutedColor }]} numberOfLines={3}>
+          {error.message}
+        </Text>
+        {recoverySteps ? (
+          <View style={styles.errorPanelSteps}>
+            {recoverySteps.map((step, index) => (
+              <Text key={step} style={[styles.errorPanelStep, { color: mutedColor }]}>
+                {index + 1}. {step}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+        {onRetry || onOpenSystemSettings || onChooseFolder || onDismiss ? (
+          <View style={styles.errorPanelActions}>
+            {onRetry ? (
+              <Pressable accessibilityRole="button" onPress={onRetry} style={styles.errorPanelButton}>
+                <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>Retry</Text>
+              </Pressable>
+            ) : null}
+            {onOpenSystemSettings ? (
+              <Pressable accessibilityRole="button" onPress={onOpenSystemSettings} style={styles.errorPanelButton}>
+                <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>Open System Settings</Text>
+              </Pressable>
+            ) : null}
+            {onChooseFolder ? (
+              <Pressable accessibilityRole="button" onPress={onChooseFolder} style={styles.errorPanelButton}>
+                <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>{chooseFolderLabel}</Text>
+              </Pressable>
+            ) : null}
+            {onDismiss ? (
+              <Pressable accessibilityRole="button" onPress={onDismiss} style={styles.errorPanelButton}>
+                <Text style={[styles.errorPanelButtonText, { color: mutedColor }]}>Dismiss</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
   const indexes: number[] = [];
 
@@ -535,6 +679,8 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const [state, setState] = useState<DiffViewerState>(emptyState);
   const [urlInput, setUrlInput] = useState("");
   const [urlInputError, setUrlInputError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<DiffRecoverableError | null>(null);
+  const [documentError, setDocumentError] = useState<DiffRecoverableError | null>(null);
   const [fileFilter, setFileFilter] = useState("");
   const [loadingSource, setLoadingSource] = useState<DiffOpenSource | null>(null);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
@@ -1074,6 +1220,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     };
     loadTraceRef.current = trace;
     setLoadingSource(nextSource);
+    if (stateRef.current.status === "loaded") {
+      setDocumentError(null);
+    } else {
+      setOpenError(null);
+    }
     logDiffOpenTiming("viewer.load.start", {
       source: nextSource,
       requestId,
@@ -1154,7 +1305,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         const statePayloadStartedAt = nowMs();
         const nextLoadedState: DiffViewerState = {
           status: "loaded",
-          error: null,
           folderPath: nextSource.value,
           source: nextSource,
           document: result.document,
@@ -1182,14 +1332,19 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       if (loadRequestIdRef.current === requestId) {
         loadTraceRef.current = null;
         setLoadingSource((current) => sourcesMatch(current, nextSource) ? null : current);
-        setState({
-          status: "error",
-          error: error instanceof Error ? error.message : String(error),
-          folderPath: nextSource.value,
-          source: nextSource,
-        });
+        const message = getErrorMessage(error);
+        const currentState = stateRef.current;
+        if (currentState.status === "loaded") {
+          const nextError = sourcesMatch(currentState.source, nextSource)
+            ? createRefreshError(nextSource, message)
+            : createOpenError(nextSource, message);
+          setDocumentError(nextError);
+        } else {
+          setOpenError(createOpenError(nextSource, message));
+          setState(emptyState);
+        }
         logDiffOpenTiming("viewer.load.error", {
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
           requestId,
         });
       }
@@ -1214,6 +1369,8 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       loadTraceRef.current = null;
       setLoadingSource(null);
       setState(emptyState);
+      setOpenError(null);
+      setDocumentError(null);
       setUrlInput("");
       setUrlInputError(null);
       setFileFilter("");
@@ -1226,6 +1383,8 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const openFolder = useCallback(async () => {
     if (!isLoading) {
       try {
+        setOpenError(null);
+        setDocumentError(null);
         const dialogStartedAt = nowMs();
         logDiffOpenTiming("viewer.dialog.start", {
           currentFolderPath: state.folderPath,
@@ -1242,20 +1401,25 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
           }
         }
       } catch (error) {
-        setState((current) => ({
-          status: "error",
-          error: error instanceof Error ? error.message : String(error),
-          folderPath: current.folderPath,
-          source: current.source,
-        }));
+        const nextError = {
+          message: getErrorMessage(error),
+          source: state.source,
+          title: "Couldn't choose folder",
+        };
+        if (state.status === "loaded") {
+          setDocumentError(nextError);
+        } else {
+          setOpenError(nextError);
+        }
       }
     }
-  }, [isLoading, loadSource, selectedSyntaxTheme, state.folderPath]);
+  }, [isLoading, loadSource, selectedSyntaxTheme, state]);
 
   const openUrl = useCallback(async () => {
     if (!isLoading) {
       const nextSource = normalizeDiffOpenSource(urlInput);
       if (nextSource?.kind === "github") {
+        setOpenError(null);
         setUrlInputError(null);
         await loadSource(nextSource, selectedSyntaxTheme);
       } else {
@@ -1263,6 +1427,23 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
     }
   }, [isLoading, loadSource, selectedSyntaxTheme, urlInput]);
+
+  const retryOpenError = useCallback(() => {
+    if (!isLoading && openError?.source) {
+      setOpenError(null);
+      loadSource(openError.source, selectedSyntaxTheme);
+    }
+  }, [isLoading, loadSource, openError, selectedSyntaxTheme]);
+
+  const dismissDocumentError = useCallback(() => {
+    setDocumentError(null);
+  }, []);
+
+  const openPermissionSettings = useCallback(() => {
+    Linking.openURL(macOSFilesAndFoldersSettingsUrl).catch((error: unknown) => {
+      console.error(`Unable to open System Settings: ${getErrorMessage(error)}`);
+    });
+  }, []);
 
   const handleDragEnter = useCallback(() => {
     setIsDropTargetActive(true);
@@ -1277,24 +1458,21 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     if (!isLoading) {
       const nextSource = getDroppedDiffSource(nativeEvent);
       if (nextSource) {
-        loadSource(nextSource, selectedSyntaxTheme).catch((error: unknown) => {
-          setState((current) => ({
-            status: "error",
-            error: error instanceof Error ? error.message : String(error),
-            folderPath: current.folderPath,
-            source: current.source,
-          }));
-        });
+        loadSource(nextSource, selectedSyntaxTheme);
       } else {
-        setState((current) => ({
-          status: "error",
-          error: getUnsupportedDropMessage(nativeEvent),
-          folderPath: current.folderPath,
-          source: current.source,
-        }));
+        const nextError = {
+          message: getUnsupportedDropMessage(nativeEvent),
+          source: null,
+          title: "Unsupported drop",
+        };
+        if (state.status === "loaded") {
+          setDocumentError(nextError);
+        } else {
+          setOpenError(nextError);
+        }
       }
     }
-  }, [isLoading, loadSource, selectedSyntaxTheme]);
+  }, [isLoading, loadSource, selectedSyntaxTheme, state.status]);
 
   useEffect(() => {
     const trace = loadTraceRef.current;
@@ -1322,12 +1500,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
       loadSource(state.source, selectedSyntaxTheme).catch((error: unknown) => {
-        setState((current) => ({
-          status: "error",
-          error: error instanceof Error ? error.message : String(error),
-          folderPath: current.folderPath,
-          source: current.source,
-        }));
+        setDocumentError(createRefreshError(state.source, getErrorMessage(error)));
       });
     }
   }, [loadSource, selectedSyntaxTheme, state]);
@@ -1344,12 +1517,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
       reloadTimeout = setTimeout(() => {
         loadSource({ kind: "folder", label: getDiffSourceLabel(visibleSource), value: visibleFolderPath }, selectedSyntaxTheme).catch((error: unknown) => {
-          setState((current) => ({
-            status: "error",
-            error: error instanceof Error ? error.message : String(error),
-            folderPath: current.folderPath,
-            source: current.source,
-          }));
+          setDocumentError(createRefreshError(visibleSource, getErrorMessage(error)));
         });
       }, 250);
     });
@@ -1368,12 +1536,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     }
 
     loadSource(state.source, selectedSyntaxTheme).catch((error: unknown) => {
-      setState((current) => ({
-        status: "error",
-        error: error instanceof Error ? error.message : String(error),
-        folderPath: current.folderPath,
-        source: current.source,
-      }));
+      setDocumentError(createRefreshError(state.source, getErrorMessage(error)));
     });
     return true;
   }, [loadSource, selectedSyntaxTheme, state]);
@@ -2022,7 +2185,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const body = useMemo(() => {
     const bodyStartedAt = nowMs();
-    const diffListHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
+    const diffContentHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
+    const documentErrorHeight = documentError
+      ? documentError.kind === "permission"
+        ? diffDocumentPermissionErrorHeight
+        : diffDocumentErrorHeight
+      : 0;
+    const diffListHeight = Math.max(0, diffContentHeight - documentErrorHeight);
     const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
     const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffTitlebarTopInset - 70) : 0;
     const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
@@ -2045,6 +2214,36 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         });
       }
     };
+    const renderDocumentError = () => documentError ? (
+      <View style={styles.documentError}>
+        <DiffErrorPanel
+          borderColor={displayTheme.colors.border}
+          chooseFolderLabel={documentError.kind === "permission" ? "Choose Another Folder" : undefined}
+          dangerColor={displayTheme.colors.danger}
+          error={documentError}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          onDismiss={dismissDocumentError}
+          onOpenSystemSettings={documentError.kind === "permission" ? openPermissionSettings : undefined}
+          onRetry={documentError.kind !== "permission" && documentError.source ? reloadCurrentSource : undefined}
+        />
+      </View>
+    ) : null;
+
+    if (state.status === "fatal") {
+      return (
+        <View style={styles.empty}>
+          <DiffErrorPanel
+            borderColor={displayTheme.colors.border}
+            dangerColor={displayTheme.colors.danger}
+            error={state.error}
+            foregroundColor={foregroundColor}
+            mutedColor={mutedColor}
+            onChooseFolder={openFolder}
+          />
+        </View>
+      );
+    }
 
     if (state.status === "loaded") {
       logDiffOpenTiming("viewer.body.start", {
@@ -2132,11 +2331,12 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
             style={[
               styles.diffPaneContent,
               {
-                height: diffListHeight,
-                minHeight: diffListHeight,
+                height: diffContentHeight,
+                minHeight: diffContentHeight,
               },
             ]}
           >
+            {renderDocumentError()}
             {list}
           </View>
         );
@@ -2145,6 +2345,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       if (state.status === "loaded") {
         return (
           <View style={styles.empty}>
+            {renderDocumentError()}
             <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
               No changes
             </Text>
@@ -2204,6 +2405,9 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
                   if (urlInputError) {
                     setUrlInputError(null);
                   }
+                  if (openError) {
+                    setOpenError(null);
+                  }
                 }}
                 onSubmitEditing={openUrl}
                 placeholder="https://github.com/org/repo/pull/123"
@@ -2247,6 +2451,22 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
             <Text style={[styles.emptyValidationText, { color: displayTheme.colors.danger }]}>
               {urlInputError}
             </Text>
+          ) : null}
+          {openError ? (
+            <View style={styles.emptyOpenError}>
+              <DiffErrorPanel
+                borderColor={displayTheme.colors.border}
+                chooseFolderLabel={openError.kind === "permission" ? "Choose Another Folder" : undefined}
+                dangerColor={displayTheme.colors.danger}
+                error={openError}
+                foregroundColor={foregroundColor}
+                mutedColor={mutedColor}
+                onChooseFolder={openFolder}
+                onDismiss={() => setOpenError(null)}
+                onOpenSystemSettings={openError.kind === "permission" ? openPermissionSettings : undefined}
+                onRetry={openError.kind !== "permission" && openError.source ? retryOpenError : undefined}
+              />
+            </View>
           ) : null}
         </View>
       );
@@ -2327,7 +2547,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
     logBodyFinish("content-only");
     return diffContent;
-  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
+  }, [activeFileIndex$, diffPaneHeight, diffRows.requestRange, diffRows.rowCache, diffRows.rowVersions$, diffRows.rowsVersion, dismissDocumentError, displayTheme.colors.border, displayTheme.colors.danger, displayTheme.colors.primary, documentError, fileFilter, filteredSidebarFiles, foregroundColor, getItemSize, getItemType, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSidebarListLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleSplitViewResize, handleTopItemChanged, handleVisibleRowsRequested, isLoading, isLoadingGithub, isRenderingInitialLoadedFrame, listExtraData, loadingSource, mutedColor, openError, openFolder, openUrl, renderRow, renderSidebarFile, renderSideBySideRow, requestSideBySideRange, retryOpenError, rowHeight, scrollToFile, sidebarCollapsed, sideBySideItemIndexes, sideBySideRowVersions$, splitPaneMetrics.sidebarHeight, splitPaneMetrics.sidebarWidth, state, syntaxTheme.appearance, urlInput, urlInputError, viewMode, visibleFolderPath, visibleItemIndexes, visibleSourceLabel]);
 
   return (
     <DragDropView
@@ -2337,9 +2557,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       onDrop={handleDrop}
       style={[styles.root, { backgroundColor }]}
     >
-      {state.error ? (
-        <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
-      ) : null}
       {body}
       {isDropTargetActive ? (
         <View
@@ -2421,6 +2638,13 @@ const styles = StyleSheet.create({
     minWidth: 220,
     paddingHorizontal: 24,
   },
+  emptyOpenError: {
+    alignItems: "center",
+    bottom: 28,
+    left: 32,
+    position: "absolute",
+    right: 32,
+  },
   emptyText: {
     fontSize: 15,
     lineHeight: 23,
@@ -2467,15 +2691,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  error: {
-    fontSize: 13,
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    textAlign: "center",
-  },
   content: {
     flex: 1,
     minHeight: 0,
+  },
+  documentError: {
+    height: diffDocumentErrorHeight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  errorPanel: {
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    maxWidth: 620,
+    overflow: "hidden",
+    width: "100%",
+  },
+  errorPanelAccent: {
+    width: 3,
+  },
+  errorPanelActions: {
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 8,
+  },
+  errorPanelBody: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorPanelButton: {
+    paddingRight: 8,
+    paddingVertical: 2,
+  },
+  errorPanelButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  errorPanelMessage: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  errorPanelStep: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  errorPanelSteps: {
+    gap: 2,
+    paddingTop: 6,
+  },
+  errorPanelTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   diffRow: {
     borderLeftWidth: 3,
