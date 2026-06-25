@@ -18,6 +18,7 @@
     "@legend-desktop/recent-documents": "0.0.0",
     "@legend-desktop/source-viewer": "workspace:*",
     "@legend-desktop/settings-window": "0.0.0",
+    "@legend-desktop/sf-symbol": "0.0.0",
     "@legend-desktop/storage": "0.0.0",
     "@legend-desktop/syntax-parser": "workspace:*",
     "@legend-desktop/syntax-settings": "workspace:*",

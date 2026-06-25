@@ -28,6 +28,7 @@ import {
 } from "@legend-desktop/source-viewer";
 import { updateMenuItems } from "@legend-desktop/native-menu";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
+import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
@@ -294,9 +295,7 @@ function DiffSidebarFileRow({
       ]}
     >
       <View style={[styles.sidebarStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-        <Text selectable={false} style={[styles.sidebarStatusIconText, { color: statusPresentation.color }]}>
-          {statusPresentation.label}
-        </Text>
+        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={10} />
       </View>
       <View style={styles.sidebarFileTextGroup}>
         <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
@@ -367,30 +366,12 @@ function getUnsupportedDropMessage(drop: DragDropFileEvent) {
   return message;
 }
 
-function EmptyFolderIcon({ color }: { color: string }) {
-  return (
-    <View style={styles.emptyFolderIcon}>
-      <View style={[styles.emptyFolderIconTab, { borderColor: color }]} />
-      <View style={[styles.emptyFolderIconBody, { borderColor: color }]} />
-    </View>
-  );
-}
-
-function EmptyLinkIcon({ color }: { color: string }) {
-  return (
-    <View style={styles.emptyLinkIcon}>
-      <View style={[styles.emptyLinkIconRing, styles.emptyLinkIconRingLeft, { borderColor: color }]} />
-      <View style={[styles.emptyLinkIconRing, styles.emptyLinkIconRingRight, { borderColor: color }]} />
-    </View>
-  );
-}
-
 function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "status"> | null | undefined) {
   const status = file?.status ?? "unknown";
   let presentation = {
     backgroundColor: "#f0883e",
     color: "#1f1300",
-    label: "M",
+    symbolName: "pencil",
     title: "Modified",
   };
 
@@ -399,7 +380,7 @@ function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "sta
       presentation = {
         backgroundColor: "#238636",
         color: "#ffffff",
-        label: "A",
+        symbolName: "plus",
         title: "Added",
       };
       break;
@@ -407,7 +388,7 @@ function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "sta
       presentation = {
         backgroundColor: "#238636",
         color: "#ffffff",
-        label: "U",
+        symbolName: "plus",
         title: "Untracked",
       };
       break;
@@ -415,7 +396,7 @@ function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "sta
       presentation = {
         backgroundColor: "#da3633",
         color: "#ffffff",
-        label: "D",
+        symbolName: "minus",
         title: "Deleted",
       };
       break;
@@ -423,7 +404,7 @@ function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "sta
       presentation = {
         backgroundColor: "#388bfd",
         color: "#ffffff",
-        label: "R",
+        symbolName: "arrow.right",
         title: "Renamed",
       };
       break;
@@ -431,7 +412,7 @@ function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "sta
       presentation = {
         backgroundColor: "#8957e5",
         color: "#ffffff",
-        label: "C",
+        symbolName: "doc.on.doc",
         title: "Copied",
       };
       break;
@@ -441,7 +422,7 @@ function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "sta
       presentation = {
         backgroundColor: "#6e7681",
         color: "#ffffff",
-        label: "?",
+        symbolName: "questionmark",
         title: status === "unknown" ? "Unknown" : status,
       };
       break;
@@ -1767,14 +1748,12 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
               },
             ]}
           >
-            <Text selectable={false} style={[styles.fileDisclosure, { color: mutedColor }]}>
-              {isCollapsed ? "▸" : "▾"}
-            </Text>
+            <View style={styles.fileDisclosure}>
+              <SFSymbol color={mutedColor} name={isCollapsed ? "chevron.right" : "chevron.down"} size={12} />
+            </View>
             {file ? (
               <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusPresentation.color }]}>
-                  {statusPresentation.label}
-                </Text>
+                <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={12} />
               </View>
             ) : null}
             <View style={styles.fileTitleGroup}>
@@ -1946,14 +1925,12 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
               },
             ]}
           >
-            <Text selectable={false} style={[styles.fileDisclosure, { color: mutedColor }]}>
-              {isCollapsed ? "▸" : "▾"}
-            </Text>
+            <View style={styles.fileDisclosure}>
+              <SFSymbol color={mutedColor} name={isCollapsed ? "chevron.right" : "chevron.down"} size={12} />
+            </View>
             {file ? (
               <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-                <Text selectable={false} style={[styles.fileStatusIconText, { color: statusPresentation.color }]}>
-                  {statusPresentation.label}
-                </Text>
+                <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={12} />
               </View>
             ) : null}
             <View style={styles.fileTitleGroup}>
@@ -2187,7 +2164,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
               },
             ]}
           >
-            <EmptyFolderIcon color={foregroundColor} />
+            <SFSymbol color={foregroundColor} name="folder" size={28} />
             <Text style={[styles.emptyButtonText, { color: foregroundColor }]}>
               Open Folder...
             </Text>
@@ -2206,7 +2183,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
                 },
               ]}
             >
-              <EmptyLinkIcon color={mutedColor} />
+              <SFSymbol color={mutedColor} name="link" size={22} />
               <TextInput
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -2438,50 +2415,6 @@ const styles = StyleSheet.create({
     minWidth: 240,
     paddingHorizontal: 28,
   },
-  emptyFolderIcon: {
-    height: 22,
-    width: 28,
-  },
-  emptyFolderIconBody: {
-    borderRadius: 3,
-    borderWidth: 2,
-    height: 16,
-    left: 0,
-    position: "absolute",
-    top: 6,
-    width: 28,
-  },
-  emptyFolderIconTab: {
-    borderBottomWidth: 0,
-    borderRadius: 3,
-    borderWidth: 2,
-    height: 8,
-    left: 2,
-    position: "absolute",
-    top: 1,
-    width: 12,
-  },
-  emptyLinkIcon: {
-    height: 22,
-    marginLeft: 2,
-    width: 26,
-  },
-  emptyLinkIconRing: {
-    borderRadius: 6,
-    borderWidth: 2,
-    height: 10,
-    position: "absolute",
-    top: 6,
-    width: 16,
-  },
-  emptyLinkIconRingLeft: {
-    left: 0,
-    transform: [{ rotate: "-38deg" }],
-  },
-  emptyLinkIconRingRight: {
-    right: 0,
-    transform: [{ rotate: "-38deg" }],
-  },
   emptyText: {
     fontSize: 17,
     lineHeight: 26,
@@ -2587,9 +2520,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   fileDisclosure: {
-    fontSize: 22,
-    lineHeight: 20,
-    textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
     width: 20,
   },
   fileMeta: {
@@ -2632,29 +2564,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 16,
   },
-	  fileStatusIconText: {
-	    fontFamily: sourceViewerCodeFontFamily,
-	    fontSize: 16,
-	    fontWeight: "700",
-	    lineHeight: 17,
-	    textAlign: "center",
-	  },
-	  fileStatusPill: {
-	    alignItems: "center",
-	    borderRadius: 4,
-	    justifyContent: "center",
-	    minWidth: 68,
-	    paddingHorizontal: 7,
-	    paddingVertical: 2,
-	  },
-	  fileStatusPillText: {
-	    fontSize: 11,
-	    fontWeight: "700",
-	    lineHeight: 14,
-	  },
-	  fileTitleGroup: {
-	    alignItems: "baseline",
-	    flex: 1,
+  fileStatusPill: {
+    alignItems: "center",
+    borderRadius: 4,
+    justifyContent: "center",
+    minWidth: 68,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  fileStatusPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  fileTitleGroup: {
+    alignItems: "baseline",
+    flex: 1,
     flexDirection: "row",
   },
   lineNumber: {
@@ -2779,13 +2704,6 @@ const styles = StyleSheet.create({
     height: 14,
     justifyContent: "center",
     width: 14,
-  },
-  sidebarStatusIconText: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 14,
-    textAlign: "center",
   },
   sidebarTitle: {
     fontSize: 11,
