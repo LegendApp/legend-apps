@@ -82,7 +82,7 @@ const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const viewModeSetting = diffSettings.field("viewMode");
-const diffSettings$ = diffSettings.settings$;
+export const diffSettings$ = diffSettings.settings$;
 
 export function getDiffSyntaxThemeSetting(): BundledSyntaxThemeName {
   return syntaxThemeSetting.get();

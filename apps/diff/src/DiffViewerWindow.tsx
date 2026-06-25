@@ -45,19 +45,21 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
   isDiffViewMode,
+  getDiffSyntaxTheme,
+  getDiffSyntaxThemeSetting,
+  getDiffViewModeSetting,
   setDiffViewModeSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffSyntaxTheme,
-  useDiffSyntaxThemeSetting,
   useDiffViewModeSetting,
   type DiffSettingsFile,
 } from "./diffSettings";
@@ -106,6 +108,13 @@ type DiffLoadTrace = {
   loadStartedAt: number;
   nativeResolvedAt: number;
   setStateAt: number;
+};
+
+type DiffSplitPaneMetrics = {
+  contentHeight: number;
+  contentWidth: number;
+  sidebarHeight: number;
+  sidebarWidth: number;
 };
 
 type DiffSidebarFileRowProps = {
@@ -674,7 +683,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const fontSize = useDiffFontSizeSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
   const viewMode = useDiffViewModeSetting();
-  const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
@@ -687,6 +695,19 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedFileIndexes, setCollapsedFileIndexes] = useState<Set<number>>(() => new Set());
+  const state$ = useObservable<DiffViewerState>(emptyState);
+  const urlInput$ = useObservable("");
+  const openError$ = useObservable<DiffRecoverableError | null>(null);
+  const documentError$ = useObservable<DiffRecoverableError | null>(null);
+  const loadingSource$ = useObservable<DiffOpenSource | null>(null);
+  const sidebarCollapsed$ = useObservable(false);
+  const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>({
+    contentHeight: 0,
+    contentWidth: 0,
+    sidebarHeight: 0,
+    sidebarWidth: 0,
+  });
+  const diffPaneHeight$ = useObservable(0);
   const activeFileIndex$ = useObservable<number | null>(null);
   const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
   const [splitPaneMetrics, setSplitPaneMetrics] = useState({
@@ -702,6 +723,48 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   splitPaneMetricsRef.current = splitPaneMetrics;
   const diffPaneHeightRef = useRef(diffPaneHeight);
   diffPaneHeightRef.current = diffPaneHeight;
+  const setViewerState = useCallback((nextState: DiffViewerState) => {
+    state$.set(nextState);
+    setState(nextState);
+  }, []);
+  const setUrlInputValue = useCallback((nextValue: string) => {
+    urlInput$.set(nextValue);
+    setUrlInput(nextValue);
+  }, []);
+  const setOpenErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
+    openError$.set(nextError);
+    setOpenError(nextError);
+  }, []);
+  const setDocumentErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
+    documentError$.set(nextError);
+    setDocumentError(nextError);
+  }, []);
+  const setLoadingSourceValue = useCallback((nextValue: SetStateAction<DiffOpenSource | null>) => {
+    setLoadingSource((current) => {
+      const nextLoadingSource = typeof nextValue === "function"
+        ? nextValue(current)
+        : nextValue;
+      loadingSource$.set(nextLoadingSource);
+      return nextLoadingSource;
+    });
+  }, []);
+  const setSidebarCollapsedValue = useCallback((nextValue: SetStateAction<boolean>) => {
+    setSidebarCollapsed((current) => {
+      const nextSidebarCollapsed = typeof nextValue === "function"
+        ? nextValue(current)
+        : nextValue;
+      sidebarCollapsed$.set(nextSidebarCollapsed);
+      return nextSidebarCollapsed;
+    });
+  }, []);
+  const setSplitPaneMetricsValue = useCallback((nextMetrics: DiffSplitPaneMetrics) => {
+    splitPaneMetrics$.set(nextMetrics);
+    setSplitPaneMetrics(nextMetrics);
+  }, []);
+  const setDiffPaneHeightValue = useCallback((nextHeight: number) => {
+    diffPaneHeight$.set(nextHeight);
+    setDiffPaneHeight(nextHeight);
+  }, []);
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
   const fileFilterInputRef = useRef<TextInputSearchRef | null>(null);
   const urlInputRef = useRef<TextInput | null>(null);
@@ -743,17 +806,20 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const showSidebarControl = showViewModeToolbar;
   const normalizedFileFilter = fileFilter.trim().toLowerCase();
 
-  useEffect(() => {
-    if (state.status === "loaded" && loggedInitialLoadedFrameRef.current !== isRenderingInitialLoadedFrame) {
+  useObserveEffect(() => {
+    const currentState = state$.get();
+    const currentLoadingSource = loadingSource$.get();
+    const currentIsRenderingInitialLoadedFrame = currentState.status === "loaded" && sourcesMatch(currentLoadingSource, currentState.source);
+    if (currentState.status === "loaded" && loggedInitialLoadedFrameRef.current !== currentIsRenderingInitialLoadedFrame) {
       logDiffOpenTiming("viewer.initialLoadedFrame.state", {
-        isRenderingInitialLoadedFrame,
-        loadingSource,
-        rows: state.document.rowCount,
-        source: state.source,
+        isRenderingInitialLoadedFrame: currentIsRenderingInitialLoadedFrame,
+        loadingSource: currentLoadingSource,
+        rows: currentState.document.rowCount,
+        source: currentState.source,
       });
     }
-    loggedInitialLoadedFrameRef.current = isRenderingInitialLoadedFrame;
-  }, [isRenderingInitialLoadedFrame, loadingSource, state]);
+    loggedInitialLoadedFrameRef.current = currentIsRenderingInitialLoadedFrame;
+  });
 
   const fileByIndex = useMemo(() => {
     const startedAt = nowMs();
@@ -1220,11 +1286,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       setStateAt: loadStartedAt,
     };
     loadTraceRef.current = trace;
-    setLoadingSource(nextSource);
-    if (stateRef.current.status === "loaded") {
-      setDocumentError(null);
+    setLoadingSourceValue(nextSource);
+    if (state$.peek().status === "loaded") {
+      setDocumentErrorValue(null);
     } else {
-      setOpenError(null);
+      setOpenErrorValue(null);
     }
     logDiffOpenTiming("viewer.load.start", {
       source: nextSource,
@@ -1317,7 +1383,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         };
         const statePayloadFinishedAt = nowMs();
         trace.setStateAt = statePayloadFinishedAt;
-        setState(nextLoadedState);
+        setViewerState(nextLoadedState);
         logDiffOpenTiming("viewer.load.setLoaded", {
           requestId,
           statePayloadMs: Number((statePayloadFinishedAt - statePayloadStartedAt).toFixed(1)),
@@ -1332,17 +1398,17 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     } catch (error) {
       if (loadRequestIdRef.current === requestId) {
         loadTraceRef.current = null;
-        setLoadingSource((current) => sourcesMatch(current, nextSource) ? null : current);
+        setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
         const message = getErrorMessage(error);
-        const currentState = stateRef.current;
+        const currentState = state$.peek();
         if (currentState.status === "loaded") {
           const nextError = sourcesMatch(currentState.source, nextSource)
             ? createRefreshError(nextSource, message)
             : createOpenError(nextSource, message);
-          setDocumentError(nextError);
+          setDocumentErrorValue(nextError);
         } else {
-          setOpenError(createOpenError(nextSource, message));
-          setState(emptyState);
+          setOpenErrorValue(createOpenError(nextSource, message));
+          setViewerState(emptyState);
         }
         logDiffOpenTiming("viewer.load.error", {
           error: message,
@@ -1355,24 +1421,25 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
+      const currentSyntaxTheme = getDiffSyntaxThemeSetting();
       logDiffOpenTiming("viewer.launchSource.effect", {
         source: initialSource,
-        selectedSyntaxTheme,
+        selectedSyntaxTheme: currentSyntaxTheme,
       });
-      loadSource(initialSource, selectedSyntaxTheme);
+      loadSource(initialSource, currentSyntaxTheme);
     }
-  }, [folderPath, loadSource, selectedSyntaxTheme, source]);
+  }, [folderPath, source]);
 
   useEffect(() => {
     const shouldFocusUrlInput = typeof focusUrlInputRequestId === "number" && !source && !folderPath;
     if (shouldFocusUrlInput) {
       loadRequestIdRef.current += 1;
       loadTraceRef.current = null;
-      setLoadingSource(null);
-      setState(emptyState);
-      setOpenError(null);
-      setDocumentError(null);
-      setUrlInput("");
+      setLoadingSourceValue(null);
+      setViewerState(emptyState);
+      setOpenErrorValue(null);
+      setDocumentErrorValue(null);
+      setUrlInputValue("");
       setUrlInputError(null);
       setFileFilter("");
       requestAnimationFrame(() => {
@@ -1382,13 +1449,14 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, [focusUrlInputRequestId, folderPath, source]);
 
   const openFolder = useCallback(async () => {
-    if (!isLoading) {
+    if (!loadingSource$.peek()) {
+      const currentState = state$.peek();
       try {
-        setOpenError(null);
-        setDocumentError(null);
+        setOpenErrorValue(null);
+        setDocumentErrorValue(null);
         const dialogStartedAt = nowMs();
         logDiffOpenTiming("viewer.dialog.start", {
-          currentFolderPath: state.folderPath,
+          currentFolderPath: currentState.folderPath,
         });
         const path = await openDiffFolderDialog();
         logDiffOpenTiming("viewer.dialog.finish", {
@@ -1398,46 +1466,47 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         if (path) {
           const nextSource = normalizeDiffOpenSource(path);
           if (nextSource) {
-            await loadSource(nextSource, selectedSyntaxTheme);
+            await loadSource(nextSource, getDiffSyntaxThemeSetting());
           }
         }
       } catch (error) {
         const nextError = {
           message: getErrorMessage(error),
-          source: state.source,
+          source: currentState.source,
           title: "Couldn't choose folder",
         };
-        if (state.status === "loaded") {
-          setDocumentError(nextError);
+        if (currentState.status === "loaded") {
+          setDocumentErrorValue(nextError);
         } else {
-          setOpenError(nextError);
+          setOpenErrorValue(nextError);
         }
       }
     }
-  }, [isLoading, loadSource, selectedSyntaxTheme, state]);
+  }, []);
 
   const openUrl = useCallback(async () => {
-    if (!isLoading) {
-      const nextSource = normalizeDiffOpenSource(urlInput);
+    if (!loadingSource$.peek()) {
+      const nextSource = normalizeDiffOpenSource(urlInput$.peek());
       if (nextSource?.kind === "github") {
-        setOpenError(null);
+        setOpenErrorValue(null);
         setUrlInputError(null);
-        await loadSource(nextSource, selectedSyntaxTheme);
+        await loadSource(nextSource, getDiffSyntaxThemeSetting());
       } else {
         setUrlInputError("Enter a GitHub PR or commit URL.");
       }
     }
-  }, [isLoading, loadSource, selectedSyntaxTheme, urlInput]);
+  }, []);
 
   const retryOpenError = useCallback(() => {
-    if (!isLoading && openError?.source) {
-      setOpenError(null);
-      loadSource(openError.source, selectedSyntaxTheme);
+    const currentOpenError = openError$.peek();
+    if (!loadingSource$.peek() && currentOpenError?.source) {
+      setOpenErrorValue(null);
+      loadSource(currentOpenError.source, getDiffSyntaxThemeSetting());
     }
-  }, [isLoading, loadSource, openError, selectedSyntaxTheme]);
+  }, []);
 
   const dismissDocumentError = useCallback(() => {
-    setDocumentError(null);
+    setDocumentErrorValue(null);
   }, []);
 
   const openPermissionSettings = useCallback(() => {
@@ -1456,32 +1525,33 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const handleDrop = useCallback(({ nativeEvent }: { nativeEvent: DragDropFileEvent }) => {
     setIsDropTargetActive(false);
-    if (!isLoading) {
+    if (!loadingSource$.peek()) {
       const nextSource = getDroppedDiffSource(nativeEvent);
       if (nextSource) {
-        loadSource(nextSource, selectedSyntaxTheme);
+        loadSource(nextSource, getDiffSyntaxThemeSetting());
       } else {
         const nextError = {
           message: getUnsupportedDropMessage(nativeEvent),
           source: null,
           title: "Unsupported drop",
         };
-        if (state.status === "loaded") {
-          setDocumentError(nextError);
+        if (state$.peek().status === "loaded") {
+          setDocumentErrorValue(nextError);
         } else {
-          setOpenError(nextError);
+          setOpenErrorValue(nextError);
         }
       }
     }
-  }, [isLoading, loadSource, selectedSyntaxTheme, state.status]);
+  }, []);
 
-  useEffect(() => {
+  useObserveEffect(() => {
+    const currentState = state$.get();
     const trace = loadTraceRef.current;
-    if (state.status === "loaded" && trace?.document === state.document && loggedTraceDocumentRef.current !== state.document) {
-      loggedTraceDocumentRef.current = state.document;
+    if (currentState.status === "loaded" && trace?.document === currentState.document && loggedTraceDocumentRef.current !== currentState.document) {
+      loggedTraceDocumentRef.current = currentState.document;
       const effectAt = nowMs();
       measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
-        setLoadingSource((current) => sourcesMatch(current, state.source) ? null : current);
+        setLoadingSourceValue((current) => sourcesMatch(current, currentState.source) ? null : current);
         logDiffOpenTiming("viewer.ui.loaded", {
           effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
           effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
@@ -1496,29 +1566,35 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         });
       });
     }
-  }, [state]);
+  });
 
-  useEffect(() => {
-    if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
-      loadSource(state.source, selectedSyntaxTheme).catch((error: unknown) => {
-        setDocumentError(createRefreshError(state.source, getErrorMessage(error)));
+  useObserveEffect(() => {
+    const currentState = state$.get();
+    const currentSyntaxTheme = getDiffSyntaxThemeSetting();
+    if (currentState.status === "loaded" && currentState.syntaxTheme !== currentSyntaxTheme) {
+      loadSource(currentState.source, currentSyntaxTheme).catch((error: unknown) => {
+        setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
       });
     }
-  }, [loadSource, selectedSyntaxTheme, state]);
+  });
 
-  useEffect(() => {
-    if (!visibleFolderPath) {
+  useObserveEffect(() => {
+    const currentState = state$.get();
+    const currentSyntaxTheme = getDiffSyntaxThemeSetting();
+    const currentVisibleSource = currentState.source;
+    const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
+    if (!currentVisibleFolderPath) {
       return undefined;
     }
 
     let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = watchDirectories([visibleFolderPath], () => {
+    const subscription = watchDirectories([currentVisibleFolderPath], () => {
       if (reloadTimeout) {
         clearTimeout(reloadTimeout);
       }
       reloadTimeout = setTimeout(() => {
-        loadSource({ kind: "folder", label: getDiffSourceLabel(visibleSource), value: visibleFolderPath }, selectedSyntaxTheme).catch((error: unknown) => {
-          setDocumentError(createRefreshError(visibleSource, getErrorMessage(error)));
+        loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }, currentSyntaxTheme).catch((error: unknown) => {
+          setDocumentErrorValue(createRefreshError(currentVisibleSource, getErrorMessage(error)));
         });
       }, 250);
     });
@@ -1529,25 +1605,28 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
       subscription.remove();
     };
-  }, [loadSource, selectedSyntaxTheme, visibleFolderPath, visibleSource]);
+  });
 
   const reloadCurrentSource = useCallback(() => {
-    if (state.status !== "loaded") {
+    const currentState = state$.peek();
+    if (currentState.status !== "loaded") {
       return false;
     }
 
-    loadSource(state.source, selectedSyntaxTheme).catch((error: unknown) => {
-      setDocumentError(createRefreshError(state.source, getErrorMessage(error)));
+    loadSource(currentState.source, getDiffSyntaxThemeSetting()).catch((error: unknown) => {
+      setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
     });
     return true;
-  }, [loadSource, selectedSyntaxTheme, state]);
+  }, []);
 
   const revealCurrentFolder = useCallback(() => {
-    if (!visibleFolderPath) {
+    const currentSource = state$.peek().source;
+    const currentVisibleFolderPath = currentSource?.kind === "folder" ? currentSource.value : null;
+    if (!currentVisibleFolderPath) {
       return false;
     }
 
-    revealInFinder(visibleFolderPath)
+    revealInFinder(currentVisibleFolderPath)
       .then((didReveal) => {
         if (!didReveal) {
           console.error("Unable to reveal folder in Finder.");
@@ -1557,7 +1636,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         console.error(error instanceof Error ? error.message : String(error));
       });
     return true;
-  }, [visibleFolderPath]);
+  }, []);
 
   const copyText = useCallback((text: string) => {
     commandRunner.runCommand({ command: "pbcopy", input: text })
@@ -1574,100 +1653,122 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const copyCurrentSource = useCallback(() => {
     let didCopy = false;
-    if (visibleSource) {
-      didCopy = copyText(visibleSource.value);
+    const currentVisibleSource = state$.peek().source;
+    if (currentVisibleSource) {
+      didCopy = copyText(currentVisibleSource.value);
     }
     return didCopy;
-  }, [copyText, visibleSource]);
+  }, []);
 
   const copyCurrentFilePath = useCallback(() => {
     let didCopy = false;
-    if (state.status === "loaded" && visibleFolderPath) {
-      const activeFile = getActiveDiffFile(state.files, activeFileIndex$.get());
+    const currentState = state$.peek();
+    const currentVisibleFolderPath = currentState.source?.kind === "folder" ? currentState.source.value : null;
+    if (currentState.status === "loaded" && currentVisibleFolderPath) {
+      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.get());
       if (activeFile) {
-        didCopy = copyText(getJoinedPath(visibleFolderPath, activeFile.path));
+        didCopy = copyText(getJoinedPath(currentVisibleFolderPath, activeFile.path));
       }
     }
     return didCopy;
-  }, [activeFileIndex$, copyText, state, visibleFolderPath]);
+  }, []);
 
   const copyCurrentRelativePath = useCallback(() => {
     let didCopy = false;
-    if (state.status === "loaded") {
-      const activeFile = getActiveDiffFile(state.files, activeFileIndex$.get());
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
+      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.get());
       if (activeFile) {
         didCopy = copyText(activeFile.path);
       }
     }
     return didCopy;
-  }, [activeFileIndex$, copyText, state]);
+  }, []);
 
-  useEffect(() => {
-    if (toolbarSource) {
+  useObserveEffect(() => {
+    const currentState = state$.get();
+    const currentLoadingSource = loadingSource$.get();
+    const currentSyntaxTheme = getDiffSyntaxTheme();
+    const currentViewMode = getDiffViewModeSetting();
+    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
+    const currentShowViewModeToolbar = currentToolbarSource !== null;
+    const currentShowSidebarControl = currentShowViewModeToolbar;
+    if (currentToolbarSource) {
       setDiffViewerWindowOptions({
-        appearance: syntaxTheme.appearance,
-        backgroundColor: syntaxTheme.background,
+        appearance: currentSyntaxTheme.appearance,
+        backgroundColor: currentSyntaxTheme.background,
         includeToolbarItems: true,
-        source: toolbarSource,
-        showSidebarControl,
-        showViewModeToolbar,
-        sidebarCollapsed,
-        viewMode,
+        source: currentToolbarSource,
+        showSidebarControl: currentShowSidebarControl,
+        showViewModeToolbar: currentShowViewModeToolbar,
+        sidebarCollapsed: sidebarCollapsed$.get(),
+        viewMode: currentViewMode,
       }).catch((error: unknown) => {
         console.error(error instanceof Error ? error.message : String(error));
       });
     }
-  }, [showSidebarControl, showViewModeToolbar, sidebarCollapsed, syntaxTheme.appearance, syntaxTheme.background, toolbarSource, viewMode]);
+  });
 
-  useEffect(() => {
+  useObserveEffect(() => {
     let frameHandle: number | null = null;
     let secondFrameHandle: number | null = null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     const scheduleStartedAt = nowMs();
-    const shouldWaitForContentLayout = state.status === "loaded" && loadedFileCount > 0;
-    const isContentLayoutReady = !shouldWaitForContentLayout || diffPaneHeight > diffTitlebarTopInset;
-    const includeToolbarItems = toolbarSource === null;
+    const currentState = state$.get();
+    const currentLoadingSource = loadingSource$.get();
+    const currentSyntaxTheme = getDiffSyntaxTheme();
+    const currentViewMode = getDiffViewModeSetting();
+    const currentDiffPaneHeight = diffPaneHeight$.get();
+    const currentSidebarCollapsed = sidebarCollapsed$.get();
+    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
+    const currentShowViewModeToolbar = currentToolbarSource !== null;
+    const currentShowSidebarControl = currentShowViewModeToolbar;
+    const shouldWaitForContentLayout = currentState.status === "loaded" && currentLoadedFileCount > 0;
+    const isContentLayoutReady = !shouldWaitForContentLayout || currentDiffPaneHeight > diffTitlebarTopInset;
+    const includeToolbarItems = currentToolbarSource === null;
 
     logDiffOpenTiming("viewer.windowOptions.schedule", {
-      diffPaneHeight,
+      diffPaneHeight: currentDiffPaneHeight,
       includeToolbarItems,
       isContentLayoutReady,
-      loadedFileCount,
-      showSidebarControl,
-      showViewModeToolbar,
-      sidebarCollapsed,
-      source: toolbarSource ?? state.source,
-      status: state.status,
-      viewMode,
+      loadedFileCount: currentLoadedFileCount,
+      showSidebarControl: currentShowSidebarControl,
+      showViewModeToolbar: currentShowViewModeToolbar,
+      sidebarCollapsed: currentSidebarCollapsed,
+      source: currentToolbarSource ?? currentState.source,
+      status: currentState.status,
+      viewMode: currentViewMode,
     });
 
     if (isContentLayoutReady) {
       const applyWindowOptions = () => {
         const startedAt = nowMs();
         logDiffOpenTiming("viewer.windowOptions.start", {
-          diffPaneHeight,
-          loadedFileCount,
+          diffPaneHeight: currentDiffPaneHeight,
+          loadedFileCount: currentLoadedFileCount,
           scheduledDelayMs: Number((startedAt - scheduleStartedAt).toFixed(1)),
-          showSidebarControl,
-          showViewModeToolbar,
-          sidebarCollapsed,
-          source: toolbarSource ?? state.source,
-          status: state.status,
-          viewMode,
+          showSidebarControl: currentShowSidebarControl,
+          showViewModeToolbar: currentShowViewModeToolbar,
+          sidebarCollapsed: currentSidebarCollapsed,
+          source: currentToolbarSource ?? currentState.source,
+          status: currentState.status,
+          viewMode: currentViewMode,
         });
         setDiffViewerWindowOptions({
-          appearance: syntaxTheme.appearance,
-          backgroundColor: syntaxTheme.background,
+          appearance: currentSyntaxTheme.appearance,
+          backgroundColor: currentSyntaxTheme.background,
           includeToolbarItems,
-          source: toolbarSource ?? state.source,
-          showSidebarControl,
-          showViewModeToolbar,
-          sidebarCollapsed,
-          viewMode,
+          source: currentToolbarSource ?? currentState.source,
+          showSidebarControl: currentShowSidebarControl,
+          showViewModeToolbar: currentShowViewModeToolbar,
+          sidebarCollapsed: currentSidebarCollapsed,
+          viewMode: currentViewMode,
         })
           .then(() => {
             logDiffOpenTiming("viewer.windowOptions.finish", {
-              source: toolbarSource ?? state.source,
+              source: currentToolbarSource ?? currentState.source,
               setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
             });
           })
@@ -1676,7 +1777,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
           });
       };
 
-      if (state.status === "loaded") {
+      if (currentState.status === "loaded") {
         frameHandle = requestAnimationFrame(() => {
           secondFrameHandle = requestAnimationFrame(() => {
             timeoutHandle = setTimeout(applyWindowOptions, diffLoadedWindowOptionsDelayMs);
@@ -1687,10 +1788,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
     } else {
       logDiffOpenTiming("viewer.windowOptions.deferred", {
-        diffPaneHeight,
-        loadedFileCount,
-        source: toolbarSource ?? state.source,
-        status: state.status,
+        diffPaneHeight: currentDiffPaneHeight,
+        loadedFileCount: currentLoadedFileCount,
+        source: currentToolbarSource ?? currentState.source,
+        status: currentState.status,
       });
     }
 
@@ -1705,28 +1806,36 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         clearTimeout(timeoutHandle);
       }
     };
-  }, [diffPaneHeight, loadedFileCount, showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.source, state.status, syntaxTheme.appearance, syntaxTheme.background, toolbarSource, viewMode]);
+  });
 
   const toggleSidebar = useCallback(() => {
-    if (!showSidebarControl) {
+    const currentState = state$.peek();
+    const currentLoadingSource = loadingSource$.peek();
+    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
+    if (!currentToolbarSource) {
       return false;
     }
 
-    setSidebarCollapsed((current) => !current);
+    setSidebarCollapsedValue((current) => !current);
     return true;
-  }, [showSidebarControl]);
+  }, []);
 
   const focusFileFilter = useCallback(() => {
-    if (!showSidebarControl) {
+    const currentState = state$.peek();
+    const currentLoadingSource = loadingSource$.peek();
+    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
+    if (!currentToolbarSource) {
       return false;
     }
 
-    setSidebarCollapsed(false);
+    setSidebarCollapsedValue(false);
     requestAnimationFrame(() => {
       fileFilterInputRef.current?.focus();
     });
     return true;
-  }, [showSidebarControl]);
+  }, []);
 
   useEffect(() => registerDiffViewerActionHandlers({
     copyFilePath: copyCurrentFilePath,
@@ -1736,26 +1845,36 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
     toggleSidebar,
-  }), [copyCurrentFilePath, copyCurrentRelativePath, copyCurrentSource, focusFileFilter, reloadCurrentSource, revealCurrentFolder, toggleSidebar]);
+  }), []);
 
-  useEffect(() => {
-    const hasLoadedFiles = loadedFileCount > 0;
+  useObserveEffect(() => {
+    const currentState = state$.get();
+    const currentViewMode = getDiffViewModeSetting();
+    const currentLoadingSource = loadingSource$.get();
+    const currentSidebarCollapsed = sidebarCollapsed$.get();
+    const currentVisibleSource = currentState.source;
+    const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
+    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentVisibleSource : null);
+    const currentShowViewModeToolbar = currentToolbarSource !== null;
+    const currentShowSidebarControl = currentShowViewModeToolbar;
+    const hasLoadedFiles = currentLoadedFileCount > 0;
     updateMenuItems(diffMenuOwnerId, [
       {
-        enabled: state.status === "loaded",
+        enabled: currentState.status === "loaded",
         id: "reload",
       },
       {
-        enabled: visibleFolderPath !== null,
+        enabled: currentVisibleFolderPath !== null,
         id: "revealInFinder",
       },
       {
-        enabled: visibleSource !== null,
+        enabled: currentVisibleSource !== null,
         id: "copySource",
-        title: visibleSource?.kind === "github" ? "Copy Source URL" : "Copy Folder Path",
+        title: currentVisibleSource?.kind === "github" ? "Copy Source URL" : "Copy Folder Path",
       },
       {
-        enabled: visibleFolderPath !== null && hasLoadedFiles,
+        enabled: currentVisibleFolderPath !== null && hasLoadedFiles,
         id: "copyFilePath",
       },
       {
@@ -1763,27 +1882,27 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         id: "copyRelativePath",
       },
       {
-        checked: showSidebarControl && !sidebarCollapsed,
-        enabled: showSidebarControl,
+        checked: currentShowSidebarControl && !currentSidebarCollapsed,
+        enabled: currentShowSidebarControl,
         id: "toggleSidebar",
-        title: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+        title: currentSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
       },
       {
-        enabled: showSidebarControl,
+        enabled: currentShowSidebarControl,
         id: "filterFiles",
       },
       {
-        checked: viewMode === "unified",
-        enabled: showViewModeToolbar,
+        checked: currentViewMode === "unified",
+        enabled: currentShowViewModeToolbar,
         id: "viewUnified",
       },
       {
-        checked: viewMode === "blocks",
-        enabled: showViewModeToolbar,
+        checked: currentViewMode === "blocks",
+        enabled: currentShowViewModeToolbar,
         id: "viewBlocks",
       },
     ]);
-  }, [loadedFileCount, showSidebarControl, showViewModeToolbar, sidebarCollapsed, state.status, viewMode, visibleFolderPath, visibleSource]);
+  });
 
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {
@@ -1796,7 +1915,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
     });
     return () => subscription.remove();
-  }, [toggleSidebar]);
+  }, []);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
     setCollapsedFileIndexes((current) => {
@@ -1859,7 +1978,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       sidebarHeight: nextMetrics.sidebarHeight,
       sidebarWidth: nextMetrics.sidebarWidth,
     });
-    setSplitPaneMetrics(nextMetrics);
+    setSplitPaneMetricsValue(nextMetrics);
   }, []);
 
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
@@ -1870,7 +1989,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       rawHeight: Number(event.nativeEvent.layout.height.toFixed(1)),
       width: Number(event.nativeEvent.layout.width.toFixed(1)),
     });
-    setDiffPaneHeight(nextHeight);
+    setDiffPaneHeightValue(nextHeight);
   }, []);
 
   const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
@@ -2402,12 +2521,12 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
                 autoCapitalize="none"
                 autoCorrect={false}
                 onChangeText={(text) => {
-                  setUrlInput(text);
+                  setUrlInputValue(text);
                   if (urlInputError) {
                     setUrlInputError(null);
                   }
                   if (openError) {
-                    setOpenError(null);
+                    setOpenErrorValue(null);
                   }
                 }}
                 onSubmitEditing={openUrl}
@@ -2463,7 +2582,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
                 foregroundColor={foregroundColor}
                 mutedColor={mutedColor}
                 onChooseFolder={openFolder}
-                onDismiss={() => setOpenError(null)}
+                onDismiss={() => setOpenErrorValue(null)}
                 onOpenSystemSettings={openError.kind === "permission" ? openPermissionSettings : undefined}
                 onRetry={openError.kind !== "permission" && openError.source ? retryOpenError : undefined}
               />
