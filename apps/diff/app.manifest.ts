@@ -29,6 +29,7 @@ const manifest = {
       "@legend-desktop/sf-symbol",
       "@legend-desktop/storage",
       "@legend-desktop/syntax-parser",
+      "@legend-desktop/text-input-search",
       "@legend-desktop/window-manager",
     ],
     ios: [],

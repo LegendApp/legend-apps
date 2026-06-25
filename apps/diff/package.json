@@ -23,6 +23,7 @@
     "@legend-desktop/syntax-parser": "workspace:*",
     "@legend-desktop/syntax-settings": "workspace:*",
     "@legend-desktop/theme": "workspace:*",
+    "@legend-desktop/text-input-search": "0.0.0",
     "@legend-desktop/virtualized-document": "workspace:*",
     "@legend-desktop/window-manager": "0.0.0",
     "@legend-desktop/windows": "0.0.0",

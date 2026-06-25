@@ -29,6 +29,7 @@ import {
 import { updateMenuItems } from "@legend-desktop/native-menu";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { TextInputSearch, type TextInputSearchRef } from "@legend-desktop/text-input-search";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
   useVirtualizedDocumentRows,
@@ -555,7 +556,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const diffPaneHeightRef = useRef(diffPaneHeight);
   diffPaneHeightRef.current = diffPaneHeight;
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
-  const fileFilterInputRef = useRef<TextInput | null>(null);
+  const fileFilterInputRef = useRef<TextInputSearchRef | null>(null);
   const urlInputRef = useRef<TextInput | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
@@ -1789,11 +1790,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
             </View>
             {file ? (
               <View style={styles.fileMeta}>
-                <View style={[styles.fileStatusPill, { backgroundColor: statusPresentation.backgroundColor }]}>
-                  <Text selectable={false} style={[styles.fileStatusPillText, { color: statusPresentation.color }]}>
-                    {statusPresentation.title}
-                  </Text>
-                </View>
                 {!file.isBinary ? (
                   <>
                     <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
@@ -1966,11 +1962,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
             </View>
             {file ? (
               <View style={styles.fileMeta}>
-                <View style={[styles.fileStatusPill, { backgroundColor: statusPresentation.backgroundColor }]}>
-                  <Text selectable={false} style={[styles.fileStatusPillText, { color: statusPresentation.color }]}>
-                    {statusPresentation.title}
-                  </Text>
-                </View>
                 {!file.isBinary ? (
                   <>
                     <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
@@ -2285,19 +2276,13 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
           ]}
         >
           <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
-          <View style={[styles.sidebarFilter, { borderColor: displayTheme.colors.border }]}>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={setFileFilter}
-              placeholder="Filter files"
-              placeholderTextColor={mutedColor}
-              ref={fileFilterInputRef}
-              returnKeyType="search"
-              style={[styles.sidebarFilterInput, { color: foregroundColor }]}
-              value={fileFilter}
-            />
-          </View>
+          <TextInputSearch
+            defaultValue={fileFilter}
+            onChangeText={setFileFilter}
+            placeholder="Filter files"
+            ref={fileFilterInputRef}
+            style={styles.sidebarFilter}
+          />
           {isSidebarLayoutReady ? (
             filteredSidebarFiles.length > 0 ? (
               <LegendList
@@ -2585,19 +2570,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 16,
   },
-  fileStatusPill: {
-    alignItems: "center",
-    borderRadius: 4,
-    justifyContent: "center",
-    minWidth: 68,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  fileStatusPillText: {
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
   fileTitleGroup: {
     alignItems: "baseline",
     flex: 1,
@@ -2694,19 +2666,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   sidebarFilter: {
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 28,
-    justifyContent: "center",
     marginBottom: 8,
     marginHorizontal: 10,
-    paddingHorizontal: 8,
-  },
-  sidebarFilterInput: {
-    fontSize: 12,
-    height: 26,
-    lineHeight: 16,
-    padding: 0,
+    minHeight: 28,
   },
   sidebarEmpty: {
     alignItems: "center",
