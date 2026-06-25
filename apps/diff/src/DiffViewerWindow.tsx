@@ -158,6 +158,23 @@ type DiffUnifiedRowProps = {
   tokenStyleById: SyntaxStyleMap;
 };
 
+type DiffSideBySideRowProps = {
+  adaptiveRender: "light" | "normal";
+  borderColor: string;
+  collapsedFileIndexes: ReadonlySet<number>;
+  fileByIndex: ReadonlyMap<number, DiffFileSummary>;
+  fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
+  fontFamily: string;
+  fontSize: number;
+  foregroundColor: string;
+  index: number;
+  mutedColor: string;
+  onToggleFileCollapsed: (fileIndex: number) => void;
+  row: DiffSideBySideRenderRow | undefined;
+  rowHeight: number;
+  tokenStyleById: SyntaxStyleMap;
+};
+
 type SideBySideTokenStyleState = {
   document: DiffDocument;
   styleCount: number;
@@ -229,6 +246,45 @@ function areDiffUnifiedRowPropsEqual(previousProps: DiffUnifiedRowProps, nextPro
     && previousProps.rowHeight === nextProps.rowHeight
     && previousProps.tokenStyleById === nextProps.tokenStyleById
     && areOptionalDiffRenderRowsEqual(previousProps.row, nextProps.row);
+}
+
+function areDiffSideBySideRenderRowsEqual(previousRow: DiffSideBySideRenderRow, nextRow: DiffSideBySideRenderRow) {
+  return previousRow === nextRow
+    || (
+      previousRow.index === nextRow.index
+      && previousRow.kind === nextRow.kind
+      && previousRow.fileIndex === nextRow.fileIndex
+      && previousRow.hunkIndex === nextRow.hunkIndex
+      && previousRow.sourceStart === nextRow.sourceStart
+      && previousRow.sourceEnd === nextRow.sourceEnd
+      && previousRow.oldRowVisible === nextRow.oldRowVisible
+      && previousRow.newRowVisible === nextRow.newRowVisible
+      && previousRow.newRowEqualsOldRow === nextRow.newRowEqualsOldRow
+      && areDiffRenderRowsEqual(previousRow.oldRow, nextRow.oldRow)
+      && areDiffRenderRowsEqual(previousRow.newRow, nextRow.newRow)
+    );
+}
+
+function areOptionalDiffSideBySideRowsEqual(previousRow: DiffSideBySideRenderRow | undefined, nextRow: DiffSideBySideRenderRow | undefined) {
+  return previousRow === nextRow
+    || Boolean(previousRow && nextRow && areDiffSideBySideRenderRowsEqual(previousRow, nextRow));
+}
+
+function areDiffSideBySideRowPropsEqual(previousProps: DiffSideBySideRowProps, nextProps: DiffSideBySideRowProps) {
+  return previousProps.adaptiveRender === nextProps.adaptiveRender
+    && previousProps.borderColor === nextProps.borderColor
+    && previousProps.collapsedFileIndexes === nextProps.collapsedFileIndexes
+    && previousProps.fileByIndex === nextProps.fileByIndex
+    && previousProps.fileByRowStart === nextProps.fileByRowStart
+    && previousProps.fontFamily === nextProps.fontFamily
+    && previousProps.fontSize === nextProps.fontSize
+    && previousProps.foregroundColor === nextProps.foregroundColor
+    && previousProps.index === nextProps.index
+    && previousProps.mutedColor === nextProps.mutedColor
+    && previousProps.onToggleFileCollapsed === nextProps.onToggleFileCollapsed
+    && previousProps.rowHeight === nextProps.rowHeight
+    && previousProps.tokenStyleById === nextProps.tokenStyleById
+    && areOptionalDiffSideBySideRowsEqual(previousProps.row, nextProps.row);
 }
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
@@ -442,6 +498,81 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
     </View>
   );
 }, areDiffUnifiedRowPropsEqual);
+
+const DiffSideBySideRow = memo(function DiffSideBySideRow({
+  adaptiveRender,
+  borderColor,
+  collapsedFileIndexes,
+  fileByIndex,
+  fileByRowStart,
+  fontFamily,
+  fontSize,
+  foregroundColor,
+  index,
+  mutedColor,
+  onToggleFileCollapsed,
+  row,
+  rowHeight,
+  tokenStyleById,
+}: DiffSideBySideRowProps) {
+  if (!row) {
+    return <View style={{ height: rowHeight }} />;
+  }
+
+  if (row.kind === "file-header") {
+    const file = fileByRowStart.get(row.sourceStart) ?? fileByIndex.get(row.fileIndex);
+    const fileIndex = file?.index ?? index;
+    return (
+      <DiffFileHeaderRow
+        borderColor={borderColor}
+        fallbackFileIndex={fileIndex}
+        fallbackPath={file?.path ?? ""}
+        file={file}
+        fontFamily={fontFamily}
+        fontSize={fontSize}
+        foregroundColor={foregroundColor}
+        isCollapsed={collapsedFileIndexes.has(fileIndex)}
+        mutedColor={mutedColor}
+        onToggleFileCollapsed={onToggleFileCollapsed}
+      />
+    );
+  }
+
+  return (
+    <View style={[styles.sideBySideRow, { height: rowHeight }]}>
+      <View style={styles.sidePane}>
+        <DiffSideBySideLine
+          adaptiveRender={adaptiveRender}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          row={row.oldRow}
+          rowHeight={rowHeight}
+          rowVisible={row.oldRowVisible}
+          side="old"
+          tokenStyleById={tokenStyleById}
+        />
+      </View>
+      <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
+      </View>
+      <View style={styles.sidePane}>
+        <DiffSideBySideLine
+          adaptiveRender={adaptiveRender}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
+          rowHeight={rowHeight}
+          rowVisible={row.newRowVisible}
+          side="new"
+          tokenStyleById={tokenStyleById}
+        />
+      </View>
+    </View>
+  );
+}, areDiffSideBySideRowPropsEqual);
 
 type DiffViewerState =
   | {
@@ -2537,107 +2668,27 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const renderSideBySideRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
-      if (!row) {
-        return <View style={{ height: rowHeight }} />;
-      }
-
-      if (row.kind === "file-header") {
-        const file = fileByRowStart.get(row.sourceStart) ?? fileByIndex.get(row.fileIndex);
-        const path = file?.path ?? "";
-        const filename = getFilename(path);
-        const directory = getDirectoryPath(path);
-        const fileIndex = file?.index ?? index;
-        const isCollapsed = collapsedFileIndexes.has(fileIndex);
-        const statusPresentation = getFileStatusPresentation(file);
-        const pathContext = file ? getFilePathContext(file, directory) : directory ? `${directory}/` : "";
-        const fileHeaderLineHeight = Math.max(18, fontSize + 8);
-
-        return (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => toggleFileCollapsed(fileIndex)}
-            style={({ pressed }) => [
-              styles.fileRow,
-              {
-                backgroundColor: "#252526",
-                borderColor: displayTheme.colors.border,
-                opacity: pressed ? 0.72 : 1,
-              },
-            ]}
-          >
-            <View style={styles.fileDisclosure}>
-              <SFSymbol color={mutedColor} name={isCollapsed ? "chevron.right" : "chevron.down"} size={12} />
-            </View>
-            {file ? (
-              <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-                <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={12} />
-              </View>
-            ) : null}
-            <View style={styles.fileTitleGroup}>
-              {pathContext ? (
-                <Text selectable style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
-                  {pathContext}
-                </Text>
-              ) : null}
-              <Text selectable style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
-                {filename}
-              </Text>
-            </View>
-            {file ? (
-              <View style={styles.fileMeta}>
-                {!file.isBinary ? (
-                  <>
-                    <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                      +{file.additions}
-                    </Text>
-                    <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                      -{file.deletions}
-                    </Text>
-                  </>
-                ) : null}
-              </View>
-            ) : null}
-          </Pressable>
-        );
-      }
-
       const sideBySideTokenStyleById = state.status === "loaded" && sideBySideTokenStyleState?.document === state.document
         ? sideBySideTokenStyleState.tokenStyleById
         : tokenStyleById;
 
       return (
-        <View style={[styles.sideBySideRow, { height: rowHeight }]}>
-          <View style={styles.sidePane}>
-            <DiffSideBySideLine
-              adaptiveRender={adaptiveRender}
-              fontFamily={fontFamily}
-              fontSize={fontSize}
-              foregroundColor={foregroundColor}
-              mutedColor={mutedColor}
-              row={row.oldRow}
-              rowHeight={rowHeight}
-              rowVisible={row.oldRowVisible}
-              side="old"
-              tokenStyleById={sideBySideTokenStyleById}
-            />
-          </View>
-          <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
-          </View>
-          <View style={styles.sidePane}>
-            <DiffSideBySideLine
-              adaptiveRender={adaptiveRender}
-              fontFamily={fontFamily}
-              fontSize={fontSize}
-              foregroundColor={foregroundColor}
-              mutedColor={mutedColor}
-              row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
-              rowHeight={rowHeight}
-              rowVisible={row.newRowVisible}
-              side="new"
-              tokenStyleById={sideBySideTokenStyleById}
-            />
-          </View>
-        </View>
+        <DiffSideBySideRow
+          adaptiveRender={adaptiveRender}
+          borderColor={displayTheme.colors.border}
+          collapsedFileIndexes={collapsedFileIndexes}
+          fileByIndex={fileByIndex}
+          fileByRowStart={fileByRowStart}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          foregroundColor={foregroundColor}
+          index={index}
+          mutedColor={mutedColor}
+          onToggleFileCollapsed={toggleFileCollapsed}
+          row={row}
+          rowHeight={rowHeight}
+          tokenStyleById={sideBySideTokenStyleById}
+        />
       );
     },
     [collapsedFileIndexes, displayTheme.colors.border, fileByIndex, fileByRowStart, fontFamily, fontSize, foregroundColor, mutedColor, rowHeight, sideBySideTokenStyleState, state, toggleFileCollapsed, tokenStyleById],
