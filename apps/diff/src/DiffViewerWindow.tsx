@@ -169,16 +169,16 @@ type DiffSideBySideRowProps = {
 
 type DiffRenderFields = {
   borderColor$: Observable<string>;
-  fileByIndex$: Observable<ReadonlyMap<number, DiffFileSummary>>;
-  fileByRowStart$: Observable<ReadonlyMap<number, DiffFileSummary>>;
-  fileHeaderRowIndexes$: Observable<ReadonlySet<number>>;
+  fileByIndexRef: { current: ReadonlyMap<number, DiffFileSummary> };
+  fileByRowStartRef: { current: ReadonlyMap<number, DiffFileSummary> };
+  fileHeaderRowIndexesRef: { current: ReadonlySet<number> };
   fontFamily$: Observable<string>;
   fontSize$: Observable<number>;
   foregroundColor$: Observable<string>;
   mutedColor$: Observable<string>;
   rowHeight$: Observable<number>;
-  sideBySideTokenStyleById$: Observable<SyntaxStyleMap>;
-  tokenStyleById$: Observable<SyntaxStyleMap>;
+  sideBySideTokenStyleByIdRef: { current: SyntaxStyleMap };
+  tokenStyleByIdRef: { current: SyntaxStyleMap };
   toggleFileCollapsed: (fileIndex: number) => void;
 };
 
@@ -346,15 +346,15 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
   row,
 }: DiffUnifiedRowProps) {
   const borderColor = useValue(renderFields.borderColor$);
-  const fileByIndex = useValue(renderFields.fileByIndex$);
-  const fileByRowStart = useValue(renderFields.fileByRowStart$);
-  const fileHeaderRowIndexes = useValue(renderFields.fileHeaderRowIndexes$);
+  const fileByIndex = renderFields.fileByIndexRef.current;
+  const fileByRowStart = renderFields.fileByRowStartRef.current;
+  const fileHeaderRowIndexes = renderFields.fileHeaderRowIndexesRef.current;
   const fontFamily = useValue(renderFields.fontFamily$);
   const fontSize = useValue(renderFields.fontSize$);
   const foregroundColor = useValue(renderFields.foregroundColor$);
   const mutedColor = useValue(renderFields.mutedColor$);
   const rowHeight = useValue(renderFields.rowHeight$);
-  const tokenStyleById = useValue(renderFields.tokenStyleById$);
+  const tokenStyleById = renderFields.tokenStyleByIdRef.current;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const changeType = row?.changeType ?? 0;
@@ -423,14 +423,14 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
   row,
 }: DiffSideBySideRowProps) {
   const borderColor = useValue(renderFields.borderColor$);
-  const fileByIndex = useValue(renderFields.fileByIndex$);
-  const fileByRowStart = useValue(renderFields.fileByRowStart$);
+  const fileByIndex = renderFields.fileByIndexRef.current;
+  const fileByRowStart = renderFields.fileByRowStartRef.current;
   const fontFamily = useValue(renderFields.fontFamily$);
   const fontSize = useValue(renderFields.fontSize$);
   const foregroundColor = useValue(renderFields.foregroundColor$);
   const mutedColor = useValue(renderFields.mutedColor$);
   const rowHeight = useValue(renderFields.rowHeight$);
-  const sideBySideTokenStyleById = useValue(renderFields.sideBySideTokenStyleById$);
+  const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleByIdRef.current;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
 
@@ -854,6 +854,12 @@ function useSyncedObservableValue<T>(value: T): Observable<T> {
     }
   }, [value$, value]);
   return value$;
+}
+
+function useLatestValueRef<T>(value: T) {
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  return valueRef;
 }
 
 function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource: DiffOpenSource | null): DiffVisibleSourceModel {
@@ -2033,10 +2039,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     viewMode,
   });
   collapsedFileIndexListRef.current = collapsedFileIndexList;
-  const getVisibleListIndex$ = useSyncedObservableValue(getVisibleListIndex);
-  const sideBySideListIndexByRowIndex$ = useSyncedObservableValue(sideBySideListIndexByRowIndex);
-  const sideBySideRowCount$ = useSyncedObservableValue(sideBySideRowCount);
-  const viewMode$ = useSyncedObservableValue(viewMode);
+  const getVisibleListIndexRef = useLatestValueRef(getVisibleListIndex);
+  const sideBySideListIndexByRowIndexRef = useLatestValueRef(sideBySideListIndexByRowIndex);
+  const sideBySideRowCountRef = useLatestValueRef(sideBySideRowCount);
+  const viewModeRef = useLatestValueRef(viewMode);
   const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
     const styles = document.getStyles();
     setSideBySideTokenStyleState((current) => (
@@ -2842,30 +2848,30 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     ? sideBySideTokenStyleState.tokenStyleById
     : tokenStyleById;
   const borderColor$ = useSyncedObservableValue(displayTheme.colors.border);
-  const fileByIndex$ = useSyncedObservableValue<ReadonlyMap<number, DiffFileSummary>>(fileByIndex);
-  const fileByRowStart$ = useSyncedObservableValue<ReadonlyMap<number, DiffFileSummary>>(fileByRowStart);
-  const fileHeaderRowIndexes$ = useSyncedObservableValue<ReadonlySet<number>>(fileHeaderRowIndexes);
+  const fileByIndexRef = useLatestValueRef<ReadonlyMap<number, DiffFileSummary>>(fileByIndex);
+  const fileByRowStartRef = useLatestValueRef<ReadonlyMap<number, DiffFileSummary>>(fileByRowStart);
+  const fileHeaderRowIndexesRef = useLatestValueRef<ReadonlySet<number>>(fileHeaderRowIndexes);
   const fontFamily$ = useSyncedObservableValue(fontFamily);
   const fontSize$ = useSyncedObservableValue(fontSize);
   const foregroundColor$ = useSyncedObservableValue(foregroundColor);
   const mutedColor$ = useSyncedObservableValue(mutedColor);
   const rowHeight$ = useSyncedObservableValue(rowHeight);
-  const sideBySideTokenStyleById$ = useSyncedObservableValue(currentSideBySideTokenStyleById);
-  const tokenStyleById$ = useSyncedObservableValue(tokenStyleById);
+  const sideBySideTokenStyleByIdRef = useLatestValueRef(currentSideBySideTokenStyleById);
+  const tokenStyleByIdRef = useLatestValueRef(tokenStyleById);
   const renderFieldsRef = useRef<DiffRenderFields | null>(null);
   if (!renderFieldsRef.current) {
     renderFieldsRef.current = {
       borderColor$,
-      fileByIndex$,
-      fileByRowStart$,
-      fileHeaderRowIndexes$,
+      fileByIndexRef,
+      fileByRowStartRef,
+      fileHeaderRowIndexesRef,
       fontFamily$,
       fontSize$,
       foregroundColor$,
       mutedColor$,
       rowHeight$,
-      sideBySideTokenStyleById$,
-      tokenStyleById$,
+      sideBySideTokenStyleByIdRef,
+      tokenStyleByIdRef,
       toggleFileCollapsed,
     };
   }
@@ -2873,9 +2879,9 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const listIndex = viewMode$.peek() === "unified"
-      ? getVisibleListIndex$.peek()(rowStart)
-      : sideBySideListIndexByRowIndex$.peek().get(rowStart);
+    const listIndex = viewModeRef.current === "unified"
+      ? getVisibleListIndexRef.current(rowStart)
+      : sideBySideListIndexByRowIndexRef.current.get(rowStart);
     if (listIndex !== undefined) {
       listRef.current?.scrollToIndex({
         animated: true,
@@ -2973,7 +2979,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       if (count > 0) {
         currentState.document.getSideBySideRows(start, count, collapsedFileIndexListRef.current);
         refreshSideBySideTokenStyles(currentState.document);
-        const end = Math.min(sideBySideRowCount$.peek(), start + count);
+        const end = Math.min(sideBySideRowCountRef.current, start + count);
         for (let index = start; index < end; index += 1) {
           bumpSideBySideRowVersion(index);
         }
