@@ -530,9 +530,7 @@ type DiffLoadedBodyProps = {
   diffPaneHeight: number;
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
   documentErrorBody: ReactNode;
-  fileFilter: string;
   fileFilterInputRef: RefObject<TextInputSearchRef | null>;
-  filteredSidebarFiles: readonly DiffFileSummary[];
   getItemSize: (index: number, row: DiffRenderRow | undefined) => number;
   getItemType: (index: number, row: DiffRenderRow | undefined) => string;
   getSideBySideItemSize: (index: number, row: DiffSideBySideRenderRow | undefined) => number;
@@ -559,7 +557,6 @@ type DiffLoadedBodyProps = {
   renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
   requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
   rowHeight: number;
-  setFileFilter: (filter: string) => void;
   sidebarCollapsed: boolean;
   sidebarListHeight: number;
   sideBySideItemIndexes: Array<number | undefined>;
@@ -1182,9 +1179,7 @@ function DiffLoadedBody({
   diffPaneHeight,
   diffRows,
   documentErrorBody,
-  fileFilter,
   fileFilterInputRef,
-  filteredSidebarFiles,
   getItemSize,
   getItemType,
   getSideBySideItemSize,
@@ -1207,7 +1202,6 @@ function DiffLoadedBody({
   renderSideBySideRow,
   requestSideBySideRange,
   rowHeight,
-  setFileFilter,
   sidebarCollapsed,
   sidebarListHeight,
   sideBySideItemIndexes,
@@ -1218,8 +1212,14 @@ function DiffLoadedBody({
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedBodyProps) {
+  const [fileFilter, setFileFilter] = useState("");
   const bodyStartedAt = nowMs();
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+  const normalizedFileFilter = fileFilter.trim().toLowerCase();
+  const filteredSidebarFiles = useMemo(
+    () => state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter)),
+    [normalizedFileFilter, state.files],
+  );
 
   logDiffOpenTiming("viewer.body.start", {
     activeItemCount: activeItemIndexes.length,
@@ -1542,7 +1542,6 @@ function useDiffLoadedModel({
   collapsedFileIndexes,
   fontFamily,
   fontSize,
-  normalizedFileFilter,
   rowHeight,
   state,
   viewMode,
@@ -1550,7 +1549,6 @@ function useDiffLoadedModel({
   collapsedFileIndexes: ReadonlySet<number>;
   fontFamily: string;
   fontSize: number;
-  normalizedFileFilter: string;
   rowHeight: number;
   state: DiffViewerState;
   viewMode: DiffSettingsFile["viewMode"];
@@ -1603,12 +1601,6 @@ function useDiffLoadedModel({
       return nextSnapshot;
     },
     [state],
-  );
-  const filteredSidebarFiles = useMemo(
-    () => state.status === "loaded"
-      ? state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter))
-      : [],
-    [normalizedFileFilter, state],
   );
   const listExtraData = useMemo(
     () => ({
@@ -1809,7 +1801,6 @@ function useDiffLoadedModel({
     fileByIndex,
     fileByRowStart,
     fileHeaderRowIndexes,
-    filteredSidebarFiles,
     getVisibleListIndex,
     listExtraData,
     sideBySideFileHeaderIndexes,
@@ -1886,7 +1877,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<DiffViewerState>(emptyState);
-  const [fileFilter, setFileFilter] = useState("");
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const state$ = useObservable<DiffViewerState>(emptyState);
   const urlInput$ = useObservable("");
@@ -1997,7 +1987,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const mutedColor = displayTheme.colors.muted;
-  const normalizedFileFilter = fileFilter.trim().toLowerCase();
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -2020,7 +2009,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     fileByIndex,
     fileByRowStart,
     fileHeaderRowIndexes,
-    filteredSidebarFiles,
     getVisibleListIndex,
     listExtraData,
     sideBySideFileHeaderIndexes,
@@ -2033,7 +2021,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     collapsedFileIndexes,
     fontFamily,
     fontSize,
-    normalizedFileFilter,
     rowHeight,
     state,
     viewMode,
@@ -2417,7 +2404,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       setDocumentErrorValue(null);
       setUrlInputValue("");
       setUrlInputErrorValue(null);
-      setFileFilter("");
       requestAnimationFrame(() => {
         urlInputRef.current?.focus();
       });
@@ -3135,9 +3121,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         diffPaneHeight={diffPaneHeight}
         diffRows={diffRows}
         documentErrorBody={documentErrorBody}
-        fileFilter={fileFilter}
         fileFilterInputRef={fileFilterInputRef}
-        filteredSidebarFiles={filteredSidebarFiles}
         getItemSize={getItemSize}
         getItemType={getItemType}
         getSideBySideItemSize={getSideBySideItemSize}
@@ -3160,7 +3144,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         renderSideBySideRow={renderSideBySideRow}
         requestSideBySideRange={requestSideBySideRange}
         rowHeight={rowHeight}
-        setFileFilter={setFileFilter}
         sidebarCollapsed={sidebarCollapsed}
         sidebarListHeight={sidebarListHeight}
         sideBySideItemIndexes={sideBySideItemIndexes}
