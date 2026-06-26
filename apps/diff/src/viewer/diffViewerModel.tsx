@@ -3,13 +3,12 @@ import type {
   DiffFileSummary,
   DiffLoadTiming,
   DiffRenderRow,
-  DiffSyntaxStyle,
+  DiffSyntaxScope,
 } from "@legend-desktop/diff-parser";
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { createContext, type ReactNode, type SetStateAction, useCallback, useContext, useMemo } from "react";
 import type { DiffOpenSource } from "../diffFiles";
-import type { DiffSettingsFile } from "../diffSettings";
 
 export type DiffLoadTrace = {
   document: DiffDocument | null;
@@ -53,8 +52,7 @@ export type DiffViewerState =
     document: DiffDocument;
     files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
-    styles: DiffSyntaxStyle[];
-    syntaxTheme: DiffSettingsFile["syntaxTheme"];
+    scopes: DiffSyntaxScope[];
     timing: DiffLoadTiming;
   }
   | {

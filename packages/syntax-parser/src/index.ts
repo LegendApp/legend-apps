@@ -106,6 +106,10 @@ export {
   type SyntaxThemeAppearance,
   type SyntaxThemeAssetEntry,
 } from "./syntaxAssets";
+export {
+  resolveSyntaxScopeStyles,
+  type SyntaxScopeEntry,
+} from "./syntaxThemeResolver";
 
 export type {
   SyntaxDocument,

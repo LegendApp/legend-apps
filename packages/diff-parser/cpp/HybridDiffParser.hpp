@@ -10,17 +10,14 @@ public:
 
   std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(
       const std::string& folderPath,
-      const std::string& theme,
       double initialRowCount) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(
       const std::string& diffText,
       const std::string& sourceLabel,
-      const std::string& theme,
       double initialRowCount) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel,
-      const std::string& theme,
       double initialRowCount) override;
 };
 

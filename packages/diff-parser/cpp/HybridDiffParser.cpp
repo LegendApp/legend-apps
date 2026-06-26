@@ -256,8 +256,7 @@ int onLine(
 
 std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
     const std::string& diffText,
-    const std::string& sourceLabel,
-    const std::string& theme) {
+    const std::string& sourceLabel) {
   auto parsed = parseUnifiedDiffText(diffText);
 
   return std::make_shared<HybridDiffDocument>(
@@ -267,11 +266,10 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
       "",
       "",
       sourceLabel,
-      theme,
       parsed.timing);
 }
 
-std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath, const std::string& theme) {
+std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath) {
   const auto loadStartedAt = DiffClock::now();
   ensureLibGit2Initialized();
   git_repository* rawRepo = nullptr;
@@ -350,7 +348,6 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
       std::move(repositoryPath),
       std::move(workdirPath),
       std::move(headTreeOid),
-      theme,
       timing);
 }
 
@@ -360,11 +357,10 @@ HybridDiffParser::HybridDiffParser() : HybridObject(TAG) {}
 
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,
-    const std::string& theme,
     double initialRowCount) {
-  return Promise<DiffLoadResult>::async([folderPath, theme, initialRowCount]() -> DiffLoadResult {
+  return Promise<DiffLoadResult>::async([folderPath, initialRowCount]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadGitDiffDocument(folderPath, theme);
+    auto document = loadGitDiffDocument(folderPath);
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -374,7 +370,7 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getPlainRows(0, initialRowCount);
     const auto rowsFinishedAt = DiffClock::now();
-    result.styles = document->getStyles();
+    result.scopes = document->getScopes();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
@@ -388,11 +384,10 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     const std::string& diffText,
     const std::string& sourceLabel,
-    const std::string& theme,
     double initialRowCount) {
-  return Promise<DiffLoadResult>::async([diffText, sourceLabel, theme, initialRowCount]() -> DiffLoadResult {
+  return Promise<DiffLoadResult>::async([diffText, sourceLabel, initialRowCount]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadUnifiedDiffDocument(diffText, sourceLabel, theme);
+    auto document = loadUnifiedDiffDocument(diffText, sourceLabel);
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -402,7 +397,7 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getPlainRows(0, initialRowCount);
     const auto rowsFinishedAt = DiffClock::now();
-    result.styles = document->getStyles();
+    result.scopes = document->getScopes();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
@@ -416,12 +411,11 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUrl(
     const std::string& diffUrl,
     const std::string& sourceLabel,
-    const std::string& theme,
     double initialRowCount) {
-  return Promise<DiffLoadResult>::async([diffUrl, sourceLabel, theme, initialRowCount]() -> DiffLoadResult {
+  return Promise<DiffLoadResult>::async([diffUrl, sourceLabel, initialRowCount]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
     const auto diff = loadDiffUrlText(diffUrl);
-    auto document = loadUnifiedDiffDocument(diff.text, sourceLabel, theme);
+    auto document = loadUnifiedDiffDocument(diff.text, sourceLabel);
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -431,7 +425,7 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getPlainRows(0, initialRowCount);
     const auto rowsFinishedAt = DiffClock::now();
-    result.styles = document->getStyles();
+    result.scopes = document->getScopes();
     auto timing = document->getTiming();
     timing.fetchMs = diff.fetchMs;
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);

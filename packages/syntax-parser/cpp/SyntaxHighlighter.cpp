@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits.h>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -1094,7 +1095,9 @@ SyntaxTokenizedLine tokenizeSyntaxLine(
     TextMateStateStack& state,
     SyntaxStyleState& styleState) {
   const auto lineLength = utf16Length(line);
-  TextMateTokenizeResult2* result = textmate_tokenize_line2_utf16(context.grammar(), line.c_str(), state);
+  std::unique_ptr<TextMateTokenizeResult2, decltype(&textmate_free_tokenize_result2)> result(
+      textmate_tokenize_line2_utf16(context.grammar(), line.c_str(), state),
+      textmate_free_tokenize_result2);
   if (!result) {
     throw std::runtime_error("Failed to tokenize syntax line.");
   }
@@ -1126,7 +1129,51 @@ SyntaxTokenizedLine tokenizeSyntaxLine(
     }
   }
 
-  textmate_free_tokenize_result2(result);
+  return tokenizedLine;
+}
+
+SyntaxScopeTokenizedLine tokenizeSyntaxScopeLine(
+    TextMateHighlighterContext& context,
+    const std::string& line,
+    TextMateStateStack& state,
+    SyntaxScopeState& scopeState) {
+  std::unique_ptr<TextMateTokenizeResult, decltype(&textmate_free_tokenize_result)> result(
+      textmate_tokenize_line_utf16(context.grammar(), line.c_str(), state),
+      textmate_free_tokenize_result);
+  if (!result) {
+    throw std::runtime_error("Failed to tokenize syntax scope line.");
+  }
+
+  state = result->ruleStack;
+  SyntaxScopeTokenizedLine tokenizedLine;
+  tokenizedLine.tokens.reserve(result->tokenCount);
+
+  for (int i = 0; i < result->tokenCount; i += 1) {
+    const auto& token = result->tokens[i];
+    const auto startColumn = static_cast<double>(token.startIndex);
+    const auto length = static_cast<double>(token.endIndex - token.startIndex);
+    if (length > 0) {
+      std::vector<std::string> scopes;
+      scopes.reserve(static_cast<size_t>(token.scopeDepth));
+      for (int scopeIndex = 0; scopeIndex < token.scopeDepth; scopeIndex += 1) {
+        const char* scope = token.scopes[scopeIndex];
+        if (scope) {
+          scopes.push_back(scope);
+        }
+      }
+
+      auto scopeId = scopeState.scopeIds.find(scopes);
+      if (scopeId == scopeState.scopeIds.end()) {
+        const auto id = static_cast<double>(scopeState.scopes.size());
+        scopeId = scopeState.scopeIds.emplace(scopes, id).first;
+        scopeState.scopes.push_back(std::move(scopes));
+      }
+
+      tokenizedLine.tokens.push_back(SyntaxScopeTokenRun(startColumn, length, scopeId->second));
+      tokenizedLine.tokenCount += 1;
+    }
+  }
+
   return tokenizedLine;
 }
 

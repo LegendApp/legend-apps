@@ -27,6 +27,14 @@ export const sourceViewerOverscanRequestDelayMs = 80;
 
 export type SyntaxStyleMap = Map<number, SyntaxStyle>;
 
+type TokenizedTextLine = Omit<SyntaxRenderLine, "tokens"> & {
+  tokens: readonly (SyntaxRenderLine["tokens"][number] | {
+    length: number;
+    scopeId: number;
+    startColumn: number;
+  })[];
+};
+
 // Keep this narrow: source-viewer code rows only, not a general replacement for React Native Text.
 export type LightTextProps = {
   allowFontScaling?: boolean;
@@ -358,7 +366,7 @@ export function SourceDocumentView({
 export type TokenizedTextProps = {
   adaptiveRender?: "light" | "normal";
   foregroundColor: string;
-  line?: SyntaxRenderLine;
+  line?: TokenizedTextLine;
   numberOfLines?: number;
   selectable?: boolean;
   style?: StyleProp<TextStyle>;
@@ -377,7 +385,8 @@ export function TokenizedText({
   return (
     <LightText numberOfLines={numberOfLines} selectable={selectable} style={[styles.sourceText, { color: foregroundColor }, style]}>
       {adaptiveRender === "light" || (line && line.tokens.length === 0) ? line?.text : line?.tokens.map((token, tokenIndex) => {
-        const tokenStyle = tokenStyleById.get(token.styleId);
+        const tokenStyleId = "scopeId" in token ? token.scopeId : token.styleId;
+        const tokenStyle = tokenStyleById.get(tokenStyleId);
         const text = line.text.slice(token.startColumn, token.startColumn + token.length);
         return (
           <LightInlineText

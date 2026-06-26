@@ -20,7 +20,7 @@ struct DiffTokenizedSourceState {
 };
 
 struct DiffSyntaxState {
-  syntaxparser::SyntaxStyleState styleState;
+  syntaxparser::SyntaxScopeState scopeState;
 };
 
 namespace {
@@ -243,7 +243,6 @@ HybridDiffDocument::HybridDiffDocument(
     std::string repositoryPath,
     std::string workdirPath,
     std::string headTreeOid,
-    std::string theme,
     DiffLoadTiming timing)
     : HybridObject(TAG),
       files_(std::move(files)),
@@ -252,7 +251,6 @@ HybridDiffDocument::HybridDiffDocument(
       repositoryPath_(std::move(repositoryPath)),
       workdirPath_(std::move(workdirPath)),
       headTreeOid_(std::move(headTreeOid)),
-      theme_(std::move(theme)),
       syntaxState_(std::make_shared<DiffSyntaxState>()),
       timing_(timing) {
   sideBySideLines_ = createDiffSideBySideLines(rows_);
@@ -504,14 +502,14 @@ std::vector<DiffFileSummary> HybridDiffDocument::getFiles() {
   return files_;
 }
 
-std::vector<DiffSyntaxStyle> HybridDiffDocument::getStyles() {
+std::vector<DiffSyntaxScope> HybridDiffDocument::getScopes() {
   std::lock_guard<std::mutex> lock(mutex_);
-  std::vector<DiffSyntaxStyle> styles;
-  styles.reserve(syntaxState_->styleState.styles.size());
-  for (const auto& style : syntaxState_->styleState.styles) {
-    styles.push_back(DiffSyntaxStyle(style.id, style.foreground, style.fontStyle));
+  std::vector<DiffSyntaxScope> scopes;
+  scopes.reserve(syntaxState_->scopeState.scopes.size());
+  for (size_t index = 0; index < syntaxState_->scopeState.scopes.size(); index += 1) {
+    scopes.push_back(DiffSyntaxScope(static_cast<double>(index), syntaxState_->scopeState.scopes[index]));
   }
-  return styles;
+  return scopes;
 }
 
 DiffLoadTiming HybridDiffDocument::getTiming() {
@@ -595,7 +593,13 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
       }
     }
   }
-  size += syntaxState_->styleState.styles.capacity() * sizeof(syntaxparser::SyntaxStyle);
+  size += syntaxState_->scopeState.scopes.capacity() * sizeof(std::vector<std::string>);
+  for (const auto& scopes : syntaxState_->scopeState.scopes) {
+    size += scopes.capacity() * sizeof(std::string);
+    for (const auto& scope : scopes) {
+      size += scope.capacity();
+    }
+  }
   return size;
 }
 
@@ -706,20 +710,20 @@ void HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lin
     }
 
     if (!source.state->context) {
-      source.state->context = syntaxparser::getHighlighterContext(source.language, theme_);
+      source.state->context = syntaxparser::getHighlighterContext(source.language, "dark-plus");
     }
 
     std::lock_guard<std::mutex> contextLock(source.state->context->mutex);
     while (source.tokenizedLineCount < end) {
-      auto tokenizedLine = syntaxparser::tokenizeSyntaxLine(
+      auto tokenizedLine = syntaxparser::tokenizeSyntaxScopeLine(
           *source.state->context,
           source.lines[source.tokenizedLineCount],
           source.state->nextState,
-          syntaxState_->styleState);
+          syntaxState_->scopeState);
       std::vector<DiffSyntaxTokenRun> tokens;
       tokens.reserve(tokenizedLine.tokens.size());
       for (const auto& token : tokenizedLine.tokens) {
-        tokens.push_back(DiffSyntaxTokenRun(token.startColumn, token.length, token.styleId));
+        tokens.push_back(DiffSyntaxTokenRun(token.startColumn, token.length, token.scopeId));
       }
       source.tokenCache[source.tokenizedLineCount] = std::move(tokens);
       source.tokenizedLineCount += 1;

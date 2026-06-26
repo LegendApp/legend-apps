@@ -39,10 +39,9 @@ function createLoadedState(source: DiffOpenSource = folderSource): DiffViewerSta
     }],
     folderPath: source.value,
     initialRows: [],
+    scopes: [],
     source,
     status: "loaded",
-    styles: [],
-    syntaxTheme: "dark-plus",
     timing: {
       copyFilesMs: 0,
       copyInitialRowsMs: 0,

@@ -41,11 +41,11 @@ namespace margelo::nitro::legenddesktop::diffparser {
   public:
     double startColumn     SWIFT_PRIVATE;
     double length     SWIFT_PRIVATE;
-    double styleId     SWIFT_PRIVATE;
+    double scopeId     SWIFT_PRIVATE;
 
   public:
     DiffSyntaxTokenRun() = default;
-    explicit DiffSyntaxTokenRun(double startColumn, double length, double styleId): startColumn(startColumn), length(length), styleId(styleId) {}
+    explicit DiffSyntaxTokenRun(double startColumn, double length, double scopeId): startColumn(startColumn), length(length), scopeId(scopeId) {}
 
   public:
     friend bool operator==(const DiffSyntaxTokenRun& lhs, const DiffSyntaxTokenRun& rhs) = default;
@@ -63,14 +63,14 @@ namespace margelo::nitro {
       return margelo::nitro::legenddesktop::diffparser::DiffSyntaxTokenRun(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "startColumn"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "length"))),
-        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styleId")))
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopeId")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffSyntaxTokenRun& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "startColumn"), JSIConverter<double>::toJSI(runtime, arg.startColumn));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "length"), JSIConverter<double>::toJSI(runtime, arg.length));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "styleId"), JSIConverter<double>::toJSI(runtime, arg.styleId));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "scopeId"), JSIConverter<double>::toJSI(runtime, arg.scopeId));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -83,7 +83,7 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "startColumn")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "length")))) return false;
-      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styleId")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopeId")))) return false;
       return true;
     }
   };

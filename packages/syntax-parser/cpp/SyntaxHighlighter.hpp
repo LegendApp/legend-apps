@@ -24,9 +24,25 @@ struct SyntaxTokenizedLine {
   double tokenCount = 0;
 };
 
+struct SyntaxScopeTokenRun {
+  double startColumn = 0;
+  double length = 0;
+  double scopeId = 0;
+};
+
+struct SyntaxScopeTokenizedLine {
+  std::vector<SyntaxScopeTokenRun> tokens;
+  double tokenCount = 0;
+};
+
 struct SyntaxStyleState {
   std::vector<SyntaxStyle> styles;
   std::map<std::pair<int, int>, double> styleIds;
+};
+
+struct SyntaxScopeState {
+  std::vector<std::vector<std::string>> scopes;
+  std::map<std::vector<std::string>, double> scopeIds;
 };
 
 class TextMateHighlighterContext;
@@ -66,5 +82,10 @@ SyntaxTokenizedLine tokenizeSyntaxLine(
     const std::string& line,
     TextMateStateStack& state,
     SyntaxStyleState& styleState);
+SyntaxScopeTokenizedLine tokenizeSyntaxScopeLine(
+    TextMateHighlighterContext& context,
+    const std::string& line,
+    TextMateStateStack& state,
+    SyntaxScopeState& scopeState);
 
 } // namespace margelo::nitro::legenddesktop::syntaxparser

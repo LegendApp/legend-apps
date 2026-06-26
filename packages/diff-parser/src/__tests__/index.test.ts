@@ -25,30 +25,30 @@ function loadModuleWithParser(parser = createParser()) {
 }
 
 describe("@legend-desktop/diff-parser", () => {
-  it("loads git folder diffs with default theme and row count", async () => {
+  it("loads git folder diffs with default row count", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 
     await expect(diffParser.loadGitFolderDiff("/tmp/repo")).resolves.toEqual({ ok: "git" });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", "dark-plus", 200);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200);
   });
 
-  it("passes explicit git folder diff options", async () => {
+  it("passes explicit git folder diff row count", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 
-    await diffParser.loadGitFolderDiff("/tmp/repo", "github-light", 25);
+    await diffParser.loadGitFolderDiff("/tmp/repo", 25);
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", "github-light", 25);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25);
   });
 
-  it("loads unified diff text with default and explicit options", async () => {
+  it("loads unified diff text with default and explicit row counts", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 
     await expect(diffParser.loadUnifiedDiff("diff --git a/a b/a", "fixture")).resolves.toEqual({ ok: "unified" });
-    await diffParser.loadUnifiedDiff("diff --git a/b b/b", "fixture 2", "github-light", 10);
+    await diffParser.loadUnifiedDiff("diff --git a/b b/b", "fixture 2", 10);
 
-    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(1, "diff --git a/a b/a", "fixture", "dark-plus", 200);
-    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(2, "diff --git a/b b/b", "fixture 2", "github-light", 10);
+    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(1, "diff --git a/a b/a", "fixture", 200);
+    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(2, "diff --git a/b b/b", "fixture 2", 10);
   });
 
   it("loads unified diffs from URLs", async () => {
@@ -59,7 +59,6 @@ describe("@legend-desktop/diff-parser", () => {
     expect(parser.loadUnifiedDiffFromUrl).toHaveBeenCalledWith(
       "https://github.com/owner/repo/pull/1.diff",
       "owner/repo#1",
-      "dark-plus",
       200,
     );
   });

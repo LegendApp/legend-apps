@@ -338,6 +338,12 @@ export function getSyntaxTheme(name: string): SyntaxTheme {
     ?? fallbackTheme;
 }
 
+export function getSyntaxThemeFile(name: string): unknown {
+  initializeSyntaxAssetsSync();
+  const normalizedName = normalizeSyntaxThemeName(name);
+  return syntaxAssetStorage.read(`${syntaxAssetFolder.themes}/${filenameForAssetName(normalizedName)}`, { format: "json" });
+}
+
 export function isAvailableSyntaxThemeName(value: unknown): value is string {
   return typeof value === "string" && getAvailableSyntaxThemes().some((theme) => theme.name === value);
 }

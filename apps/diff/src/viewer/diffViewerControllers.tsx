@@ -11,11 +11,9 @@ import { diffMenuOwnerId } from "../appConstants";
 import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   getDiffSyntaxTheme,
-  getDiffSyntaxThemeSetting,
   getDiffViewModeSetting,
   isDiffViewMode,
   setDiffViewModeSetting,
-  type DiffSettingsFile,
 } from "../diffSettings";
 import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
@@ -271,7 +269,7 @@ export function DiffLaunchController({
   focusUrlInputRequestId?: number;
   folderPath?: string;
   loadRequestIdRef: { current: number };
-  loadSource: (nextSource: DiffOpenSource, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => Promise<void>;
+  loadSource: (nextSource: DiffOpenSource) => Promise<void>;
   loadTraceRef: { current: DiffLoadTrace | null };
   source?: DiffOpenSource;
   urlInputRef: RefObject<TextInput | null>;
@@ -288,12 +286,10 @@ export function DiffLaunchController({
   useEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
-      const currentSyntaxTheme = getDiffSyntaxThemeSetting();
       logDiffOpenTiming("viewer.launchSource.effect", {
         source: initialSource,
-        selectedSyntaxTheme: currentSyntaxTheme,
       });
-      loadSource(initialSource, currentSyntaxTheme);
+      loadSource(initialSource);
     }
   }, [folderPath, loadSource, source]);
 
@@ -330,33 +326,10 @@ export function DiffLaunchController({
   return null;
 }
 
-export function DiffSyntaxThemeController({
-  loadSource,
-}: {
-  loadSource: (nextSource: DiffOpenSource, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => Promise<void>;
-}) {
-  const {
-    setDocumentErrorValue,
-    state$,
-  } = useDiffViewerModel();
-
-  useObserveEffect(() => {
-    const currentState = state$.get();
-    const currentSyntaxTheme = getDiffSyntaxThemeSetting();
-    if (currentState.status === "loaded" && currentState.syntaxTheme !== currentSyntaxTheme) {
-      loadSource(currentState.source, currentSyntaxTheme).catch((error: unknown) => {
-        setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-      });
-    }
-  });
-
-  return null;
-}
-
 export function DiffFileWatcherController({
   loadSource,
 }: {
-  loadSource: (nextSource: DiffOpenSource, syntaxThemeName: DiffSettingsFile["syntaxTheme"]) => Promise<void>;
+  loadSource: (nextSource: DiffOpenSource) => Promise<void>;
 }) {
   const {
     setDocumentErrorValue,
@@ -365,7 +338,6 @@ export function DiffFileWatcherController({
 
   useObserveEffect(() => {
     const currentState = state$.get();
-    const currentSyntaxTheme = getDiffSyntaxThemeSetting();
     const currentVisibleSource = currentState.source;
     const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
     if (!currentVisibleFolderPath) {
@@ -378,7 +350,7 @@ export function DiffFileWatcherController({
         clearTimeout(reloadTimeout);
       }
       reloadTimeout = setTimeout(() => {
-        loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }, currentSyntaxTheme).catch((error: unknown) => {
+        loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }).catch((error: unknown) => {
           setDocumentErrorValue(createRefreshError(currentVisibleSource, getErrorMessage(error)));
         });
       }, 250);

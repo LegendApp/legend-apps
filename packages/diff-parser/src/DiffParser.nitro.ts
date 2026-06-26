@@ -15,13 +15,12 @@ export interface DiffFileSummary {
 export interface DiffSyntaxTokenRun {
   startColumn: number;
   length: number;
-  styleId: number;
+  scopeId: number;
 }
 
-export interface DiffSyntaxStyle {
+export interface DiffSyntaxScope {
   id: number;
-  foreground: string;
-  fontStyle: number;
+  scopes: string[];
 }
 
 export interface DiffRenderRow {
@@ -79,7 +78,7 @@ export interface DiffLoadResult {
   document: DiffDocument;
   files: DiffFileSummary[];
   initialRows: DiffRenderRow[];
-  styles: DiffSyntaxStyle[];
+  scopes: DiffSyntaxScope[];
   timing: DiffLoadTiming;
 }
 
@@ -101,7 +100,7 @@ export interface DiffDocument
   getTokenizedRowVersion(): number;
   consumeTokenizedRowRanges(): DiffTokenizedRowRange[];
   getFiles(): DiffFileSummary[];
-  getStyles(): DiffSyntaxStyle[];
+  getScopes(): DiffSyntaxScope[];
   getTiming(): DiffLoadTiming;
   startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number): number;
   stopBackgroundTokenization(): number;
@@ -111,7 +110,7 @@ export interface DiffParser
   extends HybridObject<{
     ios: "c++";
   }> {
-  loadGitFolderDiff(folderPath: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
-  loadUnifiedDiff(diffText: string, sourceLabel: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
-  loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, theme: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadGitFolderDiff(folderPath: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
 }

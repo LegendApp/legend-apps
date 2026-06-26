@@ -58,7 +58,6 @@ public:
       std::string repositoryPath,
       std::string workdirPath,
       std::string headTreeOid,
-      std::string theme,
       DiffLoadTiming timing);
   ~HybridDiffDocument() override;
 
@@ -76,7 +75,7 @@ public:
   double getTokenizedRowVersion() override;
   std::vector<DiffTokenizedRowRange> consumeTokenizedRowRanges() override;
   std::vector<DiffFileSummary> getFiles() override;
-  std::vector<DiffSyntaxStyle> getStyles() override;
+  std::vector<DiffSyntaxScope> getScopes() override;
   DiffLoadTiming getTiming() override;
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
   double stopBackgroundTokenization() override;
@@ -111,7 +110,6 @@ private:
   std::string repositoryPath_;
   std::string workdirPath_;
   std::string headTreeOid_;
-  std::string theme_;
   std::shared_ptr<DiffSyntaxState> syntaxState_;
   DiffLoadTiming timing_;
   size_t backgroundTokenizeRowIndex_ = 0;

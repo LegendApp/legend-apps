@@ -2,23 +2,22 @@ import { NitroModules } from "react-native-nitro-modules";
 import type { DiffParser } from "./DiffParser.nitro";
 
 let diffParser: DiffParser | undefined;
-const defaultSyntaxThemeName = "dark-plus";
 
 function getDiffParser() {
   diffParser ??= NitroModules.createHybridObject<DiffParser>("DiffParser");
   return diffParser;
 }
 
-export function loadGitFolderDiff(folderPath: string, theme = defaultSyntaxThemeName, initialRowCount = 200) {
-  return getDiffParser().loadGitFolderDiff(folderPath, theme, initialRowCount);
+export function loadGitFolderDiff(folderPath: string, initialRowCount = 200) {
+  return getDiffParser().loadGitFolderDiff(folderPath, initialRowCount);
 }
 
-export function loadUnifiedDiff(diffText: string, sourceLabel: string, theme = defaultSyntaxThemeName, initialRowCount = 200) {
-  return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, theme, initialRowCount);
+export function loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount = 200) {
+  return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, initialRowCount);
 }
 
-export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, theme = defaultSyntaxThemeName, initialRowCount = 200) {
-  return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, theme, initialRowCount);
+export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount = 200) {
+  return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, initialRowCount);
 }
 
 export type {
@@ -29,7 +28,7 @@ export type {
   DiffRenderRow,
   DiffSideBySideFileHeader,
   DiffSideBySideRenderRow,
-  DiffSyntaxStyle,
+  DiffSyntaxScope,
   DiffSyntaxTokenRun,
   DiffTokenizedRowRange,
 } from "./DiffParser.nitro";

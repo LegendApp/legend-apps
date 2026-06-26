@@ -4,9 +4,10 @@ import {
   type DiffLoadTiming,
   type DiffRenderRow,
   type DiffSideBySideRenderRow,
-  type DiffSyntaxStyle,
+  type DiffSyntaxScope,
   type DiffTokenizedRowRange,
 } from "@legend-desktop/diff-parser";
+import { resolveSyntaxScopeStyles } from "@legend-desktop/syntax-parser";
 import {
   createSyntaxStyleMap,
   nowMs,
@@ -35,13 +36,15 @@ import {
 
 export type SideBySideTokenStyleState = {
   document: DiffDocument;
-  styleCount: number;
+  scopeCount: number;
+  syntaxThemeName: string;
   tokenStyleById: SyntaxStyleMap;
 };
 
 export function useDiffLoadedModel({
   collapsedFileIndexes,
   state,
+  syntaxThemeName,
   viewMode,
 }: {
   collapsedFileIndexes: ReadonlySet<number>;
@@ -49,6 +52,7 @@ export function useDiffLoadedModel({
   fontSize: number;
   rowHeight: number;
   state: DiffViewerState;
+  syntaxThemeName: string;
   viewMode: DiffSettingsFile["viewMode"];
 }) {
   const fileByIndex = useMemo(() => {
@@ -77,23 +81,23 @@ export function useDiffLoadedModel({
     });
     return map;
   }, [state]);
-  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
+  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxScope, DiffLoadTiming> | null>(
     () => {
       const startedAt = nowMs();
-      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
+      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxScope, DiffLoadTiming> | null = null;
       if (state.status === "loaded") {
         nextSnapshot = {
           document: state.document,
           initialRows: state.initialRows,
           itemCount: state.document.rowCount,
-          styles: state.styles,
+          styles: state.scopes,
           timing: state.timing,
         };
         logDiffOpenTiming("viewer.derive.snapshot", {
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           initialRows: state.initialRows.length,
           rows: state.document.rowCount,
-          styles: state.styles.length,
+          scopes: state.scopes.length,
         });
       }
       return nextSnapshot;
@@ -117,24 +121,24 @@ export function useDiffLoadedModel({
     return shouldHighlight
       ? {
           invalidate: true,
-          styles: document.getStyles(),
+          styles: document.getScopes(),
           timing: document.getTiming(),
         }
       : undefined;
   }, []);
-  const getStyles = useCallback((document: DiffDocument) => {
+  const getScopes = useCallback((document: DiffDocument) => {
     const startedAt = nowMs();
-    const styles = document.getStyles();
-    logDiffOpenTiming("viewer.stylesFetched", {
+    const scopes = document.getScopes();
+    logDiffOpenTiming("viewer.scopesFetched", {
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      styles: styles.length,
+      scopes: scopes.length,
     });
-    return styles;
+    return scopes;
   }, []);
   const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
   const diffRows = useVirtualizedDocumentRows({
     debugName: "diff",
-    getStyles,
+    getStyles: getScopes,
     getTiming,
     requestRows,
     snapshot,
@@ -148,7 +152,10 @@ export function useDiffLoadedModel({
     }
     return undefined;
   }, [state]);
-  const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
+  const tokenStyleById = useMemo(
+    () => createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, diffRows.styles)),
+    [diffRows.styles, syntaxThemeName],
+  );
   const fileHeaderRowIndexes = useMemo(() => {
     const startedAt = nowMs();
     if (state.status !== "loaded") {
@@ -323,6 +330,7 @@ export function useDiffSideBySideRuntime({
   sideBySideRowCount,
   state,
   state$,
+  syntaxThemeName,
   viewMode,
 }: {
   activeFileIndex$: Observable<number | null>;
@@ -332,6 +340,7 @@ export function useDiffSideBySideRuntime({
   sideBySideRowCount: number;
   state: DiffViewerState;
   state$: Observable<DiffViewerState>;
+  syntaxThemeName: string;
   viewMode: DiffSettingsFile["viewMode"];
 }) {
   const [sideBySideTokenStyleState, setSideBySideTokenStyleState] = useState<SideBySideTokenStyleState | null>(null);
@@ -352,17 +361,24 @@ export function useDiffSideBySideRuntime({
     [collapsedFileIndexes$],
   );
   const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
-    const styles = document.getStyles();
+    const scopes = document.getScopes();
     setSideBySideTokenStyleState((current) => (
-      current?.document === document && current.styleCount === styles.length
+      current?.document === document && current.scopeCount === scopes.length
+        && current.syntaxThemeName === syntaxThemeName
         ? current
         : {
             document,
-            styleCount: styles.length,
-            tokenStyleById: createSyntaxStyleMap(styles),
+            scopeCount: scopes.length,
+            syntaxThemeName,
+            tokenStyleById: createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, scopes)),
           }
     ));
-  }, []);
+  }, [syntaxThemeName]);
+  useEffect(() => {
+    if (state.status === "loaded" && sideBySideTokenStyleState?.document === state.document && sideBySideTokenStyleState.syntaxThemeName !== syntaxThemeName) {
+      refreshSideBySideTokenStyles(state.document);
+    }
+  }, [refreshSideBySideTokenStyles, sideBySideTokenStyleState, state, syntaxThemeName]);
   const bumpSideBySideRowVersion = useCallback((rowIndex: number) => {
     const key = String(rowIndex);
     sideBySideRowVersions$[key].set((sideBySideRowVersions$[key].peek() ?? 0) + 1);
