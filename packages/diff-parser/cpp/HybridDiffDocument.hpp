@@ -63,6 +63,8 @@ public:
 
   double getRowCount() override;
   double getFileCount() override;
+  double getTokenizedMaxRow() override;
+  DiffCachedRow getRow(double index) override;
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
   double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) override;
@@ -79,6 +81,7 @@ public:
   DiffLoadTiming getTiming() override;
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
   double stopBackgroundTokenization() override;
+  double startDefaultBackgroundTokenization();
 
 protected:
   size_t getExternalMemorySize() noexcept override;

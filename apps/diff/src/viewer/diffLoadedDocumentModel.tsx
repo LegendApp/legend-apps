@@ -23,11 +23,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { DiffSettingsFile } from "../diffSettings";
 import type { DiffSyntaxStyleStore } from "./DiffRows";
 import {
-  diffBackgroundTokenizeChunkBudgetMs,
-  diffBackgroundTokenizeChunkRowCount,
-  diffBackgroundTokenizeMaxRowCount,
   diffBackgroundTokenizePollMs,
-  diffBackgroundTokenizeStartDelayMs,
 } from "./diffViewerConstants";
 import type { DiffViewerState } from "./diffViewerModel";
 import { logDiffOpenTiming } from "./diffViewerSupport";
@@ -126,8 +122,7 @@ export function useDiffLoadedModel({
   });
   const getRow = useCallback((index: number) => {
     if (state.status === "loaded") {
-      const rows = state.document.getPlainRows(index, 1);
-      return rows[0];
+      return state.document.getRow(index).plain;
     }
     return undefined;
   }, [state]);
@@ -138,14 +133,14 @@ export function useDiffLoadedModel({
   const syntaxStyleStore = useMemo<DiffSyntaxStyleStore>(() => {
     const listeners = new Set<() => void>();
     let scopeCount = diffRows.styles.length;
-    let version = 0;
+    let tokenizedMaxRow = state.status === "loaded" ? state.document.tokenizedMaxRow : 0;
     let tokenStyleMap = tokenStyleById;
     return {
       get current() {
         return tokenStyleMap;
       },
       getSnapshot() {
-        return version;
+        return tokenizedMaxRow;
       },
       subscribe(listener: () => void) {
         listeners.add(listener);
@@ -155,43 +150,35 @@ export function useDiffLoadedModel({
       },
       refresh(document: DiffDocument) {
         const scopes = document.getScopes();
+        const nextTokenizedMaxRow = document.tokenizedMaxRow;
+        let changed = false;
         if (scopes.length !== scopeCount) {
           scopeCount = scopes.length;
           tokenStyleMap = createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, scopes));
+          changed = true;
         }
-        version += 1;
-        listeners.forEach((listener) => listener());
+        if (nextTokenizedMaxRow !== tokenizedMaxRow) {
+          tokenizedMaxRow = nextTokenizedMaxRow;
+          changed = true;
+        }
+        if (changed) {
+          listeners.forEach((listener) => listener());
+        }
       },
     };
-  }, [syntaxThemeName, tokenStyleById]);
+  }, [state.status === "loaded" ? state.document : null, syntaxThemeName, tokenStyleById]);
   useEffect(() => {
     if (state.status === "loaded") {
       const document = state.document;
-      if (document.rowCount > diffBackgroundTokenizeMaxRowCount) {
-        logDiffOpenTiming("viewer.backgroundTokenize.skipped", {
-          maxRows: diffBackgroundTokenizeMaxRowCount,
-          rows: document.rowCount,
-        });
-        return undefined;
-      }
-
-      let intervalHandle: ReturnType<typeof setInterval> | null = null;
-      const startTimeoutHandle = setTimeout(() => {
-        document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs);
-        intervalHandle = setInterval(() => {
-          const ranges = document.consumeTokenizedRowRanges();
-          if (ranges.length > 0) {
-            syntaxStyleStore.refresh(document);
-          }
-        }, diffBackgroundTokenizePollMs);
-      }, diffBackgroundTokenizeStartDelayMs);
+      const intervalHandle = setInterval(() => {
+        const ranges = document.consumeTokenizedRowRanges();
+        if (ranges.length > 0) {
+          syntaxStyleStore.refresh(document);
+        }
+      }, diffBackgroundTokenizePollMs);
 
       return () => {
-        clearTimeout(startTimeoutHandle);
-        if (intervalHandle) {
-          clearInterval(intervalHandle);
-        }
-        document.stopBackgroundTokenization();
+        clearInterval(intervalHandle);
       };
     }
     return undefined;

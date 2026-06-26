@@ -133,7 +133,7 @@ function useTokenizedDiffRow(
   adaptiveRender: "light" | "normal",
   syntaxStyleStore: DiffSyntaxStyleStore,
 ) {
-  const tokenizedVersion = useSyncExternalStore(
+  const tokenizedMaxRow = useSyncExternalStore(
     syntaxStyleStore.subscribe,
     syntaxStyleStore.getSnapshot,
     syntaxStyleStore.getSnapshot,
@@ -142,17 +142,20 @@ function useTokenizedDiffRow(
   const shouldTokenize = adaptiveRender === "normal" && document !== null && row !== undefined && row.kind !== diffRowKindFileHeader;
 
   return useMemo<TokenizedDiffRowState | null>(() => {
-    if (shouldTokenize && document && rowIndex >= 0) {
-      const cachedRow = document.getPlainRows(rowIndex, 1)[0];
-      if (cachedRow?.tokens.length > 0) {
+    if (shouldTokenize && document && rowIndex >= 0 && rowIndex < tokenizedMaxRow) {
+      const cachedRow = document.getRow(rowIndex);
+      if (cachedRow.tokens !== null) {
         return {
-          row: cachedRow,
+          row: {
+            ...cachedRow.plain,
+            tokens: cachedRow.tokens,
+          },
           tokenStyleById: syntaxStyleStore.current,
         };
       }
     }
     return null;
-  }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedVersion]);
+  }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedMaxRow]);
 }
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {

@@ -13,6 +13,8 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
+// Forward declaration of `DiffCachedRow` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffCachedRow; }
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
 // Forward declaration of `DiffSideBySideFileHeader` to properly resolve imports.
@@ -28,6 +30,7 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxScope; }
 // Forward declaration of `DiffLoadTiming` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 
+#include "DiffCachedRow.hpp"
 #include "DiffRenderRow.hpp"
 #include <vector>
 #include "DiffSideBySideFileHeader.hpp"
@@ -66,9 +69,11 @@ namespace margelo::nitro::legenddesktop::diffparser {
       // Properties
       virtual double getRowCount() = 0;
       virtual double getFileCount() = 0;
+      virtual double getTokenizedMaxRow() = 0;
 
     public:
       // Methods
+      virtual DiffCachedRow getRow(double index) = 0;
       virtual std::vector<DiffRenderRow> getPlainRows(double start, double count) = 0;
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
       virtual double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) = 0;

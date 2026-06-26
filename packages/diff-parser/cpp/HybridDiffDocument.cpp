@@ -28,6 +28,8 @@ namespace {
 constexpr double diffRowKindLine = 2;
 constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
+constexpr double defaultBackgroundTokenizeChunkRowCount = 4096;
+constexpr double defaultBackgroundTokenizeChunkBudgetMs = 1000;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
@@ -270,6 +272,27 @@ double HybridDiffDocument::getFileCount() {
   return static_cast<double>(files_.size());
 }
 
+double HybridDiffDocument::getTokenizedMaxRow() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return static_cast<double>(backgroundTokenizeRowIndex_);
+}
+
+DiffCachedRow HybridDiffDocument::getRow(double index) {
+  const auto safeIndex = static_cast<size_t>(std::max(0.0, std::floor(index)));
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (safeIndex >= rows_.size()) {
+    return DiffCachedRow(createEmptyRenderRow(), nitro::NullType());
+  }
+
+  auto plain = rows_[safeIndex];
+  auto tokens = std::move(plain.tokens);
+  plain.tokens = {};
+  if (plain.kind == diffRowKindLine && safeIndex < backgroundTokenizeRowIndex_) {
+    return DiffCachedRow(std::move(plain), std::move(tokens));
+  }
+  return DiffCachedRow(std::move(plain), nitro::NullType());
+}
+
 std::vector<DiffRenderRow> HybridDiffDocument::getRows(double start, double count) {
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));
@@ -282,6 +305,14 @@ std::vector<DiffRenderRow> HybridDiffDocument::getRows(double start, double coun
   const auto end = std::min(rows_.size(), safeStart + safeCount);
   for (size_t index = safeStart; index < end; index += 1) {
     ensureRowTokens(index);
+  }
+  if (safeStart <= backgroundTokenizeRowIndex_ && end > backgroundTokenizeRowIndex_) {
+    const auto previousTokenizedMaxRow = backgroundTokenizeRowIndex_;
+    backgroundTokenizeRowIndex_ = end;
+    tokenizedRowRanges_.push_back(DiffTokenizedRowRange(
+        static_cast<double>(previousTokenizedMaxRow),
+        static_cast<double>(backgroundTokenizeRowIndex_)));
+    tokenizedRowVersion_.fetch_add(1);
   }
   return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
 }
@@ -549,6 +580,10 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
   });
 
   return getTokenizedRowVersion();
+}
+
+double HybridDiffDocument::startDefaultBackgroundTokenization() {
+  return startBackgroundTokenization(defaultBackgroundTokenizeChunkRowCount, defaultBackgroundTokenizeChunkBudgetMs);
 }
 
 double HybridDiffDocument::stopBackgroundTokenization() {

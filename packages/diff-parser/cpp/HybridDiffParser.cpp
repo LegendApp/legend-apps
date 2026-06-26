@@ -368,7 +368,8 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     result.files = document->getFiles();
     const auto filesFinishedAt = DiffClock::now();
     const auto rowsStartedAt = DiffClock::now();
-    result.initialRows = document->getPlainRows(0, initialRowCount);
+    result.initialRows = document->getRows(0, initialRowCount);
+    document->startDefaultBackgroundTokenization();
     const auto rowsFinishedAt = DiffClock::now();
     result.scopes = document->getScopes();
     auto timing = document->getTiming();
@@ -395,7 +396,8 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     result.files = document->getFiles();
     const auto filesFinishedAt = DiffClock::now();
     const auto rowsStartedAt = DiffClock::now();
-    result.initialRows = document->getPlainRows(0, initialRowCount);
+    result.initialRows = document->getRows(0, initialRowCount);
+    document->startDefaultBackgroundTokenization();
     const auto rowsFinishedAt = DiffClock::now();
     result.scopes = document->getScopes();
     auto timing = document->getTiming();
@@ -423,7 +425,8 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     result.files = document->getFiles();
     const auto filesFinishedAt = DiffClock::now();
     const auto rowsStartedAt = DiffClock::now();
-    result.initialRows = document->getPlainRows(0, initialRowCount);
+    result.initialRows = document->getRows(0, initialRowCount);
+    document->startDefaultBackgroundTokenization();
     const auto rowsFinishedAt = DiffClock::now();
     result.scopes = document->getScopes();
     auto timing = document->getTiming();

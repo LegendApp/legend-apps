@@ -35,6 +35,11 @@ export interface DiffRenderRow {
   tokens: DiffSyntaxTokenRun[];
 }
 
+export interface DiffCachedRow {
+  plain: DiffRenderRow;
+  tokens: DiffSyntaxTokenRun[] | null;
+}
+
 export interface DiffSideBySideFileHeader {
   fileIndex: number;
   sourceStart: number;
@@ -88,6 +93,8 @@ export interface DiffDocument
   }> {
   readonly rowCount: number;
   readonly fileCount: number;
+  readonly tokenizedMaxRow: number;
+  getRow(index: number): DiffCachedRow;
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
   getSideBySideRowCount(collapsedFileIndexes: number[]): number;
