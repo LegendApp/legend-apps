@@ -25,6 +25,7 @@
     "build:all": "bun scripts/build-app.ts --all",
     "verify:all": "bun scripts/verify-app.ts --all",
     "test:diff": "jest --config apps/diff/jest.config.cjs",
+    "test:syntax-parser": "jest --config packages/syntax-parser/jest.config.cjs",
     "test:music": "jest --config apps/music/jest.config.cjs",
     "test:markdown-document": "jest --config packages/markdown-document/jest.config.cjs",
     "test:markdown-e2e": "bun scripts/test-markdown-e2e.ts",
