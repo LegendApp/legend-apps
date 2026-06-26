@@ -45,6 +45,23 @@ function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffView
   };
 }
 
+function createDiffViewerToolbarItems({
+  showSidebarControl,
+  showViewModeToolbar,
+  sidebarCollapsed,
+  viewMode,
+}: {
+  showSidebarControl?: boolean;
+  showViewModeToolbar?: boolean;
+  sidebarCollapsed?: boolean;
+  viewMode?: DiffViewMode;
+}) {
+  return [
+    ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
+    ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
+  ];
+}
+
 function createDiffViewerWindowStyle({
   appearance,
   includeFrame,
@@ -81,10 +98,12 @@ function createDiffViewerWindowStyle({
     titlebarControls: [],
     ...(includeToolbarItems
       ? {
-          toolbarItems: [
-            ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
-            ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
-          ],
+          toolbarItems: createDiffViewerToolbarItems({
+            showSidebarControl,
+            showViewModeToolbar,
+            sidebarCollapsed,
+            viewMode,
+          }),
         }
       : {}),
   };
@@ -171,43 +190,40 @@ export function openDiffSettingsWindow() {
   return DiffWindowsNavigator.open(diffSettingsWindowModuleName as DiffWindow);
 }
 
-export function setDiffViewerWindowOptions({
+export function setDiffViewerWindowAppearance({
   appearance,
-  backgroundColor,
+}: {
+  appearance: "dark" | "light";
+}) {
+  return setWindowOptions(diffViewerWindowIdentifier, {
+    windowStyle: {
+      appearance,
+    },
+  });
+}
+
+export function setDiffViewerWindowToolbarOptions({
   source,
   showSidebarControl,
   showViewModeToolbar,
   sidebarCollapsed,
   viewMode,
-  includeToolbarItems,
 }: {
-  appearance: "dark" | "light";
-  backgroundColor: string;
   source: DiffOpenSource | null;
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
   viewMode: DiffViewMode;
-  includeToolbarItems?: boolean;
 }) {
-  const startedAt = nowMs();
   return setWindowOptions(diffViewerWindowIdentifier, {
     representedURL: source?.value,
     title: getDiffSourceLabel(source),
     windowStyle: createDiffViewerWindowStyle({
-      appearance,
       includeFrame: false,
-      includeToolbarItems,
       showSidebarControl,
       showViewModeToolbar,
       sidebarCollapsed,
       viewMode,
     }),
-  }).then((result) => {
-    logDiffOpenTiming("window.options.finish", {
-      source,
-      setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
-    });
-    return result;
   });
 }

@@ -65,7 +65,12 @@ import {
   type DiffSettingsFile,
 } from "./diffSettings";
 import { registerDiffViewerActionHandlers } from "./diffViewerActions";
-import { diffSidebarToolbarItemId, diffViewModeToolbarItemId, setDiffViewerWindowOptions } from "./diffWindows";
+import {
+  diffSidebarToolbarItemId,
+  diffViewModeToolbarItemId,
+  setDiffViewerWindowAppearance,
+  setDiffViewerWindowToolbarOptions,
+} from "./diffWindows";
 
 const diffInitialRowCount = 160;
 const diffInitialHighlightChunkRowCount = 40;
@@ -81,7 +86,6 @@ const diffTitlebarTopInset = 52;
 const diffSidebarTopInset = 40;
 const diffDocumentErrorHeight = 78;
 const diffDocumentPermissionErrorHeight = 134;
-const diffLoadedWindowOptionsDelayMs = 750;
 const diffScrollIdleMs = 120;
 const diffRowKindFileHeader = 0;
 const diffChangeTypeAdd = 1;
@@ -128,17 +132,11 @@ type DiffVisibleSourceModel = {
   visibleSourceLabel: string;
 };
 
-type DiffWindowOptionsModel = {
-  appearance: "dark" | "light";
-  backgroundColor: string;
-  diffPaneHeight: number;
-  isContentLayoutReady: boolean;
-  loadedFileCount: number;
+type DiffWindowToolbarModel = {
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
   source: DiffOpenSource | null;
-  status: DiffViewerState["status"];
   toolbarSource: DiffOpenSource | null;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 };
@@ -906,40 +904,49 @@ function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource: DiffOp
   };
 }
 
-function getDiffWindowOptionsModel({
-  diffPaneHeight,
+function getDiffWindowToolbarModel({
   loadingSource,
   sidebarCollapsed,
   state,
-  syntaxTheme,
   viewMode,
 }: {
-  diffPaneHeight: number;
   loadingSource: DiffOpenSource | null;
   sidebarCollapsed: boolean;
   state: DiffViewerState;
-  syntaxTheme: ReturnType<typeof getDiffSyntaxTheme>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
-}): DiffWindowOptionsModel {
+}): DiffWindowToolbarModel {
   const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
   const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? state.source : null);
   const showViewModeToolbar = toolbarSource !== null;
-  const shouldWaitForContentLayout = state.status === "loaded" && loadedFileCount > 0;
 
   return {
-    appearance: syntaxTheme.appearance,
-    backgroundColor: syntaxTheme.background,
-    diffPaneHeight,
-    isContentLayoutReady: !shouldWaitForContentLayout || diffPaneHeight > diffTitlebarTopInset,
-    loadedFileCount,
     showSidebarControl: showViewModeToolbar,
     showViewModeToolbar,
     sidebarCollapsed,
     source: toolbarSource ?? state.source,
-    status: state.status,
     toolbarSource,
     viewMode,
   };
+}
+
+function diffOpenSourcesEqual(left: DiffOpenSource | null, right: DiffOpenSource | null) {
+  return left === null
+    ? right === null
+    : right !== null &&
+      left.kind === right.kind &&
+      left.label === right.label &&
+      left.value === right.value &&
+      (left.kind !== "github" || (right.kind === "github" && left.diffUrl === right.diffUrl));
+}
+
+function diffToolbarModelsEqual(left: DiffWindowToolbarModel | null, right: DiffWindowToolbarModel) {
+  return left !== null &&
+    left.showSidebarControl === right.showSidebarControl &&
+    left.showViewModeToolbar === right.showViewModeToolbar &&
+    left.sidebarCollapsed === right.sidebarCollapsed &&
+    left.viewMode === right.viewMode &&
+    diffOpenSourcesEqual(left.source, right.source) &&
+    diffOpenSourcesEqual(left.toolbarSource, right.toolbarSource);
 }
 
 function DiffErrorPanel({
@@ -1477,43 +1484,6 @@ function DiffLoadedBody({
 
   logBodyFinish("content-only");
   return diffContent;
-}
-
-type DiffLoadSource = (source: DiffOpenSource, syntaxTheme: ReturnType<typeof getDiffSyntaxThemeSetting>) => Promise<void>;
-
-function useDiffSourceRefreshEffects({
-  loadSource,
-  setDocumentErrorValue,
-  state$,
-}: {
-  loadSource: DiffLoadSource;
-  setDocumentErrorValue: (nextError: DiffRecoverableError | null) => void;
-  state$: Observable<DiffViewerState>;
-}) {
-  useDiffSourceRefreshEffects({
-    loadSource,
-    setDocumentErrorValue,
-    state$,
-  });
-}
-
-function useDiffWindowOptionsSync({
-  diffPaneHeight$,
-  loadingSource$,
-  sidebarCollapsed$,
-  state$,
-}: {
-  diffPaneHeight$: Observable<number>;
-  loadingSource$: Observable<DiffOpenSource | null>;
-  sidebarCollapsed$: Observable<boolean>;
-  state$: Observable<DiffViewerState>;
-}) {
-  useDiffWindowOptionsSync({
-    diffPaneHeight$,
-    loadingSource$,
-    sidebarCollapsed$,
-    state$,
-  });
 }
 
 function useDiffNativeMenuItems({
@@ -2222,6 +2192,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
+  const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
   const isLoading = loadingSource !== null;
   const isLoadingGithub = loadingSource?.kind === "github";
   const highlightedVisibleRangeRef = useRef<{
@@ -2816,113 +2787,42 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   }, []);
 
   useObserveEffect(() => {
-    let frameHandle: number | null = null;
-    let secondFrameHandle: number | null = null;
-    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-    const scheduleStartedAt = nowMs();
-    const windowOptionsModel = getDiffWindowOptionsModel({
-      diffPaneHeight: diffPaneHeight$.get(),
+    const syntaxTheme = getDiffSyntaxTheme();
+    setDiffViewerWindowAppearance({
+      appearance: syntaxTheme.appearance,
+    }).catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+    });
+  });
+
+  useObserveEffect(() => {
+    const toolbarModel = getDiffWindowToolbarModel({
       loadingSource: loadingSource$.get(),
       sidebarCollapsed: sidebarCollapsed$.get(),
       state: state$.get(),
-      syntaxTheme: getDiffSyntaxTheme(),
       viewMode: getDiffViewModeSetting(),
     });
 
-    if (windowOptionsModel.toolbarSource) {
-      setDiffViewerWindowOptions({
-        appearance: windowOptionsModel.appearance,
-        backgroundColor: windowOptionsModel.backgroundColor,
-        includeToolbarItems: true,
-        source: windowOptionsModel.toolbarSource,
-        showSidebarControl: windowOptionsModel.showSidebarControl,
-        showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
-        sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
-        viewMode: windowOptionsModel.viewMode,
-      }).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-    }
-
-    const includeToolbarItems = windowOptionsModel.toolbarSource === null;
-
-    logDiffOpenTiming("viewer.windowOptions.schedule", {
-      diffPaneHeight: windowOptionsModel.diffPaneHeight,
-      includeToolbarItems,
-      isContentLayoutReady: windowOptionsModel.isContentLayoutReady,
-      loadedFileCount: windowOptionsModel.loadedFileCount,
-      showSidebarControl: windowOptionsModel.showSidebarControl,
-      showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
-      sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
-      source: windowOptionsModel.source,
-      status: windowOptionsModel.status,
-      viewMode: windowOptionsModel.viewMode,
-    });
-
-    if (windowOptionsModel.isContentLayoutReady) {
-      const applyWindowOptions = () => {
-        const startedAt = nowMs();
-        logDiffOpenTiming("viewer.windowOptions.start", {
-          diffPaneHeight: windowOptionsModel.diffPaneHeight,
-          loadedFileCount: windowOptionsModel.loadedFileCount,
-          scheduledDelayMs: Number((startedAt - scheduleStartedAt).toFixed(1)),
-          showSidebarControl: windowOptionsModel.showSidebarControl,
-          showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
-          sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
-          source: windowOptionsModel.source,
-          status: windowOptionsModel.status,
-          viewMode: windowOptionsModel.viewMode,
-        });
-        setDiffViewerWindowOptions({
-          appearance: windowOptionsModel.appearance,
-          backgroundColor: windowOptionsModel.backgroundColor,
-          includeToolbarItems,
-          source: windowOptionsModel.source,
-          showSidebarControl: windowOptionsModel.showSidebarControl,
-          showViewModeToolbar: windowOptionsModel.showViewModeToolbar,
-          sidebarCollapsed: windowOptionsModel.sidebarCollapsed,
-          viewMode: windowOptionsModel.viewMode,
+    if (!diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel)) {
+      lastToolbarModelRef.current = toolbarModel;
+      const startedAt = nowMs();
+      setDiffViewerWindowToolbarOptions({
+        source: toolbarModel.source,
+        showSidebarControl: toolbarModel.showSidebarControl,
+        showViewModeToolbar: toolbarModel.showViewModeToolbar,
+        sidebarCollapsed: toolbarModel.sidebarCollapsed,
+        viewMode: toolbarModel.viewMode,
+      })
+        .then(() => {
+          logDiffOpenTiming("viewer.toolbarOptions.finish", {
+            source: toolbarModel.source,
+            setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
+          });
         })
-          .then(() => {
-            logDiffOpenTiming("viewer.windowOptions.finish", {
-              source: windowOptionsModel.source,
-              setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
-            });
-          })
-          .catch((error: unknown) => {
-            console.error(error instanceof Error ? error.message : String(error));
-          });
-      };
-
-      if (windowOptionsModel.status === "loaded") {
-        frameHandle = requestAnimationFrame(() => {
-          secondFrameHandle = requestAnimationFrame(() => {
-            timeoutHandle = setTimeout(applyWindowOptions, diffLoadedWindowOptionsDelayMs);
-          });
+        .catch((error: unknown) => {
+          console.error(error instanceof Error ? error.message : String(error));
         });
-      } else {
-        applyWindowOptions();
-      }
-    } else {
-      logDiffOpenTiming("viewer.windowOptions.deferred", {
-        diffPaneHeight: windowOptionsModel.diffPaneHeight,
-        loadedFileCount: windowOptionsModel.loadedFileCount,
-        source: windowOptionsModel.source,
-        status: windowOptionsModel.status,
-      });
     }
-
-    return () => {
-      if (frameHandle !== null) {
-        cancelAnimationFrame(frameHandle);
-      }
-      if (secondFrameHandle !== null) {
-        cancelAnimationFrame(secondFrameHandle);
-      }
-      if (timeoutHandle !== null) {
-        clearTimeout(timeoutHandle);
-      }
-    };
   });
 
   const toggleSidebar = useCallback(() => {
