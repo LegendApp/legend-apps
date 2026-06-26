@@ -37,6 +37,7 @@ function createLoadedState(source: DiffOpenSource = folderSource): DiffViewerSta
       rowStart: 0,
       status: "modified",
     }],
+    folderPath: source.value,
     initialRows: [],
     source,
     status: "loaded",
@@ -102,7 +103,7 @@ describe("diffViewerSupport", () => {
   });
 
   it("shows toolbar controls only while loading or when loaded files exist", () => {
-    const emptyState: DiffViewerState = { source: null, status: "empty" };
+    const emptyState: DiffViewerState = { folderPath: null, source: null, status: "empty" };
     expect(getDiffVisibleSourceModel(emptyState, null)).toMatchObject({
       loadedFileCount: 0,
       showSidebarControl: false,

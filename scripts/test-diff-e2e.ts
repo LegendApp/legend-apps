@@ -15,7 +15,7 @@ const stepsFileName = stepsFileByScenario[scenario] ?? stepsFileByScenario["loca
 const stepsFile = path.join(rootDir, "e2e", "agent-device", stepsFileName);
 const skipBuild = process.env.DIFF_E2E_SKIP_BUILD === "1";
 
-function run(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
+function run(command: string, args: string[], options: { cwd?: string; env?: Record<string, string | undefined> } = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? rootDir,
     env: {
