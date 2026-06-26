@@ -25,6 +25,7 @@ import {
 } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { ensureSyntaxGrammarsForPaths } from "@legend-desktop/syntax-parser";
 import { TextInputSearch, type TextInputSearchRef } from "@legend-desktop/text-input-search";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
@@ -2170,17 +2171,21 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         });
       }
       const nativeResolvedAt = nowMs();
+      const grammarStartedAt = nativeResolvedAt;
+      await ensureSyntaxGrammarsForPaths(result.files.map((file) => file.path));
+      const grammarResolvedAt = nowMs();
       trace.document = result.document;
-      trace.nativeResolvedAt = nativeResolvedAt;
+      trace.nativeResolvedAt = grammarResolvedAt;
       logDiffOpenTiming("viewer.load.nativeResolved", {
         files: result.files.length,
+        grammarEnsureMs: Number((grammarResolvedAt - grammarStartedAt).toFixed(1)),
         initialRows: result.initialRows.length,
-        jsAwaitMs: Number((nativeResolvedAt - nativeStartedAt).toFixed(1)),
+        jsAwaitMs: Number((grammarResolvedAt - nativeStartedAt).toFixed(1)),
         nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
         requestId,
         rows: result.document.rowCount,
         styles: result.styles.length,
-        unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
+        unaccountedJsMs: Number((grammarResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
       });
       logDiffLoadTiming(nextSource.value, result.timing);
       const recentDocumentPath = getDiffRecentDocumentPath(nextSource);

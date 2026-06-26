@@ -110,13 +110,23 @@ export const popularSyntaxGrammars = [
   { name: "markdown", label: "Markdown", filename: "markdown.json", dependencies: ["markdown.json"] },
   { name: "yaml", label: "YAML", filename: "yaml.json", dependencies: ["yaml.json"] },
   { name: "css", label: "CSS", filename: "css.json", dependencies: ["css.json"] },
+  { name: "scss", label: "SCSS", filename: "scss.json", dependencies: ["css.json", "scss.json"] },
   { name: "html", label: "HTML", filename: "html.json", dependencies: ["html.json"] },
+  { name: "xml", label: "XML", filename: "xml.json", dependencies: ["xml.json"] },
   { name: "shellscript", label: "Shell", filename: "shellscript.json", dependencies: ["shellscript.json"] },
   { name: "python", label: "Python", filename: "python.json", dependencies: ["python.json"] },
+  { name: "ruby", label: "Ruby", filename: "ruby.json", dependencies: ["ruby.json"] },
   { name: "go", label: "Go", filename: "go.json", dependencies: ["go.json"] },
   { name: "rust", label: "Rust", filename: "rust.json", dependencies: ["rust.json"] },
   { name: "swift", label: "Swift", filename: "swift.json", dependencies: ["swift.json"] },
+  { name: "kotlin", label: "Kotlin", filename: "kotlin.json", dependencies: ["kotlin.json"] },
+  { name: "java", label: "Java", filename: "java.json", dependencies: ["java.json"] },
   { name: "cpp", label: "C++", filename: "cpp.json", dependencies: ["cpp.json"] },
+  { name: "c", label: "C", filename: "c.json", dependencies: ["c.json"] },
+  { name: "objective-c", label: "Objective-C", filename: "objective-c.json", dependencies: ["c.json", "objective-c.json"] },
+  { name: "objective-cpp", label: "Objective-C++", filename: "objective-cpp.json", dependencies: ["cpp.json", "objective-cpp.json"] },
+  { name: "toml", label: "TOML", filename: "toml.json", dependencies: ["toml.json"] },
+  { name: "dockerfile", label: "Dockerfile", filename: "docker.json", dependencies: ["docker.json"] },
 ] as const;
 
 function filenameForAssetName(name: string) {
@@ -348,6 +358,69 @@ export function isSyntaxGrammarInstalled(language: string) {
   return dependencies.every((filename) => installedFiles.has(filename));
 }
 
+function extensionForPath(path: string) {
+  const slashIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const dotIndex = path.lastIndexOf(".");
+  return dotIndex >= 0 && dotIndex > slashIndex ? path.slice(dotIndex + 1).toLowerCase() : "";
+}
+
+function filenameForPath(path: string) {
+  const slashIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return slashIndex >= 0 ? path.slice(slashIndex + 1).toLowerCase() : path.toLowerCase();
+}
+
+export function getSyntaxLanguageForPath(path: string) {
+  const name = filenameForPath(path);
+  const extension = extensionForPath(path);
+
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) {
+    return "dockerfile";
+  }
+
+  if (name === ".yarnrc" || name === ".yarnrc.yml" || name === ".yarnrc.yaml" || extension === "yml") {
+    return "yaml";
+  }
+
+  const languagesByExtension: Record<string, string> = {
+    bash: "shellscript",
+    c: "c",
+    cc: "cpp",
+    cpp: "cpp",
+    css: "css",
+    cxx: "cpp",
+    go: "go",
+    h: "c",
+    hpp: "cpp",
+    html: "html",
+    java: "java",
+    js: "javascript",
+    json: "json",
+    json5: "json",
+    jsonc: "json",
+    jsx: "jsx",
+    kt: "kotlin",
+    kts: "kotlin",
+    m: "objective-c",
+    md: "markdown",
+    mdx: "markdown",
+    mm: "objective-cpp",
+    py: "python",
+    rb: "ruby",
+    rs: "rust",
+    scss: "scss",
+    sh: "shellscript",
+    swift: "swift",
+    toml: "toml",
+    ts: "typescript",
+    tsx: "tsx",
+    xml: "xml",
+    yaml: "yaml",
+    zsh: "shellscript",
+  };
+
+  return languagesByExtension[extension] ?? "";
+}
+
 function getDevSyntaxAssetSourceCandidates({ filename, kind }: SyntaxAssetSource) {
   const sourceRoot = __DEV__ ? devSyntaxAssetSourceRoot : undefined;
   if (!sourceRoot) {
@@ -421,6 +494,20 @@ export async function ensureSyntaxGrammar(language: string) {
         installDevSyntaxAsset("grammar", filename);
       }
     }
+  }
+}
+
+export async function ensureSyntaxGrammarsForPaths(paths: readonly string[]) {
+  const languages = new Set<string>();
+  for (const path of paths) {
+    const language = getSyntaxLanguageForPath(path);
+    if (language) {
+      languages.add(language);
+    }
+  }
+
+  for (const language of languages) {
+    await ensureSyntaxGrammar(language);
   }
 }
 
