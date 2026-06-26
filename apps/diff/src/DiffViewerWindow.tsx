@@ -2,6 +2,7 @@ import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desk
 import { commandRunner } from "@legend-desktop/command-runner";
 import {
   loadGitFolderDiff,
+  loadUnifiedDiff,
   loadUnifiedDiffFromUrl,
   type DiffDocument,
   type DiffFileSummary,
@@ -1143,6 +1144,39 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, syntaxThemeName, diffInitialRowCount);
         logDiffOpenTiming("viewer.native.finish", {
           fetchMs: Number(result.timing.fetchMs.toFixed(1)),
+          files: result.files.length,
+          initialRows: result.initialRows.length,
+          nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
+          nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+          requestId,
+          rows: result.document.rowCount,
+          sourceKind: nextSource.kind,
+          styles: result.styles.length,
+        });
+      } else if (nextSource.kind === "git") {
+        logDiffOpenTiming("viewer.git.start", {
+          args: nextSource.args,
+          cwd: nextSource.cwd,
+          requestId,
+          sourceKind: nextSource.kind,
+        });
+        const commandResult = await commandRunner.runCommand({
+          args: ["diff", ...nextSource.args],
+          command: "git",
+          cwd: nextSource.cwd,
+          timeoutMs: 60_000,
+        });
+        if (commandResult.exitCode !== 0) {
+          throw new Error(commandResult.stderr || `git diff exited with code ${commandResult.exitCode}.`);
+        }
+        logDiffOpenTiming("viewer.git.finish", {
+          requestId,
+          stderrLength: commandResult.stderr.length,
+          stdoutLength: commandResult.stdout.length,
+          timedOut: commandResult.timedOut,
+        });
+        result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, syntaxThemeName, diffInitialRowCount);
+        logDiffOpenTiming("viewer.native.finish", {
           files: result.files.length,
           initialRows: result.initialRows.length,
           nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),

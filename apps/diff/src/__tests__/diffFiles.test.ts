@@ -2,6 +2,7 @@ import {
   getDiffRecentDocumentPath,
   getDiffSourceLabel,
   getFilename,
+  getDiffSourceFromOpenUrl,
   getLaunchDiffFolder,
   getLaunchDiffSource,
   normalizeDiffOpenSource,
@@ -24,6 +25,16 @@ describe("diffFiles", () => {
       kind: "folder",
       label: "My Repo",
       value: "/Users/jay/My Repo",
+    });
+    expect(normalizeDiffOpenSource(".", "/Users/jay/code/legend-desktop")).toEqual({
+      kind: "folder",
+      label: "legend-desktop",
+      value: "/Users/jay/code/legend-desktop",
+    });
+    expect(normalizeDiffOpenSource("packages/diff-parser", "/Users/jay/code/legend-desktop")).toEqual({
+      kind: "folder",
+      label: "diff-parser",
+      value: "/Users/jay/code/legend-desktop/packages/diff-parser",
     });
   });
 
@@ -75,6 +86,44 @@ describe("diffFiles", () => {
       label: "owner/repo#8",
       value: "https://github.com/owner/repo/pull/8",
     });
+    expect(getLaunchDiffSource(["--cwd", "/tmp/repo"])).toEqual({
+      kind: "folder",
+      label: "repo",
+      value: "/tmp/repo",
+    });
+    expect(getLaunchDiffSource(["-psn_0_1234", "--cwd", "/tmp/repo"])).toEqual({
+      kind: "folder",
+      label: "repo",
+      value: "/tmp/repo",
+    });
+    expect(getLaunchDiffSource([".", "--cwd", "/tmp/repo"])).toEqual({
+      kind: "folder",
+      label: "repo",
+      value: "/tmp/repo",
+    });
+    expect(getLaunchDiffSource(["main...HEAD", "--cwd", "/tmp/repo"])).toEqual({
+      args: ["main...HEAD"],
+      cwd: "/tmp/repo",
+      kind: "git",
+      label: "main...HEAD",
+      value: "/tmp/repo main...HEAD",
+    });
+  });
+
+  it("reads legend diff open URLs", () => {
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=main...HEAD")).toEqual({
+      args: ["main...HEAD"],
+      cwd: "/tmp/repo",
+      kind: "git",
+      label: "main...HEAD",
+      value: "/tmp/repo main...HEAD",
+    });
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&args=%5B%22.%22%5D")).toEqual({
+      kind: "folder",
+      label: "repo",
+      value: "/tmp/repo",
+    });
+    expect(getDiffSourceFromOpenUrl("https://github.com/owner/repo/pull/1")).toBeNull();
   });
 
   it("returns recent document paths only for folders", () => {

@@ -59,8 +59,23 @@ function renderDocumentTypes(types: MacOSDocumentType[]) {
   ].join("\n");
 }
 
+function renderUrlSchemes(schemes: string[]) {
+  return [
+    "\t<key>CFBundleURLTypes</key>",
+    "\t<array>",
+    "\t<dict>",
+    "\t\t<key>CFBundleURLSchemes</key>",
+    "\t\t<array>",
+    ...schemes.map((scheme) => `\t\t\t<string>${escapePlistString(scheme)}</string>`),
+    "\t\t</array>",
+    "\t</dict>",
+    "\t</array>",
+  ].join("\n");
+}
+
 export function writeMacOSInfoPlist(manifest: AppManifest, outputDir: string) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
+  const urlSchemes = manifest.urlSchemes?.macos?.filter(Boolean) ?? [];
   const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
   const basePlist = fs.readFileSync(baseInfoPlistPath, "utf8");
   const appMetadata = [
@@ -73,7 +88,7 @@ export function writeMacOSInfoPlist(manifest: AppManifest, outputDir: string) {
   ].join("\n");
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",
-    `\n${appMetadata}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}\n</dict>\n</plist>\n`,
+    `\n${appMetadata}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,
   );
   const outputPath = path.join(outputDir, "Info.plist");
 

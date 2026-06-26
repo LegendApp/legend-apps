@@ -77,6 +77,7 @@ describe("commandRunner", () => {
     const params = {
       command: "echo",
       args: ["hello"],
+      cwd: "/tmp/repo",
       input: "stdin",
       timeoutMs: 1000,
     };

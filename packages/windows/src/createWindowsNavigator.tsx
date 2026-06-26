@@ -9,7 +9,7 @@ import {
 import type { WindowConfigEntry, WindowsConfig } from "./types";
 import { withWindowProvider } from "./WindowProvider";
 
-type WindowOpenOverrides = Omit<WindowOptions, "identifier" | "moduleName">;
+type WindowOpenOverrides = Omit<WindowOptions, "moduleName">;
 
 type RegisteredWindow = {
   identifier: string;
@@ -75,7 +75,7 @@ const mergeWindowOptions = (baseOptions: WindowOptions, overrides?: WindowOpenOv
   return {
     ...baseOptions,
     ...overrides,
-    identifier: baseOptions.identifier,
+    identifier: overrides.identifier ?? baseOptions.identifier,
     moduleName: baseOptions.moduleName,
     windowStyle: hasWindowStyle ? mergedWindowStyle : undefined,
     initialProperties: mergedInitialProps,

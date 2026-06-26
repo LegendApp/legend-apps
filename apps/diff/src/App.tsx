@@ -3,9 +3,10 @@ import { commandRunner } from "@legend-desktop/command-runner";
 import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { initializeSyntaxAssetsSync } from "@legend-desktop/syntax-parser";
-import { LogBox } from "react-native";
+import { useEffect, useRef } from "react";
+import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
-import { getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
+import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { setDiffViewModeSetting } from "./diffSettings";
 import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
@@ -163,9 +164,15 @@ async function openRecentDiffFolder(path: string, controller: DocumentAppControl
 }
 
 async function openInitialDiffViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
-  const source = getLaunchDiffSource(launchArguments);
+  let source = getLaunchDiffSource(launchArguments?.slice(1));
+  let initialUrl: string | null = null;
+  if (!source) {
+    initialUrl = await Linking.getInitialURL();
+    source = getDiffSourceFromOpenUrl(initialUrl ?? "");
+  }
   const startedAt = nowMs();
   logDiffOpenTiming("launch.open.start", {
+    initialUrl,
     source,
     launchArgumentCount: launchArguments?.length ?? 0,
   });
@@ -178,7 +185,8 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
 }
 
 export function App({ launchArguments }: DiffAppProps) {
-  useDocumentAppController({
+  const handledOpenUrlRef = useRef<{ handledAt: number; url: string } | null>(null);
+  const controller = useDocumentAppController({
     createMenuHandlers: createDiffMenuHandlers,
     launchArguments,
     menus: diffMenuConfig,
@@ -188,6 +196,48 @@ export function App({ launchArguments }: DiffAppProps) {
     reportError: reportDiffAppControllerError,
     windowIdentifier: diffViewerWindowIdentifier,
   });
+  const controllerRef = useRef(controller);
+
+  useEffect(() => {
+    controllerRef.current = controller;
+  }, [controller]);
+
+  useEffect(() => {
+    const openUrl = (url: string | null | undefined) => {
+      const now = Date.now();
+      const lastHandled = handledOpenUrlRef.current;
+      const isImmediateDuplicate = lastHandled !== null && lastHandled.url === url && now - lastHandled.handledAt < 1000;
+      if (url && !isImmediateDuplicate) {
+        handledOpenUrlRef.current = { handledAt: now, url };
+        const source = getDiffSourceFromOpenUrl(url);
+        logDiffOpenTiming("url.open", {
+          source,
+          url,
+        });
+        if (source) {
+          const currentController = controllerRef.current;
+          openDiffViewerWindow(source)
+            .then(() => {
+              currentController.setDocumentWindowOpen(true);
+            })
+            .catch(currentController.reportError);
+        }
+      }
+    };
+
+    Linking.getInitialURL()
+      .then(openUrl)
+      .catch((error: unknown) => {
+        controllerRef.current.reportError(error);
+      });
+    const subscription = Linking.addEventListener("url", (event) => {
+      openUrl(event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   return null;
 }

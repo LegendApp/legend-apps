@@ -3,6 +3,9 @@ import { openFileDialog } from "@legend-desktop/file-dialog";
 const diffFolderLaunchArgument = "--diff-folder";
 const diffSourceLaunchArgument = "--diff-source";
 const diffUrlLaunchArgument = "--diff-url";
+const diffCwdLaunchArgument = "--cwd";
+const diffNamespacedCwdLaunchArgument = "--diff-cwd";
+const diffUrlScheme = "legend-diff:";
 
 export type DiffOpenSource =
   | {
@@ -13,6 +16,13 @@ export type DiffOpenSource =
   | {
       diffUrl: string;
       kind: "github";
+      label: string;
+      value: string;
+    }
+  | {
+      args: string[];
+      cwd: string;
+      kind: "git";
       label: string;
       value: string;
     };
@@ -51,6 +61,31 @@ function parseUrl(value: string) {
   }
 
   return url;
+}
+
+function normalizePath(path: string) {
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (!part || part === ".") {
+      continue;
+    }
+    if (part === "..") {
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
+  }
+  return `${path.startsWith("/") ? "/" : ""}${parts.join("/")}`;
+}
+
+function resolvePath(value: string, cwd: string | null | undefined) {
+  if (value.startsWith("/")) {
+    return normalizePath(value);
+  }
+  if (cwd) {
+    return normalizePath(`${cwd.replace(/\/+$/, "")}/${value}`);
+  }
+  return value;
 }
 
 function hasUrlScheme(value: string) {
@@ -94,17 +129,40 @@ function getGithubDiffSource(value: string): DiffOpenSource | null {
   return source;
 }
 
-export function normalizeDiffOpenSource(value: DiffOpenSource | string | null | undefined): DiffOpenSource | null {
-  let source: DiffOpenSource | null = null;
-  if (typeof value === "string") {
-    const trimmedValue = value.trim();
-    const fileUrlPath = getFileUrlPath(trimmedValue);
-    const folderPath = fileUrlPath ?? (!hasUrlScheme(trimmedValue) ? trimmedValue : null);
-    source = getGithubDiffSource(trimmedValue) ?? (folderPath ? {
-      kind: "folder",
+function isGitDiffArgument(value: string) {
+  return value.includes("..") && !value.startsWith(".");
+}
+
+function createGitDiffSource(value: string, cwd: string | null | undefined): DiffOpenSource | null {
+  const trimmedCwd = cwd?.trim();
+  return trimmedCwd ? {
+    args: [value],
+    cwd: trimmedCwd,
+    kind: "git",
+    label: value,
+    value: `${trimmedCwd} ${value}`,
+  } : null;
+}
+
+function normalizeDiffOpenSourceString(value: string, cwd?: string | null) {
+  const trimmedValue = value.trim();
+  const fileUrlPath = getFileUrlPath(trimmedValue);
+  const folderPath = fileUrlPath ?? (!hasUrlScheme(trimmedValue) && !isGitDiffArgument(trimmedValue)
+    ? resolvePath(trimmedValue, cwd)
+    : null);
+  return getGithubDiffSource(trimmedValue)
+    ?? (isGitDiffArgument(trimmedValue) ? createGitDiffSource(trimmedValue, cwd) : null)
+    ?? (folderPath ? {
+      kind: "folder" as const,
       label: getFilename(folderPath),
       value: folderPath,
     } : null);
+}
+
+export function normalizeDiffOpenSource(value: DiffOpenSource | string | null | undefined, cwd?: string | null): DiffOpenSource | null {
+  let source: DiffOpenSource | null = null;
+  if (typeof value === "string") {
+    source = normalizeDiffOpenSourceString(value, cwd);
   } else if (value) {
     source = value;
   }
@@ -122,14 +180,21 @@ export function getDiffSourceLabel(source: DiffOpenSource | null | undefined) {
 export function getLaunchDiffSource(launchArguments: string[] | undefined) {
   const argv = typeof process !== "undefined" && Array.isArray(process.argv) ? process.argv : [];
   const args = launchArguments ?? argv;
+  const cwd = getLaunchArgumentValue(args, diffCwdLaunchArgument)
+    ?? getLaunchArgumentValue(args, diffNamespacedCwdLaunchArgument)
+    ?? null;
   const explicitSource = getLaunchArgumentValue(args, diffSourceLaunchArgument)
     ?? getLaunchArgumentValue(args, diffUrlLaunchArgument)
     ?? getLaunchArgumentValue(args, diffFolderLaunchArgument);
-  let source = normalizeDiffOpenSource(explicitSource);
+  let source = normalizeDiffOpenSource(explicitSource, cwd);
 
   if (!source) {
     const githubUrl = args.find((argument) => getGithubDiffSource(argument));
     source = normalizeDiffOpenSource(githubUrl);
+  }
+  if (!source) {
+    const positionalArg = getFirstPositionalLaunchArgument(args);
+    source = positionalArg ? normalizeDiffOpenSource(positionalArg, cwd) : normalizeDiffOpenSource(cwd);
   }
 
   return source;
@@ -148,4 +213,50 @@ export async function openDiffFolderDialog() {
   });
 
   return paths?.[0] ?? null;
+}
+
+function getFirstPositionalLaunchArgument(args: string[]) {
+  const valueFlags = new Set([
+    diffCwdLaunchArgument,
+    diffFolderLaunchArgument,
+    diffNamespacedCwdLaunchArgument,
+    diffSourceLaunchArgument,
+    diffUrlLaunchArgument,
+  ]);
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (valueFlags.has(arg)) {
+      index += 1;
+    } else if (!arg.startsWith("-")) {
+      return arg;
+    }
+  }
+  return null;
+}
+
+function getDiffOpenUrlArgs(url: URL) {
+  const argsJson = url.searchParams.get("args");
+  let args = url.searchParams.getAll("arg");
+  if (argsJson) {
+    try {
+      const parsed = JSON.parse(argsJson) as unknown;
+      if (Array.isArray(parsed) && parsed.every((arg) => typeof arg === "string")) {
+        args = parsed;
+      }
+    } catch {
+      args = [];
+    }
+  }
+  return args;
+}
+
+export function getDiffSourceFromOpenUrl(value: string) {
+  const url = parseUrl(value);
+  let source: DiffOpenSource | null = null;
+  if (url?.protocol === diffUrlScheme && url.hostname === "open") {
+    const cwd = url.searchParams.get("cwd");
+    const args = getDiffOpenUrlArgs(url);
+    source = getLaunchDiffSource([...args, ...(cwd ? [diffCwdLaunchArgument, cwd] : [])]);
+  }
+  return source;
 }

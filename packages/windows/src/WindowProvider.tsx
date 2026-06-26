@@ -22,11 +22,14 @@ export const withWindowProvider = <P extends Record<string, unknown>>(
     throw new Error(`withWindowProvider: WrappedComponent must be a function, got ${typeof WrappedComponent}`);
   }
 
-  const WithWindowProvider = (props: P) => (
-    <WindowProvider id={id}>
-      <WrappedComponent {...props} />
-    </WindowProvider>
-  );
+  const WithWindowProvider = (props: P) => {
+    const windowIdentifier = typeof props.windowIdentifier === "string" ? props.windowIdentifier : id;
+    return (
+      <WindowProvider id={windowIdentifier}>
+        <WrappedComponent {...props} />
+      </WindowProvider>
+    );
+  };
 
   WithWindowProvider.displayName =
     `WithWindowProvider(${WrappedComponent.displayName ?? WrappedComponent.name ?? "Component"})`;

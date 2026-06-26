@@ -816,7 +816,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   self.toolbarItemConfigs[toolbar.identifier] = configs;
 
   while (toolbar.items.count > 0) {
-    [toolbar removeItemAtIndex:0];
+    [toolbar removeItemAtIndex:toolbar.items.count - 1];
   }
   for (NSToolbarItemIdentifier itemIdentifier in [self toolbarDefaultItemIdentifiers:toolbar]) {
     [toolbar insertItemWithItemIdentifier:itemIdentifier atIndex:toolbar.items.count];

@@ -27,6 +27,9 @@ export type AppManifest = {
   documentTypes?: {
     macos?: MacOSDocumentType[];
   };
+  urlSchemes?: {
+    macos?: string[];
+  };
 };
 
 export type NativePackage = {

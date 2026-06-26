@@ -7,6 +7,8 @@ const createComponent = (name) => (
 module.exports = {
   __esModule: true,
   Linking: {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    getInitialURL: jest.fn(async () => null),
     openURL: jest.fn(async () => undefined),
   },
   Platform: {

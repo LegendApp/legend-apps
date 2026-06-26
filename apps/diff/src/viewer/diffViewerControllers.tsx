@@ -3,10 +3,11 @@ import { watchDirectories } from "@legend-desktop/file-system-watcher";
 import { updateMenuItems } from "@legend-desktop/native-menu";
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-desktop/source-viewer";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
+import { useWindowId } from "@legend-desktop/windows";
 import { useObserveEffect } from "@legendapp/state/react";
 import { type RefObject, useEffect, useRef } from "react";
 import type { TextInput } from "react-native";
-import { diffMenuOwnerId, diffViewerWindowIdentifier } from "../appConstants";
+import { diffMenuOwnerId } from "../appConstants";
 import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   getDiffSyntaxTheme,
@@ -110,9 +111,11 @@ export function DiffWindowToolbarItemController({
 }: {
   toggleSidebar: () => boolean;
 }) {
+  const windowIdentifier = useWindowId();
+
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {
-      if (event.identifier === diffViewerWindowIdentifier) {
+      if (event.identifier === windowIdentifier) {
         if (event.itemId === diffSidebarToolbarItemId) {
           toggleSidebar();
         } else if (event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) {
@@ -121,7 +124,7 @@ export function DiffWindowToolbarItemController({
       }
     });
     return () => subscription.remove();
-  }, [toggleSidebar]);
+  }, [toggleSidebar, windowIdentifier]);
 
   return null;
 }
@@ -132,12 +135,14 @@ export function DiffWindowChromeController() {
     sidebarCollapsed$,
     state$,
   } = useDiffViewerModel();
+  const windowIdentifier = useWindowId();
   const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
 
   useObserveEffect(() => {
     const syntaxTheme = getDiffSyntaxTheme();
     setDiffViewerWindowAppearance({
       appearance: syntaxTheme.appearance,
+      windowIdentifier,
     }).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));
     });
@@ -160,6 +165,7 @@ export function DiffWindowChromeController() {
         showViewModeToolbar: toolbarModel.showViewModeToolbar,
         sidebarCollapsed: toolbarModel.sidebarCollapsed,
         viewMode: toolbarModel.viewMode,
+        windowIdentifier,
       })
         .then(() => {
           logDiffOpenTiming("viewer.toolbarOptions.finish", {

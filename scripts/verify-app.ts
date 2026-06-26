@@ -106,6 +106,9 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
     `<key>LegendHostWindowHidden</key>\n\t${manifest.hostWindow?.macos?.hidden === true ? "<true/>" : "<false/>"}`,
     `${manifest.id}/macos Info.plist has wrong host window metadata`,
   );
+  for (const scheme of manifest.urlSchemes?.macos ?? []) {
+    assertContains(infoPlist, `<string>${scheme}</string>`, `${manifest.id}/macos Info.plist is missing URL scheme ${scheme}`);
+  }
   assertContains(
     project,
     `PRODUCT_BUNDLE_IDENTIFIER = "${manifest.bundleIds.macos}";`,

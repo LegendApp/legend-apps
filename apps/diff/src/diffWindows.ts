@@ -146,23 +146,39 @@ function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
 }
 
+function hashString(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+export function getDiffViewerWindowIdentifier(source: DiffOpenSource | null | undefined) {
+  return source ? `${diffViewerWindowIdentifier}-${source.kind}-${hashString(source.value)}` : diffViewerWindowIdentifier;
+}
+
 export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null, options: DiffViewerWindowOpenOptions = {}) {
   const source = normalizeDiffOpenSource(sourceInput);
+  const windowIdentifier = getDiffViewerWindowIdentifier(source);
   const shouldShowSourceToolbar = source !== null;
   const focusUrlInputRequestId = options.focusUrlInput ? ++diffViewerUrlFocusRequestId : undefined;
   const initialProperties = source || options.focusUrlInput
     ? {
         ...(source ? { source } : {}),
         ...(focusUrlInputRequestId ? { focusUrlInputRequestId } : {}),
+        windowIdentifier,
       }
     : undefined;
   const startedAt = nowMs();
   logDiffOpenTiming("window.open.start", {
     focusUrlInput: options.focusUrlInput === true,
     source,
+    windowIdentifier,
   });
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
+    identifier: windowIdentifier,
     initialProperties,
     representedURL: source?.value,
     title: getDiffSourceLabel(source),
@@ -176,6 +192,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     logDiffOpenTiming("window.open.finish", {
       focusUrlInput: options.focusUrlInput === true,
       source,
+      windowIdentifier,
       windowOpenMs: Number((nowMs() - startedAt).toFixed(1)),
     });
     return result;
@@ -192,10 +209,12 @@ export function openDiffSettingsWindow() {
 
 export function setDiffViewerWindowAppearance({
   appearance,
+  windowIdentifier,
 }: {
   appearance: "dark" | "light";
+  windowIdentifier: string;
 }) {
-  return setWindowOptions(diffViewerWindowIdentifier, {
+  return setWindowOptions(windowIdentifier, {
     windowStyle: {
       appearance,
     },
@@ -208,14 +227,16 @@ export function setDiffViewerWindowToolbarOptions({
   showViewModeToolbar,
   sidebarCollapsed,
   viewMode,
+  windowIdentifier,
 }: {
   source: DiffOpenSource | null;
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
   viewMode: DiffViewMode;
+  windowIdentifier: string;
 }) {
-  return setWindowOptions(diffViewerWindowIdentifier, {
+  return setWindowOptions(windowIdentifier, {
     representedURL: source?.value,
     title: getDiffSourceLabel(source),
     windowStyle: createDiffViewerWindowStyle({

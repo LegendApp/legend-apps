@@ -1,8 +1,10 @@
 #import "AppDelegate.h"
 
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTLinkingManager.h>
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <Carbon/Carbon.h>
 
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
@@ -156,6 +158,11 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   if (documentControllerClass && [documentControllerClass isSubclassOfClass:[NSDocumentController class]]) {
     (void)[[documentControllerClass alloc] init];
   }
+
+  [[NSAppleEventManager sharedAppleEventManager] setEventHandler:RCTLinkingManager.class
+                                                    andSelector:@selector(getUrlEventHandler:withReplyEvent:)
+                                                  forEventClass:kInternetEventClass
+                                                     andEventID:kAEGetURL];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification

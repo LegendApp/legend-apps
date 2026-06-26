@@ -100,12 +100,25 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   }
 
   NSString *input = [params[@"input"] isKindOfClass:[NSString class]] ? params[@"input"] : nil;
+  NSString *cwd = [params[@"cwd"] isKindOfClass:[NSString class]] ? params[@"cwd"] : nil;
   NSNumber *timeoutMs = [params[@"timeoutMs"] isKindOfClass:[NSNumber class]] ? params[@"timeoutMs"] : nil;
 
   dispatch_async(_workQueue, ^{
     NSTask *task = [[NSTask alloc] init];
     task.executableURL = [NSURL fileURLWithPath:resolvedPath];
     task.arguments = args;
+    if (cwd.length > 0) {
+      NSString *expandedCwd = [cwd stringByExpandingTildeInPath];
+      BOOL isDirectory = NO;
+      BOOL cwdExists = [[NSFileManager defaultManager] fileExistsAtPath:expandedCwd isDirectory:&isDirectory];
+      if (!cwdExists || !isDirectory) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          reject(@"invalid_cwd", [NSString stringWithFormat:@"Working directory not found: %@", cwd], nil);
+        });
+        return;
+      }
+      task.currentDirectoryURL = [NSURL fileURLWithPath:expandedCwd isDirectory:YES];
+    }
 
     NSPipe *stdoutPipe = [NSPipe pipe];
     NSPipe *stderrPipe = [NSPipe pipe];

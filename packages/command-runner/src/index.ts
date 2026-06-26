@@ -6,6 +6,7 @@ export type CommandAvailability = Record<string, boolean>;
 export type CommandRunnerParams = {
   command: string;
   args?: string[];
+  cwd?: string;
   input?: string;
   timeoutMs?: number;
 };

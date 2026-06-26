@@ -14,6 +14,9 @@ const manifest = {
       hidden: true,
     },
   },
+  urlSchemes: {
+    macos: ["legend-diff"],
+  },
   nativeModules: {
     macos: [
       "@legend-desktop/appkit-split-view",
