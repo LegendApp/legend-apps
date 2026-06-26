@@ -21,6 +21,14 @@ import {
 import type { Observable } from "@legendapp/state";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { DiffSettingsFile } from "../diffSettings";
+import type { DiffSyntaxStyleStore } from "./DiffRows";
+import {
+  diffBackgroundTokenizeChunkBudgetMs,
+  diffBackgroundTokenizeChunkRowCount,
+  diffBackgroundTokenizeMaxRowCount,
+  diffBackgroundTokenizePollMs,
+  diffBackgroundTokenizeStartDelayMs,
+} from "./diffViewerConstants";
 import type { DiffViewerState } from "./diffViewerModel";
 import { logDiffOpenTiming } from "./diffViewerSupport";
 
@@ -127,6 +135,67 @@ export function useDiffLoadedModel({
     () => createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, diffRows.styles)),
     [diffRows.styles, syntaxThemeName],
   );
+  const syntaxStyleStore = useMemo<DiffSyntaxStyleStore>(() => {
+    const listeners = new Set<() => void>();
+    let scopeCount = diffRows.styles.length;
+    let version = 0;
+    let tokenStyleMap = tokenStyleById;
+    return {
+      get current() {
+        return tokenStyleMap;
+      },
+      getSnapshot() {
+        return version;
+      },
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      refresh(document: DiffDocument) {
+        const scopes = document.getScopes();
+        if (scopes.length !== scopeCount) {
+          scopeCount = scopes.length;
+          tokenStyleMap = createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, scopes));
+        }
+        version += 1;
+        listeners.forEach((listener) => listener());
+      },
+    };
+  }, [syntaxThemeName, tokenStyleById]);
+  useEffect(() => {
+    if (state.status === "loaded") {
+      const document = state.document;
+      if (document.rowCount > diffBackgroundTokenizeMaxRowCount) {
+        logDiffOpenTiming("viewer.backgroundTokenize.skipped", {
+          maxRows: diffBackgroundTokenizeMaxRowCount,
+          rows: document.rowCount,
+        });
+        return undefined;
+      }
+
+      let intervalHandle: ReturnType<typeof setInterval> | null = null;
+      const startTimeoutHandle = setTimeout(() => {
+        document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs);
+        intervalHandle = setInterval(() => {
+          const ranges = document.consumeTokenizedRowRanges();
+          if (ranges.length > 0) {
+            syntaxStyleStore.refresh(document);
+          }
+        }, diffBackgroundTokenizePollMs);
+      }, diffBackgroundTokenizeStartDelayMs);
+
+      return () => {
+        clearTimeout(startTimeoutHandle);
+        if (intervalHandle) {
+          clearInterval(intervalHandle);
+        }
+        document.stopBackgroundTokenization();
+      };
+    }
+    return undefined;
+  }, [state.status === "loaded" ? state.document : null, syntaxStyleStore]);
   const fileHeaderRowIndexes = useMemo(() => {
     const startedAt = nowMs();
     if (state.status !== "loaded") {
@@ -288,6 +357,7 @@ export function useDiffLoadedModel({
     sideBySideItemIndexes,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
+    syntaxStyleStore,
     tokenStyleById,
     visibleItemIndexes,
   };

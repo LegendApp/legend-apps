@@ -971,6 +971,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     sideBySideItemIndexes,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
+    syntaxStyleStore,
     tokenStyleById,
     visibleItemIndexes,
   } = useDiffLoadedModel({
@@ -1468,6 +1469,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       sideBySideTokenStyleById: tokenStyleById,
       syntaxAppearance: syntaxTheme.appearance,
+      syntaxStyleStore,
       tokenStyleById,
       toggleFileCollapsed,
     }),
@@ -1483,6 +1485,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor,
       rowHeight,
       state.status === "loaded" ? state.document : null,
+      syntaxStyleStore,
       syntaxTheme.appearance,
       toggleFileCollapsed,
       tokenStyleById,

@@ -15,14 +15,13 @@ import {
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
-import { memo, useEffect, useState } from "react";
+import { memo, useMemo, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename } from "../diffFiles";
 import {
   diffChangeTypeAdd,
   diffChangeTypeRemove,
   diffRowKindFileHeader,
-  diffScrollIdleMs,
   diffSideBySideGutterWidth,
   diffSideBySideHorizontalPadding,
 } from "./diffViewerConstants";
@@ -46,6 +45,7 @@ export type DiffRenderFields = {
   rowHeight: number;
   sideBySideTokenStyleById: SyntaxStyleMap;
   syntaxAppearance: "dark" | "light";
+  syntaxStyleStore: DiffSyntaxStyleStore;
   tokenStyleById: SyntaxStyleMap;
   toggleFileCollapsed: (fileIndex: number) => void;
 };
@@ -93,6 +93,7 @@ type DiffSideBySideLineProps = {
   rowVisible: boolean;
   side: "new" | "old";
   syntaxAppearance: "dark" | "light";
+  syntaxStyleStore: DiffSyntaxStyleStore;
   tokenStyleById: SyntaxStyleMap;
 };
 
@@ -119,41 +120,39 @@ type TokenizedDiffRowState = {
   tokenStyleById: SyntaxStyleMap;
 };
 
+export type DiffSyntaxStyleStore = {
+  current: SyntaxStyleMap;
+  getSnapshot: () => number;
+  refresh: (document: DiffDocument) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+
 function useTokenizedDiffRow(
   document: DiffDocument | null,
   row: DiffRenderRow | undefined,
   adaptiveRender: "light" | "normal",
-  tokenStyleById: SyntaxStyleMap,
+  syntaxStyleStore: DiffSyntaxStyleStore,
 ) {
-  const [state, setState] = useState<TokenizedDiffRowState | null>(null);
+  const tokenizedVersion = useSyncExternalStore(
+    syntaxStyleStore.subscribe,
+    syntaxStyleStore.getSnapshot,
+    syntaxStyleStore.getSnapshot,
+  );
   const rowIndex = row?.index ?? -1;
   const shouldTokenize = adaptiveRender === "normal" && document !== null && row !== undefined && row.kind !== diffRowKindFileHeader;
 
-  useEffect(() => {
-    let isCancelled = false;
-
+  return useMemo<TokenizedDiffRowState | null>(() => {
     if (shouldTokenize && document && rowIndex >= 0) {
-      const timeoutHandle = setTimeout(() => {
-        const tokenizedRow = document.getRows(rowIndex, 1)[0];
-        if (!isCancelled && tokenizedRow) {
-          setState({
-            row: tokenizedRow,
-            tokenStyleById,
-          });
-        }
-      }, diffScrollIdleMs);
-
-      return () => {
-        isCancelled = true;
-        clearTimeout(timeoutHandle);
-      };
+      const cachedRow = document.getPlainRows(rowIndex, 1)[0];
+      if (cachedRow?.tokens.length > 0) {
+        return {
+          row: cachedRow,
+          tokenStyleById: syntaxStyleStore.current,
+        };
+      }
     }
-
-    setState(null);
-    return undefined;
-  }, [document, rowIndex, shouldTokenize, tokenStyleById]);
-
-  return state?.row.index === rowIndex ? state : null;
+    return null;
+  }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedVersion]);
 }
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
@@ -184,6 +183,7 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
   rowVisible,
   side,
   syntaxAppearance,
+  syntaxStyleStore,
   tokenStyleById,
 }: DiffSideBySideLineProps) {
   const visibleRow = rowVisible ? row : undefined;
@@ -199,7 +199,7 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
       ? palette.removeBackground
       : "transparent";
   const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
-  const tokenizedState = useTokenizedDiffRow(document, visibleRow, adaptiveRender, tokenStyleById);
+  const tokenizedState = useTokenizedDiffRow(document, visibleRow, adaptiveRender, syntaxStyleStore);
   const displayRow = tokenizedState?.row ?? visibleRow;
   const displayTokenStyleById = tokenizedState?.tokenStyleById ?? tokenStyleById;
 
@@ -341,6 +341,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
   const syntaxAppearance = renderFields.syntaxAppearance;
+  const syntaxStyleStore = renderFields.syntaxStyleStore;
   const tokenStyleById = renderFields.tokenStyleById;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
@@ -359,7 +360,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       : "transparent";
   const lineNumberColor = isChanged ? accentColor : mutedColor;
   const marker = isAdd ? "+" : isRemove ? "-" : " ";
-  const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, tokenStyleById);
+  const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, syntaxStyleStore);
   const displayRow = tokenizedState?.row ?? row;
   const displayTokenStyleById = tokenizedState?.tokenStyleById ?? tokenStyleById;
 
@@ -444,6 +445,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const rowHeight = renderFields.rowHeight;
   const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleById;
   const syntaxAppearance = renderFields.syntaxAppearance;
+  const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
 
@@ -487,6 +489,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           rowVisible={row.oldRowVisible}
           side="old"
           syntaxAppearance={syntaxAppearance}
+          syntaxStyleStore={syntaxStyleStore}
           tokenStyleById={sideBySideTokenStyleById}
         />
       </View>
@@ -505,6 +508,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           rowVisible={row.newRowVisible}
           side="new"
           syntaxAppearance={syntaxAppearance}
+          syntaxStyleStore={syntaxStyleStore}
           tokenStyleById={sideBySideTokenStyleById}
         />
       </View>

@@ -51,6 +51,14 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     rowHeight: 22,
     sideBySideTokenStyleById: new Map(),
     syntaxAppearance: "dark",
+    syntaxStyleStore: {
+      current: new Map(),
+      getSnapshot: () => 0,
+      refresh: () => {
+      },
+      subscribe: () => () => {
+      },
+    },
     toggleFileCollapsed: jest.fn(),
     tokenStyleById: new Map(),
     ...overrides,
