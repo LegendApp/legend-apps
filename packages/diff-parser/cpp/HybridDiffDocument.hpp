@@ -34,6 +34,8 @@ struct DiffFileSources {
   bool isUnifiedDiff = false;
   bool oldSourceLoaded = false;
   bool newSourceLoaded = false;
+  std::shared_ptr<std::mutex> oldSourceMutex = std::make_shared<std::mutex>();
+  std::shared_ptr<std::mutex> newSourceMutex = std::make_shared<std::mutex>();
   DiffTokenizedSource oldSource;
   DiffTokenizedSource newSource;
 };
@@ -98,7 +100,9 @@ private:
       const std::vector<double>& collapsedFileIndexes,
       bool tokenizeRows);
   void ensureRowTokens(size_t rowIndex);
+  std::vector<DiffSyntaxTokenRun> tokenizeRowOutsideDocumentLock(const DiffRenderRow& row);
   bool ensureNextBackgroundTokenChunk(
+      std::unique_lock<std::mutex>& lock,
       size_t chunkRowCount,
       std::chrono::steady_clock::duration chunkBudget);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
@@ -116,12 +120,14 @@ private:
   std::shared_ptr<DiffSyntaxState> syntaxState_;
   DiffLoadTiming timing_;
   size_t backgroundTokenizeRowIndex_ = 0;
+  size_t backgroundTokenizeNextRowIndex_ = 0;
   std::vector<DiffTokenizedRowRange> tokenizedRowRanges_;
   std::atomic<uint64_t> backgroundGeneration_{0};
   std::atomic<uint64_t> tokenizedRowVersion_{0};
   std::atomic<bool> backgroundTokenizationRunning_{false};
   std::thread backgroundThread_;
   mutable std::mutex mutex_;
+  mutable std::mutex syntaxMutex_;
 };
 
 } // namespace margelo::nitro::legenddesktop::diffparser

@@ -28,8 +28,8 @@ namespace {
 constexpr double diffRowKindLine = 2;
 constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
-constexpr double defaultBackgroundTokenizeChunkRowCount = 4096;
-constexpr double defaultBackgroundTokenizeChunkBudgetMs = 1000;
+constexpr double defaultBackgroundTokenizeChunkRowCount = 16;
+constexpr double defaultBackgroundTokenizeChunkBudgetMs = 3;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
@@ -309,6 +309,7 @@ std::vector<DiffRenderRow> HybridDiffDocument::getRows(double start, double coun
   if (safeStart <= backgroundTokenizeRowIndex_ && end > backgroundTokenizeRowIndex_) {
     const auto previousTokenizedMaxRow = backgroundTokenizeRowIndex_;
     backgroundTokenizeRowIndex_ = end;
+    backgroundTokenizeNextRowIndex_ = std::max(backgroundTokenizeNextRowIndex_, backgroundTokenizeRowIndex_);
     tokenizedRowRanges_.push_back(DiffTokenizedRowRange(
         static_cast<double>(previousTokenizedMaxRow),
         static_cast<double>(backgroundTokenizeRowIndex_)));
@@ -534,7 +535,7 @@ std::vector<DiffFileSummary> HybridDiffDocument::getFiles() {
 }
 
 std::vector<DiffSyntaxScope> HybridDiffDocument::getScopes() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(syntaxMutex_);
   std::vector<DiffSyntaxScope> scopes;
   scopes.reserve(syntaxState_->scopeState.scopes.size());
   for (size_t index = 0; index < syntaxState_->scopeState.scopes.size(); index += 1) {
@@ -562,14 +563,12 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
     bool shouldContinue = true;
 
     while (shouldContinue && document->backgroundGeneration_.load() == generation) {
-      bool didTokenizeChunk = false;
       {
-        std::lock_guard<std::mutex> lock(document->mutex_);
-        didTokenizeChunk = document->ensureNextBackgroundTokenChunk(safeChunkRowCount, safeChunkBudget);
-        shouldContinue = didTokenizeChunk;
+        std::unique_lock<std::mutex> lock(document->mutex_);
+        shouldContinue = document->ensureNextBackgroundTokenChunk(lock, safeChunkRowCount, safeChunkBudget);
       }
 
-      if (shouldContinue && didTokenizeChunk) {
+      if (shouldContinue) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
@@ -614,25 +613,45 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
   size += sideBySideLines_.capacity() * sizeof(DiffSideBySideLine);
   for (const auto& sources : fileSources_) {
     size += sources.oldPath.capacity() + sources.newPath.capacity() + sources.status.capacity();
-    for (const auto* source : {&sources.oldSource, &sources.newSource}) {
-      size += source->language.capacity();
-      size += source->lines.capacity() * sizeof(std::string);
-      size += source->tokenCache.capacity() * sizeof(std::optional<std::vector<DiffSyntaxTokenRun>>);
-      for (const auto& line : source->lines) {
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
+      const auto& source = sources.oldSource;
+      size += source.language.capacity();
+      size += source.lines.capacity() * sizeof(std::string);
+      size += source.tokenCache.capacity() * sizeof(std::optional<std::vector<DiffSyntaxTokenRun>>);
+      for (const auto& line : source.lines) {
         size += line.capacity();
       }
-      for (const auto& tokens : source->tokenCache) {
+      for (const auto& tokens : source.tokenCache) {
+        if (tokens.has_value()) {
+          size += tokens->capacity() * sizeof(DiffSyntaxTokenRun);
+        }
+      }
+    }
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
+      const auto& source = sources.newSource;
+      size += source.language.capacity();
+      size += source.lines.capacity() * sizeof(std::string);
+      size += source.tokenCache.capacity() * sizeof(std::optional<std::vector<DiffSyntaxTokenRun>>);
+      for (const auto& line : source.lines) {
+        size += line.capacity();
+      }
+      for (const auto& tokens : source.tokenCache) {
         if (tokens.has_value()) {
           size += tokens->capacity() * sizeof(DiffSyntaxTokenRun);
         }
       }
     }
   }
-  size += syntaxState_->scopeState.scopes.capacity() * sizeof(std::vector<std::string>);
-  for (const auto& scopes : syntaxState_->scopeState.scopes) {
-    size += scopes.capacity() * sizeof(std::string);
-    for (const auto& scope : scopes) {
-      size += scope.capacity();
+  {
+    std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
+    size += syntaxState_->scopeState.scopes.capacity() * sizeof(std::vector<std::string>);
+    for (const auto& scopes : syntaxState_->scopeState.scopes) {
+      size += scopes.capacity() * sizeof(std::string);
+      for (const auto& scope : scopes) {
+        size += scope.capacity();
+      }
     }
   }
   return size;
@@ -654,24 +673,55 @@ void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   }
 
   auto& sources = fileSources_[fileIndex];
-  if (row.changeType == diffChangeTypeRemove) {
+  const bool oldSource = row.changeType == diffChangeTypeRemove;
+  auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
+  std::lock_guard<std::mutex> sourceLock(*sourceMutex);
+  if (oldSource) {
     row.tokens = tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
   } else {
     row.tokens = tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
   }
 }
 
+std::vector<DiffSyntaxTokenRun> HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row) {
+  if (row.kind != diffRowKindLine) {
+    return {};
+  }
+
+  const auto fileIndex = static_cast<size_t>(std::max(0.0, row.fileIndex));
+  if (fileIndex >= fileSources_.size()) {
+    return {};
+  }
+
+  auto& sources = fileSources_[fileIndex];
+  const bool oldSource = row.changeType == diffChangeTypeRemove;
+  auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
+  std::lock_guard<std::mutex> sourceLock(*sourceMutex);
+  if (oldSource) {
+    return tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
+  }
+  return tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
+}
+
 bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
+    std::unique_lock<std::mutex>& lock,
     size_t chunkRowCount,
     std::chrono::steady_clock::duration chunkBudget) {
   const auto start = backgroundTokenizeRowIndex_;
   size_t tokenizedCount = 0;
   const auto startedAt = std::chrono::steady_clock::now();
 
-  while (backgroundTokenizeRowIndex_ < rows_.size() && tokenizedCount < chunkRowCount) {
-    const auto rowIndex = backgroundTokenizeRowIndex_;
-    backgroundTokenizeRowIndex_ += 1;
-    ensureRowTokens(rowIndex);
+  while (backgroundTokenizeNextRowIndex_ < rows_.size() && tokenizedCount < chunkRowCount) {
+    const auto rowIndex = backgroundTokenizeNextRowIndex_;
+    backgroundTokenizeNextRowIndex_ += 1;
+    const auto row = rows_[rowIndex];
+    lock.unlock();
+    auto tokens = tokenizeRowOutsideDocumentLock(row);
+    lock.lock();
+    if (rowIndex < rows_.size() && rows_[rowIndex].tokens.empty()) {
+      rows_[rowIndex].tokens = std::move(tokens);
+    }
+    backgroundTokenizeRowIndex_ = std::max(backgroundTokenizeRowIndex_, rowIndex + 1);
     tokenizedCount += 1;
     if (tokenizedCount > 0 && std::chrono::steady_clock::now() - startedAt >= chunkBudget) {
       break;
@@ -748,6 +798,7 @@ void HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lin
       source.state->context = syntaxparser::getHighlighterContext(source.language, "dark-plus");
     }
 
+    std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
     std::lock_guard<std::mutex> contextLock(source.state->context->mutex);
     while (source.tokenizedLineCount < end) {
       auto tokenizedLine = syntaxparser::tokenizeSyntaxScopeLine(
