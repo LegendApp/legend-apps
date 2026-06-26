@@ -1,11 +1,11 @@
 #include "HybridDiffParser.hpp"
 
+#include "DiffParserCore.hpp"
 #include "HybridDiffDocument.hpp"
 #include "HybridDiffUrlLoader.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include "git2.h"
@@ -148,90 +148,6 @@ std::vector<DiffFileSources> createFileSources(const std::vector<DiffFileSummary
   return fileSources;
 }
 
-std::string_view trimCarriageReturn(std::string_view line) {
-  if (!line.empty() && line.back() == '\r') {
-    line.remove_suffix(1);
-  }
-  return line;
-}
-
-std::string trimWhitespace(std::string_view value) {
-  size_t start = 0;
-  size_t end = value.size();
-  while (start < end && std::isspace(static_cast<unsigned char>(value[start]))) {
-    start += 1;
-  }
-  while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
-    end -= 1;
-  }
-  return std::string(value.substr(start, end - start));
-}
-
-std::string stripQuotedPath(std::string_view path) {
-  auto normalizedPath = trimWhitespace(path);
-  if (normalizedPath.size() >= 2 && normalizedPath.front() == '"' && normalizedPath.back() == '"') {
-    normalizedPath = normalizedPath.substr(1, normalizedPath.size() - 2);
-  }
-  return normalizedPath;
-}
-
-std::string stripGitDiffPathPrefix(std::string_view path) {
-  auto normalizedPath = stripQuotedPath(path);
-  if (normalizedPath.starts_with("a/") || normalizedPath.starts_with("b/")) {
-    return normalizedPath.substr(2);
-  }
-  return normalizedPath;
-}
-
-std::pair<std::string, std::string> parseDiffGitPaths(std::string_view line) {
-  constexpr auto prefix = std::string_view("diff --git ");
-  const auto paths = line.substr(prefix.size());
-  const auto separator = paths.find(" b/");
-  if (separator == std::string::npos) {
-    return { "", "" };
-  }
-  return {
-    stripGitDiffPathPrefix(paths.substr(0, separator)),
-    stripGitDiffPathPrefix(paths.substr(separator + 1)),
-  };
-}
-
-std::string parseHeaderPath(std::string_view line) {
-  if (line.size() <= 4) {
-    return "";
-  }
-
-  const auto tabIndex = line.find('\t', 4);
-  const auto end = tabIndex == std::string::npos ? line.size() : tabIndex;
-  return stripGitDiffPathPrefix(line.substr(4, end - 4));
-}
-
-int parsePositiveInt(std::string_view value, size_t start) {
-  int result = 0;
-  size_t index = start;
-  while (index < value.size() && std::isdigit(static_cast<unsigned char>(value[index]))) {
-    result = result * 10 + (value[index] - '0');
-    index += 1;
-  }
-  return result;
-}
-
-bool parseHunkLineNumbers(std::string_view line, int& oldStart, int& newStart) {
-  size_t index = 3;
-  if (index >= line.size() || line[index] != '-') {
-    return false;
-  }
-  index += 1;
-  oldStart = std::max(0, parsePositiveInt(line, index));
-  const auto plusIndex = line.find(" +", index);
-  if (plusIndex == std::string::npos) {
-    return false;
-  }
-  index = plusIndex + 2;
-  newStart = std::max(0, parsePositiveInt(line, index));
-  return true;
-}
-
 struct DiffBuildState {
   std::vector<DiffFileSummary> files;
   std::vector<DiffRenderRow> rows;
@@ -245,136 +161,6 @@ struct DiffBuildState {
       auto& file = files[static_cast<size_t>(currentFileIndex)];
       file.rowCount = static_cast<double>(rows.size()) - file.rowStart;
     }
-  }
-};
-
-struct UnifiedDiffBuildState {
-  DiffBuildState diff;
-  std::vector<DiffFileSources> fileSources;
-  std::string currentOldPath;
-  std::string currentNewPath;
-
-  void finishCurrentFile() {
-    diff.finishCurrentFile();
-    if (diff.currentFileIndex >= 0 && static_cast<size_t>(diff.currentFileIndex) < fileSources.size()) {
-      auto& file = diff.files[static_cast<size_t>(diff.currentFileIndex)];
-      auto& sources = fileSources[static_cast<size_t>(diff.currentFileIndex)];
-      if (file.oldPath.empty() && !currentOldPath.empty()) {
-        file.oldPath = currentOldPath;
-        sources.oldPath = currentOldPath;
-      }
-      if (file.path.empty() && !currentNewPath.empty()) {
-        file.path = currentNewPath;
-        sources.newPath = currentNewPath;
-      }
-      if (file.path == "/dev/null") {
-        file.path = file.oldPath;
-      }
-      if (file.oldPath == "/dev/null") {
-        file.oldPath = file.path;
-      }
-      file.status = currentOldPath == "/dev/null"
-        ? "added"
-        : currentNewPath == "/dev/null"
-          ? "deleted"
-          : file.oldPath != file.path
-            ? "renamed"
-            : "modified";
-      sources.status = file.status;
-      sources.isUnifiedDiff = true;
-    }
-    currentOldPath.clear();
-    currentNewPath.clear();
-  }
-
-  void startFile(const std::string& oldPath, const std::string& newPath) {
-    finishCurrentFile();
-
-    const double fileIndex = static_cast<double>(diff.files.size());
-    diff.currentFileIndex = static_cast<int>(diff.files.size());
-    diff.currentHunkIndex = -1;
-    diff.currentOldLine = -1;
-    diff.currentNewLine = -1;
-    currentOldPath = oldPath;
-    currentNewPath = newPath;
-
-    DiffFileSummary file;
-    file.index = fileIndex;
-    file.path = newPath;
-    file.oldPath = oldPath;
-    file.status = "modified";
-    file.additions = 0;
-    file.deletions = 0;
-    file.rowStart = static_cast<double>(diff.rows.size());
-    file.rowCount = 0;
-    file.isBinary = false;
-    diff.files.push_back(std::move(file));
-
-    DiffFileSources sources;
-    sources.fileIndex = fileIndex;
-    sources.oldPath = oldPath;
-    sources.newPath = newPath;
-    sources.status = "modified";
-    sources.isBinary = false;
-    sources.isUnifiedDiff = true;
-    fileSources.push_back(std::move(sources));
-
-    DiffRenderRow row;
-    row.index = static_cast<double>(diff.rows.size());
-    row.kind = diffRowKindFileHeader;
-    row.fileIndex = fileIndex;
-    row.hunkIndex = -1;
-    row.oldLineNumber = -1;
-    row.newLineNumber = -1;
-    row.changeType = diffChangeTypeMeta;
-    row.text = newPath.empty() || newPath == "/dev/null" ? oldPath : newPath;
-    row.tokens = {};
-    diff.rows.push_back(std::move(row));
-  }
-
-  void startHunk(int oldStart, int newStart) {
-    if (diff.currentFileIndex >= 0) {
-      diff.currentHunkIndex += 1;
-      diff.currentOldLine = oldStart;
-      diff.currentNewLine = newStart;
-    }
-  }
-
-  void appendLine(char origin, std::string_view text) {
-    if (diff.currentFileIndex < 0 || diff.currentHunkIndex < 0) {
-      return;
-    }
-
-    auto& file = diff.files[static_cast<size_t>(diff.currentFileIndex)];
-    DiffRenderRow row;
-    row.index = static_cast<double>(diff.rows.size());
-    row.kind = diffRowKindLine;
-    row.fileIndex = static_cast<double>(diff.currentFileIndex);
-    row.hunkIndex = static_cast<double>(diff.currentHunkIndex);
-    row.oldLineNumber = -1;
-    row.newLineNumber = -1;
-    row.changeType = diffChangeTypeContext;
-    row.text = std::string(text);
-    row.tokens = {};
-
-    if (origin == '+') {
-      row.newLineNumber = diff.currentNewLine;
-      row.changeType = diffChangeTypeAdd;
-      diff.currentNewLine += 1;
-      file.additions += 1;
-    } else if (origin == '-') {
-      row.oldLineNumber = diff.currentOldLine;
-      row.changeType = diffChangeTypeRemove;
-      diff.currentOldLine += 1;
-      file.deletions += 1;
-    } else {
-      row.oldLineNumber = diff.currentOldLine;
-      row.newLineNumber = diff.currentNewLine;
-      diff.currentOldLine += 1;
-      diff.currentNewLine += 1;
-    }
-
-    diff.rows.push_back(std::move(row));
   }
 };
 
@@ -472,75 +258,17 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
     const std::string& diffText,
     const std::string& sourceLabel,
     const std::string& theme) {
-  const auto loadStartedAt = DiffClock::now();
-  UnifiedDiffBuildState state;
-  size_t lineStart = 0;
-
-  while (lineStart <= diffText.size()) {
-    const auto lineEnd = diffText.find('\n', lineStart);
-    const auto rawLineEnd = lineEnd == std::string::npos ? diffText.size() : lineEnd;
-    const auto line = trimCarriageReturn(std::string_view(diffText.data() + lineStart, rawLineEnd - lineStart));
-
-    if (line.starts_with("diff --git ")) {
-      const auto [oldPath, newPath] = parseDiffGitPaths(line);
-      state.startFile(oldPath, newPath);
-    } else if (line.starts_with("--- ") && state.diff.currentHunkIndex < 0) {
-      state.currentOldPath = parseHeaderPath(line);
-    } else if (line.starts_with("+++ ") && state.diff.currentHunkIndex < 0) {
-      state.currentNewPath = parseHeaderPath(line);
-      if (state.diff.currentFileIndex >= 0) {
-        auto& file = state.diff.files[static_cast<size_t>(state.diff.currentFileIndex)];
-        file.path = state.currentNewPath == "/dev/null" ? state.currentOldPath : state.currentNewPath;
-        file.oldPath = state.currentOldPath == "/dev/null" ? file.path : state.currentOldPath;
-        state.diff.rows[static_cast<size_t>(file.rowStart)].text = file.path;
-        auto& sources = state.fileSources[static_cast<size_t>(state.diff.currentFileIndex)];
-        sources.oldPath = file.oldPath;
-        sources.newPath = file.path;
-      }
-    } else if (line.starts_with("@@ ")) {
-      int oldStart = 0;
-      int newStart = 0;
-      if (parseHunkLineNumbers(line, oldStart, newStart)) {
-        state.startHunk(oldStart, newStart);
-      }
-    } else if (!line.empty() && (line[0] == ' ' || line[0] == '+' || line[0] == '-')) {
-      state.appendLine(line[0], line.substr(1));
-    } else if (line.starts_with("Binary files ") && state.diff.currentFileIndex >= 0) {
-      state.diff.files[static_cast<size_t>(state.diff.currentFileIndex)].isBinary = true;
-      state.fileSources[static_cast<size_t>(state.diff.currentFileIndex)].isBinary = true;
-    }
-
-    if (lineEnd == std::string::npos) {
-      break;
-    }
-    lineStart = lineEnd + 1;
-  }
-
-  state.finishCurrentFile();
-  const auto diffWalkedAt = DiffClock::now();
-
-  DiffLoadTiming timing;
-  timing.openRepoMs = 0;
-  timing.fetchMs = 0;
-  timing.createDiffMs = 0;
-  timing.walkDiffMs = elapsedDiffMs(loadStartedAt, diffWalkedAt);
-  timing.diffMs = timing.walkDiffMs;
-  timing.documentMs = 0;
-  timing.copyFilesMs = 0;
-  timing.copyInitialRowsMs = 0;
-  timing.nativeTotalMs = timing.walkDiffMs;
-  timing.rowCount = static_cast<double>(state.diff.rows.size());
-  timing.fileCount = static_cast<double>(state.diff.files.size());
+  auto parsed = parseUnifiedDiffText(diffText);
 
   return std::make_shared<HybridDiffDocument>(
-      std::move(state.diff.files),
-      std::move(state.diff.rows),
-      std::move(state.fileSources),
+      std::move(parsed.files),
+      std::move(parsed.rows),
+      std::move(parsed.fileSources),
       "",
       "",
       sourceLabel,
       theme,
-      timing);
+      parsed.timing);
 }
 
 std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath, const std::string& theme) {

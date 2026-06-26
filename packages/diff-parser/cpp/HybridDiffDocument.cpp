@@ -1,5 +1,6 @@
 #include "HybridDiffDocument.hpp"
 
+#include "DiffParserCore.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <algorithm>
@@ -24,10 +25,7 @@ struct DiffSyntaxState {
 
 namespace {
 
-constexpr double diffRowKindFileHeader = 0;
 constexpr double diffRowKindLine = 2;
-constexpr double diffChangeTypeAdd = 1;
-constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
@@ -143,18 +141,6 @@ std::string readWorkdirFileText(const std::string& workdirPath, const std::strin
   return readFileText(std::filesystem::path(workdirPath) / path);
 }
 
-bool isFileHeaderRow(const DiffRenderRow& row) {
-  return row.kind == diffRowKindFileHeader;
-}
-
-bool isAddRow(const DiffRenderRow& row) {
-  return row.changeType == diffChangeTypeAdd;
-}
-
-bool isRemoveRow(const DiffRenderRow& row) {
-  return row.changeType == diffChangeTypeRemove;
-}
-
 double getSideBySideSourceStart(double oldRowIndex, double newRowIndex, double fallbackIndex) {
   if (oldRowIndex >= 0 && newRowIndex >= 0) {
     return std::min(oldRowIndex, newRowIndex);
@@ -190,7 +176,7 @@ DiffSideBySideLine createSideBySideLine(
     double newRowIndex) {
   return DiffSideBySideLine{
       .index = index,
-      .kind = std::move(kind),
+      .kind = kind,
       .fileIndex = fileIndex,
       .hunkIndex = hunkIndex,
       .sourceStart = getSideBySideSourceStart(oldRowIndex, newRowIndex, index),
@@ -224,92 +210,6 @@ DiffRenderRow createEmptyRenderRow() {
       0,
       "",
       {});
-}
-
-std::vector<DiffSideBySideLine> createSideBySideLines(const std::vector<DiffRenderRow>& rows) {
-  std::vector<DiffSideBySideLine> lines;
-  std::vector<const DiffRenderRow*> contextRows;
-  std::vector<const DiffRenderRow*> removedRows;
-  std::vector<const DiffRenderRow*> addedRows;
-  lines.reserve(rows.size());
-  contextRows.reserve(128);
-  removedRows.reserve(128);
-  addedRows.reserve(128);
-  double currentFileIndex = -1;
-  double currentHunkIndex = -1;
-
-  auto pushLine = [&](double kind, double fileIndex, double hunkIndex, double oldRowIndex, double newRowIndex) {
-    lines.push_back(createSideBySideLine(
-        static_cast<double>(lines.size()),
-        kind,
-        fileIndex,
-        hunkIndex,
-        oldRowIndex,
-        newRowIndex));
-  };
-
-  auto flushContextRows = [&]() {
-    if (!contextRows.empty()) {
-      for (const auto* row : contextRows) {
-        pushLine(sideBySideKindContext, row->fileIndex, row->hunkIndex, row->index, row->index);
-      }
-      contextRows.clear();
-    }
-  };
-
-  auto flushChangedRows = [&]() {
-    if (!removedRows.empty() || !addedRows.empty()) {
-      const auto lineCount = std::max(removedRows.size(), addedRows.size());
-      const auto* firstRow = !removedRows.empty() ? removedRows.front() : addedRows.front();
-      for (size_t index = 0; index < lineCount; index += 1) {
-        pushLine(
-            sideBySideKindChange,
-            firstRow->fileIndex,
-            firstRow->hunkIndex,
-            index < removedRows.size() ? removedRows[index]->index : emptySideBySideRowIndex,
-            index < addedRows.size() ? addedRows[index]->index : emptySideBySideRowIndex);
-      }
-      removedRows.clear();
-      addedRows.clear();
-    }
-  };
-
-  auto flushRows = [&]() {
-    flushContextRows();
-    flushChangedRows();
-  };
-
-  for (const auto& row : rows) {
-    if (isFileHeaderRow(row)) {
-      flushRows();
-      currentFileIndex = row.fileIndex;
-      currentHunkIndex = row.hunkIndex;
-      pushLine(sideBySideKindFileHeader, row.fileIndex, row.hunkIndex, row.index, row.index);
-    } else {
-      if (currentFileIndex != row.fileIndex || currentHunkIndex != row.hunkIndex) {
-        flushRows();
-        currentFileIndex = row.fileIndex;
-        currentHunkIndex = row.hunkIndex;
-      }
-
-      if (isRemoveRow(row)) {
-        flushContextRows();
-        if (!addedRows.empty()) {
-          flushChangedRows();
-        }
-        removedRows.push_back(&row);
-      } else if (isAddRow(row)) {
-        flushContextRows();
-        addedRows.push_back(&row);
-      } else {
-        flushChangedRows();
-        contextRows.push_back(&row);
-      }
-    }
-  }
-
-  flushRows();
-  return lines;
 }
 
 std::unordered_set<int> createCollapsedFileIndexSet(const std::vector<double>& collapsedFileIndexes) {
@@ -354,7 +254,7 @@ HybridDiffDocument::HybridDiffDocument(
       theme_(std::move(theme)),
       syntaxState_(std::make_shared<DiffSyntaxState>()),
       timing_(timing) {
-  sideBySideLines_ = createSideBySideLines(rows_);
+  sideBySideLines_ = createDiffSideBySideLines(rows_);
 }
 
 HybridDiffDocument::~HybridDiffDocument() {
