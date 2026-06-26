@@ -1,6 +1,6 @@
 import type { DiffLoadTiming } from "@legend-desktop/diff-parser";
-import { getDiffSourceLabel, type DiffOpenSource } from "./diffFiles";
-import { getDiffViewModeSetting } from "./diffSettings";
+import { getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
+import { getDiffViewModeSetting } from "../diffSettings";
 import type { DiffRecoverableError, DiffViewerState } from "./diffViewerModel";
 
 export type DiffVisibleSourceModel = {

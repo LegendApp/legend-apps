@@ -8,8 +8,8 @@ import type {
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { createContext, type ReactNode, type SetStateAction, useCallback, useContext, useMemo } from "react";
-import type { DiffOpenSource } from "./diffFiles";
-import type { DiffSettingsFile } from "./diffSettings";
+import type { DiffOpenSource } from "../diffFiles";
+import type { DiffSettingsFile } from "../diffSettings";
 
 export type DiffLoadTrace = {
   document: DiffDocument | null;

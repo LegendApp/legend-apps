@@ -9,32 +9,20 @@ import {
   type DiffRenderRow,
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
-  type DiffTokenizedRowRange,
 } from "@legend-desktop/diff-parser";
 import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
-import {
-  createSyntaxStyleMap,
-  LightText,
-  nowMs,
-  sourceViewerCodeFontFamily,
-  sourceViewerLineNumberWidth,
-  sourceViewerRowHeight,
-  TokenizedText,
-  type SyntaxStyleMap,
-} from "@legend-desktop/source-viewer";
+import { nowMs } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { ensureSyntaxGrammarsForPaths } from "@legend-desktop/syntax-parser";
 import { TextInputSearch, type TextInputSearchRef } from "@legend-desktop/text-input-search";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import {
-  useVirtualizedDocumentRows,
   VirtualizedFixedDocumentList,
   type VirtualizedDocumentRowsState,
   type VirtualizedDocumentRequestOptions,
   type VirtualizedDocumentRequestReason,
-  type VirtualizedDocumentSnapshot,
   type VirtualizedFixedDocumentListRef,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
@@ -43,8 +31,8 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
-import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
+import { useObserveEffect, useValue } from "@legendapp/state/react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
@@ -57,6 +45,39 @@ import {
   type DiffSettingsFile,
 } from "./diffSettings";
 import {
+  diffAdaptiveRender,
+  diffDocumentErrorHeight,
+  diffDocumentPermissionErrorHeight,
+  diffDropAllowedFileTypes,
+  diffFileHeaderRowHeight,
+  diffInitialHighlightChunkRowCount,
+  diffInitialRowCount,
+  diffLineOverscan,
+  diffOverscanRequestDelayMs,
+  diffRowKindFileHeader,
+  diffSidebarFileRowHeight,
+  diffSidebarTopInset,
+  diffTitlebarTopInset,
+} from "./viewer/diffViewerConstants";
+import {
+  findFileIndexForRow,
+  useDiffLoadedModel,
+  useDiffSideBySideRuntime,
+} from "./viewer/diffLoadedDocumentModel";
+import {
+  fileMatchesFilter,
+  getActiveDiffFile,
+  getDirectoryPath,
+  getFilePathContext,
+  getFileStatusPresentation,
+  getJoinedPath,
+} from "./viewer/diffFilePresentation";
+import {
+  DiffSideBySideRow,
+  DiffUnifiedRow,
+  type DiffRenderFields,
+} from "./viewer/DiffRows";
+import {
   DiffActionHandlersController,
   DiffFileWatcherController,
   DiffLaunchController,
@@ -65,7 +86,7 @@ import {
   DiffSyntaxThemeController,
   DiffWindowChromeController,
   DiffWindowToolbarItemController,
-} from "./diffViewerControllers";
+} from "./viewer/diffViewerControllers";
 import {
   DiffViewerModelProvider,
   emptyDiffViewerState,
@@ -76,7 +97,7 @@ import {
   type DiffRecoverableError,
   type DiffSplitPaneMetrics,
   type DiffViewerState,
-} from "./diffViewerModel";
+} from "./viewer/diffViewerModel";
 import {
   createOpenError,
   createRefreshError,
@@ -85,36 +106,9 @@ import {
   logDiffLoadTiming,
   logDiffOpenTiming,
   sourcesMatch,
-} from "./diffViewerSupport";
+} from "./viewer/diffViewerSupport";
 
-const diffInitialRowCount = 160;
-const diffInitialHighlightChunkRowCount = 40;
-const diffBackgroundTokenizeChunkBudgetMs = 3;
-const diffBackgroundTokenizeChunkRowCount = 16;
-const diffBackgroundTokenizeMaxRowCount = 100_000;
-const diffBackgroundTokenizePollMs = 80;
-const diffBackgroundTokenizeStartDelayMs = 160;
-const diffLineOverscan = 240;
-const diffOverscanRequestDelayMs = 80;
-const diffFileHeaderRowHeight = 52;
-const diffTitlebarTopInset = 52;
-const diffSidebarTopInset = 30;
-const diffDocumentErrorHeight = 78;
-const diffDocumentPermissionErrorHeight = 134;
-const diffScrollIdleMs = 120;
-const diffRowKindFileHeader = 0;
-const diffChangeTypeAdd = 1;
-const diffChangeTypeRemove = 2;
-const diffSideBySideGutterWidth = 44;
-const diffSideBySideHorizontalPadding = 12;
-const diffSidebarFileRowHeight = 46;
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
-const diffAdaptiveRender = {
-  enterVelocity: 8,
-  exitDelay: 150,
-  exitVelocity: 3,
-};
-const diffDropAllowedFileTypes = ["diff", "patch"];
 
 type DiffViewerWindowProps = {
   focusUrlInputRequestId?: number;
@@ -131,361 +125,6 @@ type DiffSidebarFileRowProps = {
   onPress: () => void;
   statusPresentation: ReturnType<typeof getFileStatusPresentation>;
 };
-
-type DiffFileHeaderRowProps = {
-  borderColor: string;
-  fallbackFileIndex: number;
-  fallbackPath: string;
-  file: DiffFileSummary | undefined;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  isCollapsed: boolean;
-  mutedColor: string;
-  onToggleFileCollapsed: (fileIndex: number) => void;
-};
-
-type DiffUnifiedRowProps = {
-  adaptiveRender: "light" | "normal";
-  collapsedFileIndexes$: Observable<Set<number>>;
-  index: number;
-  renderFields: DiffRenderFields;
-  row: DiffRenderRow | undefined;
-};
-
-type DiffSideBySideRowProps = {
-  adaptiveRender: "light" | "normal";
-  collapsedFileIndexes$: Observable<Set<number>>;
-  index: number;
-  renderFields: DiffRenderFields;
-  row: DiffSideBySideRenderRow | undefined;
-};
-
-type DiffRenderFields = {
-  borderColor: string;
-  fileByIndex: ReadonlyMap<number, DiffFileSummary>;
-  fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
-  fileHeaderRowIndexes: ReadonlySet<number>;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  mutedColor: string;
-  rowHeight: number;
-  sideBySideTokenStyleById: SyntaxStyleMap;
-  tokenStyleById: SyntaxStyleMap;
-  toggleFileCollapsed: (fileIndex: number) => void;
-};
-
-type SideBySideTokenStyleState = {
-  document: DiffDocument;
-  styleCount: number;
-  tokenStyleById: SyntaxStyleMap;
-};
-
-type DiffSideBySideLineProps = {
-  adaptiveRender: "light" | "normal";
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  mutedColor: string;
-  row: DiffRenderRow;
-  rowHeight: number;
-  rowVisible: boolean;
-  side: "new" | "old";
-  tokenStyleById: SyntaxStyleMap;
-};
-
-function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
-  const sharedPropsAreEqual = previousProps.adaptiveRender === nextProps.adaptiveRender
-    && previousProps.fontFamily === nextProps.fontFamily
-    && previousProps.fontSize === nextProps.fontSize
-    && previousProps.foregroundColor === nextProps.foregroundColor
-    && previousProps.mutedColor === nextProps.mutedColor
-    && previousProps.rowHeight === nextProps.rowHeight
-    && previousProps.rowVisible === nextProps.rowVisible
-    && previousProps.side === nextProps.side
-    && previousProps.tokenStyleById === nextProps.tokenStyleById;
-
-  return sharedPropsAreEqual
-    && (!nextProps.rowVisible || previousProps.row === nextProps.row);
-}
-
-const DiffSideBySideLine = memo(function DiffSideBySideLine({
-  adaptiveRender,
-  fontFamily,
-  fontSize,
-  foregroundColor,
-  mutedColor,
-  row,
-  rowHeight,
-  rowVisible,
-  side,
-  tokenStyleById,
-}: DiffSideBySideLineProps) {
-  const visibleRow = rowVisible ? row : undefined;
-  const isRemove = side === "old" && visibleRow?.changeType === diffChangeTypeRemove;
-  const isAdd = side === "new" && visibleRow?.changeType === diffChangeTypeAdd;
-  const isChanged = isRemove || isAdd;
-  const marker = isRemove ? "-" : isAdd ? "+" : " ";
-  const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
-  const rowBackgroundColor = isAdd
-    ? "#17351f"
-    : isRemove
-      ? "#3a1d24"
-      : "transparent";
-  const textColor = isChanged ? foregroundColor : "#c9d1d9";
-  const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
-
-  return (
-    <View
-      style={[
-        styles.sideLine,
-        {
-          backgroundColor: rowBackgroundColor,
-          height: rowHeight,
-        },
-      ]}
-    >
-      <LightText selectable={false} style={[styles.sideLineNumber, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {lineNumber !== undefined && lineNumber >= 0 ? lineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.sideMarker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {visibleRow ? marker : ""}
-      </LightText>
-      <TokenizedText
-        adaptiveRender={adaptiveRender}
-        foregroundColor={textColor}
-        line={visibleRow}
-        style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={tokenStyleById}
-      />
-    </View>
-  );
-}, areDiffSideBySideLinePropsEqual);
-
-const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
-  borderColor,
-  fallbackFileIndex,
-  fallbackPath,
-  file,
-  fontFamily,
-  fontSize,
-  foregroundColor,
-  isCollapsed,
-  mutedColor,
-  onToggleFileCollapsed,
-}: DiffFileHeaderRowProps) {
-  const path = file?.path ?? fallbackPath;
-  const filename = getFilename(path);
-  const directory = getDirectoryPath(path);
-  const fileIndex = file?.index ?? fallbackFileIndex;
-  const statusPresentation = getFileStatusPresentation(file);
-  const pathContext = file ? getFilePathContext(file, directory) : directory ? `${directory}/` : "";
-  const fileHeaderLineHeight = Math.max(18, fontSize + 8);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={() => onToggleFileCollapsed(fileIndex)}
-      style={({ pressed }) => [
-        styles.fileRow,
-        {
-          backgroundColor: "#252526",
-          borderColor,
-          opacity: pressed ? 0.72 : 1,
-        },
-      ]}
-    >
-      <View style={styles.fileDisclosure}>
-        <SFSymbol color={mutedColor} name={isCollapsed ? "chevron.right" : "chevron.down"} size={12} />
-      </View>
-      {file ? (
-        <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-          <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={12} />
-        </View>
-      ) : null}
-      <View style={styles.fileTitleGroup}>
-        {pathContext ? (
-          <Text selectable style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
-            {pathContext}
-          </Text>
-        ) : null}
-        <Text selectable style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
-          {filename}
-        </Text>
-      </View>
-      {file ? (
-        <View style={styles.fileMeta}>
-          {!file.isBinary ? (
-            <>
-              <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                +{file.additions}
-              </Text>
-              <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
-                -{file.deletions}
-              </Text>
-            </>
-          ) : null}
-        </View>
-      ) : null}
-    </Pressable>
-  );
-});
-
-const DiffUnifiedRow = memo(function DiffUnifiedRow({
-  adaptiveRender,
-  collapsedFileIndexes$,
-  index,
-  renderFields,
-  row,
-}: DiffUnifiedRowProps) {
-  const borderColor = renderFields.borderColor;
-  const fileByIndex = renderFields.fileByIndex;
-  const fileByRowStart = renderFields.fileByRowStart;
-  const fileHeaderRowIndexes = renderFields.fileHeaderRowIndexes;
-  const fontFamily = renderFields.fontFamily;
-  const fontSize = renderFields.fontSize;
-  const foregroundColor = renderFields.foregroundColor;
-  const mutedColor = renderFields.mutedColor;
-  const rowHeight = renderFields.rowHeight;
-  const tokenStyleById = renderFields.tokenStyleById;
-  const toggleFileCollapsed = renderFields.toggleFileCollapsed;
-  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
-  const changeType = row?.changeType ?? 0;
-  const isAdd = changeType === diffChangeTypeAdd;
-  const isRemove = changeType === diffChangeTypeRemove;
-  const isChanged = isAdd || isRemove;
-  const isFileHeader = row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index);
-  const file = row ? fileByIndex.get(row.fileIndex) : fileByRowStart.get(index);
-  const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
-  const rowBackgroundColor = isAdd
-    ? "#17351f"
-    : isRemove
-      ? "#3a1d24"
-      : "transparent";
-  const textColor = isChanged || isFileHeader
-    ? foregroundColor
-    : "#c9d1d9";
-  const lineNumberColor = isChanged ? accentColor : mutedColor;
-  const marker = isAdd ? "+" : isRemove ? "-" : " ";
-
-  if (isFileHeader) {
-    const fileIndex = file?.index ?? row?.fileIndex ?? index;
-    return (
-      <DiffFileHeaderRow
-        borderColor={borderColor}
-        fallbackFileIndex={fileIndex}
-        fallbackPath={row?.text ?? ""}
-        file={file}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        foregroundColor={foregroundColor}
-        isCollapsed={collapsedFileIndexes.has(fileIndex)}
-        mutedColor={mutedColor}
-        onToggleFileCollapsed={toggleFileCollapsed}
-      />
-    );
-  }
-
-  return (
-    <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
-      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {isFileHeader ? "" : marker}
-      </LightText>
-      <TokenizedText
-        adaptiveRender={adaptiveRender}
-        foregroundColor={textColor}
-        line={row}
-        style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={tokenStyleById}
-      />
-    </View>
-  );
-});
-
-const DiffSideBySideRow = memo(function DiffSideBySideRow({
-  adaptiveRender,
-  collapsedFileIndexes$,
-  index,
-  renderFields,
-  row,
-}: DiffSideBySideRowProps) {
-  const borderColor = renderFields.borderColor;
-  const fileByIndex = renderFields.fileByIndex;
-  const fileByRowStart = renderFields.fileByRowStart;
-  const fontFamily = renderFields.fontFamily;
-  const fontSize = renderFields.fontSize;
-  const foregroundColor = renderFields.foregroundColor;
-  const mutedColor = renderFields.mutedColor;
-  const rowHeight = renderFields.rowHeight;
-  const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleById;
-  const toggleFileCollapsed = renderFields.toggleFileCollapsed;
-  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
-
-  if (!row) {
-    return <View style={{ height: rowHeight }} />;
-  }
-
-  if (row.kind === "file-header") {
-    const file = fileByRowStart.get(row.sourceStart) ?? fileByIndex.get(row.fileIndex);
-    const fileIndex = file?.index ?? index;
-    return (
-      <DiffFileHeaderRow
-        borderColor={borderColor}
-        fallbackFileIndex={fileIndex}
-        fallbackPath={file?.path ?? ""}
-        file={file}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        foregroundColor={foregroundColor}
-        isCollapsed={collapsedFileIndexes.has(fileIndex)}
-        mutedColor={mutedColor}
-        onToggleFileCollapsed={toggleFileCollapsed}
-      />
-    );
-  }
-
-  return (
-    <View style={[styles.sideBySideRow, { height: rowHeight }]}>
-      <View style={styles.sidePane}>
-        <DiffSideBySideLine
-          adaptiveRender={adaptiveRender}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          row={row.oldRow}
-          rowHeight={rowHeight}
-          rowVisible={row.oldRowVisible}
-          side="old"
-          tokenStyleById={sideBySideTokenStyleById}
-        />
-      </View>
-      <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
-      </View>
-      <View style={styles.sidePane}>
-        <DiffSideBySideLine
-          adaptiveRender={adaptiveRender}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
-          rowHeight={rowHeight}
-          rowVisible={row.newRowVisible}
-          side="new"
-          tokenStyleById={sideBySideTokenStyleById}
-        />
-      </View>
-    </View>
-  );
-});
 
 type DiffLoadedBodyProps = {
   activeItemIndexes: readonly (number | undefined)[];
@@ -592,11 +231,6 @@ function getDiffLineRowHeight(fontSize: number) {
   return Math.max(20, fontSize + 9);
 }
 
-function getDirectoryPath(path: string) {
-  const separatorIndex = path.lastIndexOf("/");
-  return separatorIndex >= 0 ? path.slice(0, separatorIndex) : "";
-}
-
 function getDroppedDiffSource(drop: DragDropFileEvent): DiffOpenSource | null {
   const directory = drop.directories[0];
   let source = directory ? normalizeDiffOpenSource(directory) : null;
@@ -616,106 +250,6 @@ function getUnsupportedDropMessage(drop: DragDropFileEvent) {
     message = "Drop a GitHub PR or commit URL.";
   }
   return message;
-}
-
-function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "status"> | null | undefined) {
-  const status = file?.status ?? "unknown";
-  let presentation = {
-    backgroundColor: "#f0883e",
-    color: "#1f1300",
-    symbolName: "pencil",
-    title: "Modified",
-  };
-
-  switch (status) {
-    case "added":
-      presentation = {
-        backgroundColor: "#238636",
-        color: "#ffffff",
-        symbolName: "plus",
-        title: "Added",
-      };
-      break;
-    case "untracked":
-      presentation = {
-        backgroundColor: "#238636",
-        color: "#ffffff",
-        symbolName: "plus",
-        title: "Untracked",
-      };
-      break;
-    case "deleted":
-      presentation = {
-        backgroundColor: "#da3633",
-        color: "#ffffff",
-        symbolName: "minus",
-        title: "Deleted",
-      };
-      break;
-    case "renamed":
-      presentation = {
-        backgroundColor: "#388bfd",
-        color: "#ffffff",
-        symbolName: "arrow.right",
-        title: "Renamed",
-      };
-      break;
-    case "copied":
-      presentation = {
-        backgroundColor: "#8957e5",
-        color: "#ffffff",
-        symbolName: "doc.on.doc",
-        title: "Copied",
-      };
-      break;
-    case "modified":
-      break;
-    default:
-      presentation = {
-        backgroundColor: "#6e7681",
-        color: "#ffffff",
-        symbolName: "questionmark",
-        title: status === "unknown" ? "Unknown" : status,
-      };
-      break;
-  }
-
-  return file?.isBinary
-    ? { ...presentation, title: `${presentation.title} binary` }
-    : presentation;
-}
-
-function getFilePathContext(file: DiffFileSummary, directory: string) {
-  const hasOldPath = file.oldPath && file.oldPath !== file.path;
-  let context = directory ? `${directory}/` : "";
-  if (hasOldPath && (file.status === "renamed" || file.status === "copied")) {
-    context = `${file.oldPath} -> ${context}`;
-  }
-  return context;
-}
-
-function fileMatchesFilter(file: DiffFileSummary, normalizedFilter: string) {
-  let matches = true;
-  if (normalizedFilter) {
-    const haystack = `${file.path} ${file.oldPath} ${file.status}`.toLowerCase();
-    const terms = normalizedFilter.split(/\s+/).filter(Boolean);
-    matches = terms.every((term) => haystack.includes(term));
-  }
-  return matches;
-}
-
-function getActiveDiffFile(files: readonly DiffFileSummary[], activeFileIndex: number | null) {
-  let activeFile = activeFileIndex === null
-    ? null
-    : files.find((file) => file.index === activeFileIndex) ?? null;
-  if (!activeFile) {
-    activeFile = files[0] ?? null;
-  }
-  return activeFile;
-}
-
-function getJoinedPath(basePath: string, relativePath: string) {
-  return `${basePath.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
 }
 
 function DiffErrorPanel({
@@ -1325,550 +859,6 @@ function DiffDropSurface({
     </DragDropView>
   );
 }
-
-function useDiffLoadedModel({
-  collapsedFileIndexes,
-  fontFamily,
-  fontSize,
-  rowHeight,
-  state,
-  viewMode,
-}: {
-  collapsedFileIndexes: ReadonlySet<number>;
-  fontFamily: string;
-  fontSize: number;
-  rowHeight: number;
-  state: DiffViewerState;
-  viewMode: DiffSettingsFile["viewMode"];
-}) {
-  const fileByIndex = useMemo(() => {
-    const startedAt = nowMs();
-    if (state.status !== "loaded") {
-      return new Map<number, DiffFileSummary>();
-    }
-    const map = new Map(state.files.map((file) => [file.index, file]));
-    logDiffOpenTiming("viewer.derive.fileByIndex", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      files: state.files.length,
-      rows: state.document.rowCount,
-    });
-    return map;
-  }, [state]);
-  const fileByRowStart = useMemo(() => {
-    const startedAt = nowMs();
-    if (state.status !== "loaded") {
-      return new Map<number, DiffFileSummary>();
-    }
-    const map = new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
-    logDiffOpenTiming("viewer.derive.fileByRowStart", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      files: state.files.length,
-      rows: state.document.rowCount,
-    });
-    return map;
-  }, [state]);
-  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
-    () => {
-      const startedAt = nowMs();
-      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
-      if (state.status === "loaded") {
-        nextSnapshot = {
-          document: state.document,
-          initialRows: state.initialRows,
-          itemCount: state.document.rowCount,
-          styles: state.styles,
-          timing: state.timing,
-        };
-        logDiffOpenTiming("viewer.derive.snapshot", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          initialRows: state.initialRows.length,
-          rows: state.document.rowCount,
-          styles: state.styles.length,
-        });
-      }
-      return nextSnapshot;
-    },
-    [state],
-  );
-  const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
-  const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    const startedAt = nowMs();
-    const shouldHighlight = options?.reason === "highlight";
-    const rows = shouldHighlight
-      ? document.getRows(start, count)
-      : document.getPlainRows(start, count);
-    logDiffOpenTiming("viewer.rowsFetched", {
-      count,
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      reason: options?.reason ?? "unknown",
-      rows: rows.length,
-      start,
-      tokenized: shouldHighlight,
-    });
-    return rows;
-  }, []);
-  const getStyles = useCallback((document: DiffDocument) => {
-    const startedAt = nowMs();
-    const styles = document.getStyles();
-    logDiffOpenTiming("viewer.stylesFetched", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      styles: styles.length,
-    });
-    return styles;
-  }, []);
-  const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
-  const diffRows = useVirtualizedDocumentRows({
-    debugName: "diff",
-    getRowIndex,
-    getRows,
-    getStyles,
-    getTiming,
-    snapshot,
-  });
-  const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
-  const fileHeaderRowIndexes = useMemo(() => {
-    const startedAt = nowMs();
-    if (state.status !== "loaded") {
-      return new Set<number>();
-    }
-    const indexes = new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
-    logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      files: state.files.length,
-      rows: state.document.rowCount,
-    });
-    return indexes;
-  }, [state]);
-  const visibleItemIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = state.status === "loaded" && collapsedFileIndexes.size > 0
-        ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
-        : diffRows.itemIndexes;
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.visibleItemIndexes", {
-          collapsedFiles: collapsedFileIndexes.size,
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          items: indexes.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [collapsedFileIndexes, diffRows.itemIndexes, state],
-  );
-  const visibleListIndexByRowIndex = useMemo(() => {
-    const startedAt = nowMs();
-    let indexes: Map<number, number> | null = null;
-    if (collapsedFileIndexes.size > 0) {
-      indexes = new Map<number, number>();
-      visibleItemIndexes.forEach((rowIndex, listIndex) => {
-        indexes?.set(rowIndex ?? listIndex, listIndex);
-      });
-    }
-    if (state.status === "loaded") {
-      logDiffOpenTiming("viewer.derive.visibleListIndexByRowIndex", {
-        collapsedFiles: collapsedFileIndexes.size,
-        durationMs: Number((nowMs() - startedAt).toFixed(1)),
-        eagerMap: indexes !== null,
-        items: visibleItemIndexes.length,
-        rows: state.document.rowCount,
-      });
-    }
-    return indexes;
-  }, [collapsedFileIndexes, state, visibleItemIndexes]);
-  const getVisibleListIndex = useCallback((rowIndex: number) => (
-    visibleListIndexByRowIndex
-      ? visibleListIndexByRowIndex.get(rowIndex)
-      : rowIndex >= 0 && rowIndex < visibleItemIndexes.length
-        ? rowIndex
-        : undefined
-  ), [visibleItemIndexes.length, visibleListIndexByRowIndex]);
-  const collapsedFileIndexList = useMemo(
-    () => createCollapsedFileIndexList(collapsedFileIndexes),
-    [collapsedFileIndexes],
-  );
-  const sideBySideRowCount = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const count = state.status === "loaded" && viewMode !== "unified"
-        ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
-        : 0;
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideRowCount", {
-          collapsedFiles: collapsedFileIndexList.length,
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          rows: state.document.rowCount,
-          sideBySideRows: count,
-          viewMode,
-        });
-      }
-      return count;
-    },
-    [collapsedFileIndexList, state, viewMode],
-  );
-  const sideBySideItemIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = createIdentityDiffRowIndexes(sideBySideRowCount);
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          items: indexes.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [sideBySideRowCount, state],
-  );
-  const sideBySideFileHeaders = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const headers = state.status === "loaded" && viewMode !== "unified"
-        ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
-        : [];
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", {
-          collapsedFiles: collapsedFileIndexList.length,
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: headers.length,
-          rows: state.document.rowCount,
-          viewMode,
-        });
-      }
-      return headers;
-    },
-    [collapsedFileIndexList, state, viewMode],
-  );
-  const sideBySideFileHeaderIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = new Set(sideBySideFileHeaders.map((header) => header.listIndex));
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: sideBySideFileHeaders.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [sideBySideFileHeaders, state],
-  );
-  const sideBySideListIndexByRowIndex = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = new Map<number, number>();
-      sideBySideFileHeaders.forEach((header) => {
-        indexes.set(header.sourceStart, header.listIndex);
-      });
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", {
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: sideBySideFileHeaders.length,
-          rows: state.document.rowCount,
-        });
-      }
-      return indexes;
-    },
-    [sideBySideFileHeaders, state],
-  );
-
-  return {
-    collapsedFileIndexList,
-    diffRows,
-    fileByIndex,
-    fileByRowStart,
-    fileHeaderRowIndexes,
-    getVisibleListIndex,
-    sideBySideFileHeaderIndexes,
-    sideBySideItemIndexes,
-    sideBySideListIndexByRowIndex,
-    sideBySideRowCount,
-    tokenStyleById,
-    visibleItemIndexes,
-  };
-}
-
-function useDiffSideBySideRuntime({
-  activeFileIndex$,
-  collapsedFileIndexes$,
-  diffPaneHeight,
-  rowHeight,
-  sideBySideRowCount,
-  state,
-  state$,
-  viewMode,
-}: {
-  activeFileIndex$: Observable<number | null>;
-  collapsedFileIndexes$: Observable<Set<number>>;
-  diffPaneHeight: number;
-  rowHeight: number;
-  sideBySideRowCount: number;
-  state: DiffViewerState;
-  state$: Observable<DiffViewerState>;
-  viewMode: DiffSettingsFile["viewMode"];
-}) {
-  const [sideBySideTokenStyleState, setSideBySideTokenStyleState] = useState<SideBySideTokenStyleState | null>(null);
-  const sideBySideRowVersions$ = useObservable<Record<string, number>>({});
-  const sideBySideVisibleRangeRef = useRef<{
-    count: number;
-    document: DiffDocument;
-    start: number;
-  } | null>(null);
-  const sideBySideScrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sideBySideScrollingRef = useRef(false);
-  const pendingSideBySideTokenRangesRef = useRef<{
-    document: DiffDocument;
-    ranges: DiffTokenizedRowRange[];
-  } | null>(null);
-  const getCurrentCollapsedFileIndexList = useCallback(
-    () => createCollapsedFileIndexList(collapsedFileIndexes$.peek()),
-    [collapsedFileIndexes$],
-  );
-  const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
-    const styles = document.getStyles();
-    setSideBySideTokenStyleState((current) => (
-      current?.document === document && current.styleCount === styles.length
-        ? current
-        : {
-            document,
-            styleCount: styles.length,
-            tokenStyleById: createSyntaxStyleMap(styles),
-          }
-    ));
-  }, []);
-  const bumpSideBySideRowVersion = useCallback((rowIndex: number) => {
-    const key = String(rowIndex);
-    sideBySideRowVersions$[key].set((sideBySideRowVersions$[key].peek() ?? 0) + 1);
-  }, [sideBySideRowVersions$]);
-  const flushSideBySideTokenInvalidation = useCallback((document: DiffDocument, ranges: readonly DiffTokenizedRowRange[]) => {
-    const visibleRange = sideBySideVisibleRangeRef.current;
-    if (visibleRange?.document === document && ranges.length > 0) {
-      refreshSideBySideTokenStyles(document);
-      const end = visibleRange.start + visibleRange.count;
-      const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
-      for (let index = visibleRange.start; index < end; index += 1) {
-        const row = document.getPlainSideBySideRow(index, collapsedFileIndexList);
-        const oldRowIndex = row.oldRowVisible ? row.oldRow.index : -1;
-        const newRowIndex = row.newRowVisible ? row.newRow.index : -1;
-        const overlapsTokenizedRange = ranges.some((range) => (
-          (oldRowIndex >= range.start && oldRowIndex < range.end) ||
-          (newRowIndex >= range.start && newRowIndex < range.end)
-        ));
-        if (overlapsTokenizedRange) {
-          bumpSideBySideRowVersion(index);
-        }
-      }
-      if (pendingSideBySideTokenRangesRef.current?.document === document) {
-        pendingSideBySideTokenRangesRef.current = null;
-      }
-    } else if (visibleRange && visibleRange.document !== document && pendingSideBySideTokenRangesRef.current?.document === document) {
-      pendingSideBySideTokenRangesRef.current = null;
-    }
-  }, [bumpSideBySideRowVersion, getCurrentCollapsedFileIndexList, refreshSideBySideTokenStyles]);
-  const resetSideBySideRuntime = useCallback(() => {
-    sideBySideVisibleRangeRef.current = null;
-    pendingSideBySideTokenRangesRef.current = null;
-    sideBySideScrollingRef.current = false;
-    sideBySideRowVersions$.set({});
-    if (sideBySideScrollIdleTimeoutRef.current) {
-      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
-      sideBySideScrollIdleTimeoutRef.current = null;
-    }
-  }, [sideBySideRowVersions$]);
-  const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded" && options?.reason !== "scroll") {
-      const start = Math.max(0, Math.floor(lineStart));
-      const count = Math.max(0, Math.ceil(lineCount));
-      if (count > 0) {
-        const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
-        currentState.document.getSideBySideRows(start, count, collapsedFileIndexList);
-        refreshSideBySideTokenStyles(currentState.document);
-        const end = Math.min(sideBySideRowCount, start + count);
-        for (let index = start; index < end; index += 1) {
-          bumpSideBySideRowVersion(index);
-        }
-      }
-    }
-    // Scroll-driven requests stay side-effect free so scrolling never updates React state.
-  }, [bumpSideBySideRowVersion, getCurrentCollapsedFileIndexList, refreshSideBySideTokenStyles, sideBySideRowCount, state$]);
-  const getSideBySideRow = useCallback((index: number) => {
-    const currentState = state$.peek();
-    return currentState.status === "loaded"
-      ? currentState.document.getPlainSideBySideRow(index, getCurrentCollapsedFileIndexList())
-      : undefined;
-  }, [getCurrentCollapsedFileIndexList, state$]);
-  const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      const row = currentState.document.getPlainSideBySideRow(lineIndex, getCurrentCollapsedFileIndexList());
-      const nextFileIndex = findFileIndexForRow(currentState.files, row.sourceStart);
-      if (activeFileIndex$.peek() !== nextFileIndex) {
-        activeFileIndex$.set(nextFileIndex);
-      }
-    }
-  }, [activeFileIndex$, getCurrentCollapsedFileIndexList, state$]);
-  const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      sideBySideVisibleRangeRef.current = {
-        count,
-        document: currentState.document,
-        start,
-      };
-
-      if (reason === "scroll") {
-        sideBySideScrollingRef.current = true;
-        if (sideBySideScrollIdleTimeoutRef.current) {
-          clearTimeout(sideBySideScrollIdleTimeoutRef.current);
-        }
-        sideBySideScrollIdleTimeoutRef.current = setTimeout(() => {
-          sideBySideScrollingRef.current = false;
-          sideBySideScrollIdleTimeoutRef.current = null;
-          if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
-            flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
-          }
-        }, diffScrollIdleMs);
-      } else if (pendingSideBySideTokenRangesRef.current?.document === currentState.document) {
-        flushSideBySideTokenInvalidation(currentState.document, pendingSideBySideTokenRangesRef.current.ranges);
-      }
-    }
-  }, [flushSideBySideTokenInvalidation, state$]);
-
-  useEffect(() => () => {
-    if (sideBySideScrollIdleTimeoutRef.current) {
-      clearTimeout(sideBySideScrollIdleTimeoutRef.current);
-      sideBySideScrollIdleTimeoutRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
-      const document = state.document;
-      if (sideBySideRowCount > diffBackgroundTokenizeMaxRowCount) {
-        logDiffOpenTiming("viewer.backgroundTokenize.skipped", {
-          maxRows: diffBackgroundTokenizeMaxRowCount,
-          rows: sideBySideRowCount,
-        });
-        return undefined;
-      }
-
-      let intervalHandle: ReturnType<typeof setInterval> | null = null;
-      const startTimeoutHandle = setTimeout(() => {
-        document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs);
-        intervalHandle = setInterval(() => {
-          const ranges = document.consumeTokenizedRowRanges();
-          if (ranges.length > 0) {
-            const pendingRanges = pendingSideBySideTokenRangesRef.current;
-            const nextRanges = pendingRanges?.document === document
-              ? [...pendingRanges.ranges, ...ranges]
-              : ranges;
-
-            pendingSideBySideTokenRangesRef.current = {
-              document,
-              ranges: nextRanges,
-            };
-
-            if (!sideBySideScrollingRef.current) {
-              flushSideBySideTokenInvalidation(document, nextRanges);
-            }
-          }
-        }, diffBackgroundTokenizePollMs);
-      }, diffBackgroundTokenizeStartDelayMs);
-
-      return () => {
-        clearTimeout(startTimeoutHandle);
-        if (intervalHandle) {
-          clearInterval(intervalHandle);
-        }
-        document.stopBackgroundTokenization();
-      };
-    }
-    return undefined;
-  }, [diffPaneHeight, flushSideBySideTokenInvalidation, sideBySideRowCount, state.status === "loaded" ? state.document : null, viewMode]);
-
-  useEffect(() => {
-    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
-      const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
-      requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
-    } else if (viewMode === "unified") {
-      setSideBySideTokenStyleState(null);
-    }
-  }, [diffPaneHeight, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
-
-  return {
-    getSideBySideRow,
-    handleSideBySideTopItemChanged,
-    handleSideBySideVisibleRowsRequested,
-    requestSideBySideRange,
-    resetSideBySideRuntime,
-    sideBySideRowVersions$,
-    sideBySideTokenStyleState,
-  };
-}
-
-function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
-  const indexes: number[] = [];
-
-  if (files.length > 0) {
-    for (const file of files) {
-      const rowStart = Math.max(0, Math.floor(file.rowStart));
-      const rowCount = Math.max(0, Math.floor(file.rowCount));
-
-      if (rowCount > 0) {
-        indexes.push(rowStart);
-
-        if (!collapsedFileIndexes.has(file.index)) {
-          const rowEnd = rowStart + rowCount;
-          for (let rowIndex = rowStart + 1; rowIndex < rowEnd; rowIndex += 1) {
-            indexes.push(rowIndex);
-          }
-        }
-      }
-    }
-  } else {
-    fallbackItemIndexes.forEach((rowIndex, listIndex) => {
-      indexes.push(rowIndex ?? listIndex);
-    });
-  }
-
-  return indexes;
-}
-
-function createIdentityDiffRowIndexes(length: number) {
-  const count = Math.max(0, Math.floor(length));
-  return Array.from({ length: count }, (_, index) => index);
-}
-
-function createCollapsedFileIndexList(collapsedFileIndexes: ReadonlySet<number>) {
-  return Array.from(collapsedFileIndexes).sort((left, right) => left - right);
-}
-
-function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {
-  let low = 0;
-  let high = files.length - 1;
-
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const file = files[middle];
-    const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const rowEnd = rowStart + Math.max(0, Math.floor(file.rowCount));
-
-    if (rowIndex < rowStart) {
-      high = middle - 1;
-    } else if (rowIndex >= rowEnd) {
-      low = middle + 1;
-    } else {
-      return file.index;
-    }
-  }
-
-  return files.length > 0 ? files[Math.max(0, Math.min(files.length - 1, high))].index : null;
-}
-
 export function DiffViewerWindow(props: DiffViewerWindowProps) {
   return (
     <DiffViewerModelProvider>
@@ -2974,11 +1964,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 18,
   },
-  diffRow: {
-    borderLeftWidth: 3,
-    flexDirection: "row",
-    height: sourceViewerRowHeight,
-  },
   diffPane: {
     flex: 1,
   },
@@ -3011,129 +1996,11 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     marginBottom: 4,
   },
-  diffText: {
-    flex: 1,
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    overflow: "hidden",
-    paddingRight: 12,
-  },
-  fileAdded: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  fileDisclosure: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 20,
-  },
-  fileMeta: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  fileName: {
-    flexShrink: 0,
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  filePath: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: "400",
-    lineHeight: 20,
-  },
-  fileRemoved: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  fileRow: {
-    alignItems: "center",
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 8,
-    height: 40,
-    marginHorizontal: 12,
-    marginVertical: 6,
-    paddingHorizontal: 10,
-  },
-  fileStatusIcon: {
-    alignItems: "center",
-    borderRadius: 4,
-    height: 16,
-    justifyContent: "center",
-    width: 16,
-  },
-  fileTitleGroup: {
-    alignItems: "baseline",
-    flex: 1,
-    flexDirection: "row",
-  },
-  lineNumber: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
-    paddingHorizontal: 8,
-    textAlign: "right",
-    width: sourceViewerLineNumberWidth,
-  },
   list: {
     flex: 1,
   },
-  marker: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    textAlign: "center",
-    width: 28,
-  },
   root: {
     flex: 1,
-  },
-  sideBySideRow: {
-    flexDirection: "row",
-    minHeight: 0,
-  },
-  sideConnectorColumn: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sideDiffText: {
-    flex: 1,
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    overflow: "hidden",
-    paddingRight: diffSideBySideHorizontalPadding,
-  },
-  sideLine: {
-    flexDirection: "row",
-    overflow: "hidden",
-  },
-  sideLineNumber: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
-    paddingLeft: 8,
-    paddingRight: 6,
-    textAlign: "right",
-    width: 58,
-  },
-  sideMarker: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    textAlign: "center",
-    width: 18,
-  },
-  sidePane: {
-    flex: 1,
-    minWidth: 0,
   },
   sidebar: {
     flex: 1,

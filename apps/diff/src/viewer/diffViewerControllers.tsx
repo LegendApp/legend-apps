@@ -6,8 +6,8 @@ import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-man
 import { useObserveEffect } from "@legendapp/state/react";
 import { type RefObject, useEffect, useRef } from "react";
 import type { TextInput } from "react-native";
-import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
-import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
+import { diffMenuOwnerId, diffViewerWindowIdentifier } from "../appConstants";
+import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   getDiffSyntaxTheme,
   getDiffSyntaxThemeSetting,
@@ -15,14 +15,14 @@ import {
   isDiffViewMode,
   setDiffViewModeSetting,
   type DiffSettingsFile,
-} from "./diffSettings";
-import { registerDiffViewerActionHandlers } from "./diffViewerActions";
+} from "../diffSettings";
+import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
   setDiffViewerWindowToolbarOptions,
-} from "./diffWindows";
+} from "../diffWindows";
 import {
   emptyDiffViewerState,
   useDiffViewerModel,
