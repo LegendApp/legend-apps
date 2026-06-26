@@ -1,10 +1,15 @@
 module.exports = {
   rootDir: "../..",
   setupFiles: ["<rootDir>/apps/diff/jest.setup.cjs"],
-  testMatch: ["<rootDir>/apps/diff/src/**/__tests__/**/*.test.ts"],
+  testMatch: [
+    "<rootDir>/apps/diff/src/**/__tests__/**/*.test.ts",
+    "<rootDir>/apps/diff/src/**/__tests__/**/*.test.tsx",
+  ],
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
     "^@legend-desktop/file-dialog$": "<rootDir>/apps/diff/jest/mocks/fileDialogMock.cjs",
+    "^@legend-desktop/sf-symbol$": "<rootDir>/apps/diff/jest/mocks/sfSymbolMock.cjs",
+    "^@legend-desktop/source-viewer$": "<rootDir>/apps/diff/jest/mocks/sourceViewerMock.cjs",
     "^@legend-desktop/storage$": "<rootDir>/apps/diff/jest/mocks/storageMock.cjs",
     "^@legend-desktop/syntax-parser$": "<rootDir>/apps/diff/jest/mocks/syntaxParserMock.cjs",
     "^react-native$": "<rootDir>/apps/diff/jest/mocks/reactNativeMock.cjs",
