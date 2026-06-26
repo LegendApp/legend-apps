@@ -18,6 +18,20 @@ const macosRunOptionSpecs: OptionSpecs = {
   "--verbose": "boolean",
 };
 
+export function getDevSyntaxAssetSourceRoot() {
+  return process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE
+    ?? path.join(
+      rootDir,
+      "packages",
+      "syntax-parser",
+      "vendor",
+      "TextMateLib",
+      "thirdparty",
+      "textmate-grammars-themes",
+      "packages",
+    );
+}
+
 export function runCommand(command: string, args: string[], options: {
   cwd?: string;
   env?: Record<string, string | undefined>;
@@ -103,6 +117,7 @@ export function runPlatformCommand(
   const env = {
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
+    EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE: mode === "dev" ? getDevSyntaxAssetSourceRoot() : undefined,
     RCT_METRO_PORT: devServerPort ? String(devServerPort) : undefined,
     ...extraEnv,
   };

@@ -8,7 +8,7 @@ import {
   withDefaultPortArg,
 } from "./lib/apps";
 import { writeGeneratedConfig } from "./lib/nativeModules";
-import { runCommand } from "./lib/run";
+import { getDevSyntaxAssetSourceRoot, runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
 async function startOne(appId: string, platform: Platform, extraArgs: string[]) {
@@ -23,6 +23,7 @@ async function startOne(appId: string, platform: Platform, extraArgs: string[]) 
     LEGEND_PLATFORM: platform,
     LEGEND_APP_CONFIG: generated.configPath,
     LEGEND_NATIVE_CONFIG: generated.configPath,
+    EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE: getDevSyntaxAssetSourceRoot(),
     RCT_METRO_PORT: String(devServerPort),
   };
 

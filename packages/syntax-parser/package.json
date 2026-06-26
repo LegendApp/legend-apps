@@ -5,7 +5,8 @@
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "dependencies": {
-    "@legend-desktop/storage": "workspace:*"
+    "@legend-desktop/storage": "workspace:*",
+    "expo-file-system": "~19.0.21"
   },
   "peerDependencies": {
     "react": "catalog:",

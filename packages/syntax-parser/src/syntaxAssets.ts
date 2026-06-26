@@ -1,4 +1,5 @@
 import { createStorage } from "@legend-desktop/storage";
+import { File } from "expo-file-system/next";
 
 import githubDarkDimmedTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-dark-dimmed.json";
 import githubLightTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json";
@@ -49,6 +50,11 @@ type TextMateGrammarFile = {
   scopeName?: unknown;
 };
 
+type SyntaxAssetSource = {
+  filename: string;
+  kind: SyntaxAssetKind;
+};
+
 const syntaxAssetStorage = createStorage({
   root: "applicationSupport",
   subfolder: "syntax-assets",
@@ -67,6 +73,7 @@ const seededThemeFiles = {
 } as const;
 
 const seededSyntaxThemeNames = Object.keys(seededThemeFiles);
+const devSyntaxAssetSourceRoot = process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE;
 
 const fallbackTheme: SyntaxTheme = {
   appearance: "dark",
@@ -118,6 +125,13 @@ function filenameForAssetName(name: string) {
 
 function normalizeAssetName(value: string) {
   return value.replace(/\.json$/i, "");
+}
+
+function joinPath(...parts: string[]) {
+  return parts
+    .map((part, index) => index === 0 ? part.replace(/\/+$/g, "") : part.replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean)
+    .join("/");
 }
 
 function labelFromAssetName(name: string) {
@@ -334,17 +348,79 @@ export function isSyntaxGrammarInstalled(language: string) {
   return dependencies.every((filename) => installedFiles.has(filename));
 }
 
+function getDevSyntaxAssetSourceCandidates({ filename, kind }: SyntaxAssetSource) {
+  const sourceRoot = __DEV__ ? devSyntaxAssetSourceRoot : undefined;
+  if (!sourceRoot) {
+    return [];
+  }
+
+  if (kind === "theme") {
+    return [
+      joinPath(sourceRoot, "themes", filename),
+      joinPath(sourceRoot, "tm-themes", "themes", filename),
+    ];
+  }
+
+  return [
+    joinPath(sourceRoot, "grammars", filename),
+    joinPath(sourceRoot, "tm-grammars", "grammars", filename),
+  ];
+}
+
+function readDevSyntaxAssetFile(source: SyntaxAssetSource) {
+  for (const candidate of getDevSyntaxAssetSourceCandidates(source)) {
+    const file = new File(candidate);
+    if (file.exists) {
+      const value = JSON.parse(file.textSync());
+      const valid = source.kind === "theme"
+        ? parseSyntaxThemeFile(source.filename, value)
+        : parseSyntaxGrammarFile(source.filename, value);
+      if (!valid) {
+        throw new Error(`Invalid syntax ${source.kind} file at ${candidate}.`);
+      }
+      return value;
+    }
+  }
+}
+
+function writeSyntaxAsset(kind: SyntaxAssetKind, filename: string, value: unknown) {
+  const directory = kind === "grammar" ? syntaxAssetFolder.grammars : syntaxAssetFolder.themes;
+  syntaxAssetStorage.write(`${directory}/${filename}`, value, { format: "json" });
+}
+
+function unavailableSyntaxAssetMessage(kind: SyntaxAssetKind) {
+  const label = kind === "grammar" ? "grammar" : "theme";
+  return __DEV__ && devSyntaxAssetSourceRoot
+    ? `Syntax ${label} is not available in ${devSyntaxAssetSourceRoot}.`
+    : `Syntax ${label} downloads are not configured yet.`;
+}
+
+function installDevSyntaxAsset(kind: SyntaxAssetKind, filename: string) {
+  const value = readDevSyntaxAssetFile({ filename, kind });
+  if (!value) {
+    throw new Error(unavailableSyntaxAssetMessage(kind));
+  }
+  writeSyntaxAsset(kind, filename, value);
+}
+
 export async function ensureSyntaxTheme(name: string) {
   initializeSyntaxAssetsSync();
   if (!isSyntaxThemeInstalled(name)) {
-    throw new Error("Syntax theme downloads are not configured yet.");
+    installDevSyntaxAsset("theme", filenameForAssetName(name));
   }
 }
 
 export async function ensureSyntaxGrammar(language: string) {
   initializeSyntaxAssetsSync();
   if (!isSyntaxGrammarInstalled(language)) {
-    throw new Error("Syntax grammar downloads are not configured yet.");
+    const normalized = normalizeAssetName(language);
+    const catalogEntry = popularSyntaxGrammars.find((grammar) => grammar.name === normalized);
+    const dependencies = catalogEntry?.dependencies ?? [filenameForAssetName(normalized)];
+    for (const filename of dependencies) {
+      if (!syntaxAssetStorage.file(`${syntaxAssetFolder.grammars}/${filename}`).exists) {
+        installDevSyntaxAsset("grammar", filename);
+      }
+    }
   }
 }
 
