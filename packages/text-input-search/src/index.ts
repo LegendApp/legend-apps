@@ -13,6 +13,7 @@ import TextInputSearchNativeComponent, {
 } from "./TextInputSearchNativeComponent";
 
 export interface TextInputSearchProps extends Omit<ViewProps, "children"> {
+  appearance?: "dark" | "light" | "system";
   defaultValue?: string;
   onChangeText?: (text: string) => void;
   placeholder?: string;

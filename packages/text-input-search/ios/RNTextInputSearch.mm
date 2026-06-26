@@ -11,6 +11,19 @@ using namespace facebook::react;
 @interface RNTextInputSearchField : NSSearchField
 @end
 
+static NSAppearance *RNTextInputSearchAppearanceForName(NSString *appearanceName)
+{
+  if ([appearanceName isEqualToString:@"light"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  }
+
+  if ([appearanceName isEqualToString:@"dark"]) {
+    return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+  }
+
+  return nil;
+}
+
 @implementation RNTextInputSearchField
 - (BOOL)performKeyEquivalent:(NSEvent *)event
 {
@@ -89,6 +102,11 @@ using namespace facebook::react;
 {
   const auto &newProps = *std::static_pointer_cast<TextInputSearchProps const>(props);
 #if TARGET_OS_OSX
+  NSString *appearanceName = [NSString stringWithUTF8String:newProps.appearance.c_str()];
+  NSAppearance *appearance = RNTextInputSearchAppearanceForName(appearanceName);
+  self.appearance = appearance;
+  _textField.appearance = appearance;
+
   NSString *placeholder = [NSString stringWithUTF8String:newProps.placeholder.c_str()];
   _textField.placeholderString = placeholder;
 

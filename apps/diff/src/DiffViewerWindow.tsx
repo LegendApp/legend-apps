@@ -123,6 +123,8 @@ type DiffSidebarFileRowProps = {
   foregroundColor: string;
   mutedColor: string;
   onPress: () => void;
+  selectedBorderColor: string;
+  selectedBackgroundColor: string;
   statusPresentation: ReturnType<typeof getFileStatusPresentation>;
 };
 
@@ -189,6 +191,8 @@ function DiffSidebarFileRow({
   foregroundColor,
   mutedColor,
   onPress,
+  selectedBorderColor,
+  selectedBackgroundColor,
   statusPresentation,
 }: DiffSidebarFileRowProps) {
   const isActive = useValue(() => activeFileIndex$.get() === file.index);
@@ -205,8 +209,8 @@ function DiffSidebarFileRow({
         styles.sidebarFile,
         isActive
           ? {
-              backgroundColor: "#2d333b",
-              borderColor,
+              backgroundColor: selectedBackgroundColor,
+              borderColor: selectedBorderColor,
             }
           : null,
         { opacity: pressed ? 0.72 : 1 },
@@ -745,6 +749,7 @@ function DiffLoadedBody({
       >
         <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
         <TextInputSearch
+          appearance={syntaxAppearance}
           defaultValue={fileFilter}
           onChangeText={setFileFilter}
           placeholder="Filter files"
@@ -933,6 +938,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const foregroundColor = syntaxTheme.foreground;
   const fileHeaderBackgroundColor = displayTheme.colors.surfaceMuted;
   const mutedColor = displayTheme.colors.muted;
+  const selectedSidebarFileBackgroundColor = syntaxTheme.appearance === "dark"
+    ? "rgba(88, 166, 255, 0.24)"
+    : "rgba(9, 105, 218, 0.16)";
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -1544,10 +1552,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         onPress={() => scrollToFile(file)}
+        selectedBackgroundColor={selectedSidebarFileBackgroundColor}
+        selectedBorderColor={displayTheme.colors.primary}
         statusPresentation={statusPresentation}
       />
     );
-  }, [activeFileIndex$, displayTheme.colors.border, foregroundColor, mutedColor, scrollToFile]);
+  }, [activeFileIndex$, displayTheme.colors.border, displayTheme.colors.primary, foregroundColor, mutedColor, scrollToFile, selectedSidebarFileBackgroundColor]);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     const nextMetrics = {

@@ -8,6 +8,7 @@ export type TextInputSearchChangeEvent = {
 };
 
 export interface NativeProps extends ViewProps {
+  appearance?: string;
   defaultText?: string;
   onChangeText?: DirectEventHandler<TextInputSearchChangeEvent>;
   placeholder?: string;
