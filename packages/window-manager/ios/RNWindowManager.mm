@@ -172,6 +172,60 @@ static BOOL LegendViewIsTitlebarContainer(NSView *view)
     [className isEqualToString:@"NSTitlebarBackgroundView"];
 }
 
+static NSVisualEffectMaterial LegendVisualEffectMaterialForTitlebarMaterial(NSString *value)
+{
+  if ([value isEqualToString:@"hudWindow"]) {
+    return NSVisualEffectMaterialHUDWindow;
+  }
+  if ([value isEqualToString:@"sidebar"]) {
+    return NSVisualEffectMaterialSidebar;
+  }
+  if ([value isEqualToString:@"windowBackground"]) {
+    return NSVisualEffectMaterialWindowBackground;
+  }
+  if ([value isEqualToString:@"titlebar"]) {
+    return NSVisualEffectMaterialTitlebar;
+  }
+  if ([value isEqualToString:@"glass"] || [value isEqualToString:@"headerView"]) {
+    if (@available(macOS 10.14, *)) {
+      return NSVisualEffectMaterialHeaderView;
+    }
+    return NSVisualEffectMaterialTitlebar;
+  }
+  return NSVisualEffectMaterialTitlebar;
+}
+
+static NSVisualEffectBlendingMode LegendVisualEffectBlendingModeForName(NSString *value)
+{
+  return [value isEqualToString:@"withinWindow"] ? NSVisualEffectBlendingModeWithinWindow : NSVisualEffectBlendingModeBehindWindow;
+}
+
+static NSVisualEffectState LegendVisualEffectStateForName(NSString *value)
+{
+  if ([value isEqualToString:@"active"]) {
+    return NSVisualEffectStateActive;
+  }
+  if ([value isEqualToString:@"inactive"]) {
+    return NSVisualEffectStateInactive;
+  }
+  return NSVisualEffectStateFollowsWindowActiveState;
+}
+
+static NSRect LegendTitlebarMaterialFrame(NSWindow *window, NSView *frameView)
+{
+  NSRect frameBounds = frameView.bounds;
+  NSRect contentLayoutRect = [frameView convertRect:window.contentLayoutRect fromView:nil];
+  CGFloat materialMinY = NSMaxY(contentLayoutRect);
+  CGFloat materialHeight = NSMaxY(frameBounds) - materialMinY;
+
+  if (materialHeight <= 0 || materialHeight > NSHeight(frameBounds)) {
+    materialHeight = MAX(0, NSHeight(window.frame) - NSHeight(window.contentLayoutRect));
+    materialMinY = NSMaxY(frameBounds) - materialHeight;
+  }
+
+  return NSMakeRect(0, materialMinY, NSWidth(frameBounds), materialHeight);
+}
+
 static void LegendApplyTitlebarBackgroundColor(NSView *view, NSColor *backgroundColor)
 {
   BOOL isTitlebarContainer = LegendViewIsTitlebarContainer(view);
@@ -404,6 +458,7 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *moduleNames;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSTitlebarAccessoryViewController *> *> *titlebarAccessoryControllers;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSView *> *titlebarMaterialViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *toolbarItemConfigs;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
@@ -427,6 +482,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _rootViews = [NSMutableDictionary new];
     _moduleNames = [NSMutableDictionary new];
     _titlebarAccessoryControllers = [NSMutableDictionary new];
+    _titlebarMaterialViews = [NSMutableDictionary new];
     _toolbarItemConfigs = [NSMutableDictionary new];
     _windowBlurFilters = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
@@ -498,6 +554,73 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 }
 
 #if TARGET_OS_OSX
+- (void)removeTitlebarMaterialForIdentifier:(NSString *)identifier
+{
+  NSView *materialView = self.titlebarMaterialViews[identifier];
+  [materialView removeFromSuperview];
+  [self.titlebarMaterialViews removeObjectForKey:identifier];
+}
+
+- (NSView *)createTitlebarMaterialView:(NSString *)material frame:(NSRect)frame
+{
+  if ([material isEqualToString:@"glass"]) {
+    if (@available(macOS 26.0, *)) {
+      NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:frame];
+      glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+      glassView.wantsLayer = YES;
+      glassView.layer.backgroundColor = NSColor.clearColor.CGColor;
+      return glassView;
+    }
+  }
+
+  NSVisualEffectView *effectView = [[NSVisualEffectView alloc] initWithFrame:frame];
+  effectView.material = LegendVisualEffectMaterialForTitlebarMaterial(material);
+  effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+  effectView.state = NSVisualEffectStateFollowsWindowActiveState;
+  effectView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  effectView.wantsLayer = YES;
+  effectView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  return effectView;
+}
+
+- (void)applyTitlebarMaterialFromOptions:(NSDictionary *)options toWindow:(NSWindow *)window identifier:(NSString *)identifier
+{
+  NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (!LegendDictionaryHasKey(windowStyle, @"titlebarMaterial")) {
+    return;
+  }
+
+  NSString *material = [windowStyle[@"titlebarMaterial"] isKindOfClass:NSString.class] ? windowStyle[@"titlebarMaterial"] : nil;
+  [self removeTitlebarMaterialForIdentifier:identifier];
+
+  if (material.length == 0 || [material isEqualToString:@"none"]) {
+    return;
+  }
+
+  NSView *frameView = window.contentView.superview;
+  if (!frameView) {
+    return;
+  }
+
+  NSView *materialView = [self createTitlebarMaterialView:material frame:LegendTitlebarMaterialFrame(window, frameView)];
+  if ([materialView isKindOfClass:NSVisualEffectView.class]) {
+    NSVisualEffectView *effectView = (NSVisualEffectView *)materialView;
+    NSString *blendingMode = [windowStyle[@"titlebarMaterialBlendingMode"] isKindOfClass:NSString.class]
+      ? windowStyle[@"titlebarMaterialBlendingMode"]
+      : nil;
+    NSString *state = [windowStyle[@"titlebarMaterialState"] isKindOfClass:NSString.class]
+      ? windowStyle[@"titlebarMaterialState"]
+      : nil;
+    effectView.blendingMode = LegendVisualEffectBlendingModeForName(blendingMode);
+    effectView.state = LegendVisualEffectStateForName(state);
+  }
+
+  materialView.translatesAutoresizingMaskIntoConstraints = YES;
+  materialView.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
+  [frameView addSubview:materialView positioned:NSWindowAbove relativeTo:window.contentView];
+  self.titlebarMaterialViews[identifier] = materialView;
+}
+
 - (void)removeTitlebarControlsForIdentifier:(NSString *)identifier fromWindow:(NSWindow *)window
 {
   NSArray<NSTitlebarAccessoryViewController *> *controllers = self.titlebarAccessoryControllers[identifier] ?: @[];
@@ -1101,6 +1224,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendApplyTitlebarSeparatorStyle(existingWindow, titlebarSeparatorStyle);
       [self applyTitlebarControlsFromOptions:options toWindow:existingWindow identifier:identifier];
       [self applyToolbarItemsFromOptions:options toWindow:existingWindow identifier:identifier];
+      [self applyTitlebarMaterialFromOptions:options toWindow:existingWindow identifier:identifier];
       LegendApplyWindowAppearance(existingWindow, appearance);
       LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
 
@@ -1200,6 +1324,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:identifier];
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:identifier];
+    [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:identifier];
     LegendApplyWindowAppearance(window, appearance);
     LegendApplyWindowBackgroundColor(window, backgroundColor);
     if (levelNumber) {
@@ -1389,6 +1514,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     LegendApplyWindowOptions(mainWindow, options);
     [self applyTitlebarControlsFromOptions:options toWindow:mainWindow identifier:@"main"];
     [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];
+    [self applyTitlebarMaterialFromOptions:options toWindow:mainWindow identifier:@"main"];
     resolve([self successJson]);
   });
 #else
@@ -1414,6 +1540,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     LegendApplyWindowOptions(window, options);
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
+    [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:targetIdentifier];
     RCTUIView *rootView = self.rootViews[targetIdentifier];
     LegendSizeRootViewToWindow(rootView, window);
     resolve([self successJson]);
@@ -1689,8 +1816,10 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
   [self.windowBlurFilters removeObjectForKey:identifier];
   if (window) {
+    [self removeTitlebarMaterialForIdentifier:identifier];
     [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
   } else {
+    [self.titlebarMaterialViews removeObjectForKey:identifier];
     [self.titlebarAccessoryControllers removeObjectForKey:identifier];
   }
   [self.closeRequestIdentifiers removeObject:identifier];

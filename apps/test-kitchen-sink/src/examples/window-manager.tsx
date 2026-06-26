@@ -87,6 +87,7 @@ export function WindowManagerExample({
                 minHeight: 220,
                 minWidth: 320,
                 titlebarAppearsTransparent: true,
+                titlebarMaterial: "glass",
                 titlebarSeparatorStyle: "none",
                 titleVisibility: "visible",
                 toolbarStyle: "unified",

@@ -91,6 +91,7 @@ function createDiffViewerWindowStyle({
     },
     includeFrame,
     miniaturizable: true,
+    titlebarMaterial: "glass",
   });
 
   return {

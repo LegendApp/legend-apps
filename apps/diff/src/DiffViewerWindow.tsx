@@ -82,7 +82,6 @@ const diffBackgroundTokenizeStartDelayMs = 160;
 const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffFileHeaderRowHeight = 52;
-const diffTitlebarTopInset = 52;
 const diffSidebarTopInset = 40;
 const diffDocumentErrorHeight = 78;
 const diffDocumentPermissionErrorHeight = 134;
@@ -3079,7 +3078,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     setOpenErrorValue(null);
   }, []);
 
-  const diffContentHeight = Math.max(0, diffPaneHeight - diffTitlebarTopInset);
+  const diffContentHeight = diffPaneHeight;
   const documentErrorHeight = documentError
     ? documentError.kind === "permission"
       ? diffDocumentPermissionErrorHeight
@@ -3393,7 +3392,6 @@ const styles = StyleSheet.create({
   },
   diffPane: {
     flex: 1,
-    paddingTop: diffTitlebarTopInset,
   },
   diffPaneContent: {
     flex: 1,

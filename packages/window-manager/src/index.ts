@@ -83,6 +83,9 @@ export type WindowStyleOptions = {
   titleVisibility?: "visible" | "hidden";
   toolbarStyle?: "automatic" | "expanded" | "preference" | "unified" | "unifiedCompact";
   titlebarSeparatorStyle?: "automatic" | "none" | "line" | "shadow";
+  titlebarMaterial?: "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
+  titlebarMaterialBlendingMode?: "behindWindow" | "withinWindow";
+  titlebarMaterialState?: "active" | "inactive" | "followsWindowActiveState";
   backgroundColor?: string;
   hasToolbar?: boolean;
   titlebarControls?: WindowTitlebarControl[];

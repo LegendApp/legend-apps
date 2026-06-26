@@ -14,6 +14,9 @@ type DocumentWindowStyleOptions = {
   backgroundColor?: string;
   frame: WindowFrame;
   includeFrame: boolean;
+  titlebarMaterial?: WindowStyle["titlebarMaterial"];
+  titlebarMaterialBlendingMode?: WindowStyle["titlebarMaterialBlendingMode"];
+  titlebarMaterialState?: WindowStyle["titlebarMaterialState"];
 };
 
 type UnifiedToolbarWindowStyleOptions = DocumentWindowStyleOptions & {
@@ -25,6 +28,9 @@ export function createDocumentWindowStyle({
   backgroundColor,
   frame,
   includeFrame,
+  titlebarMaterial,
+  titlebarMaterialBlendingMode,
+  titlebarMaterialState,
 }: DocumentWindowStyleOptions): WindowStyle {
   return {
     appearance,
@@ -41,6 +47,9 @@ export function createDocumentWindowStyle({
     titlebarAppearsTransparent: true,
     titlebarSeparatorStyle: "none",
     titleVisibility: "visible",
+    titlebarMaterial,
+    titlebarMaterialBlendingMode,
+    titlebarMaterialState,
   };
 }
 
@@ -50,6 +59,9 @@ export function createUnifiedToolbarWindowStyle({
   frame,
   includeFrame,
   miniaturizable = false,
+  titlebarMaterial,
+  titlebarMaterialBlendingMode,
+  titlebarMaterialState,
 }: UnifiedToolbarWindowStyleOptions): WindowStyle {
   return {
     appearance,
@@ -67,6 +79,9 @@ export function createUnifiedToolbarWindowStyle({
     titlebarAppearsTransparent: true,
     titlebarSeparatorStyle: "none",
     titleVisibility: "visible",
+    titlebarMaterial,
+    titlebarMaterialBlendingMode,
+    titlebarMaterialState,
     toolbarStyle: "unified",
   };
 }
