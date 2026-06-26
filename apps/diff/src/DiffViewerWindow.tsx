@@ -138,10 +138,11 @@ type DiffLoadedBodyProps = {
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
   documentErrorBody: ReactNode;
   fileFilterInputRef: RefObject<TextInputSearchRef | null>;
-  getItemSize: (index: number, row: DiffRenderRow | undefined) => number;
-  getItemType: (index: number, row: DiffRenderRow | undefined) => string;
-  getSideBySideItemSize: (index: number, row: DiffSideBySideRenderRow | undefined) => number;
-  getSideBySideItemType: (index: number, row: DiffSideBySideRenderRow | undefined) => string;
+  getItemSize: (index: number) => number;
+  getItemType: (index: number) => string;
+  getRow: (index: number, rowVersion: number) => DiffRenderRow | undefined;
+  getSideBySideItemSize: (index: number) => number;
+  getSideBySideItemType: (index: number) => string;
   getSideBySideRow: (index: number) => DiffSideBySideRenderRow | undefined;
   handleDiffPaneLayout: (event: LayoutChangeEvent) => void;
   handleSidebarListLayout: (event: LayoutChangeEvent) => void;
@@ -564,6 +565,7 @@ function DiffLoadedBody({
   fileFilterInputRef,
   getItemSize,
   getItemType,
+  getRow,
   getSideBySideItemSize,
   getSideBySideItemType,
   getSideBySideRow,
@@ -662,6 +664,7 @@ function DiffLoadedBody({
     const list = viewMode === "unified" ? (
       <VirtualizedFixedDocumentList
         adaptiveRender={diffAdaptiveRender}
+        dataVersion={diffRows.dataVersion}
         debugName="diff"
         key="unified"
         extraData={listExtraData}
@@ -676,16 +679,16 @@ function DiffLoadedBody({
         onVisibleRowsRequested={handleVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
         requestRange={diffRows.requestRange}
-        rowCache={diffRows.rowCache}
+        getRow={getRow}
         rowVersions$={diffRows.rowVersions$}
         rowHeight={rowHeight}
-        rowsVersion={diffRows.rowsVersion}
         renderRow={renderRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
       />
     ) : (
       <VirtualizedFixedDocumentList
         adaptiveRender={diffAdaptiveRender}
+        dataVersion={diffRows.dataVersion}
         debugName={`diff-${viewMode}`}
         key={viewMode}
         extraData={listExtraData}
@@ -703,7 +706,6 @@ function DiffLoadedBody({
         requestRange={requestSideBySideRange}
         rowVersions$={sideBySideRowVersions$}
         rowHeight={rowHeight}
-        rowsVersion={0}
         renderRow={renderSideBySideRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
       />
@@ -930,7 +932,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     document: DiffDocument;
     start: number;
   } | null>(null);
-  const isRenderingInitialLoadedFrame = state.status === "loaded" && sourcesMatch(loadingSource, state.source);
+  const isRenderingInitialLoadedFrame =
+    state.status === "loaded" &&
+    state.syntaxTheme === syntaxTheme.name &&
+    sourcesMatch(loadingSource, state.source);
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
@@ -946,7 +951,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   useObserveEffect(() => {
     const currentState = state$.get();
     const currentLoadingSource = loadingSource$.get();
-    const currentIsRenderingInitialLoadedFrame = currentState.status === "loaded" && sourcesMatch(currentLoadingSource, currentState.source);
+    const currentSyntaxTheme = getDiffSyntaxThemeSetting();
+    const currentIsRenderingInitialLoadedFrame =
+      currentState.status === "loaded" &&
+      currentState.syntaxTheme === currentSyntaxTheme &&
+      sourcesMatch(currentLoadingSource, currentState.source);
     if (currentState.status === "loaded" && loggedInitialLoadedFrameRef.current !== currentIsRenderingInitialLoadedFrame) {
       logDiffOpenTiming("viewer.initialLoadedFrame.state", {
         isRenderingInitialLoadedFrame: currentIsRenderingInitialLoadedFrame,
@@ -964,6 +973,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fileByIndex,
     fileByRowStart,
     fileHeaderRowIndexes,
+    getRow,
     getVisibleListIndex,
     sideBySideFileHeaderIndexes,
     sideBySideItemIndexes,
@@ -1097,10 +1107,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     renderCountRef.current += 1;
     logDiffOpenTiming("viewer.renderCommitted", {
-      cacheSize: diffRows.rowCache.size,
+      dataVersion: diffRows.dataVersion,
       itemCount: diffRows.itemIndexes.length,
       renderCount: renderCountRef.current,
-      rowsVersion: diffRows.rowsVersion,
       state: state.status,
       visibleItemCount: visibleItemIndexes.length,
     });
@@ -1637,12 +1646,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   }, [state$]);
 
-  const getItemType = useCallback((index: number, row: DiffRenderRow | undefined) => (
-    row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"
+  const getItemType = useCallback((index: number) => (
+    fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"
   ), [fileHeaderRowIndexes]);
 
-  const getItemSize = useCallback((index: number, row: DiffRenderRow | undefined) => (
-    getItemType(index, row) === "file-header" ? diffFileHeaderRowHeight : rowHeight
+  const getItemSize = useCallback((index: number) => (
+    getItemType(index) === "file-header" ? diffFileHeaderRowHeight : rowHeight
   ), [getItemType, rowHeight]);
 
   const renderRow = useCallback(
@@ -1658,18 +1667,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     [collapsedFileIndexes$, renderFields],
   );
 
-  const getSideBySideItemType = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
-    const kind = row?.kind ?? (sideBySideFileHeaderIndexes.has(index) ? "file-header" : "line");
-    return kind === "file-header" ? "file-header" : "side-by-side-line";
+  const getSideBySideItemType = useCallback((index: number) => {
+    return sideBySideFileHeaderIndexes.has(index) ? "file-header" : "side-by-side-line";
   }, [sideBySideFileHeaderIndexes]);
 
-  const getSideBySideItemSize = useCallback((index: number, row: DiffSideBySideRenderRow | undefined) => {
-    if (row) {
-      return row.kind === "file-header"
-        ? diffFileHeaderRowHeight
-        : rowHeight;
-    }
-
+  const getSideBySideItemSize = useCallback((index: number) => {
     return sideBySideFileHeaderIndexes.has(index) ? diffFileHeaderRowHeight : rowHeight;
   }, [rowHeight, sideBySideFileHeaderIndexes]);
 
@@ -1755,6 +1757,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         fileFilterInputRef={fileFilterInputRef}
         getItemSize={getItemSize}
         getItemType={getItemType}
+        getRow={getRow}
         getSideBySideItemSize={getSideBySideItemSize}
         getSideBySideItemType={getSideBySideItemType}
         getSideBySideRow={getSideBySideRow}

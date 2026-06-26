@@ -164,6 +164,7 @@ export type SourceDocumentRowsTrace = {
 };
 
 export type SourceDocumentRowsState = VirtualizedDocumentRowsState<SyntaxRenderLine, SyntaxStyle, SourceDocumentTiming> & {
+  getRow: (index: number, rowVersion: number) => SyntaxRenderLine | undefined;
   handleInitialRowsRequested: (start: number, count: number) => void;
 };
 
@@ -175,7 +176,7 @@ export type UseSourceDocumentRowsOptions = {
     document: SyntaxDocument;
     tokenizedLineCount: number;
   }) => void;
-  onRowsFetched?: (trace: SourceDocumentRowsTrace, rowsVersion: number) => void;
+  onRowsFetched?: (trace: SourceDocumentRowsTrace, requestVersion: number) => void;
   snapshot: SourceDocumentSnapshot | null;
 };
 
@@ -219,39 +220,53 @@ export function useSourceDocumentRows({
   snapshot,
 }: UseSourceDocumentRowsOptions): SourceDocumentRowsState {
   const highlightedInitialRangeRef = useRef<string | null>(null);
-  const rowsTraceRef = useRef<SourceDocumentRowsTrace | null>(null);
   const backgroundTokenizationDocumentRef = useRef<SyntaxDocument | null>(null);
-  const notifiedRowsVersionRef = useRef(-1);
-  const getRowIndex = useCallback((line: SyntaxRenderLine) => line.index, []);
-  const getRows = useCallback((document: SyntaxDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+  const requestVersionRef = useRef(0);
+  const requestRows = useCallback((document: SyntaxDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const reason = options?.reason ?? "scroll";
     const startedAt = nowMs();
-    const rows = reason === "initial"
-      ? document.getPlainLines(start, count)
-      : document.getRenderLines(start, count);
-    rowsTraceRef.current = {
+    const shouldHighlight = reason === "highlight";
+    if (shouldHighlight) {
+      document.getRenderLines(start, count);
+    }
+    requestVersionRef.current += 1;
+    onRowsFetched?.({
       count,
       document,
       finishedAt: nowMs(),
       reason,
       start,
       startedAt,
-    };
-    return rows;
-  }, []);
+    }, requestVersionRef.current);
+    return shouldHighlight
+      ? {
+          invalidate: true,
+          styles: document.getStyles(),
+          timing: toSourceDocumentTiming(document.getTiming(), 0),
+        }
+      : undefined;
+  }, [onRowsFetched]);
   const getStyles = useCallback((document: SyntaxDocument) => document.getStyles(), []);
   const getTiming = useCallback((document: SyntaxDocument) => {
     return toSourceDocumentTiming(document.getTiming(), 0);
   }, []);
   const virtualizedRows = useVirtualizedDocumentRows({
     debugName,
-    getRowIndex,
-    getRows,
     getStyles,
     getTiming,
+    requestRows,
     snapshot,
   });
   const currentDocument = snapshot?.document ?? null;
+  const getRow = useCallback((index: number, rowVersion: number) => {
+    if (currentDocument) {
+      const lines = rowVersion > 0
+        ? currentDocument.getRenderLines(index, 1)
+        : currentDocument.getPlainLines(index, 1);
+      return lines[0];
+    }
+    return undefined;
+  }, [currentDocument]);
   const startBackgroundTokenization = useCallback((document: SyntaxDocument) => {
     if (backgroundTokenizationDocumentRef.current !== document) {
       backgroundTokenizationDocumentRef.current = document;
@@ -268,7 +283,6 @@ export function useSourceDocumentRows({
       startBackgroundTokenization(currentDocument);
     }
   }, [currentDocument, startBackgroundTokenization, virtualizedRows]);
-  const rowsVersion = virtualizedRows.rowsVersion;
 
   useEffect(() => () => {
     currentDocument?.stopBackgroundTokenization();
@@ -280,7 +294,6 @@ export function useSourceDocumentRows({
   useEffect(() => {
     highlightedInitialRangeRef.current = null;
     backgroundTokenizationDocumentRef.current = null;
-    notifiedRowsVersionRef.current = -1;
   }, [currentDocument]);
 
   useEffect(() => {
@@ -299,32 +312,13 @@ export function useSourceDocumentRows({
     }
   }, [currentDocument, initialHighlightRowCount, requestRange]);
 
-  useEffect(() => {
-    const rowsTrace = rowsTraceRef.current;
-    if (currentDocument && rowsTrace?.document === currentDocument && rowsVersion > 0 && notifiedRowsVersionRef.current !== rowsVersion) {
-      notifiedRowsVersionRef.current = rowsVersion;
-      onRowsFetched?.(rowsTrace, rowsVersion);
-      if (rowsTrace.reason === "initial") {
-        const rangeKey = `${rowsTrace.start}:${rowsTrace.count}`;
-        if (highlightedInitialRangeRef.current !== rangeKey) {
-          highlightedInitialRangeRef.current = rangeKey;
-          requestRange(rowsTrace.start, rowsTrace.count, {
-            force: true,
-            reason: "highlight",
-          });
-        }
-      } else if (rowsTrace.reason === "overscan") {
-        startBackgroundTokenization(currentDocument);
-      }
-    }
-  }, [currentDocument, onRowsFetched, requestRange, rowsVersion, startBackgroundTokenization]);
-
   const handleInitialRowsRequested = useCallback((_start: number, _count: number) => {
     highlightedInitialRangeRef.current = null;
   }, []);
 
   return {
     ...virtualizedRows,
+    getRow,
     handleInitialRowsRequested,
     requestRange,
   };
@@ -344,6 +338,8 @@ export function SourceDocumentView({
   return (
     <VirtualizedFixedDocumentList
       debugName={debugName}
+      dataVersion={sourceRows.dataVersion}
+      getRow={sourceRows.getRow}
       initialRequestRowCount={initialRequestRowCount}
       itemIndexes={sourceRows.itemIndexes}
       lineOverscan={lineOverscan}
@@ -351,10 +347,8 @@ export function SourceDocumentView({
       overscanRequestDelayMs={overscanRequestDelayMs}
       recycleItems={recycleItems}
       requestRange={sourceRows.requestRange}
-      rowCache={sourceRows.rowCache}
       rowVersions$={sourceRows.rowVersions$}
       rowHeight={rowHeight}
-      rowsVersion={sourceRows.rowsVersion}
       renderRow={renderRow}
       style={style}
     />

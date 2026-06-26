@@ -26,6 +26,7 @@ struct DiffSyntaxState {
 namespace {
 
 constexpr double diffRowKindLine = 2;
+constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;

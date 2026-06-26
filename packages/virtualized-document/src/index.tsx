@@ -34,9 +34,19 @@ export type VirtualizedDocumentRequestOptions = {
   reason?: VirtualizedDocumentRequestReason;
 };
 
+export type VirtualizedDocumentRowsRequestResult<TStyle, TTiming> = {
+  invalidate?: boolean | readonly number[];
+  styles?: readonly TStyle[];
+  timing?: TTiming;
+};
+
 export type UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming> = {
-  getRowIndex: (row: TRow) => number;
-  getRows: (document: TDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => readonly TRow[];
+  requestRows?: (
+    document: TDocument,
+    start: number,
+    count: number,
+    options?: VirtualizedDocumentRequestOptions,
+  ) => VirtualizedDocumentRowsRequestResult<TStyle, TTiming> | void;
   getStyles?: (document: TDocument) => readonly TStyle[];
   getTiming?: (document: TDocument) => TTiming;
   debugName?: string;
@@ -44,21 +54,20 @@ export type UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming> 
 };
 
 export type VirtualizedDocumentRowsState<TRow, TStyle, TTiming> = {
+  dataVersion: number;
   itemIndexes: Array<number | undefined>;
   itemCount: number;
+  invalidateRange: (start: number, count: number) => void;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
-  rowCache: Map<number, TRow>;
   rowVersions$: Observable<Record<string, number>>;
-  rowsVersion: number;
   styles: readonly TStyle[];
   timing: TTiming | null;
 };
 
 type InternalRowsState<TDocument, TRow, TStyle, TTiming> = {
+  dataVersion: number;
   document: TDocument | null;
   itemCount: number;
-  rowCache: Map<number, TRow>;
-  rowsVersion: number;
   styles: readonly TStyle[];
   timing: TTiming | null;
 };
@@ -68,26 +77,27 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
   index: number;
   listIndex: number;
   row: TRow | undefined;
+  rowVersion: number;
 };
 
 type VirtualizedFixedDocumentListRowProps<TRow> = {
   adaptiveRenderEnabled: boolean;
   debugName?: string;
-  getRow?: (index: number) => TRow | undefined;
+  getRow?: (index: number, rowVersion: number) => TRow | undefined;
   index: number;
   listIndex: number;
   renderItemBatchRef: { current: RenderItemDebugBatch | null };
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
-  rowCache?: Map<number, TRow>;
   rowVersions$?: Observable<Record<string, number>>;
 };
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
+  dataVersion?: string | number;
   debugName?: string;
   extraData?: unknown;
-  getItemSize?: (index: number, row: TRow | undefined) => number;
-  getItemType?: (index: number, row: TRow | undefined) => string | undefined;
+  getItemSize?: (index: number) => number;
+  getItemType?: (index: number) => string | undefined;
   initialRequestRowCount?: number;
   itemIndexes: Array<number | undefined>;
   ListHeaderComponent?: ReactElement;
@@ -101,10 +111,8 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   recycleItems?: boolean;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
-  getRow?: (index: number) => TRow | undefined;
-  rowCache?: Map<number, TRow>;
+  getRow?: (index: number, rowVersion: number) => TRow | undefined;
   rowVersions$?: Observable<Record<string, number>>;
-  rowsVersion: number;
   rowHeight: number;
   style?: StyleProp<ViewStyle>;
 };
@@ -213,26 +221,14 @@ function recordCallbackDebug(debugName: string | undefined, event: string, batch
   }
 }
 
-function createRowCache<TRow>(
-  rows: readonly TRow[],
-  getRowIndex: (row: TRow) => number,
-) {
-  const rowCache = new Map<number, TRow>();
-  for (const row of rows) {
-    rowCache.set(getRowIndex(row), row);
-  }
-  return rowCache;
-}
-
 function createRowsState<TDocument, TRow, TStyle, TTiming>(
   snapshot: VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> | null,
-  getRowIndex: (row: TRow) => number,
+  dataVersion: number,
 ): InternalRowsState<TDocument, TRow, TStyle, TTiming> {
   return {
+    dataVersion,
     document: snapshot?.document ?? null,
     itemCount: snapshot?.itemCount ?? 0,
-    rowCache: snapshot ? createRowCache(snapshot.initialRows, getRowIndex) : new Map<number, TRow>(),
-    rowsVersion: 0,
     styles: snapshot?.styles ?? [],
     timing: snapshot?.timing ?? null,
   };
@@ -251,17 +247,20 @@ function VirtualizedFixedDocumentListRowContent<TRow>({
   listIndex,
   renderItemBatchRef,
   renderRow,
-  rowCache,
-}: Omit<VirtualizedFixedDocumentListRowProps<TRow>, "rowVersions$">) {
+  rowVersion,
+}: Omit<VirtualizedFixedDocumentListRowProps<TRow>, "rowVersions$"> & {
+  rowVersion: number;
+}) {
   const adaptiveRender = useAdaptiveRender();
   const effectiveAdaptiveRender = adaptiveRenderEnabled ? adaptiveRender : "normal";
-  const row = getRow?.(index) ?? rowCache?.get(index);
+  const row = useMemo(() => getRow?.(index, rowVersion), [getRow, index, rowVersion]);
   recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
   return renderRow({
     adaptiveRender: effectiveAdaptiveRender,
     index,
     listIndex,
     row,
+    rowVersion,
   });
 }
 
@@ -271,8 +270,8 @@ function VirtualizedFixedDocumentListVersionedRow<TRow>({
 }: VirtualizedFixedDocumentListRowProps<TRow> & {
   rowVersions$: Observable<Record<string, number>>;
 }) {
-  useValue(() => rowVersions$[String(props.index)].get() ?? 0);
-  return <VirtualizedFixedDocumentListRowContent {...props} />;
+  const rowVersion = useValue(() => rowVersions$[String(props.index)].get() ?? 0);
+  return <VirtualizedFixedDocumentListRowContent {...props} rowVersion={rowVersion} />;
 }
 
 function isArrayIndexProperty(property: string | symbol) {
@@ -330,122 +329,97 @@ function getDocumentRangeForListRange(itemIndexes: readonly (number | undefined)
 
 export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   debugName,
-  getRowIndex,
-  getRows,
   getStyles,
   getTiming,
+  requestRows,
   snapshot,
 }: UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming>): VirtualizedDocumentRowsState<TRow, TStyle, TTiming> {
   const rowVersions$ = useObservable<Record<string, number>>({});
-  const [rowsState, setRowsState] = useState(() => createRowsState(snapshot, getRowIndex));
+  const [rowsState, setRowsState] = useState(() => createRowsState(snapshot, 0));
   const rowsStateRef = useRef(rowsState);
   const snapshotDocument = snapshot?.document ?? null;
   const activeRowsState = rowsState.document === snapshotDocument
     ? rowsState
-    : createRowsState(snapshot, getRowIndex);
+    : createRowsState(snapshot, rowsState.dataVersion + 1);
 
   useEffect(() => {
-    const nextRowsState = createRowsState(snapshot, getRowIndex);
-    rowsStateRef.current = nextRowsState;
-    rowVersions$.set({});
-    setRowsState(nextRowsState);
-    debugLog(debugName, "rows.reset", {
-      cacheSize: nextRowsState.rowCache.size,
-      itemCount: nextRowsState.itemCount,
-      rowsVersion: nextRowsState.rowsVersion,
+    setRowsState((currentRowsState) => {
+      const nextRowsState = createRowsState(snapshot, currentRowsState.dataVersion + 1);
+      rowsStateRef.current = nextRowsState;
+      rowVersions$.set({});
+      debugLog(debugName, "rows.reset", {
+        dataVersion: nextRowsState.dataVersion,
+        itemCount: nextRowsState.itemCount,
+      });
+      return nextRowsState;
     });
-  }, [getRowIndex, rowVersions$, snapshot]);
+  }, [debugName, rowVersions$, snapshot]);
 
   useEffect(() => {
     rowsStateRef.current = activeRowsState;
   }, [activeRowsState]);
 
+  const invalidateRange = useCallback((start: number, count: number) => {
+    const loadedRowsState = rowsStateRef.current;
+    const safeStart = Math.max(0, Math.floor(start));
+    const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
+    for (let index = safeStart; index < safeEnd; index += 1) {
+      bumpRowVersion(rowVersions$, index);
+    }
+  }, [rowVersions$]);
+
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const loadedRowsState = rowsStateRef.current;
-    if (loadedRowsState.document) {
+    if (loadedRowsState.document && requestRows) {
       const requestStartedAt = debugNowMs();
       const safeStart = Math.max(0, Math.floor(start));
       const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
 
       if (safeStart < safeEnd) {
-        let hasMissingRow = options?.force === true;
-        for (let index = safeStart; index < safeEnd; index += 1) {
-          if (!loadedRowsState.rowCache.has(index)) {
-            hasMissingRow = true;
-            break;
-          }
-        }
-
+        const result = requestRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
+        const invalidate = result?.invalidate;
         debugLog(debugName, "rows.request", {
-          cacheSize: loadedRowsState.rowCache.size,
           count: safeEnd - safeStart,
+          durationMs: Number((debugNowMs() - requestStartedAt).toFixed(1)),
           force: options?.force === true,
-          hasMissingRow,
+          invalidate: Array.isArray(invalidate) ? invalidate.length : invalidate === true,
           reason: options?.reason ?? "unknown",
           start: safeStart,
         });
 
-        if (hasMissingRow) {
-          const fetchedRows = getRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
-          const styles = getStyles?.(loadedRowsState.document) ?? loadedRowsState.styles;
-          const timing = getTiming?.(loadedRowsState.document) ?? loadedRowsState.timing;
-          debugLog(debugName, "rows.fetched", {
-            count: safeEnd - safeStart,
-            fetchedRows: fetchedRows.length,
-            getRowsMs: Number((debugNowMs() - requestStartedAt).toFixed(1)),
-            reason: options?.reason ?? "unknown",
-            start: safeStart,
-          });
-
-          if (options?.reason === "scroll") {
-            for (const row of fetchedRows) {
-              const rowIndex = getRowIndex(row);
-              if (!loadedRowsState.rowCache.has(rowIndex)) {
-                loadedRowsState.rowCache.set(rowIndex, row);
-              }
+        if (result?.styles || result?.timing) {
+          setRowsState((currentRowsState) => {
+            const isLoadedDocumentCurrent = rowsStateRef.current.document === loadedRowsState.document;
+            if (currentRowsState.document !== loadedRowsState.document && !isLoadedDocumentCurrent) {
+              debugLog(debugName, "rows.stateSkipped", {
+                reason: options?.reason ?? "unknown",
+              });
+              return currentRowsState;
             }
-            rowsStateRef.current = {
-              ...loadedRowsState,
-              styles,
-              timing,
+
+            const baseRowsState = currentRowsState.document === loadedRowsState.document
+              ? currentRowsState
+              : loadedRowsState;
+            const nextRowsState = {
+              ...baseRowsState,
+              styles: result.styles ?? baseRowsState.styles,
+              timing: result.timing ?? baseRowsState.timing,
             };
-          } else {
-            setRowsState((currentRowsState) => {
-              const isLoadedDocumentCurrent = rowsStateRef.current.document === loadedRowsState.document;
-              if (currentRowsState.document !== loadedRowsState.document && !isLoadedDocumentCurrent) {
-                debugLog(debugName, "rows.commitSkipped", {
-                  reason: options?.reason ?? "unknown",
-                });
-                return currentRowsState;
-              }
+            rowsStateRef.current = nextRowsState;
+            return nextRowsState;
+          });
+        }
 
-              const baseRowsState = currentRowsState.document === loadedRowsState.document
-                ? currentRowsState
-                : loadedRowsState;
-              const nextRowCache = new Map(baseRowsState.rowCache);
-              for (const row of fetchedRows) {
-                const rowIndex = getRowIndex(row);
-                if (options?.force === true || !nextRowCache.has(rowIndex)) {
-                  nextRowCache.set(rowIndex, row);
-                }
-              }
-
-              return {
-                ...baseRowsState,
-                rowCache: nextRowCache,
-                rowsVersion: baseRowsState.rowsVersion + 1,
-                styles,
-                timing,
-              };
-            });
-            for (const row of fetchedRows) {
-              bumpRowVersion(rowVersions$, getRowIndex(row));
-            }
+        if (invalidate === true) {
+          invalidateRange(safeStart, safeEnd - safeStart);
+        } else if (Array.isArray(invalidate)) {
+          for (const rowIndex of invalidate) {
+            bumpRowVersion(rowVersions$, rowIndex);
           }
         }
       }
     }
-  }, [debugName, getRowIndex, getRows, getStyles, getTiming, rowVersions$]);
+  }, [debugName, invalidateRange, requestRows, rowVersions$]);
 
   const itemIndexes = useMemo(
     () => createIdentityIndexArray(activeRowsState.itemCount),
@@ -453,12 +427,12 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   );
 
   return {
+    dataVersion: activeRowsState.dataVersion,
     itemCount: activeRowsState.itemCount,
     itemIndexes,
+    invalidateRange,
     requestRange,
-    rowCache: activeRowsState.rowCache,
     rowVersions$,
-    rowsVersion: activeRowsState.rowsVersion,
     styles: activeRowsState.styles,
     timing: activeRowsState.timing,
   };
@@ -466,6 +440,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 
 export function VirtualizedFixedDocumentList<TRow>({
   adaptiveRender,
+  dataVersion,
   debugName,
   extraData,
   getRow,
@@ -484,10 +459,8 @@ export function VirtualizedFixedDocumentList<TRow>({
   recycleItems = true,
   renderRow,
   requestRange,
-  rowCache,
   rowVersions$: rowVersionsProp$,
   rowHeight,
-  rowsVersion,
   style,
 }: VirtualizedFixedDocumentListProps<TRow>) {
   const hasRequestedInitialRangeRef = useRef(false);
@@ -511,19 +484,17 @@ export function VirtualizedFixedDocumentList<TRow>({
   const listExtraData = useMemo(
     () => ({
       extraData,
-      rowsVersion,
     }),
-    [extraData, rowsVersion],
+    [extraData],
   );
 
   useEffect(() => {
     renderCountRef.current += 1;
     debugLog(debugName, "list.renderCommitted", {
-      cacheSize: rowCache?.size ?? 0,
+      dataVersion,
       elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
       itemCount: itemIndexes.length,
       renderCount: renderCountRef.current,
-      rowsVersion,
     });
   });
 
@@ -531,16 +502,16 @@ export function VirtualizedFixedDocumentList<TRow>({
     if (!hasLoggedFirstCommitRef.current) {
       hasLoggedFirstCommitRef.current = true;
       debugLog(debugName, "list.commit.first", {
+        dataVersion,
         elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
         itemCount: itemIndexes.length,
-        rowsVersion,
       });
     } else {
       debugLog(debugName, "list.commit", {
+        dataVersion,
         elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
         itemCount: itemIndexes.length,
         renderCount: renderCountRef.current,
-        rowsVersion,
       });
     }
   });
@@ -656,18 +627,18 @@ export function VirtualizedFixedDocumentList<TRow>({
     const eventName = hasLoggedFirstLayoutRef.current ? "list.layout" : "list.layout.first";
     hasLoggedFirstLayoutRef.current = true;
     debugLog(debugName, "list.layout", {
+      dataVersion,
       elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
       itemCount: itemIndexes.length,
-      rowsVersion,
     });
     debugLog(debugName, eventName, {
+      dataVersion,
       elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
       itemCount: itemIndexes.length,
-      rowsVersion,
     });
 
     if (!hasRequestedInitialRangeRef.current) {
@@ -692,7 +663,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       }
     }
     emitTopItemChanged();
-  }, [debugName, emitTopItemChanged, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestLegendListRange, requestVisibleRange, rowsVersion]);
+  }, [dataVersion, debugName, emitTopItemChanged, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestLegendListRange, requestVisibleRange]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
@@ -726,7 +697,6 @@ export function VirtualizedFixedDocumentList<TRow>({
         listIndex,
         renderItemBatchRef,
         renderRow,
-        rowCache,
       };
 
       const renderedItem = rowVersionsProp$ ? (
@@ -735,12 +705,12 @@ export function VirtualizedFixedDocumentList<TRow>({
           rowVersions$={rowVersionsProp$}
         />
       ) : (
-        <VirtualizedFixedDocumentListRowContent {...rowProps} />
+        <VirtualizedFixedDocumentListRowContent {...rowProps} rowVersion={0} />
       );
       recordCallbackDebug(debugName, "list.renderItemCallbackFrame", renderItemCallbackBatchRef, index, renderItemStartedAt);
       return renderedItem;
     },
-    [adaptiveRender, debugName, getRow, renderRow, rowCache, rowVersionsProp$],
+    [adaptiveRender, debugName, getRow, renderRow, rowVersionsProp$],
   );
 
   const getFixedItemSize = useCallback((item: number | undefined, listIndex: number) => {
@@ -754,10 +724,10 @@ export function VirtualizedFixedDocumentList<TRow>({
         listIndex,
       });
     }
-    const size = getItemSize?.(index, rowCache?.get(index)) ?? rowHeight;
+    const size = getItemSize?.(index) ?? rowHeight;
     recordCallbackDebug(debugName, "list.getFixedItemSizeFrame", getItemSizeBatchRef, index, startedAt);
     return size;
-  }, [debugName, getItemSize, rowCache, rowHeight]);
+  }, [debugName, getItemSize, rowHeight]);
 
   const getLegendItemType = useCallback((item: number | undefined, listIndex: number) => {
     const startedAt = debugNowMs();
@@ -770,10 +740,10 @@ export function VirtualizedFixedDocumentList<TRow>({
         listIndex,
       });
     }
-    const itemType = getItemType?.(index, rowCache?.get(index));
+    const itemType = getItemType?.(index);
     recordCallbackDebug(debugName, "list.getItemTypeFrame", getItemTypeBatchRef, index, startedAt);
     return itemType;
-  }, [debugName, getItemType, rowCache]);
+  }, [debugName, getItemType]);
 
   const keyExtractor = useCallback((item: number | undefined, index: number) => {
     const startedAt = debugNowMs();
@@ -793,6 +763,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   return (
     <LegendList
       data={itemIndexes}
+      dataVersion={dataVersion}
       extraData={listExtraData}
       experimental_adaptiveRender={adaptiveRender}
       getFixedItemSize={getFixedItemSize}

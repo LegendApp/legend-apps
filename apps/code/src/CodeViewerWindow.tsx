@@ -262,7 +262,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const loadedFileRequestVersionRef = useRef(0);
   const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
-  const loggedRowsVersionRef = useRef(-1);
+  const loggedRowsRequestVersionRef = useRef(-1);
   const loadedFilePath = state.status === "loaded" ? state.filePath : null;
   const documentSnapshot = useMemo<SourceDocumentSnapshot | null>(
     () => state.status === "loaded"
@@ -292,16 +292,16 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         );
       }
     },
-    onRowsFetched: (rowsTrace, rowsVersion) => {
+    onRowsFetched: (rowsTrace, requestVersion) => {
       const loadTrace = loadTraceRef.current;
       if (
         state.status === "loaded" &&
         loadTrace?.document === state.document &&
         rowsTrace.document === state.document &&
-        rowsVersion > 0 &&
-        loggedRowsVersionRef.current !== rowsVersion
+        requestVersion > 0 &&
+        loggedRowsRequestVersionRef.current !== requestVersion
       ) {
-        loggedRowsVersionRef.current = rowsVersion;
+        loggedRowsRequestVersionRef.current = requestVersion;
         const effectAt = nowMs();
         measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
           logCodeRowsTiming({
@@ -331,10 +331,9 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   useEffect(() => {
     renderCountRef.current += 1;
     debugLog("window.renderCommitted", {
-      cacheSize: sourceRows.rowCache.size,
+      dataVersion: sourceRows.dataVersion,
       itemCount: sourceRows.itemIndexes.length,
       renderCount: renderCountRef.current,
-      rowsVersion: sourceRows.rowsVersion,
       state: state.status,
     });
   });

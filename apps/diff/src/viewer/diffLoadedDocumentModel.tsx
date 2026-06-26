@@ -100,22 +100,27 @@ export function useDiffLoadedModel({
     },
     [state],
   );
-  const getRowIndex = useCallback((row: DiffRenderRow) => row.index, []);
-  const getRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+  const requestRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const startedAt = nowMs();
     const shouldHighlight = options?.reason === "highlight";
-    const rows = shouldHighlight
-      ? document.getRows(start, count)
-      : document.getPlainRows(start, count);
+    if (shouldHighlight) {
+      document.getRows(start, count);
+    }
     logDiffOpenTiming("viewer.rowsFetched", {
       count,
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       reason: options?.reason ?? "unknown",
-      rows: rows.length,
+      rows: count,
       start,
       tokenized: shouldHighlight,
     });
-    return rows;
+    return shouldHighlight
+      ? {
+          invalidate: true,
+          styles: document.getStyles(),
+          timing: document.getTiming(),
+        }
+      : undefined;
   }, []);
   const getStyles = useCallback((document: DiffDocument) => {
     const startedAt = nowMs();
@@ -129,12 +134,20 @@ export function useDiffLoadedModel({
   const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
   const diffRows = useVirtualizedDocumentRows({
     debugName: "diff",
-    getRowIndex,
-    getRows,
     getStyles,
     getTiming,
+    requestRows,
     snapshot,
   });
+  const getRow = useCallback((index: number, rowVersion: number) => {
+    if (state.status === "loaded") {
+      const rows = rowVersion > 0
+        ? state.document.getRows(index, 1)
+        : state.document.getPlainRows(index, 1);
+      return rows[0];
+    }
+    return undefined;
+  }, [state]);
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(diffRows.styles), [diffRows.styles]);
   const fileHeaderRowIndexes = useMemo(() => {
     const startedAt = nowMs();
@@ -291,6 +304,7 @@ export function useDiffLoadedModel({
     fileByIndex,
     fileByRowStart,
     fileHeaderRowIndexes,
+    getRow,
     getVisibleListIndex,
     sideBySideFileHeaderIndexes,
     sideBySideItemIndexes,
