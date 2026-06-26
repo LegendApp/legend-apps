@@ -1,0 +1,229 @@
+import type {
+  DiffDocument,
+  DiffFileSummary,
+  DiffLoadTiming,
+  DiffRenderRow,
+  DiffSyntaxStyle,
+} from "@legend-desktop/diff-parser";
+import type { Observable } from "@legendapp/state";
+import { useObservable } from "@legendapp/state/react";
+import { createContext, type ReactNode, type SetStateAction, useCallback, useContext, useMemo } from "react";
+import type { DiffOpenSource } from "./diffFiles";
+import type { DiffSettingsFile } from "./diffSettings";
+
+export type DiffLoadTrace = {
+  document: DiffDocument | null;
+  folderPath: string;
+  loadStartedAt: number;
+  nativeResolvedAt: number;
+  setStateAt: number;
+};
+
+export type DiffSplitPaneMetrics = {
+  contentHeight: number;
+  contentWidth: number;
+  contentX: number;
+  sidebarHeight: number;
+  sidebarWidth: number;
+};
+
+export type DiffFatalError = {
+  message: string;
+  title: string;
+};
+
+export type DiffRecoverableError = {
+  kind?: "generic" | "permission";
+  message: string;
+  recoverySteps?: string[];
+  source: DiffOpenSource | null;
+  title: string;
+};
+
+export type DiffViewerState =
+  | {
+    status: "empty";
+    folderPath: null;
+    source: null;
+  }
+  | {
+    status: "loaded";
+    folderPath: string;
+    source: DiffOpenSource;
+    document: DiffDocument;
+    files: DiffFileSummary[];
+    initialRows: DiffRenderRow[];
+    styles: DiffSyntaxStyle[];
+    syntaxTheme: DiffSettingsFile["syntaxTheme"];
+    timing: DiffLoadTiming;
+  }
+  | {
+    status: "fatal";
+    error: DiffFatalError;
+    folderPath: string | null;
+    source: DiffOpenSource | null;
+  };
+
+export type DiffLoadedState = Extract<DiffViewerState, { status: "loaded" }>;
+
+export const emptyDiffViewerState: DiffViewerState = {
+  status: "empty",
+  folderPath: null,
+  source: null,
+};
+
+export type DiffViewerModel = {
+  activeFileIndex$: Observable<number | null>;
+  collapsedFileIndexes$: Observable<Set<number>>;
+  diffPaneHeight$: Observable<number>;
+  documentError$: Observable<DiffRecoverableError | null>;
+  loadingSource$: Observable<DiffOpenSource | null>;
+  openError$: Observable<DiffRecoverableError | null>;
+  setCollapsedFileIndexesValue: (nextValue: SetStateAction<Set<number>>) => void;
+  setDiffPaneHeightValue: (nextHeight: number) => void;
+  setDocumentErrorValue: (nextError: DiffRecoverableError | null) => void;
+  setLoadingSourceValue: (nextValue: SetStateAction<DiffOpenSource | null>) => void;
+  setOpenErrorValue: (nextError: DiffRecoverableError | null) => void;
+  setSidebarCollapsedValue: (nextValue: SetStateAction<boolean>) => void;
+  setSplitPaneMetricsValue: (nextMetrics: DiffSplitPaneMetrics) => void;
+  setUrlInputErrorValue: (nextError: string | null) => void;
+  setUrlInputValue: (nextValue: string) => void;
+  setViewerState: (nextState: DiffViewerState) => void;
+  sidebarCollapsed$: Observable<boolean>;
+  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
+  state$: Observable<DiffViewerState>;
+  urlInput$: Observable<string>;
+  urlInputError$: Observable<string | null>;
+};
+
+const DiffViewerModelContext = createContext<DiffViewerModel | null>(null);
+
+function resolveSetStateAction<T>(currentValue: T, nextValue: SetStateAction<T>) {
+  return typeof nextValue === "function"
+    ? (nextValue as (value: T) => T)(currentValue)
+    : nextValue;
+}
+
+export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
+  const state$ = useObservable<DiffViewerState>(emptyDiffViewerState);
+  const urlInput$ = useObservable("");
+  const urlInputError$ = useObservable<string | null>(null);
+  const openError$ = useObservable<DiffRecoverableError | null>(null);
+  const documentError$ = useObservable<DiffRecoverableError | null>(null);
+  const loadingSource$ = useObservable<DiffOpenSource | null>(null);
+  const sidebarCollapsed$ = useObservable(false);
+  const collapsedFileIndexes$ = useObservable<Set<number>>(new Set());
+  const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>({
+    contentHeight: 0,
+    contentWidth: 0,
+    contentX: 0,
+    sidebarHeight: 0,
+    sidebarWidth: 0,
+  });
+  const diffPaneHeight$ = useObservable(0);
+  const activeFileIndex$ = useObservable<number | null>(null);
+  const setViewerState = useCallback((nextState: DiffViewerState) => {
+    state$.set(nextState);
+  }, [state$]);
+  const setUrlInputValue = useCallback((nextValue: string) => {
+    urlInput$.set(nextValue);
+  }, [urlInput$]);
+  const setUrlInputErrorValue = useCallback((nextError: string | null) => {
+    urlInputError$.set(nextError);
+  }, [urlInputError$]);
+  const setOpenErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
+    openError$.set(nextError);
+  }, [openError$]);
+  const setDocumentErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
+    documentError$.set(nextError);
+  }, [documentError$]);
+  const setLoadingSourceValue = useCallback((nextValue: SetStateAction<DiffOpenSource | null>) => {
+    const currentLoadingSource = loadingSource$.peek();
+    const nextLoadingSource = resolveSetStateAction(currentLoadingSource, nextValue);
+    if (nextLoadingSource !== currentLoadingSource) {
+      loadingSource$.set(nextLoadingSource);
+    }
+  }, [loadingSource$]);
+  const setSidebarCollapsedValue = useCallback((nextValue: SetStateAction<boolean>) => {
+    const currentSidebarCollapsed = sidebarCollapsed$.peek();
+    const nextSidebarCollapsed = resolveSetStateAction(currentSidebarCollapsed, nextValue);
+    if (nextSidebarCollapsed !== currentSidebarCollapsed) {
+      sidebarCollapsed$.set(nextSidebarCollapsed);
+    }
+  }, [sidebarCollapsed$]);
+  const setCollapsedFileIndexesValue = useCallback((nextValue: SetStateAction<Set<number>>) => {
+    const currentIndexes = collapsedFileIndexes$.peek();
+    const nextIndexes = resolveSetStateAction(currentIndexes, nextValue);
+    if (nextIndexes !== currentIndexes) {
+      collapsedFileIndexes$.set(nextIndexes);
+    }
+  }, [collapsedFileIndexes$]);
+  const setSplitPaneMetricsValue = useCallback((nextMetrics: DiffSplitPaneMetrics) => {
+    splitPaneMetrics$.set(nextMetrics);
+  }, [splitPaneMetrics$]);
+  const setDiffPaneHeightValue = useCallback((nextHeight: number) => {
+    diffPaneHeight$.set(nextHeight);
+  }, [diffPaneHeight$]);
+  const model = useMemo<DiffViewerModel>(
+    () => ({
+      activeFileIndex$,
+      collapsedFileIndexes$,
+      diffPaneHeight$,
+      documentError$,
+      loadingSource$,
+      openError$,
+      setCollapsedFileIndexesValue,
+      setDiffPaneHeightValue,
+      setDocumentErrorValue,
+      setLoadingSourceValue,
+      setOpenErrorValue,
+      setSidebarCollapsedValue,
+      setSplitPaneMetricsValue,
+      setUrlInputErrorValue,
+      setUrlInputValue,
+      setViewerState,
+      sidebarCollapsed$,
+      splitPaneMetrics$,
+      state$,
+      urlInput$,
+      urlInputError$,
+    }),
+    [
+      activeFileIndex$,
+      collapsedFileIndexes$,
+      diffPaneHeight$,
+      documentError$,
+      loadingSource$,
+      openError$,
+      setCollapsedFileIndexesValue,
+      setDiffPaneHeightValue,
+      setDocumentErrorValue,
+      setLoadingSourceValue,
+      setOpenErrorValue,
+      setSidebarCollapsedValue,
+      setSplitPaneMetricsValue,
+      setUrlInputErrorValue,
+      setUrlInputValue,
+      setViewerState,
+      sidebarCollapsed$,
+      splitPaneMetrics$,
+      state$,
+      urlInput$,
+      urlInputError$,
+    ],
+  );
+
+  return (
+    <DiffViewerModelContext.Provider value={model}>
+      {children}
+    </DiffViewerModelContext.Provider>
+  );
+}
+
+export function useDiffViewerModel() {
+  const model = useContext(DiffViewerModelContext);
+  if (!model) {
+    throw new Error("useDiffViewerModel must be used within DiffViewerModelProvider");
+  }
+  return model;
+}
