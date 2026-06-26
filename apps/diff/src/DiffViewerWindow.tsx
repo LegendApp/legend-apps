@@ -170,12 +170,14 @@ type DiffLoadedBodyProps = {
 
 type DiffListExtraData = {
   borderColor: string;
+  fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
   mutedColor: string;
   rowHeight: number;
   sideBySideTokenStyleCount: number;
+  syntaxAppearance: "dark" | "light";
   syntaxTheme: DiffSettingsFile["syntaxTheme"];
   tokenStyleCount: number;
 };
@@ -929,6 +931,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
+  const fileHeaderBackgroundColor = displayTheme.colors.surfaceMuted;
   const mutedColor = displayTheme.colors.muted;
 
   useObserveEffect(() => {
@@ -1454,30 +1457,35 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const listExtraData = useMemo<DiffListExtraData>(
     () => ({
       borderColor: displayTheme.colors.border,
+      fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
       foregroundColor,
       mutedColor,
       rowHeight,
       sideBySideTokenStyleCount: currentSideBySideTokenStyleById.size,
+      syntaxAppearance: syntaxTheme.appearance,
       syntaxTheme: listSyntaxTheme,
       tokenStyleCount: tokenStyleById.size,
     }),
     [
       currentSideBySideTokenStyleById.size,
       displayTheme.colors.border,
+      fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
       foregroundColor,
       listSyntaxTheme,
       mutedColor,
       rowHeight,
+      syntaxTheme.appearance,
       tokenStyleById.size,
     ],
   );
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
       borderColor: displayTheme.colors.border,
+      fileHeaderBackgroundColor,
       fileByIndex,
       fileByRowStart,
       fileHeaderRowIndexes,
@@ -1487,12 +1495,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor,
       rowHeight,
       sideBySideTokenStyleById: currentSideBySideTokenStyleById,
+      syntaxAppearance: syntaxTheme.appearance,
       tokenStyleById,
       toggleFileCollapsed,
     }),
     [
       currentSideBySideTokenStyleById,
       displayTheme.colors.border,
+      fileHeaderBackgroundColor,
       fileByIndex,
       fileByRowStart,
       fileHeaderRowIndexes,
@@ -1501,6 +1511,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       mutedColor,
       rowHeight,
+      syntaxTheme.appearance,
       toggleFileCollapsed,
       tokenStyleById,
     ],

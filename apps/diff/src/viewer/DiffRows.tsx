@@ -32,6 +32,7 @@ import {
 
 export type DiffRenderFields = {
   borderColor: string;
+  fileHeaderBackgroundColor: string;
   fileByIndex: ReadonlyMap<number, DiffFileSummary>;
   fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
   fileHeaderRowIndexes: ReadonlySet<number>;
@@ -41,6 +42,7 @@ export type DiffRenderFields = {
   mutedColor: string;
   rowHeight: number;
   sideBySideTokenStyleById: SyntaxStyleMap;
+  syntaxAppearance: "dark" | "light";
   tokenStyleById: SyntaxStyleMap;
   toggleFileCollapsed: (fileIndex: number) => void;
 };
@@ -50,12 +52,14 @@ type DiffFileHeaderRowProps = {
   fallbackFileIndex: number;
   fallbackPath: string;
   file: DiffFileSummary | undefined;
+  fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
   isCollapsed: boolean;
   mutedColor: string;
   onToggleFileCollapsed: (fileIndex: number) => void;
+  syntaxAppearance: "dark" | "light";
 };
 
 type DiffUnifiedRowProps = {
@@ -84,8 +88,27 @@ type DiffSideBySideLineProps = {
   rowHeight: number;
   rowVisible: boolean;
   side: "new" | "old";
+  syntaxAppearance: "dark" | "light";
   tokenStyleById: SyntaxStyleMap;
 };
+
+const diffDarkPalette = {
+  addAccent: "#7ee787",
+  addBackground: "#17351f",
+  removeAccent: "#ff7b72",
+  removeBackground: "#3a1d24",
+};
+
+const diffLightPalette = {
+  addAccent: "#1a7f37",
+  addBackground: "#dafbe1",
+  removeAccent: "#cf222e",
+  removeBackground: "#ffebe9",
+};
+
+function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
+  return syntaxAppearance === "dark" ? diffDarkPalette : diffLightPalette;
+}
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
   const sharedPropsAreEqual = previousProps.adaptiveRender === nextProps.adaptiveRender
@@ -96,6 +119,7 @@ function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps,
     && previousProps.rowHeight === nextProps.rowHeight
     && previousProps.rowVisible === nextProps.rowVisible
     && previousProps.side === nextProps.side
+    && previousProps.syntaxAppearance === nextProps.syntaxAppearance
     && previousProps.tokenStyleById === nextProps.tokenStyleById;
 
   return sharedPropsAreEqual
@@ -112,6 +136,7 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
   rowHeight,
   rowVisible,
   side,
+  syntaxAppearance,
   tokenStyleById,
 }: DiffSideBySideLineProps) {
   const visibleRow = rowVisible ? row : undefined;
@@ -119,13 +144,13 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
   const isAdd = side === "new" && visibleRow?.changeType === diffChangeTypeAdd;
   const isChanged = isRemove || isAdd;
   const marker = isRemove ? "-" : isAdd ? "+" : " ";
-  const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
+  const palette = getDiffRowPalette(syntaxAppearance);
+  const accentColor = isAdd ? palette.addAccent : isRemove ? palette.removeAccent : "transparent";
   const rowBackgroundColor = isAdd
-    ? "#17351f"
+    ? palette.addBackground
     : isRemove
-      ? "#3a1d24"
+      ? palette.removeBackground
       : "transparent";
-  const textColor = isChanged ? foregroundColor : "#c9d1d9";
   const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
 
   return (
@@ -146,7 +171,7 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
       </LightText>
       <TokenizedText
         adaptiveRender={adaptiveRender}
-        foregroundColor={textColor}
+        foregroundColor={foregroundColor}
         line={visibleRow}
         style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
         tokenStyleById={tokenStyleById}
@@ -160,12 +185,14 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
   fallbackFileIndex,
   fallbackPath,
   file,
+  fileHeaderBackgroundColor,
   fontFamily,
   fontSize,
   foregroundColor,
   isCollapsed,
   mutedColor,
   onToggleFileCollapsed,
+  syntaxAppearance,
 }: DiffFileHeaderRowProps) {
   const path = file?.path ?? fallbackPath;
   const filename = getFilename(path);
@@ -174,6 +201,7 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
   const statusPresentation = getFileStatusPresentation(file);
   const pathContext = file ? getFilePathContext(file, directory) : directory ? `${directory}/` : "";
   const fileHeaderLineHeight = Math.max(18, fontSize + 8);
+  const palette = getDiffRowPalette(syntaxAppearance);
 
   return (
     <Pressable
@@ -182,7 +210,7 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
       style={({ pressed }) => [
         styles.fileRow,
         {
-          backgroundColor: "#252526",
+          backgroundColor: fileHeaderBackgroundColor,
           borderColor,
           opacity: pressed ? 0.72 : 1,
         },
@@ -210,10 +238,10 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
         <View style={styles.fileMeta}>
           {!file.isBinary ? (
             <>
-              <Text selectable={false} style={[styles.fileAdded, { color: "#7ee787", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
+              <Text selectable={false} style={[styles.fileAdded, { color: palette.addAccent, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
                 +{file.additions}
               </Text>
-              <Text selectable={false} style={[styles.fileRemoved, { color: "#ff7b72", fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
+              <Text selectable={false} style={[styles.fileRemoved, { color: palette.removeAccent, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
                 -{file.deletions}
               </Text>
             </>
@@ -232,6 +260,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   row,
 }: DiffUnifiedRowProps) {
   const borderColor = renderFields.borderColor;
+  const fileHeaderBackgroundColor = renderFields.fileHeaderBackgroundColor;
   const fileByIndex = renderFields.fileByIndex;
   const fileByRowStart = renderFields.fileByRowStart;
   const fileHeaderRowIndexes = renderFields.fileHeaderRowIndexes;
@@ -240,6 +269,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const foregroundColor = renderFields.foregroundColor;
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
+  const syntaxAppearance = renderFields.syntaxAppearance;
   const tokenStyleById = renderFields.tokenStyleById;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
@@ -249,15 +279,13 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const isChanged = isAdd || isRemove;
   const isFileHeader = row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index);
   const file = row ? fileByIndex.get(row.fileIndex) : fileByRowStart.get(index);
-  const accentColor = isAdd ? "#7ee787" : isRemove ? "#ff7b72" : "transparent";
+  const palette = getDiffRowPalette(syntaxAppearance);
+  const accentColor = isAdd ? palette.addAccent : isRemove ? palette.removeAccent : "transparent";
   const rowBackgroundColor = isAdd
-    ? "#17351f"
+    ? palette.addBackground
     : isRemove
-      ? "#3a1d24"
+      ? palette.removeBackground
       : "transparent";
-  const textColor = isChanged || isFileHeader
-    ? foregroundColor
-    : "#c9d1d9";
   const lineNumberColor = isChanged ? accentColor : mutedColor;
   const marker = isAdd ? "+" : isRemove ? "-" : " ";
 
@@ -269,12 +297,14 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
         fallbackFileIndex={fileIndex}
         fallbackPath={row?.text ?? ""}
         file={file}
+        fileHeaderBackgroundColor={fileHeaderBackgroundColor}
         fontFamily={fontFamily}
         fontSize={fontSize}
         foregroundColor={foregroundColor}
         isCollapsed={collapsedFileIndexes.has(fileIndex)}
         mutedColor={mutedColor}
         onToggleFileCollapsed={toggleFileCollapsed}
+        syntaxAppearance={syntaxAppearance}
       />
     );
   }
@@ -292,7 +322,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       </LightText>
       <TokenizedText
         adaptiveRender={adaptiveRender}
-        foregroundColor={textColor}
+        foregroundColor={foregroundColor}
         line={row}
         style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
         tokenStyleById={tokenStyleById}
@@ -309,6 +339,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   row,
 }: DiffSideBySideRowProps) {
   const borderColor = renderFields.borderColor;
+  const fileHeaderBackgroundColor = renderFields.fileHeaderBackgroundColor;
   const fileByIndex = renderFields.fileByIndex;
   const fileByRowStart = renderFields.fileByRowStart;
   const fontFamily = renderFields.fontFamily;
@@ -317,6 +348,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
   const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleById;
+  const syntaxAppearance = renderFields.syntaxAppearance;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
 
@@ -333,12 +365,14 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         fallbackFileIndex={fileIndex}
         fallbackPath={file?.path ?? ""}
         file={file}
+        fileHeaderBackgroundColor={fileHeaderBackgroundColor}
         fontFamily={fontFamily}
         fontSize={fontSize}
         foregroundColor={foregroundColor}
         isCollapsed={collapsedFileIndexes.has(fileIndex)}
         mutedColor={mutedColor}
         onToggleFileCollapsed={toggleFileCollapsed}
+        syntaxAppearance={syntaxAppearance}
       />
     );
   }
@@ -356,6 +390,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           rowHeight={rowHeight}
           rowVisible={row.oldRowVisible}
           side="old"
+          syntaxAppearance={syntaxAppearance}
           tokenStyleById={sideBySideTokenStyleById}
         />
       </View>
@@ -372,6 +407,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           rowHeight={rowHeight}
           rowVisible={row.newRowVisible}
           side="new"
+          syntaxAppearance={syntaxAppearance}
           tokenStyleById={sideBySideTokenStyleById}
         />
       </View>
