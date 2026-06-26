@@ -90,6 +90,8 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   getItemType?: (index: number, row: TRow | undefined) => string | undefined;
   initialRequestRowCount?: number;
   itemIndexes: Array<number | undefined>;
+  ListHeaderComponent?: ReactElement;
+  listHeaderHeight?: number;
   listRef?: Ref<LegendListRef>;
   onInitialRowsRequested?: (start: number, count: number) => void;
   onTopItemChanged?: (index: number, listIndex: number) => void;
@@ -463,6 +465,8 @@ export function VirtualizedFixedDocumentList<TRow>({
   getItemType,
   initialRequestRowCount,
   itemIndexes,
+  ListHeaderComponent,
+  listHeaderHeight = 0,
   listRef,
   lineOverscan = 0,
   onInitialRowsRequested,
@@ -581,7 +585,8 @@ export function VirtualizedFixedDocumentList<TRow>({
   }, [itemIndexes, onTopItemChanged]);
 
   const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason) => {
-    const visibleStart = Math.floor(offsetY / rowHeight);
+    const rowOffsetY = Math.max(0, offsetY - listHeaderHeight);
+    const visibleStart = Math.floor(rowOffsetY / rowHeight);
     const visibleCount = Math.ceil(height / rowHeight);
     const listStart = includeOverscan ? visibleStart - lineOverscan : visibleStart;
     const initialCount = initialRequestRowCount ?? visibleCount;
@@ -595,6 +600,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       listCount: documentRange.listCount,
       listStart: documentRange.listStart,
       offsetY,
+      rowOffsetY,
       reason,
       start: documentRange.start,
       visibleCount,
@@ -607,7 +613,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, reason);
     }
     return documentRange;
-  }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, onVisibleRowsRequested, requestRange, rowHeight]);
+  }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, listHeaderHeight, onVisibleRowsRequested, requestRange, rowHeight]);
 
   const requestLegendListRange = useCallback((reason: VirtualizedDocumentRequestReason) => {
     const listState = internalListRef.current?.getState();
@@ -786,6 +792,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}
       keyExtractor={keyExtractor}
+      ListHeaderComponent={ListHeaderComponent}
       ref={setListRef}
       onLayout={handleLayout}
       onScroll={handleScroll}

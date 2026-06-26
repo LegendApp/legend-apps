@@ -82,7 +82,8 @@ const diffBackgroundTokenizeStartDelayMs = 160;
 const diffLineOverscan = 240;
 const diffOverscanRequestDelayMs = 80;
 const diffFileHeaderRowHeight = 52;
-const diffSidebarTopInset = 40;
+const diffTitlebarTopInset = 52;
+const diffSidebarTopInset = diffTitlebarTopInset;
 const diffDocumentErrorHeight = 78;
 const diffDocumentPermissionErrorHeight = 134;
 const diffScrollIdleMs = 120;
@@ -180,17 +181,17 @@ type DiffSideBySideRowProps = {
 };
 
 type DiffRenderFields = {
-  borderColorRef: { current: string };
-  fileByIndexRef: { current: ReadonlyMap<number, DiffFileSummary> };
-  fileByRowStartRef: { current: ReadonlyMap<number, DiffFileSummary> };
-  fileHeaderRowIndexesRef: { current: ReadonlySet<number> };
-  fontFamilyRef: { current: string };
-  fontSizeRef: { current: number };
-  foregroundColorRef: { current: string };
-  mutedColorRef: { current: string };
-  rowHeightRef: { current: number };
-  sideBySideTokenStyleByIdRef: { current: SyntaxStyleMap };
-  tokenStyleByIdRef: { current: SyntaxStyleMap };
+  borderColor: string;
+  fileByIndex: ReadonlyMap<number, DiffFileSummary>;
+  fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
+  fileHeaderRowIndexes: ReadonlySet<number>;
+  fontFamily: string;
+  fontSize: number;
+  foregroundColor: string;
+  mutedColor: string;
+  rowHeight: number;
+  sideBySideTokenStyleById: SyntaxStyleMap;
+  tokenStyleById: SyntaxStyleMap;
   toggleFileCollapsed: (fileIndex: number) => void;
 };
 
@@ -357,16 +358,16 @@ const DiffUnifiedRow = memo(function DiffUnifiedRow({
   renderFields,
   row,
 }: DiffUnifiedRowProps) {
-  const borderColor = renderFields.borderColorRef.current;
-  const fileByIndex = renderFields.fileByIndexRef.current;
-  const fileByRowStart = renderFields.fileByRowStartRef.current;
-  const fileHeaderRowIndexes = renderFields.fileHeaderRowIndexesRef.current;
-  const fontFamily = renderFields.fontFamilyRef.current;
-  const fontSize = renderFields.fontSizeRef.current;
-  const foregroundColor = renderFields.foregroundColorRef.current;
-  const mutedColor = renderFields.mutedColorRef.current;
-  const rowHeight = renderFields.rowHeightRef.current;
-  const tokenStyleById = renderFields.tokenStyleByIdRef.current;
+  const borderColor = renderFields.borderColor;
+  const fileByIndex = renderFields.fileByIndex;
+  const fileByRowStart = renderFields.fileByRowStart;
+  const fileHeaderRowIndexes = renderFields.fileHeaderRowIndexes;
+  const fontFamily = renderFields.fontFamily;
+  const fontSize = renderFields.fontSize;
+  const foregroundColor = renderFields.foregroundColor;
+  const mutedColor = renderFields.mutedColor;
+  const rowHeight = renderFields.rowHeight;
+  const tokenStyleById = renderFields.tokenStyleById;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const changeType = row?.changeType ?? 0;
@@ -434,15 +435,15 @@ const DiffSideBySideRow = memo(function DiffSideBySideRow({
   renderFields,
   row,
 }: DiffSideBySideRowProps) {
-  const borderColor = renderFields.borderColorRef.current;
-  const fileByIndex = renderFields.fileByIndexRef.current;
-  const fileByRowStart = renderFields.fileByRowStartRef.current;
-  const fontFamily = renderFields.fontFamilyRef.current;
-  const fontSize = renderFields.fontSizeRef.current;
-  const foregroundColor = renderFields.foregroundColorRef.current;
-  const mutedColor = renderFields.mutedColorRef.current;
-  const rowHeight = renderFields.rowHeightRef.current;
-  const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleByIdRef.current;
+  const borderColor = renderFields.borderColor;
+  const fileByIndex = renderFields.fileByIndex;
+  const fileByRowStart = renderFields.fileByRowStart;
+  const fontFamily = renderFields.fontFamily;
+  const fontSize = renderFields.fontSize;
+  const foregroundColor = renderFields.foregroundColor;
+  const mutedColor = renderFields.mutedColor;
+  const rowHeight = renderFields.rowHeight;
+  const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleById;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
 
@@ -861,12 +862,6 @@ function getActiveDiffFile(files: readonly DiffFileSummary[], activeFileIndex: n
 
 function getJoinedPath(basePath: string, relativePath: string) {
   return `${basePath.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
-}
-
-function useLatestValueRef<T>(value: T) {
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  return valueRef;
 }
 
 function useDiffViewerState() {
@@ -1346,6 +1341,7 @@ function DiffLoadedBody({
       rows: state.document.rowCount,
       viewMode,
     });
+    const listHeader = <View style={styles.diffTitlebarSpacer} />;
     const list = viewMode === "unified" ? (
       <VirtualizedFixedDocumentList
         adaptiveRender={diffAdaptiveRender}
@@ -1353,8 +1349,10 @@ function DiffLoadedBody({
         key="unified"
         extraData={listExtraData}
         itemIndexes={visibleItemIndexes}
+        ListHeaderComponent={listHeader}
         getItemSize={getItemSize}
         getItemType={getItemType}
+        listHeaderHeight={diffTitlebarTopInset}
         lineOverscan={diffLineOverscan}
         listRef={listRef}
         onTopItemChanged={handleTopItemChanged}
@@ -1375,9 +1373,11 @@ function DiffLoadedBody({
         key={viewMode}
         extraData={listExtraData}
         itemIndexes={sideBySideItemIndexes}
+        ListHeaderComponent={listHeader}
         getItemSize={getSideBySideItemSize}
         getItemType={getSideBySideItemType}
         getRow={getSideBySideRow}
+        listHeaderHeight={diffTitlebarTopInset}
         lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
         listRef={listRef}
         onTopItemChanged={handleSideBySideTopItemChanged}
@@ -1730,7 +1730,7 @@ function useDiffLoadedModel({
         : undefined
   ), [visibleItemIndexes.length, visibleListIndexByRowIndex]);
   const collapsedFileIndexList = useMemo(
-    () => Array.from(collapsedFileIndexes).sort((left, right) => left - right),
+    () => createCollapsedFileIndexList(collapsedFileIndexes),
     [collapsedFileIndexes],
   );
   const sideBySideRowCount = useMemo(
@@ -1838,7 +1838,7 @@ function useDiffLoadedModel({
 
 function useDiffSideBySideRuntime({
   activeFileIndex$,
-  collapsedFileIndexListRef,
+  collapsedFileIndexes$,
   diffPaneHeight,
   rowHeight,
   sideBySideRowCount,
@@ -1847,7 +1847,7 @@ function useDiffSideBySideRuntime({
   viewMode,
 }: {
   activeFileIndex$: Observable<number | null>;
-  collapsedFileIndexListRef: RefObject<number[]>;
+  collapsedFileIndexes$: Observable<Set<number>>;
   diffPaneHeight: number;
   rowHeight: number;
   sideBySideRowCount: number;
@@ -1868,7 +1868,10 @@ function useDiffSideBySideRuntime({
     document: DiffDocument;
     ranges: DiffTokenizedRowRange[];
   } | null>(null);
-  const sideBySideRowCountRef = useLatestValueRef(sideBySideRowCount);
+  const getCurrentCollapsedFileIndexList = useCallback(
+    () => createCollapsedFileIndexList(collapsedFileIndexes$.peek()),
+    [collapsedFileIndexes$],
+  );
   const refreshSideBySideTokenStyles = useCallback((document: DiffDocument) => {
     const styles = document.getStyles();
     setSideBySideTokenStyleState((current) => (
@@ -1890,8 +1893,9 @@ function useDiffSideBySideRuntime({
     if (visibleRange?.document === document && ranges.length > 0) {
       refreshSideBySideTokenStyles(document);
       const end = visibleRange.start + visibleRange.count;
+      const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
       for (let index = visibleRange.start; index < end; index += 1) {
-        const row = document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current);
+        const row = document.getPlainSideBySideRow(index, collapsedFileIndexList);
         const oldRowIndex = row.oldRowVisible ? row.oldRow.index : -1;
         const newRowIndex = row.newRowVisible ? row.newRow.index : -1;
         const overlapsTokenizedRange = ranges.some((range) => (
@@ -1908,7 +1912,7 @@ function useDiffSideBySideRuntime({
     } else if (visibleRange && visibleRange.document !== document && pendingSideBySideTokenRangesRef.current?.document === document) {
       pendingSideBySideTokenRangesRef.current = null;
     }
-  }, [bumpSideBySideRowVersion, collapsedFileIndexListRef, refreshSideBySideTokenStyles]);
+  }, [bumpSideBySideRowVersion, getCurrentCollapsedFileIndexList, refreshSideBySideTokenStyles]);
   const resetSideBySideRuntime = useCallback(() => {
     sideBySideVisibleRangeRef.current = null;
     pendingSideBySideTokenRangesRef.current = null;
@@ -1925,32 +1929,33 @@ function useDiffSideBySideRuntime({
       const start = Math.max(0, Math.floor(lineStart));
       const count = Math.max(0, Math.ceil(lineCount));
       if (count > 0) {
-        currentState.document.getSideBySideRows(start, count, collapsedFileIndexListRef.current);
+        const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
+        currentState.document.getSideBySideRows(start, count, collapsedFileIndexList);
         refreshSideBySideTokenStyles(currentState.document);
-        const end = Math.min(sideBySideRowCountRef.current, start + count);
+        const end = Math.min(sideBySideRowCount, start + count);
         for (let index = start; index < end; index += 1) {
           bumpSideBySideRowVersion(index);
         }
       }
     }
     // Scroll-driven requests stay side-effect free so scrolling never updates React state.
-  }, [bumpSideBySideRowVersion, collapsedFileIndexListRef, refreshSideBySideTokenStyles, state$, sideBySideRowCountRef]);
+  }, [bumpSideBySideRowVersion, getCurrentCollapsedFileIndexList, refreshSideBySideTokenStyles, sideBySideRowCount, state$]);
   const getSideBySideRow = useCallback((index: number) => {
     const currentState = state$.peek();
     return currentState.status === "loaded"
-      ? currentState.document.getPlainSideBySideRow(index, collapsedFileIndexListRef.current)
+      ? currentState.document.getPlainSideBySideRow(index, getCurrentCollapsedFileIndexList())
       : undefined;
-  }, [collapsedFileIndexListRef, state$]);
+  }, [getCurrentCollapsedFileIndexList, state$]);
   const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
     const currentState = state$.peek();
     if (currentState.status === "loaded") {
-      const row = currentState.document.getPlainSideBySideRow(lineIndex, collapsedFileIndexListRef.current);
+      const row = currentState.document.getPlainSideBySideRow(lineIndex, getCurrentCollapsedFileIndexList());
       const nextFileIndex = findFileIndexForRow(currentState.files, row.sourceStart);
       if (activeFileIndex$.peek() !== nextFileIndex) {
         activeFileIndex$.set(nextFileIndex);
       }
     }
-  }, [activeFileIndex$, collapsedFileIndexListRef, state$]);
+  }, [activeFileIndex$, getCurrentCollapsedFileIndexList, state$]);
   const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
     const currentState = state$.peek();
     if (currentState.status === "loaded") {
@@ -2083,6 +2088,10 @@ function createIdentityDiffRowIndexes(length: number) {
   return Array.from({ length: count }, (_, index) => index);
 }
 
+function createCollapsedFileIndexList(collapsedFileIndexes: ReadonlySet<number>) {
+  return Array.from(collapsedFileIndexes).sort((left, right) => left - right);
+}
+
 function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {
   let low = 0;
   let high = files.length - 1;
@@ -2107,7 +2116,6 @@ function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number
 
 export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
   const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
@@ -2201,7 +2209,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   } | null>(null);
   const isRenderingInitialLoadedFrame = state.status === "loaded" && sourcesMatch(loadingSource, state.source);
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
-  const collapsedFileIndexListRef = useRef<number[]>([]);
   const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
@@ -2245,10 +2252,6 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     state,
     viewMode,
   });
-  collapsedFileIndexListRef.current = collapsedFileIndexList;
-  const getVisibleListIndexRef = useLatestValueRef(getVisibleListIndex);
-  const sideBySideListIndexByRowIndexRef = useLatestValueRef(sideBySideListIndexByRowIndex);
-  const viewModeRef = useLatestValueRef(viewMode);
   const {
     getSideBySideRow,
     handleSideBySideTopItemChanged,
@@ -2259,7 +2262,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     sideBySideTokenStyleState,
   } = useDiffSideBySideRuntime({
     activeFileIndex$,
-    collapsedFileIndexListRef,
+    collapsedFileIndexes$,
     diffPaneHeight,
     rowHeight,
     sideBySideRowCount,
@@ -2348,7 +2351,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         highlightTimeoutHandlesRef.current.add(timeoutHandle);
       }
     }
-  }, [clearHighlightTimeouts, diffRows.requestRange]);
+  }, [clearHighlightTimeouts, diffRows, state$]);
 
   const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: string) => {
     scheduleVisibleHighlight(start, count, reason);
@@ -2362,9 +2365,10 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         activeFileIndex$.set(nextFileIndex);
       }
     }
-  }, []);
+  }, [activeFileIndex$, state$]);
 
   useEffect(() => {
+    renderCountRef.current += 1;
     logDiffOpenTiming("viewer.renderCommitted", {
       cacheSize: diffRows.rowCache.size,
       itemCount: diffRows.itemIndexes.length,
@@ -2517,7 +2521,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         });
       }
     }
-  }, []);
+  }, [setDocumentErrorValue, setLoadingSourceValue, setOpenErrorValue, setViewerState, state$]);
 
   useEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
@@ -2529,7 +2533,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       });
       loadSource(initialSource, currentSyntaxTheme);
     }
-  }, [folderPath, source]);
+  }, [folderPath, loadSource, source]);
 
   useEffect(() => {
     const shouldFocusUrlInput = typeof focusUrlInputRequestId === "number" && !source && !folderPath;
@@ -2546,7 +2550,17 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         urlInputRef.current?.focus();
       });
     }
-  }, [focusUrlInputRequestId, folderPath, source]);
+  }, [
+    focusUrlInputRequestId,
+    folderPath,
+    setDocumentErrorValue,
+    setLoadingSourceValue,
+    setOpenErrorValue,
+    setUrlInputErrorValue,
+    setUrlInputValue,
+    setViewerState,
+    source,
+  ]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {
@@ -2582,7 +2596,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         }
       }
     }
-  }, []);
+  }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
 
   const openUrl = useCallback(async () => {
     if (!loadingSource$.peek()) {
@@ -2595,7 +2609,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         setUrlInputErrorValue("Enter a GitHub PR or commit URL.");
       }
     }
-  }, []);
+  }, [loadSource, loadingSource$, setOpenErrorValue, setUrlInputErrorValue, urlInput$]);
 
   const retryOpenError = useCallback(() => {
     const currentOpenError = openError$.peek();
@@ -2603,11 +2617,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       setOpenErrorValue(null);
       loadSource(currentOpenError.source, getDiffSyntaxThemeSetting());
     }
-  }, []);
+  }, [loadSource, loadingSource$, openError$, setOpenErrorValue]);
 
   const dismissDocumentError = useCallback(() => {
     setDocumentErrorValue(null);
-  }, []);
+  }, [setDocumentErrorValue]);
 
   const openPermissionSettings = useCallback(() => {
     Linking.openURL(macOSFilesAndFoldersSettingsUrl).catch((error: unknown) => {
@@ -2642,7 +2656,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         }
       }
     }
-  }, []);
+  }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -2717,7 +2731,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
     });
     return true;
-  }, []);
+  }, [loadSource, setDocumentErrorValue, state$]);
 
   const revealCurrentFolder = useCallback(() => {
     const currentSource = state$.peek().source;
@@ -2736,7 +2750,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         console.error(error instanceof Error ? error.message : String(error));
       });
     return true;
-  }, []);
+  }, [state$]);
 
   const copyText = useCallback((text: string) => {
     commandRunner.runCommand({ command: "pbcopy", input: text })
@@ -2758,7 +2772,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       didCopy = copyText(currentVisibleSource.value);
     }
     return didCopy;
-  }, []);
+  }, [copyText, state$]);
 
   const copyCurrentFilePath = useCallback(() => {
     let didCopy = false;
@@ -2771,7 +2785,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
     }
     return didCopy;
-  }, []);
+  }, [activeFileIndex$, copyText, state$]);
 
   const copyCurrentRelativePath = useCallback(() => {
     let didCopy = false;
@@ -2783,7 +2797,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       }
     }
     return didCopy;
-  }, []);
+  }, [activeFileIndex$, copyText, state$]);
 
   useObserveEffect(() => {
     const syntaxTheme = getDiffSyntaxTheme();
@@ -2835,7 +2849,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
 
     setSidebarCollapsedValue((current) => !current);
     return true;
-  }, []);
+  }, [loadingSource$, setSidebarCollapsedValue, state$]);
 
   const focusFileFilter = useCallback(() => {
     const currentState = state$.peek();
@@ -2851,7 +2865,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       fileFilterInputRef.current?.focus();
     });
     return true;
-  }, []);
+  }, [loadingSource$, setSidebarCollapsedValue, state$]);
 
   useEffect(() => registerDiffViewerActionHandlers({
     copyFilePath: copyCurrentFilePath,
@@ -2912,41 +2926,42 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       tokenStyleById.size,
     ],
   );
-  const borderColorRef = useLatestValueRef(displayTheme.colors.border);
-  const fileByIndexRef = useLatestValueRef<ReadonlyMap<number, DiffFileSummary>>(fileByIndex);
-  const fileByRowStartRef = useLatestValueRef<ReadonlyMap<number, DiffFileSummary>>(fileByRowStart);
-  const fileHeaderRowIndexesRef = useLatestValueRef<ReadonlySet<number>>(fileHeaderRowIndexes);
-  const fontFamilyRef = useLatestValueRef(fontFamily);
-  const fontSizeRef = useLatestValueRef(fontSize);
-  const foregroundColorRef = useLatestValueRef(foregroundColor);
-  const mutedColorRef = useLatestValueRef(mutedColor);
-  const rowHeightRef = useLatestValueRef(rowHeight);
-  const sideBySideTokenStyleByIdRef = useLatestValueRef(currentSideBySideTokenStyleById);
-  const tokenStyleByIdRef = useLatestValueRef(tokenStyleById);
-  const renderFieldsRef = useRef<DiffRenderFields | null>(null);
-  if (!renderFieldsRef.current) {
-    renderFieldsRef.current = {
-      borderColorRef,
-      fileByIndexRef,
-      fileByRowStartRef,
-      fileHeaderRowIndexesRef,
-      fontFamilyRef,
-      fontSizeRef,
-      foregroundColorRef,
-      mutedColorRef,
-      rowHeightRef,
-      sideBySideTokenStyleByIdRef,
-      tokenStyleByIdRef,
+  const renderFields = useMemo<DiffRenderFields>(
+    () => ({
+      borderColor: displayTheme.colors.border,
+      fileByIndex,
+      fileByRowStart,
+      fileHeaderRowIndexes,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      mutedColor,
+      rowHeight,
+      sideBySideTokenStyleById: currentSideBySideTokenStyleById,
+      tokenStyleById,
       toggleFileCollapsed,
-    };
-  }
-  const renderFields = renderFieldsRef.current;
+    }),
+    [
+      currentSideBySideTokenStyleById,
+      displayTheme.colors.border,
+      fileByIndex,
+      fileByRowStart,
+      fileHeaderRowIndexes,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      mutedColor,
+      rowHeight,
+      toggleFileCollapsed,
+      tokenStyleById,
+    ],
+  );
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const listIndex = viewModeRef.current === "unified"
-      ? getVisibleListIndexRef.current(rowStart)
-      : sideBySideListIndexByRowIndexRef.current.get(rowStart);
+    const listIndex = viewMode === "unified"
+      ? getVisibleListIndex(rowStart)
+      : sideBySideListIndexByRowIndex.get(rowStart);
     if (listIndex !== undefined) {
       listRef.current?.scrollToIndex({
         animated: true,
@@ -2956,7 +2971,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
         console.error(error instanceof Error ? error.message : String(error));
       });
     }
-  }, []);
+  }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
 
   const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
     const statusPresentation = getFileStatusPresentation(file);
@@ -2992,7 +3007,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       sidebarWidth: nextMetrics.sidebarWidth,
     });
     setSplitPaneMetricsValue(nextMetrics);
-  }, []);
+  }, [setSplitPaneMetricsValue, splitPaneMetrics$]);
 
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -3003,7 +3018,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       width: Number(event.nativeEvent.layout.width.toFixed(1)),
     });
     setDiffPaneHeightValue(nextHeight);
-  }, []);
+  }, [diffPaneHeight$, setDiffPaneHeightValue]);
 
   const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
     const currentState = state$.peek();
@@ -3013,7 +3028,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
       status: currentState.status,
       width: Number(event.nativeEvent.layout.width.toFixed(1)),
     });
-  }, []);
+  }, [state$]);
 
   const getItemType = useCallback((index: number, row: DiffRenderRow | undefined) => (
     row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"
@@ -3072,11 +3087,11 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     if (openError$.peek()) {
       setOpenErrorValue(null);
     }
-  }, []);
+  }, [openError$, setOpenErrorValue, setUrlInputErrorValue, setUrlInputValue, urlInputError$]);
 
   const dismissOpenError = useCallback(() => {
     setOpenErrorValue(null);
-  }, []);
+  }, [setOpenErrorValue]);
 
   const diffContentHeight = diffPaneHeight;
   const documentErrorHeight = documentError
@@ -3396,6 +3411,9 @@ const styles = StyleSheet.create({
   diffPaneContent: {
     flex: 1,
     minHeight: 0,
+  },
+  diffTitlebarSpacer: {
+    height: diffTitlebarTopInset,
   },
   dropOverlay: {
     alignItems: "center",
