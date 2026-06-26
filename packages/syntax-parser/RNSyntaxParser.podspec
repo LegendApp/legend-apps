@@ -15,7 +15,7 @@ Pod::Spec.new do |s|
   s.preserve_paths = "vendor/TextMateLib/**/*"
   s.resource_bundles = {
     "RNSyntaxParserThemes" => [
-      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-dark-dimmed.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json",
     ],
   }

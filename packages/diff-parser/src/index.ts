@@ -2,7 +2,7 @@ import { NitroModules } from "react-native-nitro-modules";
 import type { DiffParser } from "./DiffParser.nitro";
 
 let diffParser: DiffParser | undefined;
-const defaultSyntaxThemeName = "github-dark-dimmed";
+const defaultSyntaxThemeName = "dark-plus";
 
 function getDiffParser() {
   diffParser ??= NitroModules.createHybridObject<DiffParser>("DiffParser");

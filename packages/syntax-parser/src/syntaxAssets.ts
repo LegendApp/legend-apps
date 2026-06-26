@@ -1,7 +1,7 @@
 import { createStorage } from "@legend-desktop/storage";
 import { File } from "expo-file-system/next";
 
-import githubDarkDimmedTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-dark-dimmed.json";
+import darkPlusTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json";
 import githubLightTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json";
 
 export type SyntaxAssetKind = "grammar" | "theme";
@@ -65,10 +65,10 @@ export const syntaxAssetFolder = {
   themes: "themes",
 } as const;
 
-export const defaultSyntaxThemeName = "github-dark-dimmed";
+export const defaultSyntaxThemeName = "dark-plus";
 
 const seededThemeFiles = {
-  "github-dark-dimmed": githubDarkDimmedTheme,
+  "dark-plus": darkPlusTheme,
   "github-light": githubLightTheme,
 } as const;
 
@@ -77,9 +77,9 @@ const devSyntaxAssetSourceRoot = process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOU
 
 const fallbackTheme: SyntaxTheme = {
   appearance: "dark",
-  background: "#22272e",
-  foreground: "#adbac7",
-  label: "GitHub Dark Dimmed",
+  background: "#1E1E1E",
+  foreground: "#D4D4D4",
+  label: "Dark Plus",
   name: defaultSyntaxThemeName,
 };
 
