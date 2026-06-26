@@ -1,6 +1,6 @@
 import type { Observable } from "@legendapp/state";
 import { useMount, useObservable, useValue } from "@legendapp/state/react";
-import { createContext, type ReactNode, useCallback, useContext, useRef, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { type GestureResponderEvent, PanResponder, type PanResponderGestureState, View } from "react-native";
 
 import { useRefValue } from "@/hooks/useRefValue";
@@ -189,12 +189,13 @@ export function PanelResizeHandle({
 }: PanelResizeHandleProps) {
     const { direction, updatePanelSizes } = usePanelContext();
     const [isDragging, setIsDragging] = useState(false);
+    const [panResponder, setPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
     const lastDeltaRef = useRef(0);
     const panelIdRef = useRefValue(panelId);
     const isVertical = direction === "vertical";
 
-    const panResponder = useRef(
-        PanResponder.create({
+    useEffect(() => {
+        setPanResponder(PanResponder.create({
             onStartShouldSetPanResponder: () => !disabled,
             onMoveShouldSetPanResponder: () => !disabled,
             onPanResponderGrant: () => {
@@ -223,8 +224,11 @@ export function PanelResizeHandle({
                 setIsDragging(false);
                 onDragging?.(false);
             },
-        }),
-    ).current;
+        }));
+    }, [direction, disabled, onDragging, panelIdRef, updatePanelSizes]);
+    const hitAreaStyle = isVertical
+        ? { height: hitAreaMargins, width: "100%" as const }
+        : { height: "100%" as const, width: hitAreaMargins };
 
     return (
         <View
@@ -238,15 +242,12 @@ export function PanelResizeHandle({
                 disabled && "pointer-events-none opacity-50",
                 className,
             )}
-            {...panResponder.panHandlers}
+            {...(panResponder?.panHandlers ?? {})}
         >
             <View className={cn("bg-transparent", isVertical ? "h-[1px] w-full" : "w-[1px] h-full")} />
             <View
                 className="absolute"
-                style={{
-                    [isVertical ? "height" : "width"]: hitAreaMargins,
-                    [isVertical ? "width" : "height"]: "100%",
-                }}
+                style={hitAreaStyle}
             />
         </View>
     );

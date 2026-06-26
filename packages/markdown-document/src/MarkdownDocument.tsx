@@ -155,48 +155,52 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
   const blockSelection = useValue(documentRenderState$.blockSelection);
   const inactiveOverlayWidth = useValue(inactiveOverlayWidth$);
   const scrollOffsetY = useValue(documentRenderState$.scrollOffsetY);
-  const blockSelectionAnchor = useMemo<MarkdownSelectionAnchor | null>(() => {
-    if (!blockSelection) {
-      return null;
-    }
-
-    const listState = listRef.current?.getState();
-    const blockSelectionRects = getBlockSelectionRects({
-      blockIds,
-      blockSelection,
-      getBlockLayout: (_blockId, index) => getBlockLayoutFromListState(listState, index),
-    });
-    if (blockSelectionRects.length === 0) {
-      return null;
-    }
-
-    const firstRect = blockSelectionRects.reduce((closestRect, rect) => (
-      rect.y < closestRect.y ? rect : closestRect
-    ), blockSelectionRects[0]);
-    if (!firstRect) {
-      return null;
-    }
-
-    return {
-      blockId: firstRect.blockId,
-      height: firstRect.height,
-      itemHeight: firstRect.height,
-      itemWidth: inactiveOverlayWidth,
-      itemX: resolvedContentHorizontalPadding,
-      itemY: firstRect.y + scrollOffsetY,
-      kind: "blockSelection",
-      width: inactiveOverlayWidth,
-      x: resolvedContentHorizontalPadding,
-      y: firstRect.y + scrollOffsetY,
-    };
-  }, [blockIds, blockSelection, inactiveOverlayWidth, listRef, resolvedContentHorizontalPadding, scrollOffsetY]);
 
   useEffect(() => {
     if (enabled) {
+      let blockSelectionAnchor: MarkdownSelectionAnchor | null = null;
+      if (blockSelection) {
+        const listState = listRef.current?.getState();
+        const blockSelectionRects = getBlockSelectionRects({
+          blockIds,
+          blockSelection,
+          getBlockLayout: (_blockId, index) => getBlockLayoutFromListState(listState, index),
+        });
+        if (blockSelectionRects.length > 0) {
+          const firstRect = blockSelectionRects.reduce((closestRect, rect) => (
+            rect.y < closestRect.y ? rect : closestRect
+          ), blockSelectionRects[0]);
+          if (firstRect) {
+            blockSelectionAnchor = {
+              blockId: firstRect.blockId,
+              height: firstRect.height,
+              itemHeight: firstRect.height,
+              itemWidth: inactiveOverlayWidth,
+              itemX: resolvedContentHorizontalPadding,
+              itemY: firstRect.y + scrollOffsetY,
+              kind: "blockSelection",
+              width: inactiveOverlayWidth,
+              x: resolvedContentHorizontalPadding,
+              y: firstRect.y + scrollOffsetY,
+            };
+          }
+        }
+      }
+
       selectionAnchor$.set(blockSelectionAnchor);
       onSelectionAnchorChangeRef.current?.(blockSelectionAnchor);
     }
-  }, [blockSelectionAnchor, enabled, onSelectionAnchorChangeRef, selectionAnchor$]);
+  }, [
+    blockIds,
+    blockSelection,
+    enabled,
+    inactiveOverlayWidth,
+    listRef,
+    onSelectionAnchorChangeRef,
+    resolvedContentHorizontalPadding,
+    scrollOffsetY,
+    selectionAnchor$,
+  ]);
 
   return null;
 });
@@ -665,7 +669,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
         }).catch(reportAsyncError);
       });
-    }, [inactiveOverlayWidth$, layoutMetrics$, publishTextSelectionAnchor, reportAsyncError, resolvedMarkdownStyle]);
+    }, [
+      inactiveOverlayWidth$,
+      layoutMetrics$,
+      publishTextSelectionAnchor,
+      reportAsyncError,
+      resolvedContentHorizontalPadding,
+      resolvedMarkdownStyle,
+    ]);
     const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
 
     const cancelHydration = useCallback(() => {
@@ -881,7 +892,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         validateTransactionResult(result);
         const firstChangedBlockId = result.changedRange.blockIds[0];
         const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
-        if (result.changedRange.blockIds.length === 1 && firstChangedBlockId === activeBlockIdValue) {
+        let isSingleActiveBlockChange = false;
+        if (result.changedRange.blockIds.length === 1) {
+          isSingleActiveBlockChange = firstChangedBlockId === activeBlockIdValue;
+        }
+        if (isSingleActiveBlockChange) {
           pushUpdateBlockHistoryEntry(
             {
               type: "updateBlockMarkdown",
@@ -891,20 +906,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             },
             { groupTyping: true },
           );
-        } else if (firstChangedBlockId && lastChangedBlockId) {
-          clearTypingHistoryGroup();
-          undoStackRef.current.push({
-            type: "replaceBlockRange",
-            startBlockId: firstChangedBlockId,
-            endBlockId: lastChangedBlockId,
-            replacementMarkdown: beforeMarkdown,
-            inverseMarkdown: markdown,
-          });
-          redoStackRef.current = [];
-          publishCommandState();
+        } else if (firstChangedBlockId) {
+          if (lastChangedBlockId) {
+            clearTypingHistoryGroup();
+            undoStackRef.current.push({
+              type: "replaceBlockRange",
+              startBlockId: firstChangedBlockId,
+              endBlockId: lastChangedBlockId,
+              replacementMarkdown: beforeMarkdown,
+              inverseMarkdown: markdown,
+            });
+            redoStackRef.current = [];
+            publishCommandState();
+          }
         }
         if (activeBlockIdRef.current === activeBlockIdValue) {
-          const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue) ?? result.changedBlocks[0];
+          let nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue);
+          if (!nextActiveBlock) {
+            nextActiveBlock = result.changedBlocks[0];
+          }
           if (nextActiveBlock) {
             activeBlockIdRef.current = nextActiveBlock.id;
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
@@ -1154,26 +1174,36 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
-          if (!suppressHistoryRef.current && firstChangedBlockId && lastChangedBlockId) {
-            const historyEntry: HistoryEntry = {
-              type: "replaceBlockRange",
-              startBlockId: firstChangedBlockId,
-              endBlockId: lastChangedBlockId,
-              replacementMarkdown: block.markdown,
-              inverseMarkdown: `${beforeMarkdown}\n\n${afterMarkdown}`,
-            };
-            if (block.type === "codeBlock") {
-              historyEntry.inverseSplit = {
-                afterMarkdown,
-                beforeMarkdown,
-              };
+          if (!suppressHistoryRef.current) {
+            if (firstChangedBlockId) {
+              if (lastChangedBlockId) {
+                const historyEntry: HistoryEntry = {
+                  type: "replaceBlockRange",
+                  startBlockId: firstChangedBlockId,
+                  endBlockId: lastChangedBlockId,
+                  replacementMarkdown: block.markdown,
+                  inverseMarkdown: `${beforeMarkdown}\n\n${afterMarkdown}`,
+                };
+                if (block.type === "codeBlock") {
+                  historyEntry.inverseSplit = {
+                    afterMarkdown,
+                    beforeMarkdown,
+                  };
+                }
+                undoStackRef.current.push(historyEntry);
+                redoStackRef.current = [];
+                publishCommandState();
+              }
             }
-            undoStackRef.current.push(historyEntry);
-            redoStackRef.current = [];
-            publishCommandState();
           }
 
-          const nextActiveBlockId = result.changedRange.blockIds[1] ?? result.changedRange.blockIds[0] ?? block.id;
+          let nextActiveBlockId = result.changedRange.blockIds[1];
+          if (!nextActiveBlockId) {
+            nextActiveBlockId = result.changedRange.blockIds[0];
+          }
+          if (!nextActiveBlockId) {
+            nextActiveBlockId = block.id;
+          }
           activeBlockIdRef.current = nextActiveBlockId;
           nativeEditingBlockIdRef.current = nextActiveBlockId;
           draftMarkdownRef.current = afterMarkdown;
@@ -1345,35 +1375,37 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
           if (!suppressHistoryRef.current) {
-            const nextHistoryEntry = firstChangedBlockId && lastChangedBlockId
-              ? {
+            let nextHistoryEntry: HistoryEntry | undefined;
+            if (firstChangedBlockId) {
+              if (lastChangedBlockId) {
+                nextHistoryEntry = {
                   type: "replaceBlockRange" as const,
                   startBlockId: firstChangedBlockId,
                   endBlockId: lastChangedBlockId,
                   replacementMarkdown: selectedBlocks.markdown,
                   inverseMarkdown: markdown,
-                }
-              : (() => {
-                  if (nextBlock) {
-                    return {
-                      type: "replaceBlockRange" as const,
-                      startBlockId: nextBlock.id,
-                      endBlockId: nextBlock.id,
-                      replacementMarkdown: `${selectedBlocks.markdown}\n\n${nextBlock.markdown}`,
-                      inverseMarkdown: nextBlock.markdown,
-                    };
-                  }
-                  if (previousBlock) {
-                    return {
-                      type: "replaceBlockRange" as const,
-                      startBlockId: previousBlock.id,
-                      endBlockId: previousBlock.id,
-                      replacementMarkdown: `${previousBlock.markdown}\n\n${selectedBlocks.markdown}`,
-                      inverseMarkdown: previousBlock.markdown,
-                    };
-                  }
-                  return undefined;
-                })();
+                };
+              }
+            }
+            if (!nextHistoryEntry) {
+              if (nextBlock) {
+                nextHistoryEntry = {
+                  type: "replaceBlockRange" as const,
+                  startBlockId: nextBlock.id,
+                  endBlockId: nextBlock.id,
+                  replacementMarkdown: `${selectedBlocks.markdown}\n\n${nextBlock.markdown}`,
+                  inverseMarkdown: nextBlock.markdown,
+                };
+              } else if (previousBlock) {
+                nextHistoryEntry = {
+                  type: "replaceBlockRange" as const,
+                  startBlockId: previousBlock.id,
+                  endBlockId: previousBlock.id,
+                  replacementMarkdown: `${previousBlock.markdown}\n\n${selectedBlocks.markdown}`,
+                  inverseMarkdown: previousBlock.markdown,
+                };
+              }
+            }
 
             if (nextHistoryEntry) {
               undoStackRef.current.push(nextHistoryEntry);
@@ -1444,7 +1476,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
 
           applyTransactionResult(result);
-          const nextActiveBlock = result.changedBlocks[0] ?? blockStateRef.current.blocksById.get(activeBlockIdValue);
+          let nextActiveBlock: MarkdownBlockSnapshot | undefined = result.changedBlocks[0];
+          if (!nextActiveBlock) {
+            nextActiveBlock = blockStateRef.current.blocksById.get(activeBlockIdValue);
+          }
           if (nextActiveBlock) {
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             activeBlockIdRef.current = nextActiveBlock.id;
@@ -1453,8 +1488,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             setDraftMarkdown(nextActiveBlock.markdown);
             setActiveBlockId(nextActiveBlock.id);
             setActiveSelection(0);
-            activeInputRef.current?.setValue(nextActiveBlock.markdown);
-            activeInputRef.current?.setSelection(0, 0);
+            const activeInput = activeInputRef.current;
+            if (activeInput) {
+              activeInput.setValue(nextActiveBlock.markdown);
+              activeInput.setSelection(0, 0);
+            }
           }
           markDirty();
         } catch (error) {
@@ -1573,9 +1611,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
 
           const activeBlockIdValue = activeBlockIdRef.current;
-          const nextActiveBlock = activeBlockIdValue
-            ? result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue)
-            : undefined;
+          let nextActiveBlock: MarkdownBlockSnapshot | undefined;
+          if (activeBlockIdValue) {
+            nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue);
+          }
           if (nextActiveBlock) {
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             draftMarkdownRef.current = nextActiveBlock.markdown;
@@ -2119,16 +2158,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         try {
           await savePromise;
+          if (saveInFlightRef.current === savePromise) {
+            saveInFlightRef.current = undefined;
+          }
         } catch (error: unknown) {
           const nextError = error instanceof Error ? error : new Error(String(error));
           autosavePausedRef.current = true;
           setNextSaveState("error");
           onErrorRef.current?.(nextError);
-          throw nextError;
-        } finally {
           if (saveInFlightRef.current === savePromise) {
             saveInFlightRef.current = undefined;
           }
+          throw nextError;
         }
       },
       [
@@ -2178,6 +2219,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
 
         suppressHistoryRef.current = true;
+        const finishHistoryEntry = (nextEntry: HistoryEntry | null) => {
+          suppressHistoryRef.current = false;
+          return nextEntry;
+        };
         try {
           if (entry.type === "updateBlockMarkdown") {
             const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
@@ -2191,15 +2236,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               draftMarkdownRef.current = entry.beforeMarkdown;
               committedMarkdownRef.current = entry.beforeMarkdown;
               setDraftMarkdown(entry.beforeMarkdown);
-              activeInputRef.current?.setValue(entry.beforeMarkdown);
+              const activeInput = activeInputRef.current;
+              if (activeInput) {
+                activeInput.setValue(entry.beforeMarkdown);
+              }
             }
             markDirty();
-            return {
+            return finishHistoryEntry({
               type: "updateBlockMarkdown",
               blockId: entry.blockId,
               beforeMarkdown: entry.afterMarkdown,
               afterMarkdown: entry.beforeMarkdown,
-            } satisfies HistoryEntry;
+            } satisfies HistoryEntry);
           }
 
           if (entry.type === "splitBlock") {
@@ -2215,7 +2263,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
             const firstChangedBlockId = result.changedRange.blockIds[0];
             const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
-            const nextActiveBlockId = result.changedRange.blockIds[1] ?? result.changedRange.blockIds[0];
+            let nextActiveBlockId = result.changedRange.blockIds[1];
+            if (!nextActiveBlockId) {
+              nextActiveBlockId = result.changedRange.blockIds[0];
+            }
             const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === nextActiveBlockId);
             if (nextActiveBlock) {
               activeBlockIdRef.current = nextActiveBlock.id;
@@ -2227,10 +2278,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               setActiveBlockId(nextActiveBlock.id);
             }
             markDirty();
-            if (!firstChangedBlockId || !lastChangedBlockId) {
-              return null;
+            if (!firstChangedBlockId) {
+              return finishHistoryEntry(null);
             }
-            return {
+            if (!lastChangedBlockId) {
+              return finishHistoryEntry(null);
+            }
+            return finishHistoryEntry({
               type: "replaceBlockRange",
               startBlockId: firstChangedBlockId,
               endBlockId: lastChangedBlockId,
@@ -2240,7 +2294,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 afterMarkdown: entry.afterMarkdown,
                 beforeMarkdown: entry.beforeMarkdown,
               },
-            } satisfies HistoryEntry;
+            } satisfies HistoryEntry);
           }
 
           if (entry.type === "moveBlockRange") {
@@ -2256,9 +2310,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             blockSelectionGestureRef.current = null;
             setNextBlockSelection(nextBlockSelection);
             const activeBlockIdValue = activeBlockIdRef.current;
-            const nextActiveBlock = activeBlockIdValue
-              ? result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue)
-              : undefined;
+            let nextActiveBlock: MarkdownBlockSnapshot | undefined;
+            if (activeBlockIdValue) {
+              nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue);
+            }
             if (nextActiveBlock) {
               nativeEditingBlockIdRef.current = nextActiveBlock.id;
               draftMarkdownRef.current = nextActiveBlock.markdown;
@@ -2268,7 +2323,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               setActiveBlockId(nextActiveBlock.id);
             }
             markDirty();
-            return {
+            return finishHistoryEntry({
               type: "moveBlockRange",
               startBlockId: entry.startBlockId,
               endBlockId: entry.endBlockId,
@@ -2276,7 +2331,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               placement: entry.inversePlacement,
               inverseTargetBlockId: entry.targetBlockId,
               inversePlacement: entry.placement,
-            } satisfies HistoryEntry;
+            } satisfies HistoryEntry);
           }
 
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
@@ -2301,31 +2356,32 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             setActiveBlockId(firstChangedBlock.id);
           }
           markDirty();
-          if (!firstChangedBlockId || !lastChangedBlockId) {
-            return null;
+          if (!firstChangedBlockId) {
+            return finishHistoryEntry(null);
+          }
+          if (!lastChangedBlockId) {
+            return finishHistoryEntry(null);
           }
           if (entry.inverseSplit) {
-            return {
+            return finishHistoryEntry({
               type: "splitBlock",
               blockId: firstChangedBlockId,
               beforeMarkdown: entry.inverseSplit.beforeMarkdown,
               afterMarkdown: entry.inverseSplit.afterMarkdown,
               replacementMarkdown: entry.replacementMarkdown,
-            } satisfies HistoryEntry;
+            } satisfies HistoryEntry);
           }
-          return {
+          return finishHistoryEntry({
             type: "replaceBlockRange",
             startBlockId: firstChangedBlockId,
             endBlockId: lastChangedBlockId,
             replacementMarkdown: entry.inverseMarkdown,
             inverseMarkdown: entry.replacementMarkdown,
-          } satisfies HistoryEntry;
+          } satisfies HistoryEntry);
         } catch (error) {
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
-          return null;
-        } finally {
-          suppressHistoryRef.current = false;
+          return finishHistoryEntry(null);
         }
       },
       [adapter, applyTransactionResult, documentState, markDirty, onErrorRef],
@@ -2641,7 +2697,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       scrollViewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
       documentRenderState$.scrollOffsetY.set(event.nativeEvent.contentOffset.y);
     }, [documentRenderState$]);
-    const activeBlock = activeBlockId ? blockStateRef.current.blocksById.get(activeBlockId) : undefined;
+    const activeBlockStateForRender = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
+    const activeBlock = activeBlockStateForRender?.block;
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
       const { blockId, height, width, x, y } = frame;
       const currentBlockState = blockStateRef.current;

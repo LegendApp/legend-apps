@@ -91,15 +91,23 @@ export function AIExample({ testId }: AIExampleProps) {
   const runCommandRunnerTest = async () => {
     setStatus("Running command...");
     try {
-      const runner = selectedTool === "mock" ? mockRunner : commandRunner;
-      const command = selectedTool === "mock" ? "echo" : "/bin/echo";
+      let runner = commandRunner;
+      let command = "/bin/echo";
+      if (selectedTool === "mock") {
+        runner = mockRunner;
+        command = "echo";
+      }
       const commandResult = await runner.runCommand({
         command,
         args: ["Legend command runner"],
         timeoutMs: 5000,
       });
       setResult(formatJson(commandResult));
-      setStatus(commandResult.exitCode === 0 ? "Command completed." : "Command exited with an error.");
+      if (commandResult.exitCode === 0) {
+        setStatus("Command completed.");
+      } else {
+        setStatus("Command exited with an error.");
+      }
     } catch (error) {
       setStatus("Command failed.");
       setResult(formatUnknownError(error));
@@ -116,9 +124,20 @@ export function AIExample({ testId }: AIExampleProps) {
         timeoutMs: 60000,
         tool: activeTool,
       });
-      const errorPreview = runResult.exitCode === 0 ? "" : formatAIErrorOutput(runResult.stderr || runResult.stdout);
+      let errorPreview = "";
+      if (runResult.exitCode !== 0) {
+        let errorOutput = runResult.stderr;
+        if (!errorOutput) {
+          errorOutput = runResult.stdout;
+        }
+        errorPreview = formatAIErrorOutput(errorOutput);
+      }
       setResult(formatJson({ invocation, runResult, errorPreview }));
-      setStatus(runResult.exitCode === 0 ? "AI tool completed." : "AI tool exited with an error.");
+      if (runResult.exitCode === 0) {
+        setStatus("AI tool completed.");
+      } else {
+        setStatus("AI tool exited with an error.");
+      }
     } catch (error) {
       setStatus("AI tool failed.");
       setResult(formatUnknownError(error));

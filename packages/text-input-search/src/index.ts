@@ -28,6 +28,8 @@ export const TextInputSearch = memo(
     { defaultValue, onChangeText, value, ...props },
     ref,
   ) {
+    "use no memo";
+
     const nativeRef = useRef<React.ElementRef<typeof TextInputSearchNativeComponent>>(null);
 
     useImperativeHandle(

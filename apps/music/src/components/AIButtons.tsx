@@ -68,25 +68,38 @@ export function AIButtons({ canUseAI, libraryTracks, onAddTracks, playlist }: AI
 
                 if (addResult.addedCount === 0) {
                     showToast("No new tracks to add", "info");
-                    return;
+                } else {
+                    let targetName = playlist.name;
+                    if (addResult.targetName) {
+                        targetName = addResult.targetName;
+                    }
+
+                    let unresolvedSuffix = "";
+                    if (result.unresolvedCount > 0) {
+                        unresolvedSuffix = ` (${result.unresolvedCount} unresolved)`;
+                    }
+
+                    let undo: { label: string; onPress: () => void } | undefined;
+                    if (addResult.undo) {
+                        undo = { label: "Undo", onPress: addResult.undo };
+                    }
+
+                    let trackNoun = "tracks";
+                    if (addResult.addedCount === 1) {
+                        trackNoun = "track";
+                    }
+
+                    showToast(
+                        `Added ${addResult.addedCount} ${trackNoun} to ${targetName}${unresolvedSuffix}`,
+                        "info",
+                        undo,
+                    );
                 }
-
-                const targetName = addResult.targetName ?? playlist.name;
-                const unresolvedSuffix =
-                    result.unresolvedCount > 0 ? ` (${result.unresolvedCount} unresolved)` : "";
-                const undo = addResult.undo ? { label: "Undo", onPress: addResult.undo } : undefined;
-
-                showToast(
-                    `Added ${addResult.addedCount} ${addResult.addedCount === 1 ? "track" : "tracks"} to ${targetName}${unresolvedSuffix}`,
-                    "info",
-                    undo,
-                );
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to generate playlist tracks";
                 showToast(message, "error");
-            } finally {
-                setIsGenerating(false);
             }
+            setIsGenerating(false);
         },
         [canGenerate, libraryTracks, onAddTracks, playlist],
     );

@@ -1,10 +1,12 @@
-import type { Observable } from "@legendapp/state";
+import { observable, type Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Text, View } from "react-native";
 
 import { Icon } from "@/systems/Icon";
 import { cn } from "@legend-desktop/classnames";
 import { Button } from "./Button";
+
+const fallbackChecked$ = observable(false);
 
 export interface CheckboxProps {
     label?: string;
@@ -25,8 +27,8 @@ export function Checkbox({
     className = "",
     labelClassName = "",
 }: CheckboxProps) {
-    // Get the current value of the observable
-    const isChecked = checkedProp ?? ($checked ? useValue($checked) : undefined);
+    const observableChecked = useValue($checked ?? fallbackChecked$);
+    const isChecked = checkedProp ?? observableChecked;
 
     const handlePress = () => {
         if (disabled) {

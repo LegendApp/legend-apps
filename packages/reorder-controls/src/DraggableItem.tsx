@@ -1,5 +1,5 @@
 import { Portal } from "@gorhom/portal";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
     type GestureResponderEvent,
@@ -47,10 +47,11 @@ export const DraggableItem = <T,>({
     const dragStartMetricsRef = useRef<DragStartMetrics | null>(null);
     const dragActivatedRef = useRef(false);
     const dragStartTimeRef = useRef(0);
-    const childMeasurementsRef = useRef<LayoutRectangle | null>(null);
+    const [childMeasurements, setChildMeasurements] = useState<LayoutRectangle | null>(null);
 
     // Reference to the original view
     const viewRef = useRef<View>(null);
+    const [originalPanResponder, setOriginalPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
 
     // Portal item position state
     const [portalPosition, setPortalPosition] = useState({ top: 0, left: 0 });
@@ -66,7 +67,7 @@ export const DraggableItem = <T,>({
     const [fadeOg, setFadeOg] = useState(false);
 
     // Animated values for position and scale
-    const pan = useRef(new Animated.ValueXY()).current;
+    const pan = useMemo(() => new Animated.ValueXY(), []);
 
     // Clean up animated values on unmount to prevent memory leaks
     useEffect(() => {
@@ -76,7 +77,7 @@ export const DraggableItem = <T,>({
             pan.x.removeAllListeners();
             pan.y.removeAllListeners();
         };
-    }, [pan.x, pan.y]);
+    }, [pan]);
 
     useEffect(() => {
         requestAnimationFrame(() => {
@@ -85,9 +86,9 @@ export const DraggableItem = <T,>({
     }, [isDragging]);
 
     // Create the pan responder for the original item
-    const resolveData = () => {
+    const resolveData = useCallback(() => {
         return typeof data === "function" ? (data as () => T)() : data;
-    };
+    }, [data]);
 
     const eventCoordinates = (event: GestureResponderEvent) => ({
         locationX: event.nativeEvent.locationX,
@@ -96,8 +97,60 @@ export const DraggableItem = <T,>({
         pageY: event.nativeEvent.pageY,
     });
 
-    const originalPanResponder = useRef(
-        PanResponder.create({
+    // Shared function to handle drag end
+    const handleDragEnd = useCallback(() => {
+        if (!dragActivatedRef.current) {
+            activeDropZone$.set(null);
+            draggedItem$.set(null);
+            setIsDragging(false);
+            setPositionReady(false);
+            dragActivatedRef.current = false;
+            return;
+        }
+
+        const activeDropZoneId = activeDropZone$.get();
+        const dropZone = activeDropZoneId ? getDropZoneById(activeDropZoneId) : undefined;
+        const draggedItemValue = draggedItem$.get();
+        const isDropped = Boolean(dropZone && draggedItemValue);
+
+        if (isDropped && dropZone && draggedItemValue) {
+            dropZone.onDrop(draggedItemValue);
+        }
+
+        activeDropZone$.set(null);
+        dragActivatedRef.current = false;
+
+        // Reset the drag state
+        setIsDragging(false);
+        setPositionReady(false);
+        draggedItem$.set(null);
+
+        // Animate back to the original position
+        const animation = Animated.timing(pan, {
+            toValue: { x: 0, y: 0 },
+            duration: isDropped ? 0 : 150, // If dropped, snap instantly
+            useNativeDriver: true,
+        });
+
+        // Start the animation and add a completion callback
+        animation.start(({ finished }) => {
+            if (finished) {
+                // Trigger the drag end callback
+                onDragEnd?.();
+
+                // Ensure pan is fully reset to prevent offset on next drag
+                pan.setOffset({ x: 0, y: 0 });
+                pan.setValue({ x: 0, y: 0 });
+                globalPositionRef.current = { x: 0, y: 0 };
+
+                // Reset portal position to avoid stale position on next drag
+                setPortalPosition({ top: 0, left: 0 });
+            }
+        });
+    }, [activeDropZone$, draggedItem$, getDropZoneById, onDragEnd, pan]);
+
+    useEffect(() => {
+        setOriginalPanResponder(PanResponder.create({
             onStartShouldSetPanResponder: () => !disabled,
             onMoveShouldSetPanResponder: (_event, gestureState) => {
                 if (disabled) {
@@ -216,65 +269,24 @@ export const DraggableItem = <T,>({
             onPanResponderRelease: () => {
                 handleDragEnd();
             },
-        }),
-    ).current;
-
-    // Shared function to handle drag end
-    const handleDragEnd = () => {
-        if (!dragActivatedRef.current) {
-            activeDropZone$.set(null);
-            draggedItem$.set(null);
-            setIsDragging(false);
-            setPositionReady(false);
-            dragActivatedRef.current = false;
-            return;
-        }
-
-        const activeDropZoneId = activeDropZone$.get();
-        const dropZone = activeDropZoneId ? getDropZoneById(activeDropZoneId) : undefined;
-        const draggedItemValue = draggedItem$.get();
-        const isDropped = Boolean(dropZone && draggedItemValue);
-
-        if (isDropped && dropZone && draggedItemValue) {
-            dropZone.onDrop(draggedItemValue);
-        }
-
-        activeDropZone$.set(null);
-        dragActivatedRef.current = false;
-
-        // Reset the drag state
-        setIsDragging(false);
-        setPositionReady(false);
-        draggedItem$.set(null);
-
-        // Animate back to the original position
-        const animation = Animated.timing(pan, {
-            toValue: { x: 0, y: 0 },
-            duration: isDropped ? 0 : 150, // If dropped, snap instantly
-            useNativeDriver: true,
-        });
-
-        // Start the animation and add a completion callback
-        animation.start(({ finished }) => {
-            if (finished) {
-                // Trigger the drag end callback
-                onDragEnd?.();
-
-                // Ensure pan is fully reset to prevent offset on next drag
-                pan.setOffset({ x: 0, y: 0 });
-                pan.setValue({ x: 0, y: 0 });
-                globalPositionRef.current = { x: 0, y: 0 };
-
-                // Reset portal position to avoid stale position on next drag
-                setPortalPosition({ top: 0, left: 0 });
-            }
-        });
-    };
+        }));
+    }, [
+        activeDropZone$,
+        checkDropZones,
+        disabled,
+        draggedItem$,
+        handleDragEnd,
+        id,
+        onDragStart,
+        pan,
+        resolveData,
+        zoneId,
+    ]);
 
     // Handle layout changes
     const onLayout = (event: LayoutChangeEvent) => {
         setLayout(event.nativeEvent.layout);
-        childMeasurementsRef.current = event.nativeEvent.layout;
+        setChildMeasurements(event.nativeEvent.layout);
     };
 
     return (
@@ -282,7 +294,7 @@ export const DraggableItem = <T,>({
             {/* Placeholder that stays in place */}
             <View ref={viewRef} onLayout={onLayout} className={className} style={{}}>
                 <View
-                    {...originalPanResponder.panHandlers}
+                    {...(originalPanResponder?.panHandlers ?? {})}
                     // eslint-disable-next-line react-native/no-inline-styles
                     style={{
                         opacity: isDragging && fadeOg ? 0.2 : 1,
@@ -293,7 +305,7 @@ export const DraggableItem = <T,>({
             </View>
 
             {/* Dragged item in portal */}
-            {isDragging && positionReady && childMeasurementsRef.current && (
+            {isDragging && positionReady && childMeasurements && (
                 <Portal>
                     <Animated.View
                         className="rounded-md z-[9999] absolute"
@@ -301,8 +313,8 @@ export const DraggableItem = <T,>({
                             {
                                 top: portalPosition.top - 1,
                                 left: portalPosition.left - 1,
-                                width: childMeasurementsRef.current.width + 2,
-                                height: childMeasurementsRef.current.height + 2,
+                                width: childMeasurements.width + 2,
+                                height: childMeasurements.height + 2,
                                 transform: [{ translateX: pan.x }, { translateY: pan.y }],
                                 // Apply drop shadow styling here if desired,
                             },

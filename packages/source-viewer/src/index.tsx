@@ -267,7 +267,7 @@ export function useSourceDocumentRows({
     if (currentDocument && options?.reason === "overscan") {
       startBackgroundTokenization(currentDocument);
     }
-  }, [currentDocument, startBackgroundTokenization, virtualizedRows.requestRange]);
+  }, [currentDocument, startBackgroundTokenization, virtualizedRows]);
   const rowsVersion = virtualizedRows.rowsVersion;
 
   useEffect(() => () => {
@@ -419,7 +419,7 @@ export function SourceLineRow({
   foregroundColor,
   index,
   line,
-  lineNumber = index + 1,
+  lineNumber,
   lineNumberStyle,
   mutedColor,
   onLayout,
@@ -427,10 +427,12 @@ export function SourceLineRow({
   textStyle,
   tokenStyleById,
 }: SourceLineRowProps) {
+  const resolvedLineNumber = lineNumber ?? index + 1;
+
   return (
     <View onLayout={onLayout} style={[styles.sourceLineRow, rowStyle]}>
       <LightText selectable={false} style={[styles.lineNumber, { color: mutedColor }, lineNumberStyle]}>
-        {lineNumber}
+        {resolvedLineNumber}
       </LightText>
       <TokenizedText
         foregroundColor={foregroundColor}

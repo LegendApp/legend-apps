@@ -268,8 +268,17 @@ export function useQueueExporter({ queueTracks }: QueueExporterArgs) {
 
             try {
                 if (existing) {
-                    const isEditable = existing.source === "cache" && Boolean(existing.filePath);
-                    if (!isEditable || existing.id === DEFAULT_LOCAL_PLAYLIST_ID) {
+                    let isEditable = false;
+                    if (existing.source === "cache") {
+                        if (Boolean(existing.filePath)) {
+                            isEditable = true;
+                        }
+                    }
+                    let isReadOnly = !isEditable;
+                    if (existing.id === DEFAULT_LOCAL_PLAYLIST_ID) {
+                        isReadOnly = true;
+                    }
+                    if (isReadOnly) {
                         showToast("That playlist is read-only", "error");
                         return false;
                     }

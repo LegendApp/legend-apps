@@ -105,7 +105,7 @@ export function useHookKeyboard() {
     useMount(() => {
         perfLog("Keyboard.useHookKeyboard.mountStart");
         // Set up listeners
-        let cleanupFns: (() => void)[];
+        let cleanupFns: (() => void)[] = [];
         try {
             cleanupFns = [KeyboardManager.addKeyDownListener(onKeyDown), KeyboardManager.addKeyUpListener(onKeyUp)];
         } catch (error) {
@@ -115,12 +115,12 @@ export function useHookKeyboard() {
         // Return cleanup function
         return () => {
             perfLog("Keyboard.useHookKeyboard.cleanup");
-            try {
-                for (const cleanup of cleanupFns) {
+            for (const cleanup of cleanupFns) {
+                try {
                     cleanup();
+                } catch (error) {
+                    console.error("Failed to clean up keyboard listeners:", error);
                 }
-            } catch (error) {
-                console.error("Failed to clean up keyboard listeners:", error);
             }
         };
     });

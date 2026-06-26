@@ -118,12 +118,21 @@ function debugNowMs() {
 
 function debugLog(debugName: string | undefined, event: string, payload: Record<string, unknown>) {
   if (__DEV__ && debugName) {
+    debugSequence += 1;
     console.info(`${debugPrefix} ${event} ${JSON.stringify({
       debugName,
-      seq: ++debugSequence,
+      seq: debugSequence,
       t: Number(debugNowMs().toFixed(1)),
       ...payload,
     })}`);
+  }
+}
+
+function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
+  if (typeof ref === "function") {
+    ref(value);
+  } else if (ref) {
+    ref.current = value;
   }
 }
 
@@ -334,7 +343,6 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   const activeRowsState = rowsState.document === snapshotDocument
     ? rowsState
     : createRowsState(snapshot, getRowIndex);
-  rowsStateRef.current = activeRowsState;
 
   useEffect(() => {
     const nextRowsState = createRowsState(snapshot, getRowIndex);
@@ -508,13 +516,15 @@ export function VirtualizedFixedDocumentList<TRow>({
     [extraData, rowsVersion],
   );
 
-  renderCountRef.current += 1;
-  debugLog(debugName, "list.render", {
-    cacheSize: rowCache?.size ?? 0,
-    elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
-    itemCount: itemIndexes.length,
-    renderCount: renderCountRef.current,
-    rowsVersion,
+  useEffect(() => {
+    renderCountRef.current += 1;
+    debugLog(debugName, "list.renderCommitted", {
+      cacheSize: rowCache?.size ?? 0,
+      elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+      itemCount: itemIndexes.length,
+      renderCount: renderCountRef.current,
+      rowsVersion,
+    });
   });
 
   useEffect(() => {
@@ -557,12 +567,8 @@ export function VirtualizedFixedDocumentList<TRow>({
       });
     }
     internalListRef.current = list;
-    if (typeof listRef === "function") {
-      listRef(list);
-    } else if (listRef) {
-      listRef.current = list;
-    }
-  }, [listRef]);
+    assignRef(listRef, list);
+  }, [debugName, itemIndexes.length, listRef]);
 
   const emitTopItemChanged = useCallback(() => {
     if (onTopItemChanged) {

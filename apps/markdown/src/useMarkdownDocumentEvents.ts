@@ -136,10 +136,12 @@ export function useMarkdownWindowCloseRequest({
           await closeMarkdownEditorWindow();
         }
       } catch (error) {
-        handleError(error);
-      } finally {
         closeInFlightRef.current = false;
+        handleError(error);
+        return;
       }
+
+      closeInFlightRef.current = false;
     }
 
     const subscription = addWindowCloseRequestedListener((event) => {

@@ -644,8 +644,14 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                             return;
                         }
 
+                        let trackLabel = "tracks";
+                        if (addedCount === 1) {
+                            trackLabel = "track";
+                        }
+                        const message = `Added ${addedCount} ${trackLabel} to ${playlist.name}`;
+
                         showToast(
-                            `Added ${addedCount} ${addedCount === 1 ? "track" : "tracks"} to ${playlist.name}`,
+                            message,
                             "info",
                             {
                                 label: "Undo",

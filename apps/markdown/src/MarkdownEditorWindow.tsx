@@ -108,21 +108,22 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
   });
+  const { documentCommandsRef } = session;
   const insertLink = useCallback(() => {
     setIsLinkPopoverOpen(true);
   }, []);
   const applyLink = useCallback((url: string) => {
-    session.documentCommandsRef.current?.insertLink({ url });
+    documentCommandsRef.current?.insertLink({ url });
     setIsLinkPopoverOpen(false);
-  }, [session.documentCommandsRef]);
+  }, [documentCommandsRef]);
 
   const renderSelectionToolbar = useCallback(
     (anchor: MarkdownSelectionAnchor) => (
       <MarkdownFloatingSurface anchor={anchor} coordinateSpace="content">
-        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} floating onInsertLink={insertLink} />
+        <MarkdownFormattingToolbar commandsRef={documentCommandsRef} floating onInsertLink={insertLink} />
       </MarkdownFloatingSurface>
     ),
-    [insertLink, session.documentCommandsRef],
+    [documentCommandsRef, insertLink],
   );
 
   useEffect(() => {

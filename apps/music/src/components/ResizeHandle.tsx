@@ -1,5 +1,5 @@
 import type { Observable } from "@legendapp/state";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type GestureResponderEvent, PanResponder, type PanResponderGestureState, View } from "react-native";
 
 import { cn } from "@legend-desktop/classnames";
@@ -17,9 +17,10 @@ interface ResizeHandleProps {
 export const ResizeHandle = ({ width$, isVertical = false, min, max, side, line, className }: ResizeHandleProps) => {
     // Create PanResponder to handle resize gestures
     const lastDelta = useRef(0);
+    const [panResponder, setPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
 
-    const panResponder = useRef(
-        PanResponder.create({
+    useEffect(() => {
+        setPanResponder(PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: () => true,
             onPanResponderGrant: () => {
@@ -43,14 +44,14 @@ export const ResizeHandle = ({ width$, isVertical = false, min, max, side, line,
             onPanResponderRelease: () => {
                 lastDelta.current = 0;
             },
-        }),
-    ).current;
+        }));
+    }, [isVertical, max, min, side, width$]);
 
     return (
         <View className={cn("relative height-full z-10", isVertical ? "h-4 w-full" : "w-4 h-full", className)}>
             <View
                 className="flex-1 justify-center items-center"
-                {...panResponder.panHandlers}
+                {...(panResponder?.panHandlers ?? {})}
                 style={{
                     cursor: (isVertical ? "ns-resize" : "ew-resize") as any,
                 }}

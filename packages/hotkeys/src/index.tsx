@@ -333,13 +333,13 @@ export function HotkeyCapture({
   placeholder = "Click to record",
   value,
 }: HotkeyCaptureProps) {
-  const captureIdRef = useRef<HotkeyCaptureId>(Symbol("HotkeyCapture"));
+  const [captureId] = useState<HotkeyCaptureId>(() => Symbol("HotkeyCapture"));
   const activeCaptureId = useSyncExternalStore(
     subscribeActiveHotkeyCapture,
     getActiveHotkeyCaptureId,
     getActiveHotkeyCaptureId,
   );
-  const isCapturing = activeCaptureId === captureIdRef.current;
+  const isCapturing = activeCaptureId === captureId;
   const [pressedDisplay, setPressedDisplay] = useState<string | null>(null);
   const lastValidCapture = useRef<number[] | null>(null);
   const lastStartTimeRef = useRef(0);
@@ -360,13 +360,13 @@ export function HotkeyCapture({
   }, []);
 
   const handleCancel = useCallback(() => {
-    if (getActiveHotkeyCaptureId() === captureIdRef.current) {
+    if (getActiveHotkeyCaptureId() === captureId) {
       setActiveHotkeyCaptureId(null);
     } else {
       resetCaptureState();
       notifyCaptureChange(false);
     }
-  }, [notifyCaptureChange, resetCaptureState]);
+  }, [captureId, notifyCaptureChange, resetCaptureState]);
 
   const handleCommit = useCallback(() => {
     const nextValue = lastValidCapture.current ? serializeHotkey(lastValidCapture.current) : null;
@@ -380,16 +380,16 @@ export function HotkeyCapture({
     if (!disabled) {
       lastStartTimeRef.current = Date.now();
       resetCaptureState();
-      setActiveHotkeyCaptureId(captureIdRef.current);
+      setActiveHotkeyCaptureId(captureId);
       notifyCaptureChange(true);
     }
-  }, [disabled, notifyCaptureChange, resetCaptureState]);
+  }, [captureId, disabled, notifyCaptureChange, resetCaptureState]);
 
   const handlePress = useCallback(() => {
-    if (getActiveHotkeyCaptureId() !== captureIdRef.current) {
+    if (getActiveHotkeyCaptureId() !== captureId) {
       handleStart();
     }
-  }, [handleStart]);
+  }, [captureId, handleStart]);
 
   useEffect(() => {
     if (wasCapturingRef.current !== isCapturing) {
@@ -401,7 +401,7 @@ export function HotkeyCapture({
   }, [isCapturing, notifyCaptureChange, resetCaptureState]);
 
   useEffect(() => {
-    return registerHotkeyCaptureCancelHandler(captureIdRef.current, () => {
+    return registerHotkeyCaptureCancelHandler(captureId, () => {
       resetCaptureState();
       notifyCaptureChange(false);
     });
@@ -425,7 +425,7 @@ export function HotkeyCapture({
     };
 
     const removeDown = addKeyDownListener((event) => {
-      if (getActiveHotkeyCaptureId() !== captureIdRef.current) {
+      if (getActiveHotkeyCaptureId() !== captureId) {
         return false;
       }
       pressedCodesRef.current.add(event.keyCode);
@@ -440,7 +440,7 @@ export function HotkeyCapture({
       return true;
     });
     const removeUp = addKeyUpListener((event) => {
-      if (getActiveHotkeyCaptureId() !== captureIdRef.current) {
+      if (getActiveHotkeyCaptureId() !== captureId) {
         return false;
       }
       pressedCodesRef.current.delete(event.keyCode);
@@ -461,7 +461,7 @@ export function HotkeyCapture({
 
   useEffect(() => {
     return () => {
-      clearActiveHotkeyCaptureId(captureIdRef.current);
+      clearActiveHotkeyCaptureId(captureId);
     };
   }, []);
 

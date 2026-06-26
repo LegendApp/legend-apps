@@ -140,11 +140,18 @@ export function useMarkdownDocumentSession() {
       return false;
     }
 
+    let defaultName = getFilename(state.filename);
+    let directory: string | undefined = getDirectory(state.filename);
+    if (state.documentSource === "untitled") {
+      defaultName = untitledFilename;
+      directory = undefined;
+    }
+
     try {
       const path = await saveFileDialog({
         allowedFileTypes: markdownFileTypes,
-        defaultName: state.documentSource === "untitled" ? untitledFilename : getFilename(state.filename),
-        directory: state.documentSource === "untitled" ? undefined : getDirectory(state.filename),
+        defaultName,
+        directory,
       });
 
       if (!path) {
@@ -245,27 +252,44 @@ export function useMarkdownDocumentSession() {
     }
 
     openDialogInFlight.current = true;
+    const markdownFileTypeList = markdownFileTypes.map((type) => `.${type}`).join(", ");
 
     try {
       const paths = await openFileDialog({
         allowedFileTypes: markdownFileTypes,
         canChooseFiles: true,
       });
-      const path = paths?.find(isMarkdownPath) ?? null;
+      let path: string | null = null;
+      if (paths) {
+        const markdownPath = paths.find(isMarkdownPath);
+        if (markdownPath) {
+          path = markdownPath;
+        }
+      }
 
       if (path) {
         const didFlush = await flushCurrentDocumentBeforeTransition("open");
         if (didFlush) {
           openSelectedFile(path);
         }
-      } else if (paths && paths.length > 0) {
-        handleError(new Error(`Choose a Markdown file (${markdownFileTypes.map((type) => `.${type}`).join(", ")}).`));
+      } else {
+        let hasSelectedInvalidFile = false;
+        if (paths) {
+          if (paths.length > 0) {
+            hasSelectedInvalidFile = true;
+          }
+        }
+        if (hasSelectedInvalidFile) {
+          handleError(new Error(`Choose a Markdown file (${markdownFileTypeList}).`));
+        }
       }
     } catch (error) {
-      handleError(error);
-    } finally {
       openDialogInFlight.current = false;
+      handleError(error);
+      return;
     }
+
+    openDialogInFlight.current = false;
   }, [flushCurrentDocumentBeforeTransition, handleError, openSelectedFile]);
 
   return {

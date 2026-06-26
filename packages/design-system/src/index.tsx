@@ -1,4 +1,5 @@
 import { cn } from "@legend-desktop/classnames";
+import { showContextMenu } from "@legend-desktop/context-menu";
 import { NativeSelect } from "@legend-desktop/native-select";
 import { useCallback, useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
@@ -129,7 +130,6 @@ export function SelectControl<Value extends OptionValue = string>({
   const handlePress = async (event: GestureResponderEvent) => {
     if (!disabled) {
       const location = await getContextMenuLocation(event);
-      const { showContextMenu } = await import("@legend-desktop/context-menu");
       const selected = await showContextMenu(
         options.map((option) => ({
           id: String(option.value),

@@ -79,18 +79,18 @@ export const CurrentSongOverlayWindowManager = () => {
             perfLog("CurrentSongOverlayWindowManager.openWindow.start");
             const screen = Dimensions.get("screen");
             const windowDims = Dimensions.get("window");
-            const screenWidth =
-                typeof screen?.width === "number"
-                    ? screen.width
-                    : typeof windowDims?.width === "number"
-                      ? windowDims.width
-                      : DEFAULT_WIDTH;
-            const screenHeight =
-                typeof screen?.height === "number"
-                    ? screen.height
-                    : typeof windowDims?.height === "number"
-                      ? windowDims.height
-                      : DEFAULT_HEIGHT;
+            let screenWidth = DEFAULT_WIDTH;
+            if (typeof screen.width === "number") {
+                screenWidth = screen.width;
+            } else if (typeof windowDims.width === "number") {
+                screenWidth = windowDims.width;
+            }
+            let screenHeight = DEFAULT_HEIGHT;
+            if (typeof screen.height === "number") {
+                screenHeight = screen.height;
+            } else if (typeof windowDims.height === "number") {
+                screenHeight = windowDims.height;
+            }
 
             let x = Math.max(Math.round((screenWidth - windowWidth) / 2), 0);
             if (horizontalPosition === "left") {
@@ -109,11 +109,16 @@ export const CurrentSongOverlayWindowManager = () => {
                 y = clampY(OVERLAY_WINDOW_BOTTOM_MARGIN);
             }
 
+            let frameAnimationDurationMs: number | undefined;
+            if (shouldAnimateFrameChange) {
+                frameAnimationDurationMs = OVERLAY_WINDOW_ANIMATION_DURATION_MS;
+            }
+
             await WindowsNavigator.open(OVERLAY_WINDOW_KEY, {
                 x,
                 y,
                 animateFrameChange: shouldAnimateFrameChange,
-                frameAnimationDurationMs: shouldAnimateFrameChange ? OVERLAY_WINDOW_ANIMATION_DURATION_MS : undefined,
+                frameAnimationDurationMs,
                 windowStyle: {
                     width: windowWidth,
                     height: windowHeight,

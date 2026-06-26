@@ -58,7 +58,7 @@ export const MediaLibraryWindowManager = () => {
                 perfLog("MediaLibraryWindowManager.openWindow.start");
                 const mainFrame = await windowManager.getMainWindowFrame();
                 const screen = Dimensions.get("screen");
-                const storedSize = stateSaved$.libraryWindowSize.get?.() ?? undefined;
+                const storedSize = stateSaved$.libraryWindowSize.get();
 
                 let preferredWidth: number;
                 if (storedSize.width > 0) {

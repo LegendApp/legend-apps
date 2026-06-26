@@ -2,7 +2,7 @@ import { openFileDialog } from "@legend-desktop/file-dialog";
 import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
 import { addWindowClosedListener } from "@legend-desktop/window-manager";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export type DocumentAppController = {
   isDocumentWindowOpen: () => boolean;
@@ -62,19 +62,16 @@ export function useDocumentAppController({
   windowIdentifier,
 }: UseDocumentAppControllerOptions) {
   const didOpenDocumentWindowRef = useRef(false);
-  const documentWindowOpenRef = useRef(false);
+  const [isDocumentWindowOpen, setDocumentWindowOpen] = useState(false);
   const controller = useMemo<DocumentAppController>(() => ({
-    isDocumentWindowOpen: () => documentWindowOpenRef.current,
+    isDocumentWindowOpen: () => isDocumentWindowOpen,
     reportError,
-    setDocumentWindowOpen: (isOpen) => {
-      documentWindowOpenRef.current = isOpen;
-    },
-  }), [reportError]);
-  const menuHandlers = useRef<NativeMenuActionHandlers | null>(null);
-  menuHandlers.current ??= createMenuHandlers(controller);
+    setDocumentWindowOpen,
+  }), [isDocumentWindowOpen, reportError]);
+  const menuHandlers = useMemo(() => createMenuHandlers(controller), [controller, createMenuHandlers]);
 
   useNativeMenu({
-    handlers: menuHandlers.current,
+    handlers: menuHandlers,
     menus,
     ownerId,
   });

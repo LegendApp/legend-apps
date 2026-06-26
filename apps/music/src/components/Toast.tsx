@@ -1,6 +1,6 @@
 import { observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
 import { Button } from "@/components/Button";
@@ -45,8 +45,8 @@ export function showToast(message: string, type: ToastType = "info", action?: To
 
 export function ToastProvider() {
     const toast = useValue(toast$);
-    const opacity = useRef(new Animated.Value(0)).current;
-    const translateY = useRef(new Animated.Value(8)).current;
+    const opacity = useMemo(() => new Animated.Value(0), []);
+    const translateY = useMemo(() => new Animated.Value(8), []);
     const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useObserveEffect(() => {

@@ -1,6 +1,6 @@
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GestureResponderEvent, LayoutChangeEvent } from "react-native";
 import { PanResponder, Pressable, View } from "react-native";
 import { useObservableLatest } from "@/observables/useObservableLatest";
@@ -36,6 +36,7 @@ export function PlaybackTimelineSlider({
     const [isDragging, setIsDragging] = useState(false);
     const [sliderWidth, setSliderWidth] = useState(0);
     const [progress, setProgress] = useState(0);
+    const [panResponder, setPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
     const isDisabled$ = useObservableLatest(disabledProp);
     const isDisabled = useValue(isDisabled$);
     const lastCommittedValueRef = useRef<number | null>(null);
@@ -72,8 +73,8 @@ export function PlaybackTimelineSlider({
         updateProgress();
     };
 
-    const panResponder = useMemo(
-        () =>
+    useEffect(() => {
+        setPanResponder(
             PanResponder.create({
                 onStartShouldSetPanResponder: () => !isDisabled$.get(),
                 onStartShouldSetPanResponderCapture: () => !isDisabled$.get(),
@@ -108,8 +109,8 @@ export function PlaybackTimelineSlider({
                     }
                 },
             }),
-        [isDisabled$, onSlidingEnd, onSlidingStart, updateValueFromLocation],
-    );
+        );
+    }, [isDisabled$, onSlidingEnd, onSlidingStart, updateValueFromLocation]);
 
     const handleHoverIn = () => {
         if (!isDisabled$.get()) {
@@ -124,7 +125,7 @@ export function PlaybackTimelineSlider({
     };
 
     return (
-        <View style={[{ height: 40 }, style]} {...panResponder.panHandlers}>
+        <View style={[{ height: 40 }, style]} {...(panResponder?.panHandlers ?? {})}>
             <Pressable
                 onHoverIn={handleHoverIn}
                 onHoverOut={handleHoverOut}

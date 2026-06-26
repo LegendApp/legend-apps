@@ -95,8 +95,9 @@ function formatLineCount(count: number) {
 
 function debugLog(event: string, payload: Record<string, unknown>) {
   if (__DEV__) {
+    debugSequence += 1;
     console.info(`${debugPrefix} ${event} ${JSON.stringify({
-      seq: ++debugSequence,
+      seq: debugSequence,
       t: Number(nowMs().toFixed(1)),
       ...payload,
     })}`);
@@ -251,7 +252,6 @@ debugLog("module.evaluated", {
 
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
   const syntaxTheme = useCodeSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
@@ -328,12 +328,15 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const foregroundColor = syntaxTheme.foreground;
   const borderColor = displayTheme.colors.border;
 
-  debugLog("window.render", {
-    cacheSize: sourceRows.rowCache.size,
-    itemCount: sourceRows.itemIndexes.length,
-    renderCount: renderCountRef.current,
-    rowsVersion: sourceRows.rowsVersion,
-    state: state.status,
+  useEffect(() => {
+    renderCountRef.current += 1;
+    debugLog("window.renderCommitted", {
+      cacheSize: sourceRows.rowCache.size,
+      itemCount: sourceRows.itemIndexes.length,
+      renderCount: renderCountRef.current,
+      rowsVersion: sourceRows.rowsVersion,
+      state: state.status,
+    });
   });
 
   useEffect(() => {

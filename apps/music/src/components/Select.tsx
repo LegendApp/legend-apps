@@ -1,5 +1,5 @@
 import type { ObservableParam } from "@legendapp/state";
-import { useValue } from "@legendapp/state/react";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { Text } from "react-native";
 
 import { DropdownMenu } from "@/components/DropdownMenu";
@@ -33,7 +33,9 @@ export function Select({
     textClassName,
     disabled = false,
 }: SelectProps) {
-    const value = value$ ? useValue(value$) : valueProp;
+    const fallbackValue$ = useObservable("");
+    const observableValue = useValue(value$ ?? fallbackValue$);
+    const value = value$ ? observableValue : valueProp;
 
     const selectedOption = options.find((option) => option.value === value);
     const displayText = selectedOption ? selectedOption.label : placeholder;

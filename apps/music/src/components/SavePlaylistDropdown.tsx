@@ -46,8 +46,10 @@ export function SavePlaylistDropdown({ disabled = false, onSave }: SavePlaylistD
                     textInputRef.current?.focus();
                 }, 0);
             }
-        } finally {
             setIsSaving(false);
+        } catch (error) {
+            setIsSaving(false);
+            throw error;
         }
     }, [canSave, close, onSave, playlistName$]);
 

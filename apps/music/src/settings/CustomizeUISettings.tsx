@@ -130,7 +130,7 @@ function useNormalizedLayout<T extends string>(
     layout: UIControlLayout<T>,
     definitions: ControlDefinition<T>[],
 ): NormalizedUIControlLayout<T> {
-    return useMemo(() => normalizeLayout(layout, definitions), [layout.shown, definitions]);
+    return useMemo(() => normalizeLayout(layout, definitions), [definitions, layout]);
 }
 
 function normalizeLayout<T extends string>(

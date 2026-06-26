@@ -69,8 +69,8 @@ const Root = forwardRef<DropdownMenuRootRef, RootProps>(function Root(
     { children, isOpen$: isOpen$Prop, onSelect, closeOnSelect = true, onOpenChange },
     ref,
 ) {
-    // biome-ignore lint/correctness/useHookAtTopLevel: useObservable must run during component initialization
-    const isOpen$ = isOpen$Prop ?? useObservable(false);
+    const fallbackIsOpen$ = useObservable(false);
+    const isOpen$ = isOpen$Prop ?? fallbackIsOpen$;
     const openedWithMouseDown$ = useObservable(false);
     const triggerRef = useRef<View>(null);
 
@@ -81,12 +81,12 @@ const Root = forwardRef<DropdownMenuRootRef, RootProps>(function Root(
             state$.isDropdownOpen.set(false);
         }, 60);
         onOpenChange?.(false);
-    }, [onOpenChange]);
+    }, [isOpen$, onOpenChange, openedWithMouseDown$]);
 
     const open = useCallback(() => {
         isOpen$.set(true);
         onOpenChange?.(true);
-    }, [onOpenChange]);
+    }, [isOpen$, onOpenChange]);
 
     useImperativeHandle(
         ref,

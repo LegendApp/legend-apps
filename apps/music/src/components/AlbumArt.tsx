@@ -176,8 +176,10 @@ export function AlbumArt({
             setHasError(false);
 
             try {
-                const downloadedUri =
-                    thumbnailCache.isRemoteThumbnail(uri) && (await thumbnailCache.downloadThumbnail(uri));
+                let downloadedUri: string | null = null;
+                if (thumbnailCache.isRemoteThumbnail(uri)) {
+                    downloadedUri = await thumbnailCache.downloadThumbnail(uri);
+                }
 
                 if (isMounted) {
                     if (downloadedUri) {

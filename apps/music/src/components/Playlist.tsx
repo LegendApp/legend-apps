@@ -498,7 +498,7 @@ export function Playlist() {
                 });
             }
         },
-        [queueTracks, showDropFeedback],
+        [queueLength, queueTracks, showDropFeedback],
     );
 
     const handleTrackDragEnter = useCallback(
@@ -745,14 +745,17 @@ export function Playlist() {
                     void ensureLocalTrackThumbnail(track);
                 });
 
-                if (!hasConfiguredLibrary && !isDefaultPlaylistSelected) {
-                    setCurrentPlaylist(DEFAULT_LOCAL_PLAYLIST_ID, "file");
+                if (!hasConfiguredLibrary) {
+                    if (!isDefaultPlaylistSelected) {
+                        setCurrentPlaylist(DEFAULT_LOCAL_PLAYLIST_ID, "file");
+                    }
                 }
 
                 const additionSummary = `Added ${formatTrackCount(tracksToAdd.length)}`;
-                const persistenceHint = hasConfiguredLibrary
-                    ? ""
-                    : " Add a library folder in Settings to keep them around next time.";
+                let persistenceHint = "";
+                if (!hasConfiguredLibrary) {
+                    persistenceHint = " Add a library folder in Settings to keep them around next time.";
+                }
 
                 if (skipped > 0) {
                     const skippedFilesSummary = formatTrackCount(skipped);
