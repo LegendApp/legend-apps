@@ -81,6 +81,26 @@ run("agent-device", [
   "macos",
   "--session-lock",
   "reject",
+  "open",
+  "app.legend.diff.macos",
+  "--surface",
+  "app",
+  "--no-record",
+], {
+  env: {
+    AGENT_DEVICE_PLATFORM: "macos",
+    AGENT_DEVICE_SESSION: session,
+    AGENT_DEVICE_SESSION_LOCK: "reject",
+  },
+});
+
+run("agent-device", [
+  "--session",
+  session,
+  "--platform",
+  "macos",
+  "--session-lock",
+  "reject",
   "batch",
   "--steps-file",
   stepsFile,

@@ -1,11 +1,5 @@
 [
   {
-    "command": "open",
-    "input": {
-      "app": "app.legend.diff.macos"
-    }
-  },
-  {
     "command": "wait",
     "input": {
       "kind": "text",
