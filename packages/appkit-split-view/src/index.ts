@@ -44,6 +44,7 @@ export function SidebarSplitView({
   const [paneMetrics, setPaneMetrics] = useState({
     contentHeight: 0,
     contentWidth: 0,
+    contentX: 0,
     sidebarHeight: 0,
     sidebarWidth: 0,
   });
@@ -52,19 +53,22 @@ export function SidebarSplitView({
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     const nextContentHeight = Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height);
     const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
+    const nextContentX = Math.round(event.nativeEvent.contentX);
     const nextSidebarHeight = Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height);
     const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
 
-    if (nextContentHeight > 0 || nextContentWidth > 0 || nextSidebarHeight > 0 || nextSidebarWidth > 0) {
+    if (nextContentHeight > 0 || nextContentWidth > 0 || nextContentX > 0 || nextSidebarHeight > 0 || nextSidebarWidth > 0) {
       setPaneMetrics((current) => {
         const next = {
           contentHeight: nextContentHeight > 0 ? nextContentHeight : current.contentHeight,
           contentWidth: nextContentWidth > 0 ? nextContentWidth : current.contentWidth,
+          contentX: nextContentX > 0 ? nextContentX : current.contentX,
           sidebarHeight: nextSidebarHeight > 0 ? nextSidebarHeight : current.sidebarHeight,
           sidebarWidth: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebarWidth,
         };
         return current.contentHeight === next.contentHeight &&
           current.contentWidth === next.contentWidth &&
+          current.contentX === next.contentX &&
           current.sidebarHeight === next.sidebarHeight &&
           current.sidebarWidth === next.sidebarWidth
           ? current

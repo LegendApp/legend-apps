@@ -5,6 +5,7 @@ import type { DirectEventHandler, Double } from "react-native/Libraries/Types/Co
 export type SidebarSplitViewResizeEvent = Readonly<{
   contentHeight: Double;
   contentWidth: Double;
+  contentX: Double;
   height: Double;
   isVertical: boolean;
   sidebarHeight: Double;

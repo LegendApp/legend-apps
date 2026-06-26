@@ -69,6 +69,7 @@ import {
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
+  setDiffViewerWindowTitlebarMaterialLeadingInset,
   setDiffViewerWindowToolbarOptions,
 } from "./diffWindows";
 
@@ -118,6 +119,7 @@ type DiffLoadTrace = {
 type DiffSplitPaneMetrics = {
   contentHeight: number;
   contentWidth: number;
+  contentX: number;
   sidebarHeight: number;
   sidebarWidth: number;
 };
@@ -2134,6 +2136,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>({
     contentHeight: 0,
     contentWidth: 0,
+    contentX: 0,
     sidebarHeight: 0,
     sidebarWidth: 0,
   });
@@ -2200,6 +2203,7 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
   const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
+  const lastTitlebarMaterialLeadingInsetRef = useRef<number | null>(null);
   const isLoading = loadingSource !== null;
   const isLoadingGithub = loadingSource?.kind === "github";
   const highlightedVisibleRangeRef = useRef<{
@@ -2809,6 +2813,19 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
   });
 
   useObserveEffect(() => {
+    const sidebarCollapsedValue = sidebarCollapsed$.get();
+    const splitPaneMetrics = splitPaneMetrics$.get();
+    const nextLeadingInset = sidebarCollapsedValue ? 0 : splitPaneMetrics.contentX || splitPaneMetrics.sidebarWidth;
+
+    if (lastTitlebarMaterialLeadingInsetRef.current !== nextLeadingInset) {
+      lastTitlebarMaterialLeadingInsetRef.current = nextLeadingInset;
+      setDiffViewerWindowTitlebarMaterialLeadingInset(nextLeadingInset).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    }
+  });
+
+  useObserveEffect(() => {
     const toolbarModel = getDiffWindowToolbarModel({
       loadingSource: loadingSource$.get(),
       sidebarCollapsed: sidebarCollapsed$.get(),
@@ -2993,14 +3010,17 @@ export function DiffViewerWindow({ focusUrlInputRequestId, folderPath, source }:
     const nextMetrics = {
       contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
       contentWidth: Math.round(event.nativeEvent.contentWidth),
+      contentX: Math.round(event.nativeEvent.contentX),
       sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
       sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
     };
     logDiffOpenTiming("viewer.splitView.resize", {
       contentHeight: nextMetrics.contentHeight,
       contentWidth: nextMetrics.contentWidth,
+      contentX: nextMetrics.contentX,
       previousContentHeight: splitPaneMetrics$.peek().contentHeight,
       previousContentWidth: splitPaneMetrics$.peek().contentWidth,
+      previousContentX: splitPaneMetrics$.peek().contentX,
       previousSidebarHeight: splitPaneMetrics$.peek().sidebarHeight,
       previousSidebarWidth: splitPaneMetrics$.peek().sidebarWidth,
       sidebarHeight: nextMetrics.sidebarHeight,

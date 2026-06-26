@@ -209,12 +209,14 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
 
   CGFloat sidebarWidth = 0;
   CGFloat contentWidth = 0;
+  CGFloat contentX = 0;
   CGFloat sidebarHeight = 0;
   CGFloat contentHeight = 0;
   CGFloat height = 0;
 
   sidebarWidth = _sidebarContainer.bounds.size.width;
   contentWidth = _contentContainer.bounds.size.width;
+  contentX = [_contentContainer convertRect:_contentContainer.bounds toView:self].origin.x;
   sidebarHeight = _sidebarContainer.bounds.size.height;
   contentHeight = _contentContainer.bounds.size.height;
   height = MAX(sidebarHeight, contentHeight);
@@ -240,6 +242,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   eventEmitter->onSplitViewDidResize(SidebarSplitViewEventEmitter::OnSplitViewDidResize{
     .contentHeight = contentHeight,
     .contentWidth = contentWidth,
+    .contentX = contentX,
     .height = height,
     .isVertical = true,
     .sidebarHeight = sidebarHeight,

@@ -211,19 +211,42 @@ static NSVisualEffectState LegendVisualEffectStateForName(NSString *value)
   return NSVisualEffectStateFollowsWindowActiveState;
 }
 
-static NSRect LegendTitlebarMaterialFrame(NSWindow *window, NSView *frameView)
+static NSRect LegendTitlebarMaterialFrame(NSWindow *window, NSView *frameView, CGFloat leadingInset)
 {
   NSRect frameBounds = frameView.bounds;
+  NSRect contentFrame = window.contentView.frame;
   NSRect contentLayoutRect = [frameView convertRect:window.contentLayoutRect fromView:nil];
   CGFloat materialMinY = NSMaxY(contentLayoutRect);
   CGFloat materialHeight = NSMaxY(frameBounds) - materialMinY;
+  CGFloat materialMinX = MIN(MAX(0, NSMinX(contentFrame) + leadingInset), NSWidth(frameBounds));
 
   if (materialHeight <= 0 || materialHeight > NSHeight(frameBounds)) {
     materialHeight = MAX(0, NSHeight(window.frame) - NSHeight(window.contentLayoutRect));
     materialMinY = NSMaxY(frameBounds) - materialHeight;
   }
 
-  return NSMakeRect(0, materialMinY, NSWidth(frameBounds), materialHeight);
+  return NSMakeRect(materialMinX, materialMinY, NSWidth(frameBounds) - materialMinX, materialHeight);
+}
+
+API_AVAILABLE(macos(26.0))
+static NSView *LegendCreateOverscannedGlassEffectView(NSRect frame)
+{
+  NSView *containerView = [[NSView alloc] initWithFrame:frame];
+  containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  containerView.wantsLayer = YES;
+  containerView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  containerView.layer.masksToBounds = YES;
+
+  CGFloat overscan = 48;
+  NSRect glassFrame = NSMakeRect(-overscan, 0, NSWidth(frame) + overscan, NSHeight(frame) + overscan);
+  NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:glassFrame];
+  glassView.cornerRadius = 0;
+  glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  glassView.wantsLayer = YES;
+  glassView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  [containerView addSubview:glassView];
+
+  return containerView;
 }
 
 static void LegendApplyTitlebarBackgroundColor(NSView *view, NSColor *backgroundColor)
@@ -565,11 +588,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 {
   if ([material isEqualToString:@"glass"]) {
     if (@available(macOS 26.0, *)) {
-      NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:frame];
-      glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-      glassView.wantsLayer = YES;
-      glassView.layer.backgroundColor = NSColor.clearColor.CGColor;
-      return glassView;
+      return LegendCreateOverscannedGlassEffectView(frame);
     }
   }
 
@@ -602,7 +621,11 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     return;
   }
 
-  NSView *materialView = [self createTitlebarMaterialView:material frame:LegendTitlebarMaterialFrame(window, frameView)];
+  NSNumber *leadingInsetNumber = [windowStyle[@"titlebarMaterialLeadingInset"] isKindOfClass:NSNumber.class]
+    ? windowStyle[@"titlebarMaterialLeadingInset"]
+    : nil;
+  CGFloat leadingInset = leadingInsetNumber ? leadingInsetNumber.doubleValue : 0;
+  NSView *materialView = [self createTitlebarMaterialView:material frame:LegendTitlebarMaterialFrame(window, frameView, leadingInset)];
   if ([materialView isKindOfClass:NSVisualEffectView.class]) {
     NSVisualEffectView *effectView = (NSVisualEffectView *)materialView;
     NSString *blendingMode = [windowStyle[@"titlebarMaterialBlendingMode"] isKindOfClass:NSString.class]
