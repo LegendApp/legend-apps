@@ -1,0 +1,40 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "app.legend.diff.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "App.tsx",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "App.tsx, Modified"
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "NewFile.ts, Untracked"
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/diff-e2e/local-folder-smoke.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]
