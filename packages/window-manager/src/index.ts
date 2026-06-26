@@ -85,7 +85,6 @@ export type WindowStyleOptions = {
   titlebarSeparatorStyle?: "automatic" | "none" | "line" | "shadow";
   titlebarMaterial?: "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
   titlebarMaterialBlendingMode?: "behindWindow" | "withinWindow";
-  titlebarMaterialLeadingInset?: number;
   titlebarMaterialState?: "active" | "inactive" | "followsWindowActiveState";
   backgroundColor?: string;
   hasToolbar?: boolean;

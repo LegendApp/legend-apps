@@ -370,7 +370,7 @@ function addCodegenSpecFiles(hash: Hash, dirPath: string) {
   }
 
   for (const filePath of getDirectoryFiles(dirPath)) {
-    if (!/^Native.*\.[jt]sx?$/.test(path.basename(filePath))) {
+    if (!/^(Native.*|.*NativeComponent)\.[jt]sx?$/.test(path.basename(filePath))) {
       continue;
     }
 

@@ -211,21 +211,19 @@ static NSVisualEffectState LegendVisualEffectStateForName(NSString *value)
   return NSVisualEffectStateFollowsWindowActiveState;
 }
 
-static NSRect LegendTitlebarMaterialFrame(NSWindow *window, NSView *frameView, CGFloat leadingInset)
+static NSRect LegendTitlebarMaterialFrame(NSWindow *window, NSView *frameView)
 {
   NSRect frameBounds = frameView.bounds;
-  NSRect contentFrame = window.contentView.frame;
   NSRect contentLayoutRect = [frameView convertRect:window.contentLayoutRect fromView:nil];
   CGFloat materialMinY = NSMaxY(contentLayoutRect);
   CGFloat materialHeight = NSMaxY(frameBounds) - materialMinY;
-  CGFloat materialMinX = MIN(MAX(0, NSMinX(contentFrame) + leadingInset), NSWidth(frameBounds));
 
   if (materialHeight <= 0 || materialHeight > NSHeight(frameBounds)) {
     materialHeight = MAX(0, NSHeight(window.frame) - NSHeight(window.contentLayoutRect));
     materialMinY = NSMaxY(frameBounds) - materialHeight;
   }
 
-  return NSMakeRect(materialMinX, materialMinY, NSWidth(frameBounds) - materialMinX, materialHeight);
+  return NSMakeRect(0, materialMinY, NSWidth(frameBounds), materialHeight);
 }
 
 API_AVAILABLE(macos(26.0))
@@ -621,11 +619,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     return;
   }
 
-  NSNumber *leadingInsetNumber = [windowStyle[@"titlebarMaterialLeadingInset"] isKindOfClass:NSNumber.class]
-    ? windowStyle[@"titlebarMaterialLeadingInset"]
-    : nil;
-  CGFloat leadingInset = leadingInsetNumber ? leadingInsetNumber.doubleValue : 0;
-  NSView *materialView = [self createTitlebarMaterialView:material frame:LegendTitlebarMaterialFrame(window, frameView, leadingInset)];
+  NSView *materialView = [self createTitlebarMaterialView:material frame:LegendTitlebarMaterialFrame(window, frameView)];
   if ([materialView isKindOfClass:NSVisualEffectView.class]) {
     NSVisualEffectView *effectView = (NSVisualEffectView *)materialView;
     NSString *blendingMode = [windowStyle[@"titlebarMaterialBlendingMode"] isKindOfClass:NSString.class]

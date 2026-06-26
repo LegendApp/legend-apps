@@ -14,6 +14,10 @@ export type SidebarSplitViewResizeEvent = Readonly<{
 
 export interface NativeProps extends ViewProps {
   appearance?: string;
+  contentTitlebarHeight?: Double;
+  contentTitlebarMaterial?: string;
+  contentTitlebarOverlayColor?: string;
+  contentTitlebarOverlayOpacity?: Double;
   contentMinWidth?: Double;
   onSplitViewDidResize?: DirectEventHandler<SidebarSplitViewResizeEvent>;
   sidebarCollapsed?: boolean;

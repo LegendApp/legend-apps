@@ -69,7 +69,6 @@ function createDiffViewerWindowStyle({
   showSidebarControl,
   showViewModeToolbar,
   sidebarCollapsed,
-  titlebarMaterialLeadingInset,
   viewMode,
 }: {
   appearance?: "dark" | "light";
@@ -78,7 +77,6 @@ function createDiffViewerWindowStyle({
   showSidebarControl?: boolean;
   showViewModeToolbar?: boolean;
   sidebarCollapsed?: boolean;
-  titlebarMaterialLeadingInset?: number;
   viewMode?: DiffViewMode;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
@@ -93,8 +91,6 @@ function createDiffViewerWindowStyle({
     },
     includeFrame,
     miniaturizable: true,
-    titlebarMaterial: "glass",
-    titlebarMaterialLeadingInset,
   });
 
   return {
@@ -229,14 +225,5 @@ export function setDiffViewerWindowToolbarOptions({
       sidebarCollapsed,
       viewMode,
     }),
-  });
-}
-
-export function setDiffViewerWindowTitlebarMaterialLeadingInset(leadingInset: number) {
-  return setWindowOptions(diffViewerWindowIdentifier, {
-    windowStyle: {
-      titlebarMaterial: "glass",
-      titlebarMaterialLeadingInset: leadingInset,
-    },
   });
 }

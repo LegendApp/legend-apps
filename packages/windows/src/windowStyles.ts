@@ -16,7 +16,6 @@ type DocumentWindowStyleOptions = {
   includeFrame: boolean;
   titlebarMaterial?: WindowStyle["titlebarMaterial"];
   titlebarMaterialBlendingMode?: WindowStyle["titlebarMaterialBlendingMode"];
-  titlebarMaterialLeadingInset?: WindowStyle["titlebarMaterialLeadingInset"];
   titlebarMaterialState?: WindowStyle["titlebarMaterialState"];
 };
 
@@ -31,7 +30,6 @@ export function createDocumentWindowStyle({
   includeFrame,
   titlebarMaterial,
   titlebarMaterialBlendingMode,
-  titlebarMaterialLeadingInset,
   titlebarMaterialState,
 }: DocumentWindowStyleOptions): WindowStyle {
   return {
@@ -51,7 +49,6 @@ export function createDocumentWindowStyle({
     titleVisibility: "visible",
     titlebarMaterial,
     titlebarMaterialBlendingMode,
-    titlebarMaterialLeadingInset,
     titlebarMaterialState,
   };
 }
@@ -64,7 +61,6 @@ export function createUnifiedToolbarWindowStyle({
   miniaturizable = false,
   titlebarMaterial,
   titlebarMaterialBlendingMode,
-  titlebarMaterialLeadingInset,
   titlebarMaterialState,
 }: UnifiedToolbarWindowStyleOptions): WindowStyle {
   return {
@@ -85,7 +81,6 @@ export function createUnifiedToolbarWindowStyle({
     titleVisibility: "visible",
     titlebarMaterial,
     titlebarMaterialBlendingMode,
-    titlebarMaterialLeadingInset,
     titlebarMaterialState,
     toolbarStyle: "unified",
   };

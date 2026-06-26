@@ -20,12 +20,17 @@ export type KitchenSinkPackage = NativeMenuPackage;
 export type KitchenSinkTest = NativeMenuTest;
 export type { SidebarSplitViewResizeEvent };
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
+export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
 
 export interface SidebarSplitViewProps extends ViewProps {
   appearance?: SidebarSplitViewAppearance;
   children?: ReactNode;
   className?: string;
   contentMinWidth?: number;
+  contentTitlebarHeight?: number;
+  contentTitlebarMaterial?: SidebarSplitViewTitlebarMaterial;
+  contentTitlebarOverlayColor?: string;
+  contentTitlebarOverlayOpacity?: number;
   onSplitViewDidResize?: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void | Promise<void>;
   sidebarCollapsed?: boolean;
   sidebarMinWidth?: number;
@@ -35,6 +40,10 @@ export function SidebarSplitView({
   appearance = "system",
   children,
   contentMinWidth = 320,
+  contentTitlebarHeight = 0,
+  contentTitlebarMaterial = "none",
+  contentTitlebarOverlayColor,
+  contentTitlebarOverlayOpacity = 0,
   onSplitViewDidResize,
   sidebarCollapsed = false,
   sidebarMinWidth = 180,
@@ -84,6 +93,10 @@ export function SidebarSplitView({
     {
       appearance,
       contentMinWidth,
+      contentTitlebarHeight,
+      contentTitlebarMaterial,
+      contentTitlebarOverlayColor,
+      contentTitlebarOverlayOpacity,
       onSplitViewDidResize: handleSplitViewResize,
       sidebarCollapsed,
       sidebarMinWidth,

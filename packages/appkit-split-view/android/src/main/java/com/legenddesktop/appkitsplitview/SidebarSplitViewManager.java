@@ -41,6 +41,18 @@ public class SidebarSplitViewManager extends SimpleViewManager<SidebarSplitView>
   }
 
   @Override
+  public void setContentTitlebarHeight(SidebarSplitView view, double value) {}
+
+  @Override
+  public void setContentTitlebarMaterial(SidebarSplitView view, String value) {}
+
+  @Override
+  public void setContentTitlebarOverlayColor(SidebarSplitView view, String value) {}
+
+  @Override
+  public void setContentTitlebarOverlayOpacity(SidebarSplitView view, double value) {}
+
+  @Override
   public void setSidebarCollapsed(SidebarSplitView view, boolean value) {
     view.setSidebarCollapsed(value);
   }

@@ -5,9 +5,23 @@
 #import <react/renderer/components/RNAppKitSplitViewSpec/Props.h>
 #import <react/renderer/components/RNAppKitSplitViewSpec/RCTComponentViewHelpers.h>
 
+#if TARGET_OS_OSX
+#import <QuartzCore/QuartzCore.h>
+#endif
+
 using namespace facebook::react;
 
 #if TARGET_OS_OSX
+@interface RNSidebarSplitViewTitlebarMaterialContainerView : NSView
+@end
+
+@implementation RNSidebarSplitViewTitlebarMaterialContainerView
+- (nullable NSView *)hitTest:(NSPoint)point
+{
+  return nil;
+}
+@end
+
 static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceName)
 {
   if ([appearanceName isEqualToString:@"light"]) {
@@ -19,6 +33,129 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   }
 
   return nil;
+}
+
+static NSColor *RNSidebarSplitViewColorFromHexString(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return nil;
+  }
+
+  NSString *hex = [value hasPrefix:@"#"] ? [value substringFromIndex:1] : value;
+  if (hex.length != 6 && hex.length != 8) {
+    return nil;
+  }
+
+  unsigned long long raw = 0;
+  NSScanner *scanner = [NSScanner scannerWithString:hex];
+  if (![scanner scanHexLongLong:&raw]) {
+    return nil;
+  }
+
+  CGFloat red = 0;
+  CGFloat green = 0;
+  CGFloat blue = 0;
+  CGFloat alpha = 1;
+  if (hex.length == 8) {
+    red = ((raw >> 24) & 0xff) / 255.0;
+    green = ((raw >> 16) & 0xff) / 255.0;
+    blue = ((raw >> 8) & 0xff) / 255.0;
+    alpha = (raw & 0xff) / 255.0;
+  } else {
+    red = ((raw >> 16) & 0xff) / 255.0;
+    green = ((raw >> 8) & 0xff) / 255.0;
+    blue = (raw & 0xff) / 255.0;
+  }
+
+  return [NSColor colorWithSRGBRed:red green:green blue:blue alpha:alpha];
+}
+
+static CGFloat RNSidebarSplitViewClampedUnitValue(CGFloat value)
+{
+  return MIN(MAX(0, value), 1);
+}
+
+static NSVisualEffectMaterial RNSidebarSplitViewMaterialForName(NSString *value)
+{
+  if ([value isEqualToString:@"hudWindow"]) {
+    return NSVisualEffectMaterialHUDWindow;
+  }
+  if ([value isEqualToString:@"sidebar"]) {
+    return NSVisualEffectMaterialSidebar;
+  }
+  if ([value isEqualToString:@"windowBackground"]) {
+    return NSVisualEffectMaterialWindowBackground;
+  }
+  if ([value isEqualToString:@"titlebar"]) {
+    return NSVisualEffectMaterialTitlebar;
+  }
+  if ([value isEqualToString:@"glass"] || [value isEqualToString:@"headerView"]) {
+    if (@available(macOS 10.14, *)) {
+      return NSVisualEffectMaterialHeaderView;
+    }
+    return NSVisualEffectMaterialTitlebar;
+  }
+  return NSVisualEffectMaterialTitlebar;
+}
+
+static NSView *RNSidebarSplitViewCreateColorOverlay(NSRect frame, NSColor *color, CGFloat opacity)
+{
+  NSView *overlayView = [[NSView alloc] initWithFrame:frame];
+  overlayView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  overlayView.wantsLayer = YES;
+  overlayView.layer.backgroundColor = [color colorWithAlphaComponent:opacity].CGColor;
+  return overlayView;
+}
+
+static NSView *RNSidebarSplitViewCreateMaterialContainer(NSRect frame, NSView *materialView, NSColor *overlayColor, CGFloat overlayOpacity)
+{
+  RNSidebarSplitViewTitlebarMaterialContainerView *containerView =
+    [[RNSidebarSplitViewTitlebarMaterialContainerView alloc] initWithFrame:frame];
+  containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  containerView.wantsLayer = YES;
+  containerView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  containerView.layer.masksToBounds = YES;
+
+  [containerView addSubview:materialView];
+  if (overlayColor && overlayOpacity > 0) {
+    [containerView addSubview:RNSidebarSplitViewCreateColorOverlay(containerView.bounds, overlayColor, overlayOpacity)];
+  }
+
+  return containerView;
+}
+
+API_AVAILABLE(macos(26.0))
+static NSView *RNSidebarSplitViewCreateGlassMaterialView(NSRect frame, NSColor *overlayColor, CGFloat overlayOpacity)
+{
+  CGFloat overscan = 48;
+  NSRect glassFrame = NSMakeRect(-overscan, 0, NSWidth(frame) + (overscan * 2), NSHeight(frame) + overscan);
+  NSGlassEffectView *glassView = [[NSGlassEffectView alloc] initWithFrame:glassFrame];
+  glassView.cornerRadius = 0;
+  glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  glassView.wantsLayer = YES;
+  glassView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  return RNSidebarSplitViewCreateMaterialContainer(frame, glassView, overlayColor, overlayOpacity);
+}
+
+static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialName,
+                                                            NSRect frame,
+                                                            NSColor *overlayColor,
+                                                            CGFloat overlayOpacity)
+{
+  if ([materialName isEqualToString:@"glass"]) {
+    if (@available(macOS 26.0, *)) {
+      return RNSidebarSplitViewCreateGlassMaterialView(frame, overlayColor, overlayOpacity);
+    }
+  }
+
+  NSVisualEffectView *effectView = [[NSVisualEffectView alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame))];
+  effectView.material = RNSidebarSplitViewMaterialForName(materialName);
+  effectView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+  effectView.state = NSVisualEffectStateFollowsWindowActiveState;
+  effectView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  effectView.wantsLayer = YES;
+  effectView.layer.backgroundColor = NSColor.clearColor.CGColor;
+  return RNSidebarSplitViewCreateMaterialContainer(frame, effectView, overlayColor, overlayOpacity);
 }
 #endif
 
@@ -52,6 +189,11 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   CGFloat _lastContentWidth;
   CGFloat _lastHeight;
   NSString *_appearanceName;
+  CGFloat _contentTitlebarHeight;
+  NSString *_contentTitlebarMaterialName;
+  NSString *_contentTitlebarOverlayColorValue;
+  CGFloat _contentTitlebarOverlayOpacity;
+  NSView *_contentTitlebarMaterialView;
 #else
   UIView *_sidebarContainer;
   UIView *_contentContainer;
@@ -74,10 +216,19 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
     _lastContentWidth = -1;
     _lastHeight = -1;
     _appearanceName = @"system";
+    _contentTitlebarHeight = 0;
+    _contentTitlebarMaterialName = @"none";
+    _contentTitlebarOverlayOpacity = 0;
     _sidebarContainer = [NSView new];
     _contentContainer = [NSView new];
     _sidebarContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     _contentContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _sidebarContainer.wantsLayer = YES;
+    _contentContainer.wantsLayer = YES;
+    _sidebarContainer.layer.masksToBounds = NO;
+    _contentContainer.layer.masksToBounds = NO;
+    _sidebarContainer.layer.zPosition = 10;
+    _contentContainer.layer.zPosition = 0;
 
     _sidebarViewController = [NSViewController new];
     _contentViewController = [NSViewController new];
@@ -157,6 +308,57 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   [_contentContainer setNeedsDisplay:YES];
 }
 
+- (void)removeContentTitlebarMaterial
+{
+  [_contentTitlebarMaterialView removeFromSuperview];
+  _contentTitlebarMaterialView = nil;
+}
+
+- (void)layoutContentTitlebarMaterial
+{
+  if (_contentTitlebarHeight <= 0 ||
+      _contentTitlebarMaterialName.length == 0 ||
+      [_contentTitlebarMaterialName isEqualToString:@"none"] ||
+      !_contentContainer.superview) {
+    [self removeContentTitlebarMaterial];
+    return;
+  }
+
+  NSRect splitFrameInContent = [_splitViewController.view convertRect:_splitViewController.view.bounds toView:_contentContainer];
+  CGFloat materialHeight = MIN(_contentTitlebarHeight, NSHeight(splitFrameInContent));
+  if (materialHeight <= 0 || NSWidth(splitFrameInContent) <= 0) {
+    [self removeContentTitlebarMaterial];
+    return;
+  }
+
+  CGFloat materialY = _contentContainer.isFlipped
+    ? NSMinY(splitFrameInContent)
+    : NSMaxY(splitFrameInContent) - materialHeight;
+  NSRect materialFrame = NSMakeRect(NSMinX(splitFrameInContent), materialY, NSWidth(splitFrameInContent), materialHeight);
+
+  if (!_contentTitlebarMaterialView) {
+    NSColor *overlayColor = RNSidebarSplitViewColorFromHexString(_contentTitlebarOverlayColorValue);
+    CGFloat overlayOpacity = RNSidebarSplitViewClampedUnitValue(_contentTitlebarOverlayOpacity);
+    _contentTitlebarMaterialView = RNSidebarSplitViewCreateTitlebarMaterialView(
+      _contentTitlebarMaterialName,
+      materialFrame,
+      overlayColor,
+      overlayOpacity);
+  } else {
+    _contentTitlebarMaterialView.frame = materialFrame;
+  }
+
+  if (_contentTitlebarMaterialView.superview != _contentContainer) {
+    [_contentTitlebarMaterialView removeFromSuperview];
+    [_contentContainer addSubview:_contentTitlebarMaterialView positioned:NSWindowAbove relativeTo:_contentReactView];
+  } else {
+    [_contentContainer addSubview:_contentTitlebarMaterialView positioned:NSWindowAbove relativeTo:_contentReactView];
+  }
+
+  _sidebarContainer.layer.zPosition = 10;
+  _contentContainer.layer.zPosition = 0;
+}
+
 - (void)syncReactSubviewFrames
 {
   CGRect sidebarBounds = _sidebarContainer.bounds;
@@ -228,6 +430,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   }
 
   [self syncReactSubviewFrames];
+  [self layoutContentTitlebarMaterial];
 
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
@@ -288,6 +491,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   [self applyDividerPositionForBounds:bounds];
   [_splitViewController.splitView adjustSubviews];
   [_splitViewController.view layoutSubtreeIfNeeded];
+  [self layoutContentTitlebarMaterial];
   [self splitViewDidResize];
 }
 
@@ -386,10 +590,33 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   BOOL shouldRelayout =
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
     fabs(_contentMinWidth - newProps.contentMinWidth) >= 0.5 ||
-    _sidebarCollapsed != newProps.sidebarCollapsed;
+    _sidebarCollapsed != newProps.sidebarCollapsed ||
+    fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
+  NSString *nextContentTitlebarMaterialName = [NSString stringWithUTF8String:newProps.contentTitlebarMaterial.c_str()];
+  if (nextContentTitlebarMaterialName.length == 0) {
+    nextContentTitlebarMaterialName = @"none";
+  }
+  NSString *nextContentTitlebarOverlayColorValue = [NSString stringWithUTF8String:newProps.contentTitlebarOverlayColor.c_str()];
+  if (nextContentTitlebarOverlayColorValue.length == 0) {
+    nextContentTitlebarOverlayColorValue = nil;
+  }
+  CGFloat nextContentTitlebarOverlayOpacity = RNSidebarSplitViewClampedUnitValue(newProps.contentTitlebarOverlayOpacity);
+  BOOL shouldRecreateContentTitlebarMaterial =
+    ![_contentTitlebarMaterialName isEqualToString:nextContentTitlebarMaterialName] ||
+    !((_contentTitlebarOverlayColorValue == nextContentTitlebarOverlayColorValue) ||
+      [_contentTitlebarOverlayColorValue isEqualToString:nextContentTitlebarOverlayColorValue]) ||
+    fabs(_contentTitlebarOverlayOpacity - nextContentTitlebarOverlayOpacity) >= 0.001 ||
+    fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
   _sidebarMinWidth = newProps.sidebarMinWidth;
   _contentMinWidth = newProps.contentMinWidth;
   _sidebarCollapsed = newProps.sidebarCollapsed;
+  _contentTitlebarHeight = newProps.contentTitlebarHeight;
+  _contentTitlebarMaterialName = nextContentTitlebarMaterialName;
+  _contentTitlebarOverlayColorValue = nextContentTitlebarOverlayColorValue;
+  _contentTitlebarOverlayOpacity = nextContentTitlebarOverlayOpacity;
+  if (shouldRecreateContentTitlebarMaterial) {
+    [self removeContentTitlebarMaterial];
+  }
   if (![_appearanceName isEqualToString:nextAppearanceName]) {
     _appearanceName = nextAppearanceName;
     [self applyAppearance];
@@ -401,7 +628,7 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   [super updateProps:props oldProps:oldProps];
 
 #if TARGET_OS_OSX
-  if (shouldRelayout) {
+  if (shouldRelayout || shouldRecreateContentTitlebarMaterial) {
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
     _lastHeight = -1;
@@ -447,9 +674,9 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   if (self.window) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
       if (self.window) {
-        _lastSidebarWidth = -1;
-        _lastContentWidth = -1;
-        _lastHeight = -1;
+        self->_lastSidebarWidth = -1;
+        self->_lastContentWidth = -1;
+        self->_lastHeight = -1;
         [self layoutSplitView];
       }
     });
@@ -489,6 +716,11 @@ static NSAppearance *RNSidebarSplitViewAppearanceForName(NSString *appearanceNam
   _lastContentWidth = -1;
   _lastHeight = -1;
   _appearanceName = @"system";
+  _contentTitlebarHeight = 0;
+  _contentTitlebarMaterialName = @"none";
+  _contentTitlebarOverlayColorValue = nil;
+  _contentTitlebarOverlayOpacity = 0;
+  [self removeContentTitlebarMaterial];
   [self applyAppearance];
   [self updateSidebarCollapsed];
   [self updateSplitItemSizing];
