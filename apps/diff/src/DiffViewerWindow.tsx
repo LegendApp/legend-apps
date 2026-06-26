@@ -51,7 +51,6 @@ import {
   diffDocumentPermissionErrorHeight,
   diffDropAllowedFileTypes,
   diffFileHeaderRowHeight,
-  diffInitialHighlightChunkRowCount,
   diffInitialRowCount,
   diffLineOverscan,
   diffOverscanRequestDelayMs,
@@ -148,7 +147,7 @@ type DiffLoadedBodyProps = {
   fileFilterInputRef: RefObject<TextInputSearchRef | null>;
   getItemSize: (index: number) => number;
   getItemType: (index: number) => string;
-  getRow: (index: number, rowVersion: number) => DiffRenderRow | undefined;
+  getRow: (index: number) => DiffRenderRow | undefined;
   getSideBySideItemSize: (index: number) => number;
   getSideBySideItemType: (index: number) => string;
   getSideBySideRow: (index: number) => DiffSideBySideRenderRow | undefined;
@@ -172,7 +171,6 @@ type DiffLoadedBodyProps = {
   sidebarCollapsed: boolean;
   sidebarListHeight: number;
   sideBySideItemIndexes: Array<number | undefined>;
-  sideBySideRowVersions$: Observable<Record<string, number>>;
   splitPaneMetrics: DiffSplitPaneMetrics;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
@@ -597,7 +595,6 @@ function DiffLoadedBody({
   sidebarCollapsed,
   sidebarListHeight,
   sideBySideItemIndexes,
-  sideBySideRowVersions$,
   splitPaneMetrics,
   state,
   syntaxAppearance,
@@ -673,7 +670,6 @@ function DiffLoadedBody({
       <VirtualizedFixedDocumentList
         adaptiveRender={diffAdaptiveRender}
         dataVersion={diffRows.dataVersion}
-        debugName="diff"
         key="unified"
         extraData={listExtraData}
         itemIndexes={visibleItemIndexes}
@@ -688,7 +684,6 @@ function DiffLoadedBody({
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
         requestRange={diffRows.requestRange}
         getRow={getRow}
-        rowVersions$={diffRows.rowVersions$}
         rowHeight={rowHeight}
         renderRow={renderRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
@@ -697,7 +692,6 @@ function DiffLoadedBody({
       <VirtualizedFixedDocumentList
         adaptiveRender={diffAdaptiveRender}
         dataVersion={diffRows.dataVersion}
-        debugName={`diff-${viewMode}`}
         key={viewMode}
         extraData={listExtraData}
         itemIndexes={sideBySideItemIndexes}
@@ -712,7 +706,6 @@ function DiffLoadedBody({
         onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
         requestRange={requestSideBySideRange}
-        rowVersions$={sideBySideRowVersions$}
         rowHeight={rowHeight}
         renderRow={renderSideBySideRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
@@ -935,16 +928,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
   const isLoading = loadingSource !== null;
   const isLoadingGithub = loadingSource?.kind === "github";
-  const highlightedVisibleRangeRef = useRef<{
-    count: number;
-    document: DiffDocument;
-    start: number;
-  } | null>(null);
   const isRenderingInitialLoadedFrame =
     state.status === "loaded" &&
     sourcesMatch(loadingSource, state.source);
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
-  const highlightTimeoutHandlesRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
   const backgroundColor = syntaxTheme.background;
@@ -1001,8 +988,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     handleSideBySideVisibleRowsRequested,
     requestSideBySideRange,
     resetSideBySideRuntime,
-    sideBySideRowVersions$,
-    sideBySideTokenStyleState,
   } = useDiffSideBySideRuntime({
     activeFileIndex$,
     collapsedFileIndexes$,
@@ -1011,95 +996,20 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     sideBySideRowCount,
     state,
     state$,
-    syntaxThemeName: syntaxTheme.name,
     viewMode,
   });
-  const clearHighlightTimeouts = useCallback(() => {
-    for (const timeoutHandle of highlightTimeoutHandlesRef.current) {
-      clearTimeout(timeoutHandle);
-    }
-    highlightTimeoutHandlesRef.current.clear();
-  }, []);
-
   useEffect(() => {
-    highlightedVisibleRangeRef.current = null;
     resetSideBySideRuntime();
-    clearHighlightTimeouts();
     if (state.status === "loaded") {
       activeFileIndex$.set(state.files[0]?.index ?? null);
       setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
     } else {
       activeFileIndex$.set(null);
     }
-  }, [activeFileIndex$, clearHighlightTimeouts, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
+  }, [activeFileIndex$, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
 
-  useEffect(() => clearHighlightTimeouts, [clearHighlightTimeouts]);
-
-  const scheduleVisibleHighlight = useCallback((start: number, count: number, reason: string) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      const safeStart = Math.max(0, Math.floor(start));
-      const safeCount = Math.min(
-        Math.max(0, Math.ceil(count)),
-        Math.max(0, currentState.document.rowCount - safeStart),
-      );
-      const highlightedRange = highlightedVisibleRangeRef.current;
-      const isAlreadyHighlighted = highlightedRange?.document === currentState.document
-        && highlightedRange.start === safeStart
-        && highlightedRange.count === safeCount;
-
-      if (safeCount > 0 && !isAlreadyHighlighted) {
-        highlightedVisibleRangeRef.current = {
-          count: safeCount,
-          document: currentState.document,
-          start: safeStart,
-        };
-        clearHighlightTimeouts();
-        logDiffOpenTiming("viewer.visibleHighlight.schedule", {
-          chunkSize: diffInitialHighlightChunkRowCount,
-          count: safeCount,
-          reason,
-          start: safeStart,
-        });
-
-        const scheduleHighlightChunk = (chunkStart: number) => {
-          const timeoutHandle = setTimeout(() => {
-            highlightTimeoutHandlesRef.current.delete(timeoutHandle);
-            if (highlightedVisibleRangeRef.current?.document === currentState.document) {
-              const chunkOffset = chunkStart - safeStart;
-              const chunkCount = Math.min(diffInitialHighlightChunkRowCount, safeCount - chunkOffset);
-              if (chunkCount > 0) {
-                logDiffOpenTiming("viewer.visibleHighlight.request", {
-                  count: chunkCount,
-                  remaining: Math.max(0, safeCount - chunkOffset - chunkCount),
-                  start: chunkStart,
-                });
-                diffRows.requestRange(chunkStart, chunkCount, {
-                  force: true,
-                  reason: "highlight",
-                });
-
-                if (chunkOffset + chunkCount < safeCount) {
-                  scheduleHighlightChunk(chunkStart + chunkCount);
-                }
-              }
-            }
-          }, 0);
-          highlightTimeoutHandlesRef.current.add(timeoutHandle);
-        };
-
-        const timeoutHandle = setTimeout(() => {
-          highlightTimeoutHandlesRef.current.delete(timeoutHandle);
-          scheduleHighlightChunk(safeStart);
-        }, 0);
-        highlightTimeoutHandlesRef.current.add(timeoutHandle);
-      }
-    }
-  }, [clearHighlightTimeouts, diffRows, state$]);
-
-  const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: string) => {
-    scheduleVisibleHighlight(start, count, reason);
-  }, [scheduleVisibleHighlight]);
+  const handleVisibleRowsRequested = useCallback(() => {
+  }, []);
 
   const handleTopItemChanged = useCallback((rowIndex: number) => {
     const currentState = state$.peek();
@@ -1515,9 +1425,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return next;
     });
   }, [setCollapsedFileIndexesValue]);
-  const currentSideBySideTokenStyleById = state.status === "loaded" && sideBySideTokenStyleState?.document === state.document
-    ? sideBySideTokenStyleState.tokenStyleById
-    : tokenStyleById;
   const listSyntaxTheme = syntaxTheme.name;
   const listExtraData = useMemo<DiffListExtraData>(
     () => ({
@@ -1528,13 +1435,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       mutedColor,
       rowHeight,
-      sideBySideTokenStyleCount: currentSideBySideTokenStyleById.size,
+      sideBySideTokenStyleCount: tokenStyleById.size,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxTheme: listSyntaxTheme,
       tokenStyleCount: tokenStyleById.size,
     }),
     [
-      currentSideBySideTokenStyleById.size,
       displayTheme.colors.border,
       fileHeaderBackgroundColor,
       fontFamily,
@@ -1550,6 +1456,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
       borderColor: displayTheme.colors.border,
+      document: state.status === "loaded" ? state.document : null,
       fileHeaderBackgroundColor,
       fileByIndex,
       fileByRowStart,
@@ -1559,13 +1466,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       mutedColor,
       rowHeight,
-      sideBySideTokenStyleById: currentSideBySideTokenStyleById,
+      sideBySideTokenStyleById: tokenStyleById,
       syntaxAppearance: syntaxTheme.appearance,
       tokenStyleById,
       toggleFileCollapsed,
     }),
     [
-      currentSideBySideTokenStyleById,
       displayTheme.colors.border,
       fileHeaderBackgroundColor,
       fileByIndex,
@@ -1576,6 +1482,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       mutedColor,
       rowHeight,
+      state.status === "loaded" ? state.document : null,
       syntaxTheme.appearance,
       toggleFileCollapsed,
       tokenStyleById,
@@ -1795,7 +1702,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         sidebarCollapsed={sidebarCollapsed}
         sidebarListHeight={sidebarListHeight}
         sideBySideItemIndexes={sideBySideItemIndexes}
-        sideBySideRowVersions$={sideBySideRowVersions$}
         splitPaneMetrics={splitPaneMetrics}
         state={state}
         syntaxAppearance={syntaxTheme.appearance}

@@ -39,6 +39,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
   const file = createFile();
   return {
     borderColor: "#30363d",
+    document: null,
     fileByIndex: new Map([[file.index, file]]),
     fileByRowStart: new Map([[file.rowStart, file]]),
     fileHeaderBackgroundColor: "#161b22",

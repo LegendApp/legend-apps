@@ -6,8 +6,6 @@ import {
   type LegendListRenderItemProps,
   useAdaptiveRender,
 } from "@legendapp/list/react-native";
-import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
 import type {
   LayoutChangeEvent,
@@ -35,7 +33,6 @@ export type VirtualizedDocumentRequestOptions = {
 };
 
 export type VirtualizedDocumentRowsRequestResult<TStyle, TTiming> = {
-  invalidate?: boolean | readonly number[];
   styles?: readonly TStyle[];
   timing?: TTiming;
 };
@@ -57,9 +54,7 @@ export type VirtualizedDocumentRowsState<TRow, TStyle, TTiming> = {
   dataVersion: number;
   itemIndexes: Array<number | undefined>;
   itemCount: number;
-  invalidateRange: (start: number, count: number) => void;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
-  rowVersions$: Observable<Record<string, number>>;
   styles: readonly TStyle[];
   timing: TTiming | null;
 };
@@ -77,18 +72,16 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
   index: number;
   listIndex: number;
   row: TRow | undefined;
-  rowVersion: number;
 };
 
 type VirtualizedFixedDocumentListRowProps<TRow> = {
   adaptiveRenderEnabled: boolean;
   debugName?: string;
-  getRow?: (index: number, rowVersion: number) => TRow | undefined;
+  getRow?: (index: number) => TRow | undefined;
   index: number;
   listIndex: number;
   renderItemBatchRef: { current: RenderItemDebugBatch | null };
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
-  rowVersions$?: Observable<Record<string, number>>;
 };
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
@@ -111,8 +104,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   recycleItems?: boolean;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
-  getRow?: (index: number, rowVersion: number) => TRow | undefined;
-  rowVersions$?: Observable<Record<string, number>>;
+  getRow?: (index: number) => TRow | undefined;
   rowHeight: number;
   style?: StyleProp<ViewStyle>;
 };
@@ -234,11 +226,6 @@ function createRowsState<TDocument, TRow, TStyle, TTiming>(
   };
 }
 
-function bumpRowVersion(rowVersions$: Observable<Record<string, number>>, rowIndex: number) {
-  const key = String(rowIndex);
-  rowVersions$[key].set((rowVersions$[key].peek() ?? 0) + 1);
-}
-
 function VirtualizedFixedDocumentListRowContent<TRow>({
   adaptiveRenderEnabled,
   debugName,
@@ -247,31 +234,17 @@ function VirtualizedFixedDocumentListRowContent<TRow>({
   listIndex,
   renderItemBatchRef,
   renderRow,
-  rowVersion,
-}: Omit<VirtualizedFixedDocumentListRowProps<TRow>, "rowVersions$"> & {
-  rowVersion: number;
-}) {
+}: VirtualizedFixedDocumentListRowProps<TRow>) {
   const adaptiveRender = useAdaptiveRender();
   const effectiveAdaptiveRender = adaptiveRenderEnabled ? adaptiveRender : "normal";
-  const row = useMemo(() => getRow?.(index, rowVersion), [getRow, index, rowVersion]);
+  const row = useMemo(() => getRow?.(index), [getRow, index]);
   recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
   return renderRow({
     adaptiveRender: effectiveAdaptiveRender,
     index,
     listIndex,
     row,
-    rowVersion,
   });
-}
-
-function VirtualizedFixedDocumentListVersionedRow<TRow>({
-  rowVersions$,
-  ...props
-}: VirtualizedFixedDocumentListRowProps<TRow> & {
-  rowVersions$: Observable<Record<string, number>>;
-}) {
-  const rowVersion = useValue(() => rowVersions$[String(props.index)].get() ?? 0);
-  return <VirtualizedFixedDocumentListRowContent {...props} rowVersion={rowVersion} />;
 }
 
 function isArrayIndexProperty(property: string | symbol) {
@@ -334,7 +307,6 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   requestRows,
   snapshot,
 }: UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming>): VirtualizedDocumentRowsState<TRow, TStyle, TTiming> {
-  const rowVersions$ = useObservable<Record<string, number>>({});
   const [rowsState, setRowsState] = useState(() => createRowsState(snapshot, 0));
   const rowsStateRef = useRef(rowsState);
   const snapshotDocument = snapshot?.document ?? null;
@@ -346,27 +318,17 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
     setRowsState((currentRowsState) => {
       const nextRowsState = createRowsState(snapshot, currentRowsState.dataVersion + 1);
       rowsStateRef.current = nextRowsState;
-      rowVersions$.set({});
       debugLog(debugName, "rows.reset", {
         dataVersion: nextRowsState.dataVersion,
         itemCount: nextRowsState.itemCount,
       });
       return nextRowsState;
     });
-  }, [debugName, rowVersions$, snapshot]);
+  }, [debugName, snapshot]);
 
   useEffect(() => {
     rowsStateRef.current = activeRowsState;
   }, [activeRowsState]);
-
-  const invalidateRange = useCallback((start: number, count: number) => {
-    const loadedRowsState = rowsStateRef.current;
-    const safeStart = Math.max(0, Math.floor(start));
-    const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
-    for (let index = safeStart; index < safeEnd; index += 1) {
-      bumpRowVersion(rowVersions$, index);
-    }
-  }, [rowVersions$]);
 
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const loadedRowsState = rowsStateRef.current;
@@ -377,12 +339,10 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 
       if (safeStart < safeEnd) {
         const result = requestRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
-        const invalidate = result?.invalidate;
         debugLog(debugName, "rows.request", {
           count: safeEnd - safeStart,
           durationMs: Number((debugNowMs() - requestStartedAt).toFixed(1)),
           force: options?.force === true,
-          invalidate: Array.isArray(invalidate) ? invalidate.length : invalidate === true,
           reason: options?.reason ?? "unknown",
           start: safeStart,
         });
@@ -410,16 +370,9 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
           });
         }
 
-        if (invalidate === true) {
-          invalidateRange(safeStart, safeEnd - safeStart);
-        } else if (Array.isArray(invalidate)) {
-          for (const rowIndex of invalidate) {
-            bumpRowVersion(rowVersions$, rowIndex);
-          }
-        }
       }
     }
-  }, [debugName, invalidateRange, requestRows, rowVersions$]);
+  }, [debugName, requestRows]);
 
   const itemIndexes = useMemo(
     () => createIdentityIndexArray(activeRowsState.itemCount),
@@ -430,9 +383,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
     dataVersion: activeRowsState.dataVersion,
     itemCount: activeRowsState.itemCount,
     itemIndexes,
-    invalidateRange,
     requestRange,
-    rowVersions$,
     styles: activeRowsState.styles,
     timing: activeRowsState.timing,
   };
@@ -459,7 +410,6 @@ export function VirtualizedFixedDocumentList<TRow>({
   recycleItems = true,
   renderRow,
   requestRange,
-  rowVersions$: rowVersionsProp$,
   rowHeight,
   style,
 }: VirtualizedFixedDocumentListProps<TRow>) {
@@ -699,18 +649,11 @@ export function VirtualizedFixedDocumentList<TRow>({
         renderRow,
       };
 
-      const renderedItem = rowVersionsProp$ ? (
-        <VirtualizedFixedDocumentListVersionedRow
-          {...rowProps}
-          rowVersions$={rowVersionsProp$}
-        />
-      ) : (
-        <VirtualizedFixedDocumentListRowContent {...rowProps} rowVersion={0} />
-      );
+      const renderedItem = <VirtualizedFixedDocumentListRowContent {...rowProps} />;
       recordCallbackDebug(debugName, "list.renderItemCallbackFrame", renderItemCallbackBatchRef, index, renderItemStartedAt);
       return renderedItem;
     },
-    [adaptiveRender, debugName, getRow, renderRow, rowVersionsProp$],
+    [adaptiveRender, debugName, getRow, renderRow],
   );
 
   const getFixedItemSize = useCallback((item: number | undefined, listIndex: number) => {

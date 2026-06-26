@@ -172,7 +172,7 @@ export type SourceDocumentRowsTrace = {
 };
 
 export type SourceDocumentRowsState = VirtualizedDocumentRowsState<SyntaxRenderLine, SyntaxStyle, SourceDocumentTiming> & {
-  getRow: (index: number, rowVersion: number) => SyntaxRenderLine | undefined;
+  getRow: (index: number) => SyntaxRenderLine | undefined;
   handleInitialRowsRequested: (start: number, count: number) => void;
 };
 
@@ -248,7 +248,6 @@ export function useSourceDocumentRows({
     }, requestVersionRef.current);
     return shouldHighlight
       ? {
-          invalidate: true,
           styles: document.getStyles(),
           timing: toSourceDocumentTiming(document.getTiming(), 0),
         }
@@ -266,11 +265,9 @@ export function useSourceDocumentRows({
     snapshot,
   });
   const currentDocument = snapshot?.document ?? null;
-  const getRow = useCallback((index: number, rowVersion: number) => {
+  const getRow = useCallback((index: number) => {
     if (currentDocument) {
-      const lines = rowVersion > 0
-        ? currentDocument.getRenderLines(index, 1)
-        : currentDocument.getPlainLines(index, 1);
+      const lines = currentDocument.getPlainLines(index, 1);
       return lines[0];
     }
     return undefined;
@@ -355,7 +352,6 @@ export function SourceDocumentView({
       overscanRequestDelayMs={overscanRequestDelayMs}
       recycleItems={recycleItems}
       requestRange={sourceRows.requestRange}
-      rowVersions$={sourceRows.rowVersions$}
       rowHeight={rowHeight}
       renderRow={renderRow}
       style={style}

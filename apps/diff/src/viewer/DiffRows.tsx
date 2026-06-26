@@ -1,4 +1,5 @@
 import type {
+  DiffDocument,
   DiffFileSummary,
   DiffRenderRow,
   DiffSideBySideRenderRow,
@@ -14,13 +15,14 @@ import {
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename } from "../diffFiles";
 import {
   diffChangeTypeAdd,
   diffChangeTypeRemove,
   diffRowKindFileHeader,
+  diffScrollIdleMs,
   diffSideBySideGutterWidth,
   diffSideBySideHorizontalPadding,
 } from "./diffViewerConstants";
@@ -32,6 +34,7 @@ import {
 
 export type DiffRenderFields = {
   borderColor: string;
+  document: DiffDocument | null;
   fileHeaderBackgroundColor: string;
   fileByIndex: ReadonlyMap<number, DiffFileSummary>;
   fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
@@ -80,6 +83,7 @@ type DiffSideBySideRowProps = {
 
 type DiffSideBySideLineProps = {
   adaptiveRender: "light" | "normal";
+  document: DiffDocument | null;
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
@@ -110,6 +114,48 @@ function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? diffDarkPalette : diffLightPalette;
 }
 
+type TokenizedDiffRowState = {
+  row: DiffRenderRow;
+  tokenStyleById: SyntaxStyleMap;
+};
+
+function useTokenizedDiffRow(
+  document: DiffDocument | null,
+  row: DiffRenderRow | undefined,
+  adaptiveRender: "light" | "normal",
+  tokenStyleById: SyntaxStyleMap,
+) {
+  const [state, setState] = useState<TokenizedDiffRowState | null>(null);
+  const rowIndex = row?.index ?? -1;
+  const shouldTokenize = adaptiveRender === "normal" && document !== null && row !== undefined && row.kind !== diffRowKindFileHeader;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (shouldTokenize && document && rowIndex >= 0) {
+      const timeoutHandle = setTimeout(() => {
+        const tokenizedRow = document.getRows(rowIndex, 1)[0];
+        if (!isCancelled && tokenizedRow) {
+          setState({
+            row: tokenizedRow,
+            tokenStyleById,
+          });
+        }
+      }, diffScrollIdleMs);
+
+      return () => {
+        isCancelled = true;
+        clearTimeout(timeoutHandle);
+      };
+    }
+
+    setState(null);
+    return undefined;
+  }, [document, rowIndex, shouldTokenize, tokenStyleById]);
+
+  return state?.row.index === rowIndex ? state : null;
+}
+
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
   const sharedPropsAreEqual = previousProps.adaptiveRender === nextProps.adaptiveRender
     && previousProps.fontFamily === nextProps.fontFamily
@@ -128,6 +174,7 @@ function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps,
 
 const DiffSideBySideLine = memo(function DiffSideBySideLine({
   adaptiveRender,
+  document,
   fontFamily,
   fontSize,
   foregroundColor,
@@ -152,6 +199,30 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
       ? palette.removeBackground
       : "transparent";
   const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
+  const tokenizedState = useTokenizedDiffRow(document, visibleRow, adaptiveRender, tokenStyleById);
+  const displayRow = tokenizedState?.row ?? visibleRow;
+  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? tokenStyleById;
+
+  if (adaptiveRender === "light") {
+    return (
+      <LightText
+        selectable={false}
+        style={[
+          styles.sideLightLine,
+          {
+            backgroundColor: rowBackgroundColor,
+            color: foregroundColor,
+            fontFamily,
+            fontSize,
+            height: rowHeight,
+            lineHeight: rowHeight,
+          },
+        ]}
+      >
+        {visibleRow?.text ?? ""}
+      </LightText>
+    );
+  }
 
   return (
     <View
@@ -172,9 +243,9 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
       <TokenizedText
         adaptiveRender={adaptiveRender}
         foregroundColor={foregroundColor}
-        line={visibleRow}
+        line={displayRow}
         style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={tokenStyleById}
+        tokenStyleById={displayTokenStyleById}
       />
     </View>
   );
@@ -288,6 +359,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       : "transparent";
   const lineNumberColor = isChanged ? accentColor : mutedColor;
   const marker = isAdd ? "+" : isRemove ? "-" : " ";
+  const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, tokenStyleById);
+  const displayRow = tokenizedState?.row ?? row;
+  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? tokenStyleById;
 
   if (isFileHeader) {
     const fileIndex = file?.index ?? row?.fileIndex ?? index;
@@ -309,6 +383,27 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
     );
   }
 
+  if (adaptiveRender === "light") {
+    return (
+      <LightText
+        selectable={false}
+        style={[
+          styles.lightDiffRow,
+          {
+            backgroundColor: rowBackgroundColor,
+            color: foregroundColor,
+            fontFamily,
+            fontSize,
+            height: rowHeight,
+            lineHeight: rowHeight,
+          },
+        ]}
+      >
+        {row?.text ?? ""}
+      </LightText>
+    );
+  }
+
   return (
     <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
       <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
@@ -323,9 +418,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       <TokenizedText
         adaptiveRender={adaptiveRender}
         foregroundColor={foregroundColor}
-        line={row}
+        line={displayRow}
         style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={tokenStyleById}
+        tokenStyleById={displayTokenStyleById}
       />
     </View>
   );
@@ -382,6 +477,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
       <View style={styles.sidePane}>
         <DiffSideBySideLine
           adaptiveRender={adaptiveRender}
+          document={renderFields.document}
           fontFamily={fontFamily}
           fontSize={fontSize}
           foregroundColor={foregroundColor}
@@ -399,6 +495,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
       <View style={styles.sidePane}>
         <DiffSideBySideLine
           adaptiveRender={adaptiveRender}
+          document={renderFields.document}
           fontFamily={fontFamily}
           fontSize={fontSize}
           foregroundColor={foregroundColor}
@@ -427,6 +524,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     overflow: "hidden",
+    paddingRight: 12,
+  },
+  lightDiffRow: {
+    fontFamily: sourceViewerCodeFontFamily,
+    fontSize: 13,
+    lineHeight: sourceViewerRowHeight,
+    overflow: "hidden",
+    paddingLeft: sourceViewerLineNumberWidth * 2 + 28,
     paddingRight: 12,
   },
   fileAdded: {
@@ -513,6 +618,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     overflow: "hidden",
+    paddingRight: diffSideBySideHorizontalPadding,
+  },
+  sideLightLine: {
+    flex: 1,
+    fontFamily: sourceViewerCodeFontFamily,
+    fontSize: 13,
+    lineHeight: sourceViewerRowHeight,
+    overflow: "hidden",
+    paddingLeft: sourceViewerLineNumberWidth + 28,
     paddingRight: diffSideBySideHorizontalPadding,
   },
   sideLine: {
