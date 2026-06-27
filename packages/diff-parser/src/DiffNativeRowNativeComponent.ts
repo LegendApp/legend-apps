@@ -6,6 +6,8 @@ export interface NativeProps extends ViewProps {
   addBackgroundColor: string;
   changeBarWidth: CodegenTypes.Double;
   documentId: CodegenTypes.Double;
+  collapsedFileIndexes: string;
+  dividerColor: string;
   fontFamily: string;
   fontSize: CodegenTypes.Double;
   foregroundColor: string;
@@ -14,6 +16,7 @@ export interface NativeProps extends ViewProps {
   mutedColor: string;
   removeAccentColor: string;
   removeBackgroundColor: string;
+  presentation: string;
   rowHeight: CodegenTypes.Double;
   rowIndex: CodegenTypes.Double;
   syntaxHighlightingEnabled: boolean;

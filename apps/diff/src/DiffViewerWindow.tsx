@@ -707,8 +707,11 @@ function DiffLoadedBody({
       viewMode,
     });
     const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
-    const adaptiveRender = !nativeUnifiedRows && adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
+    const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode === "blocks";
+    const nativeDiffRows = nativeUnifiedRows || nativeSideBySideRows;
+    const adaptiveRender = !nativeDiffRows && adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
     const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
+    const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
     const listHeader = <View style={styles.diffTitlebarSpacer} />;
     const list = viewMode === "unified" ? (
       <VirtualizedFixedDocumentList
@@ -742,14 +745,14 @@ function DiffLoadedBody({
         ListHeaderComponent={listHeader}
         getItemSize={getSideBySideItemSize}
         getItemType={getSideBySideItemType}
-        getRow={getSideBySideRow}
+        getRow={nativeSideBySideRows ? undefined : getSideBySideRow}
         listHeaderHeight={diffTitlebarTopInset}
         lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
         listRef={listRef}
         onTopItemChanged={handleSideBySideTopItemChanged}
-        onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
+        onVisibleRowsRequested={nativeSideBySideRows ? undefined : handleSideBySideVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
-        requestRange={requestSideBySideRange}
+        requestRange={requestBlocksRange}
         rowHeight={rowHeight}
         renderRow={renderSideBySideRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
@@ -963,6 +966,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const syntaxTheme = useDiffSyntaxTheme();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
   const nativeUnifiedRows = rowRenderer === "native" && viewMode === "unified";
+  const nativeSideBySideRows = rowRenderer === "native" && viewMode === "blocks";
+  const nativeDiffRows = nativeUnifiedRows || nativeSideBySideRows;
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
   const {
@@ -1054,6 +1059,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     getRow,
     getVisibleListIndex,
     sideBySideFileHeaderIndexes,
+    sideBySideFileHeaderByListIndex,
     sideBySideItemIndexes,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
@@ -1081,6 +1087,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     activeFileIndex$,
     collapsedFileIndexes$,
     diffPaneHeight,
+    nativeSideBySideRows,
     rowHeight,
     sideBySideRowCount,
     state,
@@ -1204,7 +1211,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     const loadStartedAt = nowMs();
-    const initialRowCount = nativeUnifiedRows ? 0 : diffInitialRowCount;
+    const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
     const trace: DiffLoadTrace = {
       document: null,
       folderPath: nextSource.value,
@@ -1470,7 +1477,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         requestId,
       });
     }
-  }, [nativeUnifiedRows, setDocumentErrorValue, setLoadingSourceValue, setOpenErrorValue, setViewerState, state$]);
+  }, [nativeDiffRows, setDocumentErrorValue, setLoadingSourceValue, setOpenErrorValue, setViewerState, state$]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {
@@ -1723,6 +1730,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor,
       rowRenderer,
       rowHeight,
+      sideBySideFileHeaderByListIndex,
       sideBySideTokenStyleById: tokenStyleById,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxHighlightingEnabled,
@@ -1743,6 +1751,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor,
       rowRenderer,
       rowHeight,
+      sideBySideFileHeaderByListIndex,
       state.status === "loaded" ? state.document : null,
       syntaxHighlightingEnabled,
       syntaxStyleStore,

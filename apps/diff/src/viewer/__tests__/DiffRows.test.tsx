@@ -50,6 +50,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     mutedColor: "#8b949e",
     rowRenderer: "react-native",
     rowHeight: 22,
+    sideBySideFileHeaderByListIndex: new Map(),
     sideBySideTokenStyleById: new Map(),
     syntaxAppearance: "dark",
     syntaxHighlightingEnabled: true,

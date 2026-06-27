@@ -363,6 +363,10 @@ export function useDiffLoadedModel({
     },
     [sideBySideFileHeaders, state],
   );
+  const sideBySideFileHeaderByListIndex = useMemo(
+    () => new Map(sideBySideFileHeaders.map((header) => [header.listIndex, header])),
+    [sideBySideFileHeaders],
+  );
   const sideBySideListIndexByRowIndex = useMemo(
     () => {
       const startedAt = nowMs();
@@ -388,6 +392,7 @@ export function useDiffLoadedModel({
     getRow,
     getVisibleListIndex,
     sideBySideFileHeaderIndexes,
+    sideBySideFileHeaderByListIndex,
     sideBySideItemIndexes,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
@@ -401,6 +406,7 @@ export function useDiffSideBySideRuntime({
   activeFileIndex$,
   collapsedFileIndexes$,
   diffPaneHeight,
+  nativeSideBySideRows,
   rowHeight,
   sideBySideRowCount,
   state,
@@ -410,6 +416,7 @@ export function useDiffSideBySideRuntime({
   activeFileIndex$: Observable<number | null>;
   collapsedFileIndexes$: Observable<Set<number>>;
   diffPaneHeight: number;
+  nativeSideBySideRows: boolean;
   rowHeight: number;
   sideBySideRowCount: number;
   state: DiffViewerState;
@@ -430,7 +437,7 @@ export function useDiffSideBySideRuntime({
   }, []);
   const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
     const currentState = state$.peek();
-    if (currentState.status === "loaded" && options?.reason !== "scroll") {
+    if (!nativeSideBySideRows && currentState.status === "loaded" && options?.reason !== "scroll") {
       const start = Math.max(0, Math.floor(lineStart));
       const count = Math.max(0, Math.ceil(lineCount));
       if (count > 0) {
@@ -439,13 +446,13 @@ export function useDiffSideBySideRuntime({
       }
     }
     // Scroll-driven requests stay side-effect free so scrolling never updates React state.
-  }, [getCurrentCollapsedFileIndexList, state$]);
+  }, [getCurrentCollapsedFileIndexList, nativeSideBySideRows, state$]);
   const getSideBySideRow = useCallback((index: number) => {
     const currentState = state$.peek();
-    return currentState.status === "loaded"
+    return !nativeSideBySideRows && currentState.status === "loaded"
       ? currentState.document.getPlainSideBySideRow(index, getCurrentCollapsedFileIndexList())
       : undefined;
-  }, [getCurrentCollapsedFileIndexList, state$]);
+  }, [getCurrentCollapsedFileIndexList, nativeSideBySideRows, state$]);
   const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
     const currentState = state$.peek();
     if (currentState.status === "loaded") {
@@ -468,11 +475,11 @@ export function useDiffSideBySideRuntime({
   }, [state$]);
 
   useEffect(() => {
-    if (state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
+    if (!nativeSideBySideRows && state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
       const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
       requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
     }
-  }, [diffPaneHeight, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
+  }, [diffPaneHeight, nativeSideBySideRows, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
 
   return {
     getSideBySideRow,

@@ -2,6 +2,7 @@ import type {
   DiffDocument,
   DiffFileSummary,
   DiffRenderRow,
+  DiffSideBySideFileHeader,
   DiffSideBySideRenderRow,
 } from "@legend-desktop/diff-parser";
 import { DiffNativeRow } from "@legend-desktop/diff-parser";
@@ -44,6 +45,7 @@ export type DiffRenderFields = {
   mutedColor: string;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
+  sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
   sideBySideTokenStyleById: SyntaxStyleMap;
   syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
@@ -209,6 +211,8 @@ function DiffNativeUnifiedLineRow({
       addAccentColor={palette.addAccent}
       addBackgroundColor={palette.addBackground}
       changeBarWidth={diffUnifiedChangeBarWidth}
+      collapsedFileIndexes=""
+      dividerColor="transparent"
       documentId={renderFields.document?.documentId ?? 0}
       fontFamily={renderFields.fontFamily}
       fontSize={renderFields.fontSize}
@@ -216,6 +220,46 @@ function DiffNativeUnifiedLineRow({
       lineNumberWidth={diffUnifiedLineNumberWidth}
       markerWidth={diffUnifiedMarkerWidth}
       mutedColor={renderFields.mutedColor}
+      presentation="unified"
+      removeAccentColor={palette.removeAccent}
+      removeBackgroundColor={palette.removeBackground}
+      rowHeight={renderFields.rowHeight}
+      rowIndex={index}
+      style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
+      syntaxHighlightingEnabled={renderFields.syntaxHighlightingEnabled}
+      themeName={renderFields.syntaxThemeName}
+      tokenizedMaxRow={tokenizedMaxRow}
+    />
+  );
+}
+
+function DiffNativeSideBySideLineRow({
+  collapsedFileIndexesKey,
+  index,
+  renderFields,
+}: {
+  collapsedFileIndexesKey: string;
+  index: number;
+  renderFields: DiffRenderFields;
+}) {
+  const tokenizedMaxRow = useTokenizedMaxRow(renderFields.syntaxStyleStore);
+  const palette = getDiffRowPalette(renderFields.syntaxAppearance);
+  const dividerColor = getSideBySideDividerColor(renderFields.syntaxAppearance);
+  return (
+    <DiffNativeRow
+      addAccentColor={palette.addAccent}
+      addBackgroundColor={palette.addBackground}
+      changeBarWidth={0}
+      collapsedFileIndexes={collapsedFileIndexesKey}
+      dividerColor={dividerColor}
+      documentId={renderFields.document?.documentId ?? 0}
+      fontFamily={renderFields.fontFamily}
+      fontSize={renderFields.fontSize}
+      foregroundColor={renderFields.foregroundColor}
+      lineNumberWidth={diffSideBySideLineNumberWidth}
+      markerWidth={diffSideBySideMarkerWidth}
+      mutedColor={renderFields.mutedColor}
+      presentation="blocks"
       removeAccentColor={palette.removeAccent}
       removeBackgroundColor={palette.removeBackground}
       rowHeight={renderFields.rowHeight}
@@ -564,14 +608,21 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
+  const collapsedFileIndexesKey = useMemo(
+    () => [...collapsedFileIndexes].sort((left, right) => left - right).join(","),
+    [collapsedFileIndexes],
+  );
   const sideBySideDividerColor = getSideBySideDividerColor(syntaxAppearance);
+  const fileHeader = row?.kind === "file-header"
+    ? { fileIndex: row.fileIndex, sourceStart: row.sourceStart }
+    : renderFields.sideBySideFileHeaderByListIndex.get(index);
 
-  if (!row) {
+  if (!row && !fileHeader && renderFields.rowRenderer !== "native") {
     return <View style={{ height: rowHeight }} />;
   }
 
-  if (row.kind === "file-header") {
-    const file = fileByRowStart.get(row.sourceStart) ?? fileByIndex.get(row.fileIndex);
+  if (fileHeader) {
+    const file = fileByRowStart.get(fileHeader.sourceStart) ?? fileByIndex.get(fileHeader.fileIndex);
     const fileIndex = file?.index ?? index;
     return (
       <DiffFileHeaderRow
@@ -589,6 +640,20 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         syntaxAppearance={syntaxAppearance}
       />
     );
+  }
+
+  if (renderFields.rowRenderer === "native" && renderFields.document) {
+    return (
+      <DiffNativeSideBySideLineRow
+        collapsedFileIndexesKey={collapsedFileIndexesKey}
+        index={index}
+        renderFields={renderFields}
+      />
+    );
+  }
+
+  if (!row) {
+    return <View style={{ height: rowHeight }} />;
   }
 
   return (
