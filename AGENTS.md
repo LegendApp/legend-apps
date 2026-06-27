@@ -41,12 +41,14 @@ There is no dedicated test runner configured yet. Treat `bun run typecheck` and 
 
 Use `agent-device` as the default runtime debugging and UI automation surface for React Native macOS apps in this repo. Prefer it for app UI inspection, action injection, screenshots, logs, Metro reloads, React DevTools checks, and repeatable verification flows before reaching for manual OS interaction or raw platform tools.
 
-For macOS app screenshots and interaction, prefer an app-scoped session, which captures and targets the app window without foregrounding the app or disrupting the user's desktop:
+For macOS app inspection, prefer an app-scoped session, which captures and targets the app window without foregrounding the app or disrupting the user's desktop:
 
 - Open or bind a macOS app session with `agent-device open <app> --platform macos --surface app`.
 - Capture app-window screenshots with `agent-device --session <name> screenshot <path>`.
 - Use `--fullscreen` only when the whole desktop is intentionally needed.
 - Prefer `agent-device snapshot`, `screenshot`, `diff`, `logs`, `network dump`, `perf`, `metro reload`, `react-native dismiss-overlay`, `react-devtools`, and session management over manual `open -a`, AppleScript foregrounding, raw screen captures, or ad hoc UI poking.
+- Do not use `--surface frontmost-app`, desktop-wide capture, `open -a`, AppleScript activation, or manual foregrounding unless the task explicitly requires the frontmost app or a focus-dependent interaction.
+- Prefer read-only evidence first: `snapshot`, `logs`, `perf`, process checks, and Metro/React DevTools inspection. Treat `press`, `fill`, `type`, `scroll`, and app relaunches as focus-changing actions that should only be used when needed for the repro or validation.
 - For JS-only changes with Metro connected, prefer `agent-device metro reload --session <name>` instead of restarting the app.
 - For LogBox or RedBox overlays, use `agent-device react-native dismiss-overlay --session <name>` before interacting with the covered UI.
 - For debugging, keep evidence windows small: `agent-device logs clear --restart --session <name>`, `agent-device logs mark "before repro" --session <name>`, reproduce with `press`/`fill`/`type`/`scroll`/`wait`, then `agent-device logs mark "after repro" --session <name>` and `agent-device logs path --session <name>`.
@@ -60,7 +62,7 @@ For React Native macOS app debugging, do not rely on Metro output for runtime lo
 Use the normal `agent-device logs clear --restart` / `mark before` / repro / `mark after` / `logs path` loop above, with these extra checks when logs are empty or confusing:
 
 - Verify there is exactly one current debug app process, and that it comes from `DerivedData/.../Build/Products/Debug/...`, not `shell/.legend/workspaces/release/...`.
-- Prefer binding to the already-running frontmost app with `agent-device open --session <name> --platform macos --surface frontmost-app`; if binding by bundle id, re-check that it did not launch a duplicate instance.
+- Bind with `agent-device open <bundle-id-or-app-name> --session <name> --platform macos --surface app` and verify the process path separately. Avoid `--surface frontmost-app` unless the user is explicitly asking to inspect whichever app is currently frontmost.
 - If `app.log` only contains `agent-device` markers, confirm `logs path` reports `active=true`, the debug prefix was emitted after `logs clear --restart`, and the session is bound to the correct app.
 - For temporary instrumentation that must be visible in `agent-device logs` on macOS, prefer native unified logging with the app bundle id subsystem, for example `os_log_create("app.legend.markdown.macos", "debug-category")`. Plain `NSLog` can be missed by the app-scoped filter.
 - If JS-side timing is required and app logs do not include it, try `agent-device react-devtools ...` before falling back to file-backed logging.

@@ -173,7 +173,6 @@ type DiffLoadedBodyProps = {
   getSideBySideItemType: (index: number) => string;
   getSideBySideRow: (index: number) => DiffSideBySideRenderRow | undefined;
   handleDiffPaneLayout: (event: LayoutChangeEvent) => void;
-  handleInitialLoadedRootLayout: (event: LayoutChangeEvent) => void;
   handleSidebarListLayout: (event: LayoutChangeEvent) => void;
   handleSideBySideTopItemChanged: (lineIndex: number) => void;
   handleSideBySideVisibleRowsRequested: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
@@ -604,7 +603,6 @@ function DiffLoadedBody({
   getSideBySideItemType,
   getSideBySideRow,
   handleDiffPaneLayout,
-  handleInitialLoadedRootLayout,
   handleSidebarListLayout,
   handleSideBySideTopItemChanged,
   handleSideBySideVisibleRowsRequested,
@@ -758,95 +756,81 @@ function DiffLoadedBody({
     );
   }
 
-  if (!isRenderingInitialLoadedFrame) {
-    logDiffOpenTiming("viewer.body.splitView.mount", {
-      activeItemCount: activeItemIndexes.length,
-      diffPaneHeight,
-      rows: state.document.rowCount,
-      sidebarLayoutReady: isSidebarLayoutReady,
-      sidebarCollapsed,
-      sidebarHeight: splitPaneMetrics.sidebarHeight,
-      sidebarListHeight,
-      sidebarWidth: splitPaneMetrics.sidebarWidth,
-      viewMode,
-    });
-    const sidebar = (
-      <View
-        style={[
-          styles.sidebar,
-          {
-            height: splitPaneMetrics.sidebarHeight || undefined,
-            minHeight: splitPaneMetrics.sidebarHeight || undefined,
-            width: splitPaneMetrics.sidebarWidth || undefined,
-          },
-        ]}
-      >
-        <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
-        <TextInputSearch
-          appearance={syntaxAppearance}
-          defaultValue={fileFilter}
-          onChangeText={setFileFilter}
-          placeholder="Filter files"
-          ref={fileFilterInputRef}
-          style={styles.sidebarFilter}
-        />
-        {isSidebarLayoutReady ? (
-          filteredSidebarFiles.length > 0 ? (
-            <LegendList
-              data={filteredSidebarFiles}
-              getFixedItemSize={() => diffSidebarFileRowHeight}
-              keyExtractor={(file) => `${file.index}:${file.path}`}
-              onLayout={handleSidebarListLayout}
-              recycleItems
-              renderItem={renderSidebarFile}
-              style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
-            />
-          ) : (
-            <View style={[styles.sidebarEmpty, { height: sidebarListHeight, minHeight: sidebarListHeight }]}>
-              <Text style={[styles.sidebarEmptyText, { color: mutedColor }]}>
-                No files
-              </Text>
-            </View>
-          )
+  logDiffOpenTiming("viewer.body.splitView.mount", {
+    activeItemCount: activeItemIndexes.length,
+    diffPaneHeight,
+    rows: state.document.rowCount,
+    sidebarLayoutReady: isSidebarLayoutReady,
+    sidebarCollapsed,
+    sidebarHeight: splitPaneMetrics.sidebarHeight,
+    sidebarListHeight,
+    sidebarWidth: splitPaneMetrics.sidebarWidth,
+    viewMode,
+  });
+  const sidebar = (
+    <View
+      style={[
+        styles.sidebar,
+        {
+          height: splitPaneMetrics.sidebarHeight || undefined,
+          minHeight: splitPaneMetrics.sidebarHeight || undefined,
+          width: splitPaneMetrics.sidebarWidth || undefined,
+        },
+      ]}
+    >
+      <Text style={[styles.sidebarTitle, { color: mutedColor }]}>Files</Text>
+      <TextInputSearch
+        appearance={syntaxAppearance}
+        defaultValue={fileFilter}
+        onChangeText={setFileFilter}
+        placeholder="Filter files"
+        ref={fileFilterInputRef}
+        style={styles.sidebarFilter}
+      />
+      {isSidebarLayoutReady ? (
+        filteredSidebarFiles.length > 0 ? (
+          <LegendList
+            data={filteredSidebarFiles}
+            getFixedItemSize={() => diffSidebarFileRowHeight}
+            keyExtractor={(file) => `${file.index}:${file.path}`}
+            onLayout={handleSidebarListLayout}
+            recycleItems
+            renderItem={renderSidebarFile}
+            style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
+          />
         ) : (
-          <View style={styles.sidebarList} />
-        )}
-      </View>
-    );
-
-    logBodyFinish("split-view");
-    return (
-      <View style={styles.loadedRoot}>
-        <SidebarSplitView
-          appearance={syntaxAppearance}
-          contentMinWidth={420}
-          contentTitlebarHeight={diffTitlebarTopInset}
-          contentTitlebarMaterial="glass"
-          contentTitlebarOverlayColor={backgroundColor}
-          contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
-          onSplitViewDidResize={handleSplitViewResize}
-          sidebarCollapsed={sidebarCollapsed}
-          sidebarMinWidth={180}
-          style={styles.content}
-        >
-          {sidebar}
-          <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
-            {diffContent}
+          <View style={[styles.sidebarEmpty, { height: sidebarListHeight, minHeight: sidebarListHeight }]}>
+            <Text style={[styles.sidebarEmptyText, { color: mutedColor }]}>
+              No files
+            </Text>
           </View>
-        </SidebarSplitView>
-        <DiffSyntaxProgressBar
-          foregroundColor={syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.9)" : "rgba(9, 105, 218, 0.86)"}
-          progress={syntaxTokenizationProgress.progress}
-          visible={syntaxTokenizationProgress.visible}
-        />
-      </View>
-    );
-  }
+        )
+      ) : (
+        <View style={styles.sidebarList} />
+      )}
+    </View>
+  );
 
-  logBodyFinish("content-only");
+  logBodyFinish("split-view");
   return (
-    <View onLayout={handleInitialLoadedRootLayout} style={styles.loadedRoot}>
-      {diffContent}
+    <View style={styles.loadedRoot}>
+      <SidebarSplitView
+        appearance={syntaxAppearance}
+        contentMinWidth={420}
+        contentTitlebarHeight={diffTitlebarTopInset}
+        contentTitlebarMaterial="glass"
+        contentTitlebarOverlayColor={backgroundColor}
+        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
+        onSplitViewDidResize={handleSplitViewResize}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarMinWidth={180}
+        style={styles.content}
+      >
+        {sidebar}
+        <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
+          {diffContent}
+        </View>
+      </SidebarSplitView>
       <DiffSyntaxProgressBar
         foregroundColor={syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.9)" : "rgba(9, 105, 218, 0.86)"}
         progress={syntaxTokenizationProgress.progress}
@@ -1013,7 +997,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const isRenderingInitialLoadedFrame =
     state.status === "loaded" &&
     sourcesMatch(loadingSource, state.source);
-  const renderViewMode = isRenderingInitialLoadedFrame || (state.status === "loaded" && state.loadComplete === false) ? "unified" : viewMode;
+  const renderViewMode = viewMode;
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
@@ -1821,42 +1805,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [diffPaneHeight$, setDiffPaneHeightValue]);
 
-  const handleInitialLoadedRootLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextHeight = Math.round(event.nativeEvent.layout.height);
-    const nextWidth = Math.round(event.nativeEvent.layout.width);
-    const previousHeight = diffPaneHeight$.peek();
-    const previousMetrics = splitPaneMetrics$.peek();
-    const dividerWidth = sidebarCollapsed ? 0 : 1;
-    const estimatedSidebarWidth = sidebarCollapsed
-      ? 0
-      : Math.max(0, Math.min(180, nextWidth - 420 - dividerWidth));
-    const estimatedContentX = estimatedSidebarWidth > 0 ? estimatedSidebarWidth + dividerWidth : 0;
-    const estimatedContentWidth = Math.max(0, nextWidth - estimatedContentX);
-    logDiffOpenTiming("viewer.initialRoot.layout", {
-      estimatedContentWidth,
-      estimatedContentX,
-      estimatedSidebarWidth,
-      height: nextHeight,
-      previousContentHeight: previousMetrics.contentHeight,
-      previousDiffPaneHeight: previousHeight,
-      previousSidebarHeight: previousMetrics.sidebarHeight,
-      sidebarCollapsed,
-      width: nextWidth,
-    });
-    if (nextHeight > 0 || previousHeight === 0) {
-      setDiffPaneHeightValue(nextHeight);
-    }
-    if (nextHeight > 0 && nextWidth > 0 && previousMetrics.contentHeight <= 0 && estimatedContentWidth > 0) {
-      setSplitPaneMetricsValue({
-        contentHeight: nextHeight,
-        contentWidth: estimatedContentWidth,
-        contentX: estimatedContentX,
-        sidebarHeight: nextHeight,
-        sidebarWidth: estimatedSidebarWidth,
-      });
-    }
-  }, [diffPaneHeight$, setDiffPaneHeightValue, setSplitPaneMetricsValue, sidebarCollapsed, splitPaneMetrics$]);
-
   const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
     const currentState = state$.peek();
     logDiffOpenTiming("viewer.sidebarList.layout", {
@@ -2003,7 +1951,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         getSideBySideItemType={getSideBySideItemType}
         getSideBySideRow={getSideBySideRow}
         handleDiffPaneLayout={handleDiffPaneLayout}
-        handleInitialLoadedRootLayout={handleInitialLoadedRootLayout}
         handleSidebarListLayout={handleSidebarListLayout}
         handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
         handleSideBySideVisibleRowsRequested={handleSideBySideVisibleRowsRequested}

@@ -380,6 +380,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     return;
   }
 
+  subview.hidden = nativeBounds.size.width <= 0 || nativeBounds.size.height <= 0;
   subview.translatesAutoresizingMaskIntoConstraints = YES;
   subview.frame = nativeBounds;
   LayoutMetrics nextLayoutMetrics = _currentLayoutMetrics;
@@ -402,35 +403,21 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   [subview layoutSubtreeIfNeeded];
 }
 
-- (void)splitViewDidResize
+- (void)emitSplitViewDidResizeWithSidebarWidth:(CGFloat)sidebarWidth
+                                  contentWidth:(CGFloat)contentWidth
+                                      contentX:(CGFloat)contentX
+                                  sidebarHeight:(CGFloat)sidebarHeight
+                                  contentHeight:(CGFloat)contentHeight
+                                         height:(CGFloat)height
 {
   const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
   if (!eventEmitter) {
     return;
   }
 
-  CGFloat sidebarWidth = 0;
-  CGFloat contentWidth = 0;
-  CGFloat contentX = 0;
-  CGFloat sidebarHeight = 0;
-  CGFloat contentHeight = 0;
-  CGFloat height = 0;
-
-  sidebarWidth = _sidebarContainer.bounds.size.width;
-  contentWidth = _contentContainer.bounds.size.width;
-  contentX = [_contentContainer convertRect:_contentContainer.bounds toView:self].origin.x;
-  sidebarHeight = _sidebarContainer.bounds.size.height;
-  contentHeight = _contentContainer.bounds.size.height;
-  height = MAX(sidebarHeight, contentHeight);
-  CGRect bounds = [self currentLayoutBounds];
-
-  if (contentWidth <= 0 || height <= 0 ||
-      fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
+  if (contentWidth <= 0 || height <= 0) {
     return;
   }
-
-  [self syncReactSubviewFrames];
-  [self layoutContentTitlebarMaterial];
 
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
@@ -451,6 +438,75 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     .sidebarHeight = sidebarHeight,
     .sidebarWidth = sidebarWidth,
   });
+}
+
+- (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds
+{
+  if (bounds.size.width <= 0 || bounds.size.height <= 0) {
+    return NO;
+  }
+
+  CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
+  CGFloat sidebarWidth = 0;
+  if (!_sidebarCollapsed) {
+    CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness;
+    sidebarWidth = MIN(_sidebarMinWidth, maxSidebarWidth);
+    sidebarWidth = MAX(0, sidebarWidth);
+  }
+  CGFloat contentX = sidebarWidth > 0 ? sidebarWidth + dividerThickness : 0;
+  CGFloat contentWidth = MAX(0, bounds.size.width - contentX);
+  if (contentWidth <= 0) {
+    contentWidth = bounds.size.width;
+    contentX = 0;
+  }
+
+  _splitViewController.view.frame = bounds;
+  _splitViewController.splitView.frame = bounds;
+  _sidebarContainer.frame = CGRectMake(0, 0, sidebarWidth, bounds.size.height);
+  _contentContainer.frame = CGRectMake(contentX, 0, contentWidth, bounds.size.height);
+
+  CGRect sidebarBounds = CGRectMake(0, 0, sidebarWidth, bounds.size.height);
+  CGRect contentBounds = CGRectMake(0, 0, contentWidth, bounds.size.height);
+  [self syncReactSubview:_sidebarReactView
+           nativeBounds:sidebarBounds
+  previousLayoutMetrics:&_sidebarReactLayoutMetrics];
+  [self syncReactSubview:_contentReactView
+           nativeBounds:contentBounds
+  previousLayoutMetrics:&_contentReactLayoutMetrics];
+
+  [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
+                                  contentWidth:contentWidth
+                                      contentX:contentX
+                                 sidebarHeight:bounds.size.height
+                                 contentHeight:bounds.size.height
+                                        height:bounds.size.height];
+  return YES;
+}
+
+- (void)splitViewDidResize
+{
+  CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
+  CGFloat contentWidth = _contentContainer.bounds.size.width;
+  CGFloat contentX = [_contentContainer convertRect:_contentContainer.bounds toView:self].origin.x;
+  CGFloat sidebarHeight = _sidebarContainer.bounds.size.height;
+  CGFloat contentHeight = _contentContainer.bounds.size.height;
+  CGFloat height = MAX(sidebarHeight, contentHeight);
+  CGRect bounds = [self currentLayoutBounds];
+
+  if (contentWidth <= 0 || height <= 0 ||
+      fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
+    [self applyEstimatedSplitViewLayoutForBounds:bounds];
+    return;
+  }
+
+  [self syncReactSubviewFrames];
+  [self layoutContentTitlebarMaterial];
+  [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
+                                  contentWidth:contentWidth
+                                      contentX:contentX
+                                 sidebarHeight:sidebarHeight
+                                 contentHeight:contentHeight
+                                        height:height];
 }
 
 - (CGRect)currentLayoutBounds
@@ -487,6 +543,11 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   CGRect bounds = [self currentLayoutBounds];
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
+  if (_contentContainer.bounds.size.width <= 0 ||
+      _contentContainer.bounds.size.height <= 0 ||
+      fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
+    [self applyEstimatedSplitViewLayoutForBounds:bounds];
+  }
   [self updateSidebarCollapsed];
   [self applyDividerPositionForBounds:bounds];
   [_splitViewController.splitView adjustSubviews];
@@ -513,10 +574,15 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     [_sidebarReactView removeFromSuperview];
     _sidebarReactView = childComponentView;
     _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
+    childComponentView.hidden = YES;
     [_sidebarContainer addSubview:childComponentView];
-    [self syncReactSubview:_sidebarReactView
-               nativeBounds:_sidebarContainer.bounds
-      previousLayoutMetrics:&_sidebarReactLayoutMetrics];
+    if (_sidebarContainer.bounds.size.width <= 0 || _sidebarContainer.bounds.size.height <= 0) {
+      [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds]];
+    } else {
+      [self syncReactSubview:_sidebarReactView
+                 nativeBounds:_sidebarContainer.bounds
+        previousLayoutMetrics:&_sidebarReactLayoutMetrics];
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
       [self splitViewDidResize];
     });
@@ -527,10 +593,15 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     [_contentReactView removeFromSuperview];
     _contentReactView = childComponentView;
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
+    childComponentView.hidden = YES;
     [_contentContainer addSubview:childComponentView];
-    [self syncReactSubview:_contentReactView
-               nativeBounds:_contentContainer.bounds
-      previousLayoutMetrics:&_contentReactLayoutMetrics];
+    if (_contentContainer.bounds.size.width <= 0 || _contentContainer.bounds.size.height <= 0) {
+      [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds]];
+    } else {
+      [self syncReactSubview:_contentReactView
+                 nativeBounds:_contentContainer.bounds
+        previousLayoutMetrics:&_contentReactLayoutMetrics];
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
       [self splitViewDidResize];
     });
@@ -644,6 +715,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
 
 #if TARGET_OS_OSX
   _currentLayoutMetrics = layoutMetrics;
+  [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds]];
   [self layoutSplitView];
 #else
   CGFloat sidebarWidth = self.bounds.size.width * 0.26;
