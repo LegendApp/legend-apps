@@ -81,6 +81,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 @property(nonatomic, strong) NSColor *addBackgroundColor;
 @property(nonatomic, strong) NSColor *removeBackgroundColor;
 @property(nonatomic, strong) NSColor *dividerColor;
+@property(nonatomic, strong) NSMutableParagraphStyle *textParagraph;
 @property(nonatomic, strong) NSMutableParagraphStyle *rightParagraph;
 @property(nonatomic, strong) NSMutableParagraphStyle *centerParagraph;
 @property(nonatomic, copy) NSDictionary *baseTextAttributes;
@@ -128,6 +129,8 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
     _addBackgroundColor = NSColor.clearColor;
     _removeBackgroundColor = NSColor.clearColor;
     _dividerColor = NSColor.clearColor;
+    _textParagraph = [NSMutableParagraphStyle new];
+    _textParagraph.lineBreakMode = NSLineBreakByClipping;
     _rightParagraph = [NSMutableParagraphStyle new];
     _rightParagraph.alignment = NSTextAlignmentRight;
     _centerParagraph = [NSMutableParagraphStyle new];
@@ -142,6 +145,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   self.baseTextAttributes = @{
     NSFontAttributeName: self.font,
     NSForegroundColorAttributeName: self.foregroundColor,
+    NSParagraphStyleAttributeName: self.textParagraph,
   };
   self.addLineNumberAttributes = @{
     NSFontAttributeName: self.font,
