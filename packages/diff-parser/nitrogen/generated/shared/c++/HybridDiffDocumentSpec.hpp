@@ -75,6 +75,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
       virtual double getFileCount() = 0;
       virtual double getTokenizedMaxRow() = 0;
       virtual double getScopeCount() = 0;
+      virtual double getDocumentId() = 0;
 
     public:
       // Methods

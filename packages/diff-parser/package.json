@@ -4,6 +4,16 @@
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNDiffParserSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "ios": {
+      "componentProvider": {
+        "DiffNativeRow": "RNDiffNativeRow"
+      }
+    }
+  },
   "peerDependencies": {
     "react": "catalog:",
     "react-native": "catalog:"

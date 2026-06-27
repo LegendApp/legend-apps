@@ -11,10 +11,11 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :ios => "15.0", :osx => "14.0" }
-  s.source_files = "cpp/**/*.{h,hpp,cpp,mm}"
+  s.source_files = "cpp/**/*.{h,hpp,cpp,mm}", "ios/**/*.{h,m,mm}"
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",
     "HEADER_SEARCH_PATHS" => [
+      "\"$(PODS_ROOT)/Headers/Private/Yoga\"",
       "$(PODS_ROOT)/LegendLibGit2/build/include",
       "$(PODS_ROOT)/LegendLibGit2/build/gen_headers",
       "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/src",
@@ -24,6 +25,8 @@ Pod::Spec.new do |s|
     ].join(" "),
   }
   s.dependency "React-Core"
+  s.dependency "React-RCTFabric"
+  s.dependency "ReactCodegen"
   s.dependency "LegendLibGit2"
   s.dependency "RNSyntaxParser"
   load "nitrogen/generated/ios/RNDiffParser+autolinking.rb"

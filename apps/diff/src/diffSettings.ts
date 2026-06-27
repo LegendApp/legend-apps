@@ -15,10 +15,12 @@ export type DiffSettingsFile = {
   syntaxPrewarmLanguages?: string[];
   syntaxPrewarmKnownLanguages?: string[];
   syntaxTheme: string;
+  rowRenderer?: DiffRowRendererSetting;
   viewMode?: DiffViewMode;
 };
 
 export type DiffFontFamilySetting = typeof diffFontFamilyOptions[number]["value"];
+export type DiffRowRendererSetting = typeof diffRowRendererOptions[number]["value"];
 export type DiffViewMode = typeof diffViewModeOptions[number]["value"];
 
 export const diffFontFamilyOptions = [
@@ -31,9 +33,14 @@ export const diffFontFamilyOptions = [
 export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
+export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const defaultDiffSyntaxPrewarmEnabled = true;
 export const diffFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+export const diffRowRendererOptions = [
+  { label: "React Native", value: "react-native" },
+  { label: "Native (experimental)", value: "native" },
+] as const;
 export const diffViewModeOptions = [
   { label: "Unified", value: "unified" },
   { label: "Blocks", value: "blocks" },
@@ -55,6 +62,12 @@ function normalizeDiffViewMode(viewMode: unknown): DiffViewMode {
   return isDiffViewMode(viewMode)
     ? viewMode as DiffViewMode
     : defaultDiffViewMode;
+}
+
+function normalizeDiffRowRenderer(rowRenderer: unknown): DiffRowRendererSetting {
+  return typeof rowRenderer === "string" && diffRowRendererOptions.some((option) => option.value === rowRenderer)
+    ? rowRenderer as DiffRowRendererSetting
+    : defaultDiffRowRenderer;
 }
 
 function normalizeBoolean(value: unknown, defaultValue: boolean): boolean {
@@ -109,6 +122,10 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultSyntaxThemeName,
       normalize: normalizeSyntaxThemeName,
     },
+    rowRenderer: {
+      defaultValue: defaultDiffRowRenderer,
+      normalize: normalizeDiffRowRenderer,
+    },
     viewMode: {
       defaultValue: defaultDiffViewMode,
       normalize: normalizeDiffViewMode,
@@ -123,6 +140,7 @@ const syntaxPrewarmEnabledSetting = diffSettings.field("syntaxPrewarmEnabled");
 const syntaxPrewarmLanguagesSetting = diffSettings.field("syntaxPrewarmLanguages");
 const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnownLanguages");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
+const rowRendererSetting = diffSettings.field("rowRenderer");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
 
@@ -144,6 +162,10 @@ export function getDiffFontSizeSetting(): number {
 
 export function getDiffViewModeSetting(): DiffViewMode {
   return viewModeSetting.get();
+}
+
+export function getDiffRowRendererSetting(): DiffRowRendererSetting {
+  return rowRendererSetting.get();
 }
 
 export function getDiffSyntaxHighlightingEnabledSetting(): boolean {
@@ -183,6 +205,10 @@ export function useDiffViewModeSetting(): DiffViewMode {
   return normalizeDiffViewMode(useValue(diffSettings$.viewMode));
 }
 
+export function useDiffRowRendererSetting(): DiffRowRendererSetting {
+  return normalizeDiffRowRenderer(useValue(diffSettings$.rowRenderer));
+}
+
 export function useDiffSyntaxHighlightingEnabledSetting(): boolean {
   return normalizeBoolean(useValue(diffSettings$.syntaxHighlightingEnabled), defaultDiffSyntaxHighlightingEnabled);
 }
@@ -213,6 +239,10 @@ export function setDiffFontSizeSetting(fontSize: number) {
 
 export function setDiffViewModeSetting(viewMode: DiffViewMode) {
   viewModeSetting.set(viewMode);
+}
+
+export function setDiffRowRendererSetting(rowRenderer: DiffRowRendererSetting) {
+  rowRendererSetting.set(rowRenderer);
 }
 
 export function setDiffSyntaxHighlightingEnabledSetting(enabled: boolean) {

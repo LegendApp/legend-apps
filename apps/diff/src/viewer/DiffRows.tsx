@@ -4,6 +4,7 @@ import type {
   DiffRenderRow,
   DiffSideBySideRenderRow,
 } from "@legend-desktop/diff-parser";
+import { DiffNativeRow } from "@legend-desktop/diff-parser";
 import {
   LightText,
   sourceViewerCodeFontFamily,
@@ -17,6 +18,7 @@ import { useValue } from "@legendapp/state/react";
 import { memo, useMemo, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename } from "../diffFiles";
+import type { DiffRowRendererSetting } from "../diffSettings";
 import {
   diffChangeTypeAdd,
   diffChangeTypeRemove,
@@ -40,10 +42,13 @@ export type DiffRenderFields = {
   fontSize: number;
   foregroundColor: string;
   mutedColor: string;
+  rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   sideBySideTokenStyleById: SyntaxStyleMap;
   syntaxAppearance: "dark" | "light";
+  syntaxHighlightingEnabled: boolean;
   syntaxStyleStore: DiffSyntaxStyleStore;
+  syntaxThemeName: string;
   tokenStyleById: SyntaxStyleMap;
   toggleFileCollapsed: (fileIndex: number) => void;
 };
@@ -169,6 +174,47 @@ function useTokenizedDiffRow(
     }
     return null;
   }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedMaxRow]);
+}
+
+function useTokenizedMaxRow(syntaxStyleStore: DiffSyntaxStyleStore) {
+  return useSyncExternalStore(
+    syntaxStyleStore.subscribe,
+    syntaxStyleStore.getSnapshot,
+    syntaxStyleStore.getSnapshot,
+  );
+}
+
+function DiffNativeUnifiedLineRow({
+  index,
+  renderFields,
+}: {
+  index: number;
+  renderFields: DiffRenderFields;
+}) {
+  const tokenizedMaxRow = useTokenizedMaxRow(renderFields.syntaxStyleStore);
+  const palette = getDiffRowPalette(renderFields.syntaxAppearance);
+  return (
+    <DiffNativeRow
+      addAccentColor={palette.addAccent}
+      addBackgroundColor={palette.addBackground}
+      changeBarWidth={diffUnifiedChangeBarWidth}
+      documentId={renderFields.document?.documentId ?? 0}
+      fontFamily={renderFields.fontFamily}
+      fontSize={renderFields.fontSize}
+      foregroundColor={renderFields.foregroundColor}
+      lineNumberWidth={diffUnifiedLineNumberWidth}
+      markerWidth={diffUnifiedMarkerWidth}
+      mutedColor={renderFields.mutedColor}
+      removeAccentColor={palette.removeAccent}
+      removeBackgroundColor={palette.removeBackground}
+      rowHeight={renderFields.rowHeight}
+      rowIndex={index}
+      style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
+      syntaxHighlightingEnabled={renderFields.syntaxHighlightingEnabled}
+      themeName={renderFields.syntaxThemeName}
+      tokenizedMaxRow={tokenizedMaxRow}
+    />
+  );
 }
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
@@ -406,6 +452,15 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
     );
   }
 
+  if (renderFields.rowRenderer === "native" && adaptiveRender === "normal" && row && renderFields.document) {
+    return (
+      <DiffNativeUnifiedLineRow
+        index={index}
+        renderFields={renderFields}
+      />
+    );
+  }
+
   if (adaptiveRender === "light") {
     return (
       <LightText
@@ -626,6 +681,9 @@ const styles = StyleSheet.create({
     lineHeight: sourceViewerRowHeight,
     textAlign: "center",
     width: diffUnifiedMarkerWidth,
+  },
+  nativeDiffRow: {
+    width: "100%",
   },
   sideBySideRow: {
     flexDirection: "row",

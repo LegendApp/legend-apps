@@ -48,9 +48,11 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     fontSize: 12,
     foregroundColor: "#f0f6fc",
     mutedColor: "#8b949e",
+    rowRenderer: "react-native",
     rowHeight: 22,
     sideBySideTokenStyleById: new Map(),
     syntaxAppearance: "dark",
+    syntaxHighlightingEnabled: true,
     syntaxStyleStore: {
       current: new Map(),
       getSnapshot: () => 0,
@@ -59,6 +61,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
       subscribe: () => () => {
       },
     },
+    syntaxThemeName: "dark-plus",
     toggleFileCollapsed: jest.fn(),
     tokenStyleById: new Map(),
     ...overrides,

@@ -14,14 +14,17 @@ import { getDiffCliInstallStatus, installDiffCli, type DiffCliInstallStatus } fr
 import {
   diffFontFamilyOptions,
   diffFontSizeOptions,
+  diffRowRendererOptions,
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
+  setDiffRowRendererSetting,
   setDiffSyntaxHighlightingEnabledSetting,
   setDiffSyntaxPrewarmEnabledSetting,
   setDiffSyntaxPrewarmLanguagesSetting,
   setDiffSyntaxThemeSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
+  useDiffRowRendererSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxPrewarmEnabledSetting,
   useDiffSyntaxPrewarmKnownLanguagesSetting,
@@ -40,6 +43,7 @@ const diffFontSizeSettingOptions = diffFontSizeOptions.map((fontSize) => ({
 function AppearanceSettingsPage() {
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
+  const rowRenderer = useDiffRowRendererSetting();
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
 
   return (
@@ -78,6 +82,19 @@ function AppearanceSettingsPage() {
           rowDescription={null}
           selectedTheme={selectedSyntaxTheme}
           title={null}
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SelectControl
+              accessibilityLabel="Diff row renderer"
+              onChange={setDiffRowRendererSetting}
+              options={diffRowRendererOptions}
+              value={rowRenderer}
+            />
+          )}
+          description="Experimental. Restart the app before measuring memory."
+          title="Row renderer"
         />
       </SettingsSection>
     </SettingsPage>

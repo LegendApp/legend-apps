@@ -116,6 +116,7 @@ export interface DiffDocument
   readonly fileCount: number;
   readonly tokenizedMaxRow: number;
   readonly scopeCount: number;
+  readonly documentId: number;
   getRow(index: number): DiffCachedRow;
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];

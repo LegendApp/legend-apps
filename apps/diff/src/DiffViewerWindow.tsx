@@ -42,8 +42,10 @@ import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDi
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
 import {
   getDiffViewModeSetting,
+  type DiffRowRendererSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
+  useDiffRowRendererSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxTheme,
   useDiffViewModeSetting,
@@ -212,6 +214,7 @@ type DiffListExtraData = {
   fontSize: number;
   foregroundColor: string;
   mutedColor: string;
+  rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   sideBySideTokenStyleCount: number;
   syntaxAppearance: "dark" | "light";
@@ -941,6 +944,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
+  const rowRenderer = useDiffRowRendererSetting();
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
@@ -1665,6 +1669,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       mutedColor,
+      rowRenderer,
       rowHeight,
       sideBySideTokenStyleCount: tokenStyleById.size,
       syntaxAppearance: syntaxTheme.appearance,
@@ -1679,6 +1684,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       listSyntaxTheme,
       mutedColor,
+      rowRenderer,
       rowHeight,
       syntaxTheme.appearance,
       tokenStyleById.size,
@@ -1696,10 +1702,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       mutedColor,
+      rowRenderer,
       rowHeight,
       sideBySideTokenStyleById: tokenStyleById,
       syntaxAppearance: syntaxTheme.appearance,
+      syntaxHighlightingEnabled,
       syntaxStyleStore,
+      syntaxThemeName: listSyntaxTheme,
       tokenStyleById,
       toggleFileCollapsed,
     }),
@@ -1713,10 +1722,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       mutedColor,
+      rowRenderer,
       rowHeight,
       state.status === "loaded" ? state.document : null,
+      syntaxHighlightingEnabled,
       syntaxStyleStore,
       syntaxTheme.appearance,
+      listSyntaxTheme,
       toggleFileCollapsed,
       tokenStyleById,
     ],

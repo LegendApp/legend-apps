@@ -18,6 +18,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
       prototype.registerHybridGetter("fileCount", &HybridDiffDocumentSpec::getFileCount);
       prototype.registerHybridGetter("tokenizedMaxRow", &HybridDiffDocumentSpec::getTokenizedMaxRow);
       prototype.registerHybridGetter("scopeCount", &HybridDiffDocumentSpec::getScopeCount);
+      prototype.registerHybridGetter("documentId", &HybridDiffDocumentSpec::getDocumentId);
       prototype.registerHybridMethod("getRow", &HybridDiffDocumentSpec::getRow);
       prototype.registerHybridMethod("getPlainRows", &HybridDiffDocumentSpec::getPlainRows);
       prototype.registerHybridMethod("getRows", &HybridDiffDocumentSpec::getRows);

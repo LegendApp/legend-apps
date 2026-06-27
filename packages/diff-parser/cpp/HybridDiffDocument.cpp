@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include "git2.h"
+#include <map>
 #include <sstream>
 #include <unordered_set>
 
@@ -39,6 +40,10 @@ constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
 constexpr double sideBySideKindLine = 3;
+
+std::atomic<uint64_t> nextDiffDocumentId{1};
+std::mutex diffDocumentRegistryMutex;
+std::map<uint64_t, std::weak_ptr<HybridDiffDocument>> diffDocumentRegistry;
 
 #ifdef __APPLE__
 os_log_t diffMemoryLog() {
@@ -267,6 +272,7 @@ HybridDiffDocument::HybridDiffDocument(
     std::string headTreeOid,
     DiffLoadTiming timing)
     : HybridObject(TAG),
+      documentId_(nextDiffDocumentId.fetch_add(1)),
       files_(std::move(files)),
       rows_(std::move(rows)),
       fileSources_(std::move(fileSources)),
@@ -280,6 +286,8 @@ HybridDiffDocument::HybridDiffDocument(
 
 HybridDiffDocument::~HybridDiffDocument() {
   stopBackgroundTokenization();
+  std::lock_guard<std::mutex> lock(diffDocumentRegistryMutex);
+  diffDocumentRegistry.erase(documentId_);
 }
 
 double HybridDiffDocument::getRowCount() {
@@ -300,6 +308,12 @@ double HybridDiffDocument::getTokenizedMaxRow() {
 double HybridDiffDocument::getScopeCount() {
   std::lock_guard<std::mutex> lock(syntaxMutex_);
   return static_cast<double>(syntaxState_->scopeState.scopes.size());
+}
+
+double HybridDiffDocument::getDocumentId() {
+  std::lock_guard<std::mutex> lock(diffDocumentRegistryMutex);
+  diffDocumentRegistry[documentId_] = shared_cast<HybridDiffDocument>();
+  return static_cast<double>(documentId_);
 }
 
 DiffCachedRow HybridDiffDocument::getRow(double index) {
@@ -591,6 +605,24 @@ std::vector<DiffSyntaxStyle> HybridDiffDocument::getScopeStyles(const std::strin
     styles.push_back(DiffSyntaxStyle(style.id, style.foreground, style.fontStyle));
   }
   return styles;
+}
+
+DiffSyntaxStyle HybridDiffDocument::getNativeScopeStyle(const std::string& themeName, double scopeId) {
+  std::lock_guard<std::mutex> lock(syntaxMutex_);
+  const auto safeScopeId = static_cast<size_t>(std::max(0.0, std::floor(scopeId)));
+  auto& styles = nativeScopeStyleCache_[themeName];
+  if (styles.size() <= safeScopeId && styles.size() < syntaxState_->scopeState.scopes.size()) {
+    const auto resolvedStyles = syntaxparser::resolveSyntaxScopeStyles(themeName, syntaxState_->scopeState.scopes, styles.size());
+    styles.reserve(styles.size() + resolvedStyles.size());
+    for (const auto& style : resolvedStyles) {
+      styles.push_back(DiffSyntaxStyle(style.id, style.foreground, style.fontStyle));
+    }
+  }
+
+  if (safeScopeId < styles.size()) {
+    return styles[safeScopeId];
+  }
+  return DiffSyntaxStyle(static_cast<double>(safeScopeId), "", 0);
 }
 
 DiffLoadTiming HybridDiffDocument::getTiming() {
@@ -1079,6 +1111,21 @@ void HybridDiffDocument::releaseCompletedSourceCaches() {
       source.state.reset();
     }
   }
+}
+
+std::shared_ptr<HybridDiffDocument> getRegisteredDiffDocument(double documentId) {
+  const auto safeDocumentId = static_cast<uint64_t>(std::max(0.0, std::floor(documentId)));
+  std::lock_guard<std::mutex> lock(diffDocumentRegistryMutex);
+  const auto entry = diffDocumentRegistry.find(safeDocumentId);
+  if (entry == diffDocumentRegistry.end()) {
+    return nullptr;
+  }
+
+  auto document = entry->second.lock();
+  if (!document) {
+    diffDocumentRegistry.erase(entry);
+  }
+  return document;
 }
 
 } // namespace margelo::nitro::legenddesktop::diffparser

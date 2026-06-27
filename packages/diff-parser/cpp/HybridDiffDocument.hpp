@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <map>
 #include <mutex>
 #include <memory>
 #include <optional>
@@ -67,6 +68,7 @@ public:
   double getFileCount() override;
   double getTokenizedMaxRow() override;
   double getScopeCount() override;
+  double getDocumentId() override;
   DiffCachedRow getRow(double index) override;
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
@@ -82,6 +84,7 @@ public:
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxScope> getScopes() override;
   std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) override;
+  DiffSyntaxStyle getNativeScopeStyle(const std::string& themeName, double scopeId);
   DiffLoadTiming getTiming() override;
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
   double stopBackgroundTokenization() override;
@@ -130,6 +133,7 @@ private:
   std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
   void releaseCompletedSourceCaches();
 
+  uint64_t documentId_;
   std::vector<DiffFileSummary> files_;
   std::vector<DiffRenderRow> rows_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
@@ -139,6 +143,7 @@ private:
   std::string workdirPath_;
   std::string headTreeOid_;
   std::shared_ptr<DiffSyntaxState> syntaxState_;
+  std::map<std::string, std::vector<DiffSyntaxStyle>> nativeScopeStyleCache_;
   DiffLoadTiming timing_;
   size_t backgroundTokenizeRowIndex_ = 0;
   size_t backgroundTokenizeNextRowIndex_ = 0;
@@ -150,5 +155,7 @@ private:
   mutable std::mutex mutex_;
   mutable std::mutex syntaxMutex_;
 };
+
+std::shared_ptr<HybridDiffDocument> getRegisteredDiffDocument(double documentId);
 
 } // namespace margelo::nitro::legenddesktop::diffparser
