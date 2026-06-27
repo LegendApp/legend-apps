@@ -145,9 +145,7 @@ export function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
 }
 
 export function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
-  return syntaxAppearance === "dark"
-    ? "rgba(255, 255, 255, 0.08)"
-    : "rgba(17, 24, 39, 0.1)";
+  return syntaxAppearance === "dark" ? "#ffffff14" : "#1118271a";
 }
 
 type TokenizedDiffRowState = {
