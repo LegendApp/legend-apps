@@ -84,6 +84,12 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 @property(nonatomic, strong) NSMutableParagraphStyle *rightParagraph;
 @property(nonatomic, strong) NSMutableParagraphStyle *centerParagraph;
 @property(nonatomic, copy) NSDictionary *baseTextAttributes;
+@property(nonatomic, copy) NSDictionary *addLineNumberAttributes;
+@property(nonatomic, copy) NSDictionary *removeLineNumberAttributes;
+@property(nonatomic, copy) NSDictionary *mutedLineNumberAttributes;
+@property(nonatomic, copy) NSDictionary *addMarkerAttributes;
+@property(nonatomic, copy) NSDictionary *removeMarkerAttributes;
+@property(nonatomic, copy) NSDictionary *mutedMarkerAttributes;
 - (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize;
 - (void)setForegroundColorString:(NSString *)foregroundColor
                 mutedColorString:(NSString *)mutedColor
@@ -94,6 +100,9 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
               dividerColorString:(NSString *)dividerColor;
 - (void)setCollapsedFileIndexesString:(NSString *)value;
 - (const std::vector<double> &)collapsedFileIndexes;
+- (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType;
+- (NSDictionary *)markerAttributesForChangeType:(double)changeType;
+- (void)updateTextAttributes;
 @end
 
 @implementation RNDiffNativeRowRenderConfig {
@@ -123,22 +132,54 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
     _rightParagraph.alignment = NSTextAlignmentRight;
     _centerParagraph = [NSMutableParagraphStyle new];
     _centerParagraph.alignment = NSTextAlignmentCenter;
-    _baseTextAttributes = @{
-      NSFontAttributeName: _font,
-      NSForegroundColorAttributeName: _foregroundColor,
-    };
+    [self updateTextAttributes];
   }
   return self;
+}
+
+- (void)updateTextAttributes
+{
+  self.baseTextAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.foregroundColor,
+  };
+  self.addLineNumberAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.addAccentColor,
+    NSParagraphStyleAttributeName: self.rightParagraph,
+  };
+  self.removeLineNumberAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.removeAccentColor,
+    NSParagraphStyleAttributeName: self.rightParagraph,
+  };
+  self.mutedLineNumberAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.mutedColor,
+    NSParagraphStyleAttributeName: self.rightParagraph,
+  };
+  self.addMarkerAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.addAccentColor,
+    NSParagraphStyleAttributeName: self.centerParagraph,
+  };
+  self.removeMarkerAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.removeAccentColor,
+    NSParagraphStyleAttributeName: self.centerParagraph,
+  };
+  self.mutedMarkerAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.mutedColor,
+    NSParagraphStyleAttributeName: self.centerParagraph,
+  };
 }
 
 - (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize
 {
   NSFont *font = [NSFont fontWithName:fontFamily size:fontSize];
   self.font = font ?: [NSFont monospacedSystemFontOfSize:fontSize weight:NSFontWeightRegular];
-  self.baseTextAttributes = @{
-    NSFontAttributeName: self.font,
-    NSForegroundColorAttributeName: self.foregroundColor,
-  };
+  [self updateTextAttributes];
 }
 
 - (void)setForegroundColorString:(NSString *)foregroundColor
@@ -156,10 +197,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   self.addBackgroundColor = RNDiffColorFromString(addBackgroundColor, NSColor.clearColor);
   self.removeBackgroundColor = RNDiffColorFromString(removeBackgroundColor, NSColor.clearColor);
   self.dividerColor = RNDiffColorFromString(dividerColor, NSColor.clearColor);
-  self.baseTextAttributes = @{
-    NSFontAttributeName: self.font,
-    NSForegroundColorAttributeName: self.foregroundColor,
-  };
+  [self updateTextAttributes];
 }
 
 - (void)setCollapsedFileIndexesString:(NSString *)value
@@ -176,6 +214,28 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 - (const std::vector<double> &)collapsedFileIndexes
 {
   return _collapsedFileIndexes;
+}
+
+- (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType
+{
+  if (changeType == diffChangeTypeAdd) {
+    return self.addLineNumberAttributes;
+  }
+  if (changeType == diffChangeTypeRemove) {
+    return self.removeLineNumberAttributes;
+  }
+  return self.mutedLineNumberAttributes;
+}
+
+- (NSDictionary *)markerAttributesForChangeType:(double)changeType
+{
+  if (changeType == diffChangeTypeAdd) {
+    return self.addMarkerAttributes;
+  }
+  if (changeType == diffChangeTypeRemove) {
+    return self.removeMarkerAttributes;
+  }
+  return self.mutedMarkerAttributes;
 }
 
 @end
@@ -245,6 +305,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 @property(nonatomic, assign) double configVersion;
 @property(nonatomic, assign) double rowIndex;
 @property(nonatomic, copy) NSString *adaptiveRender;
+@property(nonatomic, strong) NSMutableAttributedString *attributedTextScratch;
 @end
 
 @implementation RNDiffNativeRowContentView
@@ -254,6 +315,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   if (self = [super initWithFrame:NSZeroRect]) {
     _configId = @"";
     _adaptiveRender = @"normal";
+    _attributedTextScratch = [[NSMutableAttributedString alloc] initWithString:@""];
   }
   return self;
 }
@@ -286,7 +348,11 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                              config:(RNDiffNativeRowRenderConfig *)config
 {
   NSString *text = RNDiffStringFromStdString(plain.text);
-  NSMutableAttributedString *attributedText = [[NSMutableAttributedString alloc] initWithString:text attributes:config.baseTextAttributes];
+  NSMutableAttributedString *attributedText = self.attributedTextScratch;
+  [[attributedText mutableString] setString:text];
+  if (attributedText.length > 0) {
+    [attributedText setAttributes:config.baseTextAttributes range:NSMakeRange(0, attributedText.length)];
+  }
 
   if (tokens != nullptr) {
     const char *themeName = config.themeName.UTF8String;
@@ -319,10 +385,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
   const BOOL isAdd = plain.changeType == diffChangeTypeAdd;
   const BOOL isRemove = plain.changeType == diffChangeTypeRemove;
-  const BOOL isChanged = isAdd || isRemove;
   const BOOL lightRender = [self.adaptiveRender isEqualToString:@"light"];
   NSColor *accentColor = isAdd ? config.addAccentColor : isRemove ? config.removeAccentColor : NSColor.clearColor;
-  NSColor *lineNumberColor = isChanged ? accentColor : config.mutedColor;
   NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
 
   [backgroundColor setFill];
@@ -332,16 +396,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
   const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
   if (!lightRender) {
-    NSDictionary *lineNumberAttributes = @{
-      NSFontAttributeName: config.font,
-      NSForegroundColorAttributeName: lineNumberColor,
-      NSParagraphStyleAttributeName: config.rightParagraph,
-    };
-    NSDictionary *markerAttributes = @{
-      NSFontAttributeName: config.font,
-      NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
-      NSParagraphStyleAttributeName: config.centerParagraph,
-    };
+    NSDictionary *lineNumberAttributes = [config lineNumberAttributesForChangeType:plain.changeType];
+    NSDictionary *markerAttributes = [config markerAttributesForChangeType:plain.changeType];
 
     if (plain.oldLineNumber >= 0) {
       NSString *oldLineNumber = [NSString stringWithFormat:@"%.0f", plain.oldLineNumber];
@@ -391,10 +447,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
   const BOOL isAdd = plain.changeType == diffChangeTypeAdd;
   const BOOL isRemove = plain.changeType == diffChangeTypeRemove;
-  const BOOL isChanged = isAdd || isRemove;
   const BOOL lightRender = [self.adaptiveRender isEqualToString:@"light"];
-  NSColor *accentColor = isAdd ? config.addAccentColor : isRemove ? config.removeAccentColor : NSColor.clearColor;
-  NSColor *lineNumberColor = isChanged ? accentColor : config.mutedColor;
   NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
 
   [backgroundColor setFill];
@@ -402,16 +455,13 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
   const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
   if (!lightRender) {
-    NSDictionary *lineNumberAttributes = @{
-      NSFontAttributeName: config.font,
-      NSForegroundColorAttributeName: lineNumberColor,
-      NSParagraphStyleAttributeName: config.rightParagraph,
-    };
-    NSDictionary *markerAttributes = @{
-      NSFontAttributeName: config.font,
-      NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
-      NSParagraphStyleAttributeName: config.centerParagraph,
-    };
+    NSDictionary *lineNumberAttributes = [config lineNumberAttributesForChangeType:plain.changeType];
+    const double markerChangeType = oldSide && isRemove
+      ? diffChangeTypeRemove
+      : !oldSide && isAdd
+        ? diffChangeTypeAdd
+        : 0;
+    NSDictionary *markerAttributes = [config markerAttributesForChangeType:markerChangeType];
 
     const double lineNumber = oldSide ? plain.oldLineNumber : plain.newLineNumber;
     if (lineNumber >= 0) {
