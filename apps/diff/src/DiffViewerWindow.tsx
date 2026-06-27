@@ -928,13 +928,13 @@ function DiffLoadedBody({
         {sidebar}
         <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
           {diffContent}
+          <DiffSyntaxProgressBar
+            foregroundColor={syntaxAppearance === "dark" ? "#58a6ffe6" : "#0969dadb"}
+            progress={syntaxTokenizationProgress.progress}
+            visible={syntaxTokenizationProgress.visible}
+          />
         </View>
       </SidebarSplitView>
-      <DiffSyntaxProgressBar
-        foregroundColor={syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.9)" : "rgba(9, 105, 218, 0.86)"}
-        progress={syntaxTokenizationProgress.progress}
-        visible={syntaxTokenizationProgress.visible}
-      />
     </View>
   );
 }
@@ -2494,7 +2494,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "absolute",
     right: 0,
-    top: 0,
+    top: diffTitlebarTopInset,
     zIndex: 20,
   },
   dropOverlay: {
