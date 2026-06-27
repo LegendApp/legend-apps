@@ -25,8 +25,25 @@ import type { DiffSyntaxStyleStore } from "./DiffRows";
 import {
   diffBackgroundTokenizePollMs,
 } from "./diffViewerConstants";
+import {
+  createCollapsedFileIndexList,
+  createIdentityDiffRowIndexes,
+  createSideBySideFileHeaderIndexes,
+  createSideBySideListIndexByRowIndex,
+  createVisibleDiffRowIndexes,
+  findFileIndexForRow,
+} from "./diffLoadedDocumentIndexes";
 import type { DiffViewerState } from "./diffViewerModel";
 import { logDiffOpenTiming } from "./diffViewerSupport";
+
+export {
+  createCollapsedFileIndexList,
+  createIdentityDiffRowIndexes,
+  createSideBySideFileHeaderIndexes,
+  createSideBySideListIndexByRowIndex,
+  createVisibleDiffRowIndexes,
+  findFileIndexForRow,
+} from "./diffLoadedDocumentIndexes";
 
 export function useDiffLoadedModel({
   collapsedFileIndexes,
@@ -301,7 +318,7 @@ export function useDiffLoadedModel({
   const sideBySideFileHeaderIndexes = useMemo(
     () => {
       const startedAt = nowMs();
-      const indexes = new Set(sideBySideFileHeaders.map((header) => header.listIndex));
+      const indexes = createSideBySideFileHeaderIndexes(sideBySideFileHeaders);
       if (state.status === "loaded") {
         logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", {
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
@@ -316,10 +333,7 @@ export function useDiffLoadedModel({
   const sideBySideListIndexByRowIndex = useMemo(
     () => {
       const startedAt = nowMs();
-      const indexes = new Map<number, number>();
-      sideBySideFileHeaders.forEach((header) => {
-        indexes.set(header.sourceStart, header.listIndex);
-      });
+      const indexes = createSideBySideListIndexByRowIndex(sideBySideFileHeaders);
       if (state.status === "loaded") {
         logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", {
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
@@ -434,63 +448,4 @@ export function useDiffSideBySideRuntime({
     requestSideBySideRange,
     resetSideBySideRuntime,
   };
-}
-
-function createVisibleDiffRowIndexes(files: readonly DiffFileSummary[], collapsedFileIndexes: ReadonlySet<number>, fallbackItemIndexes: readonly (number | undefined)[]) {
-  const indexes: number[] = [];
-
-  if (files.length > 0) {
-    for (const file of files) {
-      const rowStart = Math.max(0, Math.floor(file.rowStart));
-      const rowCount = Math.max(0, Math.floor(file.rowCount));
-
-      if (rowCount > 0) {
-        indexes.push(rowStart);
-
-        if (!collapsedFileIndexes.has(file.index)) {
-          const rowEnd = rowStart + rowCount;
-          for (let rowIndex = rowStart + 1; rowIndex < rowEnd; rowIndex += 1) {
-            indexes.push(rowIndex);
-          }
-        }
-      }
-    }
-  } else {
-    fallbackItemIndexes.forEach((rowIndex, listIndex) => {
-      indexes.push(rowIndex ?? listIndex);
-    });
-  }
-
-  return indexes;
-}
-
-function createIdentityDiffRowIndexes(length: number) {
-  const count = Math.max(0, Math.floor(length));
-  return Array.from({ length: count }, (_, index) => index);
-}
-
-function createCollapsedFileIndexList(collapsedFileIndexes: ReadonlySet<number>) {
-  return Array.from(collapsedFileIndexes).sort((left, right) => left - right);
-}
-
-export function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {
-  let low = 0;
-  let high = files.length - 1;
-
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const file = files[middle];
-    const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const rowEnd = rowStart + Math.max(0, Math.floor(file.rowCount));
-
-    if (rowIndex < rowStart) {
-      high = middle - 1;
-    } else if (rowIndex >= rowEnd) {
-      low = middle + 1;
-    } else {
-      return file.index;
-    }
-  }
-
-  return files.length > 0 ? files[Math.max(0, Math.min(files.length - 1, high))].index : null;
 }
