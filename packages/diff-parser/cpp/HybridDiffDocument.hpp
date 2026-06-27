@@ -113,6 +113,7 @@ private:
   DiffTokenizedSource makeUnifiedDiffSource(const DiffFileSources& sources, bool oldSource);
   void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);
   std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
+  void releaseCompletedSourceCaches();
 
   std::vector<DiffFileSummary> files_;
   std::vector<DiffRenderRow> rows_;

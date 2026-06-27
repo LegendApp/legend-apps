@@ -614,6 +614,11 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
 
     if (document->backgroundGeneration_.load() == generation) {
       document->backgroundTokenizationRunning_.store(false);
+      document->logMemorySnapshot("background.beforeSourceRelease");
+      {
+        std::lock_guard<std::mutex> lock(document->mutex_);
+        document->releaseCompletedSourceCaches();
+      }
       document->logMemorySnapshot("background.complete");
     }
   });
@@ -973,6 +978,33 @@ std::vector<DiffSyntaxTokenRun> HybridDiffDocument::tokensForLine(DiffTokenizedS
     return *source.tokenCache[lineIndex];
   }
   return {};
+}
+
+void HybridDiffDocument::releaseCompletedSourceCaches() {
+  if (backgroundTokenizeNextRowIndex_ < rows_.size()) {
+    return;
+  }
+
+  for (auto& sources : fileSources_) {
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
+      auto& source = sources.oldSource;
+      source.lines.clear();
+      source.lines.shrink_to_fit();
+      source.tokenCache.clear();
+      source.tokenCache.shrink_to_fit();
+      source.state.reset();
+    }
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
+      auto& source = sources.newSource;
+      source.lines.clear();
+      source.lines.shrink_to_fit();
+      source.tokenCache.clear();
+      source.tokenCache.shrink_to_fit();
+      source.state.reset();
+    }
+  }
 }
 
 } // namespace margelo::nitro::legenddesktop::diffparser
