@@ -7,8 +7,9 @@ import { rootDir } from "./lib/apps";
 const scenario = process.env.DIFF_E2E_SCENARIO ?? "local-folder-smoke";
 const session = process.env.AGENT_DEVICE_SESSION ?? "diff-e2e";
 const artifactsDir = path.join(rootDir, ".artifacts", "diff-e2e");
-const fixtureDir = path.join(artifactsDir, "fixtures", "local-folder-smoke");
+const fixtureDir = path.join(artifactsDir, "fixtures", scenario);
 const stepsFileByScenario: Record<string, string> = {
+  "app-surface-smoke": "diff-app-surface-smoke.steps.json",
   "local-folder-smoke": "diff-local-folder-smoke.steps.json",
 };
 const stepsFileName = stepsFileByScenario[scenario] ?? stepsFileByScenario["local-folder-smoke"];
@@ -30,7 +31,7 @@ function run(command: string, args: string[], options: { cwd?: string; env?: Rec
   }
 }
 
-function writeFile(relativePath: string, contents: string) {
+function writeFile(relativePath: string, contents: string | Buffer) {
   const filePath = path.join(fixtureDir, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, contents);
@@ -43,6 +44,9 @@ function createFixtureRepo() {
   writeFile("src/App.tsx", "export function App() {\n  return null;\n}\n");
   writeFile("src/Deleted.ts", "export const removed = true;\n");
   writeFile("README.md", "# Fixture\n");
+  if (scenario === "app-surface-smoke") {
+    writeFile("assets/logo.bin", Buffer.from([0x00, 0x01, 0x02, 0x03]));
+  }
 
   run("git", ["init"], { cwd: fixtureDir });
   run("git", ["add", "."], { cwd: fixtureDir });
@@ -59,6 +63,9 @@ function createFixtureRepo() {
   writeFile("src/App.tsx", "export function App() {\n  return \"changed\";\n}\n");
   writeFile("src/NewFile.ts", "export const added = true;\n");
   fs.rmSync(path.join(fixtureDir, "src", "Deleted.ts"));
+  if (scenario === "app-surface-smoke") {
+    writeFile("assets/logo.bin", Buffer.from([0xff, 0x00, 0xfe, 0x01]));
+  }
 }
 
 fs.mkdirSync(artifactsDir, { recursive: true });
