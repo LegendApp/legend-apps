@@ -6,7 +6,6 @@ export interface NativeProps extends ViewProps {
   configId: string;
   configVersion: CodegenTypes.Double;
   rowIndex: CodegenTypes.Double;
-  tokenizedMaxRow: CodegenTypes.Double;
 }
 
 export default codegenNativeComponent<NativeProps>("DiffNativeRow") as HostComponent<NativeProps>;

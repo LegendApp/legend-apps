@@ -219,6 +219,7 @@ type DiffLoadedBodyProps = {
 
 type DiffSyntaxTokenizationProgress = {
   progress: number;
+  version: number;
   visible: boolean;
 };
 
@@ -259,6 +260,7 @@ type DiffNativeRowConfigProps = {
   rowHeight: number;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
+  tokenizationVersion: number;
 };
 
 function noopVirtualizedDocumentRequestRange() {
@@ -779,6 +781,7 @@ function DiffLoadedBody({
         onVisibleRowsRequested={nativeUnifiedRows ? undefined : handleVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
         requestRange={requestUnifiedRange}
+        requestRangesOnScroll={!nativeUnifiedRows}
         getRow={nativeUnifiedRows ? undefined : getRow}
         rowHeight={rowHeight}
         renderRow={renderRow}
@@ -802,6 +805,7 @@ function DiffLoadedBody({
         onVisibleRowsRequested={nativeSideBySideRows ? undefined : handleSideBySideVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
         requestRange={requestBlocksRange}
+        requestRangesOnScroll={!nativeSideBySideRows}
         rowHeight={rowHeight}
         renderRow={renderSideBySideRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
@@ -843,6 +847,7 @@ function DiffLoadedBody({
             style={styles.nativeDiffRowConfig}
             syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
             themeName={nativeRowConfig.themeName}
+            tokenizationVersion={nativeRowConfig.tokenizationVersion}
           />
         ) : null}
         {list}
@@ -1093,6 +1098,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loggedFirstSideBySideRowRenderRef = useRef(false);
   const [syntaxTokenizationProgress, setSyntaxTokenizationProgress] = useState<DiffSyntaxTokenizationProgress>({
     progress: 0,
+    version: 0,
     visible: false,
   });
   const isLoading = loadingSource !== null;
@@ -1220,13 +1226,17 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       const totalRows = Math.max(0, document.rowCount);
       const updateProgress = () => {
         const tokenizedRows = Math.max(0, Math.min(totalRows, document.tokenizedMaxRow));
+        const tokenizationVersion = document.getTokenizedRowVersion();
         const nextProgress = totalRows > 0 ? tokenizedRows / totalRows : 1;
         const nextVisible = totalRows > 0 && tokenizedRows < totalRows;
         setSyntaxTokenizationProgress((current) => (
-          current.visible === nextVisible && Math.abs(current.progress - nextProgress) < 0.001
+          current.visible === nextVisible &&
+          current.version === tokenizationVersion &&
+          Math.abs(current.progress - nextProgress) < 0.001
             ? current
             : {
               progress: nextProgress,
+              version: tokenizationVersion,
               visible: nextVisible,
             }
         ));
@@ -1240,9 +1250,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     setSyntaxTokenizationProgress((current) => (
-      current.visible || current.progress !== 0
+      current.visible || current.progress !== 0 || current.version !== 0
         ? {
           progress: 0,
+          version: 0,
           visible: false,
         }
         : current
@@ -1837,6 +1848,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
+      tokenizationVersion: syntaxTokenizationProgress.version,
     };
   }, [
     fontFamily,
@@ -1847,6 +1859,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     rowHeight,
     state.status === "loaded" ? state.document : null,
     syntaxHighlightingEnabled,
+    syntaxTokenizationProgress.version,
     syntaxTheme.appearance,
   ]);
   const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
@@ -1893,6 +1906,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
+      tokenizationVersion: syntaxTokenizationProgress.version,
     };
   }, [
     collapsedFileIndexesKey,
@@ -1904,6 +1918,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     rowHeight,
     state.status === "loaded" ? state.document : null,
     syntaxHighlightingEnabled,
+    syntaxTokenizationProgress.version,
     syntaxTheme.appearance,
   ]);
   const renderFields = useMemo<DiffRenderFields>(

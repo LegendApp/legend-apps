@@ -244,7 +244,6 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 @property(nonatomic, copy) NSString *configId;
 @property(nonatomic, assign) double configVersion;
 @property(nonatomic, assign) double rowIndex;
-@property(nonatomic, assign) double tokenizedMaxRow;
 @property(nonatomic, copy) NSString *adaptiveRender;
 @end
 
@@ -321,6 +320,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   const BOOL isAdd = plain.changeType == diffChangeTypeAdd;
   const BOOL isRemove = plain.changeType == diffChangeTypeRemove;
   const BOOL isChanged = isAdd || isRemove;
+  const BOOL lightRender = [self.adaptiveRender isEqualToString:@"light"];
   NSColor *accentColor = isAdd ? config.addAccentColor : isRemove ? config.removeAccentColor : NSColor.clearColor;
   NSColor *lineNumberColor = isChanged ? accentColor : config.mutedColor;
   NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
@@ -330,37 +330,40 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   [accentColor setFill];
   NSRectFill(NSMakeRect(0, 0, config.changeBarWidth, self.bounds.size.height));
 
-  NSDictionary *lineNumberAttributes = @{
-    NSFontAttributeName: config.font,
-    NSForegroundColorAttributeName: lineNumberColor,
-    NSParagraphStyleAttributeName: config.rightParagraph,
-  };
-  NSDictionary *markerAttributes = @{
-    NSFontAttributeName: config.font,
-    NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
-    NSParagraphStyleAttributeName: config.centerParagraph,
-  };
-
   const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
-  if (plain.oldLineNumber >= 0) {
-    NSString *oldLineNumber = [NSString stringWithFormat:@"%.0f", plain.oldLineNumber];
-    [oldLineNumber drawInRect:NSMakeRect(config.changeBarWidth, textY, config.lineNumberWidth - 4, config.rowHeight)
-               withAttributes:lineNumberAttributes];
-  }
-  if (plain.newLineNumber >= 0) {
-    NSString *newLineNumber = [NSString stringWithFormat:@"%.0f", plain.newLineNumber];
-    [newLineNumber drawInRect:NSMakeRect(config.changeBarWidth + config.lineNumberWidth, textY, config.lineNumberWidth - 4, config.rowHeight)
-               withAttributes:lineNumberAttributes];
-  }
+  if (!lightRender) {
+    NSDictionary *lineNumberAttributes = @{
+      NSFontAttributeName: config.font,
+      NSForegroundColorAttributeName: lineNumberColor,
+      NSParagraphStyleAttributeName: config.rightParagraph,
+    };
+    NSDictionary *markerAttributes = @{
+      NSFontAttributeName: config.font,
+      NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
+      NSParagraphStyleAttributeName: config.centerParagraph,
+    };
 
-  NSString *marker = isAdd ? @"+" : isRemove ? @"-" : @" ";
-  [marker drawInRect:NSMakeRect(config.changeBarWidth + config.lineNumberWidth * 2, textY, config.markerWidth, config.rowHeight)
-      withAttributes:markerAttributes];
+    if (plain.oldLineNumber >= 0) {
+      NSString *oldLineNumber = [NSString stringWithFormat:@"%.0f", plain.oldLineNumber];
+      [oldLineNumber drawInRect:NSMakeRect(config.changeBarWidth, textY, config.lineNumberWidth - 4, config.rowHeight)
+                 withAttributes:lineNumberAttributes];
+    }
+    if (plain.newLineNumber >= 0) {
+      NSString *newLineNumber = [NSString stringWithFormat:@"%.0f", plain.newLineNumber];
+      [newLineNumber drawInRect:NSMakeRect(config.changeBarWidth + config.lineNumberWidth, textY, config.lineNumberWidth - 4, config.rowHeight)
+                 withAttributes:lineNumberAttributes];
+    }
+
+    NSString *marker = isAdd ? @"+" : isRemove ? @"-" : @" ";
+    [marker drawInRect:NSMakeRect(config.changeBarWidth + config.lineNumberWidth * 2, textY, config.markerWidth, config.rowHeight)
+        withAttributes:markerAttributes];
+  }
 
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
-  if (![self.adaptiveRender isEqualToString:@"light"]
+  const double tokenizedMaxRow = document->getTokenizedMaxRow();
+  if (!lightRender
       && config.syntaxHighlightingEnabled
-      && self.rowIndex < self.tokenizedMaxRow
+      && self.rowIndex < tokenizedMaxRow
       && row.tokens.has_value()
       && std::holds_alternative<std::vector<DiffSyntaxTokenRun>>(*row.tokens)) {
     tokens = &std::get<std::vector<DiffSyntaxTokenRun>>(*row.tokens);
@@ -380,6 +383,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                     columnRect:(NSRect)columnRect
                       document:(HybridDiffDocument *)document
                          config:(RNDiffNativeRowRenderConfig *)config
+                tokenizedMaxRow:(double)tokenizedMaxRow
 {
   if (!rowVisible || plain.kind != diffRowKindLine) {
     return;
@@ -388,6 +392,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   const BOOL isAdd = plain.changeType == diffChangeTypeAdd;
   const BOOL isRemove = plain.changeType == diffChangeTypeRemove;
   const BOOL isChanged = isAdd || isRemove;
+  const BOOL lightRender = [self.adaptiveRender isEqualToString:@"light"];
   NSColor *accentColor = isAdd ? config.addAccentColor : isRemove ? config.removeAccentColor : NSColor.clearColor;
   NSColor *lineNumberColor = isChanged ? accentColor : config.mutedColor;
   NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
@@ -395,33 +400,35 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   [backgroundColor setFill];
   NSRectFill(columnRect);
 
-  NSDictionary *lineNumberAttributes = @{
-    NSFontAttributeName: config.font,
-    NSForegroundColorAttributeName: lineNumberColor,
-    NSParagraphStyleAttributeName: config.rightParagraph,
-  };
-  NSDictionary *markerAttributes = @{
-    NSFontAttributeName: config.font,
-    NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
-    NSParagraphStyleAttributeName: config.centerParagraph,
-  };
-
   const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
-  const double lineNumber = oldSide ? plain.oldLineNumber : plain.newLineNumber;
-  if (lineNumber >= 0) {
-    NSString *lineNumberText = [NSString stringWithFormat:@"%.0f", lineNumber];
-    [lineNumberText drawInRect:NSMakeRect(columnRect.origin.x, textY, config.lineNumberWidth - 4, config.rowHeight)
-                withAttributes:lineNumberAttributes];
+  if (!lightRender) {
+    NSDictionary *lineNumberAttributes = @{
+      NSFontAttributeName: config.font,
+      NSForegroundColorAttributeName: lineNumberColor,
+      NSParagraphStyleAttributeName: config.rightParagraph,
+    };
+    NSDictionary *markerAttributes = @{
+      NSFontAttributeName: config.font,
+      NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
+      NSParagraphStyleAttributeName: config.centerParagraph,
+    };
+
+    const double lineNumber = oldSide ? plain.oldLineNumber : plain.newLineNumber;
+    if (lineNumber >= 0) {
+      NSString *lineNumberText = [NSString stringWithFormat:@"%.0f", lineNumber];
+      [lineNumberText drawInRect:NSMakeRect(columnRect.origin.x, textY, config.lineNumberWidth - 4, config.rowHeight)
+                  withAttributes:lineNumberAttributes];
+    }
+
+    NSString *marker = oldSide && isRemove ? @"-" : !oldSide && isAdd ? @"+" : @" ";
+    [marker drawInRect:NSMakeRect(columnRect.origin.x + config.lineNumberWidth, textY, config.markerWidth, config.rowHeight)
+        withAttributes:markerAttributes];
   }
 
-  NSString *marker = oldSide && isRemove ? @"-" : !oldSide && isAdd ? @"+" : @" ";
-  [marker drawInRect:NSMakeRect(columnRect.origin.x + config.lineNumberWidth, textY, config.markerWidth, config.rowHeight)
-      withAttributes:markerAttributes];
-
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
-  if (![self.adaptiveRender isEqualToString:@"light"]
+  if (!lightRender
       && config.syntaxHighlightingEnabled
-      && plain.index < self.tokenizedMaxRow
+      && plain.index < tokenizedMaxRow
       && !plain.tokens.empty()) {
     tokens = &plain.tokens;
   }
@@ -451,20 +458,23 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   const CGFloat rightWidth = MAX(0, width - leftWidth);
   NSRect leftRect = NSMakeRect(0, 0, leftWidth, self.bounds.size.height);
   NSRect rightRect = NSMakeRect(leftWidth, 0, rightWidth, self.bounds.size.height);
+  const double tokenizedMaxRow = document->getTokenizedMaxRow();
 
   [self drawSideBySidePlainRow:row.oldRow
                     rowVisible:row.oldRowVisible
                        oldSide:YES
                     columnRect:leftRect
                       document:document
-                         config:config];
+                         config:config
+                tokenizedMaxRow:tokenizedMaxRow];
   const DiffRenderRow &newRow = row.newRowEqualsOldRow ? row.oldRow : row.newRow;
   [self drawSideBySidePlainRow:newRow
                     rowVisible:row.newRowVisible
                        oldSide:NO
                     columnRect:rightRect
                       document:document
-                         config:config];
+                         config:config
+                tokenizedMaxRow:tokenizedMaxRow];
 
   [config.dividerColor setFill];
   NSRectFill(NSMakeRect(leftWidth, 0, 1, self.bounds.size.height));
@@ -593,7 +603,6 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.configId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
   _contentView.configVersion = newProps.configVersion;
   _contentView.rowIndex = newProps.rowIndex;
-  _contentView.tokenizedMaxRow = newProps.tokenizedMaxRow;
   _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
   [_contentView setNeedsDisplay:YES];
 #endif
@@ -607,7 +616,6 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.configId = @"";
   _contentView.configVersion = 0;
   _contentView.rowIndex = -1;
-  _contentView.tokenizedMaxRow = 0;
   _contentView.adaptiveRender = @"normal";
   [_contentView setNeedsDisplay:YES];
 #endif

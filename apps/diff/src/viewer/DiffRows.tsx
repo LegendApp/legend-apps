@@ -193,14 +193,6 @@ function useTokenizedDiffRow(
   }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedMaxRow]);
 }
 
-function useTokenizedMaxRow(syntaxStyleStore: DiffSyntaxStyleStore) {
-  return useSyncExternalStore(
-    syntaxStyleStore.subscribe,
-    syntaxStyleStore.getSnapshot,
-    syntaxStyleStore.getSnapshot,
-  );
-}
-
 function DiffNativeUnifiedLineRow({
   adaptiveRender,
   index,
@@ -210,7 +202,6 @@ function DiffNativeUnifiedLineRow({
   index: number;
   renderFields: DiffRenderFields;
 }) {
-  const tokenizedMaxRow = useTokenizedMaxRow(renderFields.syntaxStyleStore);
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
@@ -218,7 +209,6 @@ function DiffNativeUnifiedLineRow({
       configVersion={renderFields.nativeUnifiedRowConfigVersion}
       rowIndex={index}
       style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
-      tokenizedMaxRow={tokenizedMaxRow}
     />
   );
 }
@@ -232,7 +222,6 @@ function DiffNativeSideBySideLineRow({
   index: number;
   renderFields: DiffRenderFields;
 }) {
-  const tokenizedMaxRow = useTokenizedMaxRow(renderFields.syntaxStyleStore);
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
@@ -240,7 +229,6 @@ function DiffNativeSideBySideLineRow({
       configVersion={renderFields.nativeSideBySideRowConfigVersion}
       rowIndex={index}
       style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
-      tokenizedMaxRow={tokenizedMaxRow}
     />
   );
 }
