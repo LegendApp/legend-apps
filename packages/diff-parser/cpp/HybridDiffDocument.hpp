@@ -66,6 +66,7 @@ public:
   double getRowCount() override;
   double getFileCount() override;
   double getTokenizedMaxRow() override;
+  double getScopeCount() override;
   DiffCachedRow getRow(double index) override;
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
@@ -80,15 +81,18 @@ public:
   std::vector<DiffTokenizedRowRange> consumeTokenizedRowRanges() override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxScope> getScopes() override;
+  std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) override;
   DiffLoadTiming getTiming() override;
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
+  void logMemorySnapshot(const std::string& reason) noexcept;
 
 protected:
   size_t getExternalMemorySize() noexcept override;
 
 private:
+  size_t getExternalMemorySizeLocked() const noexcept;
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,

@@ -27,6 +27,8 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffTokenizedRowRan
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
 // Forward declaration of `DiffSyntaxScope` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxScope; }
+// Forward declaration of `DiffSyntaxStyle` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxStyle; }
 // Forward declaration of `DiffLoadTiming` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 
@@ -38,6 +40,8 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 #include "DiffTokenizedRowRange.hpp"
 #include "DiffFileSummary.hpp"
 #include "DiffSyntaxScope.hpp"
+#include "DiffSyntaxStyle.hpp"
+#include <string>
 #include "DiffLoadTiming.hpp"
 
 namespace margelo::nitro::legenddesktop::diffparser {
@@ -70,6 +74,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
       virtual double getRowCount() = 0;
       virtual double getFileCount() = 0;
       virtual double getTokenizedMaxRow() = 0;
+      virtual double getScopeCount() = 0;
 
     public:
       // Methods
@@ -87,6 +92,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
       virtual std::vector<DiffTokenizedRowRange> consumeTokenizedRowRanges() = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
       virtual std::vector<DiffSyntaxScope> getScopes() = 0;
+      virtual std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) = 0;
       virtual DiffLoadTiming getTiming() = 0;
       virtual double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) = 0;
       virtual double stopBackgroundTokenization() = 0;

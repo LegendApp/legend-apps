@@ -4,11 +4,9 @@ import {
   type DiffLoadTiming,
   type DiffRenderRow,
   type DiffSideBySideRenderRow,
-  type DiffSyntaxScope,
+  type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
-import { resolveSyntaxScopeStyles } from "@legend-desktop/syntax-parser";
 import {
-  createSyntaxStyleMap,
   nowMs,
   type SyntaxStyleMap,
 } from "@legend-desktop/source-viewer";
@@ -44,6 +42,17 @@ export {
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
 } from "./diffLoadedDocumentIndexes";
+
+function createDiffSyntaxStyleMap(styles: readonly DiffSyntaxStyle[]) {
+  return new Map(styles.map((style) => [
+    style.scopeId,
+    {
+      fontStyle: style.fontStyle,
+      foreground: style.foreground,
+      id: style.scopeId,
+    },
+  ])) satisfies SyntaxStyleMap;
+}
 
 export function useDiffLoadedModel({
   collapsedFileIndexes,
@@ -85,23 +94,23 @@ export function useDiffLoadedModel({
     });
     return map;
   }, [state]);
-  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxScope, DiffLoadTiming> | null>(
+  const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
     () => {
       const startedAt = nowMs();
-      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxScope, DiffLoadTiming> | null = null;
+      let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
       if (state.status === "loaded") {
         nextSnapshot = {
           document: state.document,
           initialRows: state.initialRows,
           itemCount: state.document.rowCount,
-          styles: state.scopes,
+          styles: [],
           timing: state.timing,
         };
         logDiffOpenTiming("viewer.derive.snapshot", {
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           initialRows: state.initialRows.length,
           rows: state.document.rowCount,
-          scopes: state.scopes.length,
+          scopes: state.document.scopeCount,
         });
       }
       return nextSnapshot;
@@ -120,19 +129,9 @@ export function useDiffLoadedModel({
     });
     return undefined;
   }, []);
-  const getScopes = useCallback((document: DiffDocument) => {
-    const startedAt = nowMs();
-    const scopes = document.getScopes();
-    logDiffOpenTiming("viewer.scopesFetched", {
-      durationMs: Number((nowMs() - startedAt).toFixed(1)),
-      scopes: scopes.length,
-    });
-    return scopes;
-  }, []);
   const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
   const diffRows = useVirtualizedDocumentRows({
     debugName: "diff",
-    getStyles: getScopes,
     getTiming,
     requestRows,
     snapshot,
@@ -143,13 +142,25 @@ export function useDiffLoadedModel({
     }
     return undefined;
   }, [state]);
-  const tokenStyleById = useMemo(
-    () => createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, diffRows.styles)),
-    [diffRows.styles, syntaxThemeName],
-  );
+  const tokenStyleById = useMemo(() => {
+    const startedAt = nowMs();
+    const styles = state.status === "loaded"
+      ? state.document.getScopeStyles(syntaxThemeName, 0)
+      : [];
+    if (state.status === "loaded") {
+      logDiffOpenTiming("viewer.scopeStylesFetched", {
+        durationMs: Number((nowMs() - startedAt).toFixed(1)),
+        fromScopeId: 0,
+        scopes: state.document.scopeCount,
+        styles: styles.length,
+        theme: syntaxThemeName,
+      });
+    }
+    return createDiffSyntaxStyleMap(styles);
+  }, [state.status === "loaded" ? state.document : null, syntaxThemeName]);
   const syntaxStyleStore = useMemo<DiffSyntaxStyleStore>(() => {
     const listeners = new Set<() => void>();
-    let scopeCount = diffRows.styles.length;
+    let scopeCount = state.status === "loaded" ? state.document.scopeCount : 0;
     let tokenizedMaxRow = state.status === "loaded" ? state.document.tokenizedMaxRow : 0;
     let tokenStyleMap = tokenStyleById;
     return {
@@ -166,12 +177,20 @@ export function useDiffLoadedModel({
         };
       },
       refresh(document: DiffDocument) {
-        const scopes = document.getScopes();
+        const nextScopeCount = document.scopeCount;
         const nextTokenizedMaxRow = document.tokenizedMaxRow;
         let changed = false;
-        if (scopes.length !== scopeCount) {
-          scopeCount = scopes.length;
-          tokenStyleMap = createSyntaxStyleMap(resolveSyntaxScopeStyles(syntaxThemeName, scopes));
+        if (nextScopeCount !== scopeCount) {
+          const styles = document.getScopeStyles(syntaxThemeName, scopeCount);
+          tokenStyleMap = new Map(tokenStyleMap);
+          styles.forEach((style) => {
+            tokenStyleMap.set(style.scopeId, {
+              fontStyle: style.fontStyle,
+              foreground: style.foreground,
+              id: style.scopeId,
+            });
+          });
+          scopeCount = nextScopeCount;
           changed = true;
         }
         if (nextTokenizedMaxRow !== tokenizedMaxRow) {

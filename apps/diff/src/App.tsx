@@ -9,7 +9,6 @@ import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { setDiffViewModeSetting } from "./diffSettings";
-import { warmDiffSyntaxHighlighters } from "./diffSyntaxWarmup";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
@@ -23,10 +22,15 @@ initializeSyntaxAssetsSync();
 logDiffOpenTiming("app.module", {
   phase: "evaluated",
 });
-prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
-setTimeout(() => {
-  warmDiffSyntaxHighlighters().catch(reportDiffAppControllerError);
-}, 0);
+logDiffMemoryMark("app.module", {
+  phase: "evaluated",
+});
+logDiffMemoryMark("viewer.prefetch.start", {});
+prefetchDiffViewerWindow()
+  .then(() => {
+    logDiffMemoryMark("viewer.prefetch.finish", {});
+  })
+  .catch(reportDiffAppControllerError);
 configureDiffAutoUpdates().catch(reportDiffAppControllerError);
 
 type DiffAppProps = {
@@ -43,6 +47,10 @@ function elapsedMs(start: number) {
 
 function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
+}
+
+function logDiffMemoryMark(event: string, payload: Record<string, unknown>) {
+  console.info(`${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`);
 }
 
 function reportDiffAppControllerError(error: unknown) {

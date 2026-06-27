@@ -3,7 +3,6 @@ import type {
   DiffFileSummary,
   DiffLoadTiming,
   DiffRenderRow,
-  DiffSyntaxScope,
 } from "@legend-desktop/diff-parser";
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
@@ -52,7 +51,6 @@ export type DiffViewerState =
     document: DiffDocument;
     files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
-    scopes: DiffSyntaxScope[];
     timing: DiffLoadTiming;
   }
   | {

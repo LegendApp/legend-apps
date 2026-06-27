@@ -6,11 +6,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include "git2.h"
 #include <sstream>
 #include <unordered_set>
+
+#ifdef __APPLE__
+#include <os/log.h>
+#endif
 
 namespace margelo::nitro::legenddesktop::diffparser {
 
@@ -34,6 +39,21 @@ constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
 constexpr double sideBySideKindLine = 3;
+
+#ifdef __APPLE__
+os_log_t diffMemoryLog() {
+  static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
+  return log;
+}
+#endif
+
+void logDiffMemoryMessage(const std::string& message) {
+#ifdef __APPLE__
+  os_log_with_type(diffMemoryLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
+#else
+  std::fprintf(stderr, "%s\n", message.c_str());
+#endif
+}
 
 struct GitRepositoryDeleter {
   void operator()(git_repository* repo) const {
@@ -256,6 +276,7 @@ HybridDiffDocument::HybridDiffDocument(
       syntaxState_(std::make_shared<DiffSyntaxState>()),
       timing_(timing) {
   sideBySideLines_ = createDiffSideBySideLines(rows_);
+  logMemorySnapshot("document.constructed");
 }
 
 HybridDiffDocument::~HybridDiffDocument() {
@@ -275,6 +296,11 @@ double HybridDiffDocument::getFileCount() {
 double HybridDiffDocument::getTokenizedMaxRow() {
   std::lock_guard<std::mutex> lock(mutex_);
   return static_cast<double>(backgroundTokenizeRowIndex_);
+}
+
+double HybridDiffDocument::getScopeCount() {
+  std::lock_guard<std::mutex> lock(syntaxMutex_);
+  return static_cast<double>(syntaxState_->scopeState.scopes.size());
 }
 
 DiffCachedRow HybridDiffDocument::getRow(double index) {
@@ -544,6 +570,18 @@ std::vector<DiffSyntaxScope> HybridDiffDocument::getScopes() {
   return scopes;
 }
 
+std::vector<DiffSyntaxStyle> HybridDiffDocument::getScopeStyles(const std::string& themeName, double fromScopeId) {
+  std::lock_guard<std::mutex> lock(syntaxMutex_);
+  const auto startIndex = static_cast<size_t>(std::max(0.0, std::floor(fromScopeId)));
+  const auto resolvedStyles = syntaxparser::resolveSyntaxScopeStyles(themeName, syntaxState_->scopeState.scopes, startIndex);
+  std::vector<DiffSyntaxStyle> styles;
+  styles.reserve(resolvedStyles.size());
+  for (const auto& style : resolvedStyles) {
+    styles.push_back(DiffSyntaxStyle(style.id, style.foreground, style.fontStyle));
+  }
+  return styles;
+}
+
 DiffLoadTiming HybridDiffDocument::getTiming() {
   std::lock_guard<std::mutex> lock(mutex_);
   return timing_;
@@ -558,6 +596,7 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
   const auto generation = backgroundGeneration_.fetch_add(1) + 1;
   backgroundTokenizationRunning_.store(true);
   auto document = shared_cast<HybridDiffDocument>();
+  logMemorySnapshot("background.start");
 
   backgroundThread_ = std::thread([document, generation, safeChunkRowCount, safeChunkBudget]() {
     bool shouldContinue = true;
@@ -575,6 +614,7 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
 
     if (document->backgroundGeneration_.load() == generation) {
       document->backgroundTokenizationRunning_.store(false);
+      document->logMemorySnapshot("background.complete");
     }
   });
 
@@ -586,6 +626,7 @@ double HybridDiffDocument::startDefaultBackgroundTokenization() {
 }
 
 double HybridDiffDocument::stopBackgroundTokenization() {
+  const auto wasRunning = backgroundTokenizationRunning_.load();
   backgroundGeneration_.fetch_add(1);
   backgroundTokenizationRunning_.store(false);
 
@@ -597,11 +638,13 @@ double HybridDiffDocument::stopBackgroundTokenization() {
     }
   }
 
+  if (wasRunning) {
+    logMemorySnapshot("background.stop");
+  }
   return getTokenizedRowVersion();
 }
 
-size_t HybridDiffDocument::getExternalMemorySize() noexcept {
-  std::lock_guard<std::mutex> lock(mutex_);
+size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
   size_t size = rows_.capacity() * sizeof(DiffRenderRow) + files_.capacity() * sizeof(DiffFileSummary);
   for (const auto& row : rows_) {
     size += row.text.capacity();
@@ -655,6 +698,102 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
     }
   }
   return size;
+}
+
+size_t HybridDiffDocument::getExternalMemorySize() noexcept {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return getExternalMemorySizeLocked();
+}
+
+void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
+  try {
+    std::lock_guard<std::mutex> lock(mutex_);
+    size_t rowTextBytes = 0;
+    size_t rowTokenRuns = 0;
+    size_t filePathBytes = 0;
+    size_t loadedSourceCount = 0;
+    size_t sourceLineCount = 0;
+    size_t sourceTextBytes = 0;
+    size_t sourceTokenCacheSlots = 0;
+    size_t sourceTokenRuns = 0;
+    size_t sourceTokenizedLines = 0;
+
+    for (const auto& row : rows_) {
+      rowTextBytes += row.text.capacity();
+      rowTokenRuns += row.tokens.capacity();
+    }
+    for (const auto& file : files_) {
+      filePathBytes += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();
+    }
+
+    auto addSourceStats = [&](const DiffTokenizedSource& source) {
+      loadedSourceCount += source.enabled || !source.lines.empty() || !source.language.empty() ? 1 : 0;
+      sourceLineCount += source.lines.size();
+      sourceTokenCacheSlots += source.tokenCache.size();
+      sourceTokenizedLines += source.tokenizedLineCount;
+      for (const auto& line : source.lines) {
+        sourceTextBytes += line.capacity();
+      }
+      for (const auto& tokens : source.tokenCache) {
+        if (tokens.has_value()) {
+          sourceTokenRuns += tokens->capacity();
+        }
+      }
+    };
+
+    for (const auto& sources : fileSources_) {
+      {
+        std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
+        addSourceStats(sources.oldSource);
+      }
+      {
+        std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
+        addSourceStats(sources.newSource);
+      }
+    }
+
+    size_t scopeGroupCount = 0;
+    size_t scopeStringCount = 0;
+    size_t scopeBytes = 0;
+    {
+      std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
+      scopeGroupCount = syntaxState_->scopeState.scopes.size();
+      for (const auto& scopes : syntaxState_->scopeState.scopes) {
+        scopeStringCount += scopes.size();
+        scopeBytes += scopes.capacity() * sizeof(std::string);
+        for (const auto& scope : scopes) {
+          scopeBytes += scope.capacity();
+        }
+      }
+    }
+
+    std::ostringstream message;
+    message
+        << "[DiffMemory] " << reason
+        << " externalBytes=" << getExternalMemorySizeLocked()
+        << " files=" << files_.size()
+        << " rows=" << rows_.size()
+        << " rowCapacity=" << rows_.capacity()
+        << " rowTextBytes=" << rowTextBytes
+        << " rowTokenRuns=" << rowTokenRuns
+        << " sideBySideRows=" << sideBySideLines_.size()
+        << " sideBySideCapacity=" << sideBySideLines_.capacity()
+        << " filePathBytes=" << filePathBytes
+        << " loadedSources=" << loadedSourceCount
+        << " sourceLines=" << sourceLineCount
+        << " sourceTextBytes=" << sourceTextBytes
+        << " sourceTokenCacheSlots=" << sourceTokenCacheSlots
+        << " sourceTokenizedLines=" << sourceTokenizedLines
+        << " sourceTokenRuns=" << sourceTokenRuns
+        << " tokenizedMaxRow=" << backgroundTokenizeRowIndex_
+        << " tokenizedNextRow=" << backgroundTokenizeNextRowIndex_
+        << " scopeGroups=" << scopeGroupCount
+        << " scopeStrings=" << scopeStringCount
+        << " scopeBytes=" << scopeBytes;
+    logDiffMemoryMessage(message.str());
+  } catch (...) {
+    logDiffMemoryMessage("[DiffMemory] snapshot.failed");
+  }
 }
 
 void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {

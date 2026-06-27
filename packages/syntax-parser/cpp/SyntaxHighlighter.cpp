@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <limits.h>
 #include <map>
 #include <memory>
@@ -16,6 +18,7 @@
 
 #ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
+#include <os/log.h>
 #endif
 
 namespace margelo::nitro::legenddesktop::syntaxparser {
@@ -26,6 +29,21 @@ constexpr uint32_t fontStyleMask = 0b00000000000000000111100000000000u;
 constexpr uint32_t foregroundMask = 0b00000000111111111000000000000000u;
 constexpr int fontStyleOffset = 11;
 constexpr int foregroundOffset = 15;
+
+#ifdef __APPLE__
+os_log_t syntaxMemoryLog() {
+  static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
+  return log;
+}
+#endif
+
+void logSyntaxMemoryMessage(const std::string& message) {
+#ifdef __APPLE__
+  os_log_with_type(syntaxMemoryLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
+#else
+  std::fprintf(stderr, "%s\n", message.c_str());
+#endif
+}
 
 struct GrammarConfig {
   std::string scopeName;
@@ -879,6 +897,20 @@ SyntaxHighlighterWarmupResult createWarmedHighlighterContext(
   }
 
   const auto finishedAt = SyntaxClock::now();
+  {
+    std::ostringstream message;
+    message
+        << "[DiffMemory] syntax.warmed"
+        << " language=" << language
+        << " theme=" << theme
+        << " lines=" << lines.size()
+        << " tokens=" << tokenCount
+        << " styles=" << styleState.styles.size()
+        << " contextMs=" << elapsedSyntaxMs(startedAt, contextReadyAt)
+        << " tokenizeMs=" << elapsedSyntaxMs(contextReadyAt, finishedAt)
+        << " totalMs=" << elapsedSyntaxMs(startedAt, finishedAt);
+    logSyntaxMemoryMessage(message.str());
+  }
   return SyntaxHighlighterWarmupResult{
       context,
       SyntaxHighlightTiming(
@@ -1048,6 +1080,14 @@ SyntaxHighlighterWarmupResult warmHighlighterContext(
       if (entry->failed) {
         throw std::runtime_error(entry->error);
       }
+      {
+        std::ostringstream message;
+        message
+            << "[DiffMemory] syntax.cacheHit"
+            << " key=" << key
+            << " contextCount=" << contextCache.size();
+        logSyntaxMemoryMessage(message.str());
+      }
       return SyntaxHighlighterWarmupResult{entry->context, entry->timing};
     }
 
@@ -1065,6 +1105,12 @@ SyntaxHighlighterWarmupResult warmHighlighterContext(
         entry->context = result.context;
         entry->timing = result.timing;
         entry->ready = true;
+        std::ostringstream message;
+        message
+            << "[DiffMemory] syntax.cacheStore"
+            << " key=" << key
+            << " contextCount=" << contextCache.size();
+        logSyntaxMemoryMessage(message.str());
       }
       entry->cv.notify_all();
       return result;
@@ -1087,6 +1133,78 @@ std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
     const std::string& language,
     const std::string& theme) {
   return warmHighlighterContext(language, theme).context;
+}
+
+std::string formatTextMateColor(uint32_t color) {
+  std::ostringstream stream;
+  stream
+      << "#"
+      << std::hex
+      << std::nouppercase
+      << std::setfill('0')
+      << std::setw(2) << ((color >> 24) & 0xFF)
+      << std::setw(2) << ((color >> 16) & 0xFF)
+      << std::setw(2) << ((color >> 8) & 0xFF);
+  return stream.str();
+}
+
+std::string joinScopePath(const std::vector<std::string>& scopes) {
+  std::ostringstream stream;
+  for (size_t index = 0; index < scopes.size(); index += 1) {
+    if (index > 0) {
+      stream << " ";
+    }
+    stream << scopes[index];
+  }
+  return stream.str();
+}
+
+std::shared_ptr<void> getCachedThemeHandle(const std::string& theme) {
+  const auto normalizedTheme = normalizeOption(theme);
+  static std::mutex cacheMutex;
+  static std::map<std::string, std::shared_ptr<void>> themeCache;
+
+  std::lock_guard<std::mutex> lock(cacheMutex);
+  const auto cached = themeCache.find(normalizedTheme);
+  if (cached != themeCache.end()) {
+    return cached->second;
+  }
+
+  const auto themePath = resolveSyntaxAssetFile(
+      syntaxAssetRoots("RNSyntaxParserThemes", "themes"),
+      getThemeFileName(normalizedTheme));
+  TextMateTheme themeHandle = textmate_theme_load_from_file(themePath.string().c_str());
+  if (!themeHandle) {
+    throw std::runtime_error("Failed to load syntax theme.");
+  }
+
+  auto managedTheme = std::shared_ptr<void>(themeHandle, textmate_theme_dispose);
+  themeCache[normalizedTheme] = managedTheme;
+  return managedTheme;
+}
+
+std::vector<SyntaxStyle> resolveSyntaxScopeStyles(
+    const std::string& theme,
+    const std::vector<std::vector<std::string>>& scopes,
+    size_t startIndex) {
+  auto themeHandle = getCachedThemeHandle(theme);
+
+  const auto defaultForeground = textmate_theme_get_default_foreground(themeHandle.get());
+  const auto safeStart = std::min(startIndex, scopes.size());
+  std::vector<SyntaxStyle> styles;
+  styles.reserve(scopes.size() - safeStart);
+
+  for (size_t index = safeStart; index < scopes.size(); index += 1) {
+    const auto scopePath = joinScopePath(scopes[index]);
+    const auto foreground = textmate_theme_get_foreground(themeHandle.get(), scopePath.c_str(), defaultForeground);
+    const auto fontStyle = textmate_theme_get_font_style(themeHandle.get(), scopePath.c_str(), 0);
+    styles.push_back(SyntaxStyle(
+        static_cast<double>(index),
+        formatTextMateColor(foreground),
+        static_cast<double>(std::max(0, fontStyle))));
+  }
+
+  return styles;
 }
 
 SyntaxTokenizedLine tokenizeSyntaxLine(

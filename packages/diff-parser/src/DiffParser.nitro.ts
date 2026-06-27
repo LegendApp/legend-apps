@@ -23,6 +23,12 @@ export interface DiffSyntaxScope {
   scopes: string[];
 }
 
+export interface DiffSyntaxStyle {
+  scopeId: number;
+  foreground: string;
+  fontStyle: number;
+}
+
 export interface DiffRenderRow {
   index: number;
   kind: number;
@@ -94,6 +100,7 @@ export interface DiffDocument
   readonly rowCount: number;
   readonly fileCount: number;
   readonly tokenizedMaxRow: number;
+  readonly scopeCount: number;
   getRow(index: number): DiffCachedRow;
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
@@ -108,6 +115,7 @@ export interface DiffDocument
   consumeTokenizedRowRanges(): DiffTokenizedRowRange[];
   getFiles(): DiffFileSummary[];
   getScopes(): DiffSyntaxScope[];
+  getScopeStyles(themeName: string, fromScopeId: number): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
   startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number): number;
   stopBackgroundTokenization(): number;

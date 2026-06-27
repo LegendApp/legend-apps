@@ -16,12 +16,20 @@ const themes = new Map([
   }],
 ]);
 const isSyntaxGrammarInstalled = jest.fn(() => false);
+const getSyntaxLanguageForPath = jest.fn((path) => {
+  const extension = path.split(".").pop()?.toLowerCase();
+  if (extension === "tsx" || extension === "ts" || extension === "js" || extension === "json" || extension === "swift") {
+    return extension === "ts" ? "typescript" : extension === "js" ? "javascript" : extension;
+  }
+  return "";
+});
 
 const warmSyntaxHighlighters = jest.fn(async ({ languages }) => (
   languages.map((language) => ({ language, ms: 1, ok: true }))
 ));
 
 function resetSyntaxParserMock() {
+  getSyntaxLanguageForPath.mockClear();
   isSyntaxGrammarInstalled.mockReset();
   isSyntaxGrammarInstalled.mockReturnValue(false);
   warmSyntaxHighlighters.mockClear();
@@ -30,6 +38,7 @@ function resetSyntaxParserMock() {
 module.exports = {
   __esModule: true,
   defaultSyntaxThemeName,
+  getSyntaxLanguageForPath,
   getSyntaxTheme: (name) => themes.get(name) ?? themes.get(defaultSyntaxThemeName),
   isSyntaxGrammarInstalled,
   normalizeSyntaxThemeName: (value) => themes.has(value) ? value : defaultSyntaxThemeName,

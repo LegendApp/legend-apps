@@ -77,6 +77,10 @@ std::vector<std::string> splitSyntaxLines(const std::string& source);
 std::string getSyntaxLanguageForPath(const std::string& path);
 SyntaxHighlighterWarmupResult warmHighlighterContext(const std::string& language, const std::string& theme);
 std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(const std::string& language, const std::string& theme);
+std::vector<SyntaxStyle> resolveSyntaxScopeStyles(
+    const std::string& theme,
+    const std::vector<std::vector<std::string>>& scopes,
+    size_t startIndex);
 SyntaxTokenizedLine tokenizeSyntaxLine(
     TextMateHighlighterContext& context,
     const std::string& line,

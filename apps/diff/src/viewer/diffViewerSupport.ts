@@ -26,6 +26,10 @@ export function logDiffOpenTiming(event: string, payload: Record<string, unknown
   console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
 }
 
+export function logDiffMemoryMark(event: string, payload: Record<string, unknown>) {
+  console.info(`${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`);
+}
+
 export function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource) {
   return left?.kind === right.kind && left.value === right.value;
 }

@@ -69,7 +69,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     document->startDefaultBackgroundTokenization();
     document->logMemorySnapshot("loadGitFolderDiff.afterBackgroundStart");
     const auto rowsFinishedAt = DiffClock::now();
-    result.scopes = document->getScopes();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
@@ -100,7 +99,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     document->startDefaultBackgroundTokenization();
     document->logMemorySnapshot("loadUnifiedDiff.afterBackgroundStart");
     const auto rowsFinishedAt = DiffClock::now();
-    result.scopes = document->getScopes();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
@@ -132,7 +130,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     document->startDefaultBackgroundTokenization();
     document->logMemorySnapshot("loadUnifiedDiffFromUrl.afterBackgroundStart");
     const auto rowsFinishedAt = DiffClock::now();
-    result.scopes = document->getScopes();
     auto timing = document->getTiming();
     timing.fetchMs = diff.fetchMs;
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);

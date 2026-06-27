@@ -39,7 +39,6 @@ function createLoadedState(source: DiffOpenSource = folderSource): DiffViewerSta
     }],
     folderPath: source.value,
     initialRows: [],
-    scopes: [],
     source,
     status: "loaded",
     timing: {

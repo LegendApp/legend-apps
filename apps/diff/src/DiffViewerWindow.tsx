@@ -10,7 +10,7 @@ import {
   type DiffLoadTiming,
   type DiffRenderRow,
   type DiffSideBySideRenderRow,
-  type DiffSyntaxScope,
+  type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
 import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
@@ -37,6 +37,7 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
+import { warmDiffSyntaxHighlightersForPaths } from "./diffSyntaxWarmup";
 import {
   getDiffViewModeSetting,
   useDiffFontFamilySetting,
@@ -102,6 +103,7 @@ import {
   createRefreshError,
   getDiffVisibleSourceModel,
   getErrorMessage,
+  logDiffMemoryMark,
   logDiffLoadTiming,
   logDiffOpenTiming,
   sourcesMatch,
@@ -142,7 +144,7 @@ type DiffLoadedBodyProps = {
   diffContentHeight: number;
   diffListHeight: number;
   diffPaneHeight: number;
-  diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxScope, DiffLoadTiming>;
+  diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
   documentErrorBody: ReactNode;
   fileFilterInputRef: RefObject<TextInputSearchRef | null>;
   getItemSize: (index: number) => number;
@@ -1055,6 +1057,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       source: nextSource,
       requestId,
     });
+    logDiffMemoryMark("viewer.load.start", {
+      requestId,
+      source: nextSource,
+    });
 
     let loadError: unknown = null;
     try {
@@ -1078,7 +1084,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           requestId,
           rows: result.document.rowCount,
           sourceKind: nextSource.kind,
-          scopes: result.scopes.length,
+          scopes: result.document.scopeCount,
         });
       } else if (nextSource.kind === "git") {
         logDiffOpenTiming("viewer.git.start", {
@@ -1111,7 +1117,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             requestId,
             rows: result.document.rowCount,
             sourceKind: nextSource.kind,
-            scopes: result.scopes.length,
+            scopes: result.document.scopeCount,
           });
         }
       } else {
@@ -1130,7 +1136,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           requestId,
           rows: result.document.rowCount,
           sourceKind: nextSource.kind,
-          scopes: result.scopes.length,
+          scopes: result.document.scopeCount,
         });
       }
 
@@ -1138,8 +1144,30 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         if (result) {
           const nativeResolvedAt = nowMs();
           const grammarStartedAt = nativeResolvedAt;
-          await ensureSyntaxGrammarsForPaths(result.files.map((file) => file.path));
+          const filePaths = result.files.map((file) => file.path);
+          await ensureSyntaxGrammarsForPaths(filePaths);
           const grammarResolvedAt = nowMs();
+          logDiffMemoryMark("viewer.syntaxWarmup.start", {
+            files: result.files.length,
+            requestId,
+          });
+          warmDiffSyntaxHighlightersForPaths(filePaths)
+            .then((warmupResults) => {
+              logDiffMemoryMark("viewer.syntaxWarmup.finish", {
+                languages: warmupResults.map((warmupResult) => warmupResult.language),
+                requestId,
+              });
+            })
+            .catch((error: unknown) => {
+              console.error(getErrorMessage(error));
+            });
+          logDiffMemoryMark("viewer.grammarEnsured", {
+            files: result.files.length,
+            grammarEnsureMs: Number((grammarResolvedAt - grammarStartedAt).toFixed(1)),
+            requestId,
+            rows: result.document.rowCount,
+            scopes: result.document.scopeCount,
+          });
           trace.document = result.document;
           trace.nativeResolvedAt = grammarResolvedAt;
           logDiffOpenTiming("viewer.load.nativeResolved", {
@@ -1150,7 +1178,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
             requestId,
             rows: result.document.rowCount,
-            scopes: result.scopes.length,
+            scopes: result.document.scopeCount,
             unaccountedJsMs: Number((grammarResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
           });
           logDiffLoadTiming(nextSource.value, result.timing);
@@ -1159,6 +1187,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             const recentStartedAt = nowMs();
             noteRecentDocument(recentDocumentPath);
             logDiffOpenTiming("viewer.recentDocument.noted", {
+              durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
+              requestId,
+            });
+            logDiffMemoryMark("viewer.recentDocument.noted", {
               durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
               requestId,
             });
@@ -1177,12 +1209,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               document: result.document,
               files: result.files,
               initialRows: result.initialRows,
-              scopes: result.scopes,
               timing: result.timing,
             };
             const statePayloadFinishedAt = nowMs();
             trace.setStateAt = statePayloadFinishedAt;
             setViewerState(nextLoadedState);
+            logDiffMemoryMark("viewer.statePublished", {
+              files: result.files.length,
+              initialRows: result.initialRows.length,
+              requestId,
+              rows: result.document.rowCount,
+              scopes: result.document.scopeCount,
+            });
             logDiffOpenTiming("viewer.load.setLoaded", {
               requestId,
               statePayloadMs: Number((statePayloadFinishedAt - statePayloadStartedAt).toFixed(1)),

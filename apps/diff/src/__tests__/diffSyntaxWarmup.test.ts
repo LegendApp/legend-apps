@@ -1,7 +1,7 @@
 import { isSyntaxGrammarInstalled, warmSyntaxHighlighters } from "@legend-desktop/syntax-parser";
 
 import { setDiffSyntaxThemeSetting } from "../diffSettings";
-import { warmDiffSyntaxHighlighters } from "../diffSyntaxWarmup";
+import { getDiffWarmupLanguagesForPaths, warmDiffSyntaxHighlightersForPaths } from "../diffSyntaxWarmup";
 
 const syntaxParserMock = jest.requireMock("@legend-desktop/syntax-parser");
 
@@ -11,15 +11,26 @@ describe("diffSyntaxWarmup", () => {
   });
 
   it("does not warm unavailable grammars", async () => {
-    await expect(warmDiffSyntaxHighlighters(["tsx", "json"])).resolves.toEqual([]);
+    await expect(warmDiffSyntaxHighlightersForPaths(["App.tsx", "package.json"])).resolves.toEqual([]);
     expect(warmSyntaxHighlighters).not.toHaveBeenCalled();
   });
 
-  it("warms only installed grammars with the selected theme", async () => {
+  it("finds unique installed warmup languages from file paths", () => {
+    jest.mocked(isSyntaxGrammarInstalled).mockImplementation((language) => language === "tsx" || language === "json");
+
+    expect(getDiffWarmupLanguagesForPaths([
+      "App.tsx",
+      "components/Button.tsx",
+      "package.json",
+      "README.md",
+    ])).toEqual(["tsx", "json"]);
+  });
+
+  it("warms only installed path languages with the selected theme", async () => {
     jest.mocked(isSyntaxGrammarInstalled).mockImplementation((language) => language === "tsx" || language === "json");
     setDiffSyntaxThemeSetting("github-light");
 
-    await expect(warmDiffSyntaxHighlighters(["tsx", "typescript", "json"])).resolves.toEqual([
+    await expect(warmDiffSyntaxHighlightersForPaths(["App.tsx", "state.ts", "package.json"])).resolves.toEqual([
       { language: "tsx", ms: 1, ok: true },
       { language: "json", ms: 1, ok: true },
     ]);
