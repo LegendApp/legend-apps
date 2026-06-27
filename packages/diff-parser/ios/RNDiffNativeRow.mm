@@ -91,6 +91,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 @property(nonatomic, copy) NSDictionary *addMarkerAttributes;
 @property(nonatomic, copy) NSDictionary *removeMarkerAttributes;
 @property(nonatomic, copy) NSDictionary *mutedMarkerAttributes;
+@property(nonatomic, strong) NSMutableDictionary<NSNumber *, id> *scopeColorById;
 - (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize;
 - (void)setForegroundColorString:(NSString *)foregroundColor
                 mutedColorString:(NSString *)mutedColor
@@ -101,6 +102,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
               dividerColorString:(NSString *)dividerColor;
 - (void)setCollapsedFileIndexesString:(NSString *)value;
 - (const std::vector<double> &)collapsedFileIndexes;
+- (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document;
 - (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType;
 - (NSDictionary *)markerAttributesForChangeType:(double)changeType;
 - (void)updateTextAttributes;
@@ -121,6 +123,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
     _syntaxHighlightingEnabled = YES;
     _themeName = @"dark-plus";
     _presentation = @"unified";
+    _scopeColorById = [NSMutableDictionary new];
     _font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
     _foregroundColor = NSColor.labelColor;
     _mutedColor = NSColor.secondaryLabelColor;
@@ -138,6 +141,15 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
     [self updateTextAttributes];
   }
   return self;
+}
+
+- (void)setThemeName:(NSString *)themeName
+{
+  NSString *nextThemeName = [themeName copy] ?: @"";
+  if (![_themeName isEqualToString:nextThemeName]) {
+    _themeName = nextThemeName;
+    [self.scopeColorById removeAllObjects];
+  }
 }
 
 - (void)updateTextAttributes
@@ -194,13 +206,18 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
      removeBackgroundColorString:(NSString *)removeBackgroundColor
               dividerColorString:(NSString *)dividerColor
 {
-  self.foregroundColor = RNDiffColorFromString(foregroundColor, NSColor.labelColor);
+  NSColor *nextForegroundColor = RNDiffColorFromString(foregroundColor, NSColor.labelColor);
+  const BOOL shouldResetScopeColors = ![self.foregroundColor isEqual:nextForegroundColor];
+  self.foregroundColor = nextForegroundColor;
   self.mutedColor = RNDiffColorFromString(mutedColor, NSColor.secondaryLabelColor);
-  self.addAccentColor = RNDiffColorFromString(addAccentColor, self.foregroundColor);
-  self.removeAccentColor = RNDiffColorFromString(removeAccentColor, self.foregroundColor);
+  self.addAccentColor = RNDiffColorFromString(addAccentColor, nextForegroundColor);
+  self.removeAccentColor = RNDiffColorFromString(removeAccentColor, nextForegroundColor);
   self.addBackgroundColor = RNDiffColorFromString(addBackgroundColor, NSColor.clearColor);
   self.removeBackgroundColor = RNDiffColorFromString(removeBackgroundColor, NSColor.clearColor);
   self.dividerColor = RNDiffColorFromString(dividerColor, NSColor.clearColor);
+  if (shouldResetScopeColors) {
+    [self.scopeColorById removeAllObjects];
+  }
   [self updateTextAttributes];
 }
 
@@ -218,6 +235,25 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 - (const std::vector<double> &)collapsedFileIndexes
 {
   return _collapsedFileIndexes;
+}
+
+- (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document
+{
+  const auto safeScopeId = std::max(0.0, std::floor(scopeId));
+  NSNumber *key = @(safeScopeId);
+  id cachedColor = self.scopeColorById[key];
+  if (cachedColor != nil) {
+    return cachedColor == NSNull.null ? nil : cachedColor;
+  }
+
+  const char *themeName = self.themeName.UTF8String;
+  const auto scopeStyle = document->getNativeScopeStyle(themeName ? themeName : "", safeScopeId);
+  NSColor *scopeColor = nil;
+  if (!scopeStyle.foreground.empty()) {
+    scopeColor = RNDiffColorFromString(RNDiffStringFromStdString(scopeStyle.foreground), self.foregroundColor);
+  }
+  self.scopeColorById[key] = scopeColor ?: NSNull.null;
+  return scopeColor;
 }
 
 - (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType
@@ -359,11 +395,9 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   }
 
   if (tokens != nullptr) {
-    const char *themeName = config.themeName.UTF8String;
     for (const auto &token : *tokens) {
-      const auto scopeStyle = document->getNativeScopeStyle(themeName ? themeName : "", token.scopeId);
-      if (!scopeStyle.foreground.empty()) {
-        NSColor *tokenColor = RNDiffColorFromString(RNDiffStringFromStdString(scopeStyle.foreground), config.foregroundColor);
+      NSColor *tokenColor = [config colorForScopeId:token.scopeId document:document];
+      if (tokenColor != nil) {
         const NSUInteger location = static_cast<NSUInteger>(MAX(0, token.startColumn));
         const NSUInteger length = static_cast<NSUInteger>(MAX(0, token.length));
         if (location < attributedText.length) {
