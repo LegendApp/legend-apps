@@ -76,6 +76,17 @@ type DiffUnifiedRowProps = {
   row: DiffRenderRow | undefined;
 };
 
+type DiffReactNativeUnifiedLineRowProps = {
+  accentColor: string;
+  adaptiveRender: "normal";
+  isChanged: boolean;
+  lineNumberColor: string;
+  marker: string;
+  renderFields: DiffRenderFields;
+  row: DiffRenderRow | undefined;
+  rowBackgroundColor: string;
+};
+
 type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
@@ -391,6 +402,47 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
   );
 });
 
+const DiffReactNativeUnifiedLineRow = memo(function DiffReactNativeUnifiedLineRow({
+  accentColor,
+  adaptiveRender,
+  isChanged,
+  lineNumberColor,
+  marker,
+  renderFields,
+  row,
+  rowBackgroundColor,
+}: DiffReactNativeUnifiedLineRowProps) {
+  const fontFamily = renderFields.fontFamily;
+  const fontSize = renderFields.fontSize;
+  const foregroundColor = renderFields.foregroundColor;
+  const mutedColor = renderFields.mutedColor;
+  const rowHeight = renderFields.rowHeight;
+  const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, renderFields.syntaxStyleStore);
+  const displayRow = tokenizedState?.row ?? row;
+  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? renderFields.tokenStyleById;
+
+  return (
+    <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
+      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+        {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
+      </LightText>
+      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+        {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
+      </LightText>
+      <LightText selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
+        {marker}
+      </LightText>
+      <TokenizedText
+        adaptiveRender={adaptiveRender}
+        foregroundColor={foregroundColor}
+        line={displayRow}
+        style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
+        tokenStyleById={displayTokenStyleById}
+      />
+    </View>
+  );
+});
+
 export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   adaptiveRender,
   collapsedFileIndexes$,
@@ -409,8 +461,6 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
   const syntaxAppearance = renderFields.syntaxAppearance;
-  const syntaxStyleStore = renderFields.syntaxStyleStore;
-  const tokenStyleById = renderFields.tokenStyleById;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const changeType = row?.changeType ?? 0;
@@ -428,9 +478,6 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       : "transparent";
   const lineNumberColor = isChanged ? accentColor : mutedColor;
   const marker = isAdd ? "+" : isRemove ? "-" : " ";
-  const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, syntaxStyleStore);
-  const displayRow = tokenizedState?.row ?? row;
-  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? tokenStyleById;
 
   if (isFileHeader) {
     const fileIndex = file?.index ?? row?.fileIndex ?? index;
@@ -452,7 +499,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
     );
   }
 
-  if (renderFields.rowRenderer === "native" && adaptiveRender === "normal" && row && renderFields.document) {
+  if (renderFields.rowRenderer === "native" && adaptiveRender === "normal" && renderFields.document) {
     return (
       <DiffNativeUnifiedLineRow
         index={index}
@@ -483,24 +530,16 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   }
 
   return (
-    <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
-      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {isFileHeader ? "" : marker}
-      </LightText>
-      <TokenizedText
-        adaptiveRender={adaptiveRender}
-        foregroundColor={foregroundColor}
-        line={displayRow}
-        style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={displayTokenStyleById}
-      />
-    </View>
+    <DiffReactNativeUnifiedLineRow
+      accentColor={accentColor}
+      adaptiveRender="normal"
+      isChanged={isChanged}
+      lineNumberColor={lineNumberColor}
+      marker={marker}
+      renderFields={renderFields}
+      row={row}
+      rowBackgroundColor={rowBackgroundColor}
+    />
   );
 });
 

@@ -8,6 +8,7 @@ import {
 import { useValue } from "@legendapp/state/react";
 
 export type DiffSettingsFile = {
+  adaptiveLightModeEnabled?: boolean;
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
   syntaxHighlightingEnabled?: boolean;
@@ -34,6 +35,7 @@ export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
 export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
+export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const defaultDiffSyntaxPrewarmEnabled = true;
 export const diffFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
@@ -94,6 +96,10 @@ export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
 
 const diffSettings = createObservableSettings({
   fields: {
+    adaptiveLightModeEnabled: {
+      defaultValue: defaultDiffAdaptiveLightModeEnabled,
+      normalize: (value) => normalizeBoolean(value, defaultDiffAdaptiveLightModeEnabled),
+    },
     fontFamily: {
       defaultValue: defaultDiffFontFamily,
       normalize: normalizeDiffFontFamily,
@@ -133,6 +139,7 @@ const diffSettings = createObservableSettings({
   },
   filename: "settings",
 });
+const adaptiveLightModeEnabledSetting = diffSettings.field("adaptiveLightModeEnabled");
 const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
 const syntaxHighlightingEnabledSetting = diffSettings.field("syntaxHighlightingEnabled");
@@ -143,6 +150,10 @@ const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const rowRendererSetting = diffSettings.field("rowRenderer");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
+
+export function getDiffAdaptiveLightModeEnabledSetting(): boolean {
+  return adaptiveLightModeEnabledSetting.get();
+}
 
 export function getDiffSyntaxThemeSetting(): string {
   return syntaxThemeSetting.get();
@@ -188,6 +199,10 @@ export function useDiffFontFamilySetting(): DiffFontFamilySetting {
   return normalizeDiffFontFamily(useValue(diffSettings$.fontFamily));
 }
 
+export function useDiffAdaptiveLightModeEnabledSetting(): boolean {
+  return normalizeBoolean(useValue(diffSettings$.adaptiveLightModeEnabled), defaultDiffAdaptiveLightModeEnabled);
+}
+
 export function useDiffFontSizeSetting(): number {
   return normalizeDiffFontSize(useValue(diffSettings$.fontSize));
 }
@@ -227,6 +242,10 @@ export function useDiffSyntaxPrewarmKnownLanguagesSetting(): string[] {
 
 export function setDiffSyntaxThemeSetting(syntaxTheme: string) {
   syntaxThemeSetting.set(syntaxTheme);
+}
+
+export function setDiffAdaptiveLightModeEnabledSetting(enabled: boolean) {
+  adaptiveLightModeEnabledSetting.set(enabled);
 }
 
 export function setDiffFontFamilySetting(fontFamily: DiffFontFamilySetting) {

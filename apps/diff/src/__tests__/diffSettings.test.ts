@@ -1,9 +1,11 @@
 import {
   defaultDiffFontFamily,
   defaultDiffFontSize,
+  defaultDiffAdaptiveLightModeEnabled,
   defaultDiffSyntaxHighlightingEnabled,
   defaultDiffSyntaxPrewarmEnabled,
   defaultDiffViewMode,
+  getDiffAdaptiveLightModeEnabledSetting,
   getDiffFontFamilySetting,
   getDiffFontSizeSetting,
   getDiffSyntaxHighlightingEnabledSetting,
@@ -14,6 +16,7 @@ import {
   getDiffSyntaxThemeSetting,
   getDiffViewModeSetting,
   isDiffViewMode,
+  setDiffAdaptiveLightModeEnabledSetting,
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffSyntaxHighlightingEnabledSetting,
@@ -29,6 +32,7 @@ describe("diffSettings", () => {
     expect(getDiffFontFamilySetting()).toBe(defaultDiffFontFamily);
     expect(getDiffFontSizeSetting()).toBe(defaultDiffFontSize);
     expect(getDiffViewModeSetting()).toBe(defaultDiffViewMode);
+    expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(defaultDiffAdaptiveLightModeEnabled);
     expect(getDiffSyntaxThemeSetting()).toBe("dark-plus");
     expect(getDiffSyntaxTheme().name).toBe("dark-plus");
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(defaultDiffSyntaxHighlightingEnabled);
@@ -46,6 +50,7 @@ describe("diffSettings", () => {
     setDiffFontSizeSetting(14);
     setDiffSyntaxThemeSetting("github-light");
     setDiffViewModeSetting("blocks");
+    setDiffAdaptiveLightModeEnabledSetting(false);
     setDiffSyntaxHighlightingEnabledSetting(false);
     setDiffSyntaxPrewarmEnabledSetting(false);
     setDiffSyntaxPrewarmKnownLanguagesSetting(["tsx", "typescript", "tsx"]);
@@ -56,6 +61,7 @@ describe("diffSettings", () => {
     expect(getDiffSyntaxThemeSetting()).toBe("github-light");
     expect(getDiffSyntaxTheme().appearance).toBe("light");
     expect(getDiffViewModeSetting()).toBe("blocks");
+    expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(false);
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(false);
     expect(getDiffSyntaxPrewarmEnabledSetting()).toBe(false);
     expect(getDiffSyntaxPrewarmKnownLanguagesSetting()).toEqual(["tsx", "typescript"]);
@@ -67,6 +73,7 @@ describe("diffSettings", () => {
     setDiffFontSizeSetting(100);
     setDiffSyntaxThemeSetting("not-installed");
     setDiffViewModeSetting("side-by-side" as never);
+    setDiffAdaptiveLightModeEnabledSetting("yes" as never);
     setDiffSyntaxHighlightingEnabledSetting("yes" as never);
     setDiffSyntaxPrewarmEnabledSetting("yes" as never);
     setDiffSyntaxPrewarmKnownLanguagesSetting(["tsx", "", "tsx", 1] as never);
@@ -76,6 +83,7 @@ describe("diffSettings", () => {
     expect(getDiffFontSizeSetting()).toBe(defaultDiffFontSize);
     expect(getDiffSyntaxThemeSetting()).toBe("dark-plus");
     expect(getDiffViewModeSetting()).toBe(defaultDiffViewMode);
+    expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(defaultDiffAdaptiveLightModeEnabled);
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(defaultDiffSyntaxHighlightingEnabled);
     expect(getDiffSyntaxPrewarmEnabledSetting()).toBe(defaultDiffSyntaxPrewarmEnabled);
     expect(getDiffSyntaxPrewarmKnownLanguagesSetting()).toEqual(["tsx"]);

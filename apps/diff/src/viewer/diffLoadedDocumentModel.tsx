@@ -56,6 +56,7 @@ function createDiffSyntaxStyleMap(styles: readonly DiffSyntaxStyle[]) {
 
 export function useDiffLoadedModel({
   collapsedFileIndexes,
+  nativeUnifiedRows,
   state,
   syntaxHighlightingEnabled,
   syntaxThemeName,
@@ -64,6 +65,7 @@ export function useDiffLoadedModel({
   collapsedFileIndexes: ReadonlySet<number>;
   fontFamily: string;
   fontSize: number;
+  nativeUnifiedRows: boolean;
   rowHeight: number;
   state: DiffViewerState;
   syntaxHighlightingEnabled: boolean;
@@ -135,15 +137,15 @@ export function useDiffLoadedModel({
   const diffRows = useVirtualizedDocumentRows({
     debugName: "diff",
     getTiming,
-    requestRows,
+    requestRows: nativeUnifiedRows ? undefined : requestRows,
     snapshot,
   });
   const getRow = useCallback((index: number) => {
-    if (state.status === "loaded") {
+    if (!nativeUnifiedRows && state.status === "loaded") {
       return state.document.getRow(index).plain;
     }
     return undefined;
-  }, [state]);
+  }, [nativeUnifiedRows, state]);
   const tokenStyleById = useMemo(() => {
     const startedAt = nowMs();
     const styles = state.status === "loaded" && syntaxHighlightingEnabled

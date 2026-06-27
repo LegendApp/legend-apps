@@ -43,6 +43,7 @@ import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
 import {
   getDiffViewModeSetting,
   type DiffRowRendererSetting,
+  useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
@@ -143,8 +144,11 @@ function waitForDiffProgressPoll() {
   });
 }
 
-function shouldPublishInitialProgress(progress: DiffLoadProgress) {
-  return progress.initialRows.length > 0 || progress.complete || !!progress.error;
+function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCount: number) {
+  return progress.initialRows.length > 0
+    || (initialRowCount <= 0 && progress.files.length > 0)
+    || progress.complete
+    || !!progress.error;
 }
 
 type DiffSidebarFileRowProps = {
@@ -185,6 +189,7 @@ type DiffLoadedBodyProps = {
   listExtraData: DiffListExtraData;
   listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
   loadingSource: DiffOpenSource | null;
+  adaptiveLightModeEnabled: boolean;
   mutedColor: string;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
   renderSidebarFile: (props: LegendListRenderItemProps<DiffFileSummary>) => ReactElement;
@@ -208,6 +213,7 @@ type DiffSyntaxTokenizationProgress = {
 };
 
 type DiffListExtraData = {
+  adaptiveLightModeEnabled: boolean;
   borderColor: string;
   fileHeaderBackgroundColor: string;
   fontFamily: string;
@@ -221,6 +227,9 @@ type DiffListExtraData = {
   syntaxTheme: DiffSettingsFile["syntaxTheme"];
   tokenStyleCount: number;
 };
+
+function noopVirtualizedDocumentRequestRange() {
+}
 
 function DiffSidebarFileRow({
   activeFileIndex$,
@@ -627,6 +636,7 @@ function DiffLoadedBody({
   sideBySideItemIndexes,
   splitPaneMetrics,
   state,
+  adaptiveLightModeEnabled,
   syntaxAppearance,
   syntaxTokenizationProgress,
   viewMode,
@@ -696,10 +706,13 @@ function DiffLoadedBody({
       rows: state.document.rowCount,
       viewMode,
     });
+    const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
+    const adaptiveRender = !nativeUnifiedRows && adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
+    const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
     const listHeader = <View style={styles.diffTitlebarSpacer} />;
     const list = viewMode === "unified" ? (
       <VirtualizedFixedDocumentList
-        adaptiveRender={diffAdaptiveRender}
+        adaptiveRender={adaptiveRender}
         dataVersion={diffRows.dataVersion}
         key="unified"
         extraData={listExtraData}
@@ -711,17 +724,17 @@ function DiffLoadedBody({
         lineOverscan={diffLineOverscan}
         listRef={listRef}
         onTopItemChanged={handleTopItemChanged}
-        onVisibleRowsRequested={handleVisibleRowsRequested}
+        onVisibleRowsRequested={nativeUnifiedRows ? undefined : handleVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
-        requestRange={diffRows.requestRange}
-        getRow={getRow}
+        requestRange={requestUnifiedRange}
+        getRow={nativeUnifiedRows ? undefined : getRow}
         rowHeight={rowHeight}
         renderRow={renderRow}
         style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
       />
     ) : (
       <VirtualizedFixedDocumentList
-        adaptiveRender={diffAdaptiveRender}
+        adaptiveRender={adaptiveRender}
         dataVersion={diffRows.dataVersion}
         key={viewMode}
         extraData={listExtraData}
@@ -943,11 +956,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const renderCountRef = useRef(0);
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
+  const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
   const rowRenderer = useDiffRowRendererSetting();
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
+  const nativeUnifiedRows = rowRenderer === "native" && viewMode === "unified";
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
   const {
@@ -1049,6 +1064,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     collapsedFileIndexes,
     fontFamily,
     fontSize,
+    nativeUnifiedRows,
     rowHeight,
     state,
     syntaxHighlightingEnabled,
@@ -1188,6 +1204,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     const loadStartedAt = nowMs();
+    const initialRowCount = nativeUnifiedRows ? 0 : diffInitialRowCount;
     const trace: DiffLoadTrace = {
       document: null,
       folderPath: nextSource.value,
@@ -1291,12 +1308,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       if (nextSource.kind === "github") {
         logDiffOpenTiming("viewer.native.start", {
           diffUrl: nextSource.diffUrl,
-          initialRowCount: diffInitialRowCount,
+          initialRowCount,
           requestId,
           sourceLabel: nextSource.label,
           sourceKind: nextSource.kind,
         });
-        result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, diffInitialRowCount);
+        result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, initialRowCount);
         logDiffOpenTiming("viewer.native.finish", {
           fetchMs: Number(result.timing.fetchMs.toFixed(1)),
           files: result.files.length,
@@ -1330,7 +1347,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             stdoutLength: commandResult.stdout.length,
             timedOut: commandResult.timedOut,
           });
-          result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, diffInitialRowCount);
+          result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
           logDiffOpenTiming("viewer.native.finish", {
             files: result.files.length,
             initialRows: result.initialRows.length,
@@ -1345,15 +1362,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       } else {
         logDiffOpenTiming("viewer.native.start", {
           folderPath: nextSource.value,
-          initialRowCount: diffInitialRowCount,
+          initialRowCount,
           requestId,
           sourceKind: nextSource.kind,
         });
         progressiveSession = startGitFolderDiff(nextSource.value);
-        let progress = progressiveSession.consumeChanges(diffInitialRowCount);
-        while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress)) {
+        let progress = progressiveSession.consumeChanges(initialRowCount);
+        while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress, initialRowCount)) {
           await waitForDiffProgressPoll();
-          progress = progressiveSession.consumeChanges(diffInitialRowCount);
+          progress = progressiveSession.consumeChanges(initialRowCount);
         }
         if (loadRequestIdRef.current !== requestId) {
           progressiveSession.cancel();
@@ -1399,7 +1416,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               let progress = result;
               while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
                 await waitForDiffProgressPoll();
-                progress = progressiveSession.consumeChanges(diffInitialRowCount);
+                progress = progressiveSession.consumeChanges(initialRowCount);
                 const hasChanges =
                   progress.rowVersion !== lastRowVersion ||
                   progress.fileVersion !== lastFileVersion ||
@@ -1453,7 +1470,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         requestId,
       });
     }
-  }, [setDocumentErrorValue, setLoadingSourceValue, setOpenErrorValue, setViewerState, state$]);
+  }, [nativeUnifiedRows, setDocumentErrorValue, setLoadingSourceValue, setOpenErrorValue, setViewerState, state$]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {
@@ -1663,6 +1680,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const listSyntaxTheme = syntaxTheme.name;
   const listExtraData = useMemo<DiffListExtraData>(
     () => ({
+      adaptiveLightModeEnabled,
       borderColor: displayTheme.colors.border,
       fileHeaderBackgroundColor,
       fontFamily,
@@ -1677,6 +1695,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       tokenStyleCount: tokenStyleById.size,
     }),
     [
+      adaptiveLightModeEnabled,
       displayTheme.colors.border,
       fileHeaderBackgroundColor,
       fontFamily,
@@ -1949,6 +1968,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     ) : (
       <DiffLoadedBody
         activeItemIndexes={activeItemIndexes}
+        adaptiveLightModeEnabled={adaptiveLightModeEnabled}
         backgroundColor={backgroundColor}
         diffContentHeight={diffContentHeight}
         diffListHeight={diffListHeight}

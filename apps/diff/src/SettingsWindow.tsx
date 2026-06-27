@@ -15,6 +15,7 @@ import {
   diffFontFamilyOptions,
   diffFontSizeOptions,
   diffRowRendererOptions,
+  setDiffAdaptiveLightModeEnabledSetting,
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffRowRendererSetting,
@@ -22,6 +23,7 @@ import {
   setDiffSyntaxPrewarmEnabledSetting,
   setDiffSyntaxPrewarmLanguagesSetting,
   setDiffSyntaxThemeSetting,
+  useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
@@ -41,6 +43,7 @@ const diffFontSizeSettingOptions = diffFontSizeOptions.map((fontSize) => ({
 }));
 
 function AppearanceSettingsPage() {
+  const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const rowRenderer = useDiffRowRendererSetting();
@@ -95,6 +98,18 @@ function AppearanceSettingsPage() {
           )}
           description="Experimental. Restart the app before measuring memory."
           title="Row renderer"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SwitchControl
+              accessibilityLabel="Use adaptive light mode"
+              checked={adaptiveLightModeEnabled}
+              onChange={setDiffAdaptiveLightModeEnabledSetting}
+            />
+          )}
+          description="Render simpler rows while scrolling quickly."
+          title="Adaptive light mode"
         />
       </SettingsSection>
     </SettingsPage>
