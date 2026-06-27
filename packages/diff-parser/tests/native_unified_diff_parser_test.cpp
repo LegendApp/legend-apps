@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace diffparser = margelo::nitro::legenddesktop::diffparser;
@@ -45,6 +46,29 @@ const diffparser::DiffFileSummary& fileAt(const diffparser::DiffParsedDocument& 
 const diffparser::DiffRenderRow& rowAt(const diffparser::DiffParsedDocument& parsed, size_t index) {
   expect(index < parsed.rows.size(), "expected row index " + std::to_string(index));
   return parsed.rows[index];
+}
+
+const diffparser::DiffFileSummary& findFile(const diffparser::DiffParsedDocument& parsed, std::string_view path) {
+  for (const auto& file : parsed.files) {
+    if (file.path == path) {
+      return file;
+    }
+  }
+  throw std::runtime_error("expected file path " + std::string(path));
+}
+
+const diffparser::DiffRenderRow& findRowTextForFile(
+    const diffparser::DiffParsedDocument& parsed,
+    const diffparser::DiffFileSummary& file,
+    std::string_view text) {
+  const auto start = static_cast<size_t>(file.rowStart);
+  const auto end = start + static_cast<size_t>(file.rowCount);
+  for (size_t index = start; index < end && index < parsed.rows.size(); index += 1) {
+    if (parsed.rows[index].text == text) {
+      return parsed.rows[index];
+    }
+  }
+  throw std::runtime_error("expected row text \"" + std::string(text) + "\" in " + file.path);
 }
 
 std::string makeUnifiedDiffFixture() {
@@ -188,18 +212,70 @@ void assertSideBySideRows(const diffparser::DiffParsedDocument& parsed) {
   expect(foundAddedOnlyLine, "side-by-side should keep unpaired added rows");
 }
 
+void assertGitRepositoryDiff(const std::string& fixturePath) {
+  const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath);
+  expectEqual(static_cast<double>(parsed.files.size()), 4, "git file count");
+  expectEqual(parsed.timing.fileCount, 4, "git timing file count");
+  expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git timing row count");
+  expect(!parsed.repositoryPath.empty(), "git repository path should be set");
+  expect(!parsed.workdirPath.empty(), "git workdir path should be set");
+  expect(!parsed.headTreeOid.empty(), "git HEAD tree oid should be set");
+
+  const auto& modified = findFile(parsed, "src/App.tsx");
+  expectEqual(modified.oldPath, "src/App.tsx", "git modified old path");
+  expectEqual(modified.status, "modified", "git modified status");
+  expectEqual(modified.additions, 1, "git modified additions");
+  expectEqual(modified.deletions, 1, "git modified deletions");
+  expect(!modified.isBinary, "git modified file should not be binary");
+  const auto& modifiedAddedRow = findRowTextForFile(parsed, modified, "  return \"changed\";");
+  expectEqual(modifiedAddedRow.changeType, diffChangeTypeAdd, "git modified added row type");
+  expectEqual(modifiedAddedRow.oldLineNumber, -1, "git modified added old line");
+  expectEqual(modifiedAddedRow.newLineNumber, 2, "git modified added new line");
+
+  const auto& added = findFile(parsed, "src/NewFile.ts");
+  expectEqual(added.oldPath, "src/NewFile.ts", "git added old path");
+  expectEqual(added.status, "untracked", "git added status");
+  expectEqual(added.additions, 1, "git added additions");
+  expectEqual(added.deletions, 0, "git added deletions");
+  expect(!added.isBinary, "git added file should not be binary");
+
+  const auto& deleted = findFile(parsed, "src/Deleted.ts");
+  expectEqual(deleted.oldPath, "src/Deleted.ts", "git deleted old path");
+  expectEqual(deleted.status, "deleted", "git deleted status");
+  expectEqual(deleted.additions, 0, "git deleted additions");
+  expectEqual(deleted.deletions, 1, "git deleted deletions");
+
+  const auto& binary = findFile(parsed, "assets/logo.bin");
+  expectEqual(binary.oldPath, "assets/logo.bin", "git binary old path");
+  expectEqual(binary.status, "modified", "git binary status");
+  expect(binary.isBinary, "git binary file should be marked binary");
+
+  expectEqual(static_cast<double>(parsed.fileSources.size()), 4, "git file source count");
+  for (const auto& sources : parsed.fileSources) {
+    const auto& file = fileAt(parsed, static_cast<size_t>(sources.fileIndex));
+    expectEqual(sources.oldPath, file.oldPath, "git file source old path");
+    expectEqual(sources.newPath, file.path, "git file source new path");
+    expectEqual(sources.status, file.status, "git file source status");
+    expect(sources.isBinary == file.isBinary, "git file source binary flag");
+    expect(!sources.isUnifiedDiff, "git file source should not be marked unified");
+  }
+}
+
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
   try {
     const auto parsed = diffparser::parseUnifiedDiffText(makeUnifiedDiffFixture());
     assertFileSummaries(parsed);
     assertRenderRows(parsed);
     assertSideBySideRows(parsed);
-    std::cout << "native unified diff parser fixtures passed\n";
+    if (argc > 1) {
+      assertGitRepositoryDiff(argv[1]);
+    }
+    std::cout << "native diff parser fixtures passed\n";
     return 0;
   } catch (const std::exception& error) {
-    std::cerr << "native unified diff parser fixtures failed: " << error.what() << "\n";
+    std::cerr << "native diff parser fixtures failed: " << error.what() << "\n";
     return 1;
   }
 }
