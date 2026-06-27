@@ -1,6 +1,7 @@
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
 import { commandRunner } from "@legend-desktop/command-runner";
 import {
+  DiffNativeRowConfig,
   loadUnifiedDiff,
   loadUnifiedDiffFromUrl,
   startGitFolderDiff,
@@ -87,6 +88,13 @@ import {
 import {
   DiffSideBySideRow,
   DiffUnifiedRow,
+  diffSideBySideLineNumberWidth,
+  diffSideBySideMarkerWidth,
+  diffUnifiedChangeBarWidth,
+  diffUnifiedLineNumberWidth,
+  diffUnifiedMarkerWidth,
+  getDiffRowPalette,
+  getSideBySideDividerColor,
   type DiffRenderFields,
 } from "./viewer/DiffRows";
 import {
@@ -189,6 +197,8 @@ type DiffLoadedBodyProps = {
   listExtraData: DiffListExtraData;
   listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
   loadingSource: DiffOpenSource | null;
+  nativeSideBySideRowConfig: DiffNativeRowConfigProps;
+  nativeUnifiedRowConfig: DiffNativeRowConfigProps;
   adaptiveLightModeEnabled: boolean;
   mutedColor: string;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
@@ -228,7 +238,44 @@ type DiffListExtraData = {
   tokenStyleCount: number;
 };
 
+type DiffNativeRowConfigProps = {
+  addAccentColor: string;
+  addBackgroundColor: string;
+  changeBarWidth: number;
+  collapsedFileIndexes: string;
+  configId: string;
+  configVersion: number;
+  dividerColor: string;
+  documentId: number;
+  fontFamily: string;
+  fontSize: number;
+  foregroundColor: string;
+  lineNumberWidth: number;
+  markerWidth: number;
+  mutedColor: string;
+  presentation: "blocks" | "unified";
+  removeAccentColor: string;
+  removeBackgroundColor: string;
+  rowHeight: number;
+  syntaxHighlightingEnabled: boolean;
+  themeName: string;
+};
+
 function noopVirtualizedDocumentRequestRange() {
+}
+
+function hashDiffNativeRowConfigVersion(parts: readonly unknown[]) {
+  let hash = 2166136261;
+  for (const part of parts) {
+    const value = String(part);
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    hash ^= 31;
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function DiffSidebarFileRow({
@@ -625,6 +672,8 @@ function DiffLoadedBody({
   listExtraData,
   listRef,
   loadingSource,
+  nativeSideBySideRowConfig,
+  nativeUnifiedRowConfig,
   mutedColor,
   renderRow,
   renderSidebarFile,
@@ -711,6 +760,7 @@ function DiffLoadedBody({
     const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
     const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
     const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
+    const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
     const listHeader = <View style={styles.diffTitlebarSpacer} />;
     const list = viewMode === "unified" ? (
       <VirtualizedFixedDocumentList
@@ -769,6 +819,32 @@ function DiffLoadedBody({
         ]}
       >
         {documentErrorBody}
+        {nativeRowConfig ? (
+          <DiffNativeRowConfig
+            addAccentColor={nativeRowConfig.addAccentColor}
+            addBackgroundColor={nativeRowConfig.addBackgroundColor}
+            changeBarWidth={nativeRowConfig.changeBarWidth}
+            collapsedFileIndexes={nativeRowConfig.collapsedFileIndexes}
+            collapsable={false}
+            configId={nativeRowConfig.configId}
+            configVersion={nativeRowConfig.configVersion}
+            dividerColor={nativeRowConfig.dividerColor}
+            documentId={nativeRowConfig.documentId}
+            fontFamily={nativeRowConfig.fontFamily}
+            fontSize={nativeRowConfig.fontSize}
+            foregroundColor={nativeRowConfig.foregroundColor}
+            lineNumberWidth={nativeRowConfig.lineNumberWidth}
+            markerWidth={nativeRowConfig.markerWidth}
+            mutedColor={nativeRowConfig.mutedColor}
+            presentation={nativeRowConfig.presentation}
+            removeAccentColor={nativeRowConfig.removeAccentColor}
+            removeBackgroundColor={nativeRowConfig.removeBackgroundColor}
+            rowHeight={nativeRowConfig.rowHeight}
+            style={styles.nativeDiffRowConfig}
+            syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
+            themeName={nativeRowConfig.themeName}
+          />
+        ) : null}
         {list}
       </View>
     );
@@ -1002,6 +1078,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const diffPaneHeight = useValue(diffPaneHeight$);
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
+  const collapsedFileIndexesKey = useMemo(
+    () => [...collapsedFileIndexes].sort((left, right) => left - right).join(","),
+    [collapsedFileIndexes],
+  );
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
   const fileFilterInputRef = useRef<TextInputSearchRef | null>(null);
   const urlInputRef = useRef<TextInput | null>(null);
@@ -1715,6 +1795,117 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       tokenStyleById.size,
     ],
   );
+  const nativeUnifiedRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
+    const palette = getDiffRowPalette(syntaxTheme.appearance);
+    const documentId = state.status === "loaded" ? state.document.documentId : 0;
+    const configId = `diff:${documentId}:unified`;
+    const configVersion = hashDiffNativeRowConfigVersion([
+      configId,
+      diffUnifiedChangeBarWidth,
+      diffUnifiedLineNumberWidth,
+      diffUnifiedMarkerWidth,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      mutedColor,
+      palette.addAccent,
+      palette.addBackground,
+      palette.removeAccent,
+      palette.removeBackground,
+      rowHeight,
+      syntaxHighlightingEnabled,
+      listSyntaxTheme,
+    ]);
+    return {
+      addAccentColor: palette.addAccent,
+      addBackgroundColor: palette.addBackground,
+      changeBarWidth: diffUnifiedChangeBarWidth,
+      collapsedFileIndexes: "",
+      configId,
+      configVersion,
+      dividerColor: "transparent",
+      documentId,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      lineNumberWidth: diffUnifiedLineNumberWidth,
+      markerWidth: diffUnifiedMarkerWidth,
+      mutedColor,
+      presentation: "unified",
+      removeAccentColor: palette.removeAccent,
+      removeBackgroundColor: palette.removeBackground,
+      rowHeight,
+      syntaxHighlightingEnabled,
+      themeName: listSyntaxTheme,
+    };
+  }, [
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    listSyntaxTheme,
+    mutedColor,
+    rowHeight,
+    state.status === "loaded" ? state.document : null,
+    syntaxHighlightingEnabled,
+    syntaxTheme.appearance,
+  ]);
+  const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
+    const palette = getDiffRowPalette(syntaxTheme.appearance);
+    const dividerColor = getSideBySideDividerColor(syntaxTheme.appearance);
+    const documentId = state.status === "loaded" ? state.document.documentId : 0;
+    const configId = `diff:${documentId}:blocks`;
+    const configVersion = hashDiffNativeRowConfigVersion([
+      configId,
+      collapsedFileIndexesKey,
+      dividerColor,
+      diffSideBySideLineNumberWidth,
+      diffSideBySideMarkerWidth,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      mutedColor,
+      palette.addAccent,
+      palette.addBackground,
+      palette.removeAccent,
+      palette.removeBackground,
+      rowHeight,
+      syntaxHighlightingEnabled,
+      listSyntaxTheme,
+    ]);
+    return {
+      addAccentColor: palette.addAccent,
+      addBackgroundColor: palette.addBackground,
+      changeBarWidth: 0,
+      collapsedFileIndexes: collapsedFileIndexesKey,
+      configId,
+      configVersion,
+      dividerColor,
+      documentId,
+      fontFamily,
+      fontSize,
+      foregroundColor,
+      lineNumberWidth: diffSideBySideLineNumberWidth,
+      markerWidth: diffSideBySideMarkerWidth,
+      mutedColor,
+      presentation: "blocks",
+      removeAccentColor: palette.removeAccent,
+      removeBackgroundColor: palette.removeBackground,
+      rowHeight,
+      syntaxHighlightingEnabled,
+      themeName: listSyntaxTheme,
+    };
+  }, [
+    collapsedFileIndexesKey,
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    listSyntaxTheme,
+    mutedColor,
+    rowHeight,
+    state.status === "loaded" ? state.document : null,
+    syntaxHighlightingEnabled,
+    syntaxTheme.appearance,
+  ]);
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
       borderColor: displayTheme.colors.border,
@@ -1727,6 +1918,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       mutedColor,
+      nativeSideBySideRowConfigId: nativeSideBySideRowConfig.configId,
+      nativeSideBySideRowConfigVersion: nativeSideBySideRowConfig.configVersion,
+      nativeUnifiedRowConfigId: nativeUnifiedRowConfig.configId,
+      nativeUnifiedRowConfigVersion: nativeUnifiedRowConfig.configVersion,
       rowRenderer,
       rowHeight,
       sideBySideFileHeaderByListIndex,
@@ -1748,6 +1943,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       mutedColor,
+      nativeSideBySideRowConfig.configId,
+      nativeSideBySideRowConfig.configVersion,
+      nativeUnifiedRowConfig.configId,
+      nativeUnifiedRowConfig.configVersion,
       rowRenderer,
       rowHeight,
       sideBySideFileHeaderByListIndex,
@@ -2001,6 +2200,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         listExtraData={listExtraData}
         listRef={listRef}
         loadingSource={loadingSource}
+        nativeSideBySideRowConfig={nativeSideBySideRowConfig}
+        nativeUnifiedRowConfig={nativeUnifiedRowConfig}
         mutedColor={mutedColor}
         renderRow={renderRow}
         renderSidebarFile={renderSidebarFile}
@@ -2260,6 +2461,11 @@ const styles = StyleSheet.create({
   diffPaneContent: {
     flex: 1,
     minHeight: 0,
+  },
+  nativeDiffRowConfig: {
+    height: 0,
+    overflow: "hidden",
+    width: 0,
   },
   diffTitlebarSpacer: {
     height: diffTitlebarTopInset,

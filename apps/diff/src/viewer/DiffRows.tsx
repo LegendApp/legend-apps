@@ -43,6 +43,10 @@ export type DiffRenderFields = {
   fontSize: number;
   foregroundColor: string;
   mutedColor: string;
+  nativeSideBySideRowConfigId: string;
+  nativeSideBySideRowConfigVersion: number;
+  nativeUnifiedRowConfigId: string;
+  nativeUnifiedRowConfigVersion: number;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
@@ -128,19 +132,19 @@ const diffLightPalette = {
   removeBackground: "#ffebe9",
 };
 
-const diffUnifiedChangeBarWidth = 3;
-const diffUnifiedLineNumberWidth = 44;
-const diffUnifiedMarkerWidth = 14;
+export const diffUnifiedChangeBarWidth = 3;
+export const diffUnifiedLineNumberWidth = 44;
+export const diffUnifiedMarkerWidth = 14;
 const diffUnifiedLightPaddingLeft = diffUnifiedChangeBarWidth + diffUnifiedLineNumberWidth * 2 + diffUnifiedMarkerWidth;
-const diffSideBySideLineNumberWidth = 40;
-const diffSideBySideMarkerWidth = 12;
+export const diffSideBySideLineNumberWidth = 40;
+export const diffSideBySideMarkerWidth = 12;
 const diffSideBySideLightPaddingLeft = diffSideBySideLineNumberWidth + diffSideBySideMarkerWidth;
 
-function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
+export function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? diffDarkPalette : diffLightPalette;
 }
 
-function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
+export function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark"
     ? "rgba(255, 255, 255, 0.08)"
     : "rgba(17, 24, 39, 0.1)";
@@ -207,30 +211,13 @@ function DiffNativeUnifiedLineRow({
   renderFields: DiffRenderFields;
 }) {
   const tokenizedMaxRow = useTokenizedMaxRow(renderFields.syntaxStyleStore);
-  const palette = getDiffRowPalette(renderFields.syntaxAppearance);
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
-      addAccentColor={palette.addAccent}
-      addBackgroundColor={palette.addBackground}
-      changeBarWidth={diffUnifiedChangeBarWidth}
-      collapsedFileIndexes=""
-      dividerColor="transparent"
-      documentId={renderFields.document?.documentId ?? 0}
-      fontFamily={renderFields.fontFamily}
-      fontSize={renderFields.fontSize}
-      foregroundColor={renderFields.foregroundColor}
-      lineNumberWidth={diffUnifiedLineNumberWidth}
-      markerWidth={diffUnifiedMarkerWidth}
-      mutedColor={renderFields.mutedColor}
-      presentation="unified"
-      removeAccentColor={palette.removeAccent}
-      removeBackgroundColor={palette.removeBackground}
-      rowHeight={renderFields.rowHeight}
+      configId={renderFields.nativeUnifiedRowConfigId}
+      configVersion={renderFields.nativeUnifiedRowConfigVersion}
       rowIndex={index}
       style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
-      syntaxHighlightingEnabled={renderFields.syntaxHighlightingEnabled}
-      themeName={renderFields.syntaxThemeName}
       tokenizedMaxRow={tokenizedMaxRow}
     />
   );
@@ -238,41 +225,21 @@ function DiffNativeUnifiedLineRow({
 
 function DiffNativeSideBySideLineRow({
   adaptiveRender,
-  collapsedFileIndexesKey,
   index,
   renderFields,
 }: {
   adaptiveRender: "light" | "normal";
-  collapsedFileIndexesKey: string;
   index: number;
   renderFields: DiffRenderFields;
 }) {
   const tokenizedMaxRow = useTokenizedMaxRow(renderFields.syntaxStyleStore);
-  const palette = getDiffRowPalette(renderFields.syntaxAppearance);
-  const dividerColor = getSideBySideDividerColor(renderFields.syntaxAppearance);
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
-      addAccentColor={palette.addAccent}
-      addBackgroundColor={palette.addBackground}
-      changeBarWidth={0}
-      collapsedFileIndexes={collapsedFileIndexesKey}
-      dividerColor={dividerColor}
-      documentId={renderFields.document?.documentId ?? 0}
-      fontFamily={renderFields.fontFamily}
-      fontSize={renderFields.fontSize}
-      foregroundColor={renderFields.foregroundColor}
-      lineNumberWidth={diffSideBySideLineNumberWidth}
-      markerWidth={diffSideBySideMarkerWidth}
-      mutedColor={renderFields.mutedColor}
-      presentation="blocks"
-      removeAccentColor={palette.removeAccent}
-      removeBackgroundColor={palette.removeBackground}
-      rowHeight={renderFields.rowHeight}
+      configId={renderFields.nativeSideBySideRowConfigId}
+      configVersion={renderFields.nativeSideBySideRowConfigVersion}
       rowIndex={index}
       style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
-      syntaxHighlightingEnabled={renderFields.syntaxHighlightingEnabled}
-      themeName={renderFields.syntaxThemeName}
       tokenizedMaxRow={tokenizedMaxRow}
     />
   );
@@ -615,10 +582,6 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
-  const collapsedFileIndexesKey = useMemo(
-    () => [...collapsedFileIndexes].sort((left, right) => left - right).join(","),
-    [collapsedFileIndexes],
-  );
   const sideBySideDividerColor = getSideBySideDividerColor(syntaxAppearance);
   const fileHeader = row?.kind === "file-header"
     ? { fileIndex: row.fileIndex, sourceStart: row.sourceStart }
@@ -653,7 +616,6 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
     return (
       <DiffNativeSideBySideLineRow
         adaptiveRender={adaptiveRender}
-        collapsedFileIndexesKey={collapsedFileIndexesKey}
         index={index}
         renderFields={renderFields}
       />

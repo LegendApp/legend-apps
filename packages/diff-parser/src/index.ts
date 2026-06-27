@@ -32,6 +32,7 @@ export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, ini
   return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, initialRowCount);
 }
 
+export { default as DiffNativeRowConfig } from "./DiffNativeRowConfigNativeComponent";
 export { default as DiffNativeRow } from "./DiffNativeRowNativeComponent";
 
 export type {

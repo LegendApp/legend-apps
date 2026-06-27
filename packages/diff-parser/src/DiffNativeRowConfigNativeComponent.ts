@@ -1,0 +1,27 @@
+import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
+import { codegenNativeComponent } from "react-native";
+
+export interface NativeProps extends ViewProps {
+  addAccentColor: string;
+  addBackgroundColor: string;
+  changeBarWidth: CodegenTypes.Double;
+  collapsedFileIndexes: string;
+  configId: string;
+  configVersion: CodegenTypes.Double;
+  dividerColor: string;
+  documentId: CodegenTypes.Double;
+  fontFamily: string;
+  fontSize: CodegenTypes.Double;
+  foregroundColor: string;
+  lineNumberWidth: CodegenTypes.Double;
+  markerWidth: CodegenTypes.Double;
+  mutedColor: string;
+  presentation: string;
+  removeAccentColor: string;
+  removeBackgroundColor: string;
+  rowHeight: CodegenTypes.Double;
+  syntaxHighlightingEnabled: boolean;
+  themeName: string;
+}
+
+export default codegenNativeComponent<NativeProps>("DiffNativeRowConfig") as HostComponent<NativeProps>;

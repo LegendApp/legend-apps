@@ -64,60 +64,102 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   return [NSString stringWithUTF8String:value.c_str()] ?: @"";
 }
 
-@interface RNDiffNativeRowContentView : NSView
+@interface RNDiffNativeRowRenderConfig : NSObject
 @property(nonatomic, assign) double documentId;
-@property(nonatomic, assign) double rowIndex;
 @property(nonatomic, assign) double rowHeight;
-@property(nonatomic, assign) double tokenizedMaxRow;
 @property(nonatomic, assign) double changeBarWidth;
 @property(nonatomic, assign) double lineNumberWidth;
 @property(nonatomic, assign) double markerWidth;
-@property(nonatomic, assign) double fontSize;
 @property(nonatomic, assign) BOOL syntaxHighlightingEnabled;
-@property(nonatomic, copy) NSString *fontFamily;
 @property(nonatomic, copy) NSString *themeName;
-@property(nonatomic, copy) NSString *foregroundColor;
-@property(nonatomic, copy) NSString *mutedColor;
-@property(nonatomic, copy) NSString *addAccentColor;
-@property(nonatomic, copy) NSString *removeAccentColor;
-@property(nonatomic, copy) NSString *addBackgroundColor;
-@property(nonatomic, copy) NSString *removeBackgroundColor;
-@property(nonatomic, copy) NSString *dividerColor;
 @property(nonatomic, copy) NSString *presentation;
-@property(nonatomic, copy) NSString *adaptiveRender;
+@property(nonatomic, strong) NSFont *font;
+@property(nonatomic, strong) NSColor *foregroundColor;
+@property(nonatomic, strong) NSColor *mutedColor;
+@property(nonatomic, strong) NSColor *addAccentColor;
+@property(nonatomic, strong) NSColor *removeAccentColor;
+@property(nonatomic, strong) NSColor *addBackgroundColor;
+@property(nonatomic, strong) NSColor *removeBackgroundColor;
+@property(nonatomic, strong) NSColor *dividerColor;
+@property(nonatomic, strong) NSMutableParagraphStyle *rightParagraph;
+@property(nonatomic, strong) NSMutableParagraphStyle *centerParagraph;
+@property(nonatomic, copy) NSDictionary *baseTextAttributes;
+- (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize;
+- (void)setForegroundColorString:(NSString *)foregroundColor
+                mutedColorString:(NSString *)mutedColor
+            addAccentColorString:(NSString *)addAccentColor
+         removeAccentColorString:(NSString *)removeAccentColor
+        addBackgroundColorString:(NSString *)addBackgroundColor
+     removeBackgroundColorString:(NSString *)removeBackgroundColor
+              dividerColorString:(NSString *)dividerColor;
 - (void)setCollapsedFileIndexesString:(NSString *)value;
+- (const std::vector<double> &)collapsedFileIndexes;
 @end
 
-@implementation RNDiffNativeRowContentView {
+@implementation RNDiffNativeRowRenderConfig {
   std::vector<double> _collapsedFileIndexes;
 }
 
 - (instancetype)init
 {
-  if (self = [super initWithFrame:NSZeroRect]) {
-    _fontFamily = @"Menlo";
-    _themeName = @"dark-plus";
-    _foregroundColor = @"#ffffff";
-    _mutedColor = @"#8b949e";
-    _addAccentColor = @"#7ee787";
-    _removeAccentColor = @"#ff7b72";
-    _addBackgroundColor = @"#17351f";
-    _removeBackgroundColor = @"#3a1d24";
-    _dividerColor = @"transparent";
-    _presentation = @"unified";
-    _adaptiveRender = @"normal";
+  if (self = [super init]) {
+    _documentId = 0;
     _rowHeight = 18;
+    _changeBarWidth = 3;
     _lineNumberWidth = 44;
     _markerWidth = 14;
-    _changeBarWidth = 3;
-    _fontSize = 12;
+    _syntaxHighlightingEnabled = YES;
+    _themeName = @"dark-plus";
+    _presentation = @"unified";
+    _font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
+    _foregroundColor = NSColor.labelColor;
+    _mutedColor = NSColor.secondaryLabelColor;
+    _addAccentColor = _foregroundColor;
+    _removeAccentColor = _foregroundColor;
+    _addBackgroundColor = NSColor.clearColor;
+    _removeBackgroundColor = NSColor.clearColor;
+    _dividerColor = NSColor.clearColor;
+    _rightParagraph = [NSMutableParagraphStyle new];
+    _rightParagraph.alignment = NSTextAlignmentRight;
+    _centerParagraph = [NSMutableParagraphStyle new];
+    _centerParagraph.alignment = NSTextAlignmentCenter;
+    _baseTextAttributes = @{
+      NSFontAttributeName: _font,
+      NSForegroundColorAttributeName: _foregroundColor,
+    };
   }
   return self;
 }
 
-- (BOOL)isFlipped
+- (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize
 {
-  return YES;
+  NSFont *font = [NSFont fontWithName:fontFamily size:fontSize];
+  self.font = font ?: [NSFont monospacedSystemFontOfSize:fontSize weight:NSFontWeightRegular];
+  self.baseTextAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.foregroundColor,
+  };
+}
+
+- (void)setForegroundColorString:(NSString *)foregroundColor
+                mutedColorString:(NSString *)mutedColor
+            addAccentColorString:(NSString *)addAccentColor
+         removeAccentColorString:(NSString *)removeAccentColor
+        addBackgroundColorString:(NSString *)addBackgroundColor
+     removeBackgroundColorString:(NSString *)removeBackgroundColor
+              dividerColorString:(NSString *)dividerColor
+{
+  self.foregroundColor = RNDiffColorFromString(foregroundColor, NSColor.labelColor);
+  self.mutedColor = RNDiffColorFromString(mutedColor, NSColor.secondaryLabelColor);
+  self.addAccentColor = RNDiffColorFromString(addAccentColor, self.foregroundColor);
+  self.removeAccentColor = RNDiffColorFromString(removeAccentColor, self.foregroundColor);
+  self.addBackgroundColor = RNDiffColorFromString(addBackgroundColor, NSColor.clearColor);
+  self.removeBackgroundColor = RNDiffColorFromString(removeBackgroundColor, NSColor.clearColor);
+  self.dividerColor = RNDiffColorFromString(dividerColor, NSColor.clearColor);
+  self.baseTextAttributes = @{
+    NSFontAttributeName: self.font,
+    NSForegroundColorAttributeName: self.foregroundColor,
+  };
 }
 
 - (void)setCollapsedFileIndexesString:(NSString *)value
@@ -131,30 +173,128 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   }
 }
 
-- (NSFont *)rowFont
+- (const std::vector<double> &)collapsedFileIndexes
 {
-  NSFont *font = [NSFont fontWithName:self.fontFamily size:self.fontSize];
-  return font ?: [NSFont monospacedSystemFontOfSize:self.fontSize weight:NSFontWeightRegular];
+  return _collapsedFileIndexes;
+}
+
+@end
+
+static NSMutableDictionary<NSString *, RNDiffNativeRowRenderConfig *> *RNDiffNativeRowConfigRegistry()
+{
+  static NSMutableDictionary<NSString *, RNDiffNativeRowRenderConfig *> *registry;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    registry = [NSMutableDictionary new];
+  });
+  return registry;
+}
+
+static RNDiffNativeRowRenderConfig *RNDiffNativeRowConfigForId(NSString *configId)
+{
+  return RNDiffNativeRowConfigRegistry()[configId];
+}
+
+@class RNDiffNativeRowContentView;
+
+static NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *> *> *RNDiffNativeRowViewRegistry()
+{
+  static NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *> *> *registry;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    registry = [NSMutableDictionary new];
+  });
+  return registry;
+}
+
+static void RNDiffNativeRowRegisterView(NSString *configId, RNDiffNativeRowContentView *view)
+{
+  if (configId.length == 0) {
+    return;
+  }
+  NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *> *> *registry = RNDiffNativeRowViewRegistry();
+  NSHashTable<RNDiffNativeRowContentView *> *views = registry[configId];
+  if (!views) {
+    views = [NSHashTable weakObjectsHashTable];
+    registry[configId] = views;
+  }
+  [views addObject:view];
+}
+
+static void RNDiffNativeRowUnregisterView(NSString *configId, RNDiffNativeRowContentView *view)
+{
+  if (configId.length == 0) {
+    return;
+  }
+  NSHashTable<RNDiffNativeRowContentView *> *views = RNDiffNativeRowViewRegistry()[configId];
+  [views removeObject:view];
+  if (views.count == 0) {
+    [RNDiffNativeRowViewRegistry() removeObjectForKey:configId];
+  }
+}
+
+static void RNDiffNativeRowInvalidateViews(NSString *configId)
+{
+  for (RNDiffNativeRowContentView *view in RNDiffNativeRowViewRegistry()[configId]) {
+    [(NSView *)view setNeedsDisplay:YES];
+  }
+}
+
+@interface RNDiffNativeRowContentView : NSView
+@property(nonatomic, copy) NSString *configId;
+@property(nonatomic, assign) double configVersion;
+@property(nonatomic, assign) double rowIndex;
+@property(nonatomic, assign) double tokenizedMaxRow;
+@property(nonatomic, copy) NSString *adaptiveRender;
+@end
+
+@implementation RNDiffNativeRowContentView
+
+- (instancetype)init
+{
+  if (self = [super initWithFrame:NSZeroRect]) {
+    _configId = @"";
+    _adaptiveRender = @"normal";
+  }
+  return self;
+}
+
+- (BOOL)isFlipped
+{
+  return YES;
+}
+
+- (void)setConfigId:(NSString *)configId
+{
+  NSString *nextConfigId = configId ?: @"";
+  if ([_configId isEqualToString:nextConfigId]) {
+    return;
+  }
+  RNDiffNativeRowUnregisterView(_configId, self);
+  _configId = [nextConfigId copy];
+  RNDiffNativeRowRegisterView(_configId, self);
+  [self setNeedsDisplay:YES];
+}
+
+- (void)dealloc
+{
+  RNDiffNativeRowUnregisterView(_configId, self);
 }
 
 - (NSMutableAttributedString *)attributedTextForRow:(const DiffRenderRow &)plain
                                              tokens:(const std::vector<DiffSyntaxTokenRun> *)tokens
                                            document:(HybridDiffDocument *)document
-                                               font:(NSFont *)font
-                                    foregroundColor:(NSColor *)foregroundColor
+                                             config:(RNDiffNativeRowRenderConfig *)config
 {
   NSString *text = RNDiffStringFromStdString(plain.text);
-  NSMutableAttributedString *attributedText = [[NSMutableAttributedString alloc] initWithString:text attributes:@{
-    NSFontAttributeName: font,
-    NSForegroundColorAttributeName: foregroundColor,
-  }];
+  NSMutableAttributedString *attributedText = [[NSMutableAttributedString alloc] initWithString:text attributes:config.baseTextAttributes];
 
   if (tokens != nullptr) {
-    const char *themeName = self.themeName.UTF8String;
+    const char *themeName = config.themeName.UTF8String;
     for (const auto &token : *tokens) {
       const auto scopeStyle = document->getNativeScopeStyle(themeName ? themeName : "", token.scopeId);
       if (!scopeStyle.foreground.empty()) {
-        NSColor *tokenColor = RNDiffColorFromString(RNDiffStringFromStdString(scopeStyle.foreground), foregroundColor);
+        NSColor *tokenColor = RNDiffColorFromString(RNDiffStringFromStdString(scopeStyle.foreground), config.foregroundColor);
         const NSUInteger location = static_cast<NSUInteger>(MAX(0, token.startColumn));
         const NSUInteger length = static_cast<NSUInteger>(MAX(0, token.length));
         if (location < attributedText.length) {
@@ -170,6 +310,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 }
 
 - (void)drawUnifiedDocument:(HybridDiffDocument *)document
+                     config:(RNDiffNativeRowRenderConfig *)config
 {
   const auto row = document->getRow(self.rowIndex);
   const auto plain = row.plain;
@@ -180,58 +321,45 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   const BOOL isAdd = plain.changeType == diffChangeTypeAdd;
   const BOOL isRemove = plain.changeType == diffChangeTypeRemove;
   const BOOL isChanged = isAdd || isRemove;
-  NSColor *foregroundColor = RNDiffColorFromString(self.foregroundColor, NSColor.labelColor);
-  NSColor *mutedColor = RNDiffColorFromString(self.mutedColor, NSColor.secondaryLabelColor);
-  NSColor *addAccentColor = RNDiffColorFromString(self.addAccentColor, foregroundColor);
-  NSColor *removeAccentColor = RNDiffColorFromString(self.removeAccentColor, foregroundColor);
-  NSColor *accentColor = isAdd ? addAccentColor : isRemove ? removeAccentColor : NSColor.clearColor;
-  NSColor *lineNumberColor = isChanged ? accentColor : mutedColor;
-  NSColor *backgroundColor = isAdd
-    ? RNDiffColorFromString(self.addBackgroundColor, NSColor.clearColor)
-    : isRemove
-      ? RNDiffColorFromString(self.removeBackgroundColor, NSColor.clearColor)
-      : NSColor.clearColor;
+  NSColor *accentColor = isAdd ? config.addAccentColor : isRemove ? config.removeAccentColor : NSColor.clearColor;
+  NSColor *lineNumberColor = isChanged ? accentColor : config.mutedColor;
+  NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
 
   [backgroundColor setFill];
   NSRectFill(self.bounds);
   [accentColor setFill];
-  NSRectFill(NSMakeRect(0, 0, self.changeBarWidth, self.bounds.size.height));
+  NSRectFill(NSMakeRect(0, 0, config.changeBarWidth, self.bounds.size.height));
 
-  NSFont *font = [self rowFont];
-  NSMutableParagraphStyle *rightParagraph = [NSMutableParagraphStyle new];
-  rightParagraph.alignment = NSTextAlignmentRight;
-  NSMutableParagraphStyle *centerParagraph = [NSMutableParagraphStyle new];
-  centerParagraph.alignment = NSTextAlignmentCenter;
   NSDictionary *lineNumberAttributes = @{
-    NSFontAttributeName: font,
+    NSFontAttributeName: config.font,
     NSForegroundColorAttributeName: lineNumberColor,
-    NSParagraphStyleAttributeName: rightParagraph,
+    NSParagraphStyleAttributeName: config.rightParagraph,
   };
   NSDictionary *markerAttributes = @{
-    NSFontAttributeName: font,
-    NSForegroundColorAttributeName: isChanged ? accentColor : mutedColor,
-    NSParagraphStyleAttributeName: centerParagraph,
+    NSFontAttributeName: config.font,
+    NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
+    NSParagraphStyleAttributeName: config.centerParagraph,
   };
 
-  const CGFloat textY = MAX(0, (self.rowHeight - font.ascender + font.descender) / 2.0);
+  const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
   if (plain.oldLineNumber >= 0) {
     NSString *oldLineNumber = [NSString stringWithFormat:@"%.0f", plain.oldLineNumber];
-    [oldLineNumber drawInRect:NSMakeRect(self.changeBarWidth, textY, self.lineNumberWidth - 4, self.rowHeight)
+    [oldLineNumber drawInRect:NSMakeRect(config.changeBarWidth, textY, config.lineNumberWidth - 4, config.rowHeight)
                withAttributes:lineNumberAttributes];
   }
   if (plain.newLineNumber >= 0) {
     NSString *newLineNumber = [NSString stringWithFormat:@"%.0f", plain.newLineNumber];
-    [newLineNumber drawInRect:NSMakeRect(self.changeBarWidth + self.lineNumberWidth, textY, self.lineNumberWidth - 4, self.rowHeight)
+    [newLineNumber drawInRect:NSMakeRect(config.changeBarWidth + config.lineNumberWidth, textY, config.lineNumberWidth - 4, config.rowHeight)
                withAttributes:lineNumberAttributes];
   }
 
   NSString *marker = isAdd ? @"+" : isRemove ? @"-" : @" ";
-  [marker drawInRect:NSMakeRect(self.changeBarWidth + self.lineNumberWidth * 2, textY, self.markerWidth, self.rowHeight)
+  [marker drawInRect:NSMakeRect(config.changeBarWidth + config.lineNumberWidth * 2, textY, config.markerWidth, config.rowHeight)
       withAttributes:markerAttributes];
 
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
   if (![self.adaptiveRender isEqualToString:@"light"]
-      && self.syntaxHighlightingEnabled
+      && config.syntaxHighlightingEnabled
       && self.rowIndex < self.tokenizedMaxRow
       && row.tokens.has_value()
       && std::holds_alternative<std::vector<DiffSyntaxTokenRun>>(*row.tokens)) {
@@ -240,11 +368,10 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   NSMutableAttributedString *attributedText = [self attributedTextForRow:plain
                                                                   tokens:tokens
                                                                 document:document
-                                                                    font:font
-                                                         foregroundColor:foregroundColor];
+                                                                  config:config];
 
-  const CGFloat textX = self.changeBarWidth + self.lineNumberWidth * 2 + self.markerWidth;
-  [attributedText drawInRect:NSMakeRect(textX, textY, MAX(0, self.bounds.size.width - textX - 12), self.rowHeight)];
+  const CGFloat textX = config.changeBarWidth + config.lineNumberWidth * 2 + config.markerWidth;
+  [attributedText drawInRect:NSMakeRect(textX, textY, MAX(0, self.bounds.size.width - textX - 12), config.rowHeight)];
 }
 
 - (void)drawSideBySidePlainRow:(const DiffRenderRow &)plain
@@ -252,11 +379,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
                        oldSide:(BOOL)oldSide
                     columnRect:(NSRect)columnRect
                       document:(HybridDiffDocument *)document
-                          font:(NSFont *)font
-               foregroundColor:(NSColor *)foregroundColor
-                    mutedColor:(NSColor *)mutedColor
-                addAccentColor:(NSColor *)addAccentColor
-             removeAccentColor:(NSColor *)removeAccentColor
+                         config:(RNDiffNativeRowRenderConfig *)config
 {
   if (!rowVisible || plain.kind != diffRowKindLine) {
     return;
@@ -265,47 +388,39 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   const BOOL isAdd = plain.changeType == diffChangeTypeAdd;
   const BOOL isRemove = plain.changeType == diffChangeTypeRemove;
   const BOOL isChanged = isAdd || isRemove;
-  NSColor *accentColor = isAdd ? addAccentColor : isRemove ? removeAccentColor : NSColor.clearColor;
-  NSColor *lineNumberColor = isChanged ? accentColor : mutedColor;
-  NSColor *backgroundColor = isAdd
-    ? RNDiffColorFromString(self.addBackgroundColor, NSColor.clearColor)
-    : isRemove
-      ? RNDiffColorFromString(self.removeBackgroundColor, NSColor.clearColor)
-      : NSColor.clearColor;
+  NSColor *accentColor = isAdd ? config.addAccentColor : isRemove ? config.removeAccentColor : NSColor.clearColor;
+  NSColor *lineNumberColor = isChanged ? accentColor : config.mutedColor;
+  NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
 
   [backgroundColor setFill];
   NSRectFill(columnRect);
 
-  NSMutableParagraphStyle *rightParagraph = [NSMutableParagraphStyle new];
-  rightParagraph.alignment = NSTextAlignmentRight;
-  NSMutableParagraphStyle *centerParagraph = [NSMutableParagraphStyle new];
-  centerParagraph.alignment = NSTextAlignmentCenter;
   NSDictionary *lineNumberAttributes = @{
-    NSFontAttributeName: font,
+    NSFontAttributeName: config.font,
     NSForegroundColorAttributeName: lineNumberColor,
-    NSParagraphStyleAttributeName: rightParagraph,
+    NSParagraphStyleAttributeName: config.rightParagraph,
   };
   NSDictionary *markerAttributes = @{
-    NSFontAttributeName: font,
-    NSForegroundColorAttributeName: isChanged ? accentColor : mutedColor,
-    NSParagraphStyleAttributeName: centerParagraph,
+    NSFontAttributeName: config.font,
+    NSForegroundColorAttributeName: isChanged ? accentColor : config.mutedColor,
+    NSParagraphStyleAttributeName: config.centerParagraph,
   };
 
-  const CGFloat textY = MAX(0, (self.rowHeight - font.ascender + font.descender) / 2.0);
+  const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
   const double lineNumber = oldSide ? plain.oldLineNumber : plain.newLineNumber;
   if (lineNumber >= 0) {
     NSString *lineNumberText = [NSString stringWithFormat:@"%.0f", lineNumber];
-    [lineNumberText drawInRect:NSMakeRect(columnRect.origin.x, textY, self.lineNumberWidth - 4, self.rowHeight)
+    [lineNumberText drawInRect:NSMakeRect(columnRect.origin.x, textY, config.lineNumberWidth - 4, config.rowHeight)
                 withAttributes:lineNumberAttributes];
   }
 
   NSString *marker = oldSide && isRemove ? @"-" : !oldSide && isAdd ? @"+" : @" ";
-  [marker drawInRect:NSMakeRect(columnRect.origin.x + self.lineNumberWidth, textY, self.markerWidth, self.rowHeight)
+  [marker drawInRect:NSMakeRect(columnRect.origin.x + config.lineNumberWidth, textY, config.markerWidth, config.rowHeight)
       withAttributes:markerAttributes];
 
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
   if (![self.adaptiveRender isEqualToString:@"light"]
-      && self.syntaxHighlightingEnabled
+      && config.syntaxHighlightingEnabled
       && plain.index < self.tokenizedMaxRow
       && !plain.tokens.empty()) {
     tokens = &plain.tokens;
@@ -313,29 +428,24 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   NSMutableAttributedString *attributedText = [self attributedTextForRow:plain
                                                                   tokens:tokens
                                                                 document:document
-                                                                    font:font
-                                                         foregroundColor:foregroundColor];
-  const CGFloat textX = columnRect.origin.x + self.lineNumberWidth + self.markerWidth;
+                                                                  config:config];
+  const CGFloat textX = columnRect.origin.x + config.lineNumberWidth + config.markerWidth;
   [attributedText drawInRect:NSMakeRect(
     textX,
     textY,
     MAX(0, NSMaxX(columnRect) - textX - diffSideBySideHorizontalPadding),
-    self.rowHeight
+    config.rowHeight
   )];
 }
 
 - (void)drawSideBySideDocument:(HybridDiffDocument *)document
+                         config:(RNDiffNativeRowRenderConfig *)config
 {
-  const auto row = document->getPlainSideBySideRow(self.rowIndex, _collapsedFileIndexes);
+  const auto row = document->getPlainSideBySideRow(self.rowIndex, [config collapsedFileIndexes]);
   if (row.kind == "file-header") {
     return;
   }
 
-  NSFont *font = [self rowFont];
-  NSColor *foregroundColor = RNDiffColorFromString(self.foregroundColor, NSColor.labelColor);
-  NSColor *mutedColor = RNDiffColorFromString(self.mutedColor, NSColor.secondaryLabelColor);
-  NSColor *addAccentColor = RNDiffColorFromString(self.addAccentColor, foregroundColor);
-  NSColor *removeAccentColor = RNDiffColorFromString(self.removeAccentColor, foregroundColor);
   const CGFloat width = self.bounds.size.width;
   const CGFloat leftWidth = floor(width / 2.0);
   const CGFloat rightWidth = MAX(0, width - leftWidth);
@@ -347,25 +457,16 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
                        oldSide:YES
                     columnRect:leftRect
                       document:document
-                          font:font
-               foregroundColor:foregroundColor
-                    mutedColor:mutedColor
-                addAccentColor:addAccentColor
-             removeAccentColor:removeAccentColor];
+                         config:config];
   const DiffRenderRow &newRow = row.newRowEqualsOldRow ? row.oldRow : row.newRow;
   [self drawSideBySidePlainRow:newRow
                     rowVisible:row.newRowVisible
                        oldSide:NO
                     columnRect:rightRect
                       document:document
-                          font:font
-               foregroundColor:foregroundColor
-                    mutedColor:mutedColor
-                addAccentColor:addAccentColor
-             removeAccentColor:removeAccentColor];
+                         config:config];
 
-  NSColor *dividerColor = RNDiffColorFromString(self.dividerColor, NSColor.clearColor);
-  [dividerColor setFill];
+  [config.dividerColor setFill];
   NSRectFill(NSMakeRect(leftWidth, 0, 1, self.bounds.size.height));
 }
 
@@ -373,19 +474,95 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 {
   [super drawRect:dirtyRect];
 
-  auto document = getRegisteredDiffDocument(self.documentId);
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  if (!config) {
+    return;
+  }
+  auto document = getRegisteredDiffDocument(config.documentId);
   if (!document) {
     return;
   }
-  if ([self.presentation isEqualToString:@"blocks"]) {
-    [self drawSideBySideDocument:document.get()];
+  if ([config.presentation isEqualToString:@"blocks"]) {
+    [self drawSideBySideDocument:document.get() config:config];
   } else {
-    [self drawUnifiedDocument:document.get()];
+    [self drawUnifiedDocument:document.get() config:config];
   }
 }
 
 @end
 #endif
+
+@interface RNDiffNativeRowConfig () <RCTDiffNativeRowConfigViewProtocol>
+@end
+
+@implementation RNDiffNativeRowConfig {
+#if TARGET_OS_OSX
+  NSString *_configId;
+#endif
+}
+
+- (instancetype)init
+{
+  if (self = [super init]) {
+    _props = std::make_shared<const DiffNativeRowConfigProps>();
+  }
+  return self;
+}
+
+- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
+{
+  const auto &newProps = *std::static_pointer_cast<DiffNativeRowConfigProps const>(props);
+#if TARGET_OS_OSX
+  NSString *nextConfigId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
+  if (_configId.length > 0 && ![_configId isEqualToString:nextConfigId]) {
+    [RNDiffNativeRowConfigRegistry() removeObjectForKey:_configId];
+  }
+  _configId = nextConfigId;
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigRegistry()[nextConfigId];
+  if (!config) {
+    config = [RNDiffNativeRowRenderConfig new];
+    RNDiffNativeRowConfigRegistry()[nextConfigId] = config;
+  }
+  config.documentId = newProps.documentId;
+  config.rowHeight = newProps.rowHeight;
+  config.changeBarWidth = newProps.changeBarWidth;
+  config.lineNumberWidth = newProps.lineNumberWidth;
+  config.markerWidth = newProps.markerWidth;
+  config.syntaxHighlightingEnabled = newProps.syntaxHighlightingEnabled;
+  config.themeName = [NSString stringWithUTF8String:newProps.themeName.c_str()] ?: @"dark-plus";
+  config.presentation = [NSString stringWithUTF8String:newProps.presentation.c_str()] ?: @"unified";
+  [config setFontFamily:[NSString stringWithUTF8String:newProps.fontFamily.c_str()] ?: @"Menlo"
+               fontSize:newProps.fontSize];
+  [config setForegroundColorString:[NSString stringWithUTF8String:newProps.foregroundColor.c_str()] ?: @""
+                  mutedColorString:[NSString stringWithUTF8String:newProps.mutedColor.c_str()] ?: @""
+              addAccentColorString:[NSString stringWithUTF8String:newProps.addAccentColor.c_str()] ?: @""
+           removeAccentColorString:[NSString stringWithUTF8String:newProps.removeAccentColor.c_str()] ?: @""
+          addBackgroundColorString:[NSString stringWithUTF8String:newProps.addBackgroundColor.c_str()] ?: @""
+       removeBackgroundColorString:[NSString stringWithUTF8String:newProps.removeBackgroundColor.c_str()] ?: @""
+                dividerColorString:[NSString stringWithUTF8String:newProps.dividerColor.c_str()] ?: @""];
+  [config setCollapsedFileIndexesString:[NSString stringWithUTF8String:newProps.collapsedFileIndexes.c_str()] ?: @""];
+  RNDiffNativeRowInvalidateViews(nextConfigId);
+#endif
+  [super updateProps:props oldProps:oldProps];
+}
+
+- (void)prepareForRecycle
+{
+  [super prepareForRecycle];
+#if TARGET_OS_OSX
+  if (_configId.length > 0) {
+    [RNDiffNativeRowConfigRegistry() removeObjectForKey:_configId];
+    _configId = @"";
+  }
+#endif
+}
+
++ (ComponentDescriptorProvider)componentDescriptorProvider
+{
+  return concreteComponentDescriptorProvider<DiffNativeRowConfigComponentDescriptor>();
+}
+
+@end
 
 @interface RNDiffNativeRow () <RCTDiffNativeRowViewProtocol>
 @end
@@ -413,27 +590,11 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 {
   const auto &newProps = *std::static_pointer_cast<DiffNativeRowProps const>(props);
 #if TARGET_OS_OSX
-  _contentView.documentId = newProps.documentId;
+  _contentView.configId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
+  _contentView.configVersion = newProps.configVersion;
   _contentView.rowIndex = newProps.rowIndex;
-  _contentView.rowHeight = newProps.rowHeight;
   _contentView.tokenizedMaxRow = newProps.tokenizedMaxRow;
-  _contentView.changeBarWidth = newProps.changeBarWidth;
-  _contentView.lineNumberWidth = newProps.lineNumberWidth;
-  _contentView.markerWidth = newProps.markerWidth;
-  _contentView.fontSize = newProps.fontSize;
-  _contentView.syntaxHighlightingEnabled = newProps.syntaxHighlightingEnabled;
-  _contentView.fontFamily = [NSString stringWithUTF8String:newProps.fontFamily.c_str()] ?: @"Menlo";
-  _contentView.themeName = [NSString stringWithUTF8String:newProps.themeName.c_str()] ?: @"dark-plus";
-  _contentView.foregroundColor = [NSString stringWithUTF8String:newProps.foregroundColor.c_str()] ?: @"";
-  _contentView.mutedColor = [NSString stringWithUTF8String:newProps.mutedColor.c_str()] ?: @"";
-  _contentView.addAccentColor = [NSString stringWithUTF8String:newProps.addAccentColor.c_str()] ?: @"";
-  _contentView.removeAccentColor = [NSString stringWithUTF8String:newProps.removeAccentColor.c_str()] ?: @"";
-  _contentView.addBackgroundColor = [NSString stringWithUTF8String:newProps.addBackgroundColor.c_str()] ?: @"";
-  _contentView.removeBackgroundColor = [NSString stringWithUTF8String:newProps.removeBackgroundColor.c_str()] ?: @"";
-  _contentView.dividerColor = [NSString stringWithUTF8String:newProps.dividerColor.c_str()] ?: @"";
-  _contentView.presentation = [NSString stringWithUTF8String:newProps.presentation.c_str()] ?: @"unified";
   _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
-  [_contentView setCollapsedFileIndexesString:[NSString stringWithUTF8String:newProps.collapsedFileIndexes.c_str()] ?: @""];
   [_contentView setNeedsDisplay:YES];
 #endif
   [super updateProps:props oldProps:oldProps];
@@ -443,12 +604,11 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 {
   [super prepareForRecycle];
 #if TARGET_OS_OSX
-  _contentView.documentId = 0;
+  _contentView.configId = @"";
+  _contentView.configVersion = 0;
   _contentView.rowIndex = -1;
   _contentView.tokenizedMaxRow = 0;
-  _contentView.presentation = @"unified";
   _contentView.adaptiveRender = @"normal";
-  [_contentView setCollapsedFileIndexesString:@""];
   [_contentView setNeedsDisplay:YES];
 #endif
 }
