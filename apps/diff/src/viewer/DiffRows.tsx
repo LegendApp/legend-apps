@@ -122,6 +122,12 @@ function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? diffDarkPalette : diffLightPalette;
 }
 
+function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
+  return syntaxAppearance === "dark"
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(17, 24, 39, 0.1)";
+}
+
 type TokenizedDiffRowState = {
   row: DiffRenderRow;
   tokenStyleById: SyntaxStyleMap;
@@ -464,6 +470,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
+  const sideBySideDividerColor = getSideBySideDividerColor(syntaxAppearance);
 
   if (!row) {
     return <View style={{ height: rowHeight }} />;
@@ -509,7 +516,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
       />
       <DiffSideBySideLine
         adaptiveRender={adaptiveRender}
-        borderColor={borderColor}
+        borderColor={sideBySideDividerColor}
         document={renderFields.document}
         fontFamily={fontFamily}
         fontSize={fontSize}
