@@ -21,7 +21,6 @@ import {
   diffChangeTypeAdd,
   diffChangeTypeRemove,
   diffRowKindFileHeader,
-  diffSideBySideGutterWidth,
   diffSideBySideHorizontalPadding,
 } from "./diffViewerConstants";
 import {
@@ -82,6 +81,7 @@ type DiffSideBySideRowProps = {
 
 type DiffSideBySideLineProps = {
   adaptiveRender: "light" | "normal";
+  borderColor?: string;
   document: DiffDocument | null;
   fontFamily: string;
   fontSize: number;
@@ -167,6 +167,7 @@ function useTokenizedDiffRow(
 
 function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
   const sharedPropsAreEqual = previousProps.adaptiveRender === nextProps.adaptiveRender
+    && previousProps.borderColor === nextProps.borderColor
     && previousProps.fontFamily === nextProps.fontFamily
     && previousProps.fontSize === nextProps.fontSize
     && previousProps.foregroundColor === nextProps.foregroundColor
@@ -183,6 +184,7 @@ function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps,
 
 const DiffSideBySideLine = memo(function DiffSideBySideLine({
   adaptiveRender,
+  borderColor,
   document,
   fontFamily,
   fontSize,
@@ -219,8 +221,10 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
         selectable={false}
         style={[
           styles.sideLightLine,
+          borderColor ? styles.sideLineDivider : null,
           {
             backgroundColor: rowBackgroundColor,
+            borderLeftColor: borderColor,
             color: foregroundColor,
             fontFamily,
             fontSize,
@@ -238,8 +242,10 @@ const DiffSideBySideLine = memo(function DiffSideBySideLine({
     <View
       style={[
         styles.sideLine,
+        borderColor ? styles.sideLineDivider : null,
         {
           backgroundColor: rowBackgroundColor,
+          borderLeftColor: borderColor,
           height: rowHeight,
         },
       ]}
@@ -281,7 +287,7 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
   const fileIndex = file?.index ?? fallbackFileIndex;
   const statusPresentation = getFileStatusPresentation(file);
   const pathContext = file ? getFilePathContext(file, directory) : directory ? `${directory}/` : "";
-  const fileHeaderLineHeight = Math.max(18, fontSize + 8);
+  const fileHeaderLineHeight = Math.max(16, fontSize + 4);
   const palette = getDiffRowPalette(syntaxAppearance);
 
   return (
@@ -485,7 +491,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   }
 
   return (
-    <View style={[styles.sideBySideRow, { gap: diffSideBySideGutterWidth, height: rowHeight }]}>
+    <View style={[styles.sideBySideRow, { height: rowHeight }]}>
       <DiffSideBySideLine
         adaptiveRender={adaptiveRender}
         document={renderFields.document}
@@ -503,6 +509,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
       />
       <DiffSideBySideLine
         adaptiveRender={adaptiveRender}
+        borderColor={borderColor}
         document={renderFields.document}
         fontFamily={fontFamily}
         fontSize={fontSize}
@@ -550,12 +557,12 @@ const styles = StyleSheet.create({
   fileDisclosure: {
     alignItems: "center",
     justifyContent: "center",
-    width: 20,
+    width: 16,
   },
   fileMeta: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   fileName: {
     flexShrink: 0,
@@ -579,18 +586,18 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: 8,
-    height: 40,
-    marginHorizontal: 12,
-    marginVertical: 6,
-    paddingHorizontal: 10,
+    gap: 6,
+    height: 32,
+    marginHorizontal: 8,
+    marginVertical: 4,
+    paddingHorizontal: 8,
   },
   fileStatusIcon: {
     alignItems: "center",
-    borderRadius: 4,
-    height: 16,
+    borderRadius: 3,
+    height: 14,
     justifyContent: "center",
-    width: 16,
+    width: 14,
   },
   fileTitleGroup: {
     alignItems: "baseline",
@@ -640,6 +647,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minWidth: 0,
     overflow: "hidden",
+  },
+  sideLineDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
   },
   sideLineNumber: {
     fontFamily: sourceViewerCodeFontFamily,
