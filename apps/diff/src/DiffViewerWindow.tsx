@@ -55,6 +55,8 @@ import {
   diffFileHeaderRowHeight,
   diffBackgroundTokenizeChunkBudgetMs,
   diffBackgroundTokenizeChunkRowCount,
+  diffBackgroundTokenizePollMs,
+  diffBackgroundTokenizeStartDelayMs,
   diffInitialRowCount,
   diffLineOverscan,
   diffOverscanRequestDelayMs,
@@ -179,8 +181,14 @@ type DiffLoadedBodyProps = {
   splitPaneMetrics: DiffSplitPaneMetrics;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
+  syntaxTokenizationProgress: DiffSyntaxTokenizationProgress;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
   visibleItemIndexes: Array<number | undefined>;
+};
+
+type DiffSyntaxTokenizationProgress = {
+  progress: number;
+  visible: boolean;
 };
 
 type DiffListExtraData = {
@@ -603,6 +611,7 @@ function DiffLoadedBody({
   splitPaneMetrics,
   state,
   syntaxAppearance,
+  syntaxTokenizationProgress,
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedBodyProps) {
@@ -791,28 +800,72 @@ function DiffLoadedBody({
 
     logBodyFinish("split-view");
     return (
-      <SidebarSplitView
-        appearance={syntaxAppearance}
-        contentMinWidth={420}
-        contentTitlebarHeight={diffTitlebarTopInset}
-        contentTitlebarMaterial="glass"
-        contentTitlebarOverlayColor={backgroundColor}
-        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
-        onSplitViewDidResize={handleSplitViewResize}
-        sidebarCollapsed={sidebarCollapsed}
-        sidebarMinWidth={180}
-        style={styles.content}
-      >
-        {sidebar}
-        <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
-          {diffContent}
-        </View>
-      </SidebarSplitView>
+      <View style={styles.loadedRoot}>
+        <SidebarSplitView
+          appearance={syntaxAppearance}
+          contentMinWidth={420}
+          contentTitlebarHeight={diffTitlebarTopInset}
+          contentTitlebarMaterial="glass"
+          contentTitlebarOverlayColor={backgroundColor}
+          contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
+          onSplitViewDidResize={handleSplitViewResize}
+          sidebarCollapsed={sidebarCollapsed}
+          sidebarMinWidth={180}
+          style={styles.content}
+        >
+          {sidebar}
+          <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
+            {diffContent}
+          </View>
+        </SidebarSplitView>
+        <DiffSyntaxProgressBar
+          foregroundColor={syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.9)" : "rgba(9, 105, 218, 0.86)"}
+          progress={syntaxTokenizationProgress.progress}
+          visible={syntaxTokenizationProgress.visible}
+        />
+      </View>
     );
   }
 
   logBodyFinish("content-only");
-  return diffContent;
+  return (
+    <View style={styles.loadedRoot}>
+      {diffContent}
+      <DiffSyntaxProgressBar
+        foregroundColor={syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.9)" : "rgba(9, 105, 218, 0.86)"}
+        progress={syntaxTokenizationProgress.progress}
+        visible={syntaxTokenizationProgress.visible}
+      />
+    </View>
+  );
+}
+
+function DiffSyntaxProgressBar({
+  foregroundColor,
+  progress,
+  visible,
+}: {
+  foregroundColor: string;
+  progress: number;
+  visible: boolean;
+}) {
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <View accessibilityLabel="Syntax highlighting progress" pointerEvents="none" style={styles.syntaxProgressTrack}>
+      <View
+        style={[
+          styles.syntaxProgressFill,
+          {
+            backgroundColor: foregroundColor,
+            width: `${Math.max(0.02, Math.min(1, progress)) * 100}%`,
+          },
+        ]}
+      />
+    </View>
+  );
 }
 
 function DiffDropSurface({
@@ -932,11 +985,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
+  const [syntaxTokenizationProgress, setSyntaxTokenizationProgress] = useState<DiffSyntaxTokenizationProgress>({
+    progress: 0,
+    visible: false,
+  });
   const isLoading = loadingSource !== null;
   const isLoadingGithub = loadingSource?.kind === "github";
   const isRenderingInitialLoadedFrame =
     state.status === "loaded" &&
     sourcesMatch(loadingSource, state.source);
+  const renderViewMode = isRenderingInitialLoadedFrame ? "unified" : viewMode;
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
@@ -988,7 +1046,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     state,
     syntaxHighlightingEnabled,
     syntaxThemeName: syntaxTheme.name,
-    viewMode,
+    viewMode: renderViewMode,
   });
   const {
     getSideBySideRow,
@@ -1004,41 +1062,82 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     sideBySideRowCount,
     state,
     state$,
-    viewMode,
+    viewMode: renderViewMode,
   });
   useEffect(() => {
     if (state.status === "loaded") {
       const document = state.document;
       if (syntaxHighlightingEnabled) {
         let cancelled = false;
+        let startTimeout: ReturnType<typeof setTimeout> | undefined;
         const filePaths = state.files.map((file) => file.path);
         const startedAt = nowMs();
-        ensureSyntaxGrammarsForPaths(filePaths)
-          .then(() => {
-            if (!cancelled) {
-              document.startBackgroundTokenization(
-                diffBackgroundTokenizeChunkRowCount,
-                diffBackgroundTokenizeChunkBudgetMs,
-              );
-              logDiffMemoryMark("viewer.syntaxTokenization.start", {
-                durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                files: state.files.length,
-                rows: document.rowCount,
-                scopes: document.scopeCount,
-              });
-            }
-          })
-          .catch((error: unknown) => {
-            console.error(getErrorMessage(error));
-          });
+        startTimeout = setTimeout(() => {
+          ensureSyntaxGrammarsForPaths(filePaths)
+            .then(() => {
+              if (!cancelled) {
+                document.startBackgroundTokenization(
+                  diffBackgroundTokenizeChunkRowCount,
+                  diffBackgroundTokenizeChunkBudgetMs,
+                );
+                logDiffMemoryMark("viewer.syntaxTokenization.start", {
+                  durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                  files: state.files.length,
+                  rows: document.rowCount,
+                  scopes: document.scopeCount,
+                });
+              }
+            })
+            .catch((error: unknown) => {
+              console.error(getErrorMessage(error));
+            });
+        }, diffBackgroundTokenizeStartDelayMs);
         return () => {
           cancelled = true;
+          if (startTimeout) {
+            clearTimeout(startTimeout);
+          }
           document.stopBackgroundTokenization();
         };
       }
 
       document.stopBackgroundTokenization();
     }
+    return undefined;
+  }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled]);
+  useEffect(() => {
+    if (state.status === "loaded" && syntaxHighlightingEnabled) {
+      const document = state.document;
+      const totalRows = Math.max(0, document.rowCount);
+      const updateProgress = () => {
+        const tokenizedRows = Math.max(0, Math.min(totalRows, document.tokenizedMaxRow));
+        const nextProgress = totalRows > 0 ? tokenizedRows / totalRows : 1;
+        const nextVisible = totalRows > 0 && tokenizedRows < totalRows;
+        setSyntaxTokenizationProgress((current) => (
+          current.visible === nextVisible && Math.abs(current.progress - nextProgress) < 0.001
+            ? current
+            : {
+              progress: nextProgress,
+              visible: nextVisible,
+            }
+        ));
+      };
+
+      updateProgress();
+      const intervalHandle = setInterval(updateProgress, diffBackgroundTokenizePollMs);
+      return () => {
+        clearInterval(intervalHandle);
+      };
+    }
+
+    setSyntaxTokenizationProgress((current) => (
+      current.visible || current.progress !== 0
+        ? {
+          progress: 0,
+          visible: false,
+        }
+        : current
+    ));
     return undefined;
   }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled]);
   useEffect(() => {
@@ -1183,15 +1282,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       if (!loadError) {
         if (result) {
           const nativeResolvedAt = nowMs();
-          const filePaths = result.files.map((file) => file.path);
-          const syntaxLanguages = recordDiffSyntaxLanguagesForPaths(filePaths);
-          logDiffMemoryMark("viewer.syntaxLanguagesRecorded", {
-            files: result.files.length,
-            languages: syntaxLanguages,
-            requestId,
-            rows: result.document.rowCount,
-            scopes: result.document.scopeCount,
-          });
           trace.document = result.document;
           trace.nativeResolvedAt = nativeResolvedAt;
           logDiffOpenTiming("viewer.load.nativeResolved", {
@@ -1206,24 +1296,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
           });
           logDiffLoadTiming(nextSource.value, result.timing);
-          const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
-          if (recentDocumentPath) {
-            const recentStartedAt = nowMs();
-            noteRecentDocument(recentDocumentPath);
-            logDiffOpenTiming("viewer.recentDocument.noted", {
-              durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
-              requestId,
-            });
-            logDiffMemoryMark("viewer.recentDocument.noted", {
-              durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
-              requestId,
-            });
-          } else {
-            logDiffOpenTiming("viewer.recentDocument.skipped", {
-              requestId,
-              sourceKind: nextSource.kind,
-            });
-          }
           if (loadRequestIdRef.current === requestId) {
             const statePayloadStartedAt = nowMs();
             const nextLoadedState: DiffViewerState = {
@@ -1249,6 +1321,39 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               requestId,
               statePayloadMs: Number((statePayloadFinishedAt - statePayloadStartedAt).toFixed(1)),
               setStateCallMs: Number((nowMs() - trace.setStateAt).toFixed(1)),
+            });
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                if (loadRequestIdRef.current === requestId) {
+                  const filePaths = result.files.map((file) => file.path);
+                  const syntaxLanguages = recordDiffSyntaxLanguagesForPaths(filePaths);
+                  logDiffMemoryMark("viewer.syntaxLanguagesRecorded", {
+                    files: result.files.length,
+                    languages: syntaxLanguages,
+                    requestId,
+                    rows: result.document.rowCount,
+                    scopes: result.document.scopeCount,
+                  });
+                  const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
+                  if (recentDocumentPath) {
+                    const recentStartedAt = nowMs();
+                    noteRecentDocument(recentDocumentPath);
+                    logDiffOpenTiming("viewer.recentDocument.noted", {
+                      durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
+                      requestId,
+                    });
+                    logDiffMemoryMark("viewer.recentDocument.noted", {
+                      durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
+                      requestId,
+                    });
+                  } else {
+                    logDiffOpenTiming("viewer.recentDocument.skipped", {
+                      requestId,
+                      sourceKind: nextSource.kind,
+                    });
+                  }
+                }
+              }, 0);
             });
           } else {
             logDiffOpenTiming("viewer.load.stale", {
@@ -1697,7 +1802,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const diffListHeight = Math.max(0, diffContentHeight - documentErrorHeight);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
   const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
-  const activeItemIndexes = viewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
+  const activeItemIndexes = renderViewMode === "unified" ? visibleItemIndexes : sideBySideItemIndexes;
   const documentErrorBody = (
     <DiffDocumentErrorBody
       borderColor={displayTheme.colors.border}
@@ -1770,7 +1875,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         splitPaneMetrics={splitPaneMetrics}
         state={state}
         syntaxAppearance={syntaxTheme.appearance}
-        viewMode={viewMode}
+        syntaxTokenizationProgress={syntaxTokenizationProgress}
+        viewMode={renderViewMode}
         visibleItemIndexes={visibleItemIndexes}
       />
     );
@@ -1954,6 +2060,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  loadedRoot: {
+    flex: 1,
+    minHeight: 0,
+  },
   documentError: {
     height: diffDocumentErrorHeight,
     paddingHorizontal: 12,
@@ -2015,6 +2125,18 @@ const styles = StyleSheet.create({
   },
   diffTitlebarSpacer: {
     height: diffTitlebarTopInset,
+  },
+  syntaxProgressFill: {
+    height: 2,
+  },
+  syntaxProgressTrack: {
+    height: 2,
+    left: 0,
+    overflow: "hidden",
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 20,
   },
   dropOverlay: {
     alignItems: "center",

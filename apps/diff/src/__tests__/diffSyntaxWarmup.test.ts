@@ -20,6 +20,7 @@ const syntaxParserMock = jest.requireMock("@legend-desktop/syntax-parser");
 describe("diffSyntaxWarmup", () => {
   beforeEach(() => {
     syntaxParserMock.__resetSyntaxParserMock();
+    jest.mocked(warmSyntaxHighlighters).mockClear();
     setDiffSyntaxHighlightingEnabledSetting(true);
     setDiffSyntaxPrewarmEnabledSetting(true);
     setDiffSyntaxPrewarmKnownLanguagesSetting([]);

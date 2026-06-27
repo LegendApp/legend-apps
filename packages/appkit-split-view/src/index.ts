@@ -110,10 +110,10 @@ export function SidebarSplitView({
         style: [
           styles.pane,
           {
-            flex: sidebarCollapsed || paneMetrics.sidebarWidth ? 0 : 1,
+            flex: 0,
             height: paneMetrics.sidebarHeight || undefined,
             minHeight: paneMetrics.sidebarHeight || undefined,
-            width: sidebarCollapsed ? 0 : paneMetrics.sidebarWidth || undefined,
+            width: sidebarCollapsed ? 0 : paneMetrics.sidebarWidth || sidebarMinWidth,
           },
         ],
       },

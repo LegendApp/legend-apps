@@ -286,12 +286,30 @@ export function DiffLaunchController({
   useEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
+      let loadTimeout: ReturnType<typeof setTimeout> | undefined;
       logDiffOpenTiming("viewer.launchSource.effect", {
         source: initialSource,
       });
-      loadSource(initialSource);
+      setLoadingSourceValue(initialSource);
+      const frameHandle = requestAnimationFrame(() => {
+        loadTimeout = setTimeout(() => {
+          logDiffOpenTiming("viewer.launchSource.deferredLoad", {
+            source: initialSource,
+          });
+          loadSource(initialSource).catch((error: unknown) => {
+            console.error(getErrorMessage(error));
+          });
+        }, 0);
+      });
+      return () => {
+        cancelAnimationFrame(frameHandle);
+        if (loadTimeout) {
+          clearTimeout(loadTimeout);
+        }
+      };
     }
-  }, [folderPath, loadSource, source]);
+    return undefined;
+  }, [folderPath, loadSource, setLoadingSourceValue, source]);
 
   useEffect(() => {
     const shouldFocusUrlInput = typeof focusUrlInputRequestId === "number" && !source && !folderPath;

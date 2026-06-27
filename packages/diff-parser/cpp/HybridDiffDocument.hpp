@@ -93,6 +93,7 @@ protected:
 
 private:
   size_t getExternalMemorySizeLocked() const noexcept;
+  void ensureSideBySideLinesLocked();
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,
@@ -118,6 +119,7 @@ private:
   std::vector<DiffFileSummary> files_;
   std::vector<DiffRenderRow> rows_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
+  bool sideBySideLinesReady_ = false;
   std::vector<DiffFileSources> fileSources_;
   std::string repositoryPath_;
   std::string workdirPath_;

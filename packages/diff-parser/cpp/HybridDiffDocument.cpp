@@ -275,7 +275,6 @@ HybridDiffDocument::HybridDiffDocument(
       headTreeOid_(std::move(headTreeOid)),
       syntaxState_(std::make_shared<DiffSyntaxState>()),
       timing_(timing) {
-  sideBySideLines_ = createDiffSideBySideLines(rows_);
   logMemorySnapshot("document.constructed");
 }
 
@@ -357,8 +356,16 @@ std::vector<DiffRenderRow> HybridDiffDocument::getPlainRows(double start, double
   return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
 }
 
+void HybridDiffDocument::ensureSideBySideLinesLocked() {
+  if (!sideBySideLinesReady_) {
+    sideBySideLines_ = createDiffSideBySideLines(rows_);
+    sideBySideLinesReady_ = true;
+  }
+}
+
 double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) {
   std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
 
   if (!hasCollapsedFileIndexes(collapsedFileIndexSet)) {
@@ -376,6 +383,7 @@ double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& coll
 
 std::vector<DiffSideBySideFileHeader> HybridDiffDocument::getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) {
   std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
   std::vector<DiffSideBySideFileHeader> fileHeaders;
   fileHeaders.reserve(files_.size());
@@ -405,6 +413,7 @@ double HybridDiffDocument::getSideBySideListIndexForSourceRow(
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
   size_t logicalIndex = 0;
   for (const auto& line : sideBySideLines_) {
@@ -457,6 +466,7 @@ DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRowForIndex(
   const auto safeIndex = static_cast<size_t>(std::max(0.0, std::floor(index)));
 
   std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
 
   if (!hasCollapsedFileIndexes(collapsedFileIndexSet)) {
@@ -491,6 +501,7 @@ std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRowsForRan
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
   std::vector<DiffSideBySideRenderRow> rows;
   rows.reserve(safeCount);
