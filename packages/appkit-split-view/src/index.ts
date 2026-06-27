@@ -1,4 +1,4 @@
-import { Children, createElement, type ReactNode } from "react";
+import { Children, createElement, useCallback, useState, type ReactNode } from "react";
 import {
   NativeEventEmitter,
   Platform,
@@ -50,7 +50,39 @@ export function SidebarSplitView({
   style,
   ...props
 }: SidebarSplitViewProps) {
+  const [paneMetrics, setPaneMetrics] = useState({
+    contentHeight: 0,
+    contentWidth: 0,
+    sidebarHeight: 0,
+    sidebarWidth: 0,
+  });
   const panes = Children.toArray(children);
+
+  const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
+    const nextContentHeight = Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height);
+    const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
+    const nextSidebarHeight = Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height);
+    const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
+
+    if (nextContentHeight > 0 || nextContentWidth > 0 || nextSidebarHeight > 0 || nextSidebarWidth > 0) {
+      setPaneMetrics((current) => {
+        const next = {
+          contentHeight: nextContentHeight > 0 ? nextContentHeight : current.contentHeight,
+          contentWidth: nextContentWidth > 0 ? nextContentWidth : current.contentWidth,
+          sidebarHeight: nextSidebarHeight > 0 ? nextSidebarHeight : current.sidebarHeight,
+          sidebarWidth: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebarWidth,
+        };
+        return current.contentHeight === next.contentHeight &&
+          current.contentWidth === next.contentWidth &&
+          current.sidebarHeight === next.sidebarHeight &&
+          current.sidebarWidth === next.sidebarWidth
+          ? current
+          : next;
+      });
+    }
+
+    onSplitViewDidResize?.(event);
+  }, [onSplitViewDidResize]);
 
   return createElement(
     SidebarSplitViewNativeComponent,
@@ -61,7 +93,7 @@ export function SidebarSplitView({
       contentTitlebarMaterial,
       contentTitlebarOverlayColor,
       contentTitlebarOverlayOpacity,
-      onSplitViewDidResize,
+      onSplitViewDidResize: handleSplitViewResize,
       sidebarCollapsed,
       sidebarMinWidth,
       style: [styles.root, style],
@@ -71,7 +103,14 @@ export function SidebarSplitView({
       View,
       {
         key: "sidebar",
-        style: styles.pane,
+        style: [
+          styles.pane,
+          {
+            height: paneMetrics.sidebarHeight || undefined,
+            minHeight: paneMetrics.sidebarHeight || undefined,
+            width: sidebarCollapsed ? 0 : paneMetrics.sidebarWidth || sidebarMinWidth,
+          },
+        ],
       },
       panes[0],
     ),
@@ -79,7 +118,14 @@ export function SidebarSplitView({
       View,
       {
         key: "content",
-        style: styles.pane,
+        style: [
+          styles.pane,
+          {
+            height: paneMetrics.contentHeight || undefined,
+            minHeight: paneMetrics.contentHeight || undefined,
+            width: paneMetrics.contentWidth || undefined,
+          },
+        ],
       },
       panes[1],
     ),
@@ -90,11 +136,9 @@ export function SidebarSplitView({
 const styles = StyleSheet.create({
   root: {},
   pane: {
-    bottom: 0,
     left: 0,
     minWidth: 0,
     position: "absolute",
-    right: 0,
     top: 0,
   },
 });
