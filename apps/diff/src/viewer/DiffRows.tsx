@@ -7,7 +7,6 @@ import type {
 import {
   LightText,
   sourceViewerCodeFontFamily,
-  sourceViewerLineNumberWidth,
   sourceViewerRowHeight,
   TokenizedText,
   type SyntaxStyleMap,
@@ -110,6 +109,14 @@ const diffLightPalette = {
   removeAccent: "#cf222e",
   removeBackground: "#ffebe9",
 };
+
+const diffUnifiedChangeBarWidth = 3;
+const diffUnifiedLineNumberWidth = 44;
+const diffUnifiedMarkerWidth = 14;
+const diffUnifiedLightPaddingLeft = diffUnifiedChangeBarWidth + diffUnifiedLineNumberWidth * 2 + diffUnifiedMarkerWidth;
+const diffSideBySideLineNumberWidth = 40;
+const diffSideBySideMarkerWidth = 12;
+const diffSideBySideLightPaddingLeft = diffSideBySideLineNumberWidth + diffSideBySideMarkerWidth;
 
 function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? diffDarkPalette : diffLightPalette;
@@ -478,50 +485,44 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   }
 
   return (
-    <View style={[styles.sideBySideRow, { height: rowHeight }]}>
-      <View style={styles.sidePane}>
-        <DiffSideBySideLine
-          adaptiveRender={adaptiveRender}
-          document={renderFields.document}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          row={row.oldRow}
-          rowHeight={rowHeight}
-          rowVisible={row.oldRowVisible}
-          side="old"
-          syntaxAppearance={syntaxAppearance}
-          syntaxStyleStore={syntaxStyleStore}
-          tokenStyleById={sideBySideTokenStyleById}
-        />
-      </View>
-      <View style={[styles.sideConnectorColumn, { width: diffSideBySideGutterWidth }]}>
-      </View>
-      <View style={styles.sidePane}>
-        <DiffSideBySideLine
-          adaptiveRender={adaptiveRender}
-          document={renderFields.document}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
-          rowHeight={rowHeight}
-          rowVisible={row.newRowVisible}
-          side="new"
-          syntaxAppearance={syntaxAppearance}
-          syntaxStyleStore={syntaxStyleStore}
-          tokenStyleById={sideBySideTokenStyleById}
-        />
-      </View>
+    <View style={[styles.sideBySideRow, { gap: diffSideBySideGutterWidth, height: rowHeight }]}>
+      <DiffSideBySideLine
+        adaptiveRender={adaptiveRender}
+        document={renderFields.document}
+        fontFamily={fontFamily}
+        fontSize={fontSize}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        row={row.oldRow}
+        rowHeight={rowHeight}
+        rowVisible={row.oldRowVisible}
+        side="old"
+        syntaxAppearance={syntaxAppearance}
+        syntaxStyleStore={syntaxStyleStore}
+        tokenStyleById={sideBySideTokenStyleById}
+      />
+      <DiffSideBySideLine
+        adaptiveRender={adaptiveRender}
+        document={renderFields.document}
+        fontFamily={fontFamily}
+        fontSize={fontSize}
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
+        rowHeight={rowHeight}
+        rowVisible={row.newRowVisible}
+        side="new"
+        syntaxAppearance={syntaxAppearance}
+        syntaxStyleStore={syntaxStyleStore}
+        tokenStyleById={sideBySideTokenStyleById}
+      />
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   diffRow: {
-    borderLeftWidth: 3,
+    borderLeftWidth: diffUnifiedChangeBarWidth,
     flexDirection: "row",
     height: sourceViewerRowHeight,
   },
@@ -538,7 +539,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     overflow: "hidden",
-    paddingLeft: sourceViewerLineNumberWidth * 2 + 28,
+    paddingLeft: diffUnifiedLightPaddingLeft,
     paddingRight: 12,
   },
   fileAdded: {
@@ -600,24 +601,21 @@ const styles = StyleSheet.create({
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 12,
     lineHeight: sourceViewerRowHeight,
-    paddingHorizontal: 8,
+    paddingLeft: 4,
+    paddingRight: 4,
     textAlign: "right",
-    width: sourceViewerLineNumberWidth,
+    width: diffUnifiedLineNumberWidth,
   },
   marker: {
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     textAlign: "center",
-    width: 28,
+    width: diffUnifiedMarkerWidth,
   },
   sideBySideRow: {
     flexDirection: "row",
     minHeight: 0,
-  },
-  sideConnectorColumn: {
-    alignItems: "center",
-    justifyContent: "center",
   },
   sideDiffText: {
     flex: 1,
@@ -632,32 +630,31 @@ const styles = StyleSheet.create({
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
+    minWidth: 0,
     overflow: "hidden",
-    paddingLeft: sourceViewerLineNumberWidth + 28,
+    paddingLeft: diffSideBySideLightPaddingLeft,
     paddingRight: diffSideBySideHorizontalPadding,
   },
   sideLine: {
+    flex: 1,
     flexDirection: "row",
+    minWidth: 0,
     overflow: "hidden",
   },
   sideLineNumber: {
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 12,
     lineHeight: sourceViewerRowHeight,
-    paddingLeft: 8,
-    paddingRight: 6,
+    paddingLeft: 4,
+    paddingRight: 4,
     textAlign: "right",
-    width: 58,
+    width: diffSideBySideLineNumberWidth,
   },
   sideMarker: {
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 13,
     lineHeight: sourceViewerRowHeight,
     textAlign: "center",
-    width: 18,
-  },
-  sidePane: {
-    flex: 1,
-    minWidth: 0,
+    width: diffSideBySideMarkerWidth,
   },
 });
