@@ -179,17 +179,20 @@ export function SelectControl<Value extends OptionValue = string>({
 export type SwitchControlProps = {
   accessibilityLabel?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 };
 
-export function SwitchControl({ accessibilityLabel, checked, onChange }: SwitchControlProps) {
+export function SwitchControl({ accessibilityLabel, checked, disabled = false, onChange }: SwitchControlProps) {
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="switch"
-      accessibilityState={{ checked }}
+      accessibilityState={{ checked, disabled }}
       className="flex-row items-center gap-2"
+      disabled={disabled}
       onPress={() => onChange(!checked)}
+      style={disabled ? styles.disabled : null}
     >
       <View
         className={cn(

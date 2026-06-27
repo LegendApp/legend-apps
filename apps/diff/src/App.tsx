@@ -9,6 +9,7 @@ import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import { setDiffViewModeSetting } from "./diffSettings";
+import { warmDiffSyntaxHighlightersForStartup } from "./diffSyntaxWarmup";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
@@ -186,6 +187,16 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
   });
   await openDiffViewerWindow(source);
   controller.setDocumentWindowOpen(true);
+  if (!source) {
+    logDiffMemoryMark("startup.syntaxWarmup.start", {});
+    warmDiffSyntaxHighlightersForStartup()
+      .then((warmupResults) => {
+        logDiffMemoryMark("startup.syntaxWarmup.finish", {
+          languages: warmupResults.map((warmupResult) => warmupResult.language),
+        });
+      })
+      .catch(reportDiffAppControllerError);
+  }
   logDiffOpenTiming("launch.open.finish", {
     source,
     windowOpenMs: elapsedMs(startedAt),

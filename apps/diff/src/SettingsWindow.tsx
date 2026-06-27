@@ -1,4 +1,4 @@
-import { SelectControl } from "@legend-desktop/design-system";
+import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -16,14 +16,21 @@ import {
   diffFontSizeOptions,
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
+  setDiffSyntaxHighlightingEnabledSetting,
+  setDiffSyntaxPrewarmEnabledSetting,
+  setDiffSyntaxPrewarmLanguagesSetting,
   setDiffSyntaxThemeSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
+  useDiffSyntaxHighlightingEnabledSetting,
+  useDiffSyntaxPrewarmEnabledSetting,
+  useDiffSyntaxPrewarmKnownLanguagesSetting,
+  useDiffSyntaxPrewarmLanguagesSetting,
   useDiffSyntaxTheme,
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
 
-type DiffSettingsPage = "appearance" | "commandLine";
+type DiffSettingsPage = "appearance" | "syntax" | "commandLine";
 
 const diffFontSizeSettingOptions = diffFontSizeOptions.map((fontSize) => ({
   label: String(fontSize),
@@ -72,6 +79,98 @@ function AppearanceSettingsPage() {
           selectedTheme={selectedSyntaxTheme}
           title={null}
         />
+      </SettingsSection>
+    </SettingsPage>
+  );
+}
+
+function getSyntaxLanguageLabel(language: string) {
+  if (language === "tsx") {
+    return "TSX";
+  }
+  if (language === "typescript") {
+    return "TypeScript";
+  }
+  if (language === "javascript") {
+    return "JavaScript";
+  }
+  if (language === "json") {
+    return "JSON";
+  }
+  return language.slice(0, 1).toUpperCase() + language.slice(1);
+}
+
+function SyntaxSettingsPage() {
+  const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
+  const syntaxPrewarmEnabled = useDiffSyntaxPrewarmEnabledSetting();
+  const knownLanguages = useDiffSyntaxPrewarmKnownLanguagesSetting();
+  const prewarmLanguages = useDiffSyntaxPrewarmLanguagesSetting();
+  const prewarmLanguageSet = new Set(prewarmLanguages);
+
+  const handleLanguageToggle = (language: string, enabled: boolean) => {
+    const nextLanguages = new Set(prewarmLanguages);
+    if (enabled) {
+      nextLanguages.add(language);
+    } else {
+      nextLanguages.delete(language);
+    }
+    setDiffSyntaxPrewarmLanguagesSetting([...nextLanguages]);
+  };
+
+  return (
+    <SettingsPage>
+      <SettingsSection
+        first
+        title={null}
+      >
+        <SettingsRow
+          align="center"
+          control={(
+            <SwitchControl
+              accessibilityLabel="Syntax highlighting"
+              checked={syntaxHighlightingEnabled}
+              onChange={setDiffSyntaxHighlightingEnabledSetting}
+            />
+          )}
+          title="Syntax highlighting"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SwitchControl
+              accessibilityLabel="Prewarm highlighters"
+              checked={syntaxPrewarmEnabled}
+              disabled={!syntaxHighlightingEnabled}
+              onChange={setDiffSyntaxPrewarmEnabledSetting}
+            />
+          )}
+          disabled={!syntaxHighlightingEnabled}
+          title="Prewarm highlighters"
+        />
+      </SettingsSection>
+      <SettingsSection title="Prewarm languages">
+        {knownLanguages.length > 0 ? knownLanguages.map((language) => (
+          <SettingsRow
+            align="center"
+            control={(
+              <SwitchControl
+                accessibilityLabel={`Prewarm ${getSyntaxLanguageLabel(language)}`}
+                checked={prewarmLanguageSet.has(language)}
+                disabled={!syntaxHighlightingEnabled || !syntaxPrewarmEnabled}
+                onChange={(enabled) => handleLanguageToggle(language, enabled)}
+              />
+            )}
+            disabled={!syntaxHighlightingEnabled || !syntaxPrewarmEnabled}
+            key={language}
+            title={getSyntaxLanguageLabel(language)}
+          />
+        )) : (
+          <View className="px-1 py-1.5">
+            <Text className="text-text-secondary" style={styles.noteText}>
+              No languages recorded yet.
+            </Text>
+          </View>
+        )}
       </SettingsSection>
     </SettingsPage>
   );
@@ -213,6 +312,11 @@ const pages: SettingsWindowPage<DiffSettingsPage>[] = [
     id: "appearance",
     render: () => <AppearanceSettingsPage />,
     title: "Appearance",
+  },
+  {
+    id: "syntax",
+    render: () => <SyntaxSettingsPage />,
+    title: "Syntax",
   },
   {
     id: "commandLine",

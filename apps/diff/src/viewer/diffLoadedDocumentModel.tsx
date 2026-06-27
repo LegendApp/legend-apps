@@ -57,6 +57,7 @@ function createDiffSyntaxStyleMap(styles: readonly DiffSyntaxStyle[]) {
 export function useDiffLoadedModel({
   collapsedFileIndexes,
   state,
+  syntaxHighlightingEnabled,
   syntaxThemeName,
   viewMode,
 }: {
@@ -65,6 +66,7 @@ export function useDiffLoadedModel({
   fontSize: number;
   rowHeight: number;
   state: DiffViewerState;
+  syntaxHighlightingEnabled: boolean;
   syntaxThemeName: string;
   viewMode: DiffSettingsFile["viewMode"];
 }) {
@@ -144,10 +146,10 @@ export function useDiffLoadedModel({
   }, [state]);
   const tokenStyleById = useMemo(() => {
     const startedAt = nowMs();
-    const styles = state.status === "loaded"
+    const styles = state.status === "loaded" && syntaxHighlightingEnabled
       ? state.document.getScopeStyles(syntaxThemeName, 0)
       : [];
-    if (state.status === "loaded") {
+    if (state.status === "loaded" && syntaxHighlightingEnabled) {
       logDiffOpenTiming("viewer.scopeStylesFetched", {
         durationMs: Number((nowMs() - startedAt).toFixed(1)),
         fromScopeId: 0,
@@ -157,11 +159,11 @@ export function useDiffLoadedModel({
       });
     }
     return createDiffSyntaxStyleMap(styles);
-  }, [state.status === "loaded" ? state.document : null, syntaxThemeName]);
+  }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled, syntaxThemeName]);
   const syntaxStyleStore = useMemo<DiffSyntaxStyleStore>(() => {
     const listeners = new Set<() => void>();
-    let scopeCount = state.status === "loaded" ? state.document.scopeCount : 0;
-    let tokenizedMaxRow = state.status === "loaded" ? state.document.tokenizedMaxRow : 0;
+    let scopeCount = state.status === "loaded" && syntaxHighlightingEnabled ? state.document.scopeCount : 0;
+    let tokenizedMaxRow = state.status === "loaded" && syntaxHighlightingEnabled ? state.document.tokenizedMaxRow : 0;
     let tokenStyleMap = tokenStyleById;
     return {
       get current() {
@@ -177,6 +179,16 @@ export function useDiffLoadedModel({
         };
       },
       refresh(document: DiffDocument) {
+        if (!syntaxHighlightingEnabled) {
+          if (scopeCount !== 0 || tokenizedMaxRow !== 0 || tokenStyleMap.size !== 0) {
+            scopeCount = 0;
+            tokenizedMaxRow = 0;
+            tokenStyleMap = new Map();
+            listeners.forEach((listener) => listener());
+          }
+          return;
+        }
+
         const nextScopeCount = document.scopeCount;
         const nextTokenizedMaxRow = document.tokenizedMaxRow;
         let changed = false;
@@ -202,9 +214,9 @@ export function useDiffLoadedModel({
         }
       },
     };
-  }, [state.status === "loaded" ? state.document : null, syntaxThemeName, tokenStyleById]);
+  }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled, syntaxThemeName, tokenStyleById]);
   useEffect(() => {
-    if (state.status === "loaded") {
+    if (state.status === "loaded" && syntaxHighlightingEnabled) {
       const document = state.document;
       const intervalHandle = setInterval(() => {
         const ranges = document.consumeTokenizedRowRanges();
@@ -218,7 +230,7 @@ export function useDiffLoadedModel({
       };
     }
     return undefined;
-  }, [state.status === "loaded" ? state.document : null, syntaxStyleStore]);
+  }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled, syntaxStyleStore]);
   const fileHeaderRowIndexes = useMemo(() => {
     const startedAt = nowMs();
     if (state.status !== "loaded") {

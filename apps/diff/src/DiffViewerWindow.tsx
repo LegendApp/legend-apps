@@ -37,11 +37,12 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
-import { warmDiffSyntaxHighlightersForPaths } from "./diffSyntaxWarmup";
+import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
 import {
   getDiffViewModeSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
+  useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxTheme,
   useDiffViewModeSetting,
   type DiffSettingsFile,
@@ -52,6 +53,8 @@ import {
   diffDocumentPermissionErrorHeight,
   diffDropAllowedFileTypes,
   diffFileHeaderRowHeight,
+  diffBackgroundTokenizeChunkBudgetMs,
+  diffBackgroundTokenizeChunkRowCount,
   diffInitialRowCount,
   diffLineOverscan,
   diffOverscanRequestDelayMs,
@@ -887,6 +890,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const rowHeight = getDiffLineRowHeight(fontSize);
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
+  const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
   const {
@@ -982,6 +986,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fontSize,
     rowHeight,
     state,
+    syntaxHighlightingEnabled,
     syntaxThemeName: syntaxTheme.name,
     viewMode,
   });
@@ -1001,6 +1006,41 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     state$,
     viewMode,
   });
+  useEffect(() => {
+    if (state.status === "loaded") {
+      const document = state.document;
+      if (syntaxHighlightingEnabled) {
+        let cancelled = false;
+        const filePaths = state.files.map((file) => file.path);
+        const startedAt = nowMs();
+        ensureSyntaxGrammarsForPaths(filePaths)
+          .then(() => {
+            if (!cancelled) {
+              document.startBackgroundTokenization(
+                diffBackgroundTokenizeChunkRowCount,
+                diffBackgroundTokenizeChunkBudgetMs,
+              );
+              logDiffMemoryMark("viewer.syntaxTokenization.start", {
+                durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                files: state.files.length,
+                rows: document.rowCount,
+                scopes: document.scopeCount,
+              });
+            }
+          })
+          .catch((error: unknown) => {
+            console.error(getErrorMessage(error));
+          });
+        return () => {
+          cancelled = true;
+          document.stopBackgroundTokenization();
+        };
+      }
+
+      document.stopBackgroundTokenization();
+    }
+    return undefined;
+  }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled]);
   useEffect(() => {
     resetSideBySideRuntime();
     if (state.status === "loaded") {
@@ -1143,43 +1183,27 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       if (!loadError) {
         if (result) {
           const nativeResolvedAt = nowMs();
-          const grammarStartedAt = nativeResolvedAt;
           const filePaths = result.files.map((file) => file.path);
-          await ensureSyntaxGrammarsForPaths(filePaths);
-          const grammarResolvedAt = nowMs();
-          logDiffMemoryMark("viewer.syntaxWarmup.start", {
+          const syntaxLanguages = recordDiffSyntaxLanguagesForPaths(filePaths);
+          logDiffMemoryMark("viewer.syntaxLanguagesRecorded", {
             files: result.files.length,
-            requestId,
-          });
-          warmDiffSyntaxHighlightersForPaths(filePaths)
-            .then((warmupResults) => {
-              logDiffMemoryMark("viewer.syntaxWarmup.finish", {
-                languages: warmupResults.map((warmupResult) => warmupResult.language),
-                requestId,
-              });
-            })
-            .catch((error: unknown) => {
-              console.error(getErrorMessage(error));
-            });
-          logDiffMemoryMark("viewer.grammarEnsured", {
-            files: result.files.length,
-            grammarEnsureMs: Number((grammarResolvedAt - grammarStartedAt).toFixed(1)),
+            languages: syntaxLanguages,
             requestId,
             rows: result.document.rowCount,
             scopes: result.document.scopeCount,
           });
           trace.document = result.document;
-          trace.nativeResolvedAt = grammarResolvedAt;
+          trace.nativeResolvedAt = nativeResolvedAt;
           logDiffOpenTiming("viewer.load.nativeResolved", {
             files: result.files.length,
-            grammarEnsureMs: Number((grammarResolvedAt - grammarStartedAt).toFixed(1)),
+            grammarEnsureMs: 0,
             initialRows: result.initialRows.length,
-            jsAwaitMs: Number((grammarResolvedAt - nativeStartedAt).toFixed(1)),
+            jsAwaitMs: Number((nativeResolvedAt - nativeStartedAt).toFixed(1)),
             nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
             requestId,
             rows: result.document.rowCount,
             scopes: result.document.scopeCount,
-            unaccountedJsMs: Number((grammarResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
+            unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
           });
           logDiffLoadTiming(nextSource.value, result.timing);
           const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
