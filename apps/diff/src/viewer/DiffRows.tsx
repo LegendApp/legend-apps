@@ -198,9 +198,11 @@ function useTokenizedMaxRow(syntaxStyleStore: DiffSyntaxStyleStore) {
 }
 
 function DiffNativeUnifiedLineRow({
+  adaptiveRender,
   index,
   renderFields,
 }: {
+  adaptiveRender: "light" | "normal";
   index: number;
   renderFields: DiffRenderFields;
 }) {
@@ -208,6 +210,7 @@ function DiffNativeUnifiedLineRow({
   const palette = getDiffRowPalette(renderFields.syntaxAppearance);
   return (
     <DiffNativeRow
+      adaptiveRender={adaptiveRender}
       addAccentColor={palette.addAccent}
       addBackgroundColor={palette.addBackground}
       changeBarWidth={diffUnifiedChangeBarWidth}
@@ -234,10 +237,12 @@ function DiffNativeUnifiedLineRow({
 }
 
 function DiffNativeSideBySideLineRow({
+  adaptiveRender,
   collapsedFileIndexesKey,
   index,
   renderFields,
 }: {
+  adaptiveRender: "light" | "normal";
   collapsedFileIndexesKey: string;
   index: number;
   renderFields: DiffRenderFields;
@@ -247,6 +252,7 @@ function DiffNativeSideBySideLineRow({
   const dividerColor = getSideBySideDividerColor(renderFields.syntaxAppearance);
   return (
     <DiffNativeRow
+      adaptiveRender={adaptiveRender}
       addAccentColor={palette.addAccent}
       addBackgroundColor={palette.addBackground}
       changeBarWidth={0}
@@ -543,9 +549,10 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
     );
   }
 
-  if (renderFields.rowRenderer === "native" && adaptiveRender === "normal" && renderFields.document) {
+  if (renderFields.rowRenderer === "native" && renderFields.document) {
     return (
       <DiffNativeUnifiedLineRow
+        adaptiveRender={adaptiveRender}
         index={index}
         renderFields={renderFields}
       />
@@ -645,6 +652,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   if (renderFields.rowRenderer === "native" && renderFields.document) {
     return (
       <DiffNativeSideBySideLineRow
+        adaptiveRender={adaptiveRender}
         collapsedFileIndexesKey={collapsedFileIndexesKey}
         index={index}
         renderFields={renderFields}

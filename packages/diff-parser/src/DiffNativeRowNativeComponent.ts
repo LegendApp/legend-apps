@@ -2,6 +2,7 @@ import type { CodegenTypes, HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
 
 export interface NativeProps extends ViewProps {
+  adaptiveRender: string;
   addAccentColor: string;
   addBackgroundColor: string;
   changeBarWidth: CodegenTypes.Double;

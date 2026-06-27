@@ -84,6 +84,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 @property(nonatomic, copy) NSString *removeBackgroundColor;
 @property(nonatomic, copy) NSString *dividerColor;
 @property(nonatomic, copy) NSString *presentation;
+@property(nonatomic, copy) NSString *adaptiveRender;
 - (void)setCollapsedFileIndexesString:(NSString *)value;
 @end
 
@@ -104,6 +105,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
     _removeBackgroundColor = @"#3a1d24";
     _dividerColor = @"transparent";
     _presentation = @"unified";
+    _adaptiveRender = @"normal";
     _rowHeight = 18;
     _lineNumberWidth = 44;
     _markerWidth = 14;
@@ -228,7 +230,8 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
       withAttributes:markerAttributes];
 
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
-  if (self.syntaxHighlightingEnabled
+  if (![self.adaptiveRender isEqualToString:@"light"]
+      && self.syntaxHighlightingEnabled
       && self.rowIndex < self.tokenizedMaxRow
       && row.tokens.has_value()
       && std::holds_alternative<std::vector<DiffSyntaxTokenRun>>(*row.tokens)) {
@@ -301,7 +304,10 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
       withAttributes:markerAttributes];
 
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
-  if (self.syntaxHighlightingEnabled && plain.index < self.tokenizedMaxRow && !plain.tokens.empty()) {
+  if (![self.adaptiveRender isEqualToString:@"light"]
+      && self.syntaxHighlightingEnabled
+      && plain.index < self.tokenizedMaxRow
+      && !plain.tokens.empty()) {
     tokens = &plain.tokens;
   }
   NSMutableAttributedString *attributedText = [self attributedTextForRow:plain
@@ -426,6 +432,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   _contentView.removeBackgroundColor = [NSString stringWithUTF8String:newProps.removeBackgroundColor.c_str()] ?: @"";
   _contentView.dividerColor = [NSString stringWithUTF8String:newProps.dividerColor.c_str()] ?: @"";
   _contentView.presentation = [NSString stringWithUTF8String:newProps.presentation.c_str()] ?: @"unified";
+  _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
   [_contentView setCollapsedFileIndexesString:[NSString stringWithUTF8String:newProps.collapsedFileIndexes.c_str()] ?: @""];
   [_contentView setNeedsDisplay:YES];
 #endif
@@ -440,6 +447,7 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   _contentView.rowIndex = -1;
   _contentView.tokenizedMaxRow = 0;
   _contentView.presentation = @"unified";
+  _contentView.adaptiveRender = @"normal";
   [_contentView setCollapsedFileIndexesString:@""];
   [_contentView setNeedsDisplay:YES];
 #endif

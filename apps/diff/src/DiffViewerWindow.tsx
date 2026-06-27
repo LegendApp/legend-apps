@@ -708,8 +708,7 @@ function DiffLoadedBody({
     });
     const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
     const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode === "blocks";
-    const nativeDiffRows = nativeUnifiedRows || nativeSideBySideRows;
-    const adaptiveRender = !nativeDiffRows && adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
+    const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
     const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
     const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
     const listHeader = <View style={styles.diffTitlebarSpacer} />;
