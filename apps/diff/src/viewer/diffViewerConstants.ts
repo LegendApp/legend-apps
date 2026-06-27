@@ -1,4 +1,5 @@
 export const diffInitialRowCount = 160;
+export const diffProgressiveLoadPollMs = 16;
 export const diffInitialHighlightChunkRowCount = 40;
 export const diffBackgroundTokenizeChunkBudgetMs = 3;
 export const diffBackgroundTokenizeChunkRowCount = 16;

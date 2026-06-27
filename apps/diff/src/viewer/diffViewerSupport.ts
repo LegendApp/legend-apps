@@ -1,3 +1,4 @@
+import { logDiffTimingMark } from "@legend-desktop/diff-parser";
 import type { DiffLoadTiming } from "@legend-desktop/diff-parser";
 import { getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
 import { getDiffViewModeSetting } from "../diffSettings";
@@ -23,11 +24,15 @@ export type DiffWindowToolbarModel = {
 };
 
 export function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
-  console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
+  const message = `${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`;
+  console.info(message);
+  logDiffTimingMark(message);
 }
 
 export function logDiffMemoryMark(event: string, payload: Record<string, unknown>) {
-  console.info(`${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`);
+  const message = `${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`;
+  console.info(message);
+  logDiffTimingMark(message);
 }
 
 export function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource) {

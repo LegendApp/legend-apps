@@ -1,8 +1,10 @@
 function createParser() {
   return {
+    logTimingMark: jest.fn(() => 1),
     loadGitFolderDiff: jest.fn(async () => ({ ok: "git" })),
     loadUnifiedDiff: jest.fn(async () => ({ ok: "unified" })),
     loadUnifiedDiffFromUrl: jest.fn(async () => ({ ok: "url" })),
+    startGitFolderDiff: jest.fn(() => ({ ok: "session" })),
   };
 }
 
@@ -39,6 +41,22 @@ describe("@legend-desktop/diff-parser", () => {
     await diffParser.loadGitFolderDiff("/tmp/repo", 25);
 
     expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25);
+  });
+
+  it("starts progressive git folder diff sessions", () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    expect(diffParser.startGitFolderDiff("/tmp/repo")).toEqual({ ok: "session" });
+
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo");
+  });
+
+  it("logs timing diagnostics without throwing", () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    diffParser.logDiffTimingMark("[DiffOpenTiming] test {}");
+
+    expect(parser.logTimingMark).toHaveBeenCalledWith("[DiffOpenTiming] test {}");
   });
 
   it("loads unified diff text with default and explicit row counts", async () => {

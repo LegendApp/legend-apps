@@ -660,6 +660,69 @@ double HybridDiffDocument::stopBackgroundTokenization() {
   return getTokenizedRowVersion();
 }
 
+void HybridDiffDocument::appendProgressFile(
+    DiffFileSummary file,
+    DiffFileSources fileSources,
+    DiffRenderRow headerRow) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  files_.push_back(std::move(file));
+  fileSources_.push_back(std::move(fileSources));
+  rows_.push_back(std::move(headerRow));
+  timing_.fileCount = static_cast<double>(files_.size());
+  timing_.rowCount = static_cast<double>(rows_.size());
+  sideBySideLinesReady_ = false;
+  sideBySideLines_.clear();
+}
+
+void HybridDiffDocument::setProgressFiles(
+    std::vector<DiffFileSummary> files,
+    std::vector<DiffFileSources> fileSources) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  files_ = std::move(files);
+  fileSources_ = std::move(fileSources);
+  timing_.fileCount = static_cast<double>(files_.size());
+}
+
+void HybridDiffDocument::appendProgressRow(DiffRenderRow row) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  rows_.push_back(std::move(row));
+  timing_.rowCount = static_cast<double>(rows_.size());
+  sideBySideLinesReady_ = false;
+  sideBySideLines_.clear();
+}
+
+void HybridDiffDocument::updateProgressFile(const DiffFileSummary& file) {
+  const auto fileIndex = static_cast<size_t>(std::max(0.0, std::floor(file.index)));
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (fileIndex < files_.size()) {
+    files_[fileIndex] = file;
+    if (fileIndex < fileSources_.size()) {
+      auto& sources = fileSources_[fileIndex];
+      sources.oldPath = file.oldPath;
+      sources.newPath = file.path;
+      sources.status = file.status;
+      sources.isBinary = file.isBinary;
+    }
+  }
+}
+
+void HybridDiffDocument::setProgressRepositoryMetadata(
+    std::string repositoryPath,
+    std::string workdirPath,
+    std::string headTreeOid) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  repositoryPath_ = std::move(repositoryPath);
+  workdirPath_ = std::move(workdirPath);
+  headTreeOid_ = std::move(headTreeOid);
+}
+
+void HybridDiffDocument::setProgressTiming(const DiffLoadTiming& timing) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  timing_ = timing;
+  timing_.rowCount = static_cast<double>(rows_.size());
+  timing_.fileCount = static_cast<double>(files_.size());
+}
+
 size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
   size_t size = rows_.capacity() * sizeof(DiffRenderRow) + files_.capacity() * sizeof(DiffFileSummary);
   for (const auto& row : rows_) {

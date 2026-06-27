@@ -1,3 +1,4 @@
+import { logDiffTimingMark } from "@legend-desktop/diff-parser";
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import { setWindowOptions } from "@legend-desktop/window-manager";
@@ -143,7 +144,9 @@ function nowMs() {
 }
 
 function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
-  console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
+  const message = `${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`;
+  console.info(message);
+  logDiffTimingMark(message);
 }
 
 function hashString(value: string) {

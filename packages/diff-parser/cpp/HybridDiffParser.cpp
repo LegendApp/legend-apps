@@ -2,17 +2,38 @@
 
 #include "DiffParserCore.hpp"
 #include "HybridDiffDocument.hpp"
+#include "HybridDiffLoadSession.hpp"
 #include "HybridDiffUrlLoader.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <chrono>
+#include <cstdio>
 #include <string>
+
+#ifdef __APPLE__
+#include <os/log.h>
+#endif
 
 namespace margelo::nitro::legenddesktop::diffparser {
 
 namespace {
 
 using DiffClock = std::chrono::steady_clock;
+
+#ifdef __APPLE__
+os_log_t diffTimingLog() {
+  static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
+  return log;
+}
+#endif
+
+void logDiffTimingMessage(const std::string& message) {
+#ifdef __APPLE__
+  os_log_with_type(diffTimingLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
+#else
+  std::fprintf(stderr, "%s\n", message.c_str());
+#endif
+}
 
 double elapsedDiffMs(DiffClock::time_point start, DiffClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
@@ -49,6 +70,16 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
 } // namespace
 
 HybridDiffParser::HybridDiffParser() : HybridObject(TAG) {}
+
+double HybridDiffParser::logTimingMark(const std::string& message) {
+  logDiffTimingMessage(message);
+  return 1;
+}
+
+std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
+    const std::string& folderPath) {
+  return HybridDiffLoadSession::create(folderPath);
+}
 
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,

@@ -1,5 +1,6 @@
 import { AutoUpdater } from "@legend-desktop/auto-updater";
 import { commandRunner } from "@legend-desktop/command-runner";
+import { logDiffTimingMark } from "@legend-desktop/diff-parser";
 import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
 import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
 import { initializeSyntaxAssetsSync } from "@legend-desktop/syntax-parser";
@@ -47,11 +48,15 @@ function elapsedMs(start: number) {
 }
 
 function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
-  console.info(`${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`);
+  const message = `${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`;
+  console.info(message);
+  logDiffTimingMark(message);
 }
 
 function logDiffMemoryMark(event: string, payload: Record<string, unknown>) {
-  console.info(`${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`);
+  const message = `${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`;
+  console.info(message);
+  logDiffTimingMark(message);
 }
 
 function reportDiffAppControllerError(error: unknown) {

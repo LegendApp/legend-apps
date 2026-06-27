@@ -51,6 +51,7 @@ export type DiffViewerState =
     document: DiffDocument;
     files: DiffFileSummary[];
     initialRows: DiffRenderRow[];
+    loadComplete?: boolean;
     timing: DiffLoadTiming;
   }
   | {

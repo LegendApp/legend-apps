@@ -93,6 +93,21 @@ export interface DiffLoadResult {
   timing: DiffLoadTiming;
 }
 
+export interface DiffLoadProgress {
+  document: DiffDocument;
+  files: DiffFileSummary[];
+  initialRows: DiffRenderRow[];
+  scopes: DiffSyntaxScope[];
+  timing: DiffLoadTiming;
+  rowCount: number;
+  fileCount: number;
+  rowVersion: number;
+  fileVersion: number;
+  complete: boolean;
+  cancelled: boolean;
+  error: string;
+}
+
 export interface DiffDocument
   extends HybridObject<{
     ios: "c++";
@@ -121,10 +136,21 @@ export interface DiffDocument
   stopBackgroundTokenization(): number;
 }
 
+export interface DiffLoadSession
+  extends HybridObject<{
+    ios: "c++";
+  }> {
+  getDocument(): DiffDocument;
+  consumeChanges(initialRowCount: number): DiffLoadProgress;
+  cancel(): number;
+}
+
 export interface DiffParser
   extends HybridObject<{
     ios: "c++";
   }> {
+  logTimingMark(message: string): number;
+  startGitFolderDiff(folderPath: string): DiffLoadSession;
   loadGitFolderDiff(folderPath: string, initialRowCount: number): Promise<DiffLoadResult>;
   loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
   loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;

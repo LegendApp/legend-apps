@@ -87,6 +87,20 @@ public:
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
   void logMemorySnapshot(const std::string& reason) noexcept;
+  void appendProgressFile(
+      DiffFileSummary file,
+      DiffFileSources fileSources,
+      DiffRenderRow headerRow);
+  void setProgressFiles(
+      std::vector<DiffFileSummary> files,
+      std::vector<DiffFileSources> fileSources);
+  void appendProgressRow(DiffRenderRow row);
+  void updateProgressFile(const DiffFileSummary& file);
+  void setProgressRepositoryMetadata(
+      std::string repositoryPath,
+      std::string workdirPath,
+      std::string headTreeOid);
+  void setProgressTiming(const DiffLoadTiming& timing);
 
 protected:
   size_t getExternalMemorySize() noexcept override;

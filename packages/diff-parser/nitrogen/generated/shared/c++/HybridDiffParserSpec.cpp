@@ -14,6 +14,8 @@ namespace margelo::nitro::legenddesktop::diffparser {
     HybridObject::loadHybridMethods();
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
+      prototype.registerHybridMethod("logTimingMark", &HybridDiffParserSpec::logTimingMark);
+      prototype.registerHybridMethod("startGitFolderDiff", &HybridDiffParserSpec::startGitFolderDiff);
       prototype.registerHybridMethod("loadGitFolderDiff", &HybridDiffParserSpec::loadGitFolderDiff);
       prototype.registerHybridMethod("loadUnifiedDiff", &HybridDiffParserSpec::loadUnifiedDiff);
       prototype.registerHybridMethod("loadUnifiedDiffFromUrl", &HybridDiffParserSpec::loadUnifiedDiffFromUrl);

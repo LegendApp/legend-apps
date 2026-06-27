@@ -13,12 +13,16 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
+// Forward declaration of `HybridDiffLoadSessionSpec` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::diffparser { class HybridDiffLoadSessionSpec; }
 // Forward declaration of `DiffLoadResult` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadResult; }
 
+#include <memory>
+#include "HybridDiffLoadSessionSpec.hpp"
+#include <string>
 #include "DiffLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
-#include <string>
 
 namespace margelo::nitro::legenddesktop::diffparser {
 
@@ -51,6 +55,8 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
     public:
       // Methods
+      virtual double logTimingMark(const std::string& message) = 0;
+      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(const std::string& diffText, const std::string& sourceLabel, double initialRowCount) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel, double initialRowCount) = 0;

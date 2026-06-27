@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include "git2.h"
 #include <memory>
@@ -216,6 +217,86 @@ std::string deltaStatus(const git_diff_delta* delta) {
   }
 }
 
+struct StatusPathSummary {
+  std::string path;
+  std::string oldPath;
+  std::string status;
+};
+
+std::string statusFlagsStatus(unsigned int status) {
+  if ((status & (GIT_STATUS_WT_NEW | GIT_STATUS_INDEX_NEW)) != 0) {
+    return "added";
+  }
+  if ((status & (GIT_STATUS_WT_DELETED | GIT_STATUS_INDEX_DELETED)) != 0) {
+    return "deleted";
+  }
+  if ((status & (GIT_STATUS_WT_RENAMED | GIT_STATUS_INDEX_RENAMED)) != 0) {
+    return "renamed";
+  }
+  if ((status & (GIT_STATUS_WT_TYPECHANGE | GIT_STATUS_INDEX_TYPECHANGE)) != 0) {
+    return "modified";
+  }
+  if ((status & (GIT_STATUS_WT_MODIFIED | GIT_STATUS_INDEX_MODIFIED)) != 0) {
+    return "modified";
+  }
+  return "unknown";
+}
+
+DiffFileSummary createStatusFileSummary(const StatusPathSummary& summary, double fileIndex) {
+  DiffFileSummary file;
+  file.index = fileIndex;
+  file.path = summary.path;
+  file.oldPath = summary.oldPath;
+  file.status = summary.status;
+  file.additions = 0;
+  file.deletions = 0;
+  file.rowStart = 0;
+  file.rowCount = 0;
+  file.isBinary = false;
+  return file;
+}
+
+DiffFileSources createStatusFileSources(const DiffFileSummary& file) {
+  DiffFileSources sources;
+  sources.fileIndex = file.index;
+  sources.oldPath = file.oldPath;
+  sources.newPath = file.path;
+  sources.status = file.status;
+  sources.isBinary = file.isBinary;
+  return sources;
+}
+
+struct StatusPathCollectState {
+  const DiffProgressiveCallbacks& callbacks;
+  std::vector<StatusPathSummary> paths;
+  bool stopAfterFirst = false;
+  bool stoppedAfterFirst = false;
+  bool cancelled = false;
+};
+
+int onStatusPath(const char* rawPath, unsigned int status, void* payload) {
+  auto* state = static_cast<StatusPathCollectState*>(payload);
+  if (state->callbacks.shouldCancel && state->callbacks.shouldCancel()) {
+    state->cancelled = true;
+    return 1;
+  }
+  if (rawPath == nullptr || rawPath[0] == '\0' || status == GIT_STATUS_CURRENT) {
+    return 0;
+  }
+
+  StatusPathSummary summary;
+  summary.path = rawPath;
+  summary.oldPath = rawPath;
+  summary.status = statusFlagsStatus(status);
+  state->paths.push_back(std::move(summary));
+
+  if (state->stopAfterFirst) {
+    state->stoppedAfterFirst = true;
+    return 1;
+  }
+  return 0;
+}
+
 std::string trimDiffLine(const char* content, size_t contentLength) {
   if (content == nullptr || contentLength <= 0) {
     return "";
@@ -226,21 +307,6 @@ std::string trimDiffLine(const char* content, size_t contentLength) {
     length -= 1;
   }
   return std::string(content, length);
-}
-
-std::vector<DiffFileSources> createFileSources(const std::vector<DiffFileSummary>& files) {
-  std::vector<DiffFileSources> fileSources;
-  fileSources.reserve(files.size());
-  for (const auto& file : files) {
-    DiffFileSources sources;
-    sources.fileIndex = file.index;
-    sources.oldPath = file.oldPath;
-    sources.newPath = file.path;
-    sources.status = file.status;
-    sources.isBinary = file.isBinary;
-    fileSources.push_back(std::move(sources));
-  }
-  return fileSources;
 }
 
 double getSideBySideSourceStart(double oldRowIndex, double newRowIndex, double fallbackIndex) {
@@ -300,6 +366,33 @@ struct DiffBuildState {
     if (currentFileIndex >= 0 && static_cast<size_t>(currentFileIndex) < files.size()) {
       auto& file = files[static_cast<size_t>(currentFileIndex)];
       file.rowCount = static_cast<double>(rows.size()) - file.rowStart;
+    }
+  }
+};
+
+struct ProgressiveDiffBuildState {
+  const DiffProgressiveCallbacks& callbacks;
+  DiffFileSummary currentFile;
+  double rowCount = 0;
+  double fileCount = 0;
+  int currentFileIndex = -1;
+  int currentHunkIndex = -1;
+  int currentOldLine = -1;
+  int currentNewLine = -1;
+  double nextFileIndex = -1;
+  bool cancelled = false;
+
+  bool shouldCancel() {
+    cancelled = callbacks.shouldCancel ? callbacks.shouldCancel() : false;
+    return cancelled;
+  }
+
+  void finishCurrentFile() {
+    if (currentFileIndex >= 0) {
+      currentFile.rowCount = rowCount - currentFile.rowStart;
+      if (callbacks.onFileFinished) {
+        callbacks.onFileFinished(currentFile);
+      }
     }
   }
 };
@@ -434,13 +527,21 @@ struct UnifiedDiffBuildState {
   }
 };
 
-int onGitFile(const git_diff_delta* delta, float, void* payload) {
-  auto* state = static_cast<DiffBuildState*>(payload);
+int onProgressiveGitFile(const git_diff_delta* delta, float, void* payload) {
+  auto* state = static_cast<ProgressiveDiffBuildState*>(payload);
+  if (state->shouldCancel()) {
+    return 1;
+  }
+
   state->finishCurrentFile();
 
-  const double fileIndex = static_cast<double>(state->files.size());
-  state->currentFileIndex = static_cast<int>(state->files.size());
+  const double fileIndex = state->nextFileIndex >= 0 ? state->nextFileIndex : state->fileCount;
+  state->nextFileIndex = -1;
+  state->currentFileIndex = static_cast<int>(fileIndex);
   state->currentHunkIndex = -1;
+  state->currentOldLine = -1;
+  state->currentNewLine = -1;
+  state->fileCount = std::max(state->fileCount, fileIndex + 1);
 
   DiffFileSummary file;
   file.index = fileIndex;
@@ -449,27 +550,41 @@ int onGitFile(const git_diff_delta* delta, float, void* payload) {
   file.status = deltaStatus(delta);
   file.additions = 0;
   file.deletions = 0;
-  file.rowStart = static_cast<double>(state->rows.size());
+  file.rowStart = state->rowCount;
   file.rowCount = 0;
   file.isBinary = (delta->flags & GIT_DIFF_FLAG_BINARY) != 0;
-  state->files.push_back(std::move(file));
+
+  DiffFileSources fileSources;
+  fileSources.fileIndex = file.index;
+  fileSources.oldPath = file.oldPath;
+  fileSources.newPath = file.path;
+  fileSources.status = file.status;
+  fileSources.isBinary = file.isBinary;
 
   DiffRenderRow row;
-  row.index = static_cast<double>(state->rows.size());
+  row.index = state->rowCount;
   row.kind = diffRowKindFileHeader;
   row.fileIndex = fileIndex;
   row.hunkIndex = -1;
   row.oldLineNumber = -1;
   row.newLineNumber = -1;
   row.changeType = diffChangeTypeMeta;
-  row.text = state->files.back().path;
+  row.text = file.path;
   row.tokens = {};
-  state->rows.push_back(std::move(row));
+  state->rowCount += 1;
+
+  state->currentFile = file;
+  if (state->callbacks.onFile) {
+    state->callbacks.onFile(file, fileSources, row);
+  }
   return 0;
 }
 
-int onGitHunk(const git_diff_delta*, const git_diff_hunk* hunk, void* payload) {
-  auto* state = static_cast<DiffBuildState*>(payload);
+int onProgressiveGitHunk(const git_diff_delta*, const git_diff_hunk* hunk, void* payload) {
+  auto* state = static_cast<ProgressiveDiffBuildState*>(payload);
+  if (state->shouldCancel()) {
+    return 1;
+  }
   if (state->currentFileIndex < 0) {
     return 0;
   }
@@ -480,12 +595,15 @@ int onGitHunk(const git_diff_delta*, const git_diff_hunk* hunk, void* payload) {
   return 0;
 }
 
-int onGitLine(
+int onProgressiveGitLine(
     const git_diff_delta*,
     const git_diff_hunk*,
     const git_diff_line* line,
     void* payload) {
-  auto* state = static_cast<DiffBuildState*>(payload);
+  auto* state = static_cast<ProgressiveDiffBuildState*>(payload);
+  if (state->shouldCancel()) {
+    return 1;
+  }
   if (state->currentFileIndex < 0) {
     return 0;
   }
@@ -496,11 +614,11 @@ int onGitLine(
   if (line->origin == GIT_DIFF_LINE_ADDITION) {
     changeType = diffChangeTypeAdd;
     state->currentNewLine += 1;
-    state->files[static_cast<size_t>(state->currentFileIndex)].additions += 1;
+    state->currentFile.additions += 1;
   } else if (line->origin == GIT_DIFF_LINE_DELETION) {
     changeType = diffChangeTypeRemove;
     state->currentOldLine += 1;
-    state->files[static_cast<size_t>(state->currentFileIndex)].deletions += 1;
+    state->currentFile.deletions += 1;
   } else if (line->origin == GIT_DIFF_LINE_ADD_EOFNL) {
     changeType = diffChangeTypeAdd;
   } else if (line->origin == GIT_DIFF_LINE_DEL_EOFNL) {
@@ -511,7 +629,7 @@ int onGitLine(
   }
 
   DiffRenderRow row;
-  row.index = static_cast<double>(state->rows.size());
+  row.index = state->rowCount;
   row.kind = diffRowKindLine;
   row.fileIndex = static_cast<double>(state->currentFileIndex);
   row.hunkIndex = static_cast<double>(state->currentHunkIndex);
@@ -520,7 +638,11 @@ int onGitLine(
   row.changeType = changeType;
   row.text = trimDiffLine(line->content, line->content_len);
   row.tokens = {};
-  state->rows.push_back(std::move(row));
+  state->rowCount += 1;
+
+  if (state->callbacks.onRow) {
+    state->callbacks.onRow(row);
+  }
   return 0;
 }
 
@@ -685,15 +807,26 @@ DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {
   };
 }
 
-DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
+DiffLoadTiming parseGitRepositoryDiffProgressive(
+    const std::string& folderPath,
+    const DiffProgressiveCallbacks& callbacks) {
   const auto loadStartedAt = DiffClock::now();
+  if (callbacks.onPhase) {
+    callbacks.onPhase("beforeLibGitInit");
+  }
   ensureLibGit2Initialized();
+  if (callbacks.onPhase) {
+    callbacks.onPhase("afterLibGitInit");
+  }
   git_repository* rawRepo = nullptr;
   const std::string normalizedPath = normalizeFolderPath(folderPath);
   if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
   }
   const auto repoOpenedAt = DiffClock::now();
+  if (callbacks.onPhase) {
+    callbacks.onPhase("afterRepoOpen");
+  }
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
 
   git_diff_options options = {};
@@ -723,11 +856,21 @@ DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
     throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD tree"));
   }
   std::unique_ptr<git_tree, GitTreeDeleter> headTree(rawHeadTree);
+  if (callbacks.onPhase) {
+    callbacks.onPhase("afterHeadTree");
+  }
   const char* rawRepositoryPath = git_repository_path(repo.get());
   const char* rawWorkdirPath = git_repository_workdir(repo.get());
   std::string repositoryPath = rawRepositoryPath != nullptr ? std::string(rawRepositoryPath) : std::string();
   std::string workdirPath = rawWorkdirPath != nullptr ? std::string(rawWorkdirPath) : std::string();
   std::string headTreeOid = git_oid_tostr_s(git_tree_id(headTree.get()));
+  if (callbacks.onRepositoryMetadata) {
+    callbacks.onRepositoryMetadata(DiffRepositoryMetadata{
+        .repositoryPath = repositoryPath,
+        .workdirPath = workdirPath,
+        .headTreeOid = headTreeOid,
+    });
+  }
 
   git_diff* rawDiff = nullptr;
   if (git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &options) != 0) {
@@ -736,13 +879,12 @@ DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
   const auto diffCreatedAt = DiffClock::now();
   std::unique_ptr<git_diff, GitDiffDeleter> diff(rawDiff);
 
-  DiffBuildState state;
-  if (git_diff_foreach(diff.get(), onGitFile, nullptr, onGitHunk, onGitLine, &state) != 0) {
+  ProgressiveDiffBuildState state{ .callbacks = callbacks };
+  if (git_diff_foreach(diff.get(), onProgressiveGitFile, nullptr, onProgressiveGitHunk, onProgressiveGitLine, &state) != 0 && !state.cancelled) {
     throw std::runtime_error(gitErrorMessage("Failed to read git diff"));
   }
   state.finishCurrentFile();
   const auto diffWalkedAt = DiffClock::now();
-  auto fileSources = createFileSources(state.files);
 
   DiffLoadTiming timing;
   timing.openRepoMs = elapsedDiffMs(loadStartedAt, repoOpenedAt);
@@ -754,12 +896,236 @@ DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
   timing.copyFilesMs = 0;
   timing.copyInitialRowsMs = 0;
   timing.nativeTotalMs = elapsedDiffMs(loadStartedAt, diffWalkedAt);
-  timing.rowCount = static_cast<double>(state.rows.size());
-  timing.fileCount = static_cast<double>(state.files.size());
+  timing.rowCount = state.rowCount;
+  timing.fileCount = state.fileCount;
+
+  return timing;
+}
+
+DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
+    const std::string& folderPath,
+    const DiffProgressiveCallbacks& callbacks) {
+  const auto loadStartedAt = DiffClock::now();
+  if (callbacks.onPhase) {
+    callbacks.onPhase("beforeLibGitInit");
+  }
+  ensureLibGit2Initialized();
+  if (callbacks.onPhase) {
+    callbacks.onPhase("afterLibGitInit");
+  }
+  git_repository* rawRepo = nullptr;
+  const std::string normalizedPath = normalizeFolderPath(folderPath);
+  if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
+  }
+  const auto repoOpenedAt = DiffClock::now();
+  if (callbacks.onPhase) {
+    callbacks.onPhase("afterRepoOpen");
+  }
+  std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
+
+  git_reference* rawHead = nullptr;
+  if (git_repository_head(&rawHead, repo.get()) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to resolve repository HEAD"));
+  }
+  std::unique_ptr<git_reference, GitReferenceDeleter> head(rawHead);
+  const git_oid* headTarget = git_reference_target(head.get());
+  if (headTarget == nullptr) {
+    throw std::runtime_error("Failed to read repository HEAD target");
+  }
+
+  git_commit* rawHeadCommit = nullptr;
+  if (git_commit_lookup(&rawHeadCommit, repo.get(), headTarget) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD commit"));
+  }
+  std::unique_ptr<git_commit, GitCommitDeleter> headCommit(rawHeadCommit);
+
+  git_tree* rawHeadTree = nullptr;
+  if (git_commit_tree(&rawHeadTree, headCommit.get()) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD tree"));
+  }
+  std::unique_ptr<git_tree, GitTreeDeleter> headTree(rawHeadTree);
+  if (callbacks.onPhase) {
+    callbacks.onPhase("afterHeadTree");
+  }
+  const char* rawRepositoryPath = git_repository_path(repo.get());
+  const char* rawWorkdirPath = git_repository_workdir(repo.get());
+  std::string repositoryPath = rawRepositoryPath != nullptr ? std::string(rawRepositoryPath) : std::string();
+  std::string workdirPath = rawWorkdirPath != nullptr ? std::string(rawWorkdirPath) : std::string();
+  std::string headTreeOid = git_oid_tostr_s(git_tree_id(headTree.get()));
+  if (callbacks.onRepositoryMetadata) {
+    callbacks.onRepositoryMetadata(DiffRepositoryMetadata{
+        .repositoryPath = repositoryPath,
+        .workdirPath = workdirPath,
+        .headTreeOid = headTreeOid,
+    });
+  }
+
+  git_status_options statusOptions = {};
+  if (git_status_options_init(&statusOptions, GIT_STATUS_OPTIONS_VERSION) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to initialize git status options"));
+  }
+  statusOptions.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+  statusOptions.flags = GIT_STATUS_OPT_NO_REFRESH;
+
+  git_diff_options diffOptions = {};
+  if (git_diff_options_init(&diffOptions, GIT_DIFF_OPTIONS_VERSION) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
+  }
+  diffOptions.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+
+  std::vector<DiffFileSummary> files;
+  std::vector<DiffFileSources> fileSources;
+  ProgressiveDiffBuildState state{ .callbacks = callbacks };
+
+  auto appendDiscoveredFile = [&](const StatusPathSummary& summary) {
+    const auto fileIndex = static_cast<double>(files.size());
+    auto file = createStatusFileSummary(summary, fileIndex);
+    auto sources = createStatusFileSources(file);
+    files.push_back(std::move(file));
+    fileSources.push_back(std::move(sources));
+  };
+
+  auto publishDiscoveredFiles = [&] {
+    if (callbacks.onFilesDiscovered) {
+      callbacks.onFilesDiscovered(files, fileSources);
+    }
+  };
+
+  auto generatePathDiff = [&](const DiffFileSummary& file) {
+    auto path = file.status == "deleted" && !file.oldPath.empty() ? file.oldPath : file.path;
+    char* pathspecString = path.data();
+    diffOptions.pathspec.strings = &pathspecString;
+    diffOptions.pathspec.count = 1;
+
+    git_diff* rawDiff = nullptr;
+    if (git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &diffOptions) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to create path diff"));
+    }
+    std::unique_ptr<git_diff, GitDiffDeleter> diff(rawDiff);
+
+    state.nextFileIndex = file.index;
+    if (git_diff_foreach(diff.get(), onProgressiveGitFile, nullptr, onProgressiveGitHunk, onProgressiveGitLine, &state) != 0 && !state.cancelled) {
+      throw std::runtime_error(gitErrorMessage("Failed to read path diff"));
+    }
+  };
+
+  StatusPathCollectState firstStatusState{
+      .callbacks = callbacks,
+      .stopAfterFirst = true,
+  };
+  const auto firstStatusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &firstStatusState);
+  if (firstStatusResult < 0 || (firstStatusResult > 0 && !firstStatusState.stoppedAfterFirst && !firstStatusState.cancelled)) {
+    throw std::runtime_error(gitErrorMessage("Failed to read first git status"));
+  }
+
+  if (!firstStatusState.paths.empty() && !firstStatusState.cancelled) {
+    appendDiscoveredFile(firstStatusState.paths.front());
+    publishDiscoveredFiles();
+    generatePathDiff(files.front());
+    state.finishCurrentFile();
+    files.front() = state.currentFile;
+    fileSources.front() = createStatusFileSources(files.front());
+  }
+
+  const auto firstDiffCreatedAt = DiffClock::now();
+
+  statusOptions.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS | GIT_STATUS_OPT_NO_REFRESH;
+  StatusPathCollectState statusState{ .callbacks = callbacks };
+  const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
+  if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
+    throw std::runtime_error(gitErrorMessage("Failed to read git status"));
+  }
+  const auto statusCreatedAt = DiffClock::now();
+
+  const auto firstPath = !files.empty() ? files.front().path : std::string();
+  for (const auto& statusPath : statusState.paths) {
+    if (!firstPath.empty() && statusPath.path == firstPath) {
+      continue;
+    }
+    appendDiscoveredFile(statusPath);
+  }
+
+  if (!files.empty()) {
+    publishDiscoveredFiles();
+    if (!firstPath.empty() && callbacks.onFileFinished) {
+      callbacks.onFileFinished(files.front());
+    }
+  }
+
+  state.fileCount = static_cast<double>(files.size());
+
+  for (const auto& file : files) {
+    if (state.shouldCancel()) {
+      break;
+    }
+    if (!firstPath.empty() && file.path == firstPath) {
+      continue;
+    }
+    generatePathDiff(file);
+  }
+
+  state.finishCurrentFile();
+  const auto diffWalkedAt = DiffClock::now();
+
+  DiffLoadTiming timing;
+  timing.openRepoMs = elapsedDiffMs(loadStartedAt, repoOpenedAt);
+  timing.fetchMs = 0;
+  timing.createDiffMs = elapsedDiffMs(repoOpenedAt, firstDiffCreatedAt);
+  timing.walkDiffMs = elapsedDiffMs(statusCreatedAt, diffWalkedAt);
+  timing.diffMs = timing.walkDiffMs;
+  timing.documentMs = 0;
+  timing.copyFilesMs = 0;
+  timing.copyInitialRowsMs = 0;
+  timing.nativeTotalMs = elapsedDiffMs(loadStartedAt, diffWalkedAt);
+  timing.rowCount = state.rowCount;
+  timing.fileCount = static_cast<double>(files.size());
+
+  return timing;
+}
+
+DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
+  std::vector<DiffFileSummary> files;
+  std::vector<DiffRenderRow> rows;
+  std::vector<DiffFileSources> fileSources;
+  std::string repositoryPath;
+  std::string workdirPath;
+  std::string headTreeOid;
+
+  const auto timing = parseGitRepositoryDiffProgressive(folderPath, DiffProgressiveCallbacks{
+      .shouldCancel = [] {
+        return false;
+      },
+      .onRepositoryMetadata = [&](DiffRepositoryMetadata metadata) {
+        repositoryPath = std::move(metadata.repositoryPath);
+        workdirPath = std::move(metadata.workdirPath);
+        headTreeOid = std::move(metadata.headTreeOid);
+      },
+      .onFile = [&](const DiffFileSummary& file, const DiffFileSources& sources, const DiffRenderRow& headerRow) {
+        files.push_back(file);
+        fileSources.push_back(sources);
+        rows.push_back(headerRow);
+      },
+      .onRow = [&](const DiffRenderRow& row) {
+        rows.push_back(row);
+      },
+      .onFileFinished = [&](const DiffFileSummary& file) {
+        const auto fileIndex = static_cast<size_t>(std::max(0.0, std::floor(file.index)));
+        if (fileIndex < files.size()) {
+          files[fileIndex] = file;
+          if (fileIndex < fileSources.size()) {
+            fileSources[fileIndex].oldPath = file.oldPath;
+            fileSources[fileIndex].newPath = file.path;
+            fileSources[fileIndex].status = file.status;
+            fileSources[fileIndex].isBinary = file.isBinary;
+          }
+        }
+      },
+  });
 
   return {
-    .files = std::move(state.files),
-    .rows = std::move(state.rows),
+    .files = std::move(files),
+    .rows = std::move(rows),
     .fileSources = std::move(fileSources),
     .repositoryPath = std::move(repositoryPath),
     .workdirPath = std::move(workdirPath),
