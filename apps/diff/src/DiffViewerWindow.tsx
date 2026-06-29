@@ -1031,14 +1031,6 @@ function DiffLoadedBody({
           />
         ) : null}
         {list}
-        {activeMergeFile ? (
-          <DiffMergeHeader
-            borderColor={listExtraData.borderColor}
-            mergeFile={activeMergeFile}
-            mutedColor={mutedColor}
-            primaryColor={primaryColor}
-          />
-        ) : null}
       </View>
     );
   }
@@ -1806,8 +1798,12 @@ function useDiffInlineMergeModel({
         const rowStart = file ? Math.max(0, Math.floor(file.rowStart)) : -1;
         const rowEnd = file ? rowStart + Math.max(0, Math.floor(file.rowCount)) : -1;
         const mergeFile = getMergeFile(file);
-        if (file && mergeFile && !collapsedFileIndexes.has(file.index) && rowIndex === rowStart) {
-          itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, rowStart, nextItemIndex, rowByItemIndex));
+        if (file && mergeFile && rowIndex === rowStart) {
+          itemIndexes.push(rowIndex);
+          sourceRowByItemIndex.set(rowIndex, rowIndex);
+          if (!collapsedFileIndexes.has(file.index)) {
+            itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, rowStart, nextItemIndex, rowByItemIndex));
+          }
         } else if (file && mergeFile && !collapsedFileIndexes.has(file.index) && rowIndex > rowStart && rowIndex < rowEnd) {
           // The merge rows replace the original conflicted file body.
         } else {
@@ -1829,6 +1825,9 @@ function useDiffInlineMergeModel({
         const mergeFile = getMergeFile(file);
         if (header && file && mergeFile && !collapsedFileIndexes.has(file.index)) {
           const nextHeader = headerListIndexes.find((headerIndex) => headerIndex > listIndex) ?? sideBySideItemIndexes.length;
+          const rowIndex = sideBySideItemIndexes[listIndex] ?? listIndex;
+          itemIndexes.push(rowIndex);
+          sourceRowByItemIndex.set(rowIndex, rowIndex);
           itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, header.sourceStart, nextItemIndex, rowByItemIndex));
           skipUntil = nextHeader;
         } else {
@@ -1980,32 +1979,6 @@ function useDiffInlineMergeModel({
     mergeListExtraData,
     renderMergeRow,
   };
-}
-
-function DiffMergeHeader({
-  borderColor,
-  mergeFile,
-  mutedColor,
-  primaryColor,
-}: {
-  borderColor: string;
-  mergeFile: DiffMergeConflictFile;
-  mutedColor: string;
-  primaryColor: string;
-}) {
-  return (
-    <View pointerEvents="none" style={[styles.mergeHeader, { borderColor }]}>
-      <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
-        A Current - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
-      </Text>
-      <View style={styles.mergeHeaderMiddle}>
-        <SFSymbol color={primaryColor} name="arrow.triangle.merge" size={13} />
-      </View>
-      <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
-        B Incoming - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
-      </Text>
-    </View>
-  );
 }
 
 function DiffDropSurface({
@@ -4002,30 +3975,6 @@ const styles = StyleSheet.create({
   mergeCommonRow: {
     flexDirection: "row",
     overflow: "visible",
-  },
-  mergeHeader: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    height: 32,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: diffTitlebarTopInset,
-    zIndex: 2,
-  },
-  mergeHeaderLabel: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 32,
-    paddingHorizontal: 10,
-    textTransform: "uppercase",
-  },
-  mergeHeaderMiddle: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 82,
   },
   mergeHunkHeader: {
     alignItems: "center",
