@@ -52,6 +52,7 @@ import {
   type DiffMergeConflictFile,
   type DiffMergeDisplayModel,
   type DiffMergeHunkHeaderInfo,
+  type DiffMergeSideChangeType,
   type DiffMergeState,
 } from "./diffMerge";
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
@@ -851,7 +852,6 @@ function DiffLoadedBody({
           activeFileIndex={activeFileIndex}
           borderColor={listExtraData.borderColor}
           fileByIndex={state.files}
-          fileHeaderBackgroundColor={listExtraData.fileHeaderBackgroundColor}
           foregroundColor={listExtraData.foregroundColor}
           fontFamily={listExtraData.fontFamily}
           fontSize={listExtraData.fontSize}
@@ -1220,26 +1220,64 @@ function getFullMergeDisplayModel(file: DiffMergeConflictFile | null): DiffMerge
 
 function DiffMergeHunkHeader({
   borderColor,
-  fileHeaderBackgroundColor,
   fontFamily,
   fontSize,
   info,
-  mutedColor,
+  syntaxAppearance,
 }: {
   borderColor: string;
-  fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
   info: DiffMergeHunkHeaderInfo;
-  mutedColor: string;
+  syntaxAppearance: "dark" | "light";
 }) {
+  const conflictPalette = getMergeConflictPalette(syntaxAppearance);
   return (
-    <View style={[styles.mergeHunkHeader, { backgroundColor: fileHeaderBackgroundColor, borderColor }]}>
-      <Text selectable={false} style={[styles.mergeHunkHeaderTitle, { color: mutedColor, fontFamily, fontSize }]}>
+    <View style={[styles.mergeHunkHeader, { backgroundColor: conflictPalette.hunkBackground, borderColor }]}>
+      <Text selectable={false} style={[styles.mergeHunkHeaderTitle, { color: conflictPalette.accent, fontFamily, fontSize }]}>
         Hunk {info.hunkNumber}: {info.lineLabel}
       </Text>
     </View>
   );
+}
+
+function getMergeConflictPalette(syntaxAppearance: "dark" | "light") {
+  return syntaxAppearance === "dark"
+    ? {
+        accent: "#d29922",
+        hunkBackground: "rgba(187, 128, 9, 0.28)",
+        rowBackground: "rgba(187, 128, 9, 0.18)",
+      }
+    : {
+        accent: "#9a6700",
+        hunkBackground: "#fff1a7",
+        rowBackground: "#fff8c5",
+      };
+}
+
+function getMergeSideColors(
+  changeType: DiffMergeSideChangeType | undefined,
+  side: "left" | "right",
+  mutedColor: string,
+  syntaxAppearance: "dark" | "light",
+) {
+  const palette = getDiffRowPalette(syntaxAppearance);
+  const conflictPalette = getMergeConflictPalette(syntaxAppearance);
+  const isDelete = changeType === "delete" || (side === "left" && changeType === "modify");
+  const isAdd = changeType === "add" || (side === "right" && changeType === "modify");
+  const isConflict = changeType !== undefined;
+  const backgroundColor = isConflict ? conflictPalette.rowBackground : "transparent";
+  const lineNumberColor = isDelete
+    ? palette.removeAccent
+    : isAdd
+      ? palette.addAccent
+      : isConflict
+        ? conflictPalette.accent
+        : mutedColor;
+  return {
+    backgroundColor,
+    lineNumberColor,
+  };
 }
 
 function DiffMergeCodePane({
@@ -1318,6 +1356,7 @@ function DiffMergeCodePane({
 function DiffMergeCenterGutter({
   block,
   borderColor,
+  conflictBackgroundColor,
   file,
   mutedColor,
   onResolveMergeConflict,
@@ -1326,6 +1365,7 @@ function DiffMergeCenterGutter({
 }: {
   block: DiffMergeConflictBlock | null;
   borderColor: string;
+  conflictBackgroundColor: string;
   file: DiffMergeConflictFile;
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
@@ -1335,7 +1375,7 @@ function DiffMergeCenterGutter({
   const controlsDisabled = resolvingMergeConflictKey !== null;
   const isResolving = block ? resolvingMergeConflictKey === getMergeConflictKey(file, block) : false;
   return (
-    <View style={[styles.mergeCommonMiddle, { borderColor }]}>
+    <View style={[styles.mergeCommonMiddle, { backgroundColor: conflictBackgroundColor, borderColor }]}>
       {block ? (
         <View style={styles.mergeChoiceColumn}>
           <DiffMergeActionButton
@@ -1383,7 +1423,6 @@ function DiffMergeLineRow({
   borderColor,
   controlBlock,
   file,
-  fileHeaderBackgroundColor,
   foregroundColor,
   fontFamily,
   fontSize,
@@ -1404,7 +1443,6 @@ function DiffMergeLineRow({
   borderColor: string;
   controlBlock: DiffMergeConflictBlock | null;
   file: DiffMergeConflictFile;
-  fileHeaderBackgroundColor: string;
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
@@ -1422,36 +1460,33 @@ function DiffMergeLineRow({
   syntaxAppearance: "dark" | "light";
   tokenStyleById: SyntaxStyleMap;
 }) {
-  const palette = getDiffRowPalette(syntaxAppearance);
-  const isLeftChanged = Boolean(row?.conflictBlock && row.leftLineNumber !== undefined);
-  const isRightChanged = Boolean(row?.conflictBlock && row.rightLineNumber !== undefined);
-  const leftBackgroundColor = isLeftChanged ? palette.removeBackground : "transparent";
-  const rightBackgroundColor = isRightChanged ? palette.addBackground : "transparent";
-  const leftLineNumberColor = isLeftChanged ? palette.removeAccent : mutedColor;
-  const rightLineNumberColor = isRightChanged ? palette.addAccent : mutedColor;
+  const leftColors = getMergeSideColors(row?.leftChangeType, "left", mutedColor, syntaxAppearance);
+  const rightColors = getMergeSideColors(row?.rightChangeType, "right", mutedColor, syntaxAppearance);
+  const conflictBackgroundColor = row?.conflictBlock
+    ? getMergeConflictPalette(syntaxAppearance).rowBackground
+    : "transparent";
 
   return (
     <>
       {row?.hunkHeader ? (
         <DiffMergeHunkHeader
           borderColor={borderColor}
-          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
           info={row.hunkHeader}
-          mutedColor={mutedColor}
+          syntaxAppearance={syntaxAppearance}
         />
       ) : null}
       <View style={[styles.mergeCommonRow, { height: rowHeight }]}>
         <View style={styles.mergeCommonPane}>
           <DiffMergeCodePane
-            backgroundColor={leftBackgroundColor}
+            backgroundColor={leftColors.backgroundColor}
             foregroundColor={foregroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
             lineNumber={row?.leftLineNumber}
             lineNumberWidth={diffSideBySideLineNumberWidth}
-            mutedColor={leftLineNumberColor}
+            mutedColor={leftColors.lineNumberColor}
             nativeTokens={leftTokens}
             renderer={renderer}
             rowHeight={rowHeight}
@@ -1463,6 +1498,7 @@ function DiffMergeLineRow({
         <DiffMergeCenterGutter
           block={controlBlock}
           borderColor={borderColor}
+          conflictBackgroundColor={conflictBackgroundColor}
           file={file}
           mutedColor={mutedColor}
           onResolveMergeConflict={onResolveMergeConflict}
@@ -1471,13 +1507,13 @@ function DiffMergeLineRow({
         />
         <View style={styles.mergeCommonPane}>
           <DiffMergeCodePane
-            backgroundColor={rightBackgroundColor}
+            backgroundColor={rightColors.backgroundColor}
             foregroundColor={foregroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
             lineNumber={row?.rightLineNumber}
             lineNumberWidth={diffSideBySideLineNumberWidth}
-            mutedColor={rightLineNumberColor}
+            mutedColor={rightColors.lineNumberColor}
             nativeTokens={rightTokens}
             renderer={renderer}
             rowHeight={rowHeight}
@@ -1495,7 +1531,6 @@ function DiffMergeContent({
   activeFileIndex,
   borderColor,
   fileByIndex,
-  fileHeaderBackgroundColor,
   foregroundColor,
   fontFamily,
   fontSize,
@@ -1516,7 +1551,6 @@ function DiffMergeContent({
   activeFileIndex: number | null;
   borderColor: string;
   fileByIndex: DiffFileSummary[];
-  fileHeaderBackgroundColor: string;
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
@@ -1607,7 +1641,6 @@ function DiffMergeContent({
           borderColor={borderColor}
           controlBlock={controlBlock}
           file={mergeFile}
-          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           foregroundColor={foregroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
@@ -1627,7 +1660,7 @@ function DiffMergeContent({
         />
       );
     },
-    [borderColor, controlRowByBlockKey, fileHeaderBackgroundColor, foregroundColor, fontFamily, fontSize, mergeDisplayModel, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByBlockKey, foregroundColor, fontFamily, fontSize, mergeDisplayModel, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {

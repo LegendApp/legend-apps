@@ -22,15 +22,19 @@ export type DiffMergeHunkHeaderInfo = {
   lineLabel: string;
 };
 
+export type DiffMergeSideChangeType = "add" | "delete" | "modify" | "none";
+
 export type DiffMergeDisplayLine = {
   kind: "line";
   conflictBlock?: DiffMergeConflictBlock;
   conflictLineIndex?: number;
   hunkHeader?: DiffMergeHunkHeaderInfo;
   hunkIndex?: number;
+  leftChangeType?: DiffMergeSideChangeType;
   leftLineNumber?: number;
   leftText: string;
   lineNumber: number;
+  rightChangeType?: DiffMergeSideChangeType;
   rightLineNumber?: number;
   rightText: string;
 };
@@ -177,6 +181,126 @@ export function parseConflictMarkerBlocks(content: string): DiffMergeConflictBlo
   return blocks;
 }
 
+function createCommonLineMatrix(leftLines: readonly string[], rightLines: readonly string[]) {
+  const matrix: number[][] = Array.from({ length: leftLines.length + 1 }, () => Array(rightLines.length + 1).fill(0));
+  for (let leftIndex = leftLines.length - 1; leftIndex >= 0; leftIndex -= 1) {
+    for (let rightIndex = rightLines.length - 1; rightIndex >= 0; rightIndex -= 1) {
+      matrix[leftIndex][rightIndex] = leftLines[leftIndex] === rightLines[rightIndex]
+        ? matrix[leftIndex + 1][rightIndex + 1] + 1
+        : Math.max(matrix[leftIndex + 1][rightIndex], matrix[leftIndex][rightIndex + 1]);
+    }
+  }
+  return matrix;
+}
+
+type DiffMergeAlignedConflictLine = {
+  leftIndex?: number;
+  leftText: string;
+  leftChangeType: DiffMergeSideChangeType;
+  rightIndex?: number;
+  rightText: string;
+  rightChangeType: DiffMergeSideChangeType;
+};
+
+function appendMergeReplacementRows(
+  rows: DiffMergeAlignedConflictLine[],
+  leftLines: readonly string[],
+  leftStart: number,
+  leftEnd: number,
+  rightLines: readonly string[],
+  rightStart: number,
+  rightEnd: number,
+) {
+  const leftCount = leftEnd - leftStart;
+  const rightCount = rightEnd - rightStart;
+  const pairedCount = Math.min(leftCount, rightCount);
+
+  for (let index = 0; index < pairedCount; index += 1) {
+    rows.push({
+      leftChangeType: "modify",
+      leftIndex: leftStart + index,
+      leftText: leftLines[leftStart + index] ?? "",
+      rightChangeType: "modify",
+      rightIndex: rightStart + index,
+      rightText: rightLines[rightStart + index] ?? "",
+    });
+  }
+
+  for (let leftIndex = leftStart + pairedCount; leftIndex < leftEnd; leftIndex += 1) {
+    rows.push({
+      leftChangeType: "delete",
+      leftIndex,
+      leftText: leftLines[leftIndex] ?? "",
+      rightChangeType: "none",
+      rightText: "",
+    });
+  }
+
+  for (let rightIndex = rightStart + pairedCount; rightIndex < rightEnd; rightIndex += 1) {
+    rows.push({
+      leftChangeType: "none",
+      leftText: "",
+      rightChangeType: "add",
+      rightIndex,
+      rightText: rightLines[rightIndex] ?? "",
+    });
+  }
+}
+
+export function diffMergeConflictLines(
+  leftLines: readonly string[],
+  rightLines: readonly string[],
+): DiffMergeAlignedConflictLine[] {
+  const commonLineMatrix = createCommonLineMatrix(leftLines, rightLines);
+  const alignedRows: DiffMergeAlignedConflictLine[] = [];
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let pendingLeftStart = 0;
+  let pendingRightStart = 0;
+
+  while (leftIndex < leftLines.length && rightIndex < rightLines.length) {
+    if (leftLines[leftIndex] === rightLines[rightIndex]) {
+      appendMergeReplacementRows(
+        alignedRows,
+        leftLines,
+        pendingLeftStart,
+        leftIndex,
+        rightLines,
+        pendingRightStart,
+        rightIndex,
+      );
+      alignedRows.push({
+        leftChangeType: "none",
+        leftIndex,
+        leftText: leftLines[leftIndex] ?? "",
+        rightChangeType: "none",
+        rightIndex,
+        rightText: rightLines[rightIndex] ?? "",
+      });
+      leftIndex += 1;
+      rightIndex += 1;
+      pendingLeftStart = leftIndex;
+      pendingRightStart = rightIndex;
+    } else if (commonLineMatrix[leftIndex + 1][rightIndex] >= commonLineMatrix[leftIndex][rightIndex + 1]) {
+      leftIndex += 1;
+    } else {
+      rightIndex += 1;
+    }
+  }
+
+  appendMergeReplacementRows(
+    alignedRows,
+    leftLines,
+    pendingLeftStart,
+    leftLines.length,
+    rightLines,
+    pendingRightStart,
+    rightLines.length,
+  );
+
+  return alignedRows;
+}
+
 function recordMergeDisplayLineRange(row: DiffMergeDisplayRow, range: { maxLine: number; minLine: number }) {
   const lineNumbers = [row.leftLineNumber, row.rightLineNumber].filter((lineNumber): lineNumber is number => lineNumber !== undefined);
   for (const lineNumber of lineNumbers) {
@@ -218,17 +342,28 @@ export function createDiffMergeDisplayModel(content: string, markerBlocks: DiffM
       });
     }
     const startRow = rows.length;
-    const conflictRowCount = Math.max(1, block.oursLines.length, block.theirsLines.length);
-    for (let conflictLineIndex = 0; conflictLineIndex < conflictRowCount; conflictLineIndex += 1) {
+    const conflictRows = diffMergeConflictLines(block.oursLines, block.theirsLines);
+    if (conflictRows.length === 0) {
+      conflictRows.push({
+        leftChangeType: "none",
+        leftText: "",
+        rightChangeType: "none",
+        rightText: "",
+      });
+    }
+    for (let conflictLineIndex = 0; conflictLineIndex < conflictRows.length; conflictLineIndex += 1) {
+      const conflictRow = conflictRows[conflictLineIndex];
       rows.push({
         conflictBlock: block,
         conflictLineIndex,
         kind: "line",
-        leftLineNumber: conflictLineIndex < block.oursLines.length ? block.startLine + conflictLineIndex : undefined,
-        leftText: block.oursLines[conflictLineIndex] ?? "",
-        lineNumber: block.startLine + conflictLineIndex,
-        rightLineNumber: conflictLineIndex < block.theirsLines.length ? block.startLine + conflictLineIndex : undefined,
-        rightText: block.theirsLines[conflictLineIndex] ?? "",
+        leftChangeType: conflictRow.leftChangeType,
+        leftLineNumber: conflictRow.leftIndex !== undefined ? block.startLine + conflictRow.leftIndex : undefined,
+        leftText: conflictRow.leftText,
+        lineNumber: block.startLine + (conflictRow.leftIndex ?? conflictRow.rightIndex ?? conflictLineIndex),
+        rightChangeType: conflictRow.rightChangeType,
+        rightLineNumber: conflictRow.rightIndex !== undefined ? block.startLine + conflictRow.rightIndex : undefined,
+        rightText: conflictRow.rightText,
       });
     }
     conflictRanges.push({

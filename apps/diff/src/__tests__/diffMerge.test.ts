@@ -2,6 +2,7 @@ import { createMockCommandRunner } from "@legend-desktop/command-runner";
 import {
   createDiffMergeDisplayRows,
   createDiffMergeHunkDisplayModel,
+  diffMergeConflictLines,
   loadDiffMergeState,
   parseConflictMarkerBlocks,
   parseGitUnmergedEntries,
@@ -82,8 +83,186 @@ describe("diffMerge", () => {
 
     expect(createDiffMergeDisplayRows(content, [block])).toEqual([
       { kind: "line", leftLineNumber: 1, leftText: "before", lineNumber: 1, rightLineNumber: 1, rightText: "before" },
-      { conflictBlock: block, conflictLineIndex: 0, kind: "line", leftLineNumber: 2, leftText: "current", lineNumber: 2, rightLineNumber: 2, rightText: "incoming" },
+      { conflictBlock: block, conflictLineIndex: 0, kind: "line", leftChangeType: "modify", leftLineNumber: 2, leftText: "current", lineNumber: 2, rightChangeType: "modify", rightLineNumber: 2, rightText: "incoming" },
       { kind: "line", leftLineNumber: 7, leftText: "after", lineNumber: 7, rightLineNumber: 7, rightText: "after" },
+    ]);
+  });
+
+  it("aligns conflict lines with side-specific change types", () => {
+    expect(diffMergeConflictLines(
+      ["same", "left only", "old value", "tail"],
+      ["same", "new value", "right only", "tail"],
+    )).toEqual([
+      { leftChangeType: "none", leftIndex: 0, leftText: "same", rightChangeType: "none", rightIndex: 0, rightText: "same" },
+      { leftChangeType: "modify", leftIndex: 1, leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightText: "new value" },
+      { leftChangeType: "modify", leftIndex: 2, leftText: "old value", rightChangeType: "modify", rightIndex: 2, rightText: "right only" },
+      { leftChangeType: "none", leftIndex: 3, leftText: "tail", rightChangeType: "none", rightIndex: 3, rightText: "tail" },
+    ]);
+  });
+
+  it("marks unpaired conflict lines as deletes and adds", () => {
+    expect(diffMergeConflictLines(
+      ["same", "left only", "tail"],
+      ["same", "right only 1", "right only 2", "tail"],
+    )).toEqual([
+      { leftChangeType: "none", leftIndex: 0, leftText: "same", rightChangeType: "none", rightIndex: 0, rightText: "same" },
+      { leftChangeType: "modify", leftIndex: 1, leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightText: "right only 1" },
+      { leftChangeType: "none", leftText: "", rightChangeType: "add", rightIndex: 2, rightText: "right only 2" },
+      { leftChangeType: "none", leftIndex: 2, leftText: "tail", rightChangeType: "none", rightIndex: 3, rightText: "tail" },
+    ]);
+  });
+
+  it("emits neutral equal rows and modified rows in conflict display", () => {
+    const content = [
+      "<<<<<<< HEAD",
+      "same",
+      "left only",
+      "tail",
+      "=======",
+      "same",
+      "right only",
+      "tail",
+      ">>>>>>> feature",
+    ].join("\n");
+    const [block] = parseConflictMarkerBlocks(content);
+
+    expect(createDiffMergeDisplayRows(content, [block])).toEqual([
+      {
+        conflictBlock: block,
+        conflictLineIndex: 0,
+        kind: "line",
+        leftChangeType: "none",
+        leftLineNumber: 1,
+        leftText: "same",
+        lineNumber: 1,
+        rightChangeType: "none",
+        rightLineNumber: 1,
+        rightText: "same",
+      },
+      {
+        conflictBlock: block,
+        conflictLineIndex: 1,
+        kind: "line",
+        leftChangeType: "modify",
+        leftLineNumber: 2,
+        leftText: "left only",
+        lineNumber: 2,
+        rightChangeType: "modify",
+        rightLineNumber: 2,
+        rightText: "right only",
+      },
+      {
+        conflictBlock: block,
+        conflictLineIndex: 2,
+        kind: "line",
+        leftChangeType: "none",
+        leftLineNumber: 3,
+        leftText: "tail",
+        lineNumber: 3,
+        rightChangeType: "none",
+        rightLineNumber: 3,
+        rightText: "tail",
+      },
+    ]);
+  });
+
+  it("emits side-specific add and delete rows in conflict display", () => {
+    const deleteContent = [
+      "<<<<<<< HEAD",
+      "same",
+      "left only",
+      "tail",
+      "=======",
+      "same",
+      "tail",
+      ">>>>>>> feature",
+    ].join("\n");
+    const [deleteBlock] = parseConflictMarkerBlocks(deleteContent);
+    expect(createDiffMergeDisplayRows(deleteContent, [deleteBlock])).toEqual([
+      {
+        conflictBlock: deleteBlock,
+        conflictLineIndex: 0,
+        kind: "line",
+        leftChangeType: "none",
+        leftLineNumber: 1,
+        leftText: "same",
+        lineNumber: 1,
+        rightChangeType: "none",
+        rightLineNumber: 1,
+        rightText: "same",
+      },
+      {
+        conflictBlock: deleteBlock,
+        conflictLineIndex: 1,
+        kind: "line",
+        leftChangeType: "delete",
+        leftLineNumber: 2,
+        leftText: "left only",
+        lineNumber: 2,
+        rightChangeType: "none",
+        rightText: "",
+      },
+      {
+        conflictBlock: deleteBlock,
+        conflictLineIndex: 2,
+        kind: "line",
+        leftChangeType: "none",
+        leftLineNumber: 3,
+        leftText: "tail",
+        lineNumber: 3,
+        rightChangeType: "none",
+        rightLineNumber: 2,
+        rightText: "tail",
+      },
+    ]);
+
+    const addContent = [
+      "<<<<<<< HEAD",
+      "same",
+      "tail",
+      "=======",
+      "same",
+      "right only",
+      "tail",
+      ">>>>>>> feature",
+    ].join("\n");
+    const [addBlock] = parseConflictMarkerBlocks(addContent);
+    expect(createDiffMergeDisplayRows(addContent, [addBlock])).toEqual([
+      {
+        conflictBlock: addBlock,
+        conflictLineIndex: 0,
+        kind: "line",
+        leftChangeType: "none",
+        leftLineNumber: 1,
+        leftText: "same",
+        lineNumber: 1,
+        rightChangeType: "none",
+        rightLineNumber: 1,
+        rightText: "same",
+      },
+      {
+        conflictBlock: addBlock,
+        conflictLineIndex: 1,
+        kind: "line",
+        leftChangeType: "none",
+        leftText: "",
+        lineNumber: 2,
+        rightChangeType: "add",
+        rightLineNumber: 2,
+        rightText: "right only",
+      },
+      {
+        conflictBlock: addBlock,
+        conflictLineIndex: 2,
+        kind: "line",
+        leftChangeType: "none",
+        leftLineNumber: 2,
+        leftText: "tail",
+        lineNumber: 2,
+        rightChangeType: "none",
+        rightLineNumber: 3,
+        rightText: "tail",
+      },
     ]);
   });
 
@@ -123,9 +302,11 @@ describe("diffMerge", () => {
         conflictLineIndex: 0,
         hunkIndex: 0,
         kind: "line",
+        leftChangeType: "modify",
         leftLineNumber: 3,
         leftText: "current",
         lineNumber: 3,
+        rightChangeType: "modify",
         rightLineNumber: 3,
         rightText: "incoming",
       },
