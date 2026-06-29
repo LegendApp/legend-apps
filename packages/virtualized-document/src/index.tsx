@@ -84,6 +84,8 @@ type VirtualizedFixedDocumentListRowProps<TRow> = {
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
 };
 
+type VirtualizedFixedDocumentListDocumentIndexMapper = (index: number, listIndex: number) => number | undefined;
+
 export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
   dataVersion?: string | number;
@@ -91,6 +93,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   extraData?: unknown;
   getItemSize?: (index: number) => number;
   getItemType?: (index: number) => string | undefined;
+  getDocumentIndex?: VirtualizedFixedDocumentListDocumentIndexMapper;
   initialRequestRowCount?: number;
   itemIndexes: Array<number | undefined>;
   ListHeaderComponent?: ReactElement;
@@ -272,7 +275,12 @@ function createIdentityIndexArray(length: number) {
   });
 }
 
-function getDocumentRangeForListRange(itemIndexes: readonly (number | undefined)[], start: number, count: number) {
+function getDocumentRangeForListRange(
+  itemIndexes: readonly (number | undefined)[],
+  start: number,
+  count: number,
+  getDocumentIndex?: VirtualizedFixedDocumentListDocumentIndexMapper,
+) {
   const safeListStart = Math.max(0, Math.floor(start));
   const safeListEnd = Math.min(itemIndexes.length, safeListStart + Math.max(0, Math.ceil(count)));
   let requestStart = Number.POSITIVE_INFINITY;
@@ -280,9 +288,10 @@ function getDocumentRangeForListRange(itemIndexes: readonly (number | undefined)
 
   for (let listIndex = safeListStart; listIndex < safeListEnd; listIndex += 1) {
     const itemIndex = itemIndexes[listIndex] ?? listIndex;
-    if (Number.isFinite(itemIndex)) {
-      requestStart = Math.min(requestStart, itemIndex);
-      requestEnd = Math.max(requestEnd, itemIndex + 1);
+    const documentIndex = getDocumentIndex?.(itemIndex, listIndex) ?? itemIndex;
+    if (Number.isFinite(documentIndex)) {
+      requestStart = Math.min(requestStart, documentIndex);
+      requestEnd = Math.max(requestEnd, documentIndex + 1);
     }
   }
 
@@ -396,6 +405,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   debugName,
   extraData,
   getRow,
+  getDocumentIndex,
   getItemSize,
   getItemType,
   initialRequestRowCount,
@@ -517,8 +527,8 @@ export function VirtualizedFixedDocumentList<TRow>({
     const listStart = includeOverscan ? visibleStart - lineOverscan : visibleStart;
     const initialCount = initialRequestRowCount ?? visibleCount;
     const listCount = includeOverscan ? visibleCount + lineOverscan * 2 : Math.max(visibleCount, initialCount);
-    const visibleDocumentRange = getDocumentRangeForListRange(itemIndexes, visibleStart, visibleCount);
-    const documentRange = getDocumentRangeForListRange(itemIndexes, listStart, listCount);
+    const visibleDocumentRange = getDocumentRangeForListRange(itemIndexes, visibleStart, visibleCount, getDocumentIndex);
+    const documentRange = getDocumentRangeForListRange(itemIndexes, listStart, listCount, getDocumentIndex);
     debugLog(debugName, "list.requestVisibleRange", {
       count: documentRange.count,
       height,
@@ -539,15 +549,15 @@ export function VirtualizedFixedDocumentList<TRow>({
       onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, reason);
     }
     return documentRange;
-  }, [debugName, initialRequestRowCount, itemIndexes, lineOverscan, listHeaderHeight, onVisibleRowsRequested, requestRange, rowHeight]);
+  }, [debugName, getDocumentIndex, initialRequestRowCount, itemIndexes, lineOverscan, listHeaderHeight, onVisibleRowsRequested, requestRange, rowHeight]);
 
   const requestLegendListRange = useCallback((reason: VirtualizedDocumentRequestReason) => {
     const listState = internalListRef.current?.getState();
     if (listState && listState.start >= 0 && listState.end >= listState.start) {
       const requestListStart = listState.startBuffered >= 0 ? listState.startBuffered : listState.start;
       const requestListEnd = listState.endBuffered >= requestListStart ? listState.endBuffered : listState.end;
-      const documentRange = getDocumentRangeForListRange(itemIndexes, requestListStart, requestListEnd - requestListStart + 1);
-      const visibleDocumentRange = getDocumentRangeForListRange(itemIndexes, listState.start, listState.end - listState.start + 1);
+      const documentRange = getDocumentRangeForListRange(itemIndexes, requestListStart, requestListEnd - requestListStart + 1, getDocumentIndex);
+      const visibleDocumentRange = getDocumentRangeForListRange(itemIndexes, listState.start, listState.end - listState.start + 1, getDocumentIndex);
       debugLog(debugName, "list.requestLegendListRange", {
         count: documentRange.count,
         end: listState.end,
@@ -569,7 +579,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     }
 
     return false;
-  }, [debugName, itemIndexes, onVisibleRowsRequested, requestRange]);
+  }, [debugName, getDocumentIndex, itemIndexes, onVisibleRowsRequested, requestRange]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;

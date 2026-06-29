@@ -13,6 +13,7 @@ import {
   type DiffLoadSession,
   type DiffLoadTiming,
   type DiffRenderRow,
+  type DiffSideBySideFileHeader,
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
@@ -302,6 +303,7 @@ type DiffLoadedBodyProps = {
   sidebarCollapsed: boolean;
   sidebarListHeight: number;
   sideBySideDataVersion: number;
+  sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
   sideBySideItemIndexes: Array<number | undefined>;
   splitPaneMetrics: DiffSplitPaneMetrics;
   state: DiffLoadedState;
@@ -320,6 +322,7 @@ type DiffSyntaxTokenizationProgress = {
 type DiffListExtraData = {
   adaptiveLightModeEnabled: boolean;
   borderColor: string;
+  collapsedFileIndexes: ReadonlySet<number>;
   collapsedFileIndexesKey: string;
   fileHeaderBackgroundColor: string;
   fontFamily: string;
@@ -359,6 +362,15 @@ type DiffNativeRowConfigProps = {
   syntaxHighlightingEnabled: boolean;
   themeName: string;
   tokenizationVersion: number;
+};
+
+type DiffInlineMergeRow = {
+  file: DiffMergeConflictFile;
+  itemIndex: number;
+  row: DiffMergeDisplayRow;
+  rowIndex: number;
+  sourceFileIndex: number;
+  sourceRowIndex: number;
 };
 
 function noopVirtualizedDocumentRequestRange() {
@@ -796,6 +808,7 @@ function DiffLoadedBody({
   sidebarCollapsed,
   sidebarListHeight,
   sideBySideDataVersion,
+  sideBySideFileHeaderByListIndex,
   sideBySideItemIndexes,
   splitPaneMetrics,
   state,
@@ -809,6 +822,30 @@ function DiffLoadedBody({
   const bodyStartedAt = nowMs();
   const activeFileIndex = useValue(activeFileIndex$);
   const activeMergeFile = getActiveMergeFile({ activeFileIndex, files: state.files, mergeState });
+  const inlineMergeModel = useDiffInlineMergeModel({
+    borderColor: listExtraData.borderColor,
+    collapsedFileIndexes: listExtraData.collapsedFileIndexes,
+    fileHeaderBackgroundColor: listExtraData.fileHeaderBackgroundColor,
+    files: state.files,
+    foregroundColor: listExtraData.foregroundColor,
+    fontFamily: listExtraData.fontFamily,
+    fontSize: listExtraData.fontSize,
+    mergeState,
+    mutedColor,
+    onResolveMergeConflict,
+    primaryColor,
+    resolvingMergeConflictKey,
+    rowHeight,
+    rowRenderer: listExtraData.rowRenderer,
+    showOnlyHunks: listExtraData.showOnlyHunks,
+    sideBySideFileHeaderByListIndex,
+    sideBySideItemIndexes,
+    syntaxAppearance,
+    syntaxHighlightingEnabled: listExtraData.syntaxHighlightingEnabled,
+    syntaxThemeName: listExtraData.syntaxTheme,
+    unifiedItemIndexes: visibleItemIndexes,
+    viewMode,
+  });
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
   const normalizedFileFilter = fileFilter.trim().toLowerCase();
   const filteredSidebarFiles = useMemo(
@@ -879,53 +916,40 @@ function DiffLoadedBody({
     const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
     const listHeader = <View style={styles.diffTitlebarSpacer} />;
     let list: ReactElement;
-    if (activeMergeFile) {
-      list = (
-        <DiffMergeContent
-          activeFileIndex={activeFileIndex}
-          borderColor={listExtraData.borderColor}
-          fileByIndex={state.files}
-          fileHeaderBackgroundColor={listExtraData.fileHeaderBackgroundColor}
-          foregroundColor={listExtraData.foregroundColor}
-          fontFamily={listExtraData.fontFamily}
-          fontSize={listExtraData.fontSize}
-          height={diffListHeight}
-          listRef={listRef}
-          mergeState={mergeState}
-          mutedColor={mutedColor}
-          onResolveMergeConflict={onResolveMergeConflict}
-          primaryColor={primaryColor}
-          resolvingMergeConflictKey={resolvingMergeConflictKey}
-          rowRenderer={listExtraData.rowRenderer}
-          rowHeight={rowHeight}
-          showOnlyHunks={listExtraData.showOnlyHunks}
-          syntaxAppearance={syntaxAppearance}
-          syntaxHighlightingEnabled={listExtraData.syntaxHighlightingEnabled}
-          syntaxThemeName={listExtraData.syntaxTheme}
-        />
-      );
-    } else if (viewMode === "unified") {
+    if (viewMode === "unified") {
       list = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
-          dataVersion={diffRows.dataVersion}
+          dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
           key="unified"
           extraData={listExtraData}
-          itemIndexes={visibleItemIndexes}
+          itemIndexes={inlineMergeModel.itemIndexes}
           ListHeaderComponent={listHeader}
-          getItemSize={getItemSize}
-          getItemType={getItemType}
+          getDocumentIndex={inlineMergeModel.getDocumentIndex}
+          getItemSize={(index) => inlineMergeModel.getItemSize(index, getItemSize)}
+          getItemType={(index) => inlineMergeModel.getItemType(index, getItemType)}
           listHeaderHeight={diffTitlebarTopInset}
           lineOverscan={diffLineOverscan}
           listRef={listRef}
-          onTopItemChanged={handleTopItemChanged}
+          onTopItemChanged={(index) => {
+            const mergeRow = inlineMergeModel.getInlineMergeRow(index);
+            if (mergeRow) {
+              activeFileIndex$.set(mergeRow.sourceFileIndex);
+            } else {
+              handleTopItemChanged(index);
+            }
+          }}
           onVisibleRowsRequested={nativeUnifiedRows ? undefined : handleVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={requestUnifiedRange}
           requestRangesOnScroll={!nativeUnifiedRows}
-          getRow={nativeUnifiedRows ? undefined : getRow}
+          getRow={(index) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeUnifiedRows ? undefined : getRow(index))}
           rowHeight={rowHeight}
-          renderRow={renderRow}
+          renderRow={(props) => (
+            inlineMergeModel.getInlineMergeRow(props.index)
+              ? inlineMergeModel.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
+              : renderRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>)
+          )}
           style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
         />
       );
@@ -933,24 +957,36 @@ function DiffLoadedBody({
       list = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
-          dataVersion={sideBySideDataVersion}
+          dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
           key={viewMode}
           extraData={listExtraData}
-          itemIndexes={sideBySideItemIndexes}
+          itemIndexes={inlineMergeModel.itemIndexes}
           ListHeaderComponent={listHeader}
-          getItemSize={getSideBySideItemSize}
-          getItemType={getSideBySideItemType}
-          getRow={nativeSideBySideRows ? undefined : getSideBySideRow}
+          getDocumentIndex={inlineMergeModel.getDocumentIndex}
+          getItemSize={(index) => inlineMergeModel.getItemSize(index, getSideBySideItemSize)}
+          getItemType={(index) => inlineMergeModel.getItemType(index, getSideBySideItemType)}
+          getRow={(index) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeSideBySideRows ? undefined : getSideBySideRow(index))}
           listHeaderHeight={diffTitlebarTopInset}
           lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
           listRef={listRef}
-          onTopItemChanged={handleSideBySideTopItemChanged}
+          onTopItemChanged={(index) => {
+            const mergeRow = inlineMergeModel.getInlineMergeRow(index);
+            if (mergeRow) {
+              activeFileIndex$.set(mergeRow.sourceFileIndex);
+            } else {
+              handleSideBySideTopItemChanged(index);
+            }
+          }}
           onVisibleRowsRequested={nativeSideBySideRows ? undefined : handleSideBySideVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={requestBlocksRange}
           requestRangesOnScroll={!nativeSideBySideRows}
           rowHeight={rowHeight}
-          renderRow={renderSideBySideRow}
+          renderRow={(props) => (
+            inlineMergeModel.getInlineMergeRow(props.index)
+              ? inlineMergeModel.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
+              : renderSideBySideRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>)
+          )}
           style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
         />
       );
@@ -967,7 +1003,7 @@ function DiffLoadedBody({
         ]}
       >
         {documentErrorBody}
-        {!activeMergeFile && nativeRowConfig ? (
+        {nativeRowConfig ? (
           <DiffNativeRowConfig
             addAccentColor={nativeRowConfig.addAccentColor}
             addBackgroundColor={nativeRowConfig.addBackgroundColor}
@@ -995,6 +1031,14 @@ function DiffLoadedBody({
           />
         ) : null}
         {list}
+        {activeMergeFile ? (
+          <DiffMergeHeader
+            borderColor={listExtraData.borderColor}
+            mergeFile={activeMergeFile}
+            mutedColor={mutedColor}
+            primaryColor={primaryColor}
+          />
+        ) : null}
       </View>
     );
   }
@@ -1588,16 +1632,14 @@ function DiffMergeLineRow({
   );
 }
 
-function DiffMergeContent({
-  activeFileIndex,
+function useDiffInlineMergeModel({
   borderColor,
-  fileByIndex,
+  collapsedFileIndexes,
   fileHeaderBackgroundColor,
+  files,
   foregroundColor,
   fontFamily,
   fontSize,
-  height,
-  listRef,
   mergeState,
   mutedColor,
   onResolveMergeConflict,
@@ -1606,19 +1648,21 @@ function DiffMergeContent({
   rowRenderer,
   rowHeight,
   showOnlyHunks,
+  sideBySideFileHeaderByListIndex,
+  sideBySideItemIndexes,
   syntaxAppearance,
   syntaxHighlightingEnabled,
   syntaxThemeName,
+  unifiedItemIndexes,
+  viewMode,
 }: {
-  activeFileIndex: number | null;
   borderColor: string;
-  fileByIndex: DiffFileSummary[];
+  collapsedFileIndexes: ReadonlySet<number>;
   fileHeaderBackgroundColor: string;
+  files: readonly DiffFileSummary[];
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
-  height: number;
-  listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
   mergeState: DiffMergeState;
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
@@ -1627,33 +1671,50 @@ function DiffMergeContent({
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   showOnlyHunks: boolean;
+  sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
+  sideBySideItemIndexes: Array<number | undefined>;
   syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
   syntaxThemeName: string;
+  unifiedItemIndexes: Array<number | undefined>;
+  viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }) {
-  const mergeFile = getActiveMergeFile({ activeFileIndex, files: fileByIndex, mergeState });
-  const [mergeSyntax, setMergeSyntax] = useState<DiffMergeSyntaxState | null>(null);
-  const mergeDisplayModel = useMemo(() => {
-    const fullModel = getFullMergeDisplayModel(mergeFile);
-    return showOnlyHunks
-      ? createDiffMergeHunkDisplayModel(fullModel.rows, fullModel.conflictRanges)
-      : fullModel;
-  }, [mergeFile, showOnlyHunks]);
-  const itemIndexes = useMemo(
-    () => Array.from({ length: mergeDisplayModel.rows.length }, (_, index) => index),
-    [mergeDisplayModel],
+  const [mergeSyntaxByPath, setMergeSyntaxByPath] = useState<Map<string, DiffMergeSyntaxState>>(() => new Map());
+  const mergeDisplayModelByPath = useMemo(() => {
+    const map = new Map<string, DiffMergeDisplayModel>();
+    if (mergeState.status === "ready") {
+      for (const file of mergeState.files) {
+        const fullModel = getFullMergeDisplayModel(file);
+        map.set(
+          file.path,
+          showOnlyHunks
+            ? createDiffMergeHunkDisplayModel(fullModel.rows, fullModel.conflictRanges)
+            : fullModel,
+        );
+      }
+    }
+    return map;
+  }, [mergeState, showOnlyHunks]);
+  const dataVersion = useMemo(() => {
+    if (mergeState.status !== "ready" || mergeState.files.length === 0) {
+      return "merge:none";
+    }
+    return mergeState.files.map((file) => {
+      const model = mergeDisplayModelByPath.get(file.path);
+      return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
+    }).join("|");
+  }, [mergeDisplayModelByPath, mergeState]);
+  const mergeSyntaxVersion = useMemo(
+    () => [...mergeSyntaxByPath.values()].reduce((version, syntax) => version + syntax.configVersion, 0),
+    [mergeSyntaxByPath],
   );
-  const dataVersion = mergeFile ? `${mergeFile.path}:${mergeFile.displayRows.length}:${mergeFile.markerBlocks.length}:${mergeFile.hasUnsavedDraft ? "draft" : "saved"}:${showOnlyHunks ? "hunks" : "full"}:${mergeDisplayModel.rows.length}` : "empty";
-  const syntaxKey = mergeFile && syntaxHighlightingEnabled
-    ? `${dataVersion}:${mergeFile.path}:${syntaxThemeName}`
-    : "disabled";
   const mergeListExtraData = useMemo(() => ({
     borderColor,
     dataVersion,
     foregroundColor,
     fontFamily,
     fontSize,
-    mergeSyntaxVersion: mergeSyntax?.configVersion ?? 0,
+    mergeSyntaxVersion,
     mutedColor,
     primaryColor,
     resolvingMergeConflictKey,
@@ -1667,7 +1728,7 @@ function DiffMergeContent({
     foregroundColor,
     fontFamily,
     fontSize,
-    mergeSyntax?.configVersion,
+    mergeSyntaxVersion,
     mutedColor,
     primaryColor,
     resolvingMergeConflictKey,
@@ -1676,32 +1737,159 @@ function DiffMergeContent({
     showOnlyHunks,
     syntaxAppearance,
   ]);
-  const controlRowByBlockKey = useMemo(
-    () => mergeFile ? getMergeControlRowByBlockKey(mergeDisplayModel.conflictRanges, mergeFile) : new Map<string, number>(),
-    [mergeDisplayModel, mergeFile],
-  );
-  const getMergeRow = useCallback((index: number) => mergeDisplayModel.rows[index], [mergeDisplayModel]);
-  const getMergeItemSize = useCallback((index: number) => (
-    rowHeight + (mergeDisplayModel.rows[index]?.hunkHeader ? diffHunkHeaderHeight : 0)
-  ), [mergeDisplayModel, rowHeight]);
+  const controlRowByFilePath = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    if (mergeState.status === "ready") {
+      for (const file of mergeState.files) {
+        const model = mergeDisplayModelByPath.get(file.path);
+        if (model) {
+          map.set(file.path, getMergeControlRowByBlockKey(model.conflictRanges, file));
+        }
+      }
+    }
+    return map;
+  }, [mergeDisplayModelByPath, mergeState]);
+
+  const createInlineRowsForFile = useCallback((
+    file: DiffMergeConflictFile,
+    sourceFileIndex: number,
+    sourceRowIndex: number,
+    nextItemIndex: { current: number },
+    rowByItemIndex: Map<number, DiffInlineMergeRow>,
+  ) => {
+    const model = mergeDisplayModelByPath.get(file.path);
+    if (!model || model.rows.length === 0) {
+      return [];
+    }
+
+    const itemIndexes: number[] = [];
+    for (let rowIndex = 0; rowIndex < model.rows.length; rowIndex += 1) {
+      const itemIndex = nextItemIndex.current;
+      nextItemIndex.current -= 1;
+      itemIndexes.push(itemIndex);
+      rowByItemIndex.set(itemIndex, {
+        file,
+        itemIndex,
+        row: model.rows[rowIndex],
+        rowIndex,
+        sourceFileIndex,
+        sourceRowIndex,
+      });
+    }
+    return itemIndexes;
+  }, [mergeDisplayModelByPath]);
+
+  const inlineList = useMemo(() => {
+    const rowByItemIndex = new Map<number, DiffInlineMergeRow>();
+    const nextItemIndex = { current: -1 };
+    const fileByIndex = new Map(files.map((file) => [file.index, file]));
+    const getMergeFile = (file: DiffFileSummary | undefined) => file ? getMergeConflictFileForDiffFile(mergeState, file) : null;
+    const sourceRowByItemIndex = new Map<number, number>();
+    let itemIndexes: number[];
+
+    if (viewMode === "unified") {
+      itemIndexes = [];
+      let fileCursor = 0;
+      for (const itemIndex of unifiedItemIndexes) {
+        const rowIndex = itemIndex ?? itemIndexes.length;
+        while (fileCursor < files.length) {
+          const currentFile = files[fileCursor];
+          const rowStart = Math.max(0, Math.floor(currentFile.rowStart));
+          const rowEnd = rowStart + Math.max(0, Math.floor(currentFile.rowCount));
+          if (rowEnd > rowIndex || fileCursor === files.length - 1) {
+            break;
+          }
+          fileCursor += 1;
+        }
+
+        const file = files[fileCursor];
+        const rowStart = file ? Math.max(0, Math.floor(file.rowStart)) : -1;
+        const rowEnd = file ? rowStart + Math.max(0, Math.floor(file.rowCount)) : -1;
+        const mergeFile = getMergeFile(file);
+        if (file && mergeFile && !collapsedFileIndexes.has(file.index) && rowIndex === rowStart) {
+          itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, rowStart, nextItemIndex, rowByItemIndex));
+        } else if (file && mergeFile && !collapsedFileIndexes.has(file.index) && rowIndex > rowStart && rowIndex < rowEnd) {
+          // The merge rows replace the original conflicted file body.
+        } else {
+          itemIndexes.push(rowIndex);
+          sourceRowByItemIndex.set(rowIndex, rowIndex);
+        }
+      }
+    } else {
+      itemIndexes = [];
+      const headerListIndexes = [...sideBySideFileHeaderByListIndex.keys()].sort((left, right) => left - right);
+      let skipUntil = -1;
+      for (let listIndex = 0; listIndex < sideBySideItemIndexes.length; listIndex += 1) {
+        if (listIndex < skipUntil) {
+          continue;
+        }
+
+        const header = sideBySideFileHeaderByListIndex.get(listIndex);
+        const file = header ? fileByIndex.get(header.fileIndex) : undefined;
+        const mergeFile = getMergeFile(file);
+        if (header && file && mergeFile && !collapsedFileIndexes.has(file.index)) {
+          const nextHeader = headerListIndexes.find((headerIndex) => headerIndex > listIndex) ?? sideBySideItemIndexes.length;
+          itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, header.sourceStart, nextItemIndex, rowByItemIndex));
+          skipUntil = nextHeader;
+        } else {
+          const rowIndex = sideBySideItemIndexes[listIndex] ?? listIndex;
+          itemIndexes.push(rowIndex);
+          sourceRowByItemIndex.set(rowIndex, rowIndex);
+        }
+      }
+    }
+
+    return {
+      itemIndexes,
+      rowByItemIndex,
+      sourceRowByItemIndex,
+    };
+  }, [
+    collapsedFileIndexes,
+    createInlineRowsForFile,
+    files,
+    mergeState,
+    sideBySideFileHeaderByListIndex,
+    sideBySideItemIndexes,
+    unifiedItemIndexes,
+    viewMode,
+  ]);
+
+  const getInlineMergeRow = useCallback((index: number) => inlineList.rowByItemIndex.get(index), [inlineList]);
+  const getDocumentIndex = useCallback((index: number) => {
+    const mergeRow = inlineList.rowByItemIndex.get(index);
+    return mergeRow?.sourceRowIndex ?? inlineList.sourceRowByItemIndex.get(index) ?? index;
+  }, [inlineList]);
+  const getItemSize = useCallback((index: number, getNormalItemSize: (index: number) => number) => {
+    const mergeRow = inlineList.rowByItemIndex.get(index);
+    return mergeRow
+      ? rowHeight + (mergeRow.row.hunkHeader ? diffHunkHeaderHeight : 0)
+      : getNormalItemSize(index);
+  }, [inlineList, rowHeight]);
+  const getItemType = useCallback((index: number, getNormalItemType: (index: number) => string) => (
+    inlineList.rowByItemIndex.has(index) ? "merge-line" : getNormalItemType(index)
+  ), [inlineList]);
   const renderMergeRow = useCallback(
-    ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffMergeDisplayRow>) => {
-      if (!mergeFile) {
+    ({ index }: VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>) => {
+      const mergeRow = inlineList.rowByItemIndex.get(index);
+      if (!mergeRow) {
         return <View style={{ height: rowHeight }} />;
       }
-      const displayRow = row ?? mergeDisplayModel.rows[index];
+      const { file, row: displayRow, rowIndex } = mergeRow;
+      const controlRowByBlockKey = controlRowByFilePath.get(file.path) ?? new Map<string, number>();
       const controlBlock = displayRow?.conflictBlock
-        && controlRowByBlockKey.get(getMergeConflictKey(mergeFile, displayRow.conflictBlock)) === index
+        && controlRowByBlockKey.get(getMergeConflictKey(file, displayRow.conflictBlock)) === rowIndex
         ? displayRow.conflictBlock
         : null;
-      const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, index, displayRow?.leftText ?? "");
-      const rightSyntaxLine = getMergeSyntaxLine(mergeSyntax?.rightLines, index, displayRow?.rightText ?? "");
+      const mergeSyntax = mergeSyntaxByPath.get(file.path);
+      const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, rowIndex, displayRow?.leftText ?? "");
+      const rightSyntaxLine = getMergeSyntaxLine(mergeSyntax?.rightLines, rowIndex, displayRow?.rightText ?? "");
       const tokenStyleById = mergeSyntax?.tokenStyleById ?? new Map<number, SyntaxStyle>();
       return (
         <DiffMergeLineRow
           borderColor={borderColor}
           controlBlock={controlBlock}
-          file={mergeFile}
+          file={file}
           fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           foregroundColor={foregroundColor}
           fontFamily={fontFamily}
@@ -1722,46 +1910,56 @@ function DiffMergeContent({
         />
       );
     },
-    [borderColor, controlRowByBlockKey, fileHeaderBackgroundColor, foregroundColor, fontFamily, fontSize, mergeDisplayModel, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {
-    if (!mergeFile || !syntaxHighlightingEnabled) {
-      setMergeSyntax(null);
+    if (mergeState.status !== "ready" || !syntaxHighlightingEnabled || mergeState.files.length === 0) {
+      setMergeSyntaxByPath(new Map());
       return;
     }
 
     let cancelled = false;
-    const language = getSyntaxLanguageForPath(mergeFile.path);
-    const leftSource = mergeDisplayModel.rows.map((row) => row.leftText).join("\n");
-    const rightSource = mergeDisplayModel.rows.map((row) => row.rightText).join("\n");
-    ensureSyntaxGrammarsForPaths([mergeFile.path])
-      .then(() => Promise.all([
-        highlightString(leftSource, language, syntaxThemeName),
-        highlightString(rightSource, language, syntaxThemeName),
-      ]))
-      .then(([leftResult, rightResult]) => {
+    const filesToHighlight = mergeState.files.filter((file) => (mergeDisplayModelByPath.get(file.path)?.rows.length ?? 0) > 0);
+    ensureSyntaxGrammarsForPaths(filesToHighlight.map((file) => file.path))
+      .then(() => Promise.all(filesToHighlight.map(async (file) => {
+        const model = mergeDisplayModelByPath.get(file.path);
+        const language = getSyntaxLanguageForPath(file.path);
+        const leftSource = model?.rows.map((row) => row.leftText).join("\n") ?? "";
+        const rightSource = model?.rows.map((row) => row.rightText).join("\n") ?? "";
+        const [leftResult, rightResult] = await Promise.all([
+          highlightString(leftSource, language, syntaxThemeName),
+          highlightString(rightSource, language, syntaxThemeName),
+        ]);
+        return { file, leftResult, rightResult };
+      })))
+      .then((results) => {
         if (!cancelled) {
-          const styles = [...leftResult.styles, ...rightResult.styles];
-          setMergeSyntax({
-            configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
-            key: syntaxKey,
-            leftLines: leftResult.lines,
-            rightLines: rightResult.lines,
-            tokenStyleById: createMergeSyntaxStyleMap(styles),
+          const nextSyntaxByPath = new Map<string, DiffMergeSyntaxState>();
+          results.forEach(({ file, leftResult, rightResult }) => {
+            const styles = [...leftResult.styles, ...rightResult.styles];
+            const syntaxKey = `${dataVersion}:${file.path}:${syntaxThemeName}`;
+            nextSyntaxByPath.set(file.path, {
+              configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
+              key: syntaxKey,
+              leftLines: leftResult.lines,
+              rightLines: rightResult.lines,
+              tokenStyleById: createMergeSyntaxStyleMap(styles),
+            });
           });
+          setMergeSyntaxByPath(nextSyntaxByPath);
         }
       }).catch((error: unknown) => {
         if (!cancelled) {
           console.error(error instanceof Error ? error.message : String(error));
-          setMergeSyntax(null);
+          setMergeSyntaxByPath(new Map());
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [mergeDisplayModel, mergeFile, syntaxHighlightingEnabled, syntaxKey, syntaxThemeName]);
+  }, [dataVersion, mergeDisplayModelByPath, mergeState, syntaxHighlightingEnabled, syntaxThemeName]);
 
   const emptyMessage = mergeState.status === "loading"
     ? "Checking merge conflicts..."
@@ -1771,50 +1969,41 @@ function DiffMergeContent({
         ? "No unresolved marker blocks in this file."
         : mergeState.reason;
 
-  if (!mergeFile || mergeState.status !== "ready" || mergeFile.displayRows.length === 0) {
-    return (
-      <View style={[styles.mergeEmpty, { height, minHeight: height }]}>
-        <Text style={[styles.mergeEmptyTitle, { color: foregroundColor }]}>
-          Merge Result
-        </Text>
-        <Text style={[styles.mergeEmptyText, { color: mutedColor }]}>
-          {emptyMessage}
-        </Text>
-      </View>
-    );
-  }
+  return {
+    dataVersion,
+    emptyMessage,
+    getDocumentIndex,
+    getInlineMergeRow,
+    getItemSize,
+    getItemType,
+    itemIndexes: inlineList.itemIndexes,
+    mergeListExtraData,
+    renderMergeRow,
+  };
+}
 
+function DiffMergeHeader({
+  borderColor,
+  mergeFile,
+  mutedColor,
+  primaryColor,
+}: {
+  borderColor: string;
+  mergeFile: DiffMergeConflictFile;
+  mutedColor: string;
+  primaryColor: string;
+}) {
   return (
-    <View style={[styles.mergeVirtualizedRoot, { height, minHeight: height }]}>
-      <VirtualizedFixedDocumentList
-        dataVersion={dataVersion}
-        debugName="merge"
-        extraData={mergeListExtraData}
-        getRow={getMergeRow}
-        getItemSize={getMergeItemSize}
-        itemIndexes={itemIndexes}
-        ListHeaderComponent={<View style={styles.mergeListHeaderSpacer} />}
-        listHeaderHeight={diffTitlebarTopInset + 32}
-        listRef={listRef}
-        lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
-        overscanRequestDelayMs={diffOverscanRequestDelayMs}
-        requestRange={noopVirtualizedDocumentRequestRange}
-        requestRangesOnScroll
-        rowHeight={rowHeight}
-        renderRow={renderMergeRow}
-        style={styles.mergeVirtualizedList}
-      />
-      <View pointerEvents="none" style={[styles.mergeHeader, { borderColor }]}>
-        <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
-          A Current - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
-        </Text>
-        <View style={styles.mergeHeaderMiddle}>
-          <SFSymbol color={primaryColor} name="arrow.triangle.merge" size={13} />
-        </View>
-        <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
-          B Incoming - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
-        </Text>
+    <View pointerEvents="none" style={[styles.mergeHeader, { borderColor }]}>
+      <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
+        A Current - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
+      </Text>
+      <View style={styles.mergeHeaderMiddle}>
+        <SFSymbol color={primaryColor} name="arrow.triangle.merge" size={13} />
       </View>
+      <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
+        B Incoming - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
+      </Text>
     </View>
   );
 }
@@ -2887,6 +3076,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     () => ({
       adaptiveLightModeEnabled,
       borderColor: displayTheme.colors.border,
+      collapsedFileIndexes,
       collapsedFileIndexesKey,
       fileHeaderBackgroundColor,
       fontFamily,
@@ -2905,6 +3095,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }),
     [
       adaptiveLightModeEnabled,
+      collapsedFileIndexes,
       collapsedFileIndexesKey,
       displayTheme.colors.border,
       fileHeaderBackgroundColor,
@@ -3115,12 +3306,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
     activeFileIndex$.set(file.index);
-    if (!getMergeConflictFileForDiffFile(mergeState, file)) {
-      requestAnimationFrame(() => {
-        scrollToFile(file);
-      });
-    }
-  }, [activeFileIndex$, mergeState, scrollToFile]);
+    requestAnimationFrame(() => {
+      scrollToFile(file);
+    });
+  }, [activeFileIndex$, scrollToFile]);
 
   const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
     const statusPresentation = getFileStatusPresentation(file);
@@ -3381,6 +3570,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         sidebarCollapsed={sidebarCollapsed}
         sidebarListHeight={sidebarListHeight}
         sideBySideDataVersion={sideBySideDataVersion}
+        sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
         sideBySideItemIndexes={sideBySideItemIndexes}
         splitPaneMetrics={splitPaneMetrics}
         state={state}
@@ -3813,23 +4003,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     overflow: "visible",
   },
-  mergeEmpty: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  mergeEmptyText: {
-    fontSize: 13,
-    lineHeight: 20,
-    maxWidth: 420,
-    paddingTop: 6,
-    textAlign: "center",
-  },
-  mergeEmptyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    lineHeight: 26,
-  },
   mergeHeader: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
@@ -3868,9 +4041,6 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     lineHeight: 14,
   },
-  mergeListHeaderSpacer: {
-    height: diffTitlebarTopInset + 32,
-  },
   mergeLineNumber: {
     textAlign: "right",
   },
@@ -3881,12 +4051,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     lineHeight: 12,
-  },
-  mergeVirtualizedList: {
-    flex: 1,
-  },
-  mergeVirtualizedRoot: {
-    flex: 1,
-    minHeight: 0,
   },
 });
