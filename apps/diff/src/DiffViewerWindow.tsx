@@ -88,11 +88,14 @@ import {
 import {
   DiffSideBySideRow,
   DiffUnifiedRow,
+  diffHunkHeaderHeight,
   diffSideBySideLineNumberWidth,
   diffSideBySideMarkerWidth,
   diffUnifiedChangeBarWidth,
   diffUnifiedLineNumberWidth,
   diffUnifiedMarkerWidth,
+  isDiffSideBySideHunkStart,
+  isDiffUnifiedHunkStart,
   getDiffRowPalette,
   getSideBySideDividerColor,
   type DiffRenderFields,
@@ -1936,6 +1939,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
       borderColor: displayTheme.colors.border,
+      collapsedFileIndexList,
       document: state.status === "loaded" ? state.document : null,
       fileHeaderBackgroundColor,
       fileByIndex,
@@ -1952,6 +1956,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowRenderer,
       rowHeight,
       sideBySideFileHeaderByListIndex,
+      sideBySideRowCount,
       sideBySideTokenStyleById: tokenStyleById,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxHighlightingEnabled,
@@ -1962,6 +1967,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }),
     [
       displayTheme.colors.border,
+      collapsedFileIndexList,
       fileHeaderBackgroundColor,
       fileByIndex,
       fileByRowStart,
@@ -1977,6 +1983,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowRenderer,
       rowHeight,
       sideBySideFileHeaderByListIndex,
+      sideBySideRowCount,
       state.status === "loaded" ? state.document : null,
       syntaxHighlightingEnabled,
       syntaxStyleStore,
@@ -2084,9 +2091,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"
   ), [fileHeaderRowIndexes]);
 
-  const getItemSize = useCallback((index: number) => (
-    getItemType(index) === "file-header" ? diffFileHeaderRowHeight : rowHeight
-  ), [getItemType, rowHeight]);
+  const getItemSize = useCallback((index: number) => {
+    if (getItemType(index) === "file-header") {
+      return diffFileHeaderRowHeight;
+    }
+
+    const document = state.status === "loaded" ? state.document : null;
+    const row = document?.getPlainRows(index, 1)[0];
+    return rowHeight + (isDiffUnifiedHunkStart(document, index, row) ? diffHunkHeaderHeight : 0);
+  }, [getItemType, rowHeight, state]);
 
   const renderRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
@@ -2116,8 +2129,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   }, [sideBySideFileHeaderIndexes]);
 
   const getSideBySideItemSize = useCallback((index: number) => {
-    return sideBySideFileHeaderIndexes.has(index) ? diffFileHeaderRowHeight : rowHeight;
-  }, [rowHeight, sideBySideFileHeaderIndexes]);
+    if (sideBySideFileHeaderIndexes.has(index)) {
+      return diffFileHeaderRowHeight;
+    }
+
+    const document = state.status === "loaded" ? state.document : null;
+    const row = document?.getPlainSideBySideRow(index, collapsedFileIndexList);
+    return rowHeight + (isDiffSideBySideHunkStart(document, index, collapsedFileIndexList, row) ? diffHunkHeaderHeight : 0);
+  }, [collapsedFileIndexList, rowHeight, sideBySideFileHeaderIndexes, state]);
 
   const renderSideBySideRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {

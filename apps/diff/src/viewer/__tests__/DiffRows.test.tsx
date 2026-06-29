@@ -39,6 +39,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
   const file = createFile();
   return {
     borderColor: "#30363d",
+    collapsedFileIndexList: [],
     document: null,
     fileByIndex: new Map([[file.index, file]]),
     fileByRowStart: new Map([[file.rowStart, file]]),
@@ -55,6 +56,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     rowRenderer: "react-native",
     rowHeight: 22,
     sideBySideFileHeaderByListIndex: new Map(),
+    sideBySideRowCount: 0,
     sideBySideTokenStyleById: new Map(),
     syntaxAppearance: "dark",
     syntaxHighlightingEnabled: true,
