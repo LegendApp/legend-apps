@@ -320,6 +320,23 @@ function appendInlineRange(
   }
 }
 
+function appendInlineTextRange(
+  ranges: DiffMergeInlineChangeRange[],
+  text: string,
+  startColumn: number,
+  endColumn: number,
+) {
+  let trimmedStartColumn = startColumn;
+  let trimmedEndColumn = endColumn;
+  while (trimmedStartColumn < trimmedEndColumn && /\s/.test(text[trimmedStartColumn] ?? "")) {
+    trimmedStartColumn += 1;
+  }
+  while (trimmedEndColumn > trimmedStartColumn && /\s/.test(text[trimmedEndColumn - 1] ?? "")) {
+    trimmedEndColumn -= 1;
+  }
+  appendInlineRange(ranges, trimmedStartColumn, trimmedEndColumn);
+}
+
 function isInlineWordCharacter(value: string | undefined) {
   return Boolean(value && /[A-Za-z0-9_$]/.test(value));
 }
@@ -358,8 +375,8 @@ function appendInlineReplacementRanges(
     commonSuffixLength = 0;
   }
 
-  appendInlineRange(leftRanges, leftStartColumn + commonPrefixLength, leftEndColumn - commonSuffixLength);
-  appendInlineRange(rightRanges, rightStartColumn + commonPrefixLength, rightEndColumn - commonSuffixLength);
+  appendInlineTextRange(leftRanges, leftText, leftStartColumn + commonPrefixLength, leftEndColumn - commonSuffixLength);
+  appendInlineTextRange(rightRanges, rightText, rightStartColumn + commonPrefixLength, rightEndColumn - commonSuffixLength);
 }
 
 function appendInlineTokenReplacementRanges(
@@ -388,9 +405,9 @@ function appendInlineTokenReplacementRanges(
       rightRange.endColumn,
     );
   } else if (leftRange) {
-    appendInlineRange(leftRanges, leftRange.startColumn, leftRange.endColumn);
+    appendInlineTextRange(leftRanges, leftText, leftRange.startColumn, leftRange.endColumn);
   } else if (rightRange) {
-    appendInlineRange(rightRanges, rightRange.startColumn, rightRange.endColumn);
+    appendInlineTextRange(rightRanges, rightText, rightRange.startColumn, rightRange.endColumn);
   }
 }
 

@@ -107,6 +107,31 @@ describe("diffMerge", () => {
     });
   });
 
+  it("does not highlight whitespace-only inline ranges in split and combined lines", () => {
+    const rows = diffMergeConflictLines(
+      [
+        "      <VibrancyView",
+        "        blendingMode=\"behindWindow\"",
+        "        material=\"hudWindow\"",
+        "        state=\"active\"",
+        "        style={styles.overlaySurface}",
+        "      >",
+      ],
+      [
+        "      <VibrancyView blendingMode=\"behindWindow\" material=\"hudWindow\" state=\"active\" style={styles.overlaySurface}>",
+      ],
+    );
+
+    for (const row of rows) {
+      for (const range of row.leftInlineChangeRanges ?? []) {
+        expect(row.leftText.slice(range.startColumn, range.startColumn + range.length).trim()).not.toBe("");
+      }
+      for (const range of row.rightInlineChangeRanges ?? []) {
+        expect(row.rightText.slice(range.startColumn, range.startColumn + range.length).trim()).not.toBe("");
+      }
+    }
+  });
+
   it("aligns conflict lines with side-specific change types", () => {
     expect(diffMergeConflictLines(
       ["same", "left only", "old value", "tail"],
@@ -125,7 +150,7 @@ describe("diffMerge", () => {
       ["same", "right only 1", "right only 2", "tail"],
     )).toEqual([
       { leftChangeType: "none", leftIndex: 0, leftText: "same", rightChangeType: "none", rightIndex: 0, rightText: "same" },
-      { leftChangeType: "modify", leftIndex: 1, leftInlineChangeRanges: [{ length: 4, startColumn: 0 }], leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightInlineChangeRanges: [{ length: 5, startColumn: 0 }, { length: 2, startColumn: 10 }], rightText: "right only 1" },
+      { leftChangeType: "modify", leftIndex: 1, leftInlineChangeRanges: [{ length: 4, startColumn: 0 }], leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightInlineChangeRanges: [{ length: 5, startColumn: 0 }, { length: 1, startColumn: 11 }], rightText: "right only 1" },
       { leftChangeType: "none", leftText: "", rightChangeType: "add", rightIndex: 2, rightText: "right only 2" },
       { leftChangeType: "none", leftIndex: 2, leftText: "tail", rightChangeType: "none", rightIndex: 3, rightText: "tail" },
     ]);
