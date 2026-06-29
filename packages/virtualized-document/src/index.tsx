@@ -695,18 +695,21 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const keyExtractor = useCallback((item: number | undefined, index: number) => {
     const startedAt = debugNowMs();
-    const key = String(item ?? index);
+    const rowIndex = item ?? index;
+    const key = dataVersion === undefined
+      ? String(rowIndex)
+      : `${dataVersion}:${rowIndex}`;
     if (!hasLoggedFirstKeyExtractorRef.current) {
       hasLoggedFirstKeyExtractorRef.current = true;
       debugLog(debugName, "list.keyExtractor.first", {
         elapsedSinceMountMs: Number((startedAt - mountStartedAtRef.current).toFixed(1)),
-        index: item ?? index,
+        index: rowIndex,
         listIndex: index,
       });
     }
-    recordCallbackDebug(debugName, "list.keyExtractorFrame", keyExtractorBatchRef, item ?? index, startedAt);
+    recordCallbackDebug(debugName, "list.keyExtractorFrame", keyExtractorBatchRef, rowIndex, startedAt);
     return key;
-  }, [debugName]);
+  }, [dataVersion, debugName]);
 
   return (
     <LegendList

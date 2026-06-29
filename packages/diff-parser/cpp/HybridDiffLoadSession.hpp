@@ -13,8 +13,8 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
 class HybridDiffLoadSession final : public HybridDiffLoadSessionSpec {
 public:
-  static std::shared_ptr<HybridDiffLoadSession> create(const std::string& folderPath);
-  explicit HybridDiffLoadSession(std::string folderPath);
+  static std::shared_ptr<HybridDiffLoadSession> create(const std::string& folderPath, bool showOnlyHunks);
+  HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks);
   ~HybridDiffLoadSession() override;
 
   std::shared_ptr<HybridDiffDocumentSpec> getDocument() override;
@@ -32,6 +32,7 @@ private:
   void setError(std::string error);
 
   std::string folderPath_;
+  bool showOnlyHunks_;
   std::shared_ptr<HybridDiffDocument> document_;
   std::thread workerThread_;
   std::atomic<bool> cancelled_{false};

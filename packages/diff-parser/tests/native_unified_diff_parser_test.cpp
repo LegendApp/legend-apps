@@ -73,6 +73,20 @@ const diffparser::DiffRenderRow& findRowTextForFile(
   throw std::runtime_error("expected row text \"" + std::string(text) + "\" in " + file.path);
 }
 
+bool rowTextExistsForFile(
+    const diffparser::DiffParsedDocument& parsed,
+    const diffparser::DiffFileSummary& file,
+    std::string_view text) {
+  const auto start = static_cast<size_t>(file.rowStart);
+  const auto end = start + static_cast<size_t>(file.rowCount);
+  for (size_t index = start; index < end && index < parsed.rows.size(); index += 1) {
+    if (parsed.rows[index].text == text) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::string makeUnifiedDiffFixture() {
   return R"(diff --git a/src/App.tsx b/src/App.tsx
 index 0000000..1111111 100644
@@ -214,7 +228,7 @@ void assertSideBySideRows(const diffparser::DiffParsedDocument& parsed) {
   expect(foundAddedOnlyLine, "side-by-side should keep unpaired added rows");
 }
 
-diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::string& fixturePath) {
+diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::string& fixturePath, bool showOnlyHunks = true) {
   std::vector<diffparser::DiffFileSummary> files;
   std::vector<diffparser::DiffRenderRow> rows;
   std::vector<diffparser::DiffFileSources> fileSources;
@@ -264,7 +278,7 @@ diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::st
           }
         }
       },
-  });
+  }, showOnlyHunks);
 
   return {
     .files = std::move(files),
@@ -343,6 +357,9 @@ void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
   expectEqual(parsed.timing.fileCount, 5, "git by-file timing file count");
   expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git by-file timing row count");
 
+  const auto& modified = findFile(parsed, "src/App.tsx");
+  expect(!rowTextExistsForFile(parsed, modified, "export const outsideFullFileContext = \"base\";"), "git by-file hunk mode should omit distant context");
+
   const auto& conflicted = findFile(parsed, "src/Conflict.ts");
   expectEqual(conflicted.oldPath, "src/Conflict.ts", "git by-file conflicted old path");
   expectEqual(conflicted.status, "conflicted", "git by-file conflicted status");
@@ -353,6 +370,10 @@ void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
   expectEqual(conflictMarkerRow.newLineNumber, 1, "git by-file conflicted marker new line");
   const auto& conflictBranchRow = findRowTextForFile(parsed, conflicted, "export const side = \"branch\";");
   expectEqual(conflictBranchRow.changeType, diffChangeTypeAdd, "git by-file conflicted branch row type");
+
+  const auto fullParsed = parseGitRepositoryDiffByFileForTest(fixturePath, false);
+  const auto& fullModified = findFile(fullParsed, "src/App.tsx");
+  expect(rowTextExistsForFile(fullParsed, fullModified, "export const outsideFullFileContext = \"base\";"), "git by-file full mode should include distant context");
 }
 
 } // namespace

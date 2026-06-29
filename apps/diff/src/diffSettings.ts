@@ -17,6 +17,7 @@ export type DiffSettingsFile = {
   syntaxPrewarmKnownLanguages?: string[];
   syntaxTheme: string;
   rowRenderer?: DiffRowRendererSetting;
+  showOnlyHunks?: boolean;
   viewMode?: DiffViewMode;
 };
 
@@ -35,6 +36,7 @@ export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
 export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
+export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const defaultDiffSyntaxPrewarmEnabled = true;
@@ -132,6 +134,10 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffRowRenderer,
       normalize: normalizeDiffRowRenderer,
     },
+    showOnlyHunks: {
+      defaultValue: defaultDiffShowOnlyHunks,
+      normalize: (value) => normalizeBoolean(value, defaultDiffShowOnlyHunks),
+    },
     viewMode: {
       defaultValue: defaultDiffViewMode,
       normalize: normalizeDiffViewMode,
@@ -148,6 +154,7 @@ const syntaxPrewarmLanguagesSetting = diffSettings.field("syntaxPrewarmLanguages
 const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnownLanguages");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const rowRendererSetting = diffSettings.field("rowRenderer");
+const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
 
@@ -177,6 +184,10 @@ export function getDiffViewModeSetting(): DiffViewMode {
 
 export function getDiffRowRendererSetting(): DiffRowRendererSetting {
   return rowRendererSetting.get();
+}
+
+export function getDiffShowOnlyHunksSetting(): boolean {
+  return showOnlyHunksSetting.get();
 }
 
 export function getDiffSyntaxHighlightingEnabledSetting(): boolean {
@@ -224,6 +235,10 @@ export function useDiffRowRendererSetting(): DiffRowRendererSetting {
   return normalizeDiffRowRenderer(useValue(diffSettings$.rowRenderer));
 }
 
+export function useDiffShowOnlyHunksSetting(): boolean {
+  return normalizeBoolean(useValue(diffSettings$.showOnlyHunks), defaultDiffShowOnlyHunks);
+}
+
 export function useDiffSyntaxHighlightingEnabledSetting(): boolean {
   return normalizeBoolean(useValue(diffSettings$.syntaxHighlightingEnabled), defaultDiffSyntaxHighlightingEnabled);
 }
@@ -262,6 +277,10 @@ export function setDiffViewModeSetting(viewMode: DiffViewMode) {
 
 export function setDiffRowRendererSetting(rowRenderer: DiffRowRendererSetting) {
   rowRendererSetting.set(rowRenderer);
+}
+
+export function setDiffShowOnlyHunksSetting(enabled: boolean) {
+  showOnlyHunksSetting.set(enabled);
 }
 
 export function setDiffSyntaxHighlightingEnabledSetting(enabled: boolean) {

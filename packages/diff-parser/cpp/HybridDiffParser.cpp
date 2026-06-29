@@ -54,8 +54,8 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
       parsed.timing);
 }
 
-std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath) {
-  auto parsed = parseGitRepositoryDiff(folderPath);
+std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath, bool showOnlyHunks) {
+  auto parsed = parseGitRepositoryDiff(folderPath, showOnlyHunks);
 
   return std::make_shared<HybridDiffDocument>(
       std::move(parsed.files),
@@ -77,16 +77,18 @@ double HybridDiffParser::logTimingMark(const std::string& message) {
 }
 
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
-    const std::string& folderPath) {
-  return HybridDiffLoadSession::create(folderPath);
+    const std::string& folderPath,
+    bool showOnlyHunks) {
+  return HybridDiffLoadSession::create(folderPath, showOnlyHunks);
 }
 
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,
-    double initialRowCount) {
-  return Promise<DiffLoadResult>::async([folderPath, initialRowCount]() -> DiffLoadResult {
+    double initialRowCount,
+    bool showOnlyHunks) {
+  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadGitDiffDocument(folderPath);
+    auto document = loadGitDiffDocument(folderPath, showOnlyHunks);
     document->logMemorySnapshot("loadGitFolderDiff.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;

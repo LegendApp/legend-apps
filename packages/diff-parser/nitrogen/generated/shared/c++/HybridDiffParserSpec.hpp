@@ -56,8 +56,8 @@ namespace margelo::nitro::legenddesktop::diffparser {
     public:
       // Methods
       virtual double logTimingMark(const std::string& message) = 0;
-      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath) = 0;
-      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount) = 0;
+      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath, bool showOnlyHunks) = 0;
+      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount, bool showOnlyHunks) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(const std::string& diffText, const std::string& sourceLabel, double initialRowCount) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel, double initialRowCount) = 0;
 

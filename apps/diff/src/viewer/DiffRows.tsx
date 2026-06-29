@@ -50,6 +50,7 @@ export type DiffRenderFields = {
   nativeUnifiedRowConfigVersion: number;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
+  showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
   sideBySideRowCount: number;
   sideBySideTokenStyleById: SyntaxStyleMap;
@@ -638,7 +639,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       ? getPlainUnifiedRow(renderFields.document, index)
       : undefined
   );
-  const hunkHeaderInfo = getDiffUnifiedHunkHeaderInfo(renderFields.document, index, displayRow);
+  const hunkHeaderInfo = renderFields.showOnlyHunks
+    ? getDiffUnifiedHunkHeaderInfo(renderFields.document, index, displayRow)
+    : null;
   const file = row ? fileByIndex.get(row.fileIndex) : fileByRowStart.get(index);
   const palette = getDiffRowPalette(syntaxAppearance);
   const accentColor = isAdd ? palette.addAccent : isRemove ? palette.removeAccent : "transparent";
@@ -781,13 +784,15 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const fileHeader = row?.kind === "file-header"
     ? { fileIndex: row.fileIndex, sourceStart: row.sourceStart }
     : renderFields.sideBySideFileHeaderByListIndex.get(index);
-  const hunkHeaderInfo = getDiffSideBySideHunkHeaderInfo(
-    renderFields.document,
-    index,
-    renderFields.collapsedFileIndexList,
-    renderFields.sideBySideRowCount,
-    displayRow,
-  );
+  const hunkHeaderInfo = renderFields.showOnlyHunks
+    ? getDiffSideBySideHunkHeaderInfo(
+        renderFields.document,
+        index,
+        renderFields.collapsedFileIndexList,
+        renderFields.sideBySideRowCount,
+        displayRow,
+      )
+    : null;
 
   if (!row && !fileHeader && renderFields.rowRenderer !== "native") {
     return <View style={{ height: rowHeight }} />;

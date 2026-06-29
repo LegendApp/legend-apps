@@ -5,7 +5,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
 #include "git2.h"
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -27,6 +29,7 @@ constexpr double emptySideBySideRowIndex = -1;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
+constexpr uint32_t fullFileDiffContextLines = std::numeric_limits<uint32_t>::max();
 
 using DiffClock = std::chrono::steady_clock;
 
@@ -847,7 +850,8 @@ DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {
 
 DiffLoadTiming parseGitRepositoryDiffProgressive(
     const std::string& folderPath,
-    const DiffProgressiveCallbacks& callbacks) {
+    const DiffProgressiveCallbacks& callbacks,
+    bool showOnlyHunks) {
   const auto loadStartedAt = DiffClock::now();
   if (callbacks.onPhase) {
     callbacks.onPhase("beforeLibGitInit");
@@ -872,6 +876,9 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
     throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
   }
   options.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+  if (!showOnlyHunks) {
+    options.context_lines = fullFileDiffContextLines;
+  }
 
   git_reference* rawHead = nullptr;
   if (git_repository_head(&rawHead, repo.get()) != 0) {
@@ -956,7 +963,8 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
 
 DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     const std::string& folderPath,
-    const DiffProgressiveCallbacks& callbacks) {
+    const DiffProgressiveCallbacks& callbacks,
+    bool showOnlyHunks) {
   const auto loadStartedAt = DiffClock::now();
   if (callbacks.onPhase) {
     callbacks.onPhase("beforeLibGitInit");
@@ -1025,6 +1033,9 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
   }
   diffOptions.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+  if (!showOnlyHunks) {
+    diffOptions.context_lines = fullFileDiffContextLines;
+  }
 
   std::vector<DiffFileSummary> files;
   std::vector<DiffFileSources> fileSources;
@@ -1142,7 +1153,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   return timing;
 }
 
-DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
+DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath, bool showOnlyHunks) {
   std::vector<DiffFileSummary> files;
   std::vector<DiffRenderRow> rows;
   std::vector<DiffFileSources> fileSources;
@@ -1179,7 +1190,7 @@ DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath) {
           }
         }
       },
-  });
+  }, showOnlyHunks);
 
   return {
     .files = std::move(files),

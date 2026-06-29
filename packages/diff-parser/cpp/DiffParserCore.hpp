@@ -35,13 +35,15 @@ struct DiffProgressiveCallbacks {
 };
 
 DiffParsedDocument parseUnifiedDiffText(const std::string& diffText);
-DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath);
+DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath, bool showOnlyHunks = true);
 DiffLoadTiming parseGitRepositoryDiffProgressive(
     const std::string& folderPath,
-    const DiffProgressiveCallbacks& callbacks);
+    const DiffProgressiveCallbacks& callbacks,
+    bool showOnlyHunks = true);
 DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     const std::string& folderPath,
-    const DiffProgressiveCallbacks& callbacks);
+    const DiffProgressiveCallbacks& callbacks,
+    bool showOnlyHunks = true);
 std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<DiffRenderRow>& rows);
 
 } // namespace margelo::nitro::legenddesktop::diffparser

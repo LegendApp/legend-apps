@@ -30,6 +30,9 @@ cat > "$GIT_FIXTURE/src/App.tsx" <<'EOF'
 export function App() {
   return null;
 }
+
+export const outsideNearContext = "base";
+export const outsideFullFileContext = "base";
 EOF
 cat > "$GIT_FIXTURE/src/Deleted.ts" <<'EOF'
 export const removed = true;
@@ -63,6 +66,9 @@ cat > "$GIT_FIXTURE/src/App.tsx" <<'EOF'
 export function App() {
   return "changed";
 }
+
+export const outsideNearContext = "base";
+export const outsideFullFileContext = "base";
 EOF
 cat > "$GIT_FIXTURE/src/NewFile.ts" <<'EOF'
 export const added = true;

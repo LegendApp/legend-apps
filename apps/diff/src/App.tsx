@@ -9,7 +9,11 @@ import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
-import { setDiffViewModeSetting } from "./diffSettings";
+import {
+  getDiffShowOnlyHunksSetting,
+  setDiffShowOnlyHunksSetting,
+  setDiffViewModeSetting,
+} from "./diffSettings";
 import { warmDiffSyntaxHighlightersForStartup } from "./diffSyntaxWarmup";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
@@ -162,6 +166,11 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
     filterFiles: dispatchDiffViewerAction,
     reload: dispatchDiffViewerAction,
     revealInFinder: dispatchDiffViewerAction,
+    showOnlyHunks: (action) => {
+      if (!dispatchDiffViewerAction(action)) {
+        setDiffShowOnlyHunksSetting(!getDiffShowOnlyHunksSetting());
+      }
+    },
     toggleSidebar: dispatchDiffViewerAction,
     viewBlocks: () => {
       setDiffViewModeSetting("blocks");

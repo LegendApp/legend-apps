@@ -22,6 +22,14 @@ function loadModuleWithParser(parser = createParser()) {
     __esModule: true,
     NitroModules: nitroModules,
   }));
+  jest.doMock("../DiffNativeRowConfigNativeComponent", () => ({
+    __esModule: true,
+    default: "DiffNativeRowConfig",
+  }));
+  jest.doMock("../DiffNativeRowNativeComponent", () => ({
+    __esModule: true,
+    default: "DiffNativeRow",
+  }));
   const diffParser = require("../index") as typeof import("../index");
   return { diffParser, nitroModules, parser };
 }
@@ -32,7 +40,7 @@ describe("@legend-desktop/diff-parser", () => {
 
     await expect(diffParser.loadGitFolderDiff("/tmp/repo")).resolves.toEqual({ ok: "git" });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true);
   });
 
   it("passes explicit git folder diff row count", async () => {
@@ -40,7 +48,15 @@ describe("@legend-desktop/diff-parser", () => {
 
     await diffParser.loadGitFolderDiff("/tmp/repo", 25);
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true);
+  });
+
+  it("passes git folder diff load options", async () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    await diffParser.loadGitFolderDiff("/tmp/repo", 25, { showOnlyHunks: false });
+
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false);
   });
 
   it("starts progressive git folder diff sessions", () => {
@@ -48,7 +64,15 @@ describe("@legend-desktop/diff-parser", () => {
 
     expect(diffParser.startGitFolderDiff("/tmp/repo")).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo");
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true);
+  });
+
+  it("starts progressive git folder diff sessions with options", () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    expect(diffParser.startGitFolderDiff("/tmp/repo", { showOnlyHunks: false })).toEqual({ ok: "session" });
+
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false);
   });
 
   it("logs timing diagnostics without throwing", () => {

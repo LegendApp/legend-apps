@@ -1,5 +1,5 @@
 import { NitroModules } from "react-native-nitro-modules";
-import type { DiffParser } from "./DiffParser.nitro";
+import type { DiffGitFolderLoadOptions, DiffParser } from "./DiffParser.nitro";
 
 let diffParser: DiffParser | undefined;
 
@@ -8,12 +8,20 @@ function getDiffParser() {
   return diffParser;
 }
 
-export function loadGitFolderDiff(folderPath: string, initialRowCount = 200) {
-  return getDiffParser().loadGitFolderDiff(folderPath, initialRowCount);
+function normalizeGitFolderLoadOptions(options?: Partial<DiffGitFolderLoadOptions>): DiffGitFolderLoadOptions {
+  return {
+    showOnlyHunks: options?.showOnlyHunks ?? true,
+  };
 }
 
-export function startGitFolderDiff(folderPath: string) {
-  return getDiffParser().startGitFolderDiff(folderPath);
+export function loadGitFolderDiff(folderPath: string, initialRowCount = 200, options?: Partial<DiffGitFolderLoadOptions>) {
+  const normalizedOptions = normalizeGitFolderLoadOptions(options);
+  return getDiffParser().loadGitFolderDiff(folderPath, initialRowCount, normalizedOptions.showOnlyHunks);
+}
+
+export function startGitFolderDiff(folderPath: string, options?: Partial<DiffGitFolderLoadOptions>) {
+  const normalizedOptions = normalizeGitFolderLoadOptions(options);
+  return getDiffParser().startGitFolderDiff(folderPath, normalizedOptions.showOnlyHunks);
 }
 
 export function logDiffTimingMark(message: string) {
@@ -38,6 +46,7 @@ export { default as DiffNativeRow } from "./DiffNativeRowNativeComponent";
 export type {
   DiffDocument,
   DiffFileSummary,
+  DiffGitFolderLoadOptions,
   DiffLoadProgress,
   DiffLoadResult,
   DiffLoadSession,

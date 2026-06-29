@@ -35,15 +35,16 @@ DiffLoadTiming createEmptyTiming() {
 
 } // namespace
 
-std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::create(const std::string& folderPath) {
-  auto session = std::make_shared<HybridDiffLoadSession>(folderPath);
+std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::create(const std::string& folderPath, bool showOnlyHunks) {
+  auto session = std::make_shared<HybridDiffLoadSession>(folderPath, showOnlyHunks);
   session->start();
   return session;
 }
 
-HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath)
+HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks)
     : HybridObject(TAG),
       folderPath_(std::move(folderPath)),
+      showOnlyHunks_(showOnlyHunks),
       document_(std::make_shared<HybridDiffDocument>(
           std::vector<DiffFileSummary>(),
           std::vector<DiffRenderRow>(),
@@ -142,7 +143,7 @@ void HybridDiffLoadSession::run() {
           document_->updateProgressFile(file);
           fileVersion_.fetch_add(1);
         },
-    });
+    }, showOnlyHunks_);
     timing.documentMs = elapsedSessionMs(startedAt, DiffClock::now());
     timing.nativeTotalMs = timing.documentMs;
     document_->setProgressTiming(timing);

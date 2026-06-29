@@ -108,6 +108,10 @@ export interface DiffLoadProgress {
   error: string;
 }
 
+export interface DiffGitFolderLoadOptions {
+  showOnlyHunks: boolean;
+}
+
 export interface DiffDocument
   extends HybridObject<{
     ios: "c++";
@@ -151,8 +155,8 @@ export interface DiffParser
     ios: "c++";
   }> {
   logTimingMark(message: string): number;
-  startGitFolderDiff(folderPath: string): DiffLoadSession;
-  loadGitFolderDiff(folderPath: string, initialRowCount: number): Promise<DiffLoadResult>;
+  startGitFolderDiff(folderPath: string, showOnlyHunks: boolean): DiffLoadSession;
+  loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
   loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
 }

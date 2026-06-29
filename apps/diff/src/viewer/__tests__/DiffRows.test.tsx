@@ -55,6 +55,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     nativeUnifiedRowConfigVersion: 1,
     rowRenderer: "react-native",
     rowHeight: 22,
+    showOnlyHunks: true,
     sideBySideFileHeaderByListIndex: new Map(),
     sideBySideRowCount: 0,
     sideBySideTokenStyleById: new Map(),

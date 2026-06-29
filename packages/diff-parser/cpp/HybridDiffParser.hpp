@@ -10,10 +10,12 @@ public:
 
   double logTimingMark(const std::string& message) override;
   std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(
-      const std::string& folderPath) override;
+      const std::string& folderPath,
+      bool showOnlyHunks) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(
       const std::string& folderPath,
-      double initialRowCount) override;
+      double initialRowCount,
+      bool showOnlyHunks) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(
       const std::string& diffText,
       const std::string& sourceLabel,

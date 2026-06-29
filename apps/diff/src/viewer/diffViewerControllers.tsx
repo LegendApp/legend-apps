@@ -10,6 +10,7 @@ import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
 import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
+  getDiffShowOnlyHunksSetting,
   getDiffSyntaxTheme,
   getDiffViewModeSetting,
   isDiffViewMode,
@@ -46,6 +47,7 @@ export function DiffNativeMenuController() {
 
   useObserveEffect(() => {
     const currentState = state$.get();
+    const currentShowOnlyHunks = getDiffShowOnlyHunksSetting();
     const currentViewMode = getDiffViewModeSetting();
     const currentLoadingSource = loadingSource$.get();
     const currentSidebarCollapsed = sidebarCollapsed$.get();
@@ -97,6 +99,11 @@ export function DiffNativeMenuController() {
         checked: currentViewMode === "blocks",
         enabled: currentShowViewModeToolbar,
         id: "viewBlocks",
+      },
+      {
+        checked: currentShowOnlyHunks,
+        enabled: currentVisibleFolderPath !== null,
+        id: "showOnlyHunks",
       },
     ]);
   });
@@ -187,6 +194,7 @@ export function DiffActionHandlersController({
   focusFileFilter,
   reloadCurrentSource,
   revealCurrentFolder,
+  toggleShowOnlyHunks,
   toggleSidebar,
 }: {
   copyCurrentFilePath: () => boolean;
@@ -195,6 +203,7 @@ export function DiffActionHandlersController({
   focusFileFilter: () => boolean;
   reloadCurrentSource: () => boolean;
   revealCurrentFolder: () => boolean;
+  toggleShowOnlyHunks: () => boolean;
   toggleSidebar: () => boolean;
 }) {
   useEffect(() => registerDiffViewerActionHandlers({
@@ -204,6 +213,7 @@ export function DiffActionHandlersController({
     filterFiles: focusFileFilter,
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
+    showOnlyHunks: toggleShowOnlyHunks,
     toggleSidebar,
   }), [
     copyCurrentFilePath,
@@ -212,6 +222,7 @@ export function DiffActionHandlersController({
     focusFileFilter,
     reloadCurrentSource,
     revealCurrentFolder,
+    toggleShowOnlyHunks,
     toggleSidebar,
   ]);
 
