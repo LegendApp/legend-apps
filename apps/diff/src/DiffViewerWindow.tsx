@@ -1128,8 +1128,11 @@ function DiffMergeActionButton({
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
 }) {
+  const iconColor = disabled ? borderColor : primaryColor;
   return (
     <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
       disabled={disabled}
       onPress={() => onResolveMergeConflict(file, block, choice)}
       style={[
@@ -1140,9 +1143,14 @@ function DiffMergeActionButton({
         },
       ]}
     >
-      <Text numberOfLines={1} style={[styles.mergeChoiceButtonText, { color: disabled ? borderColor : primaryColor }]}>
-        {label}
-      </Text>
+      {choice === "both" ? (
+        <View style={styles.mergeChoiceBothIcons}>
+          <SFSymbol color={iconColor} name="arrow.left" size={12} />
+          <SFSymbol color={iconColor} name="arrow.right" size={12} />
+        </View>
+      ) : (
+        <SFSymbol color={iconColor} name={choice === "ours" ? "arrow.left" : "arrow.right"} size={14} />
+      )}
     </Pressable>
   );
 }
@@ -3563,10 +3571,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 54,
   },
-  mergeChoiceButtonText: {
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 14,
+  mergeChoiceBothIcons: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
+    justifyContent: "center",
   },
   mergeChoiceColumn: {
     alignItems: "center",
