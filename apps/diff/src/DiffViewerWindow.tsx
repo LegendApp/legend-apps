@@ -1198,6 +1198,7 @@ function getMergeControlRowByBlockKey(
 }
 
 function DiffMergeCodePane({
+  backgroundColor,
   foregroundColor,
   fontFamily,
   fontSize,
@@ -1211,6 +1212,7 @@ function DiffMergeCodePane({
   text,
   tokenStyleById,
 }: {
+  backgroundColor: string;
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
@@ -1231,6 +1233,7 @@ function DiffMergeCodePane({
           fontFamily,
           fontSize,
           foregroundColor,
+          backgroundColor,
           lineNumber,
           mutedColor,
           nativeTokens,
@@ -1244,7 +1247,7 @@ function DiffMergeCodePane({
         lineNumberWidth={lineNumberWidth}
         mutedColor={mutedColor}
         rowHeight={rowHeight}
-        style={[styles.mergeNativePane, { height: rowHeight }]}
+        style={[styles.mergeNativePane, { backgroundColor, height: rowHeight }]}
         text={text}
         tokens={nativeTokens}
       />
@@ -1252,7 +1255,7 @@ function DiffMergeCodePane({
   }
 
   return (
-    <View style={[styles.mergeCodeLine, { height: rowHeight }]}>
+    <View style={[styles.mergeCodeLine, { backgroundColor, height: rowHeight }]}>
       <LightText numberOfLines={1} selectable={false} style={[styles.mergeLineNumber, { color: mutedColor, fontFamily, fontSize, lineHeight: rowHeight, width: lineNumberWidth }]}>
         {lineNumber ?? ""}
       </LightText>
@@ -1349,6 +1352,7 @@ function DiffMergeLineRow({
   rightTokens,
   row,
   rowHeight,
+  syntaxAppearance,
   tokenStyleById,
 }: {
   borderColor: string;
@@ -1368,18 +1372,28 @@ function DiffMergeLineRow({
   rightTokens: string;
   row: DiffMergeDisplayRow | undefined;
   rowHeight: number;
+  syntaxAppearance: "dark" | "light";
   tokenStyleById: SyntaxStyleMap;
 }) {
+  const palette = getDiffRowPalette(syntaxAppearance);
+  const isLeftChanged = Boolean(row?.conflictBlock && row.leftLineNumber !== undefined);
+  const isRightChanged = Boolean(row?.conflictBlock && row.rightLineNumber !== undefined);
+  const leftBackgroundColor = isLeftChanged ? palette.removeBackground : "transparent";
+  const rightBackgroundColor = isRightChanged ? palette.addBackground : "transparent";
+  const leftLineNumberColor = isLeftChanged ? palette.removeAccent : mutedColor;
+  const rightLineNumberColor = isRightChanged ? palette.addAccent : mutedColor;
+
   return (
     <View style={[styles.mergeCommonRow, { height: rowHeight }]}>
       <View style={styles.mergeCommonPane}>
         <DiffMergeCodePane
+          backgroundColor={leftBackgroundColor}
           foregroundColor={foregroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
           lineNumber={row?.leftLineNumber}
           lineNumberWidth={diffSideBySideLineNumberWidth}
-          mutedColor={mutedColor}
+          mutedColor={leftLineNumberColor}
           nativeTokens={leftTokens}
           renderer={renderer}
           rowHeight={rowHeight}
@@ -1399,12 +1413,13 @@ function DiffMergeLineRow({
       />
       <View style={styles.mergeCommonPane}>
         <DiffMergeCodePane
+          backgroundColor={rightBackgroundColor}
           foregroundColor={foregroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
           lineNumber={row?.rightLineNumber}
           lineNumberWidth={diffSideBySideLineNumberWidth}
-          mutedColor={mutedColor}
+          mutedColor={rightLineNumberColor}
           nativeTokens={rightTokens}
           renderer={renderer}
           rowHeight={rowHeight}
@@ -1433,6 +1448,7 @@ function DiffMergeContent({
   resolvingMergeConflictKey,
   rowRenderer,
   rowHeight,
+  syntaxAppearance,
   syntaxHighlightingEnabled,
   syntaxThemeName,
 }: {
@@ -1467,6 +1483,37 @@ function DiffMergeContent({
   const syntaxKey = mergeFile && syntaxHighlightingEnabled
     ? `${dataVersion}:${mergeFile.path}:${syntaxThemeName}`
     : "disabled";
+  const mergeListExtraData = useMemo(() => ({
+    borderColor,
+    controlRangeCount: visibleRange.count,
+    controlRangeStart: visibleRange.start,
+    dataVersion,
+    foregroundColor,
+    fontFamily,
+    fontSize,
+    mergeSyntaxVersion: mergeSyntax?.configVersion ?? 0,
+    mutedColor,
+    primaryColor,
+    resolvingMergeConflictKey,
+    rowHeight,
+    rowRenderer,
+    syntaxAppearance,
+  }), [
+    borderColor,
+    dataVersion,
+    foregroundColor,
+    fontFamily,
+    fontSize,
+    mergeSyntax?.configVersion,
+    mutedColor,
+    primaryColor,
+    resolvingMergeConflictKey,
+    rowHeight,
+    rowRenderer,
+    syntaxAppearance,
+    visibleRange.count,
+    visibleRange.start,
+  ]);
   const controlRowByBlockKey = useMemo(
     () => mergeFile ? getMergeControlRowByBlockKey(mergeFile, visibleRange) : new Map<string, number>(),
     [mergeFile, visibleRange],
@@ -1512,11 +1559,12 @@ function DiffMergeContent({
           rightTokens={encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor)}
           row={displayRow}
           rowHeight={rowHeight}
+          syntaxAppearance={syntaxAppearance}
           tokenStyleById={tokenStyleById}
         />
       );
     },
-    [borderColor, controlRowByBlockKey, foregroundColor, fontFamily, fontSize, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer],
+    [borderColor, controlRowByBlockKey, foregroundColor, fontFamily, fontSize, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {
@@ -1529,26 +1577,28 @@ function DiffMergeContent({
     const language = getSyntaxLanguageForPath(mergeFile.path);
     const leftSource = mergeFile.displayRows.map((row) => row.leftText).join("\n");
     const rightSource = mergeFile.displayRows.map((row) => row.rightText).join("\n");
-    Promise.all([
-      highlightString(leftSource, language, syntaxThemeName),
-      highlightString(rightSource, language, syntaxThemeName),
-    ]).then(([leftResult, rightResult]) => {
-      if (!cancelled) {
-        const styles = [...leftResult.styles, ...rightResult.styles];
-        setMergeSyntax({
-          configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
-          key: syntaxKey,
-          leftLines: leftResult.lines,
-          rightLines: rightResult.lines,
-          tokenStyleById: createMergeSyntaxStyleMap(styles),
-        });
-      }
-    }).catch((error: unknown) => {
-      if (!cancelled) {
-        console.error(error instanceof Error ? error.message : String(error));
-        setMergeSyntax(null);
-      }
-    });
+    ensureSyntaxGrammarsForPaths([mergeFile.path])
+      .then(() => Promise.all([
+        highlightString(leftSource, language, syntaxThemeName),
+        highlightString(rightSource, language, syntaxThemeName),
+      ]))
+      .then(([leftResult, rightResult]) => {
+        if (!cancelled) {
+          const styles = [...leftResult.styles, ...rightResult.styles];
+          setMergeSyntax({
+            configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
+            key: syntaxKey,
+            leftLines: leftResult.lines,
+            rightLines: rightResult.lines,
+            tokenStyleById: createMergeSyntaxStyleMap(styles),
+          });
+        }
+      }).catch((error: unknown) => {
+        if (!cancelled) {
+          console.error(error instanceof Error ? error.message : String(error));
+          setMergeSyntax(null);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -1595,7 +1645,7 @@ function DiffMergeContent({
       <VirtualizedFixedDocumentList
         dataVersion={dataVersion}
         debugName="merge"
-        extraData={dataVersion}
+        extraData={mergeListExtraData}
         getRow={getMergeRow}
         itemIndexes={itemIndexes}
         ListHeaderComponent={<View style={styles.mergeListHeaderSpacer} />}
