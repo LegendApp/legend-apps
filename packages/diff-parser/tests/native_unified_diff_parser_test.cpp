@@ -1,10 +1,12 @@
 #include "../cpp/DiffParserCore.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace diffparser = margelo::nitro::legenddesktop::diffparser;
@@ -212,10 +214,73 @@ void assertSideBySideRows(const diffparser::DiffParsedDocument& parsed) {
   expect(foundAddedOnlyLine, "side-by-side should keep unpaired added rows");
 }
 
+diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::string& fixturePath) {
+  std::vector<diffparser::DiffFileSummary> files;
+  std::vector<diffparser::DiffRenderRow> rows;
+  std::vector<diffparser::DiffFileSources> fileSources;
+  std::string repositoryPath;
+  std::string workdirPath;
+  std::string headTreeOid;
+
+  const auto timing = diffparser::parseGitRepositoryDiffProgressiveByFile(fixturePath, diffparser::DiffProgressiveCallbacks{
+      .shouldCancel = [] {
+        return false;
+      },
+      .onRepositoryMetadata = [&](diffparser::DiffRepositoryMetadata metadata) {
+        repositoryPath = std::move(metadata.repositoryPath);
+        workdirPath = std::move(metadata.workdirPath);
+        headTreeOid = std::move(metadata.headTreeOid);
+      },
+      .onFilesDiscovered = [&](std::vector<diffparser::DiffFileSummary> discoveredFiles, std::vector<diffparser::DiffFileSources> discoveredSources) {
+        files = std::move(discoveredFiles);
+        fileSources = std::move(discoveredSources);
+      },
+      .onFile = [&](const diffparser::DiffFileSummary& file, const diffparser::DiffFileSources& sources, const diffparser::DiffRenderRow& headerRow) {
+        const auto fileIndex = static_cast<size_t>(std::max(0.0, std::floor(file.index)));
+        if (fileIndex < files.size()) {
+          files[fileIndex] = file;
+        } else {
+          files.push_back(file);
+        }
+        if (fileIndex < fileSources.size()) {
+          fileSources[fileIndex] = sources;
+        } else {
+          fileSources.push_back(sources);
+        }
+        rows.push_back(headerRow);
+      },
+      .onRow = [&](const diffparser::DiffRenderRow& row) {
+        rows.push_back(row);
+      },
+      .onFileFinished = [&](const diffparser::DiffFileSummary& file) {
+        const auto fileIndex = static_cast<size_t>(std::max(0.0, std::floor(file.index)));
+        if (fileIndex < files.size()) {
+          files[fileIndex] = file;
+          if (fileIndex < fileSources.size()) {
+            fileSources[fileIndex].oldPath = file.oldPath;
+            fileSources[fileIndex].newPath = file.path;
+            fileSources[fileIndex].status = file.status;
+            fileSources[fileIndex].isBinary = file.isBinary;
+          }
+        }
+      },
+  });
+
+  return {
+    .files = std::move(files),
+    .rows = std::move(rows),
+    .fileSources = std::move(fileSources),
+    .repositoryPath = std::move(repositoryPath),
+    .workdirPath = std::move(workdirPath),
+    .headTreeOid = std::move(headTreeOid),
+    .timing = timing,
+  };
+}
+
 void assertGitRepositoryDiff(const std::string& fixturePath) {
   const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath);
-  expectEqual(static_cast<double>(parsed.files.size()), 4, "git file count");
-  expectEqual(parsed.timing.fileCount, 4, "git timing file count");
+  expectEqual(static_cast<double>(parsed.files.size()), 5, "git file count");
+  expectEqual(parsed.timing.fileCount, 5, "git timing file count");
   expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git timing row count");
   expect(!parsed.repositoryPath.empty(), "git repository path should be set");
   expect(!parsed.workdirPath.empty(), "git workdir path should be set");
@@ -250,7 +315,18 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
   expectEqual(binary.status, "modified", "git binary status");
   expect(binary.isBinary, "git binary file should be marked binary");
 
-  expectEqual(static_cast<double>(parsed.fileSources.size()), 4, "git file source count");
+  const auto& conflicted = findFile(parsed, "src/Conflict.ts");
+  expectEqual(conflicted.oldPath, "src/Conflict.ts", "git conflicted old path");
+  expectEqual(conflicted.status, "conflicted", "git conflicted status");
+  expect(!conflicted.isBinary, "git conflicted file should not be binary");
+  const auto& conflictMarkerRow = findRowTextForFile(parsed, conflicted, "<<<<<<< HEAD");
+  expectEqual(conflictMarkerRow.changeType, diffChangeTypeAdd, "git conflicted marker row type");
+  expectEqual(conflictMarkerRow.oldLineNumber, -1, "git conflicted marker old line");
+  expectEqual(conflictMarkerRow.newLineNumber, 1, "git conflicted marker new line");
+  const auto& conflictBranchRow = findRowTextForFile(parsed, conflicted, "export const side = \"branch\";");
+  expectEqual(conflictBranchRow.changeType, diffChangeTypeAdd, "git conflicted branch row type");
+
+  expectEqual(static_cast<double>(parsed.fileSources.size()), 5, "git file source count");
   for (const auto& sources : parsed.fileSources) {
     const auto& file = fileAt(parsed, static_cast<size_t>(sources.fileIndex));
     expectEqual(sources.oldPath, file.oldPath, "git file source old path");
@@ -259,6 +335,24 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
     expect(sources.isBinary == file.isBinary, "git file source binary flag");
     expect(!sources.isUnifiedDiff, "git file source should not be marked unified");
   }
+}
+
+void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
+  const auto parsed = parseGitRepositoryDiffByFileForTest(fixturePath);
+  expectEqual(static_cast<double>(parsed.files.size()), 5, "git by-file file count");
+  expectEqual(parsed.timing.fileCount, 5, "git by-file timing file count");
+  expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git by-file timing row count");
+
+  const auto& conflicted = findFile(parsed, "src/Conflict.ts");
+  expectEqual(conflicted.oldPath, "src/Conflict.ts", "git by-file conflicted old path");
+  expectEqual(conflicted.status, "conflicted", "git by-file conflicted status");
+  expect(!conflicted.isBinary, "git by-file conflicted file should not be binary");
+  const auto& conflictMarkerRow = findRowTextForFile(parsed, conflicted, "<<<<<<< HEAD");
+  expectEqual(conflictMarkerRow.changeType, diffChangeTypeAdd, "git by-file conflicted marker row type");
+  expectEqual(conflictMarkerRow.oldLineNumber, -1, "git by-file conflicted marker old line");
+  expectEqual(conflictMarkerRow.newLineNumber, 1, "git by-file conflicted marker new line");
+  const auto& conflictBranchRow = findRowTextForFile(parsed, conflicted, "export const side = \"branch\";");
+  expectEqual(conflictBranchRow.changeType, diffChangeTypeAdd, "git by-file conflicted branch row type");
 }
 
 } // namespace
@@ -271,6 +365,7 @@ int main(int argc, char** argv) {
     assertSideBySideRows(parsed);
     if (argc > 1) {
       assertGitRepositoryDiff(argv[1]);
+      assertGitRepositoryDiffByFile(argv[1]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

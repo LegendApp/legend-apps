@@ -34,6 +34,9 @@ EOF
 cat > "$GIT_FIXTURE/src/Deleted.ts" <<'EOF'
 export const removed = true;
 EOF
+cat > "$GIT_FIXTURE/src/Conflict.ts" <<'EOF'
+export const side = "base";
+EOF
 printf '\x00\x01\x02\x03' > "$GIT_FIXTURE/assets/logo.bin"
 
 git -C "$GIT_FIXTURE" init --quiet
@@ -41,6 +44,20 @@ git -C "$GIT_FIXTURE" config user.email "diff-parser-native@example.com"
 git -C "$GIT_FIXTURE" config user.name "Diff Parser Native"
 git -C "$GIT_FIXTURE" add .
 git -C "$GIT_FIXTURE" commit --quiet -m "initial fixture"
+INITIAL_BRANCH="$(git -C "$GIT_FIXTURE" branch --show-current)"
+
+git -C "$GIT_FIXTURE" checkout --quiet -b conflict-branch
+cat > "$GIT_FIXTURE/src/Conflict.ts" <<'EOF'
+export const side = "branch";
+EOF
+git -C "$GIT_FIXTURE" commit --quiet -am "branch conflict"
+
+git -C "$GIT_FIXTURE" checkout --quiet "$INITIAL_BRANCH"
+cat > "$GIT_FIXTURE/src/Conflict.ts" <<'EOF'
+export const side = "main";
+EOF
+git -C "$GIT_FIXTURE" commit --quiet -am "main conflict"
+git -C "$GIT_FIXTURE" merge --quiet conflict-branch || true
 
 cat > "$GIT_FIXTURE/src/App.tsx" <<'EOF'
 export function App() {

@@ -212,6 +212,8 @@ std::string deltaStatus(const git_diff_delta* delta) {
       return "copied";
     case GIT_DELTA_UNTRACKED:
       return "untracked";
+    case GIT_DELTA_CONFLICTED:
+      return "conflicted";
     default:
       return "unknown";
   }
@@ -224,6 +226,9 @@ struct StatusPathSummary {
 };
 
 std::string statusFlagsStatus(unsigned int status) {
+  if ((status & GIT_STATUS_CONFLICTED) != 0) {
+    return "conflicted";
+  }
   if ((status & (GIT_STATUS_WT_NEW | GIT_STATUS_INDEX_NEW)) != 0) {
     return "added";
   }
@@ -380,6 +385,10 @@ struct ProgressiveDiffBuildState {
   int currentOldLine = -1;
   int currentNewLine = -1;
   double nextFileIndex = -1;
+  std::string nextFileOldPath;
+  std::string nextFilePath;
+  std::string nextFileStatus;
+  std::vector<StatusPathSummary> statusOverrides;
   bool cancelled = false;
 
   bool shouldCancel() {
@@ -396,6 +405,18 @@ struct ProgressiveDiffBuildState {
     }
   }
 };
+
+const StatusPathSummary* findStatusOverride(
+    const std::vector<StatusPathSummary>& overrides,
+    const std::string& path,
+    const std::string& oldPath) {
+  for (const auto& override : overrides) {
+    if (override.path == path || override.path == oldPath) {
+      return &override;
+    }
+  }
+  return nullptr;
+}
 
 struct UnifiedDiffBuildState {
   DiffBuildState diff;
@@ -548,6 +569,23 @@ int onProgressiveGitFile(const git_diff_delta* delta, float, void* payload) {
   file.path = deltaPath(delta);
   file.oldPath = oldDeltaPath(delta);
   file.status = deltaStatus(delta);
+  if (const auto* override = findStatusOverride(state->statusOverrides, file.path, file.oldPath)) {
+    file.path = override->path;
+    file.oldPath = override->oldPath;
+    file.status = override->status;
+  }
+  if (!state->nextFilePath.empty()) {
+    file.path = state->nextFilePath;
+  }
+  if (!state->nextFileOldPath.empty()) {
+    file.oldPath = state->nextFileOldPath;
+  }
+  if (!state->nextFileStatus.empty()) {
+    file.status = state->nextFileStatus;
+  }
+  state->nextFilePath.clear();
+  state->nextFileOldPath.clear();
+  state->nextFileStatus.clear();
   file.additions = 0;
   file.deletions = 0;
   file.rowStart = state->rowCount;
@@ -872,14 +910,28 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
     });
   }
 
+  git_status_options statusOptions = {};
+  if (git_status_options_init(&statusOptions, GIT_STATUS_OPTIONS_VERSION) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to initialize git status options"));
+  }
+  statusOptions.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+  statusOptions.flags = GIT_STATUS_OPT_NO_REFRESH;
+
+  StatusPathCollectState statusState{ .callbacks = callbacks };
+  const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
+  if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
+    throw std::runtime_error(gitErrorMessage("Failed to read git status"));
+  }
+
   git_diff* rawDiff = nullptr;
-  if (git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &options) != 0) {
+  if (git_diff_tree_to_workdir(&rawDiff, repo.get(), headTree.get(), &options) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to create git diff"));
   }
   const auto diffCreatedAt = DiffClock::now();
   std::unique_ptr<git_diff, GitDiffDeleter> diff(rawDiff);
 
   ProgressiveDiffBuildState state{ .callbacks = callbacks };
+  state.statusOverrides = std::move(statusState.paths);
   if (git_diff_foreach(diff.get(), onProgressiveGitFile, nullptr, onProgressiveGitHunk, onProgressiveGitLine, &state) != 0 && !state.cancelled) {
     throw std::runtime_error(gitErrorMessage("Failed to read git diff"));
   }
@@ -999,12 +1051,18 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     diffOptions.pathspec.count = 1;
 
     git_diff* rawDiff = nullptr;
-    if (git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &diffOptions) != 0) {
+    const auto diffResult = file.status == "conflicted"
+      ? git_diff_tree_to_workdir(&rawDiff, repo.get(), headTree.get(), &diffOptions)
+      : git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &diffOptions);
+    if (diffResult != 0) {
       throw std::runtime_error(gitErrorMessage("Failed to create path diff"));
     }
     std::unique_ptr<git_diff, GitDiffDeleter> diff(rawDiff);
 
     state.nextFileIndex = file.index;
+    state.nextFileOldPath = file.oldPath;
+    state.nextFilePath = file.path;
+    state.nextFileStatus = file.status;
     if (git_diff_foreach(diff.get(), onProgressiveGitFile, nullptr, onProgressiveGitHunk, onProgressiveGitLine, &state) != 0 && !state.cancelled) {
       throw std::runtime_error(gitErrorMessage("Failed to read path diff"));
     }
