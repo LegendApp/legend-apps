@@ -1198,16 +1198,10 @@ function getMergeSyntaxLine(
 function getMergeControlRowByBlockKey(
   conflictRanges: readonly DiffMergeConflictRange[],
   file: DiffMergeConflictFile,
-  visibleRange: { count: number; start: number },
 ) {
   const rowByBlockKey = new Map<string, number>();
-  const visibleStart = visibleRange.start;
-  const visibleEnd = visibleRange.start + Math.max(0, visibleRange.count) - 1;
   for (const range of conflictRanges) {
-    const hasVisibleIntersection = visibleRange.count > 0 && visibleEnd >= range.startRow && visibleStart <= range.endRow;
-    const startRow = hasVisibleIntersection ? Math.max(range.startRow, visibleStart) : range.startRow;
-    const endRow = hasVisibleIntersection ? Math.min(range.endRow, visibleEnd) : range.endRow;
-    rowByBlockKey.set(getMergeConflictKey(file, range.block), Math.floor((startRow + endRow) / 2));
+    rowByBlockKey.set(getMergeConflictKey(file, range.block), Math.floor((range.startRow + range.endRow) / 2));
   }
   return rowByBlockKey;
 }
@@ -1541,7 +1535,6 @@ function DiffMergeContent({
   syntaxThemeName: string;
 }) {
   const mergeFile = getActiveMergeFile({ activeFileIndex, files: fileByIndex, mergeState });
-  const [visibleRange, setVisibleRange] = useState({ count: 0, start: 0 });
   const [mergeSyntax, setMergeSyntax] = useState<DiffMergeSyntaxState | null>(null);
   const scrolledMergeFileRef = useRef<string | null>(null);
   const mergeDisplayModel = useMemo(() => {
@@ -1560,8 +1553,6 @@ function DiffMergeContent({
     : "disabled";
   const mergeListExtraData = useMemo(() => ({
     borderColor,
-    controlRangeCount: visibleRange.count,
-    controlRangeStart: visibleRange.start,
     dataVersion,
     foregroundColor,
     fontFamily,
@@ -1588,25 +1579,16 @@ function DiffMergeContent({
     rowRenderer,
     showOnlyHunks,
     syntaxAppearance,
-    visibleRange.count,
-    visibleRange.start,
   ]);
   const controlRowByBlockKey = useMemo(
-    () => mergeFile ? getMergeControlRowByBlockKey(mergeDisplayModel.conflictRanges, mergeFile, visibleRange) : new Map<string, number>(),
-    [mergeDisplayModel, mergeFile, visibleRange],
+    () => mergeFile ? getMergeControlRowByBlockKey(mergeDisplayModel.conflictRanges, mergeFile) : new Map<string, number>(),
+    [mergeDisplayModel, mergeFile],
   );
   const getMergeRow = useCallback((index: number) => mergeDisplayModel.rows[index], [mergeDisplayModel]);
   const getMergeItemSize = useCallback((index: number) => (
     rowHeight + (mergeDisplayModel.rows[index]?.hunkHeader ? diffHunkHeaderHeight : 0)
   ), [mergeDisplayModel, rowHeight]);
   const firstConflictRowIndex = mergeDisplayModel.conflictRanges[0]?.startRow ?? 0;
-  const handleMergeVisibleRowsRequested = useCallback((start: number, count: number) => {
-    setVisibleRange((current) => (
-      current.start === start && current.count === count
-        ? current
-        : { count, start }
-    ));
-  }, []);
   const renderMergeRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffMergeDisplayRow>) => {
       if (!mergeFile) {
@@ -1734,7 +1716,6 @@ function DiffMergeContent({
         listHeaderHeight={diffTitlebarTopInset + 32}
         listRef={listRef}
         lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
-        onVisibleRowsRequested={handleMergeVisibleRowsRequested}
         overscanRequestDelayMs={diffOverscanRequestDelayMs}
         requestRange={noopVirtualizedDocumentRequestRange}
         requestRangesOnScroll
