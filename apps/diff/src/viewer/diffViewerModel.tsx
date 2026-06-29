@@ -20,7 +20,7 @@ export type DiffLoadTrace = {
 
 export type DiffLoadSourceOptions = {
   force?: boolean;
-  reason?: "launch" | "manual" | "mode-toggle" | "reload" | "watch";
+  reason?: "launch" | "manual" | "merge-resolve" | "mode-toggle" | "reload" | "watch";
 };
 
 export type DiffSplitPaneMetrics = {

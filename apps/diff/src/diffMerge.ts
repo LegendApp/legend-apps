@@ -8,13 +8,33 @@ export type DiffMergeConflictStage = {
 
 export type DiffMergeConflictBlock = {
   endLine: number;
+  index: number;
+  oursLines: string[];
   oursLineCount: number;
   separatorLine: number;
   startLine: number;
+  theirsLines: string[];
   theirsLineCount: number;
 };
 
+export type DiffMergeDisplayConflictBlock = {
+  block: DiffMergeConflictBlock;
+  kind: "conflict";
+  lineNumber: number;
+};
+
+export type DiffMergeDisplayLine = {
+  kind: "line";
+  lineNumber: number;
+  text: string;
+};
+
+export type DiffMergeDisplayRow = DiffMergeDisplayConflictBlock | DiffMergeDisplayLine;
+
+export type DiffMergeConflictChoice = "ours" | "theirs" | "both";
+
 export type DiffMergeConflictFile = {
+  displayRows: DiffMergeDisplayRow[];
   markerBlocks: DiffMergeConflictBlock[];
   path: string;
   stages: DiffMergeConflictStage[];
@@ -44,6 +64,27 @@ const conflictMarkerStartPattern = /^<<<<<<<(?:\s|$)/;
 const conflictMarkerSeparatorPattern = /^=======$/;
 const conflictMarkerEndPattern = /^>>>>>>>(?:\s|$)/;
 
+function getContentNewline(content: string) {
+  return content.includes("\r\n") ? "\r\n" : "\n";
+}
+
+function splitContentLines(content: string) {
+  const trailingNewline = /\r\n$|\n$|\r$/.test(content);
+  const lines = content.split(/\r\n|\n|\r/);
+  if (trailingNewline) {
+    lines.pop();
+  }
+  return {
+    lines,
+    newline: getContentNewline(content),
+    trailingNewline,
+  };
+}
+
+function joinContentLines(lines: string[], newline: string, trailingNewline: boolean) {
+  return `${lines.join(newline)}${trailingNewline ? newline : ""}`;
+}
+
 function createReadyMergeState(files: DiffMergeConflictFile[]): DiffMergeState {
   const fileByPath = new Map(files.map((file) => [file.path, file]));
   return {
@@ -64,6 +105,7 @@ export function parseGitUnmergedEntries(output: string): DiffMergeConflictFile[]
       let file = filesByPath.get(path);
       if (!file) {
         file = {
+          displayRows: [],
           markerBlocks: [],
           path,
           stages: [],
@@ -83,7 +125,7 @@ export function parseGitUnmergedEntries(output: string): DiffMergeConflictFile[]
 
 export function parseConflictMarkerBlocks(content: string): DiffMergeConflictBlock[] {
   const blocks: DiffMergeConflictBlock[] = [];
-  const lines = content.split(/\r\n|\n|\r/);
+  const { lines } = splitContentLines(content);
   let startLine: number | null = null;
   let separatorLine: number | null = null;
 
@@ -95,12 +137,17 @@ export function parseConflictMarkerBlocks(content: string): DiffMergeConflictBlo
     } else if (startLine !== null && separatorLine === null && conflictMarkerSeparatorPattern.test(line)) {
       separatorLine = lineNumber;
     } else if (startLine !== null && separatorLine !== null && conflictMarkerEndPattern.test(line)) {
+      const oursLines = lines.slice(startLine, separatorLine - 1);
+      const theirsLines = lines.slice(separatorLine, lineIndex);
       blocks.push({
         endLine: lineNumber,
-        oursLineCount: Math.max(0, separatorLine - startLine - 1),
+        index: blocks.length,
+        oursLines,
+        oursLineCount: oursLines.length,
         separatorLine,
         startLine,
-        theirsLineCount: Math.max(0, lineNumber - separatorLine - 1),
+        theirsLines,
+        theirsLineCount: theirsLines.length,
       });
       startLine = null;
       separatorLine = null;
@@ -108,6 +155,63 @@ export function parseConflictMarkerBlocks(content: string): DiffMergeConflictBlo
   });
 
   return blocks;
+}
+
+export function createDiffMergeDisplayRows(content: string, markerBlocks: DiffMergeConflictBlock[]): DiffMergeDisplayRow[] {
+  const { lines } = splitContentLines(content);
+  const rows: DiffMergeDisplayRow[] = [];
+  let nextLineIndex = 0;
+
+  for (const block of markerBlocks) {
+    const blockStartIndex = Math.max(0, block.startLine - 1);
+    for (let lineIndex = nextLineIndex; lineIndex < blockStartIndex; lineIndex += 1) {
+      rows.push({
+        kind: "line",
+        lineNumber: lineIndex + 1,
+        text: lines[lineIndex] ?? "",
+      });
+    }
+    rows.push({
+      block,
+      kind: "conflict",
+      lineNumber: block.startLine,
+    });
+    nextLineIndex = block.endLine;
+  }
+
+  for (let lineIndex = nextLineIndex; lineIndex < lines.length; lineIndex += 1) {
+    rows.push({
+      kind: "line",
+      lineNumber: lineIndex + 1,
+      text: lines[lineIndex] ?? "",
+    });
+  }
+
+  return rows;
+}
+
+export function resolveDiffMergeConflictContent(
+  content: string,
+  startLine: number,
+  choice: DiffMergeConflictChoice,
+) {
+  const { lines, newline, trailingNewline } = splitContentLines(content);
+  const block = parseConflictMarkerBlocks(content).find((candidate) => candidate.startLine === startLine);
+  if (!block) {
+    throw new Error(`Conflict block at line ${startLine} was not found.`);
+  }
+
+  const acceptedLines = choice === "ours"
+    ? block.oursLines
+    : choice === "theirs"
+      ? block.theirsLines
+      : [...block.oursLines, ...block.theirsLines];
+  const nextLines = [
+    ...lines.slice(0, block.startLine - 1),
+    ...acceptedLines,
+    ...lines.slice(block.endLine),
+  ];
+  return joinContentLines(nextLines, newline, trailingNewline);
 }
 
 async function loadConflictMarkers(
@@ -123,12 +227,50 @@ async function loadConflictMarkers(
       cwd: folderPath,
       timeoutMs: 5_000,
     });
+    const markerBlocks = result.exitCode === 0 ? parseConflictMarkerBlocks(result.stdout) : [];
     loadedFiles.push({
       ...file,
-      markerBlocks: result.exitCode === 0 ? parseConflictMarkerBlocks(result.stdout) : [],
+      displayRows: result.exitCode === 0 ? createDiffMergeDisplayRows(result.stdout, markerBlocks) : [],
+      markerBlocks,
     });
   }
   return loadedFiles;
+}
+
+export async function resolveDiffMergeConflictBlock({
+  choice,
+  folderPath,
+  path,
+  runner = commandRunner,
+  startLine,
+}: {
+  choice: DiffMergeConflictChoice;
+  folderPath: string;
+  path: string;
+  runner?: CommandRunner;
+  startLine: number;
+}) {
+  const readResult = await runner.runCommand({
+    args: ["--", path],
+    command: "cat",
+    cwd: folderPath,
+    timeoutMs: 5_000,
+  });
+  if (readResult.exitCode !== 0) {
+    throw new Error(readResult.stderr || `Unable to read ${path}.`);
+  }
+
+  const resolvedContent = resolveDiffMergeConflictContent(readResult.stdout, startLine, choice);
+  const writeResult = await runner.runCommand({
+    args: ["-c", "cat > \"$1\"", "legend-diff-write", path],
+    command: "sh",
+    cwd: folderPath,
+    input: resolvedContent,
+    timeoutMs: 5_000,
+  });
+  if (writeResult.exitCode !== 0) {
+    throw new Error(writeResult.stderr || `Unable to write ${path}.`);
+  }
 }
 
 export async function loadDiffMergeState(

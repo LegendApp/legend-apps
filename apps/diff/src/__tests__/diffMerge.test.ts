@@ -1,8 +1,10 @@
 import { createMockCommandRunner } from "@legend-desktop/command-runner";
 import {
+  createDiffMergeDisplayRows,
   loadDiffMergeState,
   parseConflictMarkerBlocks,
   parseGitUnmergedEntries,
+  resolveDiffMergeConflictContent,
 } from "../diffMerge";
 
 describe("diffMerge", () => {
@@ -17,6 +19,7 @@ describe("diffMerge", () => {
 
     expect(parseGitUnmergedEntries(output)).toEqual([
       {
+        displayRows: [],
         markerBlocks: [],
         path: "src/app.ts",
         stages: [
@@ -26,6 +29,7 @@ describe("diffMerge", () => {
         ],
       },
       {
+        displayRows: [],
         markerBlocks: [],
         path: "src/other.ts",
         stages: [
@@ -50,18 +54,61 @@ describe("diffMerge", () => {
     expect(parseConflictMarkerBlocks(content)).toEqual([
       {
         endLine: 7,
+        index: 0,
+        oursLines: ["current 1", "current 2"],
         oursLineCount: 2,
         separatorLine: 5,
         startLine: 2,
+        theirsLines: ["incoming"],
         theirsLineCount: 1,
       },
     ]);
   });
 
+  it("creates merge display rows without marker lines", () => {
+    const content = [
+      "before",
+      "<<<<<<< HEAD",
+      "current",
+      "=======",
+      "incoming",
+      ">>>>>>> feature",
+      "after",
+    ].join("\n");
+    const [block] = parseConflictMarkerBlocks(content);
+
+    expect(createDiffMergeDisplayRows(content, [block])).toEqual([
+      { kind: "line", lineNumber: 1, text: "before" },
+      { kind: "conflict", lineNumber: 2, block },
+      { kind: "line", lineNumber: 7, text: "after" },
+    ]);
+  });
+
+  it("resolves one conflict block from worktree content", () => {
+    const content = [
+      "before",
+      "<<<<<<< HEAD",
+      "current",
+      "=======",
+      "incoming",
+      ">>>>>>> feature",
+      "after",
+    ].join("\n");
+
+    expect(resolveDiffMergeConflictContent(content, 2, "both")).toBe([
+      "before",
+      "current",
+      "incoming",
+      "after",
+    ].join("\n"));
+  });
+
   it("loads conflict state from git index and worktree files", async () => {
+    const commands: string[] = [];
     const runner = createMockCommandRunner({
       run: (params) => {
-        if (params.command === "git") {
+        commands.push([params.command, ...(params.args ?? [])].join(" "));
+        if (params.command === "git" && params.args?.[0] === "ls-files") {
           return {
             exitCode: 0,
             stderr: "",
@@ -105,6 +152,10 @@ describe("diffMerge", () => {
         },
       ],
     });
+    expect(commands).toEqual([
+      "git ls-files -u -z",
+      "cat -- src/app.ts",
+    ]);
   });
 
   it("returns an empty ready state when Git has no unmerged entries", async () => {
