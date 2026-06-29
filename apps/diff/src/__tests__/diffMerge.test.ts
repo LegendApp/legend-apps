@@ -3,6 +3,7 @@ import {
   createDiffMergeDisplayRows,
   createDiffMergeHunkDisplayModel,
   diffMergeConflictLines,
+  diffMergeInlineChangeRanges,
   loadDiffMergeState,
   parseConflictMarkerBlocks,
   parseGitUnmergedEntries,
@@ -83,9 +84,27 @@ describe("diffMerge", () => {
 
     expect(createDiffMergeDisplayRows(content, [block])).toEqual([
       { kind: "line", leftLineNumber: 1, leftText: "before", lineNumber: 1, rightLineNumber: 1, rightText: "before" },
-      { conflictBlock: block, conflictLineIndex: 0, kind: "line", leftChangeType: "modify", leftLineNumber: 2, leftText: "current", lineNumber: 2, rightChangeType: "modify", rightLineNumber: 2, rightText: "incoming" },
+      { conflictBlock: block, conflictLineIndex: 0, kind: "line", leftChangeType: "modify", leftInlineChangeRanges: [{ length: 7, startColumn: 0 }], leftLineNumber: 2, leftText: "current", lineNumber: 2, rightChangeType: "modify", rightInlineChangeRanges: [{ length: 8, startColumn: 0 }], rightLineNumber: 2, rightText: "incoming" },
       { kind: "line", leftLineNumber: 7, leftText: "after", lineNumber: 7, rightLineNumber: 7, rightText: "after" },
     ]);
+  });
+
+  it("diffs inline conflict ranges within modified lines", () => {
+    expect(diffMergeInlineChangeRanges("value = oldName + count;", "value = newName + total;")).toEqual({
+      leftRanges: [
+        { length: 3, startColumn: 8 },
+        { length: 5, startColumn: 18 },
+      ],
+      rightRanges: [
+        { length: 3, startColumn: 8 },
+        { length: 5, startColumn: 18 },
+      ],
+    });
+
+    expect(diffMergeInlineChangeRanges("searchTerm", "searchText")).toEqual({
+      leftRanges: [{ length: 2, startColumn: 8 }],
+      rightRanges: [{ length: 2, startColumn: 8 }],
+    });
   });
 
   it("aligns conflict lines with side-specific change types", () => {
@@ -94,8 +113,8 @@ describe("diffMerge", () => {
       ["same", "new value", "right only", "tail"],
     )).toEqual([
       { leftChangeType: "none", leftIndex: 0, leftText: "same", rightChangeType: "none", rightIndex: 0, rightText: "same" },
-      { leftChangeType: "modify", leftIndex: 1, leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightText: "new value" },
-      { leftChangeType: "modify", leftIndex: 2, leftText: "old value", rightChangeType: "modify", rightIndex: 2, rightText: "right only" },
+      { leftChangeType: "modify", leftIndex: 1, leftInlineChangeRanges: [{ length: 4, startColumn: 0 }, { length: 4, startColumn: 5 }], leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightInlineChangeRanges: [{ length: 3, startColumn: 0 }, { length: 5, startColumn: 4 }], rightText: "new value" },
+      { leftChangeType: "modify", leftIndex: 2, leftInlineChangeRanges: [{ length: 3, startColumn: 0 }, { length: 5, startColumn: 4 }], leftText: "old value", rightChangeType: "modify", rightIndex: 2, rightInlineChangeRanges: [{ length: 5, startColumn: 0 }, { length: 4, startColumn: 6 }], rightText: "right only" },
       { leftChangeType: "none", leftIndex: 3, leftText: "tail", rightChangeType: "none", rightIndex: 3, rightText: "tail" },
     ]);
   });
@@ -106,9 +125,43 @@ describe("diffMerge", () => {
       ["same", "right only 1", "right only 2", "tail"],
     )).toEqual([
       { leftChangeType: "none", leftIndex: 0, leftText: "same", rightChangeType: "none", rightIndex: 0, rightText: "same" },
-      { leftChangeType: "modify", leftIndex: 1, leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightText: "right only 1" },
+      { leftChangeType: "modify", leftIndex: 1, leftInlineChangeRanges: [{ length: 4, startColumn: 0 }], leftText: "left only", rightChangeType: "modify", rightIndex: 1, rightInlineChangeRanges: [{ length: 5, startColumn: 0 }, { length: 2, startColumn: 10 }], rightText: "right only 1" },
       { leftChangeType: "none", leftText: "", rightChangeType: "add", rightIndex: 2, rightText: "right only 2" },
       { leftChangeType: "none", leftIndex: 2, leftText: "tail", rightChangeType: "none", rightIndex: 3, rightText: "tail" },
+    ]);
+  });
+
+  it("keeps inserted lines from shifting similar modified conflict rows", () => {
+    const rows = diffMergeConflictLines(
+      [
+        "borderRadius: BORDER_RADIUS,",
+        "shadowColor: \"#000000\",",
+        "shadowOffset: { width: 1, height: 8 },",
+        "shadowOpacity: 0.3,",
+        "shadowRadius: 8,",
+      ],
+      [
+        "borderRadius: 20,",
+        "// backgroundColor: \"#050505\",",
+        "// shadowColor: \"#000000\",",
+        "// shadowOffset: { width: 0, height: 8 },",
+        "// shadowOpacity: 0.3,",
+        "// shadowRadius: 8,",
+      ],
+    );
+
+    expect(rows.map((row) => ({
+      leftChangeType: row.leftChangeType,
+      leftText: row.leftText,
+      rightChangeType: row.rightChangeType,
+      rightText: row.rightText,
+    }))).toEqual([
+      { leftChangeType: "modify", leftText: "borderRadius: BORDER_RADIUS,", rightChangeType: "modify", rightText: "borderRadius: 20," },
+      { leftChangeType: "none", leftText: "", rightChangeType: "add", rightText: "// backgroundColor: \"#050505\"," },
+      { leftChangeType: "modify", leftText: "shadowColor: \"#000000\",", rightChangeType: "modify", rightText: "// shadowColor: \"#000000\"," },
+      { leftChangeType: "modify", leftText: "shadowOffset: { width: 1, height: 8 },", rightChangeType: "modify", rightText: "// shadowOffset: { width: 0, height: 8 }," },
+      { leftChangeType: "modify", leftText: "shadowOpacity: 0.3,", rightChangeType: "modify", rightText: "// shadowOpacity: 0.3," },
+      { leftChangeType: "modify", leftText: "shadowRadius: 8,", rightChangeType: "modify", rightText: "// shadowRadius: 8," },
     ]);
   });
 
@@ -144,10 +197,12 @@ describe("diffMerge", () => {
         conflictLineIndex: 1,
         kind: "line",
         leftChangeType: "modify",
+        leftInlineChangeRanges: [{ length: 4, startColumn: 0 }],
         leftLineNumber: 2,
         leftText: "left only",
         lineNumber: 2,
         rightChangeType: "modify",
+        rightInlineChangeRanges: [{ length: 5, startColumn: 0 }],
         rightLineNumber: 2,
         rightText: "right only",
       },
@@ -303,10 +358,12 @@ describe("diffMerge", () => {
         hunkIndex: 0,
         kind: "line",
         leftChangeType: "modify",
+        leftInlineChangeRanges: [{ length: 7, startColumn: 0 }],
         leftLineNumber: 3,
         leftText: "current",
         lineNumber: 3,
         rightChangeType: "modify",
+        rightInlineChangeRanges: [{ length: 8, startColumn: 0 }],
         rightLineNumber: 3,
         rightText: "incoming",
       },

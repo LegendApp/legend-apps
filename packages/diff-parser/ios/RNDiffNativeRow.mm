@@ -594,6 +594,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 @property(nonatomic, copy) NSString *fontFamily;
 @property(nonatomic, assign) double fontSize;
 @property(nonatomic, strong) NSColor *foregroundColor;
+@property(nonatomic, strong) NSColor *inlineHighlightColor;
+@property(nonatomic, copy) NSString *inlineHighlights;
 @property(nonatomic, assign) double lineNumber;
 @property(nonatomic, assign) double lineNumberWidth;
 @property(nonatomic, strong) NSColor *mutedColor;
@@ -613,6 +615,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
     _fontFamily = @"Menlo";
     _fontSize = 13;
     _foregroundColor = NSColor.labelColor;
+    _inlineHighlightColor = [NSColor colorWithRed:0.75 green:0.53 blue:0 alpha:0.3];
+    _inlineHighlights = @"";
     _lineNumber = -1;
     _lineNumberWidth = 40;
     _mutedColor = NSColor.secondaryLabelColor;
@@ -650,6 +654,33 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
     font = [fontManager convertFont:font toHaveTrait:NSBoldFontMask] ?: font;
   }
   return font;
+}
+
+- (void)applyEncodedInlineHighlightsToAttributedText:(NSMutableAttributedString *)attributedText
+{
+  if (self.inlineHighlights.length == 0 || attributedText.length == 0) {
+    return;
+  }
+
+  for (NSString *encodedHighlight in [self.inlineHighlights componentsSeparatedByString:@";"]) {
+    if (encodedHighlight.length == 0) {
+      continue;
+    }
+    NSArray<NSString *> *parts = [encodedHighlight componentsSeparatedByString:@","];
+    if (parts.count < 2) {
+      continue;
+    }
+    const NSInteger locationValue = parts[0].integerValue;
+    const NSInteger lengthValue = parts[1].integerValue;
+    if (locationValue < 0 || lengthValue <= 0 || locationValue >= attributedText.length) {
+      continue;
+    }
+    const NSUInteger location = static_cast<NSUInteger>(locationValue);
+    const NSUInteger length = MIN(static_cast<NSUInteger>(lengthValue), attributedText.length - location);
+    [attributedText addAttribute:NSBackgroundColorAttributeName
+                           value:self.inlineHighlightColor
+                           range:NSMakeRange(location, length)];
+  }
 }
 
 - (void)applyEncodedTokensToAttributedText:(NSMutableAttributedString *)attributedText baseFont:(NSFont *)baseFont
@@ -710,6 +741,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
       NSForegroundColorAttributeName: self.foregroundColor,
       NSParagraphStyleAttributeName: self.textParagraph,
     } range:NSMakeRange(0, attributedText.length)];
+    [self applyEncodedInlineHighlightsToAttributedText:attributedText];
     [self applyEncodedTokensToAttributedText:attributedText baseFont:baseFont];
   }
 
@@ -755,6 +787,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.fontFamily = [NSString stringWithUTF8String:newProps.fontFamily.c_str()] ?: @"Menlo";
   _contentView.fontSize = newProps.fontSize;
   _contentView.foregroundColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.foregroundColor.c_str()] ?: @"", NSColor.labelColor);
+  _contentView.inlineHighlightColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.inlineHighlightColor.c_str()] ?: @"", [NSColor colorWithRed:0.75 green:0.53 blue:0 alpha:0.3]);
+  _contentView.inlineHighlights = [NSString stringWithUTF8String:newProps.inlineHighlights.c_str()] ?: @"";
   _contentView.lineNumber = newProps.lineNumber;
   _contentView.lineNumberWidth = newProps.lineNumberWidth;
   _contentView.mutedColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.mutedColor.c_str()] ?: @"", NSColor.secondaryLabelColor);
@@ -771,6 +805,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   [super prepareForRecycle];
 #if TARGET_OS_OSX
   _contentView.configVersion = 0;
+  _contentView.inlineHighlights = @"";
   _contentView.lineNumber = -1;
   _contentView.text = @"";
   _contentView.tokens = @"";

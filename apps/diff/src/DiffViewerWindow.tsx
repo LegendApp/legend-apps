@@ -1183,6 +1183,13 @@ function encodeMergeNativeTokens(
   }).join(";") ?? "";
 }
 
+function encodeMergeInlineHighlights(ranges: readonly { length: number; startColumn: number }[] | undefined) {
+  return ranges?.map((range) => [
+    Math.max(0, Math.floor(range.startColumn)),
+    Math.max(0, Math.floor(range.length)),
+  ].join(",")).join(";") ?? "";
+}
+
 function getMergeSyntaxLine(
   lines: readonly SyntaxRenderLine[] | undefined,
   index: number,
@@ -1246,11 +1253,13 @@ function getMergeConflictPalette(syntaxAppearance: "dark" | "light") {
     ? {
         accent: "#d29922",
         hunkBackground: "rgba(187, 128, 9, 0.28)",
+        inlineBackground: "#fff4bf80",
         rowBackground: "rgba(187, 128, 9, 0.18)",
       }
     : {
         accent: "#9a6700",
         hunkBackground: "#fff1a7",
+        inlineBackground: "#ffffffcc",
         rowBackground: "#fff8c5",
       };
 }
@@ -1285,6 +1294,8 @@ function DiffMergeCodePane({
   foregroundColor,
   fontFamily,
   fontSize,
+  inlineHighlightColor,
+  inlineHighlights,
   lineNumber,
   lineNumberWidth,
   mutedColor,
@@ -1299,6 +1310,8 @@ function DiffMergeCodePane({
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
+  inlineHighlightColor: string;
+  inlineHighlights: string;
   lineNumber?: number;
   lineNumberWidth: number;
   mutedColor: string;
@@ -1317,6 +1330,8 @@ function DiffMergeCodePane({
           fontSize,
           foregroundColor,
           backgroundColor,
+          inlineHighlightColor,
+          inlineHighlights,
           lineNumber,
           mutedColor,
           nativeTokens,
@@ -1326,6 +1341,8 @@ function DiffMergeCodePane({
         fontFamily={fontFamily}
         fontSize={fontSize}
         foregroundColor={foregroundColor}
+        inlineHighlightColor={inlineHighlightColor}
+        inlineHighlights={inlineHighlights}
         lineNumber={lineNumber ?? -1}
         lineNumberWidth={lineNumberWidth}
         mutedColor={mutedColor}
@@ -1462,8 +1479,9 @@ function DiffMergeLineRow({
 }) {
   const leftColors = getMergeSideColors(row?.leftChangeType, "left", mutedColor, syntaxAppearance);
   const rightColors = getMergeSideColors(row?.rightChangeType, "right", mutedColor, syntaxAppearance);
+  const conflictPalette = getMergeConflictPalette(syntaxAppearance);
   const conflictBackgroundColor = row?.conflictBlock
-    ? getMergeConflictPalette(syntaxAppearance).rowBackground
+    ? conflictPalette.rowBackground
     : "transparent";
 
   return (
@@ -1484,6 +1502,8 @@ function DiffMergeLineRow({
             foregroundColor={foregroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            inlineHighlightColor={conflictPalette.inlineBackground}
+            inlineHighlights={encodeMergeInlineHighlights(row?.leftInlineChangeRanges)}
             lineNumber={row?.leftLineNumber}
             lineNumberWidth={diffSideBySideLineNumberWidth}
             mutedColor={leftColors.lineNumberColor}
@@ -1511,6 +1531,8 @@ function DiffMergeLineRow({
             foregroundColor={foregroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            inlineHighlightColor={conflictPalette.inlineBackground}
+            inlineHighlights={encodeMergeInlineHighlights(row?.rightInlineChangeRanges)}
             lineNumber={row?.rightLineNumber}
             lineNumberWidth={diffSideBySideLineNumberWidth}
             mutedColor={rightColors.lineNumberColor}

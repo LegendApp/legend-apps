@@ -24,6 +24,11 @@ export type DiffMergeHunkHeaderInfo = {
 
 export type DiffMergeSideChangeType = "add" | "delete" | "modify" | "none";
 
+export type DiffMergeInlineChangeRange = {
+  length: number;
+  startColumn: number;
+};
+
 export type DiffMergeDisplayLine = {
   kind: "line";
   conflictBlock?: DiffMergeConflictBlock;
@@ -31,10 +36,12 @@ export type DiffMergeDisplayLine = {
   hunkHeader?: DiffMergeHunkHeaderInfo;
   hunkIndex?: number;
   leftChangeType?: DiffMergeSideChangeType;
+  leftInlineChangeRanges?: DiffMergeInlineChangeRange[];
   leftLineNumber?: number;
   leftText: string;
   lineNumber: number;
   rightChangeType?: DiffMergeSideChangeType;
+  rightInlineChangeRanges?: DiffMergeInlineChangeRange[];
   rightLineNumber?: number;
   rightText: string;
 };
@@ -193,14 +200,370 @@ function createCommonLineMatrix(leftLines: readonly string[], rightLines: readon
   return matrix;
 }
 
+type DiffMergeInlineToken = {
+  length: number;
+  startColumn: number;
+  text: string;
+};
+
 type DiffMergeAlignedConflictLine = {
   leftIndex?: number;
+  leftInlineChangeRanges?: DiffMergeInlineChangeRange[];
   leftText: string;
   leftChangeType: DiffMergeSideChangeType;
   rightIndex?: number;
+  rightInlineChangeRanges?: DiffMergeInlineChangeRange[];
   rightText: string;
   rightChangeType: DiffMergeSideChangeType;
 };
+
+function pushMergeModifyRow(
+  rows: DiffMergeAlignedConflictLine[],
+  leftIndex: number,
+  leftText: string,
+  rightIndex: number,
+  rightText: string,
+) {
+  const inlineRanges = createInlineReplacementRanges(leftText, rightText);
+  rows.push({
+    leftChangeType: "modify",
+    leftIndex,
+    ...(inlineRanges.leftRanges.length > 0 ? { leftInlineChangeRanges: inlineRanges.leftRanges } : null),
+    leftText,
+    rightChangeType: "modify",
+    rightIndex,
+    ...(inlineRanges.rightRanges.length > 0 ? { rightInlineChangeRanges: inlineRanges.rightRanges } : null),
+    rightText,
+  });
+}
+
+function pushMergeDeleteRow(
+  rows: DiffMergeAlignedConflictLine[],
+  leftIndex: number,
+  leftText: string,
+) {
+  rows.push({
+    leftChangeType: "delete",
+    leftIndex,
+    leftText,
+    rightChangeType: "none",
+    rightText: "",
+  });
+}
+
+function pushMergeAddRow(
+  rows: DiffMergeAlignedConflictLine[],
+  rightIndex: number,
+  rightText: string,
+) {
+  rows.push({
+    leftChangeType: "none",
+    leftText: "",
+    rightChangeType: "add",
+    rightIndex,
+    rightText,
+  });
+}
+
+function tokenizeInlineDiffText(text: string): DiffMergeInlineToken[] {
+  const tokens: DiffMergeInlineToken[] = [];
+  const tokenPattern = /\s+|[A-Za-z0-9_$]+|./g;
+  let match: RegExpExecArray | null;
+  while ((match = tokenPattern.exec(text))) {
+    tokens.push({
+      length: match[0].length,
+      startColumn: match.index,
+      text: match[0],
+    });
+  }
+  return tokens;
+}
+
+function createCommonTokenMatrix(leftTokens: readonly DiffMergeInlineToken[], rightTokens: readonly DiffMergeInlineToken[]) {
+  const matrix: number[][] = Array.from({ length: leftTokens.length + 1 }, () => Array(rightTokens.length + 1).fill(0));
+  for (let leftIndex = leftTokens.length - 1; leftIndex >= 0; leftIndex -= 1) {
+    for (let rightIndex = rightTokens.length - 1; rightIndex >= 0; rightIndex -= 1) {
+      matrix[leftIndex][rightIndex] = leftTokens[leftIndex]?.text === rightTokens[rightIndex]?.text
+        ? matrix[leftIndex + 1][rightIndex + 1] + 1
+        : Math.max(matrix[leftIndex + 1][rightIndex], matrix[leftIndex][rightIndex + 1]);
+    }
+  }
+  return matrix;
+}
+
+function getInlineTokenBlockRange(tokens: readonly DiffMergeInlineToken[], startIndex: number, endIndex: number) {
+  const firstToken = tokens[startIndex];
+  const lastToken = tokens[endIndex - 1];
+  return firstToken && lastToken
+    ? {
+        endColumn: lastToken.startColumn + lastToken.length,
+        startColumn: firstToken.startColumn,
+      }
+    : null;
+}
+
+function appendInlineRange(
+  ranges: DiffMergeInlineChangeRange[],
+  startColumn: number,
+  endColumn: number,
+) {
+  if (endColumn > startColumn) {
+    const previousRange = ranges[ranges.length - 1];
+    if (previousRange && previousRange.startColumn + previousRange.length === startColumn) {
+      previousRange.length = endColumn - previousRange.startColumn;
+    } else {
+      ranges.push({
+        length: endColumn - startColumn,
+        startColumn,
+      });
+    }
+  }
+}
+
+function isInlineWordCharacter(value: string | undefined) {
+  return Boolean(value && /[A-Za-z0-9_$]/.test(value));
+}
+
+function appendInlineReplacementRanges(
+  leftRanges: DiffMergeInlineChangeRange[],
+  rightRanges: DiffMergeInlineChangeRange[],
+  leftText: string,
+  leftStartColumn: number,
+  leftEndColumn: number,
+  rightText: string,
+  rightStartColumn: number,
+  rightEndColumn: number,
+) {
+  let commonPrefixLength = 0;
+  const maxPrefixLength = Math.min(leftEndColumn - leftStartColumn, rightEndColumn - rightStartColumn);
+  while (
+    commonPrefixLength < maxPrefixLength &&
+    leftText[leftStartColumn + commonPrefixLength] === rightText[rightStartColumn + commonPrefixLength]
+  ) {
+    commonPrefixLength += 1;
+  }
+
+  let commonSuffixLength = 0;
+  const maxSuffixLength = maxPrefixLength - commonPrefixLength;
+  while (
+    commonSuffixLength < maxSuffixLength &&
+    leftText[leftEndColumn - commonSuffixLength - 1] === rightText[rightEndColumn - commonSuffixLength - 1]
+  ) {
+    commonSuffixLength += 1;
+  }
+  if (commonPrefixLength === 1 && isInlineWordCharacter(leftText[leftStartColumn])) {
+    commonPrefixLength = 0;
+  }
+  if (commonSuffixLength === 1 && isInlineWordCharacter(leftText[leftEndColumn - 1])) {
+    commonSuffixLength = 0;
+  }
+
+  appendInlineRange(leftRanges, leftStartColumn + commonPrefixLength, leftEndColumn - commonSuffixLength);
+  appendInlineRange(rightRanges, rightStartColumn + commonPrefixLength, rightEndColumn - commonSuffixLength);
+}
+
+function appendInlineTokenReplacementRanges(
+  leftRanges: DiffMergeInlineChangeRange[],
+  rightRanges: DiffMergeInlineChangeRange[],
+  leftText: string,
+  leftTokens: readonly DiffMergeInlineToken[],
+  leftStartTokenIndex: number,
+  leftEndTokenIndex: number,
+  rightText: string,
+  rightTokens: readonly DiffMergeInlineToken[],
+  rightStartTokenIndex: number,
+  rightEndTokenIndex: number,
+) {
+  const leftRange = getInlineTokenBlockRange(leftTokens, leftStartTokenIndex, leftEndTokenIndex);
+  const rightRange = getInlineTokenBlockRange(rightTokens, rightStartTokenIndex, rightEndTokenIndex);
+  if (leftRange && rightRange) {
+    appendInlineReplacementRanges(
+      leftRanges,
+      rightRanges,
+      leftText,
+      leftRange.startColumn,
+      leftRange.endColumn,
+      rightText,
+      rightRange.startColumn,
+      rightRange.endColumn,
+    );
+  } else if (leftRange) {
+    appendInlineRange(leftRanges, leftRange.startColumn, leftRange.endColumn);
+  } else if (rightRange) {
+    appendInlineRange(rightRanges, rightRange.startColumn, rightRange.endColumn);
+  }
+}
+
+function createInlineReplacementRanges(
+  leftText: string,
+  rightText: string,
+): {
+  leftRanges: DiffMergeInlineChangeRange[];
+  rightRanges: DiffMergeInlineChangeRange[];
+} {
+  if (leftText === rightText) {
+    return {
+      leftRanges: [],
+      rightRanges: [],
+    };
+  }
+
+  const leftTokens = tokenizeInlineDiffText(leftText);
+  const rightTokens = tokenizeInlineDiffText(rightText);
+  const leftRanges: DiffMergeInlineChangeRange[] = [];
+  const rightRanges: DiffMergeInlineChangeRange[] = [];
+  if (leftTokens.length * rightTokens.length > 20_000) {
+    appendInlineReplacementRanges(leftRanges, rightRanges, leftText, 0, leftText.length, rightText, 0, rightText.length);
+    return {
+      leftRanges,
+      rightRanges,
+    };
+  }
+
+  const commonTokenMatrix = createCommonTokenMatrix(leftTokens, rightTokens);
+  let leftTokenIndex = 0;
+  let rightTokenIndex = 0;
+  let pendingLeftStart = 0;
+  let pendingRightStart = 0;
+
+  while (leftTokenIndex < leftTokens.length && rightTokenIndex < rightTokens.length) {
+    if (leftTokens[leftTokenIndex]?.text === rightTokens[rightTokenIndex]?.text) {
+      appendInlineTokenReplacementRanges(
+        leftRanges,
+        rightRanges,
+        leftText,
+        leftTokens,
+        pendingLeftStart,
+        leftTokenIndex,
+        rightText,
+        rightTokens,
+        pendingRightStart,
+        rightTokenIndex,
+      );
+      leftTokenIndex += 1;
+      rightTokenIndex += 1;
+      pendingLeftStart = leftTokenIndex;
+      pendingRightStart = rightTokenIndex;
+    } else if (commonTokenMatrix[leftTokenIndex + 1][rightTokenIndex] >= commonTokenMatrix[leftTokenIndex][rightTokenIndex + 1]) {
+      leftTokenIndex += 1;
+    } else {
+      rightTokenIndex += 1;
+    }
+  }
+
+  appendInlineTokenReplacementRanges(
+    leftRanges,
+    rightRanges,
+    leftText,
+    leftTokens,
+    pendingLeftStart,
+    leftTokens.length,
+    rightText,
+    rightTokens,
+    pendingRightStart,
+    rightTokens.length,
+  );
+
+  return {
+    leftRanges,
+    rightRanges,
+  };
+}
+
+export function diffMergeInlineChangeRanges(leftText: string, rightText: string) {
+  return createInlineReplacementRanges(leftText, rightText);
+}
+
+function getMergeLineSimilarity(leftText: string, rightText: string) {
+  const normalizeTokens = (text: string) => {
+    const tokens = new Set<string>();
+    for (const token of tokenizeInlineDiffText(text)) {
+      if (/^[A-Za-z0-9_$]+$/.test(token.text)) {
+        const normalizedToken = token.text.toLowerCase();
+        tokens.add(normalizedToken);
+        const tokenParts = token.text
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .split(/[_\s]+|(?=\d)|(?<=\d)/)
+          .filter(Boolean);
+        for (const part of tokenParts) {
+          tokens.add(part.toLowerCase());
+        }
+      }
+    }
+    return tokens;
+  };
+  const leftTokens = normalizeTokens(leftText);
+  const rightTokens = normalizeTokens(rightText);
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
+    return 0;
+  }
+  let commonCount = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      commonCount += 1;
+    }
+  }
+  return commonCount / (leftTokens.size + rightTokens.size - commonCount);
+}
+
+function appendUnbalancedMergeReplacementRows(
+  rows: DiffMergeAlignedConflictLine[],
+  leftLines: readonly string[],
+  leftStart: number,
+  leftEnd: number,
+  rightLines: readonly string[],
+  rightStart: number,
+  rightEnd: number,
+) {
+  const leftCount = leftEnd - leftStart;
+  const rightCount = rightEnd - rightStart;
+  const minSimilarity = 0.25;
+  const scoreMatrix: number[][] = Array.from({ length: leftCount + 1 }, () => Array(rightCount + 1).fill(0));
+
+  for (let leftOffset = leftCount - 1; leftOffset >= 0; leftOffset -= 1) {
+    for (let rightOffset = rightCount - 1; rightOffset >= 0; rightOffset -= 1) {
+      const leftText = leftLines[leftStart + leftOffset] ?? "";
+      const rightText = rightLines[rightStart + rightOffset] ?? "";
+      const similarity = getMergeLineSimilarity(leftText, rightText);
+      const pairScore = similarity >= minSimilarity
+        ? scoreMatrix[leftOffset + 1][rightOffset + 1] + 1 + similarity
+        : Number.NEGATIVE_INFINITY;
+      scoreMatrix[leftOffset][rightOffset] = Math.max(
+        pairScore,
+        scoreMatrix[leftOffset + 1][rightOffset],
+        scoreMatrix[leftOffset][rightOffset + 1],
+      );
+    }
+  }
+
+  let leftOffset = 0;
+  let rightOffset = 0;
+  while (leftOffset < leftCount || rightOffset < rightCount) {
+    const leftText = leftLines[leftStart + leftOffset] ?? "";
+    const rightText = rightLines[rightStart + rightOffset] ?? "";
+    const similarity = leftOffset < leftCount && rightOffset < rightCount
+      ? getMergeLineSimilarity(leftText, rightText)
+      : 0;
+    const pairScore = similarity >= minSimilarity
+      ? scoreMatrix[leftOffset + 1]?.[rightOffset + 1] + 1 + similarity
+      : Number.NEGATIVE_INFINITY;
+    const currentScore = scoreMatrix[leftOffset]?.[rightOffset] ?? 0;
+    if (leftOffset < leftCount && rightOffset < rightCount && pairScore === currentScore) {
+      pushMergeModifyRow(rows, leftStart + leftOffset, leftText, rightStart + rightOffset, rightText);
+      leftOffset += 1;
+      rightOffset += 1;
+    } else if (
+      rightOffset < rightCount &&
+      (leftOffset >= leftCount || (scoreMatrix[leftOffset]?.[rightOffset + 1] ?? 0) >= (scoreMatrix[leftOffset + 1]?.[rightOffset] ?? 0))
+    ) {
+      pushMergeAddRow(rows, rightStart + rightOffset, rightText);
+      rightOffset += 1;
+    } else if (leftOffset < leftCount) {
+      pushMergeDeleteRow(rows, leftStart + leftOffset, leftText);
+      leftOffset += 1;
+    }
+  }
+}
 
 function appendMergeReplacementRows(
   rows: DiffMergeAlignedConflictLine[],
@@ -213,37 +576,19 @@ function appendMergeReplacementRows(
 ) {
   const leftCount = leftEnd - leftStart;
   const rightCount = rightEnd - rightStart;
-  const pairedCount = Math.min(leftCount, rightCount);
 
-  for (let index = 0; index < pairedCount; index += 1) {
-    rows.push({
-      leftChangeType: "modify",
-      leftIndex: leftStart + index,
-      leftText: leftLines[leftStart + index] ?? "",
-      rightChangeType: "modify",
-      rightIndex: rightStart + index,
-      rightText: rightLines[rightStart + index] ?? "",
-    });
-  }
-
-  for (let leftIndex = leftStart + pairedCount; leftIndex < leftEnd; leftIndex += 1) {
-    rows.push({
-      leftChangeType: "delete",
-      leftIndex,
-      leftText: leftLines[leftIndex] ?? "",
-      rightChangeType: "none",
-      rightText: "",
-    });
-  }
-
-  for (let rightIndex = rightStart + pairedCount; rightIndex < rightEnd; rightIndex += 1) {
-    rows.push({
-      leftChangeType: "none",
-      leftText: "",
-      rightChangeType: "add",
-      rightIndex,
-      rightText: rightLines[rightIndex] ?? "",
-    });
+  if (leftCount === rightCount) {
+    for (let index = 0; index < leftCount; index += 1) {
+      pushMergeModifyRow(
+        rows,
+        leftStart + index,
+        leftLines[leftStart + index] ?? "",
+        rightStart + index,
+        rightLines[rightStart + index] ?? "",
+      );
+    }
+  } else {
+    appendUnbalancedMergeReplacementRows(rows, leftLines, leftStart, leftEnd, rightLines, rightStart, rightEnd);
   }
 }
 
@@ -358,10 +703,12 @@ export function createDiffMergeDisplayModel(content: string, markerBlocks: DiffM
         conflictLineIndex,
         kind: "line",
         leftChangeType: conflictRow.leftChangeType,
+        ...(conflictRow.leftInlineChangeRanges ? { leftInlineChangeRanges: conflictRow.leftInlineChangeRanges } : null),
         leftLineNumber: conflictRow.leftIndex !== undefined ? block.startLine + conflictRow.leftIndex : undefined,
         leftText: conflictRow.leftText,
         lineNumber: block.startLine + (conflictRow.leftIndex ?? conflictRow.rightIndex ?? conflictLineIndex),
         rightChangeType: conflictRow.rightChangeType,
+        ...(conflictRow.rightInlineChangeRanges ? { rightInlineChangeRanges: conflictRow.rightInlineChangeRanges } : null),
         rightLineNumber: conflictRow.rightIndex !== undefined ? block.startLine + conflictRow.rightIndex : undefined,
         rightText: conflictRow.rightText,
       });
