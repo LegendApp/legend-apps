@@ -1961,6 +1961,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
+  const preserveActiveFilePathRef = useRef<string | null>(null);
   const loggedFirstSidebarFileRenderRef = useRef(false);
   const loggedFirstUnifiedRowRenderRef = useRef(false);
   const loggedFirstSideBySideRowRenderRef = useRef(false);
@@ -2139,8 +2140,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       loggedFirstSidebarFileRenderRef.current = false;
       loggedFirstUnifiedRowRenderRef.current = false;
       loggedFirstSideBySideRowRenderRef.current = false;
-      activeFileIndex$.set(state.files[0]?.index ?? null);
-      setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
+      const preserveActiveFilePath = preserveActiveFilePathRef.current;
+      preserveActiveFilePathRef.current = null;
+      if (preserveActiveFilePath) {
+        const preservedFile = state.files.find((file) => file.path === preserveActiveFilePath || file.oldPath === preserveActiveFilePath);
+        activeFileIndex$.set(preservedFile?.index ?? state.files[0]?.index ?? null);
+      } else {
+        activeFileIndex$.set(state.files[0]?.index ?? null);
+        setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
+      }
     } else {
       activeFileIndex$.set(null);
     }
@@ -2188,6 +2196,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
     const sourceCacheKey = getDiffSourceCacheKey(nextSource);
     const loadedCacheKey = getDiffLoadedCacheKey(nextSource, loadShowOnlyHunks);
+    const stateBeforeLoad = state$.peek();
+    const isBackgroundWatchRefresh =
+      options?.reason === "watch" &&
+      stateBeforeLoad.status === "loaded" &&
+      sourcesMatch(stateBeforeLoad.source, nextSource);
 
     if (mergeDraftsSourceKeyRef.current !== null && mergeDraftsSourceKeyRef.current !== sourceCacheKey) {
       mergeDraftsRef.current = new Map();
@@ -2237,12 +2250,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       setStateAt: loadStartedAt,
     };
     loadTraceRef.current = trace;
-    setLoadingSourceValue(nextSource);
-    setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
-    if (state$.peek().status === "loaded") {
-      setDocumentErrorValue(null);
-    } else {
-      setOpenErrorValue(null);
+    if (!isBackgroundWatchRefresh) {
+      setLoadingSourceValue(nextSource);
+      setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
+      if (stateBeforeLoad.status === "loaded") {
+        setDocumentErrorValue(null);
+      } else {
+        setOpenErrorValue(null);
+      }
     }
     logDiffOpenTiming("viewer.load.start", {
       source: nextSource,
@@ -2329,7 +2344,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         trace.document = loaded.document;
         trace.setStateAt = statePayloadFinishedAt;
       }
+      if (isBackgroundWatchRefresh) {
+        const currentLoadedState = state$.peek();
+        preserveActiveFilePathRef.current = currentLoadedState.status === "loaded"
+          ? getActiveDiffFile(currentLoadedState.files, activeFileIndex$.peek())?.path ?? null
+          : null;
+      }
       setViewerState(nextLoadedState);
+      if (isBackgroundWatchRefresh) {
+        setDocumentErrorValue(null);
+      }
       if (loadComplete) {
         loadedCacheRef.current.set(loadedCacheKey, {
           loaded,
@@ -2465,34 +2489,50 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           logDiffLoadTiming(nextSource.value, result.timing);
           if (loadRequestIdRef.current === requestId) {
             const initialLoadComplete = "complete" in result ? result.complete : true;
-            publishLoadedState(result, initialLoadComplete, "initial");
-            if (progressiveSession && "complete" in result && !result.complete) {
-              let lastFileVersion = result.fileVersion;
-              let lastRowVersion = result.rowVersion;
+            if (isBackgroundWatchRefresh && progressiveSession && "complete" in result && !result.complete) {
               let progress = result;
               while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
                 await waitForDiffProgressPoll();
                 progress = progressiveSession.consumeChanges(initialRowCount);
-                const hasChanges =
-                  progress.rowVersion !== lastRowVersion ||
-                  progress.fileVersion !== lastFileVersion ||
-                  progress.complete ||
-                  !!progress.error;
-                if (hasChanges && loadRequestIdRef.current === requestId) {
-                  lastFileVersion = progress.fileVersion;
-                  lastRowVersion = progress.rowVersion;
-                  publishLoadedState(progress, progress.complete, progress.complete ? "complete" : "progress");
-                }
               }
               if (loadRequestIdRef.current !== requestId) {
                 progressiveSession.cancel();
               } else if (progress.error) {
                 throw new Error(progress.error);
               } else {
+                publishLoadedState(progress, progress.complete, "complete");
                 schedulePostLoadSideEffects(progress);
               }
             } else {
-              schedulePostLoadSideEffects(result);
+              publishLoadedState(result, initialLoadComplete, "initial");
+              if (progressiveSession && "complete" in result && !result.complete) {
+                let lastFileVersion = result.fileVersion;
+                let lastRowVersion = result.rowVersion;
+                let progress = result;
+                while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
+                  await waitForDiffProgressPoll();
+                  progress = progressiveSession.consumeChanges(initialRowCount);
+                  const hasChanges =
+                    progress.rowVersion !== lastRowVersion ||
+                    progress.fileVersion !== lastFileVersion ||
+                    progress.complete ||
+                    !!progress.error;
+                  if (hasChanges && loadRequestIdRef.current === requestId) {
+                    lastFileVersion = progress.fileVersion;
+                    lastRowVersion = progress.rowVersion;
+                    publishLoadedState(progress, progress.complete, progress.complete ? "complete" : "progress");
+                  }
+                }
+                if (loadRequestIdRef.current !== requestId) {
+                  progressiveSession.cancel();
+                } else if (progress.error) {
+                  throw new Error(progress.error);
+                } else {
+                  schedulePostLoadSideEffects(progress);
+                }
+              } else {
+                schedulePostLoadSideEffects(result);
+              }
             }
           } else {
             progressiveSession?.cancel();
@@ -2508,9 +2548,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     if (loadError && loadRequestIdRef.current === requestId) {
-      loadTraceRef.current = null;
-      setMergeStateValue(unavailableDiffMergeState);
-      setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
+      if (!isBackgroundWatchRefresh) {
+        loadTraceRef.current = null;
+        setMergeStateValue(unavailableDiffMergeState);
+        setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
+      }
       const message = getErrorMessage(loadError);
       const currentState = state$.peek();
       if (currentState.status === "loaded") {
