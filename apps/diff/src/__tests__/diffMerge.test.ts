@@ -1,6 +1,7 @@
 import { createMockCommandRunner } from "@legend-desktop/command-runner";
 import {
   createDiffMergeConflictFileFromContent,
+  createDiffMergeDraftFileWithResolvedBlock,
   createDiffMergeDisplayRows,
   createDiffMergeHunkDisplayModel,
   diffMergeConflictLines,
@@ -463,6 +464,116 @@ describe("diffMerge", () => {
       ["current", "incoming"],
       ["after", "after"],
     ]);
+  });
+
+  it("keeps resolved draft conflict rows visible without conflict ranges", () => {
+    const content = [
+      "before",
+      "<<<<<<< HEAD",
+      "current",
+      "=======",
+      "incoming",
+      ">>>>>>> feature",
+      "after",
+    ].join("\n");
+    const file = createDiffMergeConflictFileFromContent({
+      content,
+      path: "src/app.ts",
+      stages: [{ mode: "100644", oid: "aaa111", stage: 1 }],
+    });
+    const block = file.markerBlocks[0]!;
+    const resolvedContent = resolveDiffMergeConflictContent(content, block.startLine, "theirs");
+    const draftFile = createDiffMergeDraftFileWithResolvedBlock({
+      block,
+      choice: "theirs",
+      content: resolvedContent,
+      file,
+    });
+
+    expect(draftFile.hasUnsavedDraft).toBe(true);
+    expect(draftFile.markerBlocks).toEqual([]);
+    expect(draftFile.conflictRanges).toEqual([]);
+    expect(draftFile.displayRows.map((row) => ({
+      conflictBlock: row.conflictBlock,
+      leftChangeType: row.leftChangeType,
+      leftText: row.leftText,
+      resolvedConflictBlock: row.resolvedConflictBlock,
+      rightChangeType: row.rightChangeType,
+      rightText: row.rightText,
+    }))).toEqual([
+      {
+        conflictBlock: undefined,
+        leftChangeType: undefined,
+        leftText: "before",
+        resolvedConflictBlock: undefined,
+        rightChangeType: undefined,
+        rightText: "before",
+      },
+      {
+        conflictBlock: undefined,
+        leftChangeType: "modify",
+        leftText: "current",
+        resolvedConflictBlock: block,
+        rightChangeType: "modify",
+        rightText: "incoming",
+      },
+      {
+        conflictBlock: undefined,
+        leftChangeType: undefined,
+        leftText: "after",
+        resolvedConflictBlock: undefined,
+        rightChangeType: undefined,
+        rightText: "after",
+      },
+    ]);
+
+    const hunkModel = createDiffMergeHunkDisplayModel(draftFile.displayRows, draftFile.conflictRanges, 0);
+    expect(hunkModel.rows.map((row) => [row.leftText, row.rightText])).toEqual([
+      ["current", "incoming"],
+    ]);
+    expect(hunkModel.conflictRanges).toEqual([]);
+  });
+
+  it("updates later conflict block positions after drafting an earlier resolution", () => {
+    const content = [
+      "before",
+      "<<<<<<< HEAD",
+      "current 1",
+      "=======",
+      "incoming 1",
+      ">>>>>>> feature",
+      "between",
+      "<<<<<<< HEAD",
+      "current 2",
+      "=======",
+      "incoming 2",
+      ">>>>>>> feature",
+      "after",
+    ].join("\n");
+    const file = createDiffMergeConflictFileFromContent({
+      content,
+      path: "src/app.ts",
+      stages: [{ mode: "100644", oid: "aaa111", stage: 1 }],
+    });
+    const firstBlock = file.markerBlocks[0]!;
+    const resolvedContent = resolveDiffMergeConflictContent(content, firstBlock.startLine, "ours");
+    const draftFile = createDiffMergeDraftFileWithResolvedBlock({
+      block: firstBlock,
+      choice: "ours",
+      content: resolvedContent,
+      file,
+    });
+
+    expect(draftFile.markerBlocks).toHaveLength(1);
+    expect(draftFile.markerBlocks[0]).toMatchObject({
+      startLine: 4,
+      separatorLine: 6,
+      endLine: 8,
+    });
+    const unresolvedRow = draftFile.displayRows.find((row) => row.conflictBlock);
+    expect(unresolvedRow?.conflictBlock).toBe(draftFile.markerBlocks[0]);
+    expect(unresolvedRow?.leftLineNumber).toBe(4);
+    expect(unresolvedRow?.rightLineNumber).toBe(4);
   });
 
   it("writes drafted merge content to a worktree file", async () => {

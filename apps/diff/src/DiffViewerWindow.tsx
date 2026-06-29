@@ -43,7 +43,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, t
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
-  createDiffMergeConflictFileFromContent,
+  createDiffMergeDraftFileWithResolvedBlock,
   createReadyMergeState,
   createDiffMergeHunkDisplayModel,
   loadDiffMergeState,
@@ -223,7 +223,7 @@ function applyDiffMergeDraftsToState(
   return createReadyMergeState(
     mergeState.files
       .map((file) => drafts.get(file.path)?.file ?? file)
-      .filter((file) => file.markerBlocks.length > 0),
+      .filter((file) => file.markerBlocks.length > 0 || file.hasUnsavedDraft),
   );
 }
 
@@ -407,7 +407,7 @@ function DiffSidebarFileRow({
       </View>
       <View style={styles.sidebarFileTextGroup}>
         <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
-          {filename}
+          {filename}{mergeFile?.hasUnsavedDraft ? " *" : ""}
         </Text>
         {pathContext ? (
           <Text numberOfLines={1} style={[styles.sidebarFilePath, { color: mutedColor }]}>
@@ -804,13 +804,13 @@ function DiffLoadedBody({
   const filteredSidebarFiles = useMemo(
     () => {
       if (viewMode === "merge" && mergeState.status === "ready") {
-        const unresolvedPaths = new Set(
+        const mergePaths = new Set(
           mergeState.files
-            .filter((file) => file.markerBlocks.length > 0)
+            .filter((file) => file.markerBlocks.length > 0 || file.hasUnsavedDraft)
             .map((file) => file.path),
         );
-        if (unresolvedPaths.size > 0) {
-          return state.files.filter((file) => unresolvedPaths.has(file.path) && fileMatchesFilter(file, normalizedFileFilter));
+        if (mergePaths.size > 0) {
+          return state.files.filter((file) => mergePaths.has(file.path) && fileMatchesFilter(file, normalizedFileFilter));
         }
       }
       return state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter));
@@ -1303,6 +1303,7 @@ function getMergeConflictPalette(syntaxAppearance: "dark" | "light") {
 
 function getMergeSideColors(
   changeType: DiffMergeSideChangeType | undefined,
+  isConflict: boolean,
   side: "left" | "right",
   mutedColor: string,
   syntaxAppearance: "dark" | "light",
@@ -1311,8 +1312,13 @@ function getMergeSideColors(
   const conflictPalette = getMergeConflictPalette(syntaxAppearance);
   const isDelete = changeType === "delete" || (side === "left" && changeType === "modify");
   const isAdd = changeType === "add" || (side === "right" && changeType === "modify");
-  const isConflict = changeType !== undefined;
-  const backgroundColor = isConflict ? conflictPalette.rowBackground : "transparent";
+  const backgroundColor = isConflict
+    ? conflictPalette.rowBackground
+    : isDelete
+      ? palette.removeBackground
+      : isAdd
+        ? palette.addBackground
+        : "transparent";
   const lineNumberColor = isDelete
     ? palette.removeAccent
     : isAdd
@@ -1514,8 +1520,9 @@ function DiffMergeLineRow({
   syntaxAppearance: "dark" | "light";
   tokenStyleById: SyntaxStyleMap;
 }) {
-  const leftColors = getMergeSideColors(row?.leftChangeType, "left", mutedColor, syntaxAppearance);
-  const rightColors = getMergeSideColors(row?.rightChangeType, "right", mutedColor, syntaxAppearance);
+  const isConflictRow = row?.conflictBlock !== undefined;
+  const leftColors = getMergeSideColors(row?.leftChangeType, isConflictRow, "left", mutedColor, syntaxAppearance);
+  const rightColors = getMergeSideColors(row?.rightChangeType, isConflictRow, "right", mutedColor, syntaxAppearance);
   const conflictPalette = getMergeConflictPalette(syntaxAppearance);
 
   return (
@@ -1639,7 +1646,7 @@ function DiffMergeContent({
     () => Array.from({ length: mergeDisplayModel.rows.length }, (_, index) => index),
     [mergeDisplayModel],
   );
-  const dataVersion = mergeFile ? `${mergeFile.path}:${mergeFile.displayRows.length}:${mergeFile.markerBlocks.length}:${showOnlyHunks ? "hunks" : "full"}:${mergeDisplayModel.rows.length}` : "empty";
+  const dataVersion = mergeFile ? `${mergeFile.path}:${mergeFile.displayRows.length}:${mergeFile.markerBlocks.length}:${mergeFile.hasUnsavedDraft ? "draft" : "saved"}:${showOnlyHunks ? "hunks" : "full"}:${mergeDisplayModel.rows.length}` : "empty";
   const syntaxKey = mergeFile && syntaxHighlightingEnabled
     ? `${dataVersion}:${mergeFile.path}:${syntaxThemeName}`
     : "disabled";
@@ -1782,7 +1789,7 @@ function DiffMergeContent({
         ? "No unresolved marker blocks in this file."
         : mergeState.reason;
 
-  if (!mergeFile || mergeState.status !== "ready" || mergeFile.markerBlocks.length === 0) {
+  if (!mergeFile || mergeState.status !== "ready" || mergeFile.displayRows.length === 0) {
     return (
       <View style={[styles.mergeEmpty, { height, minHeight: height }]}>
         <Text style={[styles.mergeEmptyTitle, { color: foregroundColor }]}>
@@ -1816,11 +1823,15 @@ function DiffMergeContent({
         style={styles.mergeVirtualizedList}
       />
       <View pointerEvents="none" style={[styles.mergeHeader, { borderColor }]}>
-        <Text style={[styles.mergeHeaderLabel, { color: mutedColor }]}>A Current</Text>
+        <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
+          A Current - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
+        </Text>
         <View style={styles.mergeHeaderMiddle}>
           <SFSymbol color={primaryColor} name="arrow.triangle.merge" size={13} />
         </View>
-        <Text style={[styles.mergeHeaderLabel, { color: mutedColor }]}>B Incoming</Text>
+        <Text numberOfLines={1} style={[styles.mergeHeaderLabel, { color: mutedColor }]}>
+          B Incoming - {getFilename(mergeFile.path)}{mergeFile.hasUnsavedDraft ? " *" : ""}
+        </Text>
       </View>
     </View>
   );
@@ -2591,10 +2602,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             path: file.path,
           });
           const resolvedContent = resolveDiffMergeConflictContent(currentContent, block.startLine, choice);
-          const nextFile = createDiffMergeConflictFileFromContent({
+          const nextFile = createDiffMergeDraftFileWithResolvedBlock({
+            block,
+            choice,
             content: resolvedContent,
-            path: file.path,
-            stages: file.stages,
+            file,
           });
           const nextDrafts = new Map(mergeDraftsRef.current);
           nextDrafts.set(file.path, {
@@ -2609,7 +2621,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             setMergeStateValue(createReadyMergeState(
               currentMergeState.files
                 .map((currentFile) => currentFile.path === file.path ? nextFile : currentFile)
-                .filter((currentFile) => currentFile.markerBlocks.length > 0),
+                .filter((currentFile) => currentFile.markerBlocks.length > 0 || currentFile.hasUnsavedDraft),
             ));
           }
         })
