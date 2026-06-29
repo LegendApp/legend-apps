@@ -175,9 +175,6 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
     viewBlocks: () => {
       setDiffViewModeSetting("blocks");
     },
-    viewMerge: () => {
-      setDiffViewModeSetting("merge");
-    },
     viewUnified: () => {
       setDiffViewModeSetting("unified");
     },

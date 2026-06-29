@@ -102,11 +102,6 @@ export function DiffNativeMenuController() {
         id: "viewBlocks",
       },
       {
-        checked: currentViewMode === "merge",
-        enabled: currentShowViewModeToolbar,
-        id: "viewMerge",
-      },
-      {
         checked: currentShowOnlyHunks,
         enabled: currentVisibleFolderPath !== null,
         id: "showOnlyHunks",

@@ -48,7 +48,6 @@ export const diffRowRendererOptions = [
 export const diffViewModeOptions = [
   { label: "Unified", value: "unified" },
   { label: "Blocks", value: "blocks" },
-  { label: "Merge", value: "merge" },
 ] as const;
 
 function normalizeDiffFontSize(fontSize: unknown): number {
