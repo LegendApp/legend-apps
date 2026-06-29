@@ -18,6 +18,7 @@ import {
 } from "@legend-desktop/diff-parser";
 import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
+import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
 import { LightText, nowMs, TokenizedText, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
@@ -42,9 +43,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, t
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
+  createDiffMergeConflictFileFromContent,
+  createReadyMergeState,
   createDiffMergeHunkDisplayModel,
   loadDiffMergeState,
-  resolveDiffMergeConflictBlock,
+  readDiffMergeFileContent,
+  resolveDiffMergeConflictContent,
   type DiffMergeConflictBlock,
   type DiffMergeConflictChoice,
   type DiffMergeConflictRange,
@@ -54,6 +58,7 @@ import {
   type DiffMergeHunkHeaderInfo,
   type DiffMergeSideChangeType,
   type DiffMergeState,
+  writeDiffMergeFileContent,
 } from "./diffMerge";
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
 import {
@@ -161,6 +166,11 @@ type DiffLoadedCacheEntry = {
   loadComplete: boolean;
 };
 
+type DiffMergeDraftFile = {
+  content: string;
+  file: DiffMergeConflictFile;
+};
+
 type DiffViewerWindowProps = {
   focusUrlInputRequestId?: number;
   folderPath?: string;
@@ -200,6 +210,31 @@ function getDiffSourceCacheKey(source: DiffOpenSource) {
 function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean) {
   const mode = showOnlyHunks ? "hunks" : "full";
   return `${getDiffSourceCacheKey(source)}:${mode}`;
+}
+
+function applyDiffMergeDraftsToState(
+  mergeState: DiffMergeState,
+  drafts: ReadonlyMap<string, DiffMergeDraftFile>,
+): DiffMergeState {
+  if (mergeState.status !== "ready" || drafts.size === 0) {
+    return mergeState;
+  }
+
+  return createReadyMergeState(
+    mergeState.files
+      .map((file) => drafts.get(file.path)?.file ?? file)
+      .filter((file) => file.markerBlocks.length > 0),
+  );
+}
+
+function isSaveKeyEvent(event: { keyCode: number; modifiers: number }) {
+  const saveModifiers = KeyCodes.MODIFIER_COMMAND;
+  const relevantModifiers =
+    KeyCodes.MODIFIER_COMMAND |
+    KeyCodes.MODIFIER_OPTION |
+    KeyCodes.MODIFIER_CONTROL |
+    KeyCodes.MODIFIER_SHIFT;
+  return event.keyCode === KeyCodes.KEY_S && (event.modifiers & relevantModifiers) === saveModifiers;
 }
 
 type DiffSidebarFileRowProps = {
@@ -1256,7 +1291,7 @@ function getMergeConflictPalette(syntaxAppearance: "dark" | "light") {
         accent: "#ffc857",
         hunkBackground: "#6f5f2e",
         inlineBackground: "#8f5f1f",
-        rowBackground: "#504723",
+        rowBackground: "#463f20",
       }
     : {
         accent: "#9a6400",
@@ -1925,6 +1960,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loggedFirstSidebarFileRenderRef = useRef(false);
   const loggedFirstUnifiedRowRenderRef = useRef(false);
   const loggedFirstSideBySideRowRenderRef = useRef(false);
+  const mergeDraftsRef = useRef(new Map<string, DiffMergeDraftFile>());
+  const mergeDraftsSourceKeyRef = useRef<string | null>(null);
+  const savingMergeDraftsRef = useRef(false);
   const [syntaxTokenizationProgress, setSyntaxTokenizationProgress] = useState<DiffSyntaxTokenizationProgress>({
     progress: 0,
     version: 0,
@@ -2150,6 +2188,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const sourceCacheKey = getDiffSourceCacheKey(nextSource);
     const loadedCacheKey = getDiffLoadedCacheKey(nextSource, loadShowOnlyHunks);
 
+    if (mergeDraftsSourceKeyRef.current !== null && mergeDraftsSourceKeyRef.current !== sourceCacheKey) {
+      mergeDraftsRef.current = new Map();
+      mergeDraftsSourceKeyRef.current = null;
+    }
+
     if (options?.force) {
       for (const key of loadedCacheRef.current.keys()) {
         if (key.startsWith(`${sourceCacheKey}:`)) {
@@ -2246,7 +2289,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                 .then((nextMergeState) => {
                   const currentState = state$.peek();
                   if (loadRequestIdRef.current === requestId && currentState.status === "loaded" && sourcesMatch(currentState.source, nextSource)) {
-                    setMergeStateValue(nextMergeState);
+                    setMergeStateValue(applyDiffMergeDraftsToState(nextMergeState, mergeDraftsRef.current));
                     logDiffOpenTiming("viewer.mergeState.loaded", {
                       files: nextMergeState.status === "ready" ? nextMergeState.conflictFileCount : 0,
                       requestId,
@@ -2485,19 +2528,91 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [nativeDiffRows, setDocumentErrorValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
 
+  const saveMergeDrafts = useCallback(() => {
+    const currentState = state$.peek();
+    const draftEntries = [...mergeDraftsRef.current.entries()];
+    const sourceKey = currentState.source ? getDiffSourceCacheKey(currentState.source) : null;
+    let didStartSave = false;
+    if (
+      currentState.status === "loaded" &&
+      currentState.source.kind === "folder" &&
+      draftEntries.length > 0 &&
+      mergeDraftsSourceKeyRef.current === sourceKey &&
+      resolvingMergeConflictKey === null &&
+      !savingMergeDraftsRef.current
+    ) {
+      didStartSave = true;
+      savingMergeDraftsRef.current = true;
+      setResolvingMergeConflictKey("__merge-save__");
+      setDocumentErrorValue(null);
+      Promise.resolve()
+        .then(async () => {
+          for (const [path, draft] of draftEntries) {
+            await writeDiffMergeFileContent({
+              content: draft.content,
+              folderPath: currentState.source.value,
+              path,
+            });
+          }
+          mergeDraftsRef.current = new Map();
+          mergeDraftsSourceKeyRef.current = null;
+          await loadSource(currentState.source, { force: true, reason: "merge-resolve" });
+        })
+        .catch((error: unknown) => {
+          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+        })
+        .finally(() => {
+          savingMergeDraftsRef.current = false;
+          setResolvingMergeConflictKey(null);
+        });
+    }
+    return didStartSave;
+  }, [loadSource, resolvingMergeConflictKey, setDocumentErrorValue, state$]);
+
+  useEffect(() => addKeyDownListener((event) => {
+    let handled = false;
+    if (isSaveKeyEvent(event)) {
+      handled = saveMergeDrafts();
+    }
+    return handled;
+  }), [saveMergeDrafts]);
+
   const resolveMergeConflict = useCallback((file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => {
     const currentState = state$.peek();
-    if (currentState.status === "loaded" && currentState.source.kind === "folder" && resolvingMergeConflictKey === null) {
+    if (currentState.status === "loaded" && currentState.source.kind === "folder" && resolvingMergeConflictKey === null && !savingMergeDraftsRef.current) {
       const conflictKey = getMergeConflictKey(file, block);
       setResolvingMergeConflictKey(conflictKey);
       setDocumentErrorValue(null);
-      resolveDiffMergeConflictBlock({
-        choice,
-        folderPath: currentState.source.value,
-        path: file.path,
-        startLine: block.startLine,
-      })
-        .then(() => loadSource(currentState.source, { force: true, reason: "merge-resolve" }))
+      Promise.resolve()
+        .then(async () => {
+          const existingDraft = mergeDraftsRef.current.get(file.path);
+          const currentContent = existingDraft?.content ?? await readDiffMergeFileContent({
+            folderPath: currentState.source.value,
+            path: file.path,
+          });
+          const resolvedContent = resolveDiffMergeConflictContent(currentContent, block.startLine, choice);
+          const nextFile = createDiffMergeConflictFileFromContent({
+            content: resolvedContent,
+            path: file.path,
+            stages: file.stages,
+          });
+          const nextDrafts = new Map(mergeDraftsRef.current);
+          nextDrafts.set(file.path, {
+            content: resolvedContent,
+            file: nextFile,
+          });
+          mergeDraftsRef.current = nextDrafts;
+          mergeDraftsSourceKeyRef.current = getDiffSourceCacheKey(currentState.source);
+
+          const currentMergeState = mergeState$.peek();
+          if (currentMergeState.status === "ready") {
+            setMergeStateValue(createReadyMergeState(
+              currentMergeState.files
+                .map((currentFile) => currentFile.path === file.path ? nextFile : currentFile)
+                .filter((currentFile) => currentFile.markerBlocks.length > 0),
+            ));
+          }
+        })
         .catch((error: unknown) => {
           setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
         })
@@ -2505,7 +2620,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           setResolvingMergeConflictKey(null);
         });
     }
-  }, [loadSource, resolvingMergeConflictKey, setDocumentErrorValue, state$]);
+  }, [mergeState$, resolvingMergeConflictKey, setDocumentErrorValue, setMergeStateValue, state$]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {

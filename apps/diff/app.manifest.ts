@@ -27,6 +27,7 @@ const manifest = {
       "@legend-desktop/drag-drop",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
+      "@legend-desktop/keyboard-manager",
       "@legend-desktop/native-menu",
       "@legend-desktop/native-select",
       "@legend-desktop/recent-documents",

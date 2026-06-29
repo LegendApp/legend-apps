@@ -115,7 +115,7 @@ function joinContentLines(lines: string[], newline: string, trailingNewline: boo
   return `${lines.join(newline)}${trailingNewline ? newline : ""}`;
 }
 
-function createReadyMergeState(files: DiffMergeConflictFile[]): DiffMergeState {
+export function createReadyMergeState(files: DiffMergeConflictFile[]): DiffMergeState {
   const fileByPath = new Map(files.map((file) => [file.path, file]));
   return {
     status: "ready",
@@ -123,6 +123,26 @@ function createReadyMergeState(files: DiffMergeConflictFile[]): DiffMergeState {
     conflictFileCount: files.length,
     files,
     fileByPath,
+  };
+}
+
+export function createDiffMergeConflictFileFromContent({
+  content,
+  path,
+  stages,
+}: {
+  content: string;
+  path: string;
+  stages: DiffMergeConflictStage[];
+}): DiffMergeConflictFile {
+  const markerBlocks = parseConflictMarkerBlocks(content);
+  const displayModel = createDiffMergeDisplayModel(content, markerBlocks);
+  return {
+    conflictRanges: displayModel.conflictRanges,
+    displayRows: displayModel.rows,
+    markerBlocks,
+    path,
+    stages,
   };
 }
 
@@ -857,18 +877,64 @@ async function loadConflictMarkers(
       cwd: folderPath,
       timeoutMs: 5_000,
     });
-    const markerBlocks = result.exitCode === 0 ? parseConflictMarkerBlocks(result.stdout) : [];
-    const displayModel = result.exitCode === 0
-      ? createDiffMergeDisplayModel(result.stdout, markerBlocks)
-      : { conflictRanges: [], rows: [] };
-    loadedFiles.push({
-      ...file,
-      conflictRanges: displayModel.conflictRanges,
-      displayRows: displayModel.rows,
-      markerBlocks,
-    });
+    loadedFiles.push(result.exitCode === 0
+      ? createDiffMergeConflictFileFromContent({
+        content: result.stdout,
+        path: file.path,
+        stages: file.stages,
+      })
+      : {
+        ...file,
+        conflictRanges: [],
+        displayRows: [],
+        markerBlocks: [],
+      });
   }
   return loadedFiles;
+}
+
+export async function readDiffMergeFileContent({
+  folderPath,
+  path,
+  runner = commandRunner,
+}: {
+  folderPath: string;
+  path: string;
+  runner?: CommandRunner;
+}) {
+  const readResult = await runner.runCommand({
+    args: ["--", path],
+    command: "cat",
+    cwd: folderPath,
+    timeoutMs: 5_000,
+  });
+  if (readResult.exitCode !== 0) {
+    throw new Error(readResult.stderr || `Unable to read ${path}.`);
+  }
+  return readResult.stdout;
+}
+
+export async function writeDiffMergeFileContent({
+  content,
+  folderPath,
+  path,
+  runner = commandRunner,
+}: {
+  content: string;
+  folderPath: string;
+  path: string;
+  runner?: CommandRunner;
+}) {
+  const writeResult = await runner.runCommand({
+    args: ["-c", "cat > \"$1\"", "legend-diff-write", path],
+    command: "sh",
+    cwd: folderPath,
+    input: content,
+    timeoutMs: 5_000,
+  });
+  if (writeResult.exitCode !== 0) {
+    throw new Error(writeResult.stderr || `Unable to write ${path}.`);
+  }
 }
 
 export async function resolveDiffMergeConflictBlock({
@@ -884,27 +950,9 @@ export async function resolveDiffMergeConflictBlock({
   runner?: CommandRunner;
   startLine: number;
 }) {
-  const readResult = await runner.runCommand({
-    args: ["--", path],
-    command: "cat",
-    cwd: folderPath,
-    timeoutMs: 5_000,
-  });
-  if (readResult.exitCode !== 0) {
-    throw new Error(readResult.stderr || `Unable to read ${path}.`);
-  }
-
-  const resolvedContent = resolveDiffMergeConflictContent(readResult.stdout, startLine, choice);
-  const writeResult = await runner.runCommand({
-    args: ["-c", "cat > \"$1\"", "legend-diff-write", path],
-    command: "sh",
-    cwd: folderPath,
-    input: resolvedContent,
-    timeoutMs: 5_000,
-  });
-  if (writeResult.exitCode !== 0) {
-    throw new Error(writeResult.stderr || `Unable to write ${path}.`);
-  }
+  const content = await readDiffMergeFileContent({ folderPath, path, runner });
+  const resolvedContent = resolveDiffMergeConflictContent(content, startLine, choice);
+  await writeDiffMergeFileContent({ content: resolvedContent, folderPath, path, runner });
 }
 
 export async function loadDiffMergeState(

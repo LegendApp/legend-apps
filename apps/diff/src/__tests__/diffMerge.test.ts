@@ -1,5 +1,6 @@
 import { createMockCommandRunner } from "@legend-desktop/command-runner";
 import {
+  createDiffMergeConflictFileFromContent,
   createDiffMergeDisplayRows,
   createDiffMergeHunkDisplayModel,
   diffMergeConflictLines,
@@ -8,6 +9,7 @@ import {
   parseConflictMarkerBlocks,
   parseGitUnmergedEntries,
   resolveDiffMergeConflictContent,
+  writeDiffMergeFileContent,
 } from "../diffMerge";
 
 describe("diffMerge", () => {
@@ -424,6 +426,77 @@ describe("diffMerge", () => {
       "incoming",
       "after",
     ].join("\n"));
+  });
+
+  it("creates a merge conflict file from draft content", () => {
+    const file = createDiffMergeConflictFileFromContent({
+      content: [
+        "before",
+        "<<<<<<< HEAD",
+        "current",
+        "=======",
+        "incoming",
+        ">>>>>>> feature",
+        "after",
+      ].join("\n"),
+      path: "src/app.ts",
+      stages: [{ mode: "100644", oid: "aaa111", stage: 1 }],
+    });
+
+    expect(file).toMatchObject({
+      path: "src/app.ts",
+      markerBlocks: [
+        {
+          endLine: 6,
+          startLine: 2,
+        },
+      ],
+      conflictRanges: [
+        {
+          endRow: 1,
+          startRow: 1,
+        },
+      ],
+    });
+    expect(file.displayRows.map((row) => [row.leftText, row.rightText])).toEqual([
+      ["before", "before"],
+      ["current", "incoming"],
+      ["after", "after"],
+    ]);
+  });
+
+  it("writes drafted merge content to a worktree file", async () => {
+    const commands: Array<{ command: string; args: string[]; input?: string }> = [];
+    const runner = createMockCommandRunner({
+      run: (params) => {
+        commands.push({
+          args: params.args ?? [],
+          command: params.command,
+          input: params.input,
+        });
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: "",
+          timedOut: false,
+        };
+      },
+    });
+
+    await writeDiffMergeFileContent({
+      content: "resolved\n",
+      folderPath: "/repo",
+      path: "src/app.ts",
+      runner,
+    });
+
+    expect(commands).toEqual([
+      {
+        args: ["-c", "cat > \"$1\"", "legend-diff-write", "src/app.ts"],
+        command: "sh",
+        input: "resolved\n",
+      },
+    ]);
   });
 
   it("loads conflict state from git index and worktree files", async () => {
