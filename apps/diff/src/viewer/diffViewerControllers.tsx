@@ -26,6 +26,7 @@ import {
 import {
   emptyDiffViewerState,
   useDiffViewerModel,
+  type DiffLoadSourceOptions,
   type DiffLoadTrace,
 } from "./diffViewerModel";
 import {
@@ -280,7 +281,7 @@ export function DiffLaunchController({
   focusUrlInputRequestId?: number;
   folderPath?: string;
   loadRequestIdRef: { current: number };
-  loadSource: (nextSource: DiffOpenSource) => Promise<void>;
+  loadSource: (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => Promise<void>;
   loadTraceRef: { current: DiffLoadTrace | null };
   source?: DiffOpenSource;
   urlInputRef: RefObject<TextInput | null>;
@@ -307,7 +308,7 @@ export function DiffLaunchController({
           logDiffOpenTiming("viewer.launchSource.deferredLoad", {
             source: initialSource,
           });
-          loadSource(initialSource).catch((error: unknown) => {
+          loadSource(initialSource, { reason: "launch" }).catch((error: unknown) => {
             console.error(getErrorMessage(error));
           });
         }, 0);
@@ -358,7 +359,7 @@ export function DiffLaunchController({
 export function DiffFileWatcherController({
   loadSource,
 }: {
-  loadSource: (nextSource: DiffOpenSource) => Promise<void>;
+  loadSource: (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => Promise<void>;
 }) {
   const {
     setDocumentErrorValue,
@@ -379,7 +380,7 @@ export function DiffFileWatcherController({
         clearTimeout(reloadTimeout);
       }
       reloadTimeout = setTimeout(() => {
-        loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }).catch((error: unknown) => {
+        loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }, { force: true, reason: "watch" }).catch((error: unknown) => {
           setDocumentErrorValue(createRefreshError(currentVisibleSource, getErrorMessage(error)));
         });
       }, 250);

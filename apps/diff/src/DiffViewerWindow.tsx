@@ -118,6 +118,7 @@ import {
   useDiffViewerModel,
   type DiffFatalError,
   type DiffLoadedState,
+  type DiffLoadSourceOptions,
   type DiffLoadTrace,
   type DiffRecoverableError,
   type DiffSplitPaneMetrics,
@@ -138,6 +139,11 @@ const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.pre
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
+
+type DiffLoadedCacheEntry = {
+  loaded: DiffLoadedPayload;
+  loadComplete: boolean;
+};
 
 type DiffViewerWindowProps = {
   focusUrlInputRequestId?: number;
@@ -163,6 +169,21 @@ function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCoun
     || (initialRowCount <= 0 && progress.files.length > 0)
     || progress.complete
     || !!progress.error;
+}
+
+function getDiffSourceCacheKey(source: DiffOpenSource) {
+  if (source.kind === "github") {
+    return `${source.kind}:${source.diffUrl}`;
+  }
+  if (source.kind === "git") {
+    return `${source.kind}:${source.cwd}:${source.args.join("\u0000")}`;
+  }
+  return `${source.kind}:${source.value}`;
+}
+
+function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean) {
+  const mode = showOnlyHunks ? "hunks" : "full";
+  return `${getDiffSourceCacheKey(source)}:${mode}`;
 }
 
 type DiffSidebarFileRowProps = {
@@ -1104,6 +1125,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const urlInputRef = useRef<TextInput | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
+  const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
   const loggedFirstSidebarFileRenderRef = useRef(false);
   const loggedFirstUnifiedRowRenderRef = useRef(false);
@@ -1309,12 +1331,50 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   });
 
-  const loadSource = useCallback(async (nextSource: DiffOpenSource) => {
+  const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     const loadStartedAt = nowMs();
     const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
     const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
+    const sourceCacheKey = getDiffSourceCacheKey(nextSource);
+    const loadedCacheKey = getDiffLoadedCacheKey(nextSource, loadShowOnlyHunks);
+
+    if (options?.force) {
+      for (const key of loadedCacheRef.current.keys()) {
+        if (key.startsWith(`${sourceCacheKey}:`)) {
+          loadedCacheRef.current.delete(key);
+        }
+      }
+    }
+
+    const cachedEntry = !options?.force && options?.reason === "mode-toggle"
+      ? loadedCacheRef.current.get(loadedCacheKey)
+      : undefined;
+    if (cachedEntry) {
+      loadTraceRef.current = null;
+      setLoadingSourceValue(null);
+      setDocumentErrorValue(null);
+      setOpenErrorValue(null);
+      setViewerState({
+        status: "loaded",
+        folderPath: nextSource.value,
+        source: nextSource,
+        document: cachedEntry.loaded.document,
+        files: cachedEntry.loaded.files,
+        initialRows: cachedEntry.loaded.initialRows,
+        loadComplete: cachedEntry.loadComplete,
+        timing: cachedEntry.loaded.timing,
+      });
+      logDiffOpenTiming("viewer.load.cacheHit", {
+        requestId,
+        rows: cachedEntry.loaded.document.rowCount,
+        showOnlyHunks: loadShowOnlyHunks,
+        source: nextSource,
+      });
+      return;
+    }
+
     const trace: DiffLoadTrace = {
       document: null,
       folderPath: nextSource.value,
@@ -1335,6 +1395,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
     logDiffMemoryMark("viewer.load.start", {
       requestId,
+      reason: options?.reason ?? "manual",
       source: nextSource,
     });
 
@@ -1392,6 +1453,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         trace.setStateAt = statePayloadFinishedAt;
       }
       setViewerState(nextLoadedState);
+      if (loadComplete) {
+        loadedCacheRef.current.set(loadedCacheKey, {
+          loaded,
+          loadComplete,
+        });
+      }
       logDiffMemoryMark("viewer.statePublished", {
         files: loaded.files.length,
         initialRows: loaded.initialRows.length,
@@ -1677,7 +1744,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return false;
     }
 
-    loadSource(currentState.source).catch((error: unknown) => {
+    loadSource(currentState.source, { force: true, reason: "reload" }).catch((error: unknown) => {
       setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
     });
     return true;
@@ -1689,7 +1756,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     if (currentState.status === "loaded" && currentState.source.kind === "folder") {
       const nextShowOnlyHunks = !getDiffShowOnlyHunksSetting();
       setDiffShowOnlyHunksSetting(nextShowOnlyHunks);
-      loadSource(currentState.source).catch((error: unknown) => {
+      loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
         setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
       });
       didToggle = true;

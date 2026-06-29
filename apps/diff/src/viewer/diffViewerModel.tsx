@@ -17,6 +17,11 @@ export type DiffLoadTrace = {
   setStateAt: number;
 };
 
+export type DiffLoadSourceOptions = {
+  force?: boolean;
+  reason?: "launch" | "manual" | "mode-toggle" | "reload" | "watch";
+};
+
 export type DiffSplitPaneMetrics = {
   contentHeight: number;
   contentWidth: number;
