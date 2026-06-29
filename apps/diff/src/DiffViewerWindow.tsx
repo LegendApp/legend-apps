@@ -208,6 +208,7 @@ type DiffLoadedBodyProps = {
   rowHeight: number;
   sidebarCollapsed: boolean;
   sidebarListHeight: number;
+  sideBySideDataVersion: number;
   sideBySideItemIndexes: Array<number | undefined>;
   splitPaneMetrics: DiffSplitPaneMetrics;
   state: DiffLoadedState;
@@ -226,6 +227,7 @@ type DiffSyntaxTokenizationProgress = {
 type DiffListExtraData = {
   adaptiveLightModeEnabled: boolean;
   borderColor: string;
+  collapsedFileIndexesKey: string;
   fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
@@ -233,6 +235,7 @@ type DiffListExtraData = {
   mutedColor: string;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
+  sideBySideRowCount: number;
   sideBySideTokenStyleCount: number;
   syntaxAppearance: "dark" | "light";
   syntaxTheme: DiffSettingsFile["syntaxTheme"];
@@ -684,6 +687,7 @@ function DiffLoadedBody({
   rowHeight,
   sidebarCollapsed,
   sidebarListHeight,
+  sideBySideDataVersion,
   sideBySideItemIndexes,
   splitPaneMetrics,
   state,
@@ -790,7 +794,7 @@ function DiffLoadedBody({
     ) : (
       <VirtualizedFixedDocumentList
         adaptiveRender={adaptiveRender}
-        dataVersion={diffRows.dataVersion}
+        dataVersion={sideBySideDataVersion}
         key={viewMode}
         extraData={listExtraData}
         itemIndexes={sideBySideItemIndexes}
@@ -1775,10 +1779,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   }, [setCollapsedFileIndexesValue]);
   const listSyntaxTheme = syntaxTheme.name;
+  const sideBySideDataVersion = useMemo(
+    () => hashDiffNativeRowConfigVersion([diffRows.dataVersion, collapsedFileIndexesKey, sideBySideRowCount]),
+    [collapsedFileIndexesKey, diffRows.dataVersion, sideBySideRowCount],
+  );
   const listExtraData = useMemo<DiffListExtraData>(
     () => ({
       adaptiveLightModeEnabled,
       borderColor: displayTheme.colors.border,
+      collapsedFileIndexesKey,
       fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
@@ -1786,6 +1795,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor,
       rowRenderer,
       rowHeight,
+      sideBySideRowCount,
       sideBySideTokenStyleCount: tokenStyleById.size,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxTheme: listSyntaxTheme,
@@ -1793,6 +1803,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }),
     [
       adaptiveLightModeEnabled,
+      collapsedFileIndexesKey,
       displayTheme.colors.border,
       fileHeaderBackgroundColor,
       fontFamily,
@@ -1802,6 +1813,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor,
       rowRenderer,
       rowHeight,
+      sideBySideRowCount,
       syntaxTheme.appearance,
       tokenStyleById.size,
     ],
@@ -2225,6 +2237,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         rowHeight={rowHeight}
         sidebarCollapsed={sidebarCollapsed}
         sidebarListHeight={sidebarListHeight}
+        sideBySideDataVersion={sideBySideDataVersion}
         sideBySideItemIndexes={sideBySideItemIndexes}
         splitPaneMetrics={splitPaneMetrics}
         state={state}
