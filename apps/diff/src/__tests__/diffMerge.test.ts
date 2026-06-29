@@ -19,6 +19,7 @@ describe("diffMerge", () => {
 
     expect(parseGitUnmergedEntries(output)).toEqual([
       {
+        conflictRanges: [],
         displayRows: [],
         markerBlocks: [],
         path: "src/app.ts",
@@ -29,6 +30,7 @@ describe("diffMerge", () => {
         ],
       },
       {
+        conflictRanges: [],
         displayRows: [],
         markerBlocks: [],
         path: "src/other.ts",
@@ -78,9 +80,9 @@ describe("diffMerge", () => {
     const [block] = parseConflictMarkerBlocks(content);
 
     expect(createDiffMergeDisplayRows(content, [block])).toEqual([
-      { kind: "line", lineNumber: 1, text: "before" },
-      { kind: "conflict", lineNumber: 2, block },
-      { kind: "line", lineNumber: 7, text: "after" },
+      { kind: "line", leftLineNumber: 1, leftText: "before", lineNumber: 1, rightLineNumber: 1, rightText: "before" },
+      { conflictBlock: block, conflictLineIndex: 0, kind: "line", leftLineNumber: 2, leftText: "current", lineNumber: 2, rightLineNumber: 2, rightText: "incoming" },
+      { kind: "line", leftLineNumber: 7, leftText: "after", lineNumber: 7, rightLineNumber: 7, rightText: "after" },
     ]);
   });
 

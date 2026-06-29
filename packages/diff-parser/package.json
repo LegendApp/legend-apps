@@ -11,7 +11,8 @@
     "ios": {
       "componentProvider": {
         "DiffNativeRowConfig": "RNDiffNativeRowConfig",
-        "DiffNativeRow": "RNDiffNativeRow"
+        "DiffNativeRow": "RNDiffNativeRow",
+        "DiffMergeNativePane": "RNDiffMergeNativePane"
       }
     }
   },

@@ -42,6 +42,7 @@ export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, ini
 
 export { default as DiffNativeRowConfig } from "./DiffNativeRowConfigNativeComponent";
 export { default as DiffNativeRow } from "./DiffNativeRowNativeComponent";
+export { default as DiffMergeNativePane } from "./DiffMergeNativePaneNativeComponent";
 
 export type {
   DiffDocument,

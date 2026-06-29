@@ -9,8 +9,13 @@ const DiffNativeRowConfig = React.memo(function DiffNativeRowConfig(props) {
   return React.createElement(View, props);
 });
 
+const DiffMergeNativePane = React.memo(function DiffMergeNativePane(props) {
+  return React.createElement(View, props);
+});
+
 module.exports = {
   __esModule: true,
+  DiffMergeNativePane,
   DiffNativeRow,
   DiffNativeRowConfig,
   loadGitFolderDiff: jest.fn(),

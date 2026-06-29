@@ -17,23 +17,29 @@ export type DiffMergeConflictBlock = {
   theirsLineCount: number;
 };
 
-export type DiffMergeDisplayConflictBlock = {
-  block: DiffMergeConflictBlock;
-  kind: "conflict";
-  lineNumber: number;
-};
-
 export type DiffMergeDisplayLine = {
   kind: "line";
+  conflictBlock?: DiffMergeConflictBlock;
+  conflictLineIndex?: number;
+  leftLineNumber?: number;
+  leftText: string;
   lineNumber: number;
-  text: string;
+  rightLineNumber?: number;
+  rightText: string;
 };
 
-export type DiffMergeDisplayRow = DiffMergeDisplayConflictBlock | DiffMergeDisplayLine;
+export type DiffMergeDisplayRow = DiffMergeDisplayLine;
+
+export type DiffMergeConflictRange = {
+  block: DiffMergeConflictBlock;
+  endRow: number;
+  startRow: number;
+};
 
 export type DiffMergeConflictChoice = "ours" | "theirs" | "both";
 
 export type DiffMergeConflictFile = {
+  conflictRanges: DiffMergeConflictRange[];
   displayRows: DiffMergeDisplayRow[];
   markerBlocks: DiffMergeConflictBlock[];
   path: string;
@@ -105,6 +111,7 @@ export function parseGitUnmergedEntries(output: string): DiffMergeConflictFile[]
       let file = filesByPath.get(path);
       if (!file) {
         file = {
+          conflictRanges: [],
           displayRows: [],
           markerBlocks: [],
           path,
@@ -157,8 +164,9 @@ export function parseConflictMarkerBlocks(content: string): DiffMergeConflictBlo
   return blocks;
 }
 
-export function createDiffMergeDisplayRows(content: string, markerBlocks: DiffMergeConflictBlock[]): DiffMergeDisplayRow[] {
+export function createDiffMergeDisplayModel(content: string, markerBlocks: DiffMergeConflictBlock[]) {
   const { lines } = splitContentLines(content);
+  const conflictRanges: DiffMergeConflictRange[] = [];
   const rows: DiffMergeDisplayRow[] = [];
   let nextLineIndex = 0;
 
@@ -167,14 +175,31 @@ export function createDiffMergeDisplayRows(content: string, markerBlocks: DiffMe
     for (let lineIndex = nextLineIndex; lineIndex < blockStartIndex; lineIndex += 1) {
       rows.push({
         kind: "line",
+        leftLineNumber: lineIndex + 1,
+        leftText: lines[lineIndex] ?? "",
         lineNumber: lineIndex + 1,
-        text: lines[lineIndex] ?? "",
+        rightLineNumber: lineIndex + 1,
+        rightText: lines[lineIndex] ?? "",
       });
     }
-    rows.push({
+    const startRow = rows.length;
+    const conflictRowCount = Math.max(1, block.oursLines.length, block.theirsLines.length);
+    for (let conflictLineIndex = 0; conflictLineIndex < conflictRowCount; conflictLineIndex += 1) {
+      rows.push({
+        conflictBlock: block,
+        conflictLineIndex,
+        kind: "line",
+        leftLineNumber: conflictLineIndex < block.oursLines.length ? block.startLine + conflictLineIndex : undefined,
+        leftText: block.oursLines[conflictLineIndex] ?? "",
+        lineNumber: block.startLine + conflictLineIndex,
+        rightLineNumber: conflictLineIndex < block.theirsLines.length ? block.startLine + conflictLineIndex : undefined,
+        rightText: block.theirsLines[conflictLineIndex] ?? "",
+      });
+    }
+    conflictRanges.push({
       block,
-      kind: "conflict",
-      lineNumber: block.startLine,
+      endRow: rows.length - 1,
+      startRow,
     });
     nextLineIndex = block.endLine;
   }
@@ -182,12 +207,22 @@ export function createDiffMergeDisplayRows(content: string, markerBlocks: DiffMe
   for (let lineIndex = nextLineIndex; lineIndex < lines.length; lineIndex += 1) {
     rows.push({
       kind: "line",
+      leftLineNumber: lineIndex + 1,
+      leftText: lines[lineIndex] ?? "",
       lineNumber: lineIndex + 1,
-      text: lines[lineIndex] ?? "",
+      rightLineNumber: lineIndex + 1,
+      rightText: lines[lineIndex] ?? "",
     });
   }
 
-  return rows;
+  return {
+    conflictRanges,
+    rows,
+  };
+}
+
+export function createDiffMergeDisplayRows(content: string, markerBlocks: DiffMergeConflictBlock[]): DiffMergeDisplayRow[] {
+  return createDiffMergeDisplayModel(content, markerBlocks).rows;
 }
 
 export function resolveDiffMergeConflictContent(
@@ -228,9 +263,13 @@ async function loadConflictMarkers(
       timeoutMs: 5_000,
     });
     const markerBlocks = result.exitCode === 0 ? parseConflictMarkerBlocks(result.stdout) : [];
+    const displayModel = result.exitCode === 0
+      ? createDiffMergeDisplayModel(result.stdout, markerBlocks)
+      : { conflictRanges: [], rows: [] };
     loadedFiles.push({
       ...file,
-      displayRows: result.exitCode === 0 ? createDiffMergeDisplayRows(result.stdout, markerBlocks) : [],
+      conflictRanges: displayModel.conflictRanges,
+      displayRows: displayModel.rows,
       markerBlocks,
     });
   }

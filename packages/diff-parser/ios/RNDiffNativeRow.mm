@@ -588,7 +588,217 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 }
 
 @end
+
+@interface RNDiffMergeNativePaneContentView : NSView
+@property(nonatomic, assign) double configVersion;
+@property(nonatomic, copy) NSString *fontFamily;
+@property(nonatomic, assign) double fontSize;
+@property(nonatomic, strong) NSColor *foregroundColor;
+@property(nonatomic, assign) double lineNumber;
+@property(nonatomic, assign) double lineNumberWidth;
+@property(nonatomic, strong) NSColor *mutedColor;
+@property(nonatomic, assign) double rowHeight;
+@property(nonatomic, copy) NSString *text;
+@property(nonatomic, copy) NSString *tokens;
+@property(nonatomic, strong) NSMutableAttributedString *attributedTextScratch;
+@property(nonatomic, strong) NSMutableParagraphStyle *textParagraph;
+@property(nonatomic, strong) NSMutableParagraphStyle *rightParagraph;
+@end
+
+@implementation RNDiffMergeNativePaneContentView
+
+- (instancetype)init
+{
+  if (self = [super initWithFrame:NSZeroRect]) {
+    _fontFamily = @"Menlo";
+    _fontSize = 13;
+    _foregroundColor = NSColor.labelColor;
+    _lineNumber = -1;
+    _lineNumberWidth = 40;
+    _mutedColor = NSColor.secondaryLabelColor;
+    _rowHeight = 22;
+    _text = @"";
+    _tokens = @"";
+    _attributedTextScratch = [[NSMutableAttributedString alloc] initWithString:@""];
+    _textParagraph = [NSMutableParagraphStyle new];
+    _textParagraph.lineBreakMode = NSLineBreakByClipping;
+    _rightParagraph = [NSMutableParagraphStyle new];
+    _rightParagraph.alignment = NSTextAlignmentRight;
+  }
+  return self;
+}
+
+- (BOOL)isFlipped
+{
+  return YES;
+}
+
+- (NSFont *)baseFont
+{
+  NSFont *font = [NSFont fontWithName:self.fontFamily size:self.fontSize];
+  return font ?: [NSFont monospacedSystemFontOfSize:self.fontSize weight:NSFontWeightRegular];
+}
+
+- (NSFont *)fontWithBaseFont:(NSFont *)baseFont style:(NSInteger)fontStyle
+{
+  NSFont *font = baseFont;
+  NSFontManager *fontManager = [NSFontManager sharedFontManager];
+  if (fontStyle == 1 || fontStyle == 3) {
+    font = [fontManager convertFont:font toHaveTrait:NSItalicFontMask] ?: font;
+  }
+  if (fontStyle == 2 || fontStyle == 3) {
+    font = [fontManager convertFont:font toHaveTrait:NSBoldFontMask] ?: font;
+  }
+  return font;
+}
+
+- (void)applyEncodedTokensToAttributedText:(NSMutableAttributedString *)attributedText baseFont:(NSFont *)baseFont
+{
+  if (self.tokens.length == 0 || attributedText.length == 0) {
+    return;
+  }
+
+  for (NSString *encodedToken in [self.tokens componentsSeparatedByString:@";"]) {
+    if (encodedToken.length == 0) {
+      continue;
+    }
+    NSArray<NSString *> *parts = [encodedToken componentsSeparatedByString:@","];
+    if (parts.count < 4) {
+      continue;
+    }
+    const NSInteger locationValue = parts[0].integerValue;
+    const NSInteger lengthValue = parts[1].integerValue;
+    const NSInteger fontStyle = parts[3].integerValue;
+    if (locationValue < 0 || lengthValue <= 0 || locationValue >= attributedText.length) {
+      continue;
+    }
+    const NSUInteger location = static_cast<NSUInteger>(locationValue);
+    const NSUInteger length = MIN(static_cast<NSUInteger>(lengthValue), attributedText.length - location);
+    NSColor *tokenColor = RNDiffColorFromString(parts[2], self.foregroundColor);
+    [attributedText addAttribute:NSForegroundColorAttributeName
+                           value:tokenColor
+                           range:NSMakeRange(location, length)];
+    NSFont *tokenFont = fontStyle == 0 ? baseFont : [self fontWithBaseFont:baseFont style:fontStyle];
+    [attributedText addAttribute:NSFontAttributeName
+                           value:tokenFont
+                           range:NSMakeRange(location, length)];
+  }
+}
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+  [super drawRect:dirtyRect];
+
+  NSFont *baseFont = [self baseFont];
+  const CGFloat textY = MAX(0, (self.rowHeight - baseFont.ascender + baseFont.descender) / 2.0);
+  NSDictionary *lineNumberAttributes = @{
+    NSFontAttributeName: baseFont,
+    NSForegroundColorAttributeName: self.mutedColor,
+    NSParagraphStyleAttributeName: self.rightParagraph,
+  };
+  if (self.lineNumber >= 0) {
+    NSString *lineNumberText = [NSString stringWithFormat:@"%.0f", self.lineNumber];
+    [lineNumberText drawInRect:NSMakeRect(0, textY, MAX(0, self.lineNumberWidth - 4), self.rowHeight)
+                withAttributes:lineNumberAttributes];
+  }
+
+  NSMutableAttributedString *attributedText = self.attributedTextScratch;
+  [[attributedText mutableString] setString:self.text ?: @""];
+  if (attributedText.length > 0) {
+    [attributedText setAttributes:@{
+      NSFontAttributeName: baseFont,
+      NSForegroundColorAttributeName: self.foregroundColor,
+      NSParagraphStyleAttributeName: self.textParagraph,
+    } range:NSMakeRange(0, attributedText.length)];
+    [self applyEncodedTokensToAttributedText:attributedText baseFont:baseFont];
+  }
+
+  const CGFloat textX = self.lineNumberWidth;
+  [attributedText drawInRect:NSMakeRect(
+    textX,
+    textY,
+    MAX(0, self.bounds.size.width - textX - diffSideBySideHorizontalPadding),
+    self.rowHeight
+  )];
+}
+
+@end
 #endif
+
+@interface RNDiffMergeNativePane () <RCTDiffMergeNativePaneViewProtocol>
+@end
+
+@implementation RNDiffMergeNativePane {
+#if TARGET_OS_OSX
+  RNDiffMergeNativePaneContentView *_contentView;
+#endif
+}
+
+- (instancetype)init
+{
+  if (self = [super init]) {
+    _props = std::make_shared<const DiffMergeNativePaneProps>();
+#if TARGET_OS_OSX
+    _contentView = [RNDiffMergeNativePaneContentView new];
+    _contentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self addSubview:_contentView];
+#endif
+  }
+  return self;
+}
+
+- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
+{
+  const auto &newProps = *std::static_pointer_cast<DiffMergeNativePaneProps const>(props);
+#if TARGET_OS_OSX
+  _contentView.configVersion = newProps.configVersion;
+  _contentView.fontFamily = [NSString stringWithUTF8String:newProps.fontFamily.c_str()] ?: @"Menlo";
+  _contentView.fontSize = newProps.fontSize;
+  _contentView.foregroundColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.foregroundColor.c_str()] ?: @"", NSColor.labelColor);
+  _contentView.lineNumber = newProps.lineNumber;
+  _contentView.lineNumberWidth = newProps.lineNumberWidth;
+  _contentView.mutedColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.mutedColor.c_str()] ?: @"", NSColor.secondaryLabelColor);
+  _contentView.rowHeight = newProps.rowHeight;
+  _contentView.text = [NSString stringWithUTF8String:newProps.text.c_str()] ?: @"";
+  _contentView.tokens = [NSString stringWithUTF8String:newProps.tokens.c_str()] ?: @"";
+  [_contentView setNeedsDisplay:YES];
+#endif
+  [super updateProps:props oldProps:oldProps];
+}
+
+- (void)prepareForRecycle
+{
+  [super prepareForRecycle];
+#if TARGET_OS_OSX
+  _contentView.configVersion = 0;
+  _contentView.lineNumber = -1;
+  _contentView.text = @"";
+  _contentView.tokens = @"";
+  [_contentView setNeedsDisplay:YES];
+#endif
+}
+
+- (void)layoutSubviews
+{
+  [super layoutSubviews];
+#if TARGET_OS_OSX
+  _contentView.frame = self.bounds;
+#endif
+}
+
+- (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
+           oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
+{
+  [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+  [self layoutSubviews];
+}
+
++ (ComponentDescriptorProvider)componentDescriptorProvider
+{
+  return concreteComponentDescriptorProvider<DiffMergeNativePaneComponentDescriptor>();
+}
+
+@end
 
 @interface RNDiffNativeRowConfig () <RCTDiffNativeRowConfigViewProtocol>
 @end
