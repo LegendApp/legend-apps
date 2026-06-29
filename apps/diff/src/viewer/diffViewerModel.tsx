@@ -8,6 +8,7 @@ import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { createContext, type ReactNode, type SetStateAction, useCallback, useContext, useMemo } from "react";
 import type { DiffOpenSource } from "../diffFiles";
+import type { DiffMergeState } from "../diffMerge";
 
 export type DiffLoadTrace = {
   document: DiffDocument | null;
@@ -74,17 +75,24 @@ export const emptyDiffViewerState: DiffViewerState = {
   source: null,
 };
 
+export const unavailableDiffMergeState: DiffMergeState = {
+  status: "unavailable",
+  reason: "Merge mode is available for local Git repositories.",
+};
+
 export type DiffViewerModel = {
   activeFileIndex$: Observable<number | null>;
   collapsedFileIndexes$: Observable<Set<number>>;
   diffPaneHeight$: Observable<number>;
   documentError$: Observable<DiffRecoverableError | null>;
   loadingSource$: Observable<DiffOpenSource | null>;
+  mergeState$: Observable<DiffMergeState>;
   openError$: Observable<DiffRecoverableError | null>;
   setCollapsedFileIndexesValue: (nextValue: SetStateAction<Set<number>>) => void;
   setDiffPaneHeightValue: (nextHeight: number) => void;
   setDocumentErrorValue: (nextError: DiffRecoverableError | null) => void;
   setLoadingSourceValue: (nextValue: SetStateAction<DiffOpenSource | null>) => void;
+  setMergeStateValue: (nextMergeState: DiffMergeState) => void;
   setOpenErrorValue: (nextError: DiffRecoverableError | null) => void;
   setSidebarCollapsedValue: (nextValue: SetStateAction<boolean>) => void;
   setSplitPaneMetricsValue: (nextMetrics: DiffSplitPaneMetrics) => void;
@@ -113,6 +121,7 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
   const openError$ = useObservable<DiffRecoverableError | null>(null);
   const documentError$ = useObservable<DiffRecoverableError | null>(null);
   const loadingSource$ = useObservable<DiffOpenSource | null>(null);
+  const mergeState$ = useObservable<DiffMergeState>(unavailableDiffMergeState);
   const sidebarCollapsed$ = useObservable(false);
   const collapsedFileIndexes$ = useObservable<Set<number>>(new Set());
   const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>({
@@ -146,6 +155,9 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
       loadingSource$.set(nextLoadingSource);
     }
   }, [loadingSource$]);
+  const setMergeStateValue = useCallback((nextMergeState: DiffMergeState) => {
+    mergeState$.set(nextMergeState);
+  }, [mergeState$]);
   const setSidebarCollapsedValue = useCallback((nextValue: SetStateAction<boolean>) => {
     const currentSidebarCollapsed = sidebarCollapsed$.peek();
     const nextSidebarCollapsed = resolveSetStateAction(currentSidebarCollapsed, nextValue);
@@ -173,11 +185,13 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
       diffPaneHeight$,
       documentError$,
       loadingSource$,
+      mergeState$,
       openError$,
       setCollapsedFileIndexesValue,
       setDiffPaneHeightValue,
       setDocumentErrorValue,
       setLoadingSourceValue,
+      setMergeStateValue,
       setOpenErrorValue,
       setSidebarCollapsedValue,
       setSplitPaneMetricsValue,
@@ -196,11 +210,13 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
       diffPaneHeight$,
       documentError$,
       loadingSource$,
+      mergeState$,
       openError$,
       setCollapsedFileIndexesValue,
       setDiffPaneHeightValue,
       setDocumentErrorValue,
       setLoadingSourceValue,
+      setMergeStateValue,
       setOpenErrorValue,
       setSidebarCollapsedValue,
       setSplitPaneMetricsValue,

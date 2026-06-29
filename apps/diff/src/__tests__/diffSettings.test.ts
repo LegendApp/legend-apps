@@ -46,6 +46,7 @@ describe("diffSettings", () => {
   it("accepts only known view modes", () => {
     expect(isDiffViewMode("unified")).toBe(true);
     expect(isDiffViewMode("blocks")).toBe(true);
+    expect(isDiffViewMode("merge")).toBe(true);
     expect(isDiffViewMode("side-by-side")).toBe(false);
   });
 
@@ -53,7 +54,7 @@ describe("diffSettings", () => {
     setDiffFontFamilySetting("SF Mono");
     setDiffFontSizeSetting(14);
     setDiffSyntaxThemeSetting("github-light");
-    setDiffViewModeSetting("blocks");
+    setDiffViewModeSetting("merge");
     setDiffShowOnlyHunksSetting(false);
     setDiffAdaptiveLightModeEnabledSetting(false);
     setDiffSyntaxHighlightingEnabledSetting(false);
@@ -65,7 +66,7 @@ describe("diffSettings", () => {
     expect(getDiffFontSizeSetting()).toBe(14);
     expect(getDiffSyntaxThemeSetting()).toBe("github-light");
     expect(getDiffSyntaxTheme().appearance).toBe("light");
-    expect(getDiffViewModeSetting()).toBe("blocks");
+    expect(getDiffViewModeSetting()).toBe("merge");
     expect(getDiffShowOnlyHunksSetting()).toBe(false);
     expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(false);
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(false);

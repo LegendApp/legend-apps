@@ -150,6 +150,13 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         enabled: false,
         shortcut: { key: "2", modifiers: commandModifier },
       },
+      {
+        id: "viewMerge",
+        title: "Merge",
+        checked: false,
+        enabled: false,
+        shortcut: { key: "3", modifiers: commandModifier },
+      },
       { separator: true, id: "separator-view-hunks" },
       {
         id: "showOnlyHunks",

@@ -17,6 +17,7 @@ export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
 let diffViewerUrlFocusRequestId = 0;
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
   blocks: "rectangle.split.2x1",
+  merge: "arrow.triangle.merge",
   unified: "rectangle.portrait",
 };
 
