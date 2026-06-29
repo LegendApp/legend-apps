@@ -17,10 +17,17 @@ export type DiffMergeConflictBlock = {
   theirsLineCount: number;
 };
 
+export type DiffMergeHunkHeaderInfo = {
+  hunkNumber: number;
+  lineLabel: string;
+};
+
 export type DiffMergeDisplayLine = {
   kind: "line";
   conflictBlock?: DiffMergeConflictBlock;
   conflictLineIndex?: number;
+  hunkHeader?: DiffMergeHunkHeaderInfo;
+  hunkIndex?: number;
   leftLineNumber?: number;
   leftText: string;
   lineNumber: number;
@@ -34,6 +41,11 @@ export type DiffMergeConflictRange = {
   block: DiffMergeConflictBlock;
   endRow: number;
   startRow: number;
+};
+
+export type DiffMergeDisplayModel = {
+  conflictRanges: DiffMergeConflictRange[];
+  rows: DiffMergeDisplayRow[];
 };
 
 export type DiffMergeConflictChoice = "ours" | "theirs" | "both";
@@ -69,6 +81,7 @@ export type DiffMergeState =
 const conflictMarkerStartPattern = /^<<<<<<<(?:\s|$)/;
 const conflictMarkerSeparatorPattern = /^=======$/;
 const conflictMarkerEndPattern = /^>>>>>>>(?:\s|$)/;
+const defaultDiffMergeHunkContextLineCount = 3;
 
 function getContentNewline(content: string) {
   return content.includes("\r\n") ? "\r\n" : "\n";
@@ -164,7 +177,29 @@ export function parseConflictMarkerBlocks(content: string): DiffMergeConflictBlo
   return blocks;
 }
 
-export function createDiffMergeDisplayModel(content: string, markerBlocks: DiffMergeConflictBlock[]) {
+function recordMergeDisplayLineRange(row: DiffMergeDisplayRow, range: { maxLine: number; minLine: number }) {
+  const lineNumbers = [row.leftLineNumber, row.rightLineNumber].filter((lineNumber): lineNumber is number => lineNumber !== undefined);
+  for (const lineNumber of lineNumbers) {
+    range.minLine = Math.min(range.minLine, lineNumber);
+    range.maxLine = Math.max(range.maxLine, lineNumber);
+  }
+}
+
+function getMergeDisplayLineRangeLabel(rows: readonly DiffMergeDisplayRow[]) {
+  const range = {
+    maxLine: Number.NEGATIVE_INFINITY,
+    minLine: Number.POSITIVE_INFINITY,
+  };
+  for (const row of rows) {
+    recordMergeDisplayLineRange(row, range);
+  }
+  if (!Number.isFinite(range.minLine) || !Number.isFinite(range.maxLine)) {
+    return "Lines";
+  }
+  return range.minLine === range.maxLine ? `Line ${range.minLine}` : `Lines ${range.minLine}-${range.maxLine}`;
+}
+
+export function createDiffMergeDisplayModel(content: string, markerBlocks: DiffMergeConflictBlock[]): DiffMergeDisplayModel {
   const { lines } = splitContentLines(content);
   const conflictRanges: DiffMergeConflictRange[] = [];
   const rows: DiffMergeDisplayRow[] = [];
@@ -223,6 +258,67 @@ export function createDiffMergeDisplayModel(content: string, markerBlocks: DiffM
 
 export function createDiffMergeDisplayRows(content: string, markerBlocks: DiffMergeConflictBlock[]): DiffMergeDisplayRow[] {
   return createDiffMergeDisplayModel(content, markerBlocks).rows;
+}
+
+export function createDiffMergeHunkDisplayModel(
+  rows: readonly DiffMergeDisplayRow[],
+  conflictRanges: readonly DiffMergeConflictRange[],
+  contextLineCount = defaultDiffMergeHunkContextLineCount,
+): DiffMergeDisplayModel {
+  const rowCount = rows.length;
+  const contextCount = Math.max(0, Math.floor(contextLineCount));
+  const hunkRanges: Array<{ endRow: number; startRow: number }> = [];
+
+  for (const range of conflictRanges) {
+    const startRow = Math.max(0, range.startRow - contextCount);
+    const endRow = Math.min(rowCount - 1, range.endRow + contextCount);
+    const previousRange = hunkRanges[hunkRanges.length - 1];
+    if (previousRange && startRow <= previousRange.endRow + 1) {
+      previousRange.endRow = Math.max(previousRange.endRow, endRow);
+    } else if (startRow <= endRow) {
+      hunkRanges.push({ endRow, startRow });
+    }
+  }
+
+  const hunkRows: DiffMergeDisplayRow[] = [];
+  const hunkConflictRangeByBlock = new Map<DiffMergeConflictBlock, DiffMergeConflictRange>();
+
+  hunkRanges.forEach((range, hunkIndex) => {
+    const rangeRows = rows.slice(range.startRow, range.endRow + 1);
+    const lineLabel = getMergeDisplayLineRangeLabel(rangeRows);
+    for (let rowIndex = range.startRow; rowIndex <= range.endRow; rowIndex += 1) {
+      const sourceRow = rows[rowIndex];
+      const hunkRow: DiffMergeDisplayRow = {
+        ...sourceRow,
+        hunkIndex,
+      };
+      if (rowIndex === range.startRow) {
+        hunkRow.hunkHeader = {
+          hunkNumber: hunkIndex + 1,
+          lineLabel,
+        };
+      }
+      hunkRows.push(hunkRow);
+
+      if (sourceRow.conflictBlock) {
+        const existingRange = hunkConflictRangeByBlock.get(sourceRow.conflictBlock);
+        if (existingRange) {
+          existingRange.endRow = hunkRows.length - 1;
+        } else {
+          hunkConflictRangeByBlock.set(sourceRow.conflictBlock, {
+            block: sourceRow.conflictBlock,
+            endRow: hunkRows.length - 1,
+            startRow: hunkRows.length - 1,
+          });
+        }
+      }
+    }
+  });
+
+  return {
+    conflictRanges: [...hunkConflictRangeByBlock.values()],
+    rows: hunkRows,
+  };
 }
 
 export function resolveDiffMergeConflictContent(

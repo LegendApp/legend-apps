@@ -42,12 +42,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, t
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
+  createDiffMergeHunkDisplayModel,
   loadDiffMergeState,
   resolveDiffMergeConflictBlock,
   type DiffMergeConflictBlock,
   type DiffMergeConflictChoice,
+  type DiffMergeConflictRange,
   type DiffMergeDisplayRow,
   type DiffMergeConflictFile,
+  type DiffMergeDisplayModel,
+  type DiffMergeHunkHeaderInfo,
   type DiffMergeState,
 } from "./diffMerge";
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
@@ -847,6 +851,7 @@ function DiffLoadedBody({
           activeFileIndex={activeFileIndex}
           borderColor={listExtraData.borderColor}
           fileByIndex={state.files}
+          fileHeaderBackgroundColor={listExtraData.fileHeaderBackgroundColor}
           foregroundColor={listExtraData.foregroundColor}
           fontFamily={listExtraData.fontFamily}
           fontSize={listExtraData.fontSize}
@@ -859,6 +864,7 @@ function DiffLoadedBody({
           resolvingMergeConflictKey={resolvingMergeConflictKey}
           rowRenderer={listExtraData.rowRenderer}
           rowHeight={rowHeight}
+          showOnlyHunks={listExtraData.showOnlyHunks}
           syntaxAppearance={syntaxAppearance}
           syntaxHighlightingEnabled={listExtraData.syntaxHighlightingEnabled}
           syntaxThemeName={listExtraData.syntaxTheme}
@@ -1182,19 +1188,56 @@ function getMergeSyntaxLine(
 }
 
 function getMergeControlRowByBlockKey(
+  conflictRanges: readonly DiffMergeConflictRange[],
   file: DiffMergeConflictFile,
   visibleRange: { count: number; start: number },
 ) {
   const rowByBlockKey = new Map<string, number>();
   const visibleStart = visibleRange.start;
   const visibleEnd = visibleRange.start + Math.max(0, visibleRange.count) - 1;
-  for (const range of file.conflictRanges) {
+  for (const range of conflictRanges) {
     const hasVisibleIntersection = visibleRange.count > 0 && visibleEnd >= range.startRow && visibleStart <= range.endRow;
     const startRow = hasVisibleIntersection ? Math.max(range.startRow, visibleStart) : range.startRow;
     const endRow = hasVisibleIntersection ? Math.min(range.endRow, visibleEnd) : range.endRow;
     rowByBlockKey.set(getMergeConflictKey(file, range.block), Math.floor((startRow + endRow) / 2));
   }
   return rowByBlockKey;
+}
+
+function getFullMergeDisplayModel(file: DiffMergeConflictFile | null): DiffMergeDisplayModel {
+  return file
+    ? {
+        conflictRanges: file.conflictRanges,
+        rows: file.displayRows,
+      }
+    : {
+        conflictRanges: [],
+        rows: [],
+      };
+}
+
+function DiffMergeHunkHeader({
+  borderColor,
+  fileHeaderBackgroundColor,
+  fontFamily,
+  fontSize,
+  info,
+  mutedColor,
+}: {
+  borderColor: string;
+  fileHeaderBackgroundColor: string;
+  fontFamily: string;
+  fontSize: number;
+  info: DiffMergeHunkHeaderInfo;
+  mutedColor: string;
+}) {
+  return (
+    <View style={[styles.mergeHunkHeader, { backgroundColor: fileHeaderBackgroundColor, borderColor }]}>
+      <Text selectable={false} style={[styles.mergeHunkHeaderTitle, { color: mutedColor, fontFamily, fontSize }]}>
+        Hunk {info.hunkNumber}: {info.lineLabel}
+      </Text>
+    </View>
+  );
 }
 
 function DiffMergeCodePane({
@@ -1338,6 +1381,7 @@ function DiffMergeLineRow({
   borderColor,
   controlBlock,
   file,
+  fileHeaderBackgroundColor,
   foregroundColor,
   fontFamily,
   fontSize,
@@ -1358,6 +1402,7 @@ function DiffMergeLineRow({
   borderColor: string;
   controlBlock: DiffMergeConflictBlock | null;
   file: DiffMergeConflictFile;
+  fileHeaderBackgroundColor: string;
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
@@ -1384,51 +1429,63 @@ function DiffMergeLineRow({
   const rightLineNumberColor = isRightChanged ? palette.addAccent : mutedColor;
 
   return (
-    <View style={[styles.mergeCommonRow, { height: rowHeight }]}>
-      <View style={styles.mergeCommonPane}>
-        <DiffMergeCodePane
-          backgroundColor={leftBackgroundColor}
-          foregroundColor={foregroundColor}
+    <>
+      {row?.hunkHeader ? (
+        <DiffMergeHunkHeader
+          borderColor={borderColor}
+          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
-          lineNumber={row?.leftLineNumber}
-          lineNumberWidth={diffSideBySideLineNumberWidth}
-          mutedColor={leftLineNumberColor}
-          nativeTokens={leftTokens}
-          renderer={renderer}
-          rowHeight={rowHeight}
-          syntaxLine={leftSyntaxLine}
-          text={row?.leftText ?? ""}
-          tokenStyleById={tokenStyleById}
+          info={row.hunkHeader}
+          mutedColor={mutedColor}
         />
-      </View>
-      <DiffMergeCenterGutter
-        block={controlBlock}
-        borderColor={borderColor}
-        file={file}
-        mutedColor={mutedColor}
-        onResolveMergeConflict={onResolveMergeConflict}
-        primaryColor={primaryColor}
-        resolvingMergeConflictKey={resolvingMergeConflictKey}
-      />
-      <View style={styles.mergeCommonPane}>
-        <DiffMergeCodePane
-          backgroundColor={rightBackgroundColor}
-          foregroundColor={foregroundColor}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          lineNumber={row?.rightLineNumber}
-          lineNumberWidth={diffSideBySideLineNumberWidth}
-          mutedColor={rightLineNumberColor}
-          nativeTokens={rightTokens}
-          renderer={renderer}
-          rowHeight={rowHeight}
-          syntaxLine={rightSyntaxLine}
-          text={row?.rightText ?? ""}
-          tokenStyleById={tokenStyleById}
+      ) : null}
+      <View style={[styles.mergeCommonRow, { height: rowHeight }]}>
+        <View style={styles.mergeCommonPane}>
+          <DiffMergeCodePane
+            backgroundColor={leftBackgroundColor}
+            foregroundColor={foregroundColor}
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            lineNumber={row?.leftLineNumber}
+            lineNumberWidth={diffSideBySideLineNumberWidth}
+            mutedColor={leftLineNumberColor}
+            nativeTokens={leftTokens}
+            renderer={renderer}
+            rowHeight={rowHeight}
+            syntaxLine={leftSyntaxLine}
+            text={row?.leftText ?? ""}
+            tokenStyleById={tokenStyleById}
+          />
+        </View>
+        <DiffMergeCenterGutter
+          block={controlBlock}
+          borderColor={borderColor}
+          file={file}
+          mutedColor={mutedColor}
+          onResolveMergeConflict={onResolveMergeConflict}
+          primaryColor={primaryColor}
+          resolvingMergeConflictKey={resolvingMergeConflictKey}
         />
+        <View style={styles.mergeCommonPane}>
+          <DiffMergeCodePane
+            backgroundColor={rightBackgroundColor}
+            foregroundColor={foregroundColor}
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            lineNumber={row?.rightLineNumber}
+            lineNumberWidth={diffSideBySideLineNumberWidth}
+            mutedColor={rightLineNumberColor}
+            nativeTokens={rightTokens}
+            renderer={renderer}
+            rowHeight={rowHeight}
+            syntaxLine={rightSyntaxLine}
+            text={row?.rightText ?? ""}
+            tokenStyleById={tokenStyleById}
+          />
+        </View>
       </View>
-    </View>
+    </>
   );
 }
 
@@ -1436,6 +1493,7 @@ function DiffMergeContent({
   activeFileIndex,
   borderColor,
   fileByIndex,
+  fileHeaderBackgroundColor,
   foregroundColor,
   fontFamily,
   fontSize,
@@ -1448,6 +1506,7 @@ function DiffMergeContent({
   resolvingMergeConflictKey,
   rowRenderer,
   rowHeight,
+  showOnlyHunks,
   syntaxAppearance,
   syntaxHighlightingEnabled,
   syntaxThemeName,
@@ -1455,6 +1514,7 @@ function DiffMergeContent({
   activeFileIndex: number | null;
   borderColor: string;
   fileByIndex: DiffFileSummary[];
+  fileHeaderBackgroundColor: string;
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
@@ -1467,6 +1527,7 @@ function DiffMergeContent({
   resolvingMergeConflictKey: string | null;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
+  showOnlyHunks: boolean;
   syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
   syntaxThemeName: string;
@@ -1475,11 +1536,17 @@ function DiffMergeContent({
   const [visibleRange, setVisibleRange] = useState({ count: 0, start: 0 });
   const [mergeSyntax, setMergeSyntax] = useState<DiffMergeSyntaxState | null>(null);
   const scrolledMergeFileRef = useRef<string | null>(null);
+  const mergeDisplayModel = useMemo(() => {
+    const fullModel = getFullMergeDisplayModel(mergeFile);
+    return showOnlyHunks
+      ? createDiffMergeHunkDisplayModel(fullModel.rows, fullModel.conflictRanges)
+      : fullModel;
+  }, [mergeFile, showOnlyHunks]);
   const itemIndexes = useMemo(
-    () => Array.from({ length: mergeFile?.displayRows.length ?? 0 }, (_, index) => index),
-    [mergeFile],
+    () => Array.from({ length: mergeDisplayModel.rows.length }, (_, index) => index),
+    [mergeDisplayModel],
   );
-  const dataVersion = mergeFile ? `${mergeFile.path}:${mergeFile.displayRows.length}:${mergeFile.markerBlocks.length}` : "empty";
+  const dataVersion = mergeFile ? `${mergeFile.path}:${mergeFile.displayRows.length}:${mergeFile.markerBlocks.length}:${showOnlyHunks ? "hunks" : "full"}:${mergeDisplayModel.rows.length}` : "empty";
   const syntaxKey = mergeFile && syntaxHighlightingEnabled
     ? `${dataVersion}:${mergeFile.path}:${syntaxThemeName}`
     : "disabled";
@@ -1497,6 +1564,7 @@ function DiffMergeContent({
     resolvingMergeConflictKey,
     rowHeight,
     rowRenderer,
+    showOnlyHunks,
     syntaxAppearance,
   }), [
     borderColor,
@@ -1510,16 +1578,20 @@ function DiffMergeContent({
     resolvingMergeConflictKey,
     rowHeight,
     rowRenderer,
+    showOnlyHunks,
     syntaxAppearance,
     visibleRange.count,
     visibleRange.start,
   ]);
   const controlRowByBlockKey = useMemo(
-    () => mergeFile ? getMergeControlRowByBlockKey(mergeFile, visibleRange) : new Map<string, number>(),
-    [mergeFile, visibleRange],
+    () => mergeFile ? getMergeControlRowByBlockKey(mergeDisplayModel.conflictRanges, mergeFile, visibleRange) : new Map<string, number>(),
+    [mergeDisplayModel, mergeFile, visibleRange],
   );
-  const getMergeRow = useCallback((index: number) => mergeFile?.displayRows[index], [mergeFile]);
-  const firstConflictRowIndex = mergeFile?.conflictRanges[0]?.startRow ?? 0;
+  const getMergeRow = useCallback((index: number) => mergeDisplayModel.rows[index], [mergeDisplayModel]);
+  const getMergeItemSize = useCallback((index: number) => (
+    rowHeight + (mergeDisplayModel.rows[index]?.hunkHeader ? diffHunkHeaderHeight : 0)
+  ), [mergeDisplayModel, rowHeight]);
+  const firstConflictRowIndex = mergeDisplayModel.conflictRanges[0]?.startRow ?? 0;
   const handleMergeVisibleRowsRequested = useCallback((start: number, count: number) => {
     setVisibleRange((current) => (
       current.start === start && current.count === count
@@ -1532,7 +1604,7 @@ function DiffMergeContent({
       if (!mergeFile) {
         return <View style={{ height: rowHeight }} />;
       }
-      const displayRow = row ?? mergeFile?.displayRows[index];
+      const displayRow = row ?? mergeDisplayModel.rows[index];
       const controlBlock = displayRow?.conflictBlock
         && controlRowByBlockKey.get(getMergeConflictKey(mergeFile, displayRow.conflictBlock)) === index
         ? displayRow.conflictBlock
@@ -1545,6 +1617,7 @@ function DiffMergeContent({
           borderColor={borderColor}
           controlBlock={controlBlock}
           file={mergeFile}
+          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           foregroundColor={foregroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
@@ -1564,7 +1637,7 @@ function DiffMergeContent({
         />
       );
     },
-    [borderColor, controlRowByBlockKey, foregroundColor, fontFamily, fontSize, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByBlockKey, fileHeaderBackgroundColor, foregroundColor, fontFamily, fontSize, mergeDisplayModel, mergeFile, mergeSyntax, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {
@@ -1575,8 +1648,8 @@ function DiffMergeContent({
 
     let cancelled = false;
     const language = getSyntaxLanguageForPath(mergeFile.path);
-    const leftSource = mergeFile.displayRows.map((row) => row.leftText).join("\n");
-    const rightSource = mergeFile.displayRows.map((row) => row.rightText).join("\n");
+    const leftSource = mergeDisplayModel.rows.map((row) => row.leftText).join("\n");
+    const rightSource = mergeDisplayModel.rows.map((row) => row.rightText).join("\n");
     ensureSyntaxGrammarsForPaths([mergeFile.path])
       .then(() => Promise.all([
         highlightString(leftSource, language, syntaxThemeName),
@@ -1603,10 +1676,10 @@ function DiffMergeContent({
     return () => {
       cancelled = true;
     };
-  }, [mergeFile, syntaxHighlightingEnabled, syntaxKey, syntaxThemeName]);
+  }, [mergeDisplayModel, mergeFile, syntaxHighlightingEnabled, syntaxKey, syntaxThemeName]);
 
   useEffect(() => {
-    if (mergeFile && scrolledMergeFileRef.current !== dataVersion && mergeFile.conflictRanges.length > 0) {
+    if (mergeFile && scrolledMergeFileRef.current !== dataVersion && mergeDisplayModel.conflictRanges.length > 0) {
       scrolledMergeFileRef.current = dataVersion;
       requestAnimationFrame(() => {
         listRef.current?.scrollToIndex({
@@ -1618,7 +1691,7 @@ function DiffMergeContent({
         });
       });
     }
-  }, [dataVersion, firstConflictRowIndex, listRef, mergeFile]);
+  }, [dataVersion, firstConflictRowIndex, listRef, mergeDisplayModel, mergeFile]);
   const emptyMessage = mergeState.status === "loading"
     ? "Checking merge conflicts..."
     : mergeState.status === "error"
@@ -1647,6 +1720,7 @@ function DiffMergeContent({
         debugName="merge"
         extraData={mergeListExtraData}
         getRow={getMergeRow}
+        getItemSize={getMergeItemSize}
         itemIndexes={itemIndexes}
         ListHeaderComponent={<View style={styles.mergeListHeaderSpacer} />}
         listHeaderHeight={diffTitlebarTopInset + 32}
@@ -3569,6 +3643,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     width: 82,
+  },
+  mergeHunkHeader: {
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    height: diffHunkHeaderHeight,
+    paddingLeft: 10,
+    paddingRight: 10,
+  },
+  mergeHunkHeaderTitle: {
+    fontSize: 11,
+    fontWeight: "400",
+    lineHeight: 14,
   },
   mergeListHeaderSpacer: {
     height: diffTitlebarTopInset + 32,

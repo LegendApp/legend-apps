@@ -1,6 +1,7 @@
 import { createMockCommandRunner } from "@legend-desktop/command-runner";
 import {
   createDiffMergeDisplayRows,
+  createDiffMergeHunkDisplayModel,
   loadDiffMergeState,
   parseConflictMarkerBlocks,
   parseGitUnmergedEntries,
@@ -83,6 +84,63 @@ describe("diffMerge", () => {
       { kind: "line", leftLineNumber: 1, leftText: "before", lineNumber: 1, rightLineNumber: 1, rightText: "before" },
       { conflictBlock: block, conflictLineIndex: 0, kind: "line", leftLineNumber: 2, leftText: "current", lineNumber: 2, rightLineNumber: 2, rightText: "incoming" },
       { kind: "line", leftLineNumber: 7, leftText: "after", lineNumber: 7, rightLineNumber: 7, rightText: "after" },
+    ]);
+  });
+
+  it("creates merge hunk rows with context and hunk headers", () => {
+    const content = [
+      "line 1",
+      "line 2",
+      "<<<<<<< HEAD",
+      "current",
+      "=======",
+      "incoming",
+      ">>>>>>> feature",
+      "line 8",
+      "line 9",
+    ].join("\n");
+    const [block] = parseConflictMarkerBlocks(content);
+    const fullRows = createDiffMergeDisplayRows(content, [block]);
+    const hunkModel = createDiffMergeHunkDisplayModel(
+      fullRows,
+      [{ block, startRow: 2, endRow: 2 }],
+      1,
+    );
+
+    expect(hunkModel.rows).toEqual([
+      {
+        hunkHeader: { hunkNumber: 1, lineLabel: "Lines 2-8" },
+        hunkIndex: 0,
+        kind: "line",
+        leftLineNumber: 2,
+        leftText: "line 2",
+        lineNumber: 2,
+        rightLineNumber: 2,
+        rightText: "line 2",
+      },
+      {
+        conflictBlock: block,
+        conflictLineIndex: 0,
+        hunkIndex: 0,
+        kind: "line",
+        leftLineNumber: 3,
+        leftText: "current",
+        lineNumber: 3,
+        rightLineNumber: 3,
+        rightText: "incoming",
+      },
+      {
+        hunkIndex: 0,
+        kind: "line",
+        leftLineNumber: 8,
+        leftText: "line 8",
+        lineNumber: 8,
+        rightLineNumber: 8,
+        rightText: "line 8",
+      },
+    ]);
+    expect(hunkModel.conflictRanges).toEqual([
+      { block, startRow: 1, endRow: 1 },
     ]);
   });
 
