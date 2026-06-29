@@ -363,8 +363,10 @@ export function DiffLaunchController({
 
 export function DiffFileWatcherController({
   loadSource,
+  suppressReloadUntilRef,
 }: {
   loadSource: (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => Promise<void>;
+  suppressReloadUntilRef?: RefObject<number>;
 }) {
   const {
     setDocumentErrorValue,
@@ -384,10 +386,15 @@ export function DiffFileWatcherController({
       if (reloadTimeout) {
         clearTimeout(reloadTimeout);
       }
+      if ((suppressReloadUntilRef?.current ?? 0) > Date.now()) {
+        return;
+      }
       reloadTimeout = setTimeout(() => {
-        loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }, { force: true, reason: "watch" }).catch((error: unknown) => {
-          setDocumentErrorValue(createRefreshError(currentVisibleSource, getErrorMessage(error)));
-        });
+        if ((suppressReloadUntilRef?.current ?? 0) <= Date.now()) {
+          loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }, { force: true, reason: "watch" }).catch((error: unknown) => {
+            setDocumentErrorValue(createRefreshError(currentVisibleSource, getErrorMessage(error)));
+          });
+        }
       }, 250);
     });
 
