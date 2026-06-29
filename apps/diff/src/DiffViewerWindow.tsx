@@ -1635,7 +1635,6 @@ function DiffMergeContent({
 }) {
   const mergeFile = getActiveMergeFile({ activeFileIndex, files: fileByIndex, mergeState });
   const [mergeSyntax, setMergeSyntax] = useState<DiffMergeSyntaxState | null>(null);
-  const scrolledMergeFileRef = useRef<string | null>(null);
   const mergeDisplayModel = useMemo(() => {
     const fullModel = getFullMergeDisplayModel(mergeFile);
     return showOnlyHunks
@@ -1687,7 +1686,6 @@ function DiffMergeContent({
   const getMergeItemSize = useCallback((index: number) => (
     rowHeight + (mergeDisplayModel.rows[index]?.hunkHeader ? diffHunkHeaderHeight : 0)
   ), [mergeDisplayModel, rowHeight]);
-  const firstConflictRowIndex = mergeDisplayModel.conflictRanges[0]?.startRow ?? 0;
   const renderMergeRow = useCallback(
     ({ index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffMergeDisplayRow>) => {
       if (!mergeFile) {
@@ -1767,20 +1765,6 @@ function DiffMergeContent({
     };
   }, [mergeDisplayModel, mergeFile, syntaxHighlightingEnabled, syntaxKey, syntaxThemeName]);
 
-  useEffect(() => {
-    if (mergeFile && scrolledMergeFileRef.current !== dataVersion && mergeDisplayModel.conflictRanges.length > 0) {
-      scrolledMergeFileRef.current = dataVersion;
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToIndex({
-          animated: false,
-          index: Math.max(0, firstConflictRowIndex - 4),
-          viewPosition: 0,
-        }).catch((error: unknown) => {
-          console.error(error instanceof Error ? error.message : String(error));
-        });
-      });
-    }
-  }, [dataVersion, firstConflictRowIndex, listRef, mergeDisplayModel, mergeFile]);
   const emptyMessage = mergeState.status === "loading"
     ? "Checking merge conflicts..."
     : mergeState.status === "error"
