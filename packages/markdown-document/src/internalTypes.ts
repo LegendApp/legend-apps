@@ -104,7 +104,6 @@ export type MarkdownDocumentRenderState = {
   blockIds: string[];
   blockSelection: BlockSelectionState | null;
   blocksById: Map<string, MarkdownBlockSnapshot>;
-  scrollOffsetY: number;
   selectedBlocksById: Map<string, boolean>;
 };
 

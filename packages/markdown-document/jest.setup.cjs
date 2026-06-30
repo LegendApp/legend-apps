@@ -63,6 +63,8 @@ jest.mock("@legendapp/list/react-native", () => {
           elementAtIndex: (index) => (index >= 0 && index < data.length ? {} : undefined),
           end: data.length - 1,
           endBuffered: data.length - 1,
+          positionAtIndex: (index) => index * 25,
+          sizeAtIndex: (index) => 25,
           start: 0,
           startBuffered: 0,
         }),

@@ -20,7 +20,7 @@ describe("getMarkdownFloatingSurfaceFrame", () => {
 
     expect(frame).toEqual({
       left: 32,
-      top: 79,
+      top: 91,
       width: 640,
     });
   });
@@ -39,7 +39,7 @@ describe("getMarkdownFloatingSurfaceFrame", () => {
 
     expect(frame).toEqual({
       left: 148,
-      top: 79,
+      top: 91,
       width: 36,
     });
   });
@@ -62,7 +62,7 @@ describe("getMarkdownFloatingSurfaceFrame", () => {
 
     expect(frame).toEqual({
       left: 0,
-      top: -21,
+      top: -9,
       width: 640,
     });
   });
@@ -86,7 +86,7 @@ describe("getMarkdownFloatingSurfaceFrame", () => {
 
     expect(frame).toEqual({
       left: 40,
-      top: 634,
+      top: 646,
       width: 640,
     });
   });

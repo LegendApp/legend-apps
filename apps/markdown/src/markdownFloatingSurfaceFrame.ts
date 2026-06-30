@@ -5,6 +5,7 @@ export type MarkdownFloatingSurfacePlacement = "above" | "below";
 
 const floatingToolbarEstimatedHeight = 40;
 const floatingToolbarGap = 6;
+const floatingToolbarVerticalOffset = 12;
 
 export function getMarkdownFloatingSurfaceFrame({
   anchor,
@@ -21,8 +22,11 @@ export function getMarkdownFloatingSurfaceFrame({
   const selectionTop = anchor.y - itemTop;
   const surfaceTop = coordinateSpace === "content" ? anchor.y : selectionTop;
   const top = placement === "above"
-    ? Math.max(coordinateSpace === "content" ? 0 : -floatingToolbarEstimatedHeight, surfaceTop - floatingToolbarEstimatedHeight - floatingToolbarGap)
-    : Math.max(0, surfaceTop + anchor.height + floatingToolbarGap);
+    ? Math.max(
+      coordinateSpace === "content" ? 0 : -floatingToolbarEstimatedHeight,
+      surfaceTop - floatingToolbarEstimatedHeight - floatingToolbarGap + floatingToolbarVerticalOffset,
+    )
+    : Math.max(0, surfaceTop + anchor.height + floatingToolbarGap + floatingToolbarVerticalOffset);
 
   const frame = {
     left: surfaceLeft,

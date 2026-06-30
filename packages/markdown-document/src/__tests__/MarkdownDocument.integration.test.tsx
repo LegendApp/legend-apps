@@ -3608,6 +3608,55 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("keeps block selection toolbar anchors in padded list content coordinates", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const onSelectionAnchorChange = jest.fn();
+    const renderSelectionToolbar = jest.fn(() => (
+      <View testID="markdown-selection-toolbar" />
+    ));
+    const { commandsRef, onError, renderer } = await renderDocument({
+      adapter,
+      documentProps: {
+        onSelectionAnchorChange,
+        renderSelectionToolbar,
+        selectionToolbarEnabled: true,
+      },
+    });
+
+    await changeSelection(editorInput(renderer), "First".length);
+    await expect(extendBlockSelectionDown(commandsRef)).resolves.toBe(true);
+
+    expect(renderSelectionToolbar).toHaveBeenLastCalledWith(expect.objectContaining({
+      blockId: "d1:b0",
+      itemY: 48,
+      kind: "blockSelection",
+      y: 48,
+    }));
+    expect(onSelectionAnchorChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      blockId: "d1:b0",
+      itemY: 48,
+      kind: "blockSelection",
+      y: 48,
+    }));
+
+    const toolbarCallCount = renderSelectionToolbar.mock.calls.length;
+    const anchorChangeCallCount = onSelectionAnchorChange.mock.calls.length;
+    const list = renderer.root.find((node) => typeof node.props.onScroll === "function");
+
+    await act(async () => {
+      list.props.onScroll({ nativeEvent: { contentOffset: { y: 120 }, layoutMeasurement: { height: 400 } } });
+    });
+    await flushPromises();
+
+    expect(renderSelectionToolbar).toHaveBeenCalledTimes(toolbarCallCount);
+    expect(onSelectionAnchorChange).toHaveBeenCalledTimes(anchorChangeCallCount);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("exposes a command to invalidate LegendList layout measurements", async () => {
     const { __legendListTestHooks } = jest.requireMock("@legendapp/list/react-native") as {
       __legendListTestHooks: {

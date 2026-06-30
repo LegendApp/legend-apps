@@ -102,6 +102,7 @@ type PendingVerticalNavigationSelection = {
 };
 
 type MarkdownSelectionToolbarFooterProps = {
+  anchorPublisherProps: MarkdownBlockSelectionAnchorPublisherProps;
   enabled: boolean;
   renderSelectionToolbar?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
@@ -113,23 +114,24 @@ function createMarkdownDocumentRenderState(): MarkdownDocumentRenderState {
     blockIds: [],
     blockSelection: null,
     blocksById: new Map(),
-    scrollOffsetY: 0,
     selectedBlocksById: new Map(),
   };
 }
 
 const MarkdownSelectionToolbarFooter = memo(function MarkdownSelectionToolbarFooter({
+  anchorPublisherProps,
   enabled,
   renderSelectionToolbar,
   selectionAnchor$,
 }: MarkdownSelectionToolbarFooterProps) {
   const anchor = useValue(selectionAnchor$);
 
-  return enabled && anchor && renderSelectionToolbar ? (
+  return (
     <View pointerEvents="box-none" style={styles.selectionToolbarFooterContent}>
-      {renderSelectionToolbar(anchor)}
+      <MarkdownBlockSelectionAnchorPublisher {...anchorPublisherProps} />
+      {enabled && anchor && renderSelectionToolbar ? renderSelectionToolbar(anchor) : null}
     </View>
-  ) : null;
+  );
 });
 
 type MarkdownBlockSelectionAnchorPublisherProps = {
@@ -139,6 +141,7 @@ type MarkdownBlockSelectionAnchorPublisherProps = {
   listRef: RefObject<LegendListRef | null>;
   onSelectionAnchorChangeRef: RefObject<((anchor: MarkdownSelectionAnchor | null) => void) | undefined>;
   resolvedContentHorizontalPadding: number;
+  resolvedContentVerticalPadding: number;
   selectionAnchor$: Observable<MarkdownSelectionAnchor | null>;
 };
 
@@ -149,12 +152,12 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
   listRef,
   onSelectionAnchorChangeRef,
   resolvedContentHorizontalPadding,
+  resolvedContentVerticalPadding,
   selectionAnchor$,
 }: MarkdownBlockSelectionAnchorPublisherProps) {
   const blockIds = useValue(documentRenderState$.blockIds);
   const blockSelection = useValue(documentRenderState$.blockSelection);
   const inactiveOverlayWidth = useValue(inactiveOverlayWidth$);
-  const scrollOffsetY = useValue(documentRenderState$.scrollOffsetY);
 
   useEffect(() => {
     if (enabled) {
@@ -177,11 +180,11 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
               itemHeight: firstRect.height,
               itemWidth: inactiveOverlayWidth,
               itemX: resolvedContentHorizontalPadding,
-              itemY: firstRect.y + scrollOffsetY,
+              itemY: firstRect.y + resolvedContentVerticalPadding,
               kind: "blockSelection",
               width: inactiveOverlayWidth,
               x: resolvedContentHorizontalPadding,
-              y: firstRect.y + scrollOffsetY,
+              y: firstRect.y + resolvedContentVerticalPadding,
             };
           }
         }
@@ -198,7 +201,7 @@ const MarkdownBlockSelectionAnchorPublisher = memo(function MarkdownBlockSelecti
     listRef,
     onSelectionAnchorChangeRef,
     resolvedContentHorizontalPadding,
-    scrollOffsetY,
+    resolvedContentVerticalPadding,
     selectionAnchor$,
   ]);
 
@@ -651,8 +654,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 ? contentContainerOffsetX + resolvedContentHorizontalPadding
                 : nativeOverlayFrame?.left ?? measuredItemX;
               const itemY = activeBlockLayout
-                ? activeBlockLayout.y
-                : nativeOverlayFrame?.top ?? measuredItemY;
+                ? activeBlockLayout.y + resolvedContentVerticalPadding
+                : nativeOverlayFrame
+                ? nativeOverlayFrame.top + resolvedContentVerticalPadding
+                : measuredItemY;
               const inactiveOverlayWidth = inactiveOverlayWidth$.peek();
               const itemWidth = activeBlockLayout
                 ? inactiveOverlayWidth
@@ -672,7 +677,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 itemWidth,
                 itemY,
                 paragraphLineHeight,
-                scrollOffsetY: nativeOverlayFrame ? 0 : scrollOffsetYRef.current,
+                scrollOffsetY: activeBlockLayout || nativeOverlayFrame ? 0 : scrollOffsetYRef.current,
                 selectedLength,
               });
               publishTextSelectionAnchor(anchor);
@@ -686,6 +691,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       publishTextSelectionAnchor,
       reportAsyncError,
       resolvedContentHorizontalPadding,
+      resolvedContentVerticalPadding,
       resolvedMarkdownStyle,
     ]);
     const handleChangeSelectionRef = useLatestRef(updateTextSelectionAnchor);
@@ -2699,18 +2705,38 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelectionOverlayStyle,
       ],
     );
+    const selectionToolbarAnchorPublisherProps = useMemo<MarkdownBlockSelectionAnchorPublisherProps>(() => ({
+      documentRenderState$,
+      enabled: selectionToolbarAnchor === undefined && blockSelection !== null,
+      inactiveOverlayWidth$,
+      listRef,
+      onSelectionAnchorChangeRef,
+      resolvedContentHorizontalPadding,
+      resolvedContentVerticalPadding,
+      selectionAnchor$,
+    }), [
+      blockSelection,
+      documentRenderState$,
+      inactiveOverlayWidth$,
+      listRef,
+      onSelectionAnchorChangeRef,
+      resolvedContentHorizontalPadding,
+      resolvedContentVerticalPadding,
+      selectionAnchor$,
+      selectionToolbarAnchor,
+    ]);
     const selectionToolbarFooter = useMemo(() => (
       <MarkdownSelectionToolbarFooter
+        anchorPublisherProps={selectionToolbarAnchorPublisherProps}
         enabled={isSelectionToolbarEnabled}
         renderSelectionToolbar={renderSelectionToolbar}
         selectionAnchor$={selectionAnchor$}
       />
-    ), [isSelectionToolbarEnabled, renderSelectionToolbar, selectionAnchor$]);
+    ), [isSelectionToolbarEnabled, renderSelectionToolbar, selectionAnchor$, selectionToolbarAnchorPublisherProps]);
     const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
       scrollViewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
-      documentRenderState$.scrollOffsetY.set(event.nativeEvent.contentOffset.y);
-    }, [documentRenderState$]);
+    }, []);
     const activeBlockStateForRender = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
     const activeBlock = activeBlockStateForRender?.block;
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
@@ -2807,15 +2833,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const documentContent = (
       <>
-        <MarkdownBlockSelectionAnchorPublisher
-          documentRenderState$={documentRenderState$}
-          enabled={selectionToolbarAnchor === undefined && blockSelection !== null}
-          inactiveOverlayWidth$={inactiveOverlayWidth$}
-          listRef={listRef}
-          onSelectionAnchorChangeRef={onSelectionAnchorChangeRef}
-          resolvedContentHorizontalPadding={resolvedContentHorizontalPadding}
-          selectionAnchor$={selectionAnchor$}
-        />
         <MarkdownBlockSelectionInput
           inputRef={blockSelectionInputRef}
           inputText$={blockSelectionInputText$}
