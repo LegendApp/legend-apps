@@ -60,7 +60,6 @@ describe("documentStateModel", () => {
     ]);
 
     expect(state.blockIds).toEqual(["d1:b0", "d1:b1"]);
-    expect(state.blocksById.get("d1:b1")?.markdown).toBe("Block 1");
     expect(() => assertMarkdownDocumentBlockStateInvariants(state)).not.toThrow();
   });
 
@@ -87,9 +86,6 @@ describe("documentStateModel", () => {
     );
 
     expect(nextState.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b4", "d1:b3"]);
-    expect(nextState.blocksById.has("d1:b2")).toBe(false);
-    expect(nextState.blocksById.get("d1:b1")?.markdown).toBe("Edited");
-    expect(nextState.blocksById.get("d1:b4")?.markdown).toBe("Inserted");
     expect(() => assertMarkdownDocumentBlockStateInvariants(nextState, {
       retiredBlockIds: ["d1:b2"],
     })).not.toThrow();
@@ -121,8 +117,6 @@ describe("documentStateModel", () => {
     );
 
     expect(nextState.blockIds).toEqual(["d1:b0", "d1:b3", "d1:b1", "d1:b2", "d1:b4"]);
-    expect(nextState.blocksById.get("d1:b1")?.index).toBe(2);
-    expect(nextState.blocksById.get("d1:b3")?.index).toBe(1);
     expect(() => assertMarkdownDocumentBlockStateInvariants(nextState)).not.toThrow();
   });
 
@@ -138,18 +132,15 @@ describe("documentStateModel", () => {
     ]);
 
     expect(nextState.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
-    expect(nextState.blocksById.get("d1:b1")?.markdown).toBe("Fresh markdown");
     expect(() => assertMarkdownDocumentBlockStateInvariants(nextState)).not.toThrow();
   });
 
   it("appends hydrated ids without requiring cached block snapshots", () => {
-    const state = createMarkdownDocumentBlockStateFromIds(["d1:b0"], [block("d1:b0", 0)]);
+    const state = createMarkdownDocumentBlockStateFromIds(["d1:b0"]);
 
     const nextState = mergeHydratedMarkdownBlockIds(state, ["d1:b1", "d1:b2"]);
 
     expect(nextState.blockIds).toEqual(["d1:b0", "d1:b1", "d1:b2"]);
-    expect(nextState.blocksById.has("d1:b0")).toBe(true);
-    expect(nextState.blocksById.has("d1:b1")).toBe(false);
     expect(() => assertMarkdownDocumentBlockStateInvariants(nextState)).not.toThrow();
   });
 
@@ -184,7 +175,6 @@ describe("documentStateModel", () => {
 
     expect(staleHydratedState).toBe(editedState);
     expect(staleHydratedState.blockIds).toEqual(["d1:b0", "d1:b3", "d1:b1"]);
-    expect(staleHydratedState.blocksById.has("d1:b2")).toBe(false);
   });
 
   it("throws when stale retired ids remain live", () => {

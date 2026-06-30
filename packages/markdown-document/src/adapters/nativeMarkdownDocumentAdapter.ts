@@ -20,7 +20,6 @@ let nextDocumentNumber = 1;
 
 type NativeDocumentSession = {
   nativeDocument: NativeMarkdownDocument;
-  blocksById: Map<string, MarkdownBlockSnapshot>;
 };
 
 const sessions = new Map<string, NativeDocumentSession>();
@@ -47,21 +46,13 @@ function toBlockSnapshot(block: MarkdownRenderBlock): MarkdownBlockSnapshot {
   };
 }
 
-function cacheBlocks(session: NativeDocumentSession, blocks: MarkdownBlockSnapshot[]) {
-  for (const block of blocks) {
-    session.blocksById.set(block.id, block);
-  }
-}
-
 function getBlockAtIndex(session: NativeDocumentSession, index: number) {
   const block = session.nativeDocument.getRenderBlocks(index, 1)[0];
   if (!block) {
     return undefined;
   }
 
-  const snapshot = toBlockSnapshot(block);
-  cacheBlocks(session, [snapshot]);
-  return snapshot;
+  return toBlockSnapshot(block);
 }
 
 function toTransactionResult(result: NativeMarkdownTransactionResult): MarkdownTransactionResult {
@@ -98,10 +89,8 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     const initialBlocks = result.initialBlocks.map(toBlockSnapshot);
     const session: NativeDocumentSession = {
       nativeDocument: result.document,
-      blocksById: new Map(),
     };
 
-    cacheBlocks(session, initialBlocks);
     sessions.set(documentId, session);
 
     return {
@@ -124,21 +113,12 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
 
   getBlockAtIndexSync(documentId: string, index: number): MarkdownBlockSnapshot | undefined {
     const session = getSession(documentId);
-    const blockId = session.nativeDocument.getBlockKey(index);
-    const cached = blockId ? session.blocksById.get(blockId) : undefined;
-    return cached ?? getBlockAtIndex(session, index);
+    return getBlockAtIndex(session, index);
   },
 
   async getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot> {
     const session = getSession(documentId);
-    const cached = session.blocksById.get(blockId);
-    if (cached) {
-      return cached;
-    }
-
-    const block = toBlockSnapshot(session.nativeDocument.getRenderBlockById(blockId));
-    cacheBlocks(session, [block]);
-    return block;
+    return toBlockSnapshot(session.nativeDocument.getRenderBlockById(blockId));
   },
 
   async getBlockIds(documentId: string, startIndex: number, count: number): Promise<string[]> {
@@ -156,9 +136,7 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     }
 
     const session = getSession(documentId);
-    const blocks = session.nativeDocument.getRenderBlocks(startIndex, count).map(toBlockSnapshot);
-    cacheBlocks(session, blocks);
-    return blocks;
+    return session.nativeDocument.getRenderBlocks(startIndex, count).map(toBlockSnapshot);
   },
 
   async save(documentId: string): Promise<void> {
@@ -193,10 +171,6 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
           }
         : transaction;
     const result = toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
-    cacheBlocks(session, result.changedBlocks);
-    for (const retiredBlockId of result.retiredBlockIds) {
-      session.blocksById.delete(retiredBlockId);
-    }
     return result;
   },
 };

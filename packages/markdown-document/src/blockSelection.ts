@@ -1,5 +1,4 @@
 import type { BlockLayout, BlockSelectionState } from "./internalTypes";
-import type { MarkdownBlockSnapshot } from "./types";
 
 export type GetBlockLayout = (blockId: string, index: number) => BlockLayout | undefined;
 
@@ -87,45 +86,4 @@ export function getBlockSelectionRects({
     }
   }
   return rects;
-}
-
-export function getSelectedBlockMarkdown({
-  blockIds,
-  blocksById,
-  blockSelection,
-}: {
-  blockIds: string[];
-  blocksById: Map<string, MarkdownBlockSnapshot>;
-  blockSelection: BlockSelectionState;
-}) {
-  const anchorIndex = blockIds.indexOf(blockSelection.anchorBlockId);
-  const focusIndex = blockIds.indexOf(blockSelection.focusBlockId);
-  if (anchorIndex < 0 || focusIndex < 0) {
-    return null;
-  }
-
-  const startIndex = Math.min(anchorIndex, focusIndex);
-  const endIndex = Math.max(anchorIndex, focusIndex);
-  const startBlockId = blockIds[startIndex];
-  const endBlockId = blockIds[endIndex];
-  if (!startBlockId || !endBlockId) {
-    return null;
-  }
-
-  const selectedMarkdown: string[] = [];
-  for (let index = startIndex; index <= endIndex; index += 1) {
-    const block = blocksById.get(blockIds[index] ?? "");
-    if (!block) {
-      return null;
-    }
-    selectedMarkdown.push(block.markdown);
-  }
-
-  return {
-    endBlockId,
-    endIndex,
-    markdown: selectedMarkdown.join("\n\n"),
-    startBlockId,
-    startIndex,
-  };
 }

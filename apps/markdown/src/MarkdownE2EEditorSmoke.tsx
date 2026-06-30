@@ -136,6 +136,8 @@ export function MarkdownE2EEditorSmoke({
     applyTransaction: nativeMarkdownDocumentAdapter.applyTransaction,
     close: nativeMarkdownDocumentAdapter.close,
     getBlock: nativeMarkdownDocumentAdapter.getBlock,
+    getBlockAtIndexSync: nativeMarkdownDocumentAdapter.getBlockAtIndexSync,
+    getBlockIds: nativeMarkdownDocumentAdapter.getBlockIds,
     getBlocks: nativeMarkdownDocumentAdapter.getBlocks,
     load(filename) {
       return nativeMarkdownDocumentAdapter.loadMarkdown(filename, smokeMarkdownByVariant[variant]);

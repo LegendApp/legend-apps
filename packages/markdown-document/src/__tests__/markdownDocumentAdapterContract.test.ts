@@ -94,10 +94,6 @@ class MarkdownAdapterHarness {
     return this.state.blockIds;
   }
 
-  get blocksById() {
-    return this.state.blocksById;
-  }
-
   hydrate(startIndex: number, count: number) {
     const requestRevision = this.revision;
     return this.adapter.getBlocks(this.snapshot.documentId, startIndex, count).then((blocks) => {
@@ -221,8 +217,6 @@ describe("markdown document adapter contract", () => {
     await hydratePromise;
 
     expect(harness.blockIds).toEqual(["d1:b0", "d1:b4", "d1:b1"]);
-    expect(harness.blocksById.has("d1:b2")).toBe(false);
-    expect(harness.blocksById.has("d1:b3")).toBe(false);
     expect(() => harness.assertInvariants()).not.toThrow();
   });
 
@@ -270,7 +264,6 @@ describe("markdown document adapter contract", () => {
     await applyPromise;
 
     expect(harness.blockIds).toEqual(["d1:b0", "d1:b1"]);
-    expect(harness.blocksById.has("d1:b2")).toBe(false);
     expect(() => harness.assertInvariants(["d1:b2"])).not.toThrow();
   });
 
@@ -293,7 +286,6 @@ describe("markdown document adapter contract", () => {
     expect(harness.blockIds[4999]).toBe("d1:b4999");
     expect(harness.blockIds[5000]).toBe("d1:b5000");
     expect(harness.blockIds[5001]).toBe("d1:b5001");
-    expect(harness.blocksById.get("d1:b5000")?.markdown).toBe("Middle edited");
     expect(() => harness.assertInvariants()).not.toThrow();
   });
 });

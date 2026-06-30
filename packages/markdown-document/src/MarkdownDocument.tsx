@@ -388,6 +388,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
     const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
     const activeBlockIdRef = useRef<string | null>(null);
+    const activeBlockSnapshotRef = useRef<MarkdownBlockSnapshot | undefined>(undefined);
     const blockSelectionInputRef = useRef<TextInput | null>(null);
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
@@ -698,23 +699,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, []);
 
-    const cacheBlockSnapshots = useCallback((blocks: MarkdownBlockSnapshot[]) => {
-      if (blocks.length > 0) {
-        const blocksById = new Map(blockStateRef.current.blocksById);
-        for (const block of blocks) {
-          blocksById.set(block.id, block);
-        }
-        blockStateRef.current = {
-          ...blockStateRef.current,
-          blocksById,
-        };
-      }
-    }, []);
-
     const getBlockAtIndexForRender = useCallback((blockId: string, index: number) => {
-      const cachedBlock = blockStateRef.current.blocksById.get(blockId);
-      if (cachedBlock) {
-        return cachedBlock;
+      const activeBlock = activeBlockSnapshotRef.current;
+      if (activeBlock?.id === blockId) {
+        return activeBlock;
       }
 
       if (documentState.status !== "loaded") {
@@ -723,43 +711,38 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       const block = adapter.getBlockAtIndexSync?.(documentState.snapshot.documentId, index);
       if (block?.id !== blockId) {
-        return undefined;
+        const initialBlock = documentState.snapshot.initialBlocks[index];
+        return initialBlock?.id === blockId ? initialBlock : undefined;
       }
 
-      cacheBlockSnapshots([block]);
       return block;
-    }, [adapter, cacheBlockSnapshots, documentState]);
+    }, [adapter, documentState]);
 
     const loadBlockAtIndex = useCallback(async (blockId: string | undefined, index: number) => {
       if (!blockId || documentState.status !== "loaded") {
         return undefined;
       }
 
-      const cachedBlock = blockStateRef.current.blocksById.get(blockId);
-      if (cachedBlock) {
-        return cachedBlock;
+      const activeBlock = activeBlockSnapshotRef.current;
+      if (activeBlock?.id === blockId) {
+        return activeBlock;
       }
 
       const syncBlock = adapter.getBlockAtIndexSync?.(documentState.snapshot.documentId, index);
       if (syncBlock?.id === blockId) {
-        cacheBlockSnapshots([syncBlock]);
         return syncBlock;
       }
 
-      const block = await adapter.getBlock(documentState.snapshot.documentId, blockId);
-      cacheBlockSnapshots([block]);
-      return block;
-    }, [adapter, cacheBlockSnapshots, documentState]);
+      return adapter.getBlock(documentState.snapshot.documentId, blockId);
+    }, [adapter, documentState]);
 
     const loadBlocksForRange = useCallback(async (startIndex: number, count: number) => {
       if (documentState.status !== "loaded" || count <= 0) {
         return [];
       }
 
-      const blocks = await adapter.getBlocks(documentState.snapshot.documentId, startIndex, count);
-      cacheBlockSnapshots(blocks);
-      return blocks;
-    }, [adapter, cacheBlockSnapshots, documentState]);
+      return adapter.getBlocks(documentState.snapshot.documentId, startIndex, count);
+    }, [adapter, documentState]);
 
     const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[], requestRevision: number) => {
       if (blocks.length === 0 || requestRevision !== currentRevisionRef.current) {
@@ -818,8 +801,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [commitBlockState, validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
-      const previousBlockState = blockStateRef.current;
-      const block = previousBlockState.blocksById.get(blockId);
+      const block = activeBlockSnapshotRef.current?.id === blockId ? activeBlockSnapshotRef.current : undefined;
       if (!block || block.markdown === markdown) {
         return;
       }
@@ -832,13 +814,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         sourceEndByte: block.sourceStartByte + markdown.length,
         textRevision: block.textRevision + 1,
       };
-      const blocksById = new Map(previousBlockState.blocksById);
-      blocksById.set(blockId, nextBlock);
-      const nextBlockState = {
-        ...previousBlockState,
-        blocksById,
-      };
-      commitBlockState(nextBlockState);
+      activeBlockSnapshotRef.current = nextBlock;
       if (activeBlockIdRef.current === blockId) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
         documentRenderState$.activeBlocksById.get(blockId).set({
@@ -848,7 +824,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           selection: activeInputSelectionRef.current.start,
         });
       }
-    }, [commitBlockState, documentRenderState$]);
+    }, [documentRenderState$]);
 
     const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
       const updateReactState = options.updateReactState ?? true;
@@ -914,6 +890,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             nextActiveBlock = result.changedBlocks[0];
           }
           if (nextActiveBlock) {
+            activeBlockSnapshotRef.current = nextActiveBlock;
             activeBlockIdRef.current = nextActiveBlock.id;
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             draftMarkdownRef.current = nextActiveBlock.markdown;
@@ -964,7 +941,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [runCommitActiveBlock]);
 
     const setActiveBlock = useCallback((block: MarkdownBlockSnapshot, selection: number) => {
-      cacheBlockSnapshots([block]);
+      activeBlockSnapshotRef.current = block;
       nativeEditingBlockIdRef.current = block.id;
       activeBlockIdRef.current = block.id;
       activeInputSelectionRef.current = { start: selection, end: selection };
@@ -973,7 +950,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       setDraftMarkdown(block.markdown);
       setActiveSelection(selection);
       setActiveBlockId(block.id);
-    }, [cacheBlockSnapshots]);
+    }, []);
 
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
@@ -1000,6 +977,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           activeInputRef.current?.blur();
           nativeEditingBlockIdRef.current = null;
           clearOverlayFrame();
+          activeBlockSnapshotRef.current = undefined;
           activeBlockIdRef.current = null;
           setActiveBlockId(null);
           setActiveSelection(0);
@@ -1191,6 +1169,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           if (!nextActiveBlockId) {
             nextActiveBlockId = block.id;
           }
+          const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === nextActiveBlockId);
+          activeBlockSnapshotRef.current = nextActiveBlock ?? {
+            ...block,
+            id: nextActiveBlockId,
+            markdown: afterMarkdown,
+          };
           activeBlockIdRef.current = nextActiveBlockId;
           nativeEditingBlockIdRef.current = nextActiveBlockId;
           draftMarkdownRef.current = afterMarkdown;
@@ -1272,6 +1256,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
         nativeEditingBlockIdRef.current = null;
         clearOverlayFrame();
+        activeBlockSnapshotRef.current = undefined;
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
@@ -1294,6 +1279,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeInputRef.current?.blur();
         nativeEditingBlockIdRef.current = null;
         clearOverlayFrame();
+        activeBlockSnapshotRef.current = undefined;
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
         setActiveSelection(0);
@@ -1406,6 +1392,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const nextActiveBlock = result.changedBlocks[0];
           if (nextActiveBlock) {
             const nextSelection = Math.min(markdown.length, nextActiveBlock.markdown.length);
+            activeBlockSnapshotRef.current = nextActiveBlock;
             activeBlockIdRef.current = nextActiveBlock.id;
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             draftMarkdownRef.current = nextActiveBlock.markdown;
@@ -1465,9 +1452,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           applyTransactionResult(result);
           let nextActiveBlock: MarkdownBlockSnapshot | undefined = result.changedBlocks[0];
           if (!nextActiveBlock) {
-            nextActiveBlock = blockStateRef.current.blocksById.get(activeBlockIdValue);
+            nextActiveBlock = activeBlockSnapshotRef.current?.id === activeBlockIdValue
+              ? activeBlockSnapshotRef.current
+              : undefined;
           }
           if (nextActiveBlock) {
+            activeBlockSnapshotRef.current = nextActiveBlock;
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             activeBlockIdRef.current = nextActiveBlock.id;
             draftMarkdownRef.current = nextActiveBlock.markdown;
@@ -1603,6 +1593,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue);
           }
           if (nextActiveBlock) {
+            activeBlockSnapshotRef.current = nextActiveBlock;
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
@@ -1780,6 +1771,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       activeInputRef.current?.blur?.();
       nativeEditingBlockIdRef.current = null;
       clearOverlayFrame();
+      activeBlockSnapshotRef.current = undefined;
       activeBlockIdRef.current = null;
       blockSelectionGestureRef.current = null;
       clearTextSelectionAnchor();
@@ -1964,6 +1956,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearAutosaveTimer();
       commitQueueRef.current = Promise.resolve();
       activeBlockIdRef.current = null;
+      activeBlockSnapshotRef.current = undefined;
       if (activeRenderBlockIdRef.current) {
         documentRenderState$.activeBlocksById.get(activeRenderBlockIdRef.current).delete();
         activeRenderBlockIdRef.current = null;
@@ -2013,7 +2006,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
           const initialBlockIds = snapshot.initialBlocks.map((block) => block.id);
           const nextBlockState = adapter.getBlockIds
-            ? createMarkdownDocumentBlockStateFromIds(initialBlockIds, snapshot.initialBlocks)
+            ? createMarkdownDocumentBlockStateFromIds(initialBlockIds)
             : createMarkdownDocumentBlockState(snapshot.initialBlocks);
           commitBlockState(nextBlockState);
           setDocumentState({ status: "loaded", snapshot });
@@ -2028,6 +2021,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           if (autoFocusFirstBlock) {
             const firstBlock = snapshot.initialBlocks[0];
             if (firstBlock) {
+              activeBlockSnapshotRef.current = firstBlock;
               activeBlockIdRef.current = firstBlock.id;
               nativeEditingBlockIdRef.current = firstBlock.id;
               draftMarkdownRef.current = firstBlock.markdown;
@@ -2255,6 +2249,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             }
             const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === nextActiveBlockId);
             if (nextActiveBlock) {
+              activeBlockSnapshotRef.current = nextActiveBlock;
               activeBlockIdRef.current = nextActiveBlock.id;
               nativeEditingBlockIdRef.current = nextActiveBlock.id;
               draftMarkdownRef.current = nextActiveBlock.markdown;
@@ -2301,6 +2296,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue);
             }
             if (nextActiveBlock) {
+              activeBlockSnapshotRef.current = nextActiveBlock;
               nativeEditingBlockIdRef.current = nextActiveBlock.id;
               draftMarkdownRef.current = nextActiveBlock.markdown;
               committedMarkdownRef.current = nextActiveBlock.markdown;
@@ -2333,6 +2329,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
           const firstChangedBlock = result.changedBlocks[0];
           if (firstChangedBlock) {
+            activeBlockSnapshotRef.current = firstChangedBlock;
             activeBlockIdRef.current = firstChangedBlock.id;
             nativeEditingBlockIdRef.current = firstChangedBlock.id;
             draftMarkdownRef.current = firstChangedBlock.markdown;
@@ -2555,7 +2552,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       if (previousActiveBlockId && previousActiveBlockId !== activeBlockId) {
         documentRenderState$.activeBlocksById.get(previousActiveBlockId).delete();
       }
-      const activeBlock = activeBlockId ? blockStateRef.current.blocksById.get(activeBlockId) : undefined;
+      const activeBlock = activeBlockId && activeBlockSnapshotRef.current?.id === activeBlockId
+        ? activeBlockSnapshotRef.current
+        : undefined;
       if (activeBlockId && activeBlock) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
         const cachedOverlayFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
@@ -2703,7 +2702,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       />
     ), [isSelectionToolbarEnabled, renderSelectionToolbar, selectionAnchor$, selectionToolbarAnchorPublisherProps]);
     const activeBlockStateForRender = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
-    const activeBlock = activeBlockStateForRender?.block;
+    const activeBlockSnapshot = activeBlockId && activeBlockSnapshotRef.current?.id === activeBlockId
+      ? activeBlockSnapshotRef.current
+      : undefined;
+    const activeBlock = activeBlockStateForRender?.block ?? (activeBlockSnapshot
+      ? {
+        ...activeBlockSnapshot,
+        markdown: draftMarkdown,
+      }
+      : undefined);
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
       const { blockId, height, width, x, y } = frame;
       const currentBlockState = blockStateRef.current;

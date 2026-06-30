@@ -96,6 +96,10 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
     return blockSnapshot;
   }
 
+  getBlockAtIndexSync(_documentId: string, index: number) {
+    return this.blocks[index];
+  }
+
   async getBlocks(_documentId: string, startIndex: number, count: number) {
     return this.blocks.slice(startIndex, startIndex + count);
   }
