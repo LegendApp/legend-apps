@@ -5,6 +5,7 @@ import { codegenNativeComponent } from "react-native";
 type EditorFrameEvent = Readonly<{
   blockId: string;
   height: Double;
+  rowHeight: Double;
   width: Double;
   x: Double;
   y: Double;
@@ -12,6 +13,7 @@ type EditorFrameEvent = Readonly<{
 
 export interface NativeProps extends ViewProps {
   activeBlockId?: string;
+  markdownLayoutConfigJson?: string;
   onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }

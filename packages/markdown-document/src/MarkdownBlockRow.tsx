@@ -238,7 +238,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const rowPaddingTop = typeof rowStyle.paddingTop === "number" ? rowStyle.paddingTop : 0;
   const rowPaddingBottom = typeof rowStyle.paddingBottom === "number" ? rowStyle.paddingBottom : 0;
   const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
-    ? { height: activeBlock.editorFrame.height + rowPaddingTop + rowPaddingBottom }
+    ? { height: activeBlock.editorFrame.rowHeight }
     : null;
   const commentAnchor = rowState?.commentAnchor ?? null;
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
@@ -313,14 +313,14 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
         <MarkdownBlockActivationView
           ref={rowRef}
           blockId={block.id}
-          bottomPadding={rowPaddingBottom}
           contentsHidden={isActive}
+          nextBlockId={getBlockIdAtIndex(index + 1) ?? ""}
           onLayout={(event) => {
             rowWidth$.set(event.nativeEvent.layout.width);
           }}
+          previousBlockId={previousBlockId ?? ""}
           renderRevision={renderRevision}
           style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
-          topPadding={rowPaddingTop}
         >
           {renderedMarkdown}
           {selectionOverlay}

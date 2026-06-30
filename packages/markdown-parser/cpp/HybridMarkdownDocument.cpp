@@ -1,6 +1,7 @@
 #include "HybridMarkdownDocument.hpp"
 
 #include "MarkdownBlockParser.hpp"
+#include "MarkdownDocumentRegistry.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -167,10 +168,10 @@ void registerMarkdownDocument(std::shared_ptr<HybridMarkdownDocument> document) 
   }
 }
 
-std::string markdownForRegisteredBlockId(const std::string& blockId) {
+std::shared_ptr<HybridMarkdownDocument> registeredDocumentForBlockId(const std::string& blockId) {
   const std::string documentId = documentIdForBlockId(blockId);
   if (documentId.empty()) {
-    return "";
+    return nullptr;
   }
 
   std::shared_ptr<HybridMarkdownDocument> document;
@@ -184,7 +185,29 @@ std::string markdownForRegisteredBlockId(const std::string& blockId) {
       }
     }
   }
+  return document;
+}
 
+RegisteredMarkdownBlockMetadata metadataForRegisteredBlockId(const std::string& blockId) {
+  std::shared_ptr<HybridMarkdownDocument> document = registeredDocumentForBlockId(blockId);
+  if (!document) {
+    return RegisteredMarkdownBlockMetadata();
+  }
+
+  try {
+    const MarkdownBlockMetadata metadata = document->getBlockMetadataById(blockId);
+    return RegisteredMarkdownBlockMetadata{
+      .id = metadata.id,
+      .type = metadata.type,
+      .headingLevel = metadata.headingLevel,
+    };
+  } catch (...) {
+    return RegisteredMarkdownBlockMetadata();
+  }
+}
+
+std::string markdownForRegisteredBlockId(const std::string& blockId) {
+  std::shared_ptr<HybridMarkdownDocument> document = registeredDocumentForBlockId(blockId);
   return document ? document->markdownForBlockId(blockId) : "";
 }
 

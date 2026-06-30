@@ -224,6 +224,7 @@ type MarkdownBlockSelectionInputProps = {
 type NativeEditorFramePayload = {
   blockId: string;
   height: number;
+  rowHeight: number;
   width: number;
   x: number;
   y: number;
@@ -237,6 +238,7 @@ type MarkdownNativeEditorHostProps = {
   activeBlockId: string | null;
   children: ReactNode;
   containerRef: RefObject<View | null>;
+  markdownLayoutConfigJson?: string;
   onBeginEditing: (event: NativeEditorFrameEvent) => void;
   onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
@@ -247,6 +249,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   activeBlockId,
   children,
   containerRef,
+  markdownLayoutConfigJson,
   onBeginEditing,
   onEditorFrameChange,
   onLayout,
@@ -256,6 +259,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
     <MarkdownEditorHost
       ref={containerRef}
       activeBlockId={activeBlockId ?? ""}
+      markdownLayoutConfigJson={markdownLayoutConfigJson}
       onBeginEditing={onBeginEditing}
       onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
@@ -299,10 +303,6 @@ function countMarkdownLineBreaks(markdown: string) {
 
 function waitForAnimationFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-function numberFromStyleValue(value: unknown) {
-  return typeof value === "number" ? value : 0;
 }
 
 type MarkdownLegendListState = ReturnType<LegendListRef["getState"]>;
@@ -462,6 +462,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onSelectionAnchorChangeRef = useLatestRef(onSelectionAnchorChange);
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
+    const nativeMarkdownLayoutConfigJson = useMemo(
+      () => usesNativeEditorOverlay ? JSON.stringify({ blockSpacing: resolvedMarkdownLayout.blockSpacing }) : undefined,
+      [resolvedMarkdownLayout],
+    );
     const resolvedContentMaxWidth = resolvedMarkdownLayout.content?.maxWidth ?? contentMaxWidth;
     const resolvedContentHorizontalPadding = resolvedMarkdownLayout.content?.horizontalPadding ?? contentHorizontalPadding;
     const resolvedContentVerticalPadding = resolvedMarkdownLayout.content?.verticalPadding ?? 48;
@@ -2789,8 +2793,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
       : undefined);
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
-      const { blockId, height, width, x, y } = frame;
-      const currentBlockState = blockStateRef.current;
+      const { blockId, height, rowHeight, width, x, y } = frame;
       const blockIndex = getBlockIndexById(blockId);
       const block = blockIndex >= 0 ? getBlockAtIndexForRender(blockId, blockIndex) : undefined;
       if (!block) {
@@ -2801,6 +2804,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const nextOverlayFrame = {
         height,
         left: x,
+        rowHeight,
         top: y,
         width,
       };
@@ -2814,22 +2818,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         });
       }
 
-      const previousBlockId = currentBlockState.blockIds[blockIndex - 1];
-      const previousBlock = blockIndex > 0 && previousBlockId
-        ? getBlockAtIndexForRender(previousBlockId, blockIndex - 1)
-        : undefined;
-      const rowSpacing = blockIndex === -1
-        ? undefined
-        : blockRowSpacingStyle(
-          block,
-          previousBlock,
-          blockIndex > 0,
-          blockIndex < currentBlockState.blockIds.length - 1,
-          resolvedMarkdownLayout,
-        );
-      const rowPaddingTop = numberFromStyleValue(rowSpacing?.paddingTop);
-      const rowPaddingBottom = numberFromStyleValue(rowSpacing?.paddingBottom);
-      const rowHeight = height + rowPaddingTop + rowPaddingBottom;
       const previousRowSize = nativeEditorRowSizeRef.current.get(blockId);
       if (!previousRowSize || previousRowSize.height !== rowHeight || previousRowSize.width !== width) {
         nativeEditorRowSizeRef.current.set(blockId, { height: rowHeight, width });
@@ -2837,7 +2825,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       return block;
-    }, [documentRenderState$, getBlockAtIndexForRender, getBlockIndexById, resolvedMarkdownLayout]);
+    }, [documentRenderState$, getBlockAtIndexForRender, getBlockIndexById]);
     const handleNativeBeginEditing = useCallback(
       (event: NativeEditorFrameEvent) => {
         const block = applyNativeEditorFrame(event.nativeEvent);
@@ -2942,6 +2930,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         <MarkdownNativeEditorHost
           activeBlockId={activeBlockId ?? ""}
           containerRef={containerRef}
+          markdownLayoutConfigJson={nativeMarkdownLayoutConfigJson}
           onBeginEditing={handleNativeBeginEditing}
           onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}

@@ -252,6 +252,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 25,
+          rowHeight: 25,
           width: 640,
           x: 40,
           y: 80,
@@ -313,6 +314,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          rowHeight: 44,
           width: 640,
           x: 40,
           y: 80,
@@ -363,6 +365,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          rowHeight: 44,
           width: 640,
           x: 40,
           y: 80,
@@ -387,6 +390,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 35,
+          rowHeight: 54.2,
           width: 640,
           x: 40,
           y: 80,
@@ -429,6 +433,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 44,
+          rowHeight: 68,
           width: 640,
           x: 40,
           y: 80,
@@ -446,6 +451,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 60,
+          rowHeight: 84,
           width: 640,
           x: 40,
           y: 80,
@@ -486,6 +492,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          rowHeight: 44,
           width: 640,
           x: 40,
           y: 80,
@@ -500,6 +507,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 44,
+          rowHeight: 60,
           width: 640,
           x: 40,
           y: 80,
@@ -533,6 +541,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          rowHeight: 44,
           width: 640,
           x: -10,
           y: 80,
@@ -569,6 +578,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          rowHeight: 44,
           width: 640,
           x: 40,
           y: 80,

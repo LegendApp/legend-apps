@@ -88,6 +88,7 @@ export type BlockLayout = {
 export type OverlayFrame = {
   height: number;
   left: number;
+  rowHeight: number;
   top: number;
   width: number;
 };

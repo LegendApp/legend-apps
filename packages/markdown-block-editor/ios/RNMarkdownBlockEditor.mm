@@ -162,6 +162,146 @@ static NSString *nativeMarkdownForBlockId(NSString *blockId)
                                 encoding:NSUTF8StringEncoding] ?: @"";
 }
 
+struct MarkdownBlockSpacingConfig {
+  CGFloat marginTop = 0;
+  CGFloat marginBottom = 0;
+};
+
+struct MarkdownLayoutSpacingConfig {
+  MarkdownBlockSpacingConfig blockquote;
+  MarkdownBlockSpacingConfig codeBlock;
+  MarkdownBlockSpacingConfig fallback;
+  MarkdownBlockSpacingConfig heading[7];
+  MarkdownBlockSpacingConfig list;
+  MarkdownBlockSpacingConfig paragraph;
+  MarkdownBlockSpacingConfig table;
+  MarkdownBlockSpacingConfig thematicBreak;
+};
+
+static CGFloat numberValueForKey(NSDictionary *dictionary, NSString *key)
+{
+  id value = dictionary[key];
+  return [value respondsToSelector:@selector(doubleValue)] ? (CGFloat)[value doubleValue] : 0;
+}
+
+static MarkdownBlockSpacingConfig blockSpacingConfigFromDictionary(id value)
+{
+  MarkdownBlockSpacingConfig spacing;
+  if ([value isKindOfClass:NSDictionary.class]) {
+    NSDictionary *dictionary = (NSDictionary *)value;
+    spacing.marginTop = numberValueForKey(dictionary, @"marginTop");
+    spacing.marginBottom = numberValueForKey(dictionary, @"marginBottom");
+  }
+  return spacing;
+}
+
+static MarkdownLayoutSpacingConfig layoutSpacingConfigFromJson(NSString *json)
+{
+  MarkdownLayoutSpacingConfig config;
+  if (json.length == 0) {
+    return config;
+  }
+
+  NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+  if (data == nil) {
+    return config;
+  }
+
+  id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  if (![parsed isKindOfClass:NSDictionary.class]) {
+    return config;
+  }
+
+  NSDictionary *root = (NSDictionary *)parsed;
+  id blockSpacingValue = root[@"blockSpacing"];
+  if (![blockSpacingValue isKindOfClass:NSDictionary.class]) {
+    return config;
+  }
+
+  NSDictionary *blockSpacing = (NSDictionary *)blockSpacingValue;
+  config.blockquote = blockSpacingConfigFromDictionary(blockSpacing[@"blockquote"]);
+  config.codeBlock = blockSpacingConfigFromDictionary(blockSpacing[@"codeBlock"]);
+  config.fallback = blockSpacingConfigFromDictionary(blockSpacing[@"fallback"]);
+  config.list = blockSpacingConfigFromDictionary(blockSpacing[@"list"]);
+  config.paragraph = blockSpacingConfigFromDictionary(blockSpacing[@"paragraph"]);
+  config.table = blockSpacingConfigFromDictionary(blockSpacing[@"table"]);
+  config.thematicBreak = blockSpacingConfigFromDictionary(blockSpacing[@"thematicBreak"]);
+
+  id headingValue = blockSpacing[@"heading"];
+  if ([headingValue isKindOfClass:NSDictionary.class]) {
+    NSDictionary *heading = (NSDictionary *)headingValue;
+    for (NSInteger level = 1; level <= 6; level += 1) {
+      config.heading[level] = blockSpacingConfigFromDictionary(heading[[NSString stringWithFormat:@"%ld", (long)level]]);
+    }
+  }
+
+  return config;
+}
+
+static std::string stringForNSString(NSString *value)
+{
+  return value.length == 0 ? std::string() : std::string([value UTF8String] ?: "");
+}
+
+static MarkdownBlockSpacingConfig spacingForBlockMetadata(
+    const MarkdownLayoutSpacingConfig& config,
+    const margelo::nitro::legenddesktop::markdownparser::RegisteredMarkdownBlockMetadata& metadata)
+{
+  if (metadata.id.empty()) {
+    return config.fallback;
+  }
+
+  if (metadata.type == "heading") {
+    NSInteger headingLevel = (NSInteger)metadata.headingLevel;
+    return headingLevel >= 1 && headingLevel <= 6 ? config.heading[headingLevel] : config.fallback;
+  }
+  if (metadata.type == "paragraph") {
+    return config.paragraph;
+  }
+  if (metadata.type == "codeBlock") {
+    return config.codeBlock;
+  }
+  if (metadata.type == "quote") {
+    return config.blockquote;
+  }
+  if (metadata.type == "unorderedList" || metadata.type == "orderedList" || metadata.type == "listItem") {
+    return config.list;
+  }
+  if (metadata.type == "thematicBreak") {
+    return config.thematicBreak;
+  }
+  if (
+      metadata.type == "table" ||
+      metadata.type == "tableHead" ||
+      metadata.type == "tableBody" ||
+      metadata.type == "tableRow" ||
+      metadata.type == "tableHeaderCell" ||
+      metadata.type == "tableCell") {
+    return config.table;
+  }
+
+  return config.fallback;
+}
+
+static NSEdgeInsets rowPaddingForBlockIds(
+    const MarkdownLayoutSpacingConfig& config,
+    NSString *blockId,
+    NSString *previousBlockId,
+    NSString *nextBlockId)
+{
+  const auto metadata = margelo::nitro::legenddesktop::markdownparser::metadataForRegisteredBlockId(stringForNSString(blockId));
+  const MarkdownBlockSpacingConfig spacing = spacingForBlockMetadata(config, metadata);
+  CGFloat paddingTop = 0;
+  if (previousBlockId.length > 0) {
+    const auto previousMetadata = margelo::nitro::legenddesktop::markdownparser::metadataForRegisteredBlockId(stringForNSString(previousBlockId));
+    const MarkdownBlockSpacingConfig previousSpacing = spacingForBlockMetadata(config, previousMetadata);
+    paddingTop = MAX(previousSpacing.marginBottom, spacing.marginTop);
+  }
+
+  CGFloat paddingBottom = nextBlockId.length > 0 ? 0 : spacing.marginBottom;
+  return NSEdgeInsetsMake(MAX(0, paddingTop), 0, MAX(0, paddingBottom), 0);
+}
+
 static void registerNativeMarkdownProvider()
 {
   static dispatch_once_t onceToken;
@@ -180,9 +320,11 @@ static void registerNativeMarkdownProvider()
   __weak NSView *_overlayInputHomeSuperview;
   NSMapTable<NSString *, RNMarkdownBlockActivationView *> *_activationViews;
   NSString *_activeBlockId;
+  NSString *_layoutConfigJson;
   NSString *_lastLoadedBlockId;
   NSString *_lastLoadedMarkdown;
   BOOL _isPositioningOverlay;
+  MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
   id _overlayScrollWheelMonitor;
 }
@@ -433,6 +575,20 @@ static void registerNativeMarkdownProvider()
   [view setContentsHidden:contentsHidden];
 }
 
+- (NSEdgeInsets)rowPaddingForActivationView:(RNMarkdownBlockActivationView *)view
+{
+  if (view == nil) {
+    return NSEdgeInsetsMake(0, 0, 0, 0);
+  }
+  return rowPaddingForBlockIds(_layoutSpacingConfig, view.blockId, view.previousBlockId, view.nextBlockId);
+}
+
+- (CGFloat)rowHeightForActivationView:(RNMarkdownBlockActivationView *)view contentHeight:(CGFloat)contentHeight
+{
+  NSEdgeInsets padding = [self rowPaddingForActivationView:view];
+  return MAX(0, contentHeight) + MAX(0, padding.top) + MAX(0, padding.bottom);
+}
+
 - (void)showActiveBlockContents
 {
   [self setBlockView:[self activeBlockView] contentsHidden:NO];
@@ -497,6 +653,7 @@ static void registerNativeMarkdownProvider()
   eventEmitter->onBeginEditing({
     .blockId = std::string([view.blockId UTF8String] ?: ""),
     .height = frame.size.height,
+    .rowHeight = [self rowHeightForActivationView:view contentHeight:frame.size.height],
     .width = frame.size.width,
     .x = frame.origin.x,
     .y = frame.origin.y,
@@ -515,6 +672,7 @@ static void registerNativeMarkdownProvider()
   eventEmitter->onEditorFrameChange({
     .blockId = std::string([view.blockId UTF8String] ?: ""),
     .height = frame.size.height,
+    .rowHeight = [self rowHeightForActivationView:view contentHeight:frame.size.height],
     .width = frame.size.width,
     .x = frame.origin.x,
     .y = frame.origin.y,
@@ -644,6 +802,12 @@ static void registerNativeMarkdownProvider()
   const auto &oldViewProps = *std::static_pointer_cast<MarkdownEditorHostProps const>(_props);
   const auto &newViewProps = *std::static_pointer_cast<MarkdownEditorHostProps const>(props);
 
+  NSString *nextLayoutConfigJson = [NSString stringWithUTF8String:newViewProps.markdownLayoutConfigJson.c_str()];
+  if (_layoutConfigJson == nil || ![_layoutConfigJson isEqualToString:nextLayoutConfigJson]) {
+    _layoutConfigJson = [nextLayoutConfigJson copy];
+    _layoutSpacingConfig = layoutSpacingConfigFromJson(_layoutConfigJson);
+  }
+
   NSString *nextActiveBlockId = [NSString stringWithUTF8String:newViewProps.activeBlockId.c_str()];
   if (nextActiveBlockId.length == 0) {
     if (_activeBlockId != nil) {
@@ -670,6 +834,14 @@ static void registerNativeMarkdownProvider()
 
   if (oldViewProps.activeBlockId != newViewProps.activeBlockId && nextActiveBlockId.length == 0) {
     [self hideOverlay];
+  }
+
+  if (oldViewProps.markdownLayoutConfigJson != newViewProps.markdownLayoutConfigJson && _activeBlockId != nil) {
+    RNMarkdownBlockActivationView *view = [self activeBlockView];
+    if (view != nil && _overlayInput != nil && _overlayInput.superview != nil) {
+      [self positionOverlayForBlockView:view];
+      [self emitEditorFrameChangeForBlockView:view];
+    }
   }
 
   [super updateProps:props oldProps:oldProps];
@@ -700,9 +872,11 @@ static void registerNativeMarkdownProvider()
   _overlayInput = nil;
   _overlayInputHomeSuperview = nil;
   _activeBlockId = nil;
+  _layoutConfigJson = nil;
   _lastLoadedBlockId = nil;
   _lastLoadedMarkdown = nil;
   _isPositioningOverlay = NO;
+  _layoutSpacingConfig = MarkdownLayoutSpacingConfig();
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -726,9 +900,9 @@ static void registerNativeMarkdownProvider()
     registerNativeMarkdownProvider();
     _props = std::make_shared<const MarkdownBlockActivationViewProps>();
     _blockId = @"";
-    _bottomPadding = 0;
     _contentsHidden = NO;
-    _topPadding = 0;
+    _nextBlockId = @"";
+    _previousBlockId = @"";
   }
   return self;
 }
@@ -736,8 +910,10 @@ static void registerNativeMarkdownProvider()
 - (NSRect)contentBounds
 {
   NSRect bounds = self.bounds;
-  CGFloat topPadding = MAX(0, self.topPadding);
-  CGFloat bottomPadding = MAX(0, self.bottomPadding);
+  RNMarkdownEditorHost *host = [self editorHost];
+  NSEdgeInsets padding = host == nil ? NSEdgeInsetsMake(0, 0, 0, 0) : [host rowPaddingForActivationView:self];
+  CGFloat topPadding = MAX(0, padding.top);
+  CGFloat bottomPadding = MAX(0, padding.bottom);
   CGFloat verticalPadding = MIN(NSHeight(bounds), topPadding + bottomPadding);
   NSRect contentBounds = bounds;
   contentBounds.size.height = MAX(0, NSHeight(bounds) - verticalPadding);
@@ -842,8 +1018,8 @@ static void registerNativeMarkdownProvider()
     _blockId = [nextBlockId copy];
     [self registerWithHostIfNeeded];
   }
-  self.bottomPadding = MAX(0, newViewProps.bottomPadding);
-  self.topPadding = MAX(0, newViewProps.topPadding);
+  self.nextBlockId = [NSString stringWithUTF8String:newViewProps.nextBlockId.c_str()];
+  self.previousBlockId = [NSString stringWithUTF8String:newViewProps.previousBlockId.c_str()];
   [self setContentsHidden:newViewProps.contentsHidden];
 
   [super updateProps:props oldProps:oldProps];
@@ -873,8 +1049,8 @@ static void registerNativeMarkdownProvider()
   [super prepareForRecycle];
   [self setContentsHidden:NO];
   _blockId = @"";
-  _bottomPadding = 0;
-  _topPadding = 0;
+  _nextBlockId = @"";
+  _previousBlockId = @"";
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
