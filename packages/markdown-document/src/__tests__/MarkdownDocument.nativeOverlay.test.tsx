@@ -18,6 +18,13 @@ const { __legendListTestHooks } = jest.requireMock("@legendapp/list/react-native
     setItemSize: jest.Mock;
   };
 };
+const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-markdown") as {
+  __enrichedMarkdownTestHooks: {
+    inputInstances: () => Array<{
+      setValue: jest.Mock;
+    }>;
+  };
+};
 
 jest.mock("../constants", () => ({
   ...jest.requireActual("../constants"),
@@ -158,8 +165,7 @@ function editorInput(root: TestRenderer.ReactTestRenderer | TestRenderer.ReactTe
 function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.find((node) => (
     typeof node.props.onBeginEditing === "function" &&
-    typeof node.props.onEditorFrameChange === "function" &&
-    Object.prototype.hasOwnProperty.call(node.props, "activeMarkdown")
+    typeof node.props.onEditorFrameChange === "function"
   ));
 }
 
@@ -312,17 +318,20 @@ describe("MarkdownDocument native editor overlay", () => {
 
     expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 18 }));
 
+    const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+    activeInput?.setValue.mockClear();
+
     await act(async () => {
       commandsRef.current?.setHeading(2);
       await Promise.resolve();
     });
 
     expect(host.props.activeBlockId).toBe("d1:b0");
-    expect(host.props.activeMarkdown).toBe("## Heading");
+    expect(activeInput?.setValue).toHaveBeenCalledWith("## Heading");
     expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
   });
 
-  it("updates native host markdown optimistically while typed heading changes are still committing", async () => {
+  it("keeps measured row size while typed heading changes are still committing", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -367,7 +376,6 @@ describe("MarkdownDocument native editor overlay", () => {
         type: "updateBlockMarkdown",
       },
     ]);
-    expect(nativeHost(renderer!).props.activeMarkdown).toBe("## Heading");
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -427,7 +435,6 @@ describe("MarkdownDocument native editor overlay", () => {
     __legendListTestHooks.setItemSize.mockClear();
     await changeText(editorInput(renderer!), "# Heading text");
 
-    expect(nativeHost(renderer!).props.activeMarkdown).toBe("# Heading text");
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 
     await act(async () => {

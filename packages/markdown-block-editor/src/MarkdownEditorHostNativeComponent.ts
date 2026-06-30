@@ -12,7 +12,6 @@ type EditorFrameEvent = Readonly<{
 
 export interface NativeProps extends ViewProps {
   activeBlockId?: string;
-  activeMarkdown?: string;
   onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }

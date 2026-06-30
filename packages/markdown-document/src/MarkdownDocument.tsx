@@ -229,8 +229,6 @@ type MarkdownNativeEditorHostProps = {
   activeBlockId: string | null;
   children: ReactNode;
   containerRef: RefObject<View | null>;
-  documentRenderState$: Observable<MarkdownDocumentRenderState>;
-  fallbackActiveMarkdown: string;
   onBeginEditing: (event: NativeEditorFrameEvent) => void;
   onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
@@ -241,21 +239,15 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   activeBlockId,
   children,
   containerRef,
-  documentRenderState$,
-  fallbackActiveMarkdown,
   onBeginEditing,
   onEditorFrameChange,
   onLayout,
   style,
 }: MarkdownNativeEditorHostProps) {
-  const activeBlockState = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
-  const activeMarkdown = activeBlockId ? activeBlockState?.draftMarkdown ?? fallbackActiveMarkdown : "";
-
   return (
     <MarkdownEditorHost
       ref={containerRef}
       activeBlockId={activeBlockId ?? ""}
-      activeMarkdown={activeMarkdown}
       onBeginEditing={onBeginEditing}
       onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
@@ -2856,8 +2848,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         <MarkdownNativeEditorHost
           activeBlockId={activeBlockId ?? ""}
           containerRef={containerRef}
-          documentRenderState$={documentRenderState$}
-          fallbackActiveMarkdown={draftMarkdown}
           onBeginEditing={handleNativeBeginEditing}
           onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}
