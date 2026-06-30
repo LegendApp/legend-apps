@@ -104,6 +104,7 @@ import {
 import {
   fileMatchesFilter,
   getActiveDiffFile,
+  getConflictedFileStatusPresentation,
   getDirectoryPath,
   getFilePathContext,
   getFileStatusPresentation,
@@ -424,7 +425,7 @@ function DiffSidebarFileRow({
       ]}
     >
       <View style={[styles.sidebarStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={10} />
+        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={10} yOffset={statusPresentation.iconYOffset} />
       </View>
       <View style={styles.sidebarFileTextGroup}>
         <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
@@ -3285,7 +3286,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   }, [activeFileIndex$, scrollToFile]);
 
   const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
-    const statusPresentation = getFileStatusPresentation(file);
+    const mergeFile = getMergeConflictFileForDiffFile(mergeState, file);
+    const statusPresentation = mergeFile?.markerBlocks.length
+      ? getConflictedFileStatusPresentation()
+      : getFileStatusPresentation(file);
     if (!loggedFirstSidebarFileRenderRef.current) {
       loggedFirstSidebarFileRenderRef.current = true;
       logDiffOpenTiming("viewer.sidebarFile.render.first", {
@@ -3300,7 +3304,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         borderColor={displayTheme.colors.border}
         file={file}
         foregroundColor={foregroundColor}
-        mergeFile={getMergeConflictFileForDiffFile(mergeState, file)}
+        mergeFile={mergeFile}
         mutedColor={mutedColor}
         onPress={() => handleSidebarFilePress(file)}
         selectedBackgroundColor={selectedSidebarFileBackgroundColor}

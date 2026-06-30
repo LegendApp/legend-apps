@@ -1,5 +1,23 @@
 import type { DiffFileSummary } from "@legend-desktop/diff-parser";
 
+type FileStatusPresentation = {
+  backgroundColor: string;
+  color: string;
+  iconYOffset?: number;
+  symbolName: string;
+  title: string;
+};
+
+export function getConflictedFileStatusPresentation(): FileStatusPresentation {
+  return {
+    backgroundColor: "#ffab2d",
+    color: "#1f1300",
+    iconYOffset: -0.75,
+    symbolName: "exclamationmark.triangle.fill",
+    title: "Conflicted",
+  };
+}
+
 export function getDirectoryPath(path: string) {
   const separatorIndex = path.lastIndexOf("/");
   return separatorIndex >= 0 ? path.slice(0, separatorIndex) : "";
@@ -7,7 +25,7 @@ export function getDirectoryPath(path: string) {
 
 export function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary" | "status"> | null | undefined) {
   const status = file?.status ?? "unknown";
-  let presentation = {
+  let presentation: FileStatusPresentation = {
     backgroundColor: "#f0883e",
     color: "#1f1300",
     symbolName: "pencil",
@@ -54,6 +72,9 @@ export function getFileStatusPresentation(file: Pick<DiffFileSummary, "isBinary"
         symbolName: "doc.on.doc",
         title: "Copied",
       };
+      break;
+    case "conflicted":
+      presentation = getConflictedFileStatusPresentation();
       break;
     case "modified":
       break;

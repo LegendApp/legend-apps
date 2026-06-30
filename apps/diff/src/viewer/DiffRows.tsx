@@ -537,7 +537,7 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
       </View>
       {file ? (
         <View style={[styles.fileStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-          <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={12} />
+          <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={12} yOffset={statusPresentation.iconYOffset} />
         </View>
       ) : null}
       <View style={styles.fileTitleGroup}>

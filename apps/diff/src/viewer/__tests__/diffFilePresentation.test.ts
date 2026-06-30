@@ -43,6 +43,12 @@ describe("diffFilePresentation", () => {
       symbolName: "arrow.right",
       title: "Renamed",
     });
+    expect(getFileStatusPresentation(createFile({ status: "conflicted" }))).toMatchObject({
+      backgroundColor: "#ffab2d",
+      iconYOffset: -0.75,
+      symbolName: "exclamationmark.triangle.fill",
+      title: "Conflicted",
+    });
     expect(getFileStatusPresentation(createFile({ isBinary: true, status: "modified" }))).toMatchObject({
       title: "Modified binary",
     });
