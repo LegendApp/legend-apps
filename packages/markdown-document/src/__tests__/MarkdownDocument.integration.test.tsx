@@ -518,6 +518,18 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
   }
 }
 
+class BlockIdMountedEditorAdapter extends MountedEditorAdapter {
+  getBlockIdsRequests: Array<{
+    count: number;
+    startIndex: number;
+  }> = [];
+
+  async getBlockIds(_documentId: string, startIndex: number, count: number) {
+    this.getBlockIdsRequests.push({ count, startIndex });
+    return this.blockIds.slice(startIndex, startIndex + count);
+  }
+}
+
 async function renderDocument({
   adapter,
   autoFocusFirstBlock = true,
@@ -5571,6 +5583,23 @@ describe("MarkdownDocument mounted editing", () => {
 
     expect(renderedMarkdownNodes(renderer, "Stale third")).toEqual([]);
     expect(renderedMarkdownNodes(renderer, "Stale fourth")).toEqual([]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("loads complete block ids once when the adapter exposes id hydration", async () => {
+    const initialBlocks = [block("d1:b0", 0, "First")];
+    const adapter = new BlockIdMountedEditorAdapter(snapshot(initialBlocks, 3), [
+      ...initialBlocks,
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]);
+    const { onError, renderer } = await renderDocument({ adapter });
+    await runPendingTimers();
+
+    expect(adapter.getBlockIdsRequests).toEqual([{ count: 3, startIndex: 0 }]);
+    expect(adapter.pendingHydrationRequests).toEqual([]);
+    expect(renderedMarkdownNodes(renderer, "Second")).toHaveLength(1);
+    expect(renderedMarkdownNodes(renderer, "Third")).toHaveLength(1);
     expect(onError).not.toHaveBeenCalled();
   });
 
