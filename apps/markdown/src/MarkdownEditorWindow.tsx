@@ -1,10 +1,13 @@
 import {
   MarkdownDocument,
+  nativeMarkdownDocumentAdapter,
+  type MarkdownDocumentProps,
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
 import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useValue } from "@legendapp/state/react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
@@ -46,9 +49,13 @@ import {
 import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature";
 import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
+import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
 };
+
+type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
+type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
 
 function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): MarkdownE2EEditorSmokeVariant | null {
   if (scenario === "editor-selection-smoke") {
@@ -98,12 +105,10 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings),
     [appearanceSettings, layoutTheme],
   );
-  const showUntitledPlaceholder = session.isUntitledDocument && !session.isDirty && !session.lastError;
   const measurementSignature = useMemo(
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
   );
-  const watchedFilePath = session.filename && !session.isUntitledDocument ? session.filename : null;
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
@@ -137,35 +142,6 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   useEffect(() => {
     applyMarkdownThemeSetting();
   }, []);
-
-  useEffect(() => {
-    if (!watchedFilePath) {
-      return undefined;
-    }
-
-    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = watchFiles([watchedFilePath], () => {
-      if (session.sessionState$.isDirty.peek()) {
-        return;
-      }
-
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      reloadTimeout = setTimeout(() => {
-        if (!session.sessionState$.isDirty.peek()) {
-          session.documentCommandsRef.current?.reload();
-        }
-      }, 100);
-    });
-
-    return () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      subscription.remove();
-    };
-  }, [session.documentCommandsRef, session.sessionState$, watchedFilePath]);
 
   useMarkdownStartupDocument({
     launchArguments,
@@ -234,55 +210,148 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     }
   }
 
-  if (!session.hasDocument || !session.filename) {
+  return (
+    <>
+      <MarkdownFileWatcher session={session} />
+      <MarkdownEditorSessionContent
+        autosaveEnabled={autosave === "enabled"}
+        backgroundStyle={backgroundStyle}
+        dangerColor={displayTheme.colors.danger}
+        foregroundColor={displayTheme.colors.foreground}
+        formattingToolbarMode={formattingToolbarMode}
+        isLinkPopoverOpen={isLinkPopoverOpen}
+        markdownLayout={markdownLayout}
+        markdownStyle={markdownStyle}
+        mutedColor={displayTheme.colors.muted}
+        onApplyLink={applyLink}
+        onCancelLink={() => setIsLinkPopoverOpen(false)}
+        onInsertLink={insertLink}
+        renderSelectionToolbar={renderSelectionToolbar}
+        session={session}
+        theme={displayTheme.markdownDocument}
+      />
+    </>
+  );
+}
+
+export default MarkdownEditorWindow;
+
+function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) {
+  const filename = useValue(session.sessionState$.filename);
+  const documentSource = useValue(session.sessionState$.documentSource);
+  const watchedFilePath = filename && documentSource !== "untitled" ? filename : null;
+
+  useEffect(() => {
+    if (!watchedFilePath) {
+      return undefined;
+    }
+
+    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+    const subscription = watchFiles([watchedFilePath], () => {
+      if (session.sessionState$.isDirty.peek()) {
+        return;
+      }
+
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(() => {
+        if (!session.sessionState$.isDirty.peek()) {
+          session.documentCommandsRef.current?.reload();
+        }
+      }, 100);
+    });
+
+    return () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      subscription.remove();
+    };
+  }, [session.documentCommandsRef, session.sessionState$, watchedFilePath]);
+
+  return null;
+}
+
+type MarkdownEditorSessionContentProps = {
+  autosaveEnabled: boolean;
+  backgroundStyle: { backgroundColor: string };
+  dangerColor: string;
+  foregroundColor: string;
+  formattingToolbarMode: MarkdownFormattingToolbarMode;
+  isLinkPopoverOpen: boolean;
+  markdownLayout: MarkdownDocumentProps["markdownLayout"];
+  markdownStyle: MarkdownDocumentProps["markdownStyle"];
+  mutedColor: string;
+  onApplyLink: (url: string) => void;
+  onCancelLink: () => void;
+  onInsertLink: () => void;
+  renderSelectionToolbar: NonNullable<MarkdownDocumentProps["renderSelectionToolbar"]>;
+  session: MarkdownDocumentSession;
+  theme: MarkdownDocumentProps["theme"];
+};
+
+function MarkdownEditorSessionContent({
+  autosaveEnabled,
+  backgroundStyle,
+  dangerColor,
+  foregroundColor,
+  formattingToolbarMode,
+  isLinkPopoverOpen,
+  markdownLayout,
+  markdownStyle,
+  mutedColor,
+  onApplyLink,
+  onCancelLink,
+  onInsertLink,
+  renderSelectionToolbar,
+  session,
+  theme,
+}: MarkdownEditorSessionContentProps) {
+  const filename = useValue(session.sessionState$.filename);
+  const documentSource = useValue(session.sessionState$.documentSource);
+  const isUntitledDocument = documentSource === "untitled";
+
+  if (!filename) {
     return null;
   }
 
   return (
     <View style={[styles.root, backgroundStyle]}>
-      {session.lastError ? (
-        <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{session.lastError}</Text>
-      ) : null}
+      <MarkdownSessionError color={dangerColor} session={session} />
       {formattingToolbarMode === "top" ? (
-        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={insertLink} />
+        <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={onInsertLink} />
       ) : null}
       <View style={styles.documentFrame}>
         {isLinkPopoverOpen ? (
           <MarkdownLinkPopover
-            onCancel={() => setIsLinkPopoverOpen(false)}
-            onSubmit={applyLink}
+            onCancel={onCancelLink}
+            onSubmit={onApplyLink}
           />
         ) : null}
-        {showUntitledPlaceholder ? (
-          <View pointerEvents="none" style={styles.placeholder}>
-            <Text style={[styles.placeholderTitle, { color: displayTheme.colors.foreground }]}>Untitled</Text>
-            <Text style={[styles.placeholderText, { color: displayTheme.colors.muted }]}>Start writing</Text>
-          </View>
-        ) : null}
-        <MarkdownDocument
-          adapter={session.activeAdapter}
-          autoFocusFirstBlock={session.isUntitledDocument}
-          commandsRef={session.documentCommandsRef}
-          filename={session.filename}
+        <MarkdownUntitledPlaceholder
+          foregroundColor={foregroundColor}
+          isUntitledDocument={isUntitledDocument}
+          mutedColor={mutedColor}
+          session={session}
+        />
+        <MarkdownDocumentSurface
+          autosaveEnabled={autosaveEnabled}
+          backgroundStyle={backgroundStyle}
+          filename={filename}
+          isUntitledDocument={isUntitledDocument}
           markdownLayout={markdownLayout}
           markdownStyle={markdownStyle}
-          onCommandStateChange={session.setCommandState}
-          onDirtyChange={session.setIsDirty}
-          onError={session.handleError}
-          onLoadError={session.handleDocumentLoadError}
-          onLoaded={session.handleDocumentLoaded}
-          onSaveStateChange={session.setSaveState}
           renderSelectionToolbar={renderSelectionToolbar}
-          savePolicy={{ autosave: !session.isUntitledDocument && autosave === "enabled" }}
+          session={session}
           selectionToolbarEnabled={formattingToolbarMode === "selection"}
-          style={[styles.document, backgroundStyle]}
-          theme={displayTheme.markdownDocument}
+          theme={theme}
         />
       </View>
       {formattingToolbarMode === "bottom" ? (
         <MarkdownFormattingToolbar
           commandsRef={session.documentCommandsRef}
-          onInsertLink={insertLink}
+          onInsertLink={onInsertLink}
           placement="bottom"
           style={styles.bottomToolbar}
         />
@@ -291,7 +360,102 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   );
 }
 
-export default MarkdownEditorWindow;
+function MarkdownSessionError({
+  color,
+  session,
+}: {
+  color: string;
+  session: MarkdownDocumentSession;
+}) {
+  const lastError = useValue(session.sessionState$.lastError);
+
+  if (!lastError) {
+    return null;
+  }
+
+  return <Text style={[styles.error, { color }]}>{lastError}</Text>;
+}
+
+function MarkdownUntitledPlaceholder({
+  foregroundColor,
+  isUntitledDocument,
+  mutedColor,
+  session,
+}: {
+  foregroundColor: string;
+  isUntitledDocument: boolean;
+  mutedColor: string;
+  session: MarkdownDocumentSession;
+}) {
+  const isDirty = useValue(session.sessionState$.isDirty);
+  const lastError = useValue(session.sessionState$.lastError);
+
+  if (!isUntitledDocument || isDirty || lastError) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="none" style={styles.placeholder}>
+      <Text style={[styles.placeholderTitle, { color: foregroundColor }]}>Untitled</Text>
+      <Text style={[styles.placeholderText, { color: mutedColor }]}>Start writing</Text>
+    </View>
+  );
+}
+
+type MarkdownDocumentSurfaceProps = {
+  autosaveEnabled: boolean;
+  backgroundStyle: { backgroundColor: string };
+  filename: string;
+  isUntitledDocument: boolean;
+  markdownLayout: MarkdownDocumentProps["markdownLayout"];
+  markdownStyle: MarkdownDocumentProps["markdownStyle"];
+  renderSelectionToolbar: NonNullable<MarkdownDocumentProps["renderSelectionToolbar"]>;
+  selectionToolbarEnabled: boolean;
+  session: MarkdownDocumentSession;
+  theme: MarkdownDocumentProps["theme"];
+};
+
+const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
+  autosaveEnabled,
+  backgroundStyle,
+  filename,
+  isUntitledDocument,
+  markdownLayout,
+  markdownStyle,
+  renderSelectionToolbar,
+  selectionToolbarEnabled,
+  session,
+  theme,
+}: MarkdownDocumentSurfaceProps) {
+  const adapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
+  const documentStyle = useMemo(() => [styles.document, backgroundStyle], [backgroundStyle]);
+  const savePolicy = useMemo(
+    () => ({ autosave: !isUntitledDocument && autosaveEnabled }),
+    [autosaveEnabled, isUntitledDocument],
+  );
+
+  return (
+    <MarkdownDocument
+      adapter={adapter}
+      autoFocusFirstBlock={isUntitledDocument}
+      commandsRef={session.documentCommandsRef}
+      filename={filename}
+      markdownLayout={markdownLayout}
+      markdownStyle={markdownStyle}
+      onCommandStateChange={session.setCommandState}
+      onDirtyChange={session.setIsDirty}
+      onError={session.handleError}
+      onLoadError={session.handleDocumentLoadError}
+      onLoaded={session.handleDocumentLoaded}
+      onSaveStateChange={session.setSaveState}
+      renderSelectionToolbar={renderSelectionToolbar}
+      savePolicy={savePolicy}
+      selectionToolbarEnabled={selectionToolbarEnabled}
+      style={documentStyle}
+      theme={theme}
+    />
+  );
+});
 
 const styles = StyleSheet.create({
   document: {

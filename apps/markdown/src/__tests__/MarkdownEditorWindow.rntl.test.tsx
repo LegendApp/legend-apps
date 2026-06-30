@@ -1,8 +1,10 @@
-import { render } from "@testing-library/react-native";
+import { act, render } from "@testing-library/react-native";
+import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
+import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
 const mockUseMarkdownAppExit = useMarkdownAppExit as jest.MockedFunction<typeof useMarkdownAppExit>;
 const mockUseMarkdownWindowCloseRequest = useMarkdownWindowCloseRequest as jest.MockedFunction<typeof useMarkdownWindowCloseRequest>;
@@ -13,22 +15,31 @@ const mockMarkdownE2EEditorSmoke = jest.fn((props: { autoSelectBlocks?: boolean;
 const mockMarkdownE2ERunner = jest.fn((props: { scenario: string }) => (
   <Text>{`document-runner:${props.scenario}`}</Text>
 ));
+const mockMarkdownDocument = jest.fn((_props: unknown) => {
+  const React = require("react");
+  const { Text } = require("react-native");
+  return React.createElement(Text, null, "markdown-document");
+});
 const mockInvalidateLayoutMeasurements = jest.fn();
+const mockSessionState$ = observable<MarkdownDocumentSessionState>({
+  commandState: { canRedo: false, canUndo: false },
+  documentSource: "untitled",
+  filename: "test.md",
+  isDirty: false,
+  lastError: null,
+  saveState: "idle",
+});
 const mockSession = {
-  activeAdapter: {},
   clearDocumentError: jest.fn(),
   documentCommandsRef: {
     current: {
       invalidateLayoutMeasurements: mockInvalidateLayoutMeasurements,
     },
   },
-  filename: "test.md",
   flushCurrentDocumentBeforeTransition: jest.fn(async () => true),
   handleError: jest.fn(),
-  hasDocument: true,
-  isDirty: false,
-  isUntitledDocument: true,
-  lastError: null,
+  handleDocumentLoaded: jest.fn(),
+  handleDocumentLoadError: jest.fn(),
   newMarkdownDocument: jest.fn(),
   openMarkdownDialog: jest.fn(),
   openSelectedFile: jest.fn(),
@@ -36,19 +47,19 @@ const mockSession = {
   prepareCurrentDocumentForClose: jest.fn(async () => true),
   saveCurrentDocument: jest.fn(async () => true),
   saveCurrentDocumentAs: jest.fn(async () => true),
-  saveState: "idle",
-  sessionState$: {},
+  sessionState$: mockSessionState$,
   setCommandState: jest.fn(),
   setIsDirty: jest.fn(),
   setSaveState: jest.fn(),
 };
 
+jest.mock("@legend-desktop/file-system-watcher", () => ({
+  watchFiles: jest.fn(() => ({ remove: jest.fn() })),
+}));
+
 jest.mock("@legend-desktop/markdown-document", () => ({
-  MarkdownDocument: () => {
-    const React = require("react");
-    const { Text } = require("react-native");
-    return React.createElement(Text, null, "markdown-document");
-  },
+  MarkdownDocument: (props: unknown) => mockMarkdownDocument(props),
+  nativeMarkdownDocumentAdapter: {},
 }));
 
 jest.mock("../MarkdownE2EEditorSmoke", () => ({
@@ -120,12 +131,18 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;
     mockMarkdownE2EEditorSmoke.mockClear();
     mockMarkdownE2ERunner.mockClear();
+    mockMarkdownDocument.mockClear();
     mockInvalidateLayoutMeasurements.mockClear();
     mockUseMarkdownAppExit.mockClear();
     mockUseMarkdownWindowCloseRequest.mockClear();
-    mockSession.isDirty = false;
-    mockSession.isUntitledDocument = true;
-    mockSession.lastError = null;
+    mockSessionState$.assign({
+      commandState: { canRedo: false, canUndo: false },
+      documentSource: "untitled",
+      filename: "test.md",
+      isDirty: false,
+      lastError: null,
+      saveState: "idle",
+    });
   });
 
   it.each([
@@ -173,14 +190,33 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
   });
 
   it("shows a quiet placeholder for a clean untitled document", async () => {
-    mockSession.isUntitledDocument = true;
-    mockSession.isDirty = false;
-    mockSession.lastError = null;
+    mockSessionState$.assign({
+      documentSource: "untitled",
+      isDirty: false,
+      lastError: null,
+    });
 
     const view = await render(<MarkdownEditorWindow />);
 
     expect(view.getByText("Untitled")).toBeTruthy();
     expect(view.getByText("Start writing")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("keeps session chrome state changes out of the document render path", async () => {
+    const view = await render(<MarkdownEditorWindow />);
+    const initialDocumentRenderCount = mockMarkdownDocument.mock.calls.length;
+
+    await act(async () => {
+      mockSessionState$.assign({
+        isDirty: true,
+        lastError: "Unable to save",
+        saveState: "saving",
+      });
+    });
+
+    expect(view.getByText("Unable to save")).toBeTruthy();
+    expect(mockMarkdownDocument).toHaveBeenCalledTimes(initialDocumentRenderCount);
     await view.unmount();
   });
 });

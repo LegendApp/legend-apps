@@ -1,20 +1,19 @@
 import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
 import {
-  nativeMarkdownDocumentAdapter,
   type MarkdownDocumentCommandState,
   type MarkdownDocumentCommands,
   type MarkdownSaveState,
 } from "@legend-desktop/markdown-document";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
+import { useObservable } from "@legendapp/state/react";
 import { useCallback, useRef } from "react";
 import { markdownFileTypes } from "./appConstants";
 import { addRecentMarkdownFile, removeRecentMarkdownFile } from "./appMetadata";
 import { confirmDirtyDocumentTransition } from "./confirmDirtyDocumentTransition";
 import { getDirectory, getFilename, isMarkdownPath } from "./markdownFiles";
 import { clearLastMarkdownDocumentPath, setLastMarkdownDocumentPath } from "./markdownSettings";
-import { untitledFilename, untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
+import { untitledFilename } from "./untitledMarkdownAdapter";
 
 export type DocumentSource = "file" | "untitled";
 
@@ -42,18 +41,9 @@ export function useMarkdownDocumentSession() {
     lastError: null,
     saveState: "idle",
   });
-  const filename = useValue(sessionState$.filename);
-  const isDirty = useValue(sessionState$.isDirty);
-  const lastError = useValue(sessionState$.lastError);
-  const documentSource = useValue(sessionState$.documentSource);
-  const saveState = useValue(sessionState$.saveState);
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
   const preserveNextLoadedError = useRef(false);
-
-  const hasDocument = filename !== null;
-  const isUntitledDocument = documentSource === "untitled";
-  const activeAdapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
 
   const clearDocumentError = useCallback(() => {
     sessionState$.lastError.set(null);
@@ -293,18 +283,12 @@ export function useMarkdownDocumentSession() {
   }, [flushCurrentDocumentBeforeTransition, handleError, openSelectedFile]);
 
   return {
-    activeAdapter,
     clearDocumentError,
     documentCommandsRef,
-    filename,
     flushCurrentDocumentBeforeTransition,
     handleError,
     handleDocumentLoaded,
-    hasDocument,
     handleDocumentLoadError,
-    isDirty,
-    isUntitledDocument,
-    lastError,
     newMarkdownDocument,
     openMarkdownDialog,
     openSelectedFile,
@@ -312,7 +296,6 @@ export function useMarkdownDocumentSession() {
     prepareCurrentDocumentForClose,
     saveCurrentDocument,
     saveCurrentDocumentAs,
-    saveState,
     sessionState$,
     setCommandState,
     setIsDirty,
