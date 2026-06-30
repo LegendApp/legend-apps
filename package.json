@@ -33,6 +33,7 @@
     "test:music": "jest --config apps/music/jest.config.cjs",
     "test:markdown-document": "jest --config packages/markdown-document/jest.config.cjs",
     "test:markdown-e2e": "bun scripts/test-markdown-e2e.ts",
+    "profile:markdown-e2e": "bun scripts/profile-markdown-e2e.ts",
     "test:markdown-e2e:code-block-smoke": "MARKDOWN_E2E_SCENARIO=editor-code-block-smoke bun scripts/test-markdown-e2e.ts",
     "test:markdown-e2e:edit-navigation-smoke": "MARKDOWN_E2E_SCENARIO=editor-edit-navigation-smoke bun scripts/test-markdown-e2e.ts",
     "test:markdown-e2e:navigation-smoke": "MARKDOWN_E2E_SCENARIO=editor-navigation-smoke bun scripts/test-markdown-e2e.ts",
