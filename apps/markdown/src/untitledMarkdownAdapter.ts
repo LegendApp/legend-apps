@@ -21,6 +21,12 @@ export const untitledMarkdownAdapter: MarkdownDocumentAdapter = {
     }
     return nativeMarkdownDocumentAdapter.getBlockIds(documentId, startIndex, count);
   },
+  getBlockMetadata(documentId, startIndex, count) {
+    if (!nativeMarkdownDocumentAdapter.getBlockMetadata) {
+      return Promise.resolve([]);
+    }
+    return nativeMarkdownDocumentAdapter.getBlockMetadata(documentId, startIndex, count);
+  },
   getBlocks(documentId, startIndex, count) {
     return nativeMarkdownDocumentAdapter.getBlocks(documentId, startIndex, count);
   },

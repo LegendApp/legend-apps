@@ -3,10 +3,12 @@ import {
   loadMarkdownFile,
   type MarkdownFileLoadResult,
   type MarkdownDocument as NativeMarkdownDocument,
+  type MarkdownBlockMetadata as NativeMarkdownBlockMetadata,
   type MarkdownRenderBlock,
   type MarkdownTransactionResult as NativeMarkdownTransactionResult,
 } from "@legend-desktop/markdown-parser";
 import type {
+  MarkdownBlockMetadata,
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
   MarkdownDocumentSnapshot,
@@ -46,13 +48,29 @@ function toBlockSnapshot(block: MarkdownRenderBlock): MarkdownBlockSnapshot {
   };
 }
 
+function toBlockMetadata(block: NativeMarkdownBlockMetadata): MarkdownBlockMetadata {
+  return {
+    id: block.id,
+    index: block.index,
+    type: block.type,
+    depth: block.depth,
+    headingLevel: block.headingLevel,
+    markdownLength: block.markdownLength,
+    sourceStartByte: block.sourceStartByte,
+    sourceEndByte: block.sourceEndByte,
+    contentStartByte: block.contentStartByte,
+    contentEndByte: block.contentEndByte,
+    textRevision: block.textRevision,
+  };
+}
+
 function getBlockAtIndex(session: NativeDocumentSession, index: number) {
-  const block = session.nativeDocument.getRenderBlocks(index, 1)[0];
+  const block = session.nativeDocument.getBlockMetadata(index, 1)[0];
   if (!block) {
     return undefined;
   }
 
-  return toBlockSnapshot(block);
+  return toBlockMetadata(block);
 }
 
 function toTransactionResult(result: NativeMarkdownTransactionResult): MarkdownTransactionResult {
@@ -86,7 +104,7 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
   async loadDocument(filename: string, result: MarkdownFileLoadResult): Promise<MarkdownDocumentSnapshot> {
     const documentId = nextDocumentId();
     const timing = result.document.getTiming();
-    const initialBlocks = result.initialBlocks.map(toBlockSnapshot);
+    const initialBlocks = result.initialBlocks.map(toBlockMetadata);
     const session: NativeDocumentSession = {
       nativeDocument: result.document,
     };
@@ -111,7 +129,7 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     return nativeMarkdownDocumentAdapter.loadDocument(filename, await createMarkdownDocument(markdown, { initialBlockCount }));
   },
 
-  getBlockAtIndexSync(documentId: string, index: number): MarkdownBlockSnapshot | undefined {
+  getBlockAtIndexSync(documentId: string, index: number): MarkdownBlockMetadata | undefined {
     const session = getSession(documentId);
     return getBlockAtIndex(session, index);
   },
@@ -128,6 +146,15 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
 
     const session = getSession(documentId);
     return session.nativeDocument.getBlockIds(startIndex, count);
+  },
+
+  async getBlockMetadata(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockMetadata[]> {
+    if (count <= 0) {
+      return [];
+    }
+
+    const session = getSession(documentId);
+    return session.nativeDocument.getBlockMetadata(startIndex, count).map(toBlockMetadata);
   },
 
   async getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]> {

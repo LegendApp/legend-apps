@@ -270,6 +270,27 @@ double HybridMarkdownDocument::getIndexForBlockId(const std::string& blockId) {
   return it == blockIndexById_.end() ? -1.0 : static_cast<double>(it->second);
 }
 
+MarkdownBlockMetadata HybridMarkdownDocument::getBlockMetadataById(const std::string& blockId) {
+  const size_t index = findBlockIndex(blockId);
+  return metadataForBlock(blocks_[index]);
+}
+
+std::vector<MarkdownBlockMetadata> HybridMarkdownDocument::getBlockMetadata(double start, double count) {
+  const auto safeStart = static_cast<size_t>(std::max(0.0, start));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, count));
+  if (safeStart >= blocks_.size() || safeCount == 0) {
+    return {};
+  }
+
+  const auto end = std::min(blocks_.size(), safeStart + safeCount);
+  std::vector<MarkdownBlockMetadata> metadata;
+  metadata.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    metadata.push_back(metadataForBlock(blocks_[index]));
+  }
+  return metadata;
+}
+
 MarkdownRenderBlock HybridMarkdownDocument::getRenderBlockById(const std::string& blockId) {
   const size_t index = findBlockIndex(blockId);
   return renderBlockForBlock(index, blocks_[index]);
@@ -367,6 +388,21 @@ void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const 
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
   return sourceText_.capacity() + blocks_.capacity() * sizeof(MarkdownBlockRange);
+}
+
+MarkdownBlockMetadata HybridMarkdownDocument::metadataForBlock(const MarkdownBlockRange& block) const {
+  return MarkdownBlockMetadata(
+      block.id,
+      static_cast<double>(block.index),
+      markdownBlockTypeName(block.type),
+      static_cast<double>(block.depth),
+      static_cast<double>(block.headingLevel),
+      static_cast<double>(block.markdownEnd - block.markdownStart),
+      static_cast<double>(block.markdownStart),
+      static_cast<double>(block.markdownEnd),
+      static_cast<double>(block.contentStart),
+      static_cast<double>(block.contentEnd),
+      static_cast<double>(block.textRevision));
 }
 
 MarkdownRenderBlock HybridMarkdownDocument::renderBlockForBlock(

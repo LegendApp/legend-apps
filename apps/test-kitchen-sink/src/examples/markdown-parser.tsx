@@ -427,7 +427,7 @@ export function MarkdownParserExample() {
       .then((result) => {
         const finishedAt = Date.now();
         const timing = result.document.getTiming();
-        replaceDocument(result.document, path, result.initialBlocks);
+        replaceDocument(result.document, path, result.document.getRenderBlocks(0, MARKDOWN_INITIAL_BLOCK_COUNT));
         setStatus(
           `Loaded ${result.document.blockCount} render blocks from ${path.split("/").pop() ?? path} in ${formatDuration(
             finishedAt - startedAt,

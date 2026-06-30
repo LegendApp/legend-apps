@@ -3,13 +3,13 @@ import type { ReactNode, Ref } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 
-export type MarkdownBlockSnapshot = {
+export type MarkdownBlockMetadata = {
   id: string;
   index: number;
   type: string;
   depth: number;
   headingLevel: number;
-  markdown: string;
+  markdownLength?: number;
   sourceStartByte: number;
   sourceEndByte: number;
   contentStartByte?: number;
@@ -17,12 +17,16 @@ export type MarkdownBlockSnapshot = {
   textRevision: number;
 };
 
+export type MarkdownBlockSnapshot = MarkdownBlockMetadata & {
+  markdown: string;
+};
+
 export type MarkdownDocumentSnapshot = {
   documentId: string;
   filename: string;
   sourceSize: number;
   blockCount: number;
-  initialBlocks: MarkdownBlockSnapshot[];
+  initialBlocks: MarkdownBlockMetadata[];
   timing: {
     readMs: number;
     parseMs: number;
@@ -71,8 +75,9 @@ export type MarkdownTransactionResult = {
 export type MarkdownDocumentAdapter = {
   load(filename: string): Promise<MarkdownDocumentSnapshot>;
   getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot>;
-  getBlockAtIndexSync?: (documentId: string, index: number) => MarkdownBlockSnapshot | undefined;
+  getBlockAtIndexSync?: (documentId: string, index: number) => MarkdownBlockMetadata | undefined;
   getBlockIds?: (documentId: string, startIndex: number, count: number) => Promise<string[]>;
+  getBlockMetadata?: (documentId: string, startIndex: number, count: number) => Promise<MarkdownBlockMetadata[]>;
   getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]>;
   save(documentId: string): Promise<void>;
   saveAs(documentId: string, filename: string): Promise<void>;

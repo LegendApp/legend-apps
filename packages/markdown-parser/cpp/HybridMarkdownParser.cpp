@@ -176,7 +176,7 @@ std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::createMar
         streamMarkdownSource(makeStringSource(markdown), 0));
     MarkdownFileLoadResult result;
     result.document = document;
-    result.initialBlocks = document->getRenderBlocks(0, initialBlockCount);
+    result.initialBlocks = document->getBlockMetadata(0, initialBlockCount);
     return result;
   });
 }
@@ -193,7 +193,7 @@ std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::loadMarkd
         streamMarkdownSource(std::move(source), elapsedMs(readStartedAt, readFinishedAt)));
     MarkdownFileLoadResult result;
     result.document = document;
-    result.initialBlocks = document->getRenderBlocks(0, initialBlockCount);
+    result.initialBlocks = document->getBlockMetadata(0, initialBlockCount);
     return result;
   });
 }

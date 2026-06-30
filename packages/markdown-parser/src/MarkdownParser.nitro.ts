@@ -23,6 +23,20 @@ export interface MarkdownRenderBlock {
   textRevision: number;
 }
 
+export interface MarkdownBlockMetadata {
+  id: string;
+  index: number;
+  type: string;
+  depth: number;
+  headingLevel: number;
+  markdownLength: number;
+  sourceStartByte: number;
+  sourceEndByte: number;
+  contentStartByte: number;
+  contentEndByte: number;
+  textRevision: number;
+}
+
 export interface MarkdownTransaction {
   type: string;
   blockId: string;
@@ -47,7 +61,7 @@ export interface MarkdownTransactionResult {
 
 export interface MarkdownFileLoadResult {
   document: MarkdownDocument;
-  initialBlocks: MarkdownRenderBlock[];
+  initialBlocks: MarkdownBlockMetadata[];
 }
 
 export interface MarkdownDocument
@@ -59,6 +73,8 @@ export interface MarkdownDocument
   getBlockIds(start: number, count: number): string[];
   getBlockKey(index: number): string;
   getIndexForBlockId(blockId: string): number;
+  getBlockMetadataById(blockId: string): MarkdownBlockMetadata;
+  getBlockMetadata(start: number, count: number): MarkdownBlockMetadata[];
   getRenderBlockById(blockId: string): MarkdownRenderBlock;
   getRenderBlocks(start: number, count: number): MarkdownRenderBlock[];
   getTiming(): MarkdownDocumentTiming;

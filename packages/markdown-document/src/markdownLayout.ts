@@ -2,7 +2,7 @@ import { Platform, PlatformColor, type ColorValue, type GestureResponderEvent, t
 import type { MarkdownTextInputStyle } from "react-native-enriched-markdown";
 import { markdownDocumentStyles } from "./MarkdownDocument.styles";
 import type { NativeSelectionDragOutsideEvent, SelectionDragOutsideEvent } from "./internalTypes";
-import type { MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps } from "./types";
+import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps } from "./types";
 
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -115,13 +115,13 @@ export function emptyParagraphPlaceholderStyle(markdownStyle: NonNullable<Markdo
   return { minHeight: lineHeight };
 }
 
-export function getHeadingLevel(block: MarkdownBlockSnapshot): HeadingLevel | undefined {
+export function getHeadingLevel(block: MarkdownBlockMetadata): HeadingLevel | undefined {
   return block.type === "heading" && block.headingLevel >= 1 && block.headingLevel <= 6
     ? block.headingLevel as HeadingLevel
     : undefined;
 }
 
-export function blockSpacingForBlock(block: MarkdownBlockSnapshot, markdownLayout: MarkdownDocumentLayout) {
+export function blockSpacingForBlock(block: MarkdownBlockMetadata, markdownLayout: MarkdownDocumentLayout) {
   const { blockSpacing } = markdownLayout;
   const headingLevel = getHeadingLevel(block);
   if (headingLevel) {
@@ -154,8 +154,8 @@ export function blockSpacingForBlock(block: MarkdownBlockSnapshot, markdownLayou
 }
 
 export function blockRowSpacingStyle(
-  block: MarkdownBlockSnapshot,
-  previousBlock: MarkdownBlockSnapshot | undefined,
+  block: MarkdownBlockMetadata,
+  previousBlock: MarkdownBlockMetadata | undefined,
   hasPreviousBlock: boolean,
   hasNextBlock: boolean,
   markdownLayout: MarkdownDocumentLayout,

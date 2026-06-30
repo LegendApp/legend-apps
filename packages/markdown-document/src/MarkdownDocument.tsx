@@ -60,6 +60,7 @@ import {
 import { resolveOptimisticBlockPresentation } from "./optimisticBlockPresentation";
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 import type {
+  MarkdownBlockMetadata,
   MarkdownBlockSnapshot,
   MarkdownDocumentCommandState,
   MarkdownDocumentCommands,
@@ -347,6 +348,10 @@ function getStructuralSplitMarkdown(
     !(committedMarkdown.length === 0 && isTwoLineMarkdownPasteFromEmptyBlock(markdown));
 
   return shouldSplit ? splitMarkdown : null;
+}
+
+function isMarkdownBlockSnapshot(block: MarkdownBlockMetadata): block is MarkdownBlockSnapshot {
+  return typeof (block as Partial<MarkdownBlockSnapshot>).markdown === "string";
 }
 
 export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDocumentProps>(
@@ -699,7 +704,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, []);
 
-    const getBlockAtIndexForRender = useCallback((blockId: string, index: number) => {
+    const getBlockAtIndexForRender = useCallback((blockId: string, index: number): MarkdownBlockMetadata | undefined => {
       const activeBlock = activeBlockSnapshotRef.current;
       if (activeBlock?.id === blockId) {
         return activeBlock;
@@ -728,11 +733,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return activeBlock;
       }
 
-      const syncBlock = adapter.getBlockAtIndexSync?.(documentState.snapshot.documentId, index);
-      if (syncBlock?.id === blockId) {
-        return syncBlock;
-      }
-
       return adapter.getBlock(documentState.snapshot.documentId, blockId);
     }, [adapter, documentState]);
 
@@ -744,7 +744,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return adapter.getBlocks(documentState.snapshot.documentId, startIndex, count);
     }, [adapter, documentState]);
 
-    const mergeBlocks = useCallback((blocks: MarkdownBlockSnapshot[], requestRevision: number) => {
+    const mergeBlocks = useCallback((blocks: MarkdownBlockMetadata[], requestRevision: number) => {
       if (blocks.length === 0 || requestRevision !== currentRevisionRef.current) {
         return;
       }
@@ -1895,7 +1895,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const count = Math.min(hydrateChunkSize, snapshot.blockCount - startIndex);
           const hydrateRequest = adapter.getBlockIds
             ? adapter.getBlockIds(snapshot.documentId, startIndex, count)
-            : adapter.getBlocks(snapshot.documentId, startIndex, count);
+            : adapter.getBlockMetadata
+              ? adapter.getBlockMetadata(snapshot.documentId, startIndex, count)
+              : adapter.getBlocks(snapshot.documentId, startIndex, count);
 
           hydrateRequest
             .then((blocksOrIds) => {
@@ -1909,7 +1911,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 startIndex += blockIds.length;
                 hydratedBlockCount += blockIds.length;
               } else {
-                const blocks = blocksOrIds as MarkdownBlockSnapshot[];
+                const blocks = blocksOrIds as MarkdownBlockMetadata[];
                 mergeBlocks(blocks, requestRevision);
                 startIndex += blocks.length;
                 hydratedBlockCount += blocks.length;
@@ -2021,14 +2023,21 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           if (autoFocusFirstBlock) {
             const firstBlock = snapshot.initialBlocks[0];
             if (firstBlock) {
-              activeBlockSnapshotRef.current = firstBlock;
               activeBlockIdRef.current = firstBlock.id;
               nativeEditingBlockIdRef.current = firstBlock.id;
-              draftMarkdownRef.current = firstBlock.markdown;
-              committedMarkdownRef.current = firstBlock.markdown;
-              setDraftMarkdown(firstBlock.markdown);
               setActiveSelection(0);
               setActiveBlockId(firstBlock.id);
+              if (isMarkdownBlockSnapshot(firstBlock)) {
+                setActiveBlock(firstBlock, 0);
+              } else {
+                adapter.getBlock(snapshot.documentId, firstBlock.id)
+                  .then((block) => {
+                    if (!isCanceled && loadVersion === loadVersionRef.current && activeBlockIdRef.current === block.id) {
+                      setActiveBlock(block, 0);
+                    }
+                  })
+                  .catch(reportAsyncError);
+              }
             }
           }
           onLoadedRef.current?.({
@@ -2072,6 +2081,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       commitBlockState,
       publishCommandState,
       reportAsyncError,
+      setActiveBlock,
       setNextSaveState,
       clearTypingHistoryGroup,
     ]);
@@ -2637,7 +2647,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           {...props}
           activeInputRef={activeInputRef}
           documentRenderState$={documentRenderState$}
-          getBlockSnapshot={getBlockAtIndexForRender}
+          getBlockMetadata={getBlockAtIndexForRender}
           hasNextBlock={props.index + 1 < blockIds.length}
           hasPreviousBlock={props.index > 0}
           commentAnchor={commentAnchor?.blockId === props.item ? commentAnchor : null}
@@ -2767,11 +2777,40 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (block) {
           schedulePendingVerticalNavigationSelection();
           if (activeBlockIdRef.current !== block.id) {
-            activateBlock(block, 0);
+            commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
+            blockSelectionGestureRef.current = null;
+            setNextBlockSelection(null);
+            clearTextSelectionAnchor();
+            activeBlockIdRef.current = block.id;
+            nativeEditingBlockIdRef.current = block.id;
+            setActiveSelection(0);
+            setActiveBlockId(block.id);
+            if (isMarkdownBlockSnapshot(block)) {
+              setActiveBlock(block, 0);
+            } else if (documentState.status === "loaded") {
+              const documentId = documentState.snapshot.documentId;
+              adapter.getBlock(documentId, block.id)
+                .then((nextBlock) => {
+                  if (activeBlockIdRef.current === nextBlock.id) {
+                    setActiveBlock(nextBlock, 0);
+                  }
+                })
+                .catch(reportAsyncError);
+            }
           }
         }
       },
-      [activateBlock, applyNativeEditorFrame, schedulePendingVerticalNavigationSelection],
+      [
+        adapter,
+        applyNativeEditorFrame,
+        clearTextSelectionAnchor,
+        commitActiveBlock,
+        documentState,
+        reportAsyncError,
+        schedulePendingVerticalNavigationSelection,
+        setActiveBlock,
+        setNextBlockSelection,
+      ],
     );
     const handleNativeEditorFrameChange = useCallback(
       (event: NativeEditorFrameEvent) => {

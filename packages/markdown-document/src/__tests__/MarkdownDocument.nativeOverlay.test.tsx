@@ -84,7 +84,7 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   constructor(private documentSnapshot: MarkdownDocumentSnapshot) {}
 
   async load() {
-    this.blocks = [...this.documentSnapshot.initialBlocks];
+    this.blocks = [...this.documentSnapshot.initialBlocks] as MarkdownBlockSnapshot[];
     return this.documentSnapshot;
   }
 

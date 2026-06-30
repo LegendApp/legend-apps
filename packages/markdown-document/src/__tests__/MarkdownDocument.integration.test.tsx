@@ -268,7 +268,7 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
 
   constructor(
     private documentSnapshot: MarkdownDocumentSnapshot,
-    private allBlocks = documentSnapshot.initialBlocks,
+    private allBlocks: MarkdownBlockSnapshot[] = documentSnapshot.initialBlocks as MarkdownBlockSnapshot[],
   ) {}
 
   get blockIds() {

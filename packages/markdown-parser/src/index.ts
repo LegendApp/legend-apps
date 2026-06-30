@@ -25,6 +25,7 @@ export function createMarkdownDocument(markdown = "", options: MarkdownFileLoadO
 export type {
   MarkdownDocument,
   MarkdownDocumentTiming,
+  MarkdownBlockMetadata,
   MarkdownChangedRange,
   MarkdownFileLoadResult,
   MarkdownRenderBlock,

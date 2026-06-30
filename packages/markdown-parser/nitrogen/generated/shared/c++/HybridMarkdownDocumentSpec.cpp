@@ -19,6 +19,8 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       prototype.registerHybridMethod("getBlockIds", &HybridMarkdownDocumentSpec::getBlockIds);
       prototype.registerHybridMethod("getBlockKey", &HybridMarkdownDocumentSpec::getBlockKey);
       prototype.registerHybridMethod("getIndexForBlockId", &HybridMarkdownDocumentSpec::getIndexForBlockId);
+      prototype.registerHybridMethod("getBlockMetadataById", &HybridMarkdownDocumentSpec::getBlockMetadataById);
+      prototype.registerHybridMethod("getBlockMetadata", &HybridMarkdownDocumentSpec::getBlockMetadata);
       prototype.registerHybridMethod("getRenderBlockById", &HybridMarkdownDocumentSpec::getRenderBlockById);
       prototype.registerHybridMethod("getRenderBlocks", &HybridMarkdownDocumentSpec::getRenderBlocks);
       prototype.registerHybridMethod("getTiming", &HybridMarkdownDocumentSpec::getTiming);

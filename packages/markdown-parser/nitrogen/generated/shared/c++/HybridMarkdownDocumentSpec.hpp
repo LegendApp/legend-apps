@@ -13,6 +13,8 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
+// Forward declaration of `MarkdownBlockMetadata` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBlockMetadata; }
 // Forward declaration of `MarkdownRenderBlock` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownRenderBlock; }
 // Forward declaration of `MarkdownDocumentTiming` to properly resolve imports.
@@ -22,12 +24,13 @@ namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransac
 // Forward declaration of `MarkdownTransaction` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransaction; }
 
-#include "MarkdownRenderBlock.hpp"
+#include <string>
 #include <vector>
+#include "MarkdownBlockMetadata.hpp"
+#include "MarkdownRenderBlock.hpp"
 #include "MarkdownDocumentTiming.hpp"
 #include "MarkdownTransactionResult.hpp"
 #include "MarkdownTransaction.hpp"
-#include <string>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -64,6 +67,8 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       virtual std::vector<std::string> getBlockIds(double start, double count) = 0;
       virtual std::string getBlockKey(double index) = 0;
       virtual double getIndexForBlockId(const std::string& blockId) = 0;
+      virtual MarkdownBlockMetadata getBlockMetadataById(const std::string& blockId) = 0;
+      virtual std::vector<MarkdownBlockMetadata> getBlockMetadata(double start, double count) = 0;
       virtual MarkdownRenderBlock getRenderBlockById(const std::string& blockId) = 0;
       virtual std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) = 0;
       virtual MarkdownDocumentTiming getTiming() = 0;

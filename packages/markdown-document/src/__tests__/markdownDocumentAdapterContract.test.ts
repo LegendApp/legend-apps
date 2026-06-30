@@ -49,7 +49,7 @@ class FakeMarkdownAdapter implements MarkdownDocumentAdapter {
   }
 
   async getBlock(_documentId: string, blockId: string) {
-    const block = this.snapshot.initialBlocks.find((candidate) => candidate.id === blockId);
+    const block = (this.snapshot.initialBlocks as MarkdownBlockSnapshot[]).find((candidate) => candidate.id === blockId);
     if (!block) {
       throw new Error(`Missing fake block: ${blockId}`);
     }

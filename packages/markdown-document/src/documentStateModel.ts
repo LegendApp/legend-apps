@@ -1,4 +1,4 @@
-import type { MarkdownBlockSnapshot, MarkdownTransactionResult } from "./types";
+import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownTransactionResult } from "./types";
 
 export type MarkdownDocumentBlockState = {
   blockIds: string[];
@@ -13,7 +13,7 @@ export type MarkdownDocumentBlockStateInvariantContext = {
   retiredBlockIds?: Iterable<string>;
 };
 
-export function createMarkdownDocumentBlockState(blocks: MarkdownBlockSnapshot[]): MarkdownDocumentBlockState {
+export function createMarkdownDocumentBlockState(blocks: MarkdownBlockMetadata[]): MarkdownDocumentBlockState {
   const seen = new Set<string>();
   const blockIds: string[] = [];
   for (const block of blocks) {
@@ -50,7 +50,7 @@ export function mergeHydratedMarkdownBlockIds(
 
 export function mergeHydratedMarkdownBlocks(
   previousState: MarkdownDocumentBlockState,
-  blocks: MarkdownBlockSnapshot[],
+  blocks: MarkdownBlockMetadata[],
 ): MarkdownDocumentBlockState {
   const seen = new Set(previousState.blockIds);
   const blockIds = [...previousState.blockIds];
@@ -71,7 +71,7 @@ export function mergeHydratedMarkdownBlocksForRevision({
   previousState,
   requestRevision,
 }: {
-  blocks: MarkdownBlockSnapshot[];
+  blocks: MarkdownBlockMetadata[];
   currentRevision: number;
   previousState: MarkdownDocumentBlockState;
   requestRevision: number;

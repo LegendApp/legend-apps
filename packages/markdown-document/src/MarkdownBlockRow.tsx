@@ -27,8 +27,12 @@ import {
   inputStyleFromMarkdownStyle,
   normalizeSelectionDragOutsideEvent,
 } from "./markdownLayout";
-import type { MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
+import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
 import { useLatestRef } from "./useLatestRef";
+
+function isMarkdownBlockSnapshot(block: MarkdownBlockMetadata): block is MarkdownBlockSnapshot {
+  return typeof (block as Partial<MarkdownBlockSnapshot>).markdown === "string";
+}
 
 export const MarkdownEditorInput = memo(
   function MarkdownEditorInput({
@@ -178,7 +182,7 @@ export const MarkdownOverlayEditorInput = memo(
 export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   activeInputRef,
   commentAnchor,
-  getBlockSnapshot,
+  getBlockMetadata,
   hasNextBlock,
   hasPreviousBlock,
   onActivate,
@@ -199,7 +203,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   commentAnchor?: MarkdownSelectionAnchor | null;
-  getBlockSnapshot: (blockId: string, index: number) => MarkdownBlockSnapshot | undefined;
+  getBlockMetadata: (blockId: string, index: number) => MarkdownBlockMetadata | undefined;
   hasNextBlock: boolean;
   hasPreviousBlock: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
@@ -218,9 +222,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
 }) {
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
-  const block = getBlockSnapshot(blockId, index);
-  const previousBlock = previousBlockId ? getBlockSnapshot(previousBlockId, index - 1) : undefined;
-  const activeEditorBlock = activeBlock?.block ?? block;
+  const block = getBlockMetadata(blockId, index);
+  const previousBlock = previousBlockId ? getBlockMetadata(previousBlockId, index - 1) : undefined;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;
   const isActive = activeBlock !== undefined;
@@ -231,7 +234,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
     return null;
   }
 
-  const layoutBlock = isActive ? activeEditorBlock : block;
+  const activeEditorBlock = activeBlock?.block ?? (isMarkdownBlockSnapshot(block) ? block : undefined);
+  const layoutBlock = activeEditorBlock ?? block;
   const rowStyle = blockRowSpacingStyle(layoutBlock, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
   const rowPaddingTop = typeof rowStyle.paddingTop === "number" ? rowStyle.paddingTop : 0;
   const rowPaddingBottom = typeof rowStyle.paddingBottom === "number" ? rowStyle.paddingBottom : 0;
@@ -243,7 +247,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
     <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
   ) : null;
 
-  if (isActive && !usesNativeEditorOverlay) {
+  if (isActive && !usesNativeEditorOverlay && activeEditorBlock) {
     return (
       <View
         ref={rowRef}
@@ -270,8 +274,10 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
     );
   }
 
-  const isEmptyParagraph = block.type === "paragraph" && block.markdown.length === 0;
+  const markdownLength = block.markdownLength ?? (isMarkdownBlockSnapshot(block) ? block.markdown.length : 0);
+  const isEmptyParagraph = block.type === "paragraph" && markdownLength === 0;
   const renderRevision = block.textRevision + markdownRenderRevision / 1000;
+  const markdown = isMarkdownBlockSnapshot(block) ? block.markdown : "";
   const renderedMarkdown = isEmptyParagraph ? (
     <View style={[styles.emptyParagraphPlaceholder, emptyParagraphPlaceholderStyle(markdownStyle)]} />
   ) : usesNativeEditorOverlay ? (
@@ -292,7 +298,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       allowTrailingMargin={false}
       containerStyle={styles.renderedText}
       flavor="github"
-      markdown={block.markdown}
+      markdown={markdown}
       markdownStyle={markdownStyle}
       onLinkPress={(event) => {
         Linking.openURL(event.url).catch(() => {});
@@ -337,10 +343,12 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
         delayHoverIn={0}
         delayHoverOut={0}
         onPress={(event) => {
-          onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth$.peek(), {
-            paddingBottom: rowPaddingBottom,
-            paddingTop: rowPaddingTop,
-          }));
+          if (isMarkdownBlockSnapshot(block)) {
+            onActivate(block, estimateMarkdownSelection(block.markdown, event, rowWidth$.peek(), {
+              paddingBottom: rowPaddingBottom,
+              paddingTop: rowPaddingTop,
+            }));
+          }
         }}
         style={[rowStyle, styles.rowContent]}
       >

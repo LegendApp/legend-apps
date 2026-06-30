@@ -30,12 +30,12 @@
 
 // Forward declaration of `HybridMarkdownDocumentSpec` to properly resolve imports.
 namespace margelo::nitro::legenddesktop::markdownparser { class HybridMarkdownDocumentSpec; }
-// Forward declaration of `MarkdownRenderBlock` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownRenderBlock; }
+// Forward declaration of `MarkdownBlockMetadata` to properly resolve imports.
+namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBlockMetadata; }
 
 #include <memory>
 #include "HybridMarkdownDocumentSpec.hpp"
-#include "MarkdownRenderBlock.hpp"
+#include "MarkdownBlockMetadata.hpp"
 #include <vector>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
@@ -46,11 +46,11 @@ namespace margelo::nitro::legenddesktop::markdownparser {
   struct MarkdownFileLoadResult final {
   public:
     std::shared_ptr<HybridMarkdownDocumentSpec> document     SWIFT_PRIVATE;
-    std::vector<MarkdownRenderBlock> initialBlocks     SWIFT_PRIVATE;
+    std::vector<MarkdownBlockMetadata> initialBlocks     SWIFT_PRIVATE;
 
   public:
     MarkdownFileLoadResult() = default;
-    explicit MarkdownFileLoadResult(std::shared_ptr<HybridMarkdownDocumentSpec> document, std::vector<MarkdownRenderBlock> initialBlocks): document(document), initialBlocks(initialBlocks) {}
+    explicit MarkdownFileLoadResult(std::shared_ptr<HybridMarkdownDocumentSpec> document, std::vector<MarkdownBlockMetadata> initialBlocks): document(document), initialBlocks(initialBlocks) {}
 
   public:
     friend bool operator==(const MarkdownFileLoadResult& lhs, const MarkdownFileLoadResult& rhs) = default;
@@ -67,13 +67,13 @@ namespace margelo::nitro {
       jsi::Object obj = arg.asObject(runtime);
       return margelo::nitro::legenddesktop::markdownparser::MarkdownFileLoadResult(
         JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::markdownparser::HybridMarkdownDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))
+        JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownBlockMetadata>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownFileLoadResult& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::markdownparser::HybridMarkdownDocumentSpec>>::toJSI(runtime, arg.document));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks"), JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock>>::toJSI(runtime, arg.initialBlocks));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks"), JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownBlockMetadata>>::toJSI(runtime, arg.initialBlocks));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -85,7 +85,7 @@ namespace margelo::nitro {
         return false;
       }
       if (!JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::markdownparser::HybridMarkdownDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownBlockMetadata>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))) return false;
       return true;
     }
   };

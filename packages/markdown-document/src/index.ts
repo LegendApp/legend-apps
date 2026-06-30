@@ -9,6 +9,7 @@ export {
 export { defaultMarkdownLayout, defaultMarkdownStyle } from "./styles";
 export type {
   MarkdownBlockSnapshot,
+  MarkdownBlockMetadata,
   MarkdownDocumentAdapter,
   MarkdownDocumentCommandState,
   MarkdownDocumentCommands,
