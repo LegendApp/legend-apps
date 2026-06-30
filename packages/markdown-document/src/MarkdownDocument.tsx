@@ -111,7 +111,6 @@ function createMarkdownDocumentRenderState(): MarkdownDocumentRenderState {
     activeBlocksById: new Map(),
     blockIds: [],
     blockSelection: null,
-    blocksById: new Map(),
     selectedBlocksById: new Map(),
   };
 }
@@ -691,26 +690,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, []);
 
-    const publishBlocksByIdChanges = useCallback((changedBlocks: MarkdownBlockSnapshot[], retiredBlockIds: string[] = []) => {
-      retiredBlockIds.forEach((blockId) => {
-        documentRenderState$.blocksById.get(blockId).delete();
-      });
-      changedBlocks.forEach((block) => {
-        documentRenderState$.blocksById.get(block.id).set(block);
-      });
-    }, [documentRenderState$]);
-
-    const commitBlockState = useCallback((nextBlockState: MarkdownDocumentBlockState, changes: {
-      changedBlocks?: MarkdownBlockSnapshot[];
-      retiredBlockIds?: string[];
-    } = {}) => {
+    const commitBlockState = useCallback((nextBlockState: MarkdownDocumentBlockState) => {
       const previousBlockIds = blockStateRef.current.blockIds;
       blockStateRef.current = nextBlockState;
-      publishBlocksByIdChanges(changes.changedBlocks ?? [], changes.retiredBlockIds);
       if (!areStringArraysEqual(previousBlockIds, nextBlockState.blockIds)) {
         setBlockIds(nextBlockState.blockIds);
       }
-    }, [publishBlocksByIdChanges]);
+    }, []);
 
     const cacheBlockSnapshots = useCallback((blocks: MarkdownBlockSnapshot[]) => {
       if (blocks.length > 0) {
@@ -786,7 +772,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         previousState: blockStateRef.current,
         requestRevision,
       });
-      commitBlockState(nextBlockState, { changedBlocks: blocks });
+      commitBlockState(nextBlockState);
     }, [commitBlockState]);
 
     const mergeBlockIds = useCallback((nextBlockIds: string[], requestRevision: number) => {
@@ -810,10 +796,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
       const nextBlockState = validateTransactionResult(result);
       currentRevisionRef.current = result.revision;
-      commitBlockState(nextBlockState, {
-        changedBlocks: result.changedBlocks,
-        retiredBlockIds: result.retiredBlockIds,
-      });
+      commitBlockState(nextBlockState);
 
       setDocumentState((previousDocumentState) => {
         if (previousDocumentState.status !== "loaded") {
@@ -855,7 +838,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         ...previousBlockState,
         blocksById,
       };
-      commitBlockState(nextBlockState, { changedBlocks: [nextBlock] });
+      commitBlockState(nextBlockState);
       if (activeBlockIdRef.current === blockId) {
         const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
         documentRenderState$.activeBlocksById.get(blockId).set({
@@ -2008,10 +1991,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       pendingVerticalNavigationSelectionRef.current = null;
       clearOverlayFrame();
       setDocumentState({ status: "loading" });
-      const retiredBlockIds = blockStateRef.current.blockIds;
       documentRenderState$.blockIds.set([]);
       const emptyBlockState = createMarkdownDocumentBlockState([]);
-      commitBlockState(emptyBlockState, { retiredBlockIds });
+      commitBlockState(emptyBlockState);
       setActiveBlockId(null);
       setActiveSelection(0);
       setNextBlockSelection(null);
@@ -2033,7 +2015,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const nextBlockState = adapter.getBlockIds
             ? createMarkdownDocumentBlockStateFromIds(initialBlockIds, snapshot.initialBlocks)
             : createMarkdownDocumentBlockState(snapshot.initialBlocks);
-          commitBlockState(nextBlockState, { changedBlocks: snapshot.initialBlocks });
+          commitBlockState(nextBlockState);
           setDocumentState({ status: "loaded", snapshot });
           logMarkdownDocumentDiagnostics("loaded", {
             blockCount: snapshot.blockCount,

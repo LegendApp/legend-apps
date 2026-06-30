@@ -216,12 +216,10 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
-  const observedBlock = useValue(documentRenderState$.blocksById.get(blockId));
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
-  const observedPreviousBlock = useValue(documentRenderState$.blocksById.get(previousBlockId ?? ""));
-  const block = observedBlock ?? getBlockSnapshot(blockId, index);
-  const previousBlock = observedPreviousBlock ?? (previousBlockId ? getBlockSnapshot(previousBlockId, index - 1) : undefined);
+  const block = getBlockSnapshot(blockId, index);
+  const previousBlock = previousBlockId ? getBlockSnapshot(previousBlockId, index - 1) : undefined;
   const activeEditorBlock = activeBlock?.block ?? block;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;
