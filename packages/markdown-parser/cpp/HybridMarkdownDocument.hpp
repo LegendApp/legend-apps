@@ -11,6 +11,10 @@
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
+class HybridMarkdownDocument;
+
+void registerMarkdownDocument(std::shared_ptr<HybridMarkdownDocument> document);
+
 class MarkdownSource {
 public:
   virtual ~MarkdownSource() = default;
@@ -72,6 +76,8 @@ public:
   MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) override;
   void save() override;
   void saveAs(const std::string& filePath) override;
+  const std::string& documentId() const noexcept;
+  std::string markdownForBlockId(const std::string& blockId) const;
 
 protected:
   size_t getExternalMemorySize() noexcept override;

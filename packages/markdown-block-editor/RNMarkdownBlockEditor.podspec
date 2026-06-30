@@ -13,10 +13,11 @@ Pod::Spec.new do |s|
   s.platforms = { :osx => "14.0" }
   s.source_files = "ios/**/*.{h,m,mm}"
   s.pod_target_xcconfig = {
-    "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/Headers/Private/Yoga\""
+    "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/Headers/Private/Yoga\" \"$(PODS_ROOT)/Headers/Private/ReactNativeEnrichedMarkdown\""
   }
   s.dependency "React-Core"
   s.dependency "React-RCTFabric"
   s.dependency "ReactCodegen"
+  s.dependency "RNMarkdownParser"
   s.dependency "ReactNativeEnrichedMarkdown"
 end

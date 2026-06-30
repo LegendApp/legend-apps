@@ -1,7 +1,7 @@
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { MarkdownBlockActivationView } from "@legend-desktop/markdown-block-editor";
+import { MarkdownBlockActivationView, MarkdownBlockRenderer } from "@legend-desktop/markdown-block-editor";
 import { Fragment, memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
@@ -189,6 +189,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   onVerticalNavigationOutsideRef,
   documentRenderState$,
   markdownLayout,
+  markdownRenderRevision,
   markdownStyle,
   previousBlockId,
   renderCommentBubble,
@@ -203,6 +204,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   hasPreviousBlock: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
   markdownLayout: MarkdownDocumentLayout;
+  markdownRenderRevision: number;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onBlurRef: RefObject<() => void>;
@@ -271,8 +273,22 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   }
 
   const isEmptyParagraph = block.type === "paragraph" && block.markdown.length === 0;
+  const renderRevision = block.textRevision + markdownRenderRevision / 1000;
   const renderedMarkdown = isEmptyParagraph ? (
     <View style={[styles.emptyParagraphPlaceholder, emptyParagraphPlaceholderStyle(markdownStyle)]} />
+  ) : usesNativeEditorOverlay ? (
+    <MarkdownBlockRenderer
+      allowTrailingMargin={false}
+      blockId={block.id}
+      containerStyle={styles.renderedText}
+      markdownStyle={markdownStyle}
+      onLinkPress={(event) => {
+        Linking.openURL(event.url).catch(() => {});
+      }}
+      onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
+      renderRevision={renderRevision}
+      selectable
+    />
   ) : (
     <EnrichedMarkdownText
       allowTrailingMargin={false}
@@ -296,10 +312,10 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           blockId={block.id}
           bottomPadding={rowPaddingBottom}
           contentsHidden={isActive}
-          markdown={block.markdown}
           onLayout={(event) => {
             rowWidth$.set(event.nativeEvent.layout.width);
           }}
+          renderRevision={renderRevision}
           style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
           topPadding={rowPaddingTop}
         >

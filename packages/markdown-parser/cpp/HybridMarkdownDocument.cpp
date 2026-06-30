@@ -8,8 +8,10 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace margelo::nitro::legenddesktop::markdownparser {
 
@@ -87,6 +89,14 @@ bool isWhitespaceOnly(const std::string& markdown) {
   });
 }
 
+std::mutex registryMutex;
+std::unordered_map<std::string, std::weak_ptr<HybridMarkdownDocument>> documentRegistry;
+
+std::string documentIdForBlockId(const std::string& blockId) {
+  const size_t separator = blockId.find(":");
+  return separator == std::string::npos ? "" : blockId.substr(0, separator);
+}
+
 MarkdownBlockType blockTypeForMarkdown(const std::string& markdown) {
   const size_t start = firstContentIndex(markdown);
   if (start >= markdown.size()) {
@@ -149,6 +159,34 @@ void updateBlockSyntax(MarkdownBlockRange& block, const std::string& markdown) {
 }
 
 } // namespace
+
+void registerMarkdownDocument(std::shared_ptr<HybridMarkdownDocument> document) {
+  if (document) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    documentRegistry[document->documentId()] = document;
+  }
+}
+
+std::string markdownForRegisteredBlockId(const std::string& blockId) {
+  const std::string documentId = documentIdForBlockId(blockId);
+  if (documentId.empty()) {
+    return "";
+  }
+
+  std::shared_ptr<HybridMarkdownDocument> document;
+  {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    const auto it = documentRegistry.find(documentId);
+    if (it != documentRegistry.end()) {
+      document = it->second.lock();
+      if (!document) {
+        documentRegistry.erase(it);
+      }
+    }
+  }
+
+  return document ? document->markdownForBlockId(blockId) : "";
+}
 
 std::string nextDocumentId() {
   static std::atomic<size_t> nextId = 1;
@@ -288,6 +326,24 @@ void HybridMarkdownDocument::saveAs(const std::string& filePath) {
 
   writeToFilePath(filePath);
   filePath_ = filePath;
+}
+
+const std::string& HybridMarkdownDocument::documentId() const noexcept {
+  return documentId_;
+}
+
+std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockId) const {
+  const auto it = blockIndexById_.find(blockId);
+  if (it == blockIndexById_.end()) {
+    return "";
+  }
+
+  const size_t index = it->second;
+  if (index >= blocks_.size()) {
+    return "";
+  }
+
+  return markdownForBlock(index, blocks_[index]);
 }
 
 void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const {

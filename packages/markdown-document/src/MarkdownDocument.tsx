@@ -455,6 +455,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onSelectionAnchorChangeRef = useLatestRef(onSelectionAnchorChange);
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
+    const markdownRenderRevisionRef = useRef({
+      revision: 0,
+      style: resolvedMarkdownStyle,
+    });
+    if (markdownRenderRevisionRef.current.style !== resolvedMarkdownStyle) {
+      markdownRenderRevisionRef.current = {
+        revision: markdownRenderRevisionRef.current.revision + 1,
+        style: resolvedMarkdownStyle,
+      };
+    }
+    const markdownRenderRevision = markdownRenderRevisionRef.current.revision;
     const resolvedContentMaxWidth = resolvedMarkdownLayout.content?.maxWidth ?? contentMaxWidth;
     const resolvedContentHorizontalPadding = resolvedMarkdownLayout.content?.horizontalPadding ?? contentHorizontalPadding;
     const resolvedContentVerticalPadding = resolvedMarkdownLayout.content?.verticalPadding ?? 48;
@@ -2622,8 +2633,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         renderCommentBubble,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
+        markdownRenderRevision,
       }),
-      [blockIds, commentAnchor, renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle],
+      [blockIds, commentAnchor, markdownRenderRevision, renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -2656,6 +2668,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           hasPreviousBlock={props.index > 0}
           commentAnchor={commentAnchor?.blockId === props.item ? commentAnchor : null}
           markdownLayout={resolvedMarkdownLayout}
+          markdownRenderRevision={markdownRenderRevision}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
           onBlurRef={handleEditorBlurRef}
@@ -2681,6 +2694,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         handleVerticalNavigationOutsideRef,
         renderCommentBubble,
         resolvedMarkdownLayout,
+        markdownRenderRevision,
         resolvedMarkdownStyle,
         blockSelectionOverlayStyle,
       ],

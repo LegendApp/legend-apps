@@ -100,11 +100,15 @@ jest.mock("@legendapp/list/react-native", () => {
 jest.mock("@legend-desktop/markdown-block-editor", () => {
   const React = require("react");
   const { View } = require("react-native");
+  const { EnrichedMarkdownText } = require("react-native-enriched-markdown");
 
   return {
     MarkdownBlockActivationView: React.forwardRef(({ children, ...props }, ref) => (
       React.createElement(View, { ...props, ref }, children)
     )),
+    MarkdownBlockRenderer: ({ blockId, renderRevision, ...props }) => (
+      React.createElement(EnrichedMarkdownText, { ...props, markdown: blockId, nativeMarkdownRevision: renderRevision })
+    ),
     MarkdownEditorHost: React.forwardRef(({ children, ...props }, ref) => (
       React.createElement(View, { ...props, ref }, children)
     )),

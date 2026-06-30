@@ -5,6 +5,10 @@
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/Props.h>
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/RCTComponentViewHelpers.h>
 
+#import <ReactNativeEnrichedMarkdown/ENRMNativeMarkdownProvider.h>
+
+#include <RNMarkdownParser/MarkdownDocumentRegistry.hpp>
+
 #include <cmath>
 
 using namespace facebook::react;
@@ -184,6 +188,29 @@ static BOOL isEnrichedMarkdownInput(id view)
   return [view respondsToSelector:setValueSelector()] && [view respondsToSelector:mouseDownSelector()];
 }
 
+static NSString *nativeMarkdownForBlockId(NSString *blockId)
+{
+  if (blockId.length == 0) {
+    return @"";
+  }
+
+  const std::string markdown =
+      margelo::nitro::legenddesktop::markdownparser::markdownForRegisteredBlockId(std::string([blockId UTF8String]));
+  return [[NSString alloc] initWithBytes:markdown.data()
+                                  length:markdown.size()
+                                encoding:NSUTF8StringEncoding] ?: @"";
+}
+
+static void registerNativeMarkdownProvider()
+{
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    ENRMSetNativeMarkdownProvider(^NSString *(NSString *blockId) {
+      return nativeMarkdownForBlockId(blockId);
+    });
+  });
+}
+
 @interface RNMarkdownEditorHost () <RCTMarkdownEditorHostViewProtocol>
 @end
 
@@ -199,9 +226,15 @@ static BOOL isEnrichedMarkdownInput(id view)
   id _overlayScrollWheelMonitor;
 }
 
++ (void)load
+{
+  registerNativeMarkdownProvider();
+}
+
 - (instancetype)init
 {
   if (self = [super init]) {
+    registerNativeMarkdownProvider();
     _props = std::make_shared<const MarkdownEditorHostProps>();
     _activationViews = [NSMapTable strongToWeakObjectsMapTable];
     [self installOverlayScrollWheelMonitorIfNeeded];
@@ -284,7 +317,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   if (_activeBlockId != nil && [_activeBlockId isEqualToString:view.blockId]) {
     [self observeScrollViewForBlockView:view];
     [self showOverlayForBlockView:view
-                         markdown:_lastLoadedMarkdown ?: view.markdown
+                         markdown:_lastLoadedMarkdown ?: [view currentMarkdown]
                             event:nil
                         loadValue:_lastLoadedBlockId == nil || ![_lastLoadedBlockId isEqualToString:view.blockId]];
     [self emitBeginEditingForBlockView:view];
@@ -589,7 +622,7 @@ static BOOL isEnrichedMarkdownInput(id view)
   _activeBlockId = [view.blockId copy];
   [self setBlockView:view contentsHidden:YES];
   [self observeScrollViewForBlockView:view];
-  [self showOverlayForBlockView:view markdown:view.markdown event:event loadValue:YES];
+  [self showOverlayForBlockView:view markdown:[view currentMarkdown] event:event loadValue:YES];
   [self emitBeginEditingForBlockView:view];
   [self emitEditorFrameChangeForBlockView:view];
 }
@@ -743,9 +776,9 @@ static BOOL isEnrichedMarkdownInput(id view)
 - (instancetype)init
 {
   if (self = [super init]) {
+    registerNativeMarkdownProvider();
     _props = std::make_shared<const MarkdownBlockActivationViewProps>();
     _blockId = @"";
-    _markdown = @"";
     _bottomPadding = 0;
     _contentsHidden = NO;
     _topPadding = 0;
@@ -785,6 +818,15 @@ static BOOL isEnrichedMarkdownInput(id view)
   }
   _contentsHidden = contentsHidden;
   [self applyContentsHidden];
+}
+
+- (NSString *)currentMarkdown
+{
+  if (_blockId.length == 0) {
+    return @"";
+  }
+
+  return nativeMarkdownForBlockId(_blockId);
 }
 
 - (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
@@ -847,19 +889,18 @@ static BOOL isEnrichedMarkdownInput(id view)
   const auto &newViewProps = *std::static_pointer_cast<MarkdownBlockActivationViewProps const>(props);
 
   NSString *nextBlockId = [NSString stringWithUTF8String:newViewProps.blockId.c_str()];
-  NSString *nextMarkdown = [NSString stringWithUTF8String:newViewProps.markdown.c_str()];
   if (![_blockId isEqualToString:nextBlockId]) {
     [self setContentsHidden:NO];
     [self unregisterFromHost];
     _blockId = [nextBlockId copy];
     [self registerWithHostIfNeeded];
   }
-  _markdown = [nextMarkdown copy];
   self.bottomPadding = MAX(0, newViewProps.bottomPadding);
   self.topPadding = MAX(0, newViewProps.topPadding);
   [self setContentsHidden:newViewProps.contentsHidden];
 
   [super updateProps:props oldProps:oldProps];
+
 }
 
 - (void)mouseDown:(NSEvent *)event
@@ -886,7 +927,6 @@ static BOOL isEnrichedMarkdownInput(id view)
   [self setContentsHidden:NO];
   _blockId = @"";
   _bottomPadding = 0;
-  _markdown = @"";
   _topPadding = 0;
 }
 

@@ -1,8 +1,32 @@
 diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
-index 9227b789cfcfd1c68ae253ae1a7cb6c65ed26092..4694b0e40aaf3aeddee06290fdfe4700763ba03a 100644
+index 9227b78..715e3da 100644
 --- a/ios/EnrichedMarkdown.mm
 +++ b/ios/EnrichedMarkdown.mm
-@@ -522,6 +522,20 @@ - (EnrichedMarkdownInternalText *)createTextViewForRenderedSegment:(ENRMRenderRe
+@@ -7,6 +7,7 @@
+ #import "EditMenuUtils.h"
+
+ #import "ENRMFeatureFlags.h"
++#import "ENRMNativeMarkdownProvider.h"
+
+ #if ENRICHED_MARKDOWN_MATH
+ #import "ENRMMathContainerView.h"
+@@ -45,6 +46,15 @@
+
+ using namespace facebook::react;
+
++static NSString *ENRMMarkdownForProps(const EnrichedMarkdownProps &props)
++{
++  if (!props.nativeMarkdownBlockId.empty()) {
++    NSString *blockId = [[NSString alloc] initWithUTF8String:props.nativeMarkdownBlockId.c_str()];
++    return ENRMMarkdownForNativeBlockId(blockId);
++  }
++  return [[NSString alloc] initWithUTF8String:props.markdown.c_str()] ?: @"";
++}
++
+ @interface EMTextSegment : NSObject
+ @property (nonatomic, strong) NSArray<MarkdownASTNode *> *nodes;
+ + (instancetype)segmentWithNodes:(NSArray<MarkdownASTNode *> *)nodes;
+@@ -522,6 +532,20 @@ - (EnrichedMarkdownInternalText *)createTextViewForRenderedSegment:(ENRMRenderRe
      return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, segmentMarkdown, strongSelf->_config,
                                       @[ baseMenu ], customItems);
    }];
@@ -23,7 +47,28 @@ index 9227b789cfcfd1c68ae253ae1a7cb6c65ed26092..4694b0e40aaf3aeddee06290fdfe4700
  #endif
 
    return view;
-@@ -740,7 +754,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
+@@ -637,7 +661,10 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+     _md4cFlags.latexMath = newViewProps.md4cFlags.latexMath;
+     md4cFlagsChanged = YES;
+   }
+-  BOOL markdownChanged = oldViewProps.markdown != newViewProps.markdown;
++  BOOL markdownChanged =
++      oldViewProps.markdown != newViewProps.markdown ||
++      oldViewProps.nativeMarkdownBlockId != newViewProps.nativeMarkdownBlockId ||
++      oldViewProps.nativeMarkdownRevision != newViewProps.nativeMarkdownRevision;
+   BOOL allowTrailingMarginChanged = newViewProps.allowTrailingMargin != oldViewProps.allowTrailingMargin;
+
+   _enableLinkPreview = newViewProps.enableLinkPreview;
+@@ -658,7 +685,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+   }
+
+   if (markdownChanged || stylePropChanged || md4cFlagsChanged || allowTrailingMarginChanged) {
+-    NSString *markdownString = [[NSString alloc] initWithUTF8String:newViewProps.markdown.c_str()];
++    NSString *markdownString = ENRMMarkdownForProps(newViewProps);
+     [self renderMarkdownContent:markdownString];
+   }
+
+@@ -740,7 +767,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
              if (eventEmitter) {
                eventEmitter->onTaskListItemPress({
                    .index = (int)index,
@@ -33,10 +78,34 @@ index 9227b789cfcfd1c68ae253ae1a7cb6c65ed26092..4694b0e40aaf3aeddee06290fdfe4700
                });
              }
 diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
-index 239e435add583462dea7659b6ee88defbee508ad..aa8c69bc8f85eca4a0345ade9bc5b00e444ceff8 100644
+index 239e435..d70f0bc 100644
 --- a/ios/EnrichedMarkdownText.mm
 +++ b/ios/EnrichedMarkdownText.mm
-@@ -201,6 +201,20 @@ - (void)setupTextView
+@@ -4,6 +4,7 @@
+ #import "ENRMContextMenuTextView+macOS.h"
+ #import "ENRMImageAttachment.h"
+ #import "ENRMMarkdownParser.h"
++#import "ENRMNativeMarkdownProvider.h"
+ #import "ENRMSpoilerOverlayManager.h"
+ #import "ENRMSpoilerTapUtils.h"
+ #import "ENRMTailFadeInAnimator.h"
+@@ -34,6 +35,15 @@
+
+ using namespace facebook::react;
+
++static NSString *ENRMMarkdownTextForProps(const EnrichedMarkdownTextProps &props)
++{
++  if (!props.nativeMarkdownBlockId.empty()) {
++    NSString *blockId = [[NSString alloc] initWithUTF8String:props.nativeMarkdownBlockId.c_str()];
++    return ENRMMarkdownForNativeBlockId(blockId);
++  }
++  return [[NSString alloc] initWithUTF8String:props.markdown.c_str()] ?: @"";
++}
++
+ @interface EnrichedMarkdownText () <RCTEnrichedMarkdownTextViewProtocol, UITextViewDelegate>
+ - (void)setupTextView;
+ - (void)renderMarkdownContent:(NSString *)markdownString;
+@@ -201,6 +211,20 @@ - (void)setupTextView
      return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, strongSelf->_cachedMarkdown,
                                       strongSelf->_config, @[ baseMenu ], customItems);
    };
@@ -57,7 +126,28 @@ index 239e435add583462dea7659b6ee88defbee508ad..aa8c69bc8f85eca4a0345ade9bc5b00e
  #endif
 
    ENRMTapRecognizer *tapRecognizer = [[ENRMTapRecognizer alloc] initWithTarget:self action:@selector(textTapped:)];
-@@ -524,7 +538,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
+@@ -444,7 +468,10 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+     _md4cFlags.latexMath = newViewProps.md4cFlags.latexMath;
+     md4cFlagsChanged = YES;
+   }
+-  BOOL markdownChanged = oldViewProps.markdown != newViewProps.markdown;
++  BOOL markdownChanged =
++      oldViewProps.markdown != newViewProps.markdown ||
++      oldViewProps.nativeMarkdownBlockId != newViewProps.nativeMarkdownBlockId ||
++      oldViewProps.nativeMarkdownRevision != newViewProps.nativeMarkdownRevision;
+   BOOL allowTrailingMarginChanged = newViewProps.allowTrailingMargin != oldViewProps.allowTrailingMargin;
+
+   _enableLinkPreview = newViewProps.enableLinkPreview;
+@@ -471,7 +498,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+   }
+
+   if (markdownChanged || stylePropChanged || md4cFlagsChanged || allowTrailingMarginChanged) {
+-    NSString *markdownString = [[NSString alloc] initWithUTF8String:newViewProps.markdown.c_str()];
++    NSString *markdownString = ENRMMarkdownTextForProps(newViewProps);
+     [self renderMarkdownContent:markdownString];
+   }
+
+@@ -524,7 +551,7 @@ - (void)textTapped:(ENRMTapRecognizer *)recognizer
              if (eventEmitter) {
                eventEmitter->onTaskListItemPress({
                    .index = (int)index,
@@ -67,7 +157,7 @@ index 239e435add583462dea7659b6ee88defbee508ad..aa8c69bc8f85eca4a0345ade9bc5b00e
                });
              }
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
-index ea444f1e0a1fea13834967873ec584afaeb91b57..7c7c7dd0e2e91a059e9ff97420172b6ba1b8282f 100644
+index ea444f1..7c7c7dd 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 @@ -54,6 +54,17 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
@@ -133,7 +223,7 @@ index ea444f1e0a1fea13834967873ec584afaeb91b57..7c7c7dd0e2e91a059e9ff97420172b6b
 +
  } // namespace facebook::react
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h
-index 797de6a25adafb12ef6a8d407b527e740cc92351..2c34bb46397de29d75b7caa09717d9902ba49f34 100644
+index 797de6a..2c34bb4 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.h
 @@ -37,6 +37,12 @@ class EnrichedMarkdownEventEmitter : public ViewEventEmitter {
@@ -208,11 +298,302 @@ index 797de6a25adafb12ef6a8d407b527e740cc92351..2c34bb46397de29d75b7caa09717d990
 +  void onSelectionDragOutside(OnSelectionDragOutside value) const;
  };
  } // namespace facebook::react
+diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
+index f1fa74a..1f16614 100644
+--- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
++++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
+@@ -20,6 +20,8 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
+     const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+     markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
++    nativeMarkdownBlockId(convertRawProp(context, rawProps, "nativeMarkdownBlockId", sourceProps.nativeMarkdownBlockId, {})),
++    nativeMarkdownRevision(convertRawProp(context, rawProps, "nativeMarkdownRevision", sourceProps.nativeMarkdownRevision, {0.0})),
+     markdownStyle(convertRawProp(context, rawProps, "markdownStyle", sourceProps.markdownStyle, {})),
+     enableLinkPreview(convertRawProp(context, rawProps, "enableLinkPreview", sourceProps.enableLinkPreview, {true})),
+     selectable(convertRawProp(context, rawProps, "selectable", sourceProps.selectable, {false})),
+@@ -30,7 +32,7 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
+     streamingAnimation(convertRawProp(context, rawProps, "streamingAnimation", sourceProps.streamingAnimation, {false})),
+     spoilerOverlay(convertRawProp(context, rawProps, "spoilerOverlay", sourceProps.spoilerOverlay, {std::string{"particles"}})),
+     contextMenuItems(convertRawProp(context, rawProps, "contextMenuItems", sourceProps.contextMenuItems, {})) {}
+-    
++
+ #ifdef RN_SERIALIZABLE_STATE
+ ComponentName EnrichedMarkdownProps::getDiffPropsImplementationTarget() const {
+   return "EnrichedMarkdown";
+@@ -46,47 +48,55 @@ folly::dynamic EnrichedMarkdownProps::getDiffProps(
+     return folly::dynamic::object();
+   }
+   folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+-  
++
+   if (markdown != oldProps->markdown) {
+     result["markdown"] = markdown;
+   }
+-    
++
++  if (nativeMarkdownBlockId != oldProps->nativeMarkdownBlockId) {
++    result["nativeMarkdownBlockId"] = nativeMarkdownBlockId;
++  }
++
++  if ((nativeMarkdownRevision != oldProps->nativeMarkdownRevision) && !(std::isnan(nativeMarkdownRevision) && std::isnan(oldProps->nativeMarkdownRevision))) {
++    result["nativeMarkdownRevision"] = nativeMarkdownRevision;
++  }
++
+   if (markdownStyle != oldProps->markdownStyle) {
+     result["markdownStyle"] = toDynamic(markdownStyle);
+   }
+-    
++
+   if (enableLinkPreview != oldProps->enableLinkPreview) {
+     result["enableLinkPreview"] = enableLinkPreview;
+   }
+-    
++
+   if (selectable != oldProps->selectable) {
+     result["selectable"] = selectable;
+   }
+-    
++
+   if (md4cFlags != oldProps->md4cFlags) {
+     result["md4cFlags"] = toDynamic(md4cFlags);
+   }
+-    
++
+   if (allowFontScaling != oldProps->allowFontScaling) {
+     result["allowFontScaling"] = allowFontScaling;
+   }
+-    
++
+   if ((maxFontSizeMultiplier != oldProps->maxFontSizeMultiplier) && !(std::isnan(maxFontSizeMultiplier) && std::isnan(oldProps->maxFontSizeMultiplier))) {
+     result["maxFontSizeMultiplier"] = maxFontSizeMultiplier;
+   }
+-    
++
+   if (allowTrailingMargin != oldProps->allowTrailingMargin) {
+     result["allowTrailingMargin"] = allowTrailingMargin;
+   }
+-    
++
+   if (streamingAnimation != oldProps->streamingAnimation) {
+     result["streamingAnimation"] = streamingAnimation;
+   }
+-    
++
+   if (spoilerOverlay != oldProps->spoilerOverlay) {
+     result["spoilerOverlay"] = spoilerOverlay;
+   }
+-    
++
+   if (contextMenuItems != oldProps->contextMenuItems) {
+     result["contextMenuItems"] = toDynamic(contextMenuItems);
+   }
+@@ -117,7 +127,7 @@ EnrichedMarkdownTextInputProps::EnrichedMarkdownTextInputProps(
+     isOnChangeMarkdownSet(convertRawProp(context, rawProps, "isOnChangeMarkdownSet", sourceProps.isOnChangeMarkdownSet, {false})),
+     contextMenuItems(convertRawProp(context, rawProps, "contextMenuItems", sourceProps.contextMenuItems, {})),
+     linkRegex(convertRawProp(context, rawProps, "linkRegex", sourceProps.linkRegex, {})) {}
+-    
++
+ #ifdef RN_SERIALIZABLE_STATE
+ ComponentName EnrichedMarkdownTextInputProps::getDiffPropsImplementationTarget() const {
+   return "EnrichedMarkdownTextInput";
+@@ -133,79 +143,79 @@ folly::dynamic EnrichedMarkdownTextInputProps::getDiffProps(
+     return folly::dynamic::object();
+   }
+   folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+-  
++
+   if (defaultValue != oldProps->defaultValue) {
+     result["defaultValue"] = defaultValue;
+   }
+-    
++
+   if (placeholder != oldProps->placeholder) {
+     result["placeholder"] = placeholder;
+   }
+-    
++
+   if (placeholderTextColor != oldProps->placeholderTextColor) {
+     result["placeholderTextColor"] = *placeholderTextColor;
+   }
+-    
++
+   if (editable != oldProps->editable) {
+     result["editable"] = editable;
+   }
+-    
++
+   if (autoFocus != oldProps->autoFocus) {
+     result["autoFocus"] = autoFocus;
+   }
+-    
++
+   if (scrollEnabled != oldProps->scrollEnabled) {
+     result["scrollEnabled"] = scrollEnabled;
+   }
+-    
++
+   if (autoCapitalize != oldProps->autoCapitalize) {
+     result["autoCapitalize"] = autoCapitalize;
+   }
+-    
++
+   if (multiline != oldProps->multiline) {
+     result["multiline"] = multiline;
+   }
+-    
++
+   if (cursorColor != oldProps->cursorColor) {
+     result["cursorColor"] = *cursorColor;
+   }
+-    
++
+   if (selectionColor != oldProps->selectionColor) {
+     result["selectionColor"] = *selectionColor;
+   }
+-    
++
+   if (markdownStyle != oldProps->markdownStyle) {
+     result["markdownStyle"] = toDynamic(markdownStyle);
+   }
+-    
++
+   if (color != oldProps->color) {
+     result["color"] = *color;
+   }
+-    
++
+   if ((fontSize != oldProps->fontSize) && !(std::isnan(fontSize) && std::isnan(oldProps->fontSize))) {
+     result["fontSize"] = fontSize;
+   }
+-    
++
+   if ((lineHeight != oldProps->lineHeight) && !(std::isnan(lineHeight) && std::isnan(oldProps->lineHeight))) {
+     result["lineHeight"] = lineHeight;
+   }
+-    
++
+   if (fontFamily != oldProps->fontFamily) {
+     result["fontFamily"] = fontFamily;
+   }
+-    
++
+   if (fontWeight != oldProps->fontWeight) {
+     result["fontWeight"] = fontWeight;
+   }
+-    
++
+   if (isOnChangeMarkdownSet != oldProps->isOnChangeMarkdownSet) {
+     result["isOnChangeMarkdownSet"] = isOnChangeMarkdownSet;
+   }
+-    
++
+   if (contextMenuItems != oldProps->contextMenuItems) {
+     result["contextMenuItems"] = toDynamic(contextMenuItems);
+   }
+-    
++
+   if (linkRegex != oldProps->linkRegex) {
+     result["linkRegex"] = toDynamic(linkRegex);
+   }
+@@ -218,6 +228,8 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
+     const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
+
+     markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
++    nativeMarkdownBlockId(convertRawProp(context, rawProps, "nativeMarkdownBlockId", sourceProps.nativeMarkdownBlockId, {})),
++    nativeMarkdownRevision(convertRawProp(context, rawProps, "nativeMarkdownRevision", sourceProps.nativeMarkdownRevision, {0.0})),
+     markdownStyle(convertRawProp(context, rawProps, "markdownStyle", sourceProps.markdownStyle, {})),
+     enableLinkPreview(convertRawProp(context, rawProps, "enableLinkPreview", sourceProps.enableLinkPreview, {true})),
+     selectable(convertRawProp(context, rawProps, "selectable", sourceProps.selectable, {false})),
+@@ -228,7 +240,7 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
+     streamingAnimation(convertRawProp(context, rawProps, "streamingAnimation", sourceProps.streamingAnimation, {false})),
+     spoilerOverlay(convertRawProp(context, rawProps, "spoilerOverlay", sourceProps.spoilerOverlay, {std::string{"particles"}})),
+     contextMenuItems(convertRawProp(context, rawProps, "contextMenuItems", sourceProps.contextMenuItems, {})) {}
+-    
++
+ #ifdef RN_SERIALIZABLE_STATE
+ ComponentName EnrichedMarkdownTextProps::getDiffPropsImplementationTarget() const {
+   return "EnrichedMarkdownText";
+@@ -244,47 +256,55 @@ folly::dynamic EnrichedMarkdownTextProps::getDiffProps(
+     return folly::dynamic::object();
+   }
+   folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
+-  
++
+   if (markdown != oldProps->markdown) {
+     result["markdown"] = markdown;
+   }
+-    
++
++  if (nativeMarkdownBlockId != oldProps->nativeMarkdownBlockId) {
++    result["nativeMarkdownBlockId"] = nativeMarkdownBlockId;
++  }
++
++  if ((nativeMarkdownRevision != oldProps->nativeMarkdownRevision) && !(std::isnan(nativeMarkdownRevision) && std::isnan(oldProps->nativeMarkdownRevision))) {
++    result["nativeMarkdownRevision"] = nativeMarkdownRevision;
++  }
++
+   if (markdownStyle != oldProps->markdownStyle) {
+     result["markdownStyle"] = toDynamic(markdownStyle);
+   }
+-    
++
+   if (enableLinkPreview != oldProps->enableLinkPreview) {
+     result["enableLinkPreview"] = enableLinkPreview;
+   }
+-    
++
+   if (selectable != oldProps->selectable) {
+     result["selectable"] = selectable;
+   }
+-    
++
+   if (md4cFlags != oldProps->md4cFlags) {
+     result["md4cFlags"] = toDynamic(md4cFlags);
+   }
+-    
++
+   if (allowFontScaling != oldProps->allowFontScaling) {
+     result["allowFontScaling"] = allowFontScaling;
+   }
+-    
++
+   if ((maxFontSizeMultiplier != oldProps->maxFontSizeMultiplier) && !(std::isnan(maxFontSizeMultiplier) && std::isnan(oldProps->maxFontSizeMultiplier))) {
+     result["maxFontSizeMultiplier"] = maxFontSizeMultiplier;
+   }
+-    
++
+   if (allowTrailingMargin != oldProps->allowTrailingMargin) {
+     result["allowTrailingMargin"] = allowTrailingMargin;
+   }
+-    
++
+   if (streamingAnimation != oldProps->streamingAnimation) {
+     result["streamingAnimation"] = streamingAnimation;
+   }
+-    
++
+   if (spoilerOverlay != oldProps->spoilerOverlay) {
+     result["spoilerOverlay"] = spoilerOverlay;
+   }
+-    
++
+   if (contextMenuItems != oldProps->contextMenuItems) {
+     result["contextMenuItems"] = toDynamic(contextMenuItems);
+   }
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
-index c9e19844506517f35bd95fd73fc3933c406845ac..91b8ee562e77d631ad6a00410eba533340f82556 100644
+index c9e1984..fc4d5b9 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
-@@ -2120,6 +2120,14 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+@@ -1951,6 +1951,8 @@ class EnrichedMarkdownProps final : public ViewProps {
+ #pragma mark - Props
+
+   std::string markdown{};
++  std::string nativeMarkdownBlockId{};
++  double nativeMarkdownRevision{0.0};
+   EnrichedMarkdownMarkdownStyleStruct markdownStyle{};
+   bool enableLinkPreview{true};
+   bool selectable{false};
+@@ -2120,6 +2122,14 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  #endif
 
  struct EnrichedMarkdownTextInputMarkdownStyleStruct {
@@ -227,7 +608,7 @@ index c9e19844506517f35bd95fd73fc3933c406845ac..91b8ee562e77d631ad6a00410eba5333
    EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
    EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
    EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-@@ -2131,6 +2139,14 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+@@ -2131,6 +2141,14 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
 
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
@@ -242,7 +623,7 @@ index c9e19844506517f35bd95fd73fc3933c406845ac..91b8ee562e77d631ad6a00410eba5333
      result["strong"] = ::facebook::react::toDynamic(strong);
      result["em"] = ::facebook::react::toDynamic(em);
      result["link"] = ::facebook::react::toDynamic(link);
-@@ -2143,6 +2159,38 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+@@ -2143,6 +2161,38 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
 
@@ -281,8 +662,17 @@ index c9e19844506517f35bd95fd73fc3933c406845ac..91b8ee562e77d631ad6a00410eba5333
    auto tmp_strong = map.find("strong");
    if (tmp_strong != map.end()) {
      fromRawValue(context, tmp_strong->second, result.strong);
+@@ -4247,6 +4297,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
+ #pragma mark - Props
+
+   std::string markdown{};
++  std::string nativeMarkdownBlockId{};
++  double nativeMarkdownRevision{0.0};
+   EnrichedMarkdownTextMarkdownStyleStruct markdownStyle{};
+   bool enableLinkPreview{true};
+   bool selectable{false};
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
-index 016b9fb46138e0a2afc2e728375d8e06b2a405fc..c6094a13699521a7a22a18f292068c1f4d1d3020 100644
+index 016b9fb..c6094a1 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 @@ -22,6 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
@@ -329,7 +719,7 @@ index 016b9fb46138e0a2afc2e728375d8e06b2a405fc..c6094a13699521a7a22a18f292068c1f
  #if RCT_DEBUG
    if ([args count] != 0) {
 diff --git a/ios/input/ENRMInputFormatter.h b/ios/input/ENRMInputFormatter.h
-index dfd6c3f9c1fe224660deece9cdf62be9fc5b9219..eb09489d20ec176eb5d49a5ad4b6301d28464afa 100644
+index dfd6c3f..eb09489 100644
 --- a/ios/input/ENRMInputFormatter.h
 +++ b/ios/input/ENRMInputFormatter.h
 @@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
@@ -341,7 +731,7 @@ index dfd6c3f9c1fe224660deece9cdf62be9fc5b9219..eb09489d20ec176eb5d49a5ad4b6301d
  /// Bold — color override (nil = inherit baseTextColor)
  @property (nonatomic, strong, nullable) RCTUIColor *boldColor;
 diff --git a/ios/input/ENRMInputFormatter.mm b/ios/input/ENRMInputFormatter.mm
-index b81743b7c47f467a70738238dd0ad967ef938f84..f211ab0067bb97029116dacbb054a82c2eefaf55 100644
+index b81743b..f211ab0 100644
 --- a/ios/input/ENRMInputFormatter.mm
 +++ b/ios/input/ENRMInputFormatter.mm
 @@ -17,6 +17,7 @@ - (instancetype)init
@@ -376,7 +766,7 @@ index b81743b7c47f467a70738238dd0ad967ef938f84..f211ab0067bb97029116dacbb054a82c
    [textStorage removeAttribute:NSStrikethroughStyleAttributeName range:fullTextRange];
    [textStorage removeAttribute:NSBackgroundColorAttributeName range:fullTextRange];
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
-index 187cf5b49638c1fe8e35cb70bcd64ab22cb1bab1..340d25afe38bfb453a051cd28c33293c018287a2 100644
+index 187cf5b..340d25a 100644
 --- a/ios/input/ENRMInputTextView.mm
 +++ b/ios/input/ENRMInputTextView.mm
 @@ -83,6 +83,12 @@ - (void)layoutSubviews
@@ -579,7 +969,7 @@ index 187cf5b49638c1fe8e35cb70bcd64ab22cb1bab1..340d25afe38bfb453a051cd28c33293c
  {
    NSMenu *menu = [super menuForEvent:event];
 diff --git a/ios/input/EnrichedMarkdownTextInput+Internal.h b/ios/input/EnrichedMarkdownTextInput+Internal.h
-index f02ae612dc15fb369eaef4d3bedda31049517e21..ce8ce1bc8e8c79132359c3e54c8accbd9b22b969 100644
+index f02ae61..ce8ce1b 100644
 --- a/ios/input/EnrichedMarkdownTextInput+Internal.h
 +++ b/ios/input/EnrichedMarkdownTextInput+Internal.h
 @@ -23,6 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
@@ -592,7 +982,7 @@ index f02ae612dc15fb369eaef4d3bedda31049517e21..ce8ce1bc8e8c79132359c3e54c8accbd
 
  @end
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..a8de429968e847a8c686a1187da109b8987abb63 100644
+index 96969e8..a8de429 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -38,6 +38,10 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
@@ -1214,7 +1604,7 @@ index 96969e8a75f348d92b3db75babb6a9cff08c1c8a..a8de429968e847a8c686a1187da109b8
        }
      }
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..064aa2c13dde399e7d2ff1137848d40f20e2aaf3 100644
+index fd76ab3..064aa2c 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
 @@ -63,6 +63,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
@@ -1278,8 +1668,224 @@ index fd76ab3999e3fcaa2677d83162b005cfa2da9ce2..064aa2c13dde399e7d2ff1137848d40f
 +
 +  return changed;
 +}
+diff --git a/new/ios/internals/ENRMNativeMarkdownProvider.h b/ios/internals/ENRMNativeMarkdownProvider.h
+new file mode 100644
+index 0000000..66d0eed
+--- /dev/null
++++ b/ios/internals/ENRMNativeMarkdownProvider.h
+@@ -0,0 +1,12 @@
++#pragma once
++
++#import <Foundation/Foundation.h>
++
++NS_ASSUME_NONNULL_BEGIN
++
++typedef NSString *_Nonnull (^ENRMNativeMarkdownProvider)(NSString *blockId);
++
++void ENRMSetNativeMarkdownProvider(ENRMNativeMarkdownProvider _Nullable provider);
++NSString *ENRMMarkdownForNativeBlockId(NSString *blockId);
++
++NS_ASSUME_NONNULL_END
+diff --git a/new/ios/internals/ENRMNativeMarkdownProvider.mm b/ios/internals/ENRMNativeMarkdownProvider.mm
+new file mode 100644
+index 0000000..9a13011
+--- /dev/null
++++ b/ios/internals/ENRMNativeMarkdownProvider.mm
+@@ -0,0 +1,16 @@
++#import "ENRMNativeMarkdownProvider.h"
++
++static ENRMNativeMarkdownProvider currentNativeMarkdownProvider;
++
++void ENRMSetNativeMarkdownProvider(ENRMNativeMarkdownProvider provider)
++{
++  currentNativeMarkdownProvider = [provider copy];
++}
++
++NSString *ENRMMarkdownForNativeBlockId(NSString *blockId)
++{
++  if (blockId.length == 0 || currentNativeMarkdownProvider == nil) {
++    return @"";
++  }
++  return currentNativeMarkdownProvider(blockId) ?: @"";
++}
+diff --git a/ios/internals/EnrichedMarkdownShadowNode.h b/ios/internals/EnrichedMarkdownShadowNode.h
+index 656ae5b..48554b1 100644
+--- a/ios/internals/EnrichedMarkdownShadowNode.h
++++ b/ios/internals/EnrichedMarkdownShadowNode.h
+@@ -36,7 +36,7 @@ private:
+   int localHeightRecalculationCounter_{0};
+
+   // Creates mock view off-screen for initial measurement when real view doesn't exist
+-  id setupMockEnrichedMarkdown_(CGFloat width) const;
++  id setupMockEnrichedMarkdown_(CGFloat width, NSString *markdown) const;
+ };
+
+ } // namespace facebook::react
+diff --git a/ios/internals/EnrichedMarkdownShadowNode.mm b/ios/internals/EnrichedMarkdownShadowNode.mm
+index 48f0dcd..83f737d 100644
+--- a/ios/internals/EnrichedMarkdownShadowNode.mm
++++ b/ios/internals/EnrichedMarkdownShadowNode.mm
+@@ -1,4 +1,5 @@
+ #import "EnrichedMarkdownShadowNode.h"
++#import "ENRMNativeMarkdownProvider.h"
+ #import "EnrichedMarkdown.h"
+ #import <react/utils/ManagedObjectWrapper.h>
+ #import <yoga/Yoga.h>
+@@ -32,7 +33,7 @@
+ }
+
+ /// Creates a mock view off-screen to measure content when real view isn't ready yet.
+-id EnrichedMarkdownShadowNode::setupMockEnrichedMarkdown_(CGFloat width) const
++id EnrichedMarkdownShadowNode::setupMockEnrichedMarkdown_(CGFloat width, NSString *markdown) const
+ {
+   EnrichedMarkdown *mockView = [[EnrichedMarkdown alloc] initWithFrame:CGRectMake(20000, 20000, width, 1000)];
+
+@@ -40,9 +41,7 @@
+   [mockView updateProps:props oldProps:nullptr];
+
+   // Render markdown synchronously for accurate measurement
+-  const auto &typedProps = *std::static_pointer_cast<const EnrichedMarkdownProps>(props);
+-  if (!typedProps.markdown.empty()) {
+-    NSString *markdown = [NSString stringWithUTF8String:typedProps.markdown.c_str()];
++  if (markdown.length > 0) {
+     [mockView renderMarkdownSynchronously:markdown];
+   }
+
+@@ -58,7 +57,9 @@
+
+   CGFloat fontScale = typedProps.allowFontScaling ? RCTFontSizeMultiplier() : 1.0;
+
+-  if (!typedProps.markdown.empty()) {
++  const BOOL usesNativeMarkdown = !typedProps.nativeMarkdownBlockId.empty();
++
++  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
+     auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::GitHub);
+     CachedSize cached;
+     if (MeasurementCache::shared().get(cacheKey, cached)) {
+@@ -76,15 +77,21 @@
+       (RCTInternalGenericWeakWrapper *)unwrapManagedObject(getStateData().getComponentViewRef());
+   EnrichedMarkdown *view = weakWrapper ? (EnrichedMarkdown *)weakWrapper.object : nil;
+
+-  NSString *currentMarkdown = typedProps.markdown.empty() ? nil : @(typedProps.markdown.c_str());
+-
+   __block CGSize size;
+
+   void (^measureBlock)(void) = ^{
++    NSString *currentMarkdown = nil;
++    if (usesNativeMarkdown) {
++      NSString *blockId = [[NSString alloc] initWithUTF8String:typedProps.nativeMarkdownBlockId.c_str()];
++      currentMarkdown = ENRMMarkdownForNativeBlockId(blockId);
++    } else if (!typedProps.markdown.empty()) {
++      currentMarkdown = @(typedProps.markdown.c_str());
++    }
++
+     if (view && [view hasRenderedMarkdown:currentMarkdown]) {
+       size = [view measureSize:maxWidth];
+     } else {
+-      EnrichedMarkdown *mockView = setupMockEnrichedMarkdown_(maxWidth);
++      EnrichedMarkdown *mockView = setupMockEnrichedMarkdown_(maxWidth, currentMarkdown);
+       size = [mockView measureSize:maxWidth];
+     }
+   };
+@@ -95,7 +102,7 @@
+     dispatch_sync(dispatch_get_main_queue(), measureBlock);
+   }
+
+-  if (!typedProps.markdown.empty()) {
++  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
+     auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::GitHub);
+     MeasurementCache::shared().set(cacheKey, {size.width, size.height});
+   }
+diff --git a/ios/internals/EnrichedMarkdownTextShadowNode.h b/ios/internals/EnrichedMarkdownTextShadowNode.h
+index b3523ed..b5dc607 100644
+--- a/ios/internals/EnrichedMarkdownTextShadowNode.h
++++ b/ios/internals/EnrichedMarkdownTextShadowNode.h
+@@ -38,7 +38,7 @@ private:
+   int localHeightRecalculationCounter_{0};
+
+   // Creates mock view off-screen for initial measurement when real view doesn't exist
+-  id setupMockEnrichedMarkdownText_(CGFloat width) const;
++  id setupMockEnrichedMarkdownText_(CGFloat width, NSString *markdown) const;
+ };
+
+ } // namespace facebook::react
+diff --git a/ios/internals/EnrichedMarkdownTextShadowNode.mm b/ios/internals/EnrichedMarkdownTextShadowNode.mm
+index 417c39d..6acde71 100644
+--- a/ios/internals/EnrichedMarkdownTextShadowNode.mm
++++ b/ios/internals/EnrichedMarkdownTextShadowNode.mm
+@@ -1,4 +1,5 @@
+ #import "EnrichedMarkdownTextShadowNode.h"
++#import "ENRMNativeMarkdownProvider.h"
+ #import "EnrichedMarkdownText.h"
+ #import <react/utils/ManagedObjectWrapper.h>
+ #import <yoga/Yoga.h>
+@@ -33,7 +34,7 @@
+ }
+
+ /// Creates a mock view off-screen to measure content when real view isn't ready yet.
+-id EnrichedMarkdownTextShadowNode::setupMockEnrichedMarkdownText_(CGFloat width) const
++id EnrichedMarkdownTextShadowNode::setupMockEnrichedMarkdownText_(CGFloat width, NSString *markdown) const
+ {
+   EnrichedMarkdownText *mockView = [[EnrichedMarkdownText alloc] initWithFrame:CGRectMake(20000, 20000, width, 1000)];
+
+@@ -41,9 +42,7 @@
+   [mockView updateProps:props oldProps:nullptr];
+
+   // Render markdown synchronously for accurate measurement
+-  const auto &typedProps = *std::static_pointer_cast<const EnrichedMarkdownTextProps>(props);
+-  if (!typedProps.markdown.empty()) {
+-    NSString *markdown = [NSString stringWithUTF8String:typedProps.markdown.c_str()];
++  if (markdown.length > 0) {
+     [mockView renderMarkdownSynchronously:markdown];
+   }
+
+@@ -61,7 +60,9 @@
+   // This avoids the expensive mock view + synchronous md4c parse path for repeated content.
+   CGFloat fontScale = typedProps.allowFontScaling ? RCTFontSizeMultiplier() : 1.0;
+
+-  if (!typedProps.markdown.empty()) {
++  const BOOL usesNativeMarkdown = !typedProps.nativeMarkdownBlockId.empty();
++
++  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
+     auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::CommonMark);
+     CachedSize cached;
+     if (MeasurementCache::shared().get(cacheKey, cached)) {
+@@ -79,15 +80,21 @@
+       (RCTInternalGenericWeakWrapper *)unwrapManagedObject(getStateData().getComponentViewRef());
+   EnrichedMarkdownText *view = weakWrapper ? (EnrichedMarkdownText *)weakWrapper.object : nil;
+
+-  NSString *currentMarkdown = typedProps.markdown.empty() ? nil : @(typedProps.markdown.c_str());
+-
+   __block CGSize size;
+
+   void (^measureBlock)(void) = ^{
++    NSString *currentMarkdown = nil;
++    if (usesNativeMarkdown) {
++      NSString *blockId = [[NSString alloc] initWithUTF8String:typedProps.nativeMarkdownBlockId.c_str()];
++      currentMarkdown = ENRMMarkdownForNativeBlockId(blockId);
++    } else if (!typedProps.markdown.empty()) {
++      currentMarkdown = @(typedProps.markdown.c_str());
++    }
++
+     if (view && [view hasRenderedMarkdown:currentMarkdown]) {
+       size = [view measureSize:maxWidth];
+     } else {
+-      EnrichedMarkdownText *mockView = setupMockEnrichedMarkdownText_(maxWidth);
++      EnrichedMarkdownText *mockView = setupMockEnrichedMarkdownText_(maxWidth, currentMarkdown);
+       size = [mockView measureSize:maxWidth];
+     }
+   };
+@@ -98,7 +105,7 @@
+     dispatch_sync(dispatch_get_main_queue(), measureBlock);
+   }
+
+-  if (!typedProps.markdown.empty()) {
++  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
+     auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::CommonMark);
+     MeasurementCache::shared().set(cacheKey, {size.width, size.height});
+   }
 diff --git a/ios/renderer/CodeRenderer.m b/ios/renderer/CodeRenderer.m
-index e52a35c24336a0290868f1dfea220d862e3fef29..358f27c02f25df3870a70b9dbfd1b370d0a45977 100644
+index e52a35c..358f27c 100644
 --- a/ios/renderer/CodeRenderer.m
 +++ b/ios/renderer/CodeRenderer.m
 @@ -71,6 +71,10 @@ - (void)renderNode:(MarkdownASTNode *)node into:(NSMutableAttributedString *)out
@@ -1294,7 +1900,7 @@ index e52a35c24336a0290868f1dfea220d862e3fef29..358f27c02f25df3870a70b9dbfd1b370
  }
 
 diff --git a/ios/utils/CodeBackground.m b/ios/utils/CodeBackground.m
-index 5e5d5bf06370c9a94ed5645ccba4436894fe2bdb..8f2ac639a59b9ea4c51edd36189576428f986d2e 100644
+index 5e5d5bf..8f2ac63 100644
 --- a/ios/utils/CodeBackground.m
 +++ b/ios/utils/CodeBackground.m
 @@ -4,8 +4,9 @@
@@ -1339,7 +1945,7 @@ index 5e5d5bf06370c9a94ed5645ccba4436894fe2bdb..8f2ac639a59b9ea4c51edd3618957642
 
  - (UIBezierPath *)pathForRect:(CGRect)rect isFirst:(BOOL)isFirst isLast:(BOOL)isLast
 diff --git a/ios/views/ENRMContextMenuTextView+macOS.h b/ios/views/ENRMContextMenuTextView+macOS.h
-index 58d865a40ea3d93a4be5255f2fceec9628a3a50c..1a5abb608915f01daaa8f88fa4ed40776d49fa46 100644
+index 58d865a..1a5abb6 100644
 --- a/ios/views/ENRMContextMenuTextView+macOS.h
 +++ b/ios/views/ENRMContextMenuTextView+macOS.h
 @@ -5,12 +5,14 @@
@@ -1358,7 +1964,7 @@ index 58d865a40ea3d93a4be5255f2fceec9628a3a50c..1a5abb608915f01daaa8f88fa4ed4077
  @end
 
 diff --git a/ios/views/ENRMContextMenuTextView+macOS.m b/ios/views/ENRMContextMenuTextView+macOS.m
-index 3da7fe63229a552292bf616e3bddb17b0ed534ca..d187bc7df67d444db64b9ae8ec1786e7866f6554 100644
+index 3da7fe6..d187bc7 100644
 --- a/ios/views/ENRMContextMenuTextView+macOS.m
 +++ b/ios/views/ENRMContextMenuTextView+macOS.m
 @@ -3,6 +3,10 @@
@@ -1443,7 +2049,7 @@ index 3da7fe63229a552292bf616e3bddb17b0ed534ca..d187bc7df67d444db64b9ae8ec1786e7
  {
    NSMenu *baseMenu = [super menuForEvent:event];
 diff --git a/ios/views/EnrichedMarkdownInternalText.h b/ios/views/EnrichedMarkdownInternalText.h
-index 2bc6e14eee98ab506369037665652073d13f4fbf..e40dffa48c5892cbbb359163969316c579a13de3 100644
+index 2bc6e14..e40dffa 100644
 --- a/ios/views/EnrichedMarkdownInternalText.h
 +++ b/ios/views/EnrichedMarkdownInternalText.h
 @@ -35,6 +35,7 @@ NS_ASSUME_NONNULL_BEGIN
@@ -1455,7 +2061,7 @@ index 2bc6e14eee98ab506369037665652073d13f4fbf..e40dffa48c5892cbbb359163969316c5
 
  @end
 diff --git a/ios/views/EnrichedMarkdownInternalText.m b/ios/views/EnrichedMarkdownInternalText.m
-index cdb8a0b53cc4b97c3fe8e1ae8e03d426f79cf9d4..809cb30af766a8ac887c1005b792a487dc9f5890 100644
+index cdb8a0b..809cb30 100644
 --- a/ios/views/EnrichedMarkdownInternalText.m
 +++ b/ios/views/EnrichedMarkdownInternalText.m
 @@ -155,6 +155,11 @@ - (void)setContextMenuProvider:(ENRMContextMenuProvider)provider
@@ -1471,7 +2077,7 @@ index cdb8a0b53cc4b97c3fe8e1ae8e03d426f79cf9d4..809cb30af766a8ac887c1005b792a487
 
  @end
 diff --git a/lib/module/EnrichedMarkdownNativeComponent.ts b/lib/module/EnrichedMarkdownNativeComponent.ts
-index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858bc05e75af 100644
+index 06024b4..e2edb1b 100644
 --- a/lib/module/EnrichedMarkdownNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownNativeComponent.ts
 @@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
@@ -1487,7 +2093,18 @@ index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858b
  /**
   * MD4C parser flags configuration.
   * Controls how the markdown parser interprets certain syntax.
-@@ -322,6 +328,7 @@ export interface NativeProps extends ViewProps {
+@@ -230,7 +236,9 @@ export interface NativeProps extends ViewProps {
+   /**
+    * Markdown content to render.
+    */
+-  markdown: string;
++  markdown?: string;
++  nativeMarkdownBlockId?: string;
++  nativeMarkdownRevision?: CodegenTypes.Float;
+   /**
+    * Internal style configuration for markdown elements.
+    * Always provided with complete defaults via normalizeMarkdownStyle.
+@@ -322,6 +330,7 @@ export interface NativeProps extends ViewProps {
     * Receives the item label, the currently selected text, and the selection range.
     */
    onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
@@ -1496,7 +2113,7 @@ index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858b
 
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
 diff --git a/lib/module/EnrichedMarkdownTextInput.js b/lib/module/EnrichedMarkdownTextInput.js
-index 4b01cfc89e57bd956eb897f3924aa00dd470e1bc..7e14896610e57f729fb034ac9cbaf04ccd969132 100644
+index 4b01cfc..7e14896 100644
 --- a/lib/module/EnrichedMarkdownTextInput.js
 +++ b/lib/module/EnrichedMarkdownTextInput.js
 @@ -28,6 +28,8 @@ export const EnrichedMarkdownTextInput = ({
@@ -1548,7 +2165,7 @@ index 4b01cfc89e57bd956eb897f3924aa00dd470e1bc..7e14896610e57f729fb034ac9cbaf04c
      onLinkDetected: handleLinkDetected,
      onInputFocus: handleFocus,
 diff --git a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index d9368251ce5a49f785fd6572963d470f6fb107be..8a180070354f2f97b7ae848040965b66b3fdfe4d 100644
+index d936825..8a18007 100644
 --- a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -9,6 +9,14 @@ import {
@@ -1629,7 +2246,7 @@ index d9368251ce5a49f785fd6572963d470f6fb107be..8a180070354f2f97b7ae848040965b66
      'toggleItalic',
      'toggleUnderline',
 diff --git a/lib/module/EnrichedMarkdownTextNativeComponent.ts b/lib/module/EnrichedMarkdownTextNativeComponent.ts
-index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc78219326 100644
+index e238ecf..0f7b33d 100644
 --- a/lib/module/EnrichedMarkdownTextNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownTextNativeComponent.ts
 @@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
@@ -1645,7 +2262,18 @@ index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc
  /**
   * MD4C parser flags configuration.
   * Controls how the markdown parser interprets certain syntax.
-@@ -321,6 +327,7 @@ export interface NativeProps extends ViewProps {
+@@ -230,7 +236,9 @@ export interface NativeProps extends ViewProps {
+   /**
+    * Markdown content to render.
+    */
+-  markdown: string;
++  markdown?: string;
++  nativeMarkdownBlockId?: string;
++  nativeMarkdownRevision?: CodegenTypes.Float;
+   /**
+    * Internal style configuration for markdown elements.
+    * Always provided with complete defaults via normalizeMarkdownStyle.
+@@ -321,6 +329,7 @@ export interface NativeProps extends ViewProps {
     * Receives the item label, the currently selected text, and the selection range.
     */
    onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
@@ -1654,28 +2282,41 @@ index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc
 
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdownText', {
 diff --git a/lib/module/native/EnrichedMarkdownText.js b/lib/module/native/EnrichedMarkdownText.js
-index 490b5670a6c3424123ec88dd51b088be845fee53..f6ff3eb8927036f83eb4df639bf8cf0ea4fc75a7 100644
+index 490b567..8f4fae2 100644
 --- a/lib/module/native/EnrichedMarkdownText.js
 +++ b/lib/module/native/EnrichedMarkdownText.js
-@@ -26,6 +26,7 @@ export const EnrichedMarkdownText = ({
+@@ -26,6 +26,9 @@ export const EnrichedMarkdownText = ({
    streamingAnimation = false,
    spoilerOverlay = 'particles',
    contextMenuItems,
++  nativeMarkdownBlockId,
++  nativeMarkdownRevision,
 +  onSelectionDragOutside,
    ...rest
  }) => {
    const normalizedStyleRef = useRef(null);
-@@ -98,6 +99,9 @@ export const EnrichedMarkdownText = ({
+@@ -98,8 +101,19 @@ export const EnrichedMarkdownText = ({
        text
      });
    }, [onTaskListItemPress]);
 +  const handleSelectionDragOutside = useCallback(e => {
 +    onSelectionDragOutside?.(e.nativeEvent);
 +  }, [onSelectionDragOutside]);
++  const markdownProps = markdown === undefined ? {} : {
++    markdown
++  };
++  const nativeMarkdownProps = nativeMarkdownBlockId === undefined ? {} : {
++    nativeMarkdownBlockId,
++    nativeMarkdownRevision
++  };
    const sharedProps = {
-     markdown,
+-    markdown,
++    ...markdownProps,
++    ...nativeMarkdownProps,
      markdownStyle: normalizedStyle,
-@@ -115,6 +119,7 @@ export const EnrichedMarkdownText = ({
+     onLinkPress: handleLinkPress,
+     onLinkLongPress: handleLinkLongPress,
+@@ -115,6 +129,7 @@ export const EnrichedMarkdownText = ({
      style: containerStyle,
      contextMenuItems: nativeContextMenuItems,
      onContextMenuItemPress: handleContextMenuItemPress,
@@ -1683,8 +2324,15 @@ index 490b5670a6c3424123ec88dd51b088be845fee53..f6ff3eb8927036f83eb4df639bf8cf0e
      ...rest
    };
    if (flavor === 'github') {
+@@ -127,4 +142,4 @@ export const EnrichedMarkdownText = ({
+   });
+ };
+ export default EnrichedMarkdownText;
+-//# sourceMappingURL=EnrichedMarkdownText.js.map
+\ No newline at end of file
++//# sourceMappingURL=EnrichedMarkdownText.js.map
 diff --git a/lib/module/normalizeMarkdownTextInputStyle.js b/lib/module/normalizeMarkdownTextInputStyle.js
-index 0bafc38eb77802d975f09b92045721f2ef967192..32d998f5c14d34277c9eb6e003e6122ce27164b8 100644
+index 0bafc38..32d998f 100644
 --- a/lib/module/normalizeMarkdownTextInputStyle.js
 +++ b/lib/module/normalizeMarkdownTextInputStyle.js
 @@ -1,11 +1,28 @@
@@ -1733,8 +2381,30 @@ index 0bafc38eb77802d975f09b92045721f2ef967192..32d998f5c14d34277c9eb6e003e6122c
      strong: {
        color: normalizeColor(style.strong?.color)
      },
+diff --git a/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
+index 567cc1e..4c6f6c2 100644
+--- a/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
++++ b/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
+@@ -194,7 +194,9 @@ export interface NativeProps extends ViewProps {
+     /**
+      * Markdown content to render.
+      */
+-    markdown: string;
++    markdown?: string;
++    nativeMarkdownBlockId?: string;
++    nativeMarkdownRevision?: CodegenTypes.Float;
+     /**
+      * Internal style configuration for markdown elements.
+      * Always provided with complete defaults via normalizeMarkdownStyle.
+@@ -288,4 +290,4 @@ export interface NativeProps extends ViewProps {
+ }
+ declare const _default: import("react-native/types_generated/Libraries/Utilities/codegenNativeComponent").NativeComponentType<NativeProps>;
+ export default _default;
+-//# sourceMappingURL=EnrichedMarkdownNativeComponent.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=EnrichedMarkdownNativeComponent.d.ts.map
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
-index fb360242782f2b1acfc242c87fba0c332c1251ef..da1485c1af61a6bfca18578351e9ca30747a2037 100644
+index fb36024..da1485c 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 @@ -2,7 +2,8 @@ import { type OnLinkDetected } from './EnrichedMarkdownTextInputNativeComponent'
@@ -1790,7 +2460,7 @@ index fb360242782f2b1acfc242c87fba0c332c1251ef..da1485c1af61a6bfca18578351e9ca30
  //# sourceMappingURL=EnrichedMarkdownTextInput.d.ts.map
 \ No newline at end of file
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..f7d3b7cca8ad9f2ffbb50698e2a13499b3feaa93 100644
+index fb5ebe3..f7d3b7c 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 @@ -1,6 +1,14 @@
@@ -1855,8 +2525,30 @@ index fb5ebe3902ec19a0690b91e1e2de48a2e13296df..f7d3b7cca8ad9f2ffbb50698e2a13499
      toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
+diff --git a/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts
+index 4254d5d..ed788f7 100644
+--- a/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts
++++ b/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts
+@@ -194,7 +194,9 @@ export interface NativeProps extends ViewProps {
+     /**
+      * Markdown content to render.
+      */
+-    markdown: string;
++    markdown?: string;
++    nativeMarkdownBlockId?: string;
++    nativeMarkdownRevision?: CodegenTypes.Float;
+     /**
+      * Internal style configuration for markdown elements.
+      * Always provided with complete defaults via normalizeMarkdownStyle.
+@@ -288,4 +290,4 @@ export interface NativeProps extends ViewProps {
+ }
+ declare const _default: import("react-native/types_generated/Libraries/Utilities/codegenNativeComponent").NativeComponentType<NativeProps>;
+ export default _default;
+-//# sourceMappingURL=EnrichedMarkdownTextNativeComponent.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=EnrichedMarkdownTextNativeComponent.d.ts.map
 diff --git a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
-index ddc0716688d088bde3981337eb094c92b83d6bf4..3c39bc2188e6095a320bb6bd016bd4f478e3dc1b 100644
+index ddc0716..3c39bc2 100644
 --- a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
 +++ b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
 @@ -1,6 +1,21 @@
@@ -1882,7 +2574,7 @@ index ddc0716688d088bde3981337eb094c92b83d6bf4..3c39bc2188e6095a320bb6bd016bd4f4
          color?: ColorValue;
      };
 diff --git a/lib/typescript/src/types/MarkdownTextProps.d.ts b/lib/typescript/src/types/MarkdownTextProps.d.ts
-index b912aa6e663c5312565e4611801c820a737c68ae..bee955da5d3877900e47cca99ab74634016b7e09 100644
+index b912aa6..6568194 100644
 --- a/lib/typescript/src/types/MarkdownTextProps.d.ts
 +++ b/lib/typescript/src/types/MarkdownTextProps.d.ts
 @@ -1,6 +1,6 @@
@@ -1893,7 +2585,26 @@ index b912aa6e663c5312565e4611801c820a737c68ae..bee955da5d3877900e47cca99ab74634
  /**
   * Public context menu item. Each item includes a JS-side `onPress` callback
   * that is called when the user taps the item in the selection context menu.
-@@ -66,6 +66,7 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+@@ -22,7 +22,17 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+      * Markdown content to render.
+      * @platform ios, android, web
+      */
+-    markdown: string;
++    markdown?: string;
++    /**
++     * Native markdown block id to render without passing markdown through JS.
++     * @platform ios
++     */
++    nativeMarkdownBlockId?: string;
++    /**
++     * Native markdown block revision used to invalidate render and measurement.
++     * @platform ios
++     */
++    nativeMarkdownRevision?: number;
+     /**
+      * Style configuration for markdown elements.
+      * @platform ios, android, web
+@@ -66,6 +76,7 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
       * @platform ios, android, web
       */
      onTaskListItemPress?: (event: TaskListItemPressEvent) => void;
@@ -1901,8 +2612,15 @@ index b912aa6e663c5312565e4611801c820a737c68ae..bee955da5d3877900e47cca99ab74634
      /**
       * Controls whether the system link preview is shown on long press (iOS only).
       *
+@@ -156,4 +167,4 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+      */
+     dir?: 'ltr' | 'rtl' | 'auto';
+ }
+-//# sourceMappingURL=MarkdownTextProps.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=MarkdownTextProps.d.ts.map
 diff --git a/lib/typescript/src/types/events.d.ts b/lib/typescript/src/types/events.d.ts
-index 0b620239dbb0835552e5db32f454e43fd30aa03e..c04e64b013724aeb9d015bcf42d913f2010d7f7a 100644
+index 0b62023..c04e64b 100644
 --- a/lib/typescript/src/types/events.d.ts
 +++ b/lib/typescript/src/types/events.d.ts
 @@ -26,4 +26,9 @@ export interface OnContextMenuItemPressEvent {
@@ -1917,7 +2635,7 @@ index 0b620239dbb0835552e5db32f454e43fd30aa03e..c04e64b013724aeb9d015bcf42d913f2
  //# sourceMappingURL=events.d.ts.map
 \ No newline at end of file
 diff --git a/src/EnrichedMarkdownNativeComponent.ts b/src/EnrichedMarkdownNativeComponent.ts
-index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858bc05e75af 100644
+index 06024b4..e2edb1b 100644
 --- a/src/EnrichedMarkdownNativeComponent.ts
 +++ b/src/EnrichedMarkdownNativeComponent.ts
 @@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
@@ -1933,7 +2651,18 @@ index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858b
  /**
   * MD4C parser flags configuration.
   * Controls how the markdown parser interprets certain syntax.
-@@ -322,6 +328,7 @@ export interface NativeProps extends ViewProps {
+@@ -230,7 +236,9 @@ export interface NativeProps extends ViewProps {
+   /**
+    * Markdown content to render.
+    */
+-  markdown: string;
++  markdown?: string;
++  nativeMarkdownBlockId?: string;
++  nativeMarkdownRevision?: CodegenTypes.Float;
+   /**
+    * Internal style configuration for markdown elements.
+    * Always provided with complete defaults via normalizeMarkdownStyle.
+@@ -322,6 +330,7 @@ export interface NativeProps extends ViewProps {
     * Receives the item label, the currently selected text, and the selection range.
     */
    onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
@@ -1942,7 +2671,7 @@ index 06024b47242de2ebef33aa68a0890ea520e60b8f..a88e856c7dda985c13feb5b2967e858b
 
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
 diff --git a/src/EnrichedMarkdownTextInput.tsx b/src/EnrichedMarkdownTextInput.tsx
-index 6ea44db8535d7d14186d8a488c8c83130f8ee889..6b7cac174618232c01c71f265c35645b6b35034a 100644
+index 6ea44db..6b7cac1 100644
 --- a/src/EnrichedMarkdownTextInput.tsx
 +++ b/src/EnrichedMarkdownTextInput.tsx
 @@ -12,6 +12,8 @@ import EnrichedMarkdownTextInputNativeComponent, {
@@ -2065,7 +2794,7 @@ index 6ea44db8535d7d14186d8a488c8c83130f8ee889..6b7cac174618232c01c71f265c35645b
        onLinkDetected={handleLinkDetected as NativeProps['onLinkDetected']}
        onInputFocus={handleFocus as NativeProps['onInputFocus']}
 diff --git a/src/EnrichedMarkdownTextInputNativeComponent.ts b/src/EnrichedMarkdownTextInputNativeComponent.ts
-index d9368251ce5a49f785fd6572963d470f6fb107be..8a180070354f2f97b7ae848040965b66b3fdfe4d 100644
+index d936825..8a18007 100644
 --- a/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/src/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -9,6 +9,14 @@ import {
@@ -2146,7 +2875,7 @@ index d9368251ce5a49f785fd6572963d470f6fb107be..8a180070354f2f97b7ae848040965b66
      'toggleItalic',
      'toggleUnderline',
 diff --git a/src/EnrichedMarkdownTextNativeComponent.ts b/src/EnrichedMarkdownTextNativeComponent.ts
-index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc78219326 100644
+index e238ecf..0f7b33d 100644
 --- a/src/EnrichedMarkdownTextNativeComponent.ts
 +++ b/src/EnrichedMarkdownTextNativeComponent.ts
 @@ -206,6 +206,12 @@ export interface OnContextMenuItemPressEvent {
@@ -2162,7 +2891,18 @@ index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc
  /**
   * MD4C parser flags configuration.
   * Controls how the markdown parser interprets certain syntax.
-@@ -321,6 +327,7 @@ export interface NativeProps extends ViewProps {
+@@ -230,7 +236,9 @@ export interface NativeProps extends ViewProps {
+   /**
+    * Markdown content to render.
+    */
+-  markdown: string;
++  markdown?: string;
++  nativeMarkdownBlockId?: string;
++  nativeMarkdownRevision?: CodegenTypes.Float;
+   /**
+    * Internal style configuration for markdown elements.
+    * Always provided with complete defaults via normalizeMarkdownStyle.
+@@ -321,6 +329,7 @@ export interface NativeProps extends ViewProps {
     * Receives the item label, the currently selected text, and the selection range.
     */
    onContextMenuItemPress?: CodegenTypes.BubblingEventHandler<OnContextMenuItemPressEvent>;
@@ -2171,7 +2911,7 @@ index e238ecfccf08329ef50db1cdcf0e3abc98488830..8ed01db26dadf87b7e12738a9da5dcfc
 
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdownText', {
 diff --git a/src/native/EnrichedMarkdownText.tsx b/src/native/EnrichedMarkdownText.tsx
-index 236c2b7c29fdd7ba080b70b30c4438d166ccbc40..04dcdc275d9940f237e67ff81608015d58b04550 100644
+index 236c2b7..98682ff 100644
 --- a/src/native/EnrichedMarkdownText.tsx
 +++ b/src/native/EnrichedMarkdownText.tsx
 @@ -14,6 +14,7 @@ import type {
@@ -2182,15 +2922,17 @@ index 236c2b7c29fdd7ba080b70b30c4438d166ccbc40..04dcdc275d9940f237e67ff81608015d
  } from '../types/events';
 
  export type { MarkdownStyle, Md4cFlags };
-@@ -42,6 +43,7 @@ export const EnrichedMarkdownText = ({
+@@ -42,6 +43,9 @@ export const EnrichedMarkdownText = ({
    streamingAnimation = false,
    spoilerOverlay = 'particles',
    contextMenuItems,
++  nativeMarkdownBlockId,
++  nativeMarkdownRevision,
 +  onSelectionDragOutside,
    ...rest
  }: EnrichedMarkdownTextProps) => {
    const normalizedStyleRef = useRef<MarkdownStyleInternal | null>(null);
-@@ -120,6 +122,13 @@ export const EnrichedMarkdownText = ({
+@@ -120,8 +124,22 @@ export const EnrichedMarkdownText = ({
      [onTaskListItemPress]
    );
 
@@ -2201,10 +2943,20 @@ index 236c2b7c29fdd7ba080b70b30c4438d166ccbc40..04dcdc275d9940f237e67ff81608015d
 +    [onSelectionDragOutside]
 +  );
 +
++  const markdownProps = markdown === undefined ? {} : { markdown };
++  const nativeMarkdownProps =
++    nativeMarkdownBlockId === undefined
++      ? {}
++      : { nativeMarkdownBlockId, nativeMarkdownRevision };
++
    const sharedProps = {
-     markdown,
+-    markdown,
++    ...markdownProps,
++    ...nativeMarkdownProps,
      markdownStyle: normalizedStyle,
-@@ -137,6 +146,7 @@ export const EnrichedMarkdownText = ({
+     onLinkPress: handleLinkPress,
+     onLinkLongPress: handleLinkLongPress,
+@@ -137,6 +155,7 @@ export const EnrichedMarkdownText = ({
      style: containerStyle,
      contextMenuItems: nativeContextMenuItems,
      onContextMenuItemPress: handleContextMenuItemPress,
@@ -2213,7 +2965,7 @@ index 236c2b7c29fdd7ba080b70b30c4438d166ccbc40..04dcdc275d9940f237e67ff81608015d
    };
 
 diff --git a/src/normalizeMarkdownTextInputStyle.ts b/src/normalizeMarkdownTextInputStyle.ts
-index 5fd79f8b0e1a2bc441c99c653d54f68496f53188..fdbcbcb23e1892b1bd645a64f097b447c1f47ad7 100644
+index 5fd79f8..fdbcbcb 100644
 --- a/src/normalizeMarkdownTextInputStyle.ts
 +++ b/src/normalizeMarkdownTextInputStyle.ts
 @@ -1,8 +1,25 @@
@@ -2293,7 +3045,7 @@ index 5fd79f8b0e1a2bc441c99c653d54f68496f53188..fdbcbcb23e1892b1bd645a64f097b447
        color: normalizeColor(style.strong?.color),
      },
 diff --git a/src/types/MarkdownTextProps.ts b/src/types/MarkdownTextProps.ts
-index d450699edd84cd75a6763463ac49e67a99c2841d..4c778f6f2f3ce8a228562f823e3598b5d8b2f77b 100644
+index d450699..986cd4b 100644
 --- a/src/types/MarkdownTextProps.ts
 +++ b/src/types/MarkdownTextProps.ts
 @@ -3,6 +3,7 @@ import type { MarkdownStyle, Md4cFlags } from './MarkdownStyle';
@@ -2304,7 +3056,26 @@ index d450699edd84cd75a6763463ac49e67a99c2841d..4c778f6f2f3ce8a228562f823e3598b5
    TaskListItemPressEvent,
  } from './events';
 
-@@ -69,6 +70,7 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+@@ -25,7 +26,17 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
+    * Markdown content to render.
+    * @platform ios, android, web
+    */
+-  markdown: string;
++  markdown?: string;
++  /**
++   * Native markdown block id to render without passing markdown through JS.
++   * @platform ios
++   */
++  nativeMarkdownBlockId?: string;
++  /**
++   * Native markdown block revision used to invalidate render and measurement.
++   * @platform ios
++   */
++  nativeMarkdownRevision?: number;
+   /**
+    * Style configuration for markdown elements.
+    * @platform ios, android, web
+@@ -69,6 +80,7 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
     * @platform ios, android, web
     */
    onTaskListItemPress?: (event: TaskListItemPressEvent) => void;
@@ -2313,7 +3084,7 @@ index d450699edd84cd75a6763463ac49e67a99c2841d..4c778f6f2f3ce8a228562f823e3598b5
     * Controls whether the system link preview is shown on long press (iOS only).
     *
 diff --git a/src/types/events.ts b/src/types/events.ts
-index 11f876c7737baf9a472b848eda1d1dad997518da..1943ff1868f32bc27b1e3fd641e6b76212acaf01 100644
+index 11f876c..1943ff1 100644
 --- a/src/types/events.ts
 +++ b/src/types/events.ts
 @@ -30,3 +30,9 @@ export interface OnContextMenuItemPressEvent {

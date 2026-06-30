@@ -159,6 +159,7 @@ std::shared_ptr<HybridMarkdownDocument> createDocument(std::string filePath, Mar
       timing);
   const auto documentFinishedAt = Clock::now();
   document->setDocumentDurationMs(elapsedMs(documentStartedAt, documentFinishedAt));
+  registerMarkdownDocument(document);
   return document;
 }
 
