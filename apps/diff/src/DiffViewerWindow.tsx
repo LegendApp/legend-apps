@@ -3271,6 +3271,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       listRef.current?.scrollToIndex({
         animated: true,
         index: listIndex,
+        viewOffset: diffTitlebarTopInset,
         viewPosition: 0,
       }).catch((error: unknown) => {
         console.error(error instanceof Error ? error.message : String(error));
