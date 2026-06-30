@@ -1,5 +1,5 @@
 import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import type { Observable } from "@legendapp/state";
+import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownEditorHost } from "@legend-desktop/markdown-block-editor";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -112,6 +112,7 @@ function createMarkdownDocumentRenderState(): MarkdownDocumentRenderState {
     activeBlocksById: new Map(),
     blockIds: [],
     blockSelection: null,
+    rowStatesById: new Map(),
     selectedBlocksById: new Map(),
   };
 }
@@ -392,6 +393,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const commitQueueRef = useRef(Promise.resolve());
     const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
     const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
+    const loadedSnapshotRef = useRef<MarkdownDocumentSnapshot | null>(null);
     const activeBlockIdRef = useRef<string | null>(null);
     const activeBlockSnapshotRef = useRef<MarkdownBlockSnapshot | undefined>(undefined);
     const blockSelectionInputRef = useRef<TextInput | null>(null);
@@ -404,6 +406,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const pendingVerticalNavigationFrameRef = useRef<number | undefined>(undefined);
     const activeRenderBlockIdRef = useRef<string | null>(null);
     const selectedRenderBlockIdsRef = useRef(new Set<string>());
+    const commentAnchorBlockIdRef = useRef<string | null>(null);
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const overlayFrameBlockIdRef = useRef<string | undefined>(undefined);
     const nativeEditorRowSizeRef = useRef(new Map<string, { height: number; width: number }>());
@@ -451,17 +454,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onSelectionAnchorChangeRef = useLatestRef(onSelectionAnchorChange);
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
-    const markdownRenderRevisionRef = useRef({
-      revision: 0,
-      style: resolvedMarkdownStyle,
-    });
-    if (markdownRenderRevisionRef.current.style !== resolvedMarkdownStyle) {
-      markdownRenderRevisionRef.current = {
-        revision: markdownRenderRevisionRef.current.revision + 1,
-        style: resolvedMarkdownStyle,
-      };
-    }
-    const markdownRenderRevision = markdownRenderRevisionRef.current.revision;
     const resolvedContentMaxWidth = resolvedMarkdownLayout.content?.maxWidth ?? contentMaxWidth;
     const resolvedContentHorizontalPadding = resolvedMarkdownLayout.content?.horizontalPadding ?? contentHorizontalPadding;
     const resolvedContentVerticalPadding = resolvedMarkdownLayout.content?.verticalPadding ?? 48;
@@ -544,6 +536,37 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockSelectionRef.current = nextBlockSelection;
       setBlockSelection(nextBlockSelection);
     }, []);
+
+    const setBlockRowCommentAnchor = useCallback((blockId: string, nextCommentAnchor: MarkdownSelectionAnchor | null) => {
+      const rowState$ = documentRenderState$.rowStatesById.get(blockId);
+      const rowState = rowState$.peek();
+      if (rowState?.commentAnchor !== nextCommentAnchor) {
+        if (rowState || nextCommentAnchor) {
+          rowState$.set({
+            commentAnchor: nextCommentAnchor,
+            renderRevision: rowState?.renderRevision ?? 0,
+          });
+        }
+      }
+    }, [documentRenderState$]);
+
+    const bumpBlockRowRenderRevision = useCallback((blockId: string) => {
+      const rowState$ = documentRenderState$.rowStatesById.get(blockId);
+      const rowState = rowState$.peek();
+      rowState$.set({
+        commentAnchor: rowState?.commentAnchor ?? null,
+        renderRevision: (rowState?.renderRevision ?? 0) + 1,
+      });
+    }, [documentRenderState$]);
+
+    const bumpTransactionRowRenderRevisions = useCallback((result: MarkdownTransactionResult) => {
+      batch(() => {
+        result.retiredBlockIds.forEach((blockId) => {
+          documentRenderState$.rowStatesById.get(blockId).delete();
+        });
+        result.changedRange.blockIds.forEach(bumpBlockRowRenderRevision);
+      });
+    }, [bumpBlockRowRenderRevision, documentRenderState$]);
 
     const publishCommandState = useCallback(() => {
       const nextState: MarkdownDocumentCommandState = {
@@ -704,24 +727,29 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, []);
 
+    const getBlockCount = useCallback(() => blockStateRef.current.blockIds.length, []);
+
+    const getBlockIdAtIndex = useCallback((index: number) => blockStateRef.current.blockIds[index], []);
+
     const getBlockAtIndexForRender = useCallback((blockId: string, index: number): MarkdownBlockMetadata | undefined => {
       const activeBlock = activeBlockSnapshotRef.current;
       if (activeBlock?.id === blockId) {
         return activeBlock;
       }
 
-      if (documentState.status !== "loaded") {
+      const snapshot = loadedSnapshotRef.current;
+      if (!snapshot) {
         return undefined;
       }
 
-      const block = adapter.getBlockAtIndexSync?.(documentState.snapshot.documentId, index);
+      const block = adapter.getBlockAtIndexSync?.(snapshot.documentId, index);
       if (block?.id !== blockId) {
-        const initialBlock = documentState.snapshot.initialBlocks[index];
+        const initialBlock = snapshot.initialBlocks[index];
         return initialBlock?.id === blockId ? initialBlock : undefined;
       }
 
       return block;
-    }, [adapter, documentState]);
+    }, [adapter]);
 
     const loadBlockAtIndex = useCallback(async (blockId: string | undefined, index: number) => {
       if (!blockId || documentState.status !== "loaded") {
@@ -780,6 +808,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const nextBlockState = validateTransactionResult(result);
       currentRevisionRef.current = result.revision;
       commitBlockState(nextBlockState);
+      bumpTransactionRowRenderRevisions(result);
 
       setDocumentState((previousDocumentState) => {
         if (previousDocumentState.status !== "loaded") {
@@ -798,7 +827,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           },
         };
       });
-    }, [commitBlockState, validateTransactionResult]);
+    }, [bumpTransactionRowRenderRevisions, commitBlockState, validateTransactionResult]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
       const block = activeBlockSnapshotRef.current?.id === blockId ? activeBlockSnapshotRef.current : undefined;
@@ -1967,6 +1996,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         documentRenderState$.activeBlocksById.get(activeRenderBlockIdRef.current).delete();
         activeRenderBlockIdRef.current = null;
       }
+      commentAnchorBlockIdRef.current = null;
       selectedRenderBlockIdsRef.current.forEach((blockId) => {
         documentRenderState$.selectedBlocksById.get(blockId).delete();
       });
@@ -1978,6 +2008,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       isDirtyRef.current = false;
       pendingRenderTransactionRef.current = undefined;
       autosavePausedRef.current = false;
+      loadedSnapshotRef.current = null;
       undoStackRef.current = [];
       redoStackRef.current = [];
       publishCommandState();
@@ -1991,6 +2022,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       clearOverlayFrame();
       setDocumentState({ status: "loading" });
       documentRenderState$.blockIds.set([]);
+      documentRenderState$.rowStatesById.set(new Map());
       const emptyBlockState = createMarkdownDocumentBlockState([]);
       commitBlockState(emptyBlockState);
       setActiveBlockId(null);
@@ -2014,6 +2046,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const nextBlockState = adapter.getBlockIds
             ? createMarkdownDocumentBlockStateFromIds(initialBlockIds)
             : createMarkdownDocumentBlockState(snapshot.initialBlocks);
+          loadedSnapshotRef.current = snapshot;
           commitBlockState(nextBlockState);
           setDocumentState({ status: "loaded", snapshot });
           logMarkdownDocumentDiagnostics("loaded", {
@@ -2057,6 +2090,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
 
           const nextError = error instanceof Error ? error : new Error(String(error));
+          loadedSnapshotRef.current = null;
           setDocumentState({ status: "error", error: nextError });
           onLoadErrorRef.current?.(nextError);
           onErrorRef.current?.(nextError);
@@ -2600,6 +2634,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       });
       selectedRenderBlockIdsRef.current = selectedBlockIds;
     }, [documentRenderState$, selectedBlockIds]);
+    useEffect(() => {
+      const previousCommentAnchorBlockId = commentAnchorBlockIdRef.current;
+      const nextCommentAnchorBlockId = commentAnchor?.blockId ?? null;
+      batch(() => {
+        if (previousCommentAnchorBlockId && previousCommentAnchorBlockId !== nextCommentAnchorBlockId) {
+          setBlockRowCommentAnchor(previousCommentAnchorBlockId, null);
+        }
+        if (nextCommentAnchorBlockId) {
+          setBlockRowCommentAnchor(nextCommentAnchorBlockId, commentAnchor ?? null);
+        }
+      });
+      commentAnchorBlockIdRef.current = nextCommentAnchorBlockId;
+    }, [commentAnchor, setBlockRowCommentAnchor]);
     const selectionToolbarAnchorValue = selectionToolbarAnchor === undefined ? null : selectionToolbarAnchor;
     const isSelectionToolbarEnabled = selectionToolbarEnabled ?? selectionToolbarAnchor !== undefined;
     useEffect(() => {
@@ -2616,14 +2663,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [onSelectionAnchorChange, selectionAnchor$]);
     const listExtraData = useMemo(
       () => ({
-        blockIds,
-        commentAnchor,
         renderCommentBubble,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
-        markdownRenderRevision,
       }),
-      [blockIds, commentAnchor, markdownRenderRevision, renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle],
+      [renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle],
     );
     const alwaysRenderActiveBlock = useMemo(
       () => (activeBlockId ? { keys: [activeBlockId] } : undefined),
@@ -2651,12 +2695,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           {...props}
           activeInputRef={activeInputRef}
           documentRenderState$={documentRenderState$}
+          getBlockCount={getBlockCount}
+          getBlockIdAtIndex={getBlockIdAtIndex}
           getBlockMetadata={getBlockAtIndexForRender}
-          hasNextBlock={props.index + 1 < blockIds.length}
-          hasPreviousBlock={props.index > 0}
-          commentAnchor={commentAnchor?.blockId === props.item ? commentAnchor : null}
           markdownLayout={resolvedMarkdownLayout}
-          markdownRenderRevision={markdownRenderRevision}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
           onBlurRef={handleEditorBlurRef}
@@ -2664,16 +2706,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onChangeSelectionRef={handleChangeSelectionRef}
           onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
           onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
-          previousBlockId={blockIds[props.index - 1]}
           renderCommentBubble={renderCommentBubble}
           selectionOverlayStyle={blockSelectionOverlayStyle}
         />
       ),
       [
         activateBlock,
-        blockIds,
-        commentAnchor,
         documentRenderState$,
+        getBlockCount,
+        getBlockIdAtIndex,
         getBlockAtIndexForRender,
         handleEditorBlurRef,
         handleChangeMarkdownRef,
@@ -2682,7 +2723,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         handleVerticalNavigationOutsideRef,
         renderCommentBubble,
         resolvedMarkdownLayout,
-        markdownRenderRevision,
         resolvedMarkdownStyle,
         blockSelectionOverlayStyle,
       ],

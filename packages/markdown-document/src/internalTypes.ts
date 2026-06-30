@@ -1,4 +1,4 @@
-import type { MarkdownBlockSnapshot, MarkdownDocumentSnapshot } from "./types";
+import type { MarkdownBlockSnapshot, MarkdownDocumentSnapshot, MarkdownSelectionAnchor } from "./types";
 
 export type DocumentState =
   | {
@@ -99,10 +99,16 @@ export type ActiveBlockRenderState = {
   selection: number;
 };
 
+export type MarkdownBlockRowRenderState = {
+  commentAnchor: MarkdownSelectionAnchor | null;
+  renderRevision: number;
+};
+
 export type MarkdownDocumentRenderState = {
   activeBlocksById: Map<string, ActiveBlockRenderState>;
   blockIds: string[];
   blockSelection: BlockSelectionState | null;
+  rowStatesById: Map<string, MarkdownBlockRowRenderState>;
   selectedBlocksById: Map<string, boolean>;
 };
 

@@ -181,10 +181,9 @@ export const MarkdownOverlayEditorInput = memo(
 
 export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   activeInputRef,
-  commentAnchor,
+  getBlockCount,
+  getBlockIdAtIndex,
   getBlockMetadata,
-  hasNextBlock,
-  hasPreviousBlock,
   onActivate,
   onBlurRef,
   onChangeMarkdownRef,
@@ -193,22 +192,18 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   onVerticalNavigationOutsideRef,
   documentRenderState$,
   markdownLayout,
-  markdownRenderRevision,
   markdownStyle,
-  previousBlockId,
   renderCommentBubble,
   selectionOverlayStyle,
   item: blockId,
   index,
 }: LegendListRenderItemProps<string> & {
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
-  commentAnchor?: MarkdownSelectionAnchor | null;
+  getBlockCount: () => number;
+  getBlockIdAtIndex: (index: number) => string | undefined;
   getBlockMetadata: (blockId: string, index: number) => MarkdownBlockMetadata | undefined;
-  hasNextBlock: boolean;
-  hasPreviousBlock: boolean;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
   markdownLayout: MarkdownDocumentLayout;
-  markdownRenderRevision: number;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onBlurRef: RefObject<() => void>;
@@ -216,17 +211,20 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
   onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
-  previousBlockId?: string;
   renderCommentBubble?: (anchor: MarkdownSelectionAnchor) => ReactNode;
   selectionOverlayStyle: StyleProp<ViewStyle>;
 }) {
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
+  const rowState = useValue(documentRenderState$.rowStatesById.get(blockId));
   const block = getBlockMetadata(blockId, index);
+  const previousBlockId = getBlockIdAtIndex(index - 1);
   const previousBlock = previousBlockId ? getBlockMetadata(previousBlockId, index - 1) : undefined;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
   const initialSelection = activeBlock?.selection ?? 0;
   const isActive = activeBlock !== undefined;
+  const hasPreviousBlock = index > 0;
+  const hasNextBlock = index + 1 < getBlockCount();
   const rowWidth$ = useObservable(700);
   const rowRef = useRef<View>(null);
 
@@ -242,6 +240,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
     ? { height: activeBlock.editorFrame.height + rowPaddingTop + rowPaddingBottom }
     : null;
+  const commentAnchor = rowState?.commentAnchor ?? null;
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
   const selectionOverlay = isBlockSelected ? (
     <View pointerEvents="none" style={selectionOverlayStyle} testID={`markdown-block-selection-overlay-${block.id}`} />
@@ -276,7 +275,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
 
   const markdownLength = block.markdownLength ?? (isMarkdownBlockSnapshot(block) ? block.markdown.length : 0);
   const isEmptyParagraph = block.type === "paragraph" && markdownLength === 0;
-  const renderRevision = block.textRevision + markdownRenderRevision / 1000;
+  const renderRevision = block.textRevision * 1000000 + (rowState?.renderRevision ?? 0);
   const markdown = isMarkdownBlockSnapshot(block) ? block.markdown : "";
   const renderedMarkdown = isEmptyParagraph ? (
     <View style={[styles.emptyParagraphPlaceholder, emptyParagraphPlaceholderStyle(markdownStyle)]} />
