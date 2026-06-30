@@ -895,8 +895,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
-            setDraftMarkdown(nextActiveBlock.markdown);
-            setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
+            if (updateReactState || !usesNativeEditorOverlay) {
+              setDraftMarkdown(nextActiveBlock.markdown);
+              setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
+            }
             setActiveBlockId(nextActiveBlock.id);
           } else {
             committedMarkdownRef.current = markdown;
@@ -1239,7 +1241,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
 
         draftMarkdownRef.current = markdown;
-        setDraftMarkdown(markdown);
+        if (!usesNativeEditorOverlay) {
+          setDraftMarkdown(markdown);
+        }
         updateRenderedBlockMarkdown(block.id, markdown);
         markDirty();
         commitActiveBlock({ updateReactState: false }).catch(reportAsyncError);
