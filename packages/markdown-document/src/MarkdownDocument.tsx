@@ -11,8 +11,6 @@ import {
   TextInput,
   View,
   type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -428,8 +426,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       updatedAt: number;
     } | undefined>(undefined);
     const selectionAnchorRequestRef = useRef(0);
-    const scrollOffsetYRef = useRef(0);
-    const scrollViewportHeightRef = useRef(0);
     const internalSelectionAnchor$ = useObservable<MarkdownSelectionAnchor | null>(null);
     const selectionAnchor$ = selectionAnchorProp$ ?? internalSelectionAnchor$;
     const documentRenderState$ = useObservable(createMarkdownDocumentRenderState);
@@ -677,7 +673,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 itemWidth,
                 itemY,
                 paragraphLineHeight,
-                scrollOffsetY: activeBlockLayout || nativeOverlayFrame ? 0 : scrollOffsetYRef.current,
+                scrollOffsetY: activeBlockLayout || nativeOverlayFrame ? 0 : (listRef.current?.getState().scroll ?? 0),
                 selectedLength,
               });
               publishTextSelectionAnchor(anchor);
@@ -1053,8 +1049,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const blockIdAtWindowY = useCallback((y: number, direction: "down" | "up") => {
-      const contentY = y - layoutMetrics$.containerWindowY.peek() + scrollOffsetYRef.current;
       const listState = listRef.current?.getState();
+      const contentY = y - layoutMetrics$.containerWindowY.peek() + (listState?.scroll ?? 0);
       return findBlockIdAtContentY({
         blockIds,
         direction,
@@ -1065,9 +1061,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const scrollBlockIntoView = useCallback((block: MarkdownBlockSnapshot) => {
       const blockIndex = blockStateRef.current.blockIds.indexOf(block.id);
-      const blockLayout = getBlockLayoutFromListState(listRef.current?.getState(), blockIndex);
-      const viewportHeight = scrollViewportHeightRef.current;
-      const currentScrollOffset = scrollOffsetYRef.current;
+      const listState = listRef.current?.getState();
+      const blockLayout = getBlockLayoutFromListState(listState, blockIndex);
+      const viewportHeight = listState?.scrollLength ?? 0;
+      const currentScrollOffset = listState?.scroll ?? 0;
 
       if (blockLayout && viewportHeight > 0) {
         const scrollMargin = 12;
@@ -1084,7 +1081,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
 
         if (nextScrollOffset !== undefined && nextScrollOffset !== currentScrollOffset) {
-          scrollOffsetYRef.current = nextScrollOffset;
           listRef.current?.scrollToOffset({ animated: true, offset: nextScrollOffset }).catch(reportAsyncError);
         }
       }
@@ -1118,7 +1114,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const measureContainerWindowLayout = useCallback((event?: LayoutChangeEvent) => {
       if (event) {
         const containerWidth = event.nativeEvent.layout.width;
-        scrollViewportHeightRef.current = event.nativeEvent.layout.height;
         const constrainedContentWidth = Math.min(containerWidth, resolvedContentMaxWidth);
         const nextContentWidth = Math.max(1, constrainedContentWidth - resolvedContentHorizontalPadding * 2);
         layoutMetrics$.contentContainerOffsetX.set(Math.max(0, (containerWidth - constrainedContentWidth) / 2));
@@ -2733,10 +2728,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         selectionAnchor$={selectionAnchor$}
       />
     ), [isSelectionToolbarEnabled, renderSelectionToolbar, selectionAnchor$, selectionToolbarAnchorPublisherProps]);
-    const handleListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
-      scrollViewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
-    }, []);
     const activeBlockStateForRender = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
     const activeBlock = activeBlockStateForRender?.block;
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
@@ -2852,7 +2843,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onLoad={() => {
             hydrateRemainingBlocks(documentState.snapshot, loadVersionRef.current);
           }}
-          onScroll={handleListScroll}
           recycleItems
           renderItem={renderMarkdownBlockRow}
           style={styles.list}

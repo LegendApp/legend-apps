@@ -3643,17 +3643,6 @@ describe("MarkdownDocument mounted editing", () => {
       y: 48,
     }));
 
-    const toolbarCallCount = renderSelectionToolbar.mock.calls.length;
-    const anchorChangeCallCount = onSelectionAnchorChange.mock.calls.length;
-    const list = renderer.root.find((node) => typeof node.props.onScroll === "function");
-
-    await act(async () => {
-      list.props.onScroll({ nativeEvent: { contentOffset: { y: 120 }, layoutMeasurement: { height: 400 } } });
-    });
-    await flushPromises();
-
-    expect(renderSelectionToolbar).toHaveBeenCalledTimes(toolbarCallCount);
-    expect(onSelectionAnchorChange).toHaveBeenCalledTimes(anchorChangeCallCount);
     expect(onError).not.toHaveBeenCalled();
   });
 

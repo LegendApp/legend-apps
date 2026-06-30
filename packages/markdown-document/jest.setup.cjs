@@ -55,7 +55,6 @@ jest.mock("@legendapp/list/react-native", () => {
       contentContainerStyle,
       ListFooterComponent,
       ListFooterComponentStyle,
-      onScroll,
     }, ref) {
       React.useImperativeHandle(ref, () => ({
         clearCaches,
@@ -64,6 +63,8 @@ jest.mock("@legendapp/list/react-native", () => {
           end: data.length - 1,
           endBuffered: data.length - 1,
           positionAtIndex: (index) => index * 25,
+          scroll: 0,
+          scrollLength: 400,
           sizeAtIndex: (index) => 25,
           start: 0,
           startBuffered: 0,
@@ -79,7 +80,7 @@ jest.mock("@legendapp/list/react-native", () => {
 
       return React.createElement(
         View,
-        { onScroll, style },
+        { style },
         React.createElement(
           View,
           { style: contentContainerStyle },

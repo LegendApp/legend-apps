@@ -236,10 +236,8 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     const host = nativeHost(renderer!);
-    const list = renderer!.root.find((node) => typeof node.props.onScroll === "function");
 
     await act(async () => {
-      list.props.onScroll({ nativeEvent: { contentOffset: { y: 120 }, layoutMeasurement: { height: 400 } } });
       host.props.onBeginEditing({
         nativeEvent: {
           blockId: "d1:b0",
