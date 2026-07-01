@@ -42,22 +42,26 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
     const shuffleEnabled = useValue(settings$.playback.shuffle);
     const repeatMode = useValue(settings$.playback.repeatMode);
     const playbackControlsLayout = usePlaybackControlLayout();
-    const localMusicState = useValue(localMusicState$);
-    const library = useValue(library$);
-    const queue = useValue(queue$);
+    const localTracks = useValue(localMusicState$.tracks);
+    const localPlaylists = useValue(localMusicState$.playlists);
+    const libraryTracks = useValue(library$.tracks);
+    const queueTracks = useValue(queue$.tracks);
     const { width: windowWidth } = useWindowDimensions();
     const [layoutWidth, setLayoutWidth] = useState(0);
     const dropdownMenuRef = useRef<DropdownMenuRootRef>(null);
 
-    const { playlistMap, tracksByPath } = usePlaylistOptions(localMusicState);
+    const { playlistMap, tracksByPath } = usePlaylistOptions({
+        tracks: localTracks,
+        playlists: localPlaylists,
+    });
     const { isLibraryOpen, toggleLibraryWindow } = useLibraryToggle();
     const { handleTrackSelect, handleLibraryItemSelect, handleSearchPlaylistSelect } = usePlaylistQueueHandlers({
         playlistMap,
         tracksByPath,
-        localTracks: localMusicState.tracks,
-        libraryTracks: library.tracks,
+        localTracks,
+        libraryTracks,
     });
-    const { handleSavePlaylist } = useQueueExporter({ queueTracks: queue.tracks });
+    const { handleSavePlaylist } = useQueueExporter({ queueTracks });
 
     const configuredControls = controlsOverride?.length
         ? controlsOverride
@@ -179,8 +183,8 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
                             <JumpSearchMenuDropdown
                                 key="search"
                                 ref={dropdownMenuRef}
-                                tracks={localMusicState.tracks}
-                                playlists={localMusicState.playlists}
+                                tracks={localTracks}
+                                playlists={localPlaylists}
                                 onSelectTrack={handleTrackSelect}
                                 onSelectLibraryItem={handleLibraryItemSelect}
                                 onSelectPlaylist={handleSearchPlaylistSelect}
@@ -191,7 +195,7 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
                         return SUPPORT_PLAYLISTS ? (
                             <SavePlaylistDropdown
                                 key="savePlaylist"
-                                disabled={queue.tracks.length === 0}
+                                disabled={queueTracks.length === 0}
                                 onSave={handleSavePlaylist}
                             />
                         ) : null;

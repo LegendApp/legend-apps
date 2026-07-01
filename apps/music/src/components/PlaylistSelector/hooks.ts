@@ -6,7 +6,7 @@ import { localAudioControls } from "@/components/LocalAudioPlayer";
 import { showToast } from "@/components/Toast";
 import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
 import type { LibraryItem, LibraryTrack } from "@/systems/LibraryState";
-import type { LocalMusicState, LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
 import {
     createLocalPlaylist,
     DEFAULT_LOCAL_PLAYLIST_ID,
@@ -36,7 +36,12 @@ interface UsePlaylistOptionsResult {
     tracksByPath: Map<string, LocalTrack>;
 }
 
-export function usePlaylistOptions(localMusicState: LocalMusicState): UsePlaylistOptionsResult {
+interface PlaylistOptionsSource {
+    tracks: LocalTrack[];
+    playlists: LocalPlaylist[];
+}
+
+export function usePlaylistOptions(localMusicState: PlaylistOptionsSource): UsePlaylistOptionsResult {
     const localFilesPlaylist = useMemo<PlaylistOption>(
         () => ({
             id: DEFAULT_LOCAL_PLAYLIST_ID,
