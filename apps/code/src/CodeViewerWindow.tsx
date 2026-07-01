@@ -111,7 +111,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   );
   const sourceRows = useSourceDocumentRows({
     backgroundTokenizationChunkLineCount: codeBackgroundTokenizationChunkLineCount,
-    debugName: "code",
     initialHighlightRowCount: sourceViewerInitialRequestRowCount,
     snapshot: documentSnapshot,
   });
@@ -291,7 +290,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       ) : null}
       {sourceRows.itemIndexes.length > 0 ? (
         <SourceDocumentView
-          debugName="code"
           initialRequestRowCount={sourceViewerInitialRequestRowCount}
           lineOverscan={sourceViewerLineOverscan}
           overscanRequestDelayMs={sourceViewerOverscanRequestDelayMs}

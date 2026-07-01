@@ -162,15 +162,6 @@ export type SourceDocumentTiming = {
 
 export type SourceDocumentSnapshot = VirtualizedDocumentSnapshot<SyntaxDocument, SyntaxRenderLine, SyntaxStyle, SourceDocumentTiming>;
 
-export type SourceDocumentRowsTrace = {
-  count: number;
-  document: SyntaxDocument;
-  finishedAt: number;
-  reason: VirtualizedDocumentRequestReason;
-  start: number;
-  startedAt: number;
-};
-
 export type SourceDocumentRowsState = VirtualizedDocumentRowsState<SyntaxRenderLine, SyntaxStyle, SourceDocumentTiming> & {
   getRow: (index: number) => SyntaxRenderLine | undefined;
   handleInitialRowsRequested: (start: number, count: number) => void;
@@ -180,11 +171,6 @@ export type UseSourceDocumentRowsOptions = {
   backgroundTokenizationChunkLineCount?: number;
   debugName?: string;
   initialHighlightRowCount?: number;
-  onBackgroundTokenizationStart?: (event: {
-    document: SyntaxDocument;
-    tokenizedLineCount: number;
-  }) => void;
-  onRowsFetched?: (trace: SourceDocumentRowsTrace, requestVersion: number) => void;
   snapshot: SourceDocumentSnapshot | null;
 };
 
@@ -223,36 +209,23 @@ export function useSourceDocumentRows({
   backgroundTokenizationChunkLineCount = 500,
   debugName,
   initialHighlightRowCount = sourceViewerInitialRequestRowCount,
-  onBackgroundTokenizationStart,
-  onRowsFetched,
   snapshot,
 }: UseSourceDocumentRowsOptions): SourceDocumentRowsState {
   const highlightedInitialRangeRef = useRef<string | null>(null);
   const backgroundTokenizationDocumentRef = useRef<SyntaxDocument | null>(null);
-  const requestVersionRef = useRef(0);
   const requestRows = useCallback((document: SyntaxDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const reason = options?.reason ?? "scroll";
-    const startedAt = nowMs();
     const shouldHighlight = reason === "highlight";
     if (shouldHighlight) {
       document.getRenderLines(start, count);
     }
-    requestVersionRef.current += 1;
-    onRowsFetched?.({
-      count,
-      document,
-      finishedAt: nowMs(),
-      reason,
-      start,
-      startedAt,
-    }, requestVersionRef.current);
     return shouldHighlight
       ? {
           styles: document.getStyles(),
           timing: toSourceDocumentTiming(document.getTiming(), 0),
         }
       : undefined;
-  }, [onRowsFetched]);
+  }, []);
   const getStyles = useCallback((document: SyntaxDocument) => document.getStyles(), []);
   const getTiming = useCallback((document: SyntaxDocument) => {
     return toSourceDocumentTiming(document.getTiming(), 0);
@@ -275,13 +248,9 @@ export function useSourceDocumentRows({
   const startBackgroundTokenization = useCallback((document: SyntaxDocument) => {
     if (backgroundTokenizationDocumentRef.current !== document) {
       backgroundTokenizationDocumentRef.current = document;
-      const tokenizedLineCount = document.startBackgroundTokenization(backgroundTokenizationChunkLineCount);
-      onBackgroundTokenizationStart?.({
-        document,
-        tokenizedLineCount,
-      });
+      document.startBackgroundTokenization(backgroundTokenizationChunkLineCount);
     }
-  }, [backgroundTokenizationChunkLineCount, onBackgroundTokenizationStart]);
+  }, [backgroundTokenizationChunkLineCount]);
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     virtualizedRows.requestRange(start, count, options);
     if (currentDocument && options?.reason === "overscan") {
