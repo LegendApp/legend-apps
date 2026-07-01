@@ -54,6 +54,8 @@ const formatAddedDate = (timestamp?: number): string => {
 export function TrackList(_props: TrackListProps) {
     const {
         tracks,
+        trackIds,
+        trackById,
         selectedIndices$,
         handleTrackClick,
         handleTrackDoubleClick,
@@ -264,7 +266,12 @@ export function TrackList(_props: TrackListProps) {
     );
 
     const renderTrack = useCallback(
-        ({ item, index }: { item: TrackData; index: number }) => {
+        ({ item: trackId, index }: { item: string; index: number }) => {
+            const item = trackById.get(trackId);
+            if (!item) {
+                return null;
+            }
+
             if (item.isSeparator) {
                 return <LibrarySeparatorRow title={item.title} />;
             }
@@ -318,16 +325,23 @@ export function TrackList(_props: TrackListProps) {
             selectedPlaylist,
             selectedIndices$,
             columns,
+            trackById,
         ],
     );
 
-    const getItemType = useCallback((item: TrackData) => {
-        return item.isSeparator ? "separator" : "track";
-    }, []);
+    const getItemType = useCallback(
+        (item: string) => {
+            return trackById.get(item)?.isSeparator ? "separator" : "track";
+        },
+        [trackById],
+    );
 
-    const getFixedItemSize = useCallback((item: TrackData, _index: number, type: string | undefined) => {
-        return item.isSeparator ? 72 : 32;
-    }, []);
+    const getFixedItemSize = useCallback(
+        (item: string, _index: number, _type: string | undefined) => {
+            return trackById.get(item)?.isSeparator ? 72 : 32;
+        },
+        [trackById],
+    );
 
     return (
         <View className="flex-1 pl-2 relative">
@@ -355,7 +369,7 @@ export function TrackList(_props: TrackListProps) {
             >
                 <LegendList
                     key={selectedView}
-                    data={tracks}
+                    data={trackIds}
                     keyExtractor={keyExtractor}
                     renderItem={renderTrack}
                     getItemType={getItemType}
@@ -371,7 +385,7 @@ export function TrackList(_props: TrackListProps) {
                     }
                     style={{ flex: 1 }}
                     contentContainerStyle={
-                        tracks.length
+                        trackIds.length
                             ? undefined
                             : {
                                   flexGrow: 1,

@@ -25,7 +25,6 @@ import { getQueueAction, type QueueAction } from "@/utils/queueActions";
 import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "@/utils/trackContextMenu";
 import { buildTrackLookup } from "@/utils/trackResolution";
 
-type TrackListItem = TrackData;
 type LibraryTrackListItem = TrackData & { sourceTrack?: LibraryTrack };
 
 const ADD_TO_PLAYLIST_MENU_ITEM: ContextMenuItem = { id: "add-to-playlist", title: "Add to Playlist…" };
@@ -190,6 +189,8 @@ const sortAlbumGroupTracks = (
 
 interface UseLibraryTrackListResult {
     tracks: TrackData[];
+    trackIds: string[];
+    trackById: ReadonlyMap<string, TrackData>;
     selectedIndices$: Observable<Set<number>>;
     handleTrackClick: (index: number, event?: NativeMouseEvent) => void;
     handleTrackDoubleClick: (index: number, event?: NativeMouseEvent) => void;
@@ -198,7 +199,7 @@ interface UseLibraryTrackListResult {
     syncSelectionAfterReorder: (fromIndex: number, toIndex: number) => void;
     handleNativeDragStart: () => void;
     buildDragData: (activeIndex: number) => MediaLibraryDragData;
-    keyExtractor: (item: TrackData) => string;
+    keyExtractor: (item: string) => string;
 }
 
 interface BuildTrackItemsInput {
@@ -483,6 +484,16 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
         ],
     );
 
+    const trackIds = useMemo(() => trackItems.map((track) => track.id), [trackItems]);
+
+    const trackById = useMemo(() => {
+        const byId = new Map<string, TrackData>();
+        for (const track of trackItems) {
+            byId.set(track.id, track);
+        }
+        return byId;
+    }, [trackItems]);
+
     const isSearchActive = searchQuery.trim().length > 0;
     const selectedPlaylist =
         selectedView === "playlist" && selectedPlaylistId
@@ -748,10 +759,12 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
         [handleSelectionClick, handleTrackAction],
     );
 
-    const keyExtractor = useCallback((item: TrackListItem) => item.id, []);
+    const keyExtractor = useCallback((item: string) => item, []);
 
     return {
         tracks: trackItems,
+        trackIds,
+        trackById,
         selectedIndices$,
         handleTrackClick,
         handleTrackDoubleClick,
