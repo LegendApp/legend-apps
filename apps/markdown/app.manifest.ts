@@ -18,6 +18,7 @@ const manifest = {
     macos: [
       "@legend-desktop/app-exit",
       "@legend-desktop/appkit-split-view",
+      "@legend-desktop/context-menu",
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/keyboard-manager",
