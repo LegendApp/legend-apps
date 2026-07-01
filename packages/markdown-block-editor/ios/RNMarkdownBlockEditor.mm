@@ -5,7 +5,7 @@
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/Props.h>
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/RCTComponentViewHelpers.h>
 
-#import <ReactNativeEnrichedMarkdown/ENRMNativeMarkdownProvider.h>
+#import <ReactNativeEnrichedMarkdown/EnrichedMarkdown.h>
 
 #include <RNMarkdownParser/MarkdownDocumentRegistry.hpp>
 
