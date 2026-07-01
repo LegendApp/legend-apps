@@ -12,6 +12,14 @@ import { state$ } from "@/systems/State";
 import packageJson from "../../package.json";
 
 export const GeneralSettings = function GeneralSettings() {
+    return (
+        <SettingsPage>
+            <GeneralSettingsContent />
+        </SettingsPage>
+    );
+};
+
+export function GeneralSettingsContent() {
     const globalHotkeyEnabled = useValue(settings$.general.globalHotkeyEnabled);
     const globalHotkey = useValue(settings$.general.globalHotkey);
     const globalHotkeyError = useValue(globalHotkeyStatus$.error);
@@ -22,7 +30,7 @@ export const GeneralSettings = function GeneralSettings() {
     // ];
 
     return (
-        <SettingsPage>
+        <>
             <SettingsSection title="Appearance" first>
                 {/* <SettingsRow
                     title="Playlist Style"
@@ -91,6 +99,6 @@ export const GeneralSettings = function GeneralSettings() {
                     </Button>
                 </View>
             </SettingsSection>
-        </SettingsPage>
+        </>
     );
-};
+}

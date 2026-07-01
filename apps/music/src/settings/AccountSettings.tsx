@@ -6,6 +6,14 @@ import { SettingsCard, SettingsPage, SettingsSection } from "@/settings/componen
 import { settings$ } from "@/systems/Settings";
 
 export function AccountSettings() {
+    return (
+        <SettingsPage>
+            <AccountSettingsContent />
+        </SettingsPage>
+    );
+}
+
+export function AccountSettingsContent() {
     const isRegistered = useValue(settings$.registration.isRegistered);
     const registrationType = useValue(settings$.registration.registrationType);
 
@@ -25,7 +33,7 @@ export function AccountSettings() {
 
     if (isRegistered) {
         return (
-            <SettingsPage>
+            <>
                 <SettingsCard className="flex flex-col gap-6 border-green-400/30 bg-green-500/20">
                     <Text className="text-2xl font-semibold text-white">✅ Registered</Text>
                     <Text className="text-white/90 text-lg leading-relaxed">
@@ -54,12 +62,12 @@ export function AccountSettings() {
                         <Text className="text-background-inverse font-semibold">Contact Support</Text>
                     </Button>
                 </SettingsCard>
-            </SettingsPage>
+            </>
         );
     }
 
     return (
-        <SettingsPage>
+        <>
             <SettingsSection
                 title="Legend Music is Free & Open Source"
                 description="Legend Music is completely free to use and open source. Your support helps us dedicate more time to improving the app and other Legend tools."
@@ -102,6 +110,6 @@ export function AccountSettings() {
                     Even if you choose not to register, you'll always have access to the full app.
                 </Text>
             </SettingsSection>
-        </SettingsPage>
+        </>
     );
 }

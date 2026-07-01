@@ -96,6 +96,14 @@ const PLAYBACK_CONTROL_MAP = Object.fromEntries(
 const PLAYBACK_DRAG_ZONE_ID = "customize-playback-controls";
 
 export function CustomizeUISettings() {
+    return (
+        <SettingsPage>
+            <CustomizeUISettingsContent />
+        </SettingsPage>
+    );
+}
+
+export function CustomizeUISettingsContent() {
     const playbackLayout = usePlaybackControlLayout();
 
     useObserveEffect(() => {
@@ -105,7 +113,7 @@ export function CustomizeUISettings() {
     const normalizedPlaybackLayout = useNormalizedLayout(playbackLayout, PLAYBACK_CONTROL_DEFINITIONS);
 
     return (
-        <SettingsPage>
+        <>
             <DragDropProvider>
                 <View className="flex flex-col gap-8">
                     <SettingsSection
@@ -122,7 +130,7 @@ export function CustomizeUISettings() {
                     </SettingsSection>
                 </View>
             </DragDropProvider>
-        </SettingsPage>
+        </>
     );
 }
 

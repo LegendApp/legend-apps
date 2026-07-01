@@ -26,6 +26,14 @@ const normalizeLibraryPath = (path: string): string => {
 };
 
 export const LibrarySettings = function LibrarySettings() {
+    return (
+        <SettingsPage>
+            <LibrarySettingsContent />
+        </SettingsPage>
+    );
+};
+
+export function LibrarySettingsContent() {
     const librarySettings = useValue(librarySettings$);
     const localMusicState = useValue(localMusicState$);
     const latestError = useValue(localMusicState$.error);
@@ -113,7 +121,7 @@ export const LibrarySettings = function LibrarySettings() {
     };
 
     return (
-        <SettingsPage>
+        <>
             <SettingsSection title="Library Paths" first>
                 {librarySettings.paths.length > 0 ? (
                     <View className="flex flex-col gap-2">
@@ -196,6 +204,6 @@ export const LibrarySettings = function LibrarySettings() {
                     </View>
                 ) : null}
             </SettingsSection>
-        </SettingsPage>
+        </>
     );
-};
+}

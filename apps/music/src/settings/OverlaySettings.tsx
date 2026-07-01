@@ -24,6 +24,14 @@ const horizontalOptions = [
 ];
 
 export const OverlaySettings = function OverlaySettings() {
+    return (
+        <SettingsPage>
+            <OverlaySettingsContent />
+        </SettingsPage>
+    );
+};
+
+export function OverlaySettingsContent() {
     const durationSeconds$ = settings$.overlay.displayDurationSeconds;
     const overlayEnabled = useValue(settings$.overlay.enabled);
     const durationText$ = useObservable(
@@ -45,7 +53,7 @@ export const OverlaySettings = function OverlaySettings() {
     );
 
     return (
-        <SettingsPage>
+        <>
             <SettingsSection title="Overlay Options" first>
                 <SettingsRow
                     title="Enable overlay"
@@ -93,6 +101,6 @@ export const OverlaySettings = function OverlaySettings() {
                     controlWrapperClassName="ml-6"
                 />
             </SettingsSection>
-        </SettingsPage>
+        </>
     );
-};
+}

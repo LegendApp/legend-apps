@@ -21,6 +21,14 @@ function applyMusicTheme(themeName: MusicThemeName) {
 }
 
 export const ThemeSettings = () => {
+    return (
+        <SettingsPage>
+            <ThemeSettingsContent />
+        </SettingsPage>
+    );
+};
+
+export function ThemeSettingsContent() {
     const { resetTheme } = useTheme();
     const appearance = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
     const selectedTheme = appearance.theme;
@@ -39,15 +47,18 @@ export const ThemeSettings = () => {
     };
 
     return (
-        <SettingsPage
-            actions={
-                <Button onClick={handleReset} variant="secondary" className="px-3 py-1.5 h-auto">
-                    <Text className="text-sm text-text-primary">Reset</Text>
-                </Button>
-            }
-            contentClassName="p-4"
-        >
-            <SettingsSection card={false} contentClassName="gap-3" first title="Theme">
+        <>
+            <SettingsSection
+                card={false}
+                contentClassName="gap-3"
+                first
+                headerRight={(
+                    <Button onClick={handleReset} variant="secondary" className="px-3 py-1.5 h-auto">
+                        <Text className="text-sm text-text-primary">Reset</Text>
+                    </Button>
+                )}
+                title="Theme"
+            >
                 <View accessibilityRole="radiogroup" className="gap-2">
                     {musicThemeOptions.map((theme) => {
                         const isSelected = selectedTheme === theme.value;
@@ -100,6 +111,6 @@ export const ThemeSettings = () => {
                 />
             </SettingsSection>
 
-        </SettingsPage>
+        </>
     );
-};
+}

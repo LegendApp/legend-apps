@@ -68,6 +68,14 @@ const libraries: Library[] = [
 ];
 
 export function OpenSourceSettings() {
+    return (
+        <SettingsPage>
+            <OpenSourceSettingsContent />
+        </SettingsPage>
+    );
+}
+
+export function OpenSourceSettingsContent() {
     const handleOpenLink = (url: string) => {
         Linking.openURL(url);
     };
@@ -77,7 +85,7 @@ export function OpenSourceSettings() {
     };
 
     return (
-        <SettingsPage>
+        <>
             <SettingsSection
                 title="Legend Music is Open Source"
                 description="Legend Music is completely free and open source. Contribute to development, explore the code, or build your own version."
@@ -129,6 +137,6 @@ export function OpenSourceSettings() {
                     </View>
                 ))}
             </SettingsSection>
-        </SettingsPage>
+        </>
     );
 }
