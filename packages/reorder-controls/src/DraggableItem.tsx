@@ -170,27 +170,12 @@ export const DraggableItem = <T,>({
         setPositionReady(false);
         draggedItem$.set(null);
 
-        // Animate back to the original position
-        const animation = Animated.timing(pan, {
-            toValue: { x: 0, y: 0 },
-            duration: isDropped ? 0 : 150, // If dropped, snap instantly
-            useNativeDriver: true,
-        });
-
-        // Start the animation and add a completion callback
-        animation.start(({ finished }) => {
-            if (finished) {
-                // Trigger the drag end callback
-                onDragEnd?.();
-
-                // Ensure pan is fully reset to prevent offset on next drag
-                pan.setOffset({ x: 0, y: 0 });
-                pan.setValue({ x: 0, y: 0 });
-                globalPositionRef.current = { x: 0, y: 0 };
-
-                // Reset portal position to avoid stale position on next drag
-                setPortalPosition({ top: 0, left: 0 });
-            }
+        pan.stopAnimation(() => {
+            onDragEnd?.();
+            pan.setOffset({ x: 0, y: 0 });
+            pan.setValue({ x: 0, y: 0 });
+            globalPositionRef.current = { x: 0, y: 0 };
+            setPortalPosition({ top: 0, left: 0 });
         });
     }, [activeDropZone$, draggedItem$, getDropZoneById, onDragEnd, pan]);
 
@@ -208,6 +193,7 @@ export const DraggableItem = <T,>({
 
             onPanResponderGrant: (e: GestureResponderEvent) => {
                 // Ensure clean state before starting a new drag
+                pan.stopAnimation();
                 pan.flattenOffset();
                 pan.setOffset({ x: 0, y: 0 });
                 pan.setValue({ x: 0, y: 0 });
