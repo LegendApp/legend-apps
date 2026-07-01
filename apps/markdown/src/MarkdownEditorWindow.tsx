@@ -1,10 +1,10 @@
+import { useWatchedDocumentReload } from "@legend-desktop/document-app";
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,
   type MarkdownDocumentProps,
   type MarkdownSelectionAnchor,
 } from "@legend-desktop/markdown-document";
-import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -240,35 +240,16 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
   const watchedFilePath = filename && documentSource !== "untitled" ? filename : null;
+  const shouldReload = useCallback(() => !session.sessionState$.isDirty.peek(), [session.sessionState$]);
+  const reloadDocument = useCallback(() => {
+    session.documentCommandsRef.current?.reload();
+  }, [session.documentCommandsRef]);
 
-  useEffect(() => {
-    if (!watchedFilePath) {
-      return undefined;
-    }
-
-    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = watchFiles([watchedFilePath], () => {
-      if (session.sessionState$.isDirty.peek()) {
-        return;
-      }
-
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      reloadTimeout = setTimeout(() => {
-        if (!session.sessionState$.isDirty.peek()) {
-          session.documentCommandsRef.current?.reload();
-        }
-      }, 100);
-    });
-
-    return () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      subscription.remove();
-    };
-  }, [session.documentCommandsRef, session.sessionState$, watchedFilePath]);
+  useWatchedDocumentReload({
+    onReload: reloadDocument,
+    path: watchedFilePath,
+    shouldReload,
+  });
 
   return null;
 }

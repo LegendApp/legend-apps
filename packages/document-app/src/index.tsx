@@ -1,4 +1,5 @@
 import { openFileDialog } from "@legend-desktop/file-dialog";
+import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
 import { addWindowClosedListener } from "@legend-desktop/window-manager";
@@ -27,6 +28,46 @@ export type OpenSelectedDocumentPathOptions = {
   isDocumentPath: (path: string) => boolean;
 };
 
+export type GetLaunchDocumentPathOptions = {
+  isDocumentPath: (path: string) => boolean;
+  launchArguments?: string[];
+};
+
+export type UseWatchedDocumentReloadOptions = {
+  delayMs?: number;
+  enabled?: boolean;
+  onReload: () => void;
+  path: string | null | undefined;
+  shouldReload?: () => boolean;
+};
+
+export function getPathExtension(path: string) {
+  return path.split(".").pop()?.toLowerCase();
+}
+
+export function pathMatchesExtensions(path: string, extensions: readonly string[]) {
+  const extension = getPathExtension(path);
+  return extension !== undefined && extensions.includes(extension);
+}
+
+export function getLaunchDocumentPath({
+  isDocumentPath,
+  launchArguments,
+}: GetLaunchDocumentPathOptions) {
+  const argv = typeof process !== "undefined" && Array.isArray(process.argv) ? process.argv : [];
+  return launchArguments?.find(isDocumentPath) ?? argv.find(isDocumentPath) ?? null;
+}
+
+export function getDirectory(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex > 0 ? path.slice(0, separatorIndex) : undefined;
+}
+
+export function getFilename(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+}
+
 export async function openSelectedDocumentPath({
   allowedFileTypes,
   invalidSelectionMessage,
@@ -49,6 +90,41 @@ export async function openSelectedDocumentPath({
   }
 
   return null;
+}
+
+export function useWatchedDocumentReload({
+  delayMs = 100,
+  enabled = true,
+  onReload,
+  path,
+  shouldReload,
+}: UseWatchedDocumentReloadOptions) {
+  useEffect(() => {
+    if (enabled && path) {
+      let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+      const subscription = watchFiles([path], () => {
+        if (!shouldReload || shouldReload()) {
+          if (reloadTimeout) {
+            clearTimeout(reloadTimeout);
+          }
+          reloadTimeout = setTimeout(() => {
+            if (!shouldReload || shouldReload()) {
+              onReload();
+            }
+          }, delayMs);
+        }
+      });
+
+      return () => {
+        if (reloadTimeout) {
+          clearTimeout(reloadTimeout);
+        }
+        subscription.remove();
+      };
+    }
+
+    return undefined;
+  }, [delayMs, enabled, onReload, path, shouldReload]);
 }
 
 export function useDocumentAppController({

@@ -1,5 +1,4 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { watchFiles } from "@legend-desktop/file-system-watcher";
+import { openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-desktop/document-app";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
   createSyntaxStyleMap,
@@ -209,19 +208,20 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   }, []);
 
   const openCodeDialog = useCallback(async () => {
-    const paths = await openFileDialog({
-      allowedFileTypes: codeFileTypes,
-      canChooseFiles: true,
-    });
-    const path = paths?.find(isCodePath) ?? null;
-
-    if (path) {
-      await loadFile(path, selectedSyntaxTheme, syntaxHighlightingEnabled);
-    } else if (paths && paths.length > 0) {
+    try {
+      const path = await openSelectedDocumentPath({
+        allowedFileTypes: codeFileTypes,
+        invalidSelectionMessage: `Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`,
+        isDocumentPath: isCodePath,
+      });
+      if (path) {
+        await loadFile(path, selectedSyntaxTheme, syntaxHighlightingEnabled);
+      }
+    } catch (error) {
       setState({
         status: "error",
         filePath: state.filePath,
-        error: `Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`,
+        error: error instanceof Error ? error.message : String(error),
         timing: null,
       });
     }
@@ -269,28 +269,15 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     }
   }, [loadFile, selectedSyntaxTheme, state, syntaxHighlightingEnabled]);
 
-  useEffect(() => {
-    if (!loadedFilePath) {
-      return undefined;
+  const reloadLoadedFile = useCallback(() => {
+    if (loadedFilePath) {
+      loadFile(loadedFilePath, selectedSyntaxTheme, syntaxHighlightingEnabled);
     }
-
-    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = watchFiles([loadedFilePath], () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      reloadTimeout = setTimeout(() => {
-        loadFile(loadedFilePath, selectedSyntaxTheme, syntaxHighlightingEnabled);
-      }, 100);
-    });
-
-    return () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      subscription.remove();
-    };
   }, [loadFile, loadedFilePath, selectedSyntaxTheme, syntaxHighlightingEnabled]);
+  useWatchedDocumentReload({
+    onReload: reloadLoadedFile,
+    path: loadedFilePath,
+  });
 
   useEffect(() => {
     setCodeViewerWindowOptions({
