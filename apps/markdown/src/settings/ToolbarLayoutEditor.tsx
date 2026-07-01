@@ -136,6 +136,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
               <DraggableItem<ToolbarDragData>
                 className="flex-shrink-0"
                 data={() => ({ group, itemId })}
+                dragHitPoint="center"
                 dragOverlayMode="local"
                 id={`${layoutId}-${group}-${itemId}`}
                 zoneId={zoneId}

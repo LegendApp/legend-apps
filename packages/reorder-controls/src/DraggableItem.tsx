@@ -26,6 +26,7 @@ interface DraggableItemProps<T = any> {
     zoneId: string;
     data: DragDataResolver<T>;
     children: ReactNode;
+    dragHitPoint?: "center" | "pointer";
     dragOverlayMode?: "local" | "portal";
     disabled?: boolean;
     onDragStart?: () => void;
@@ -38,6 +39,7 @@ export const DraggableItem = <T,>({
     zoneId,
     data,
     children,
+    dragHitPoint = "pointer",
     dragOverlayMode = "portal",
     disabled = false,
     onDragStart,
@@ -51,6 +53,7 @@ export const DraggableItem = <T,>({
     const [_layout, setLayout] = useState<LayoutRectangle | null>(null);
     const initialPositionRef = useRef({ pageX: 0, pageY: 0 });
     const initialEventPositionRef = useRef({ pageX: 0, pageY: 0 });
+    const initialItemCenterRef = useRef({ x: 0, y: 0 });
     const eventToMeasuredOffsetRef = useRef({ x: 0, y: 0 });
     const dragStartMetricsRef = useRef<DragStartMetrics | null>(null);
     const dragActivatedRef = useRef(false);
@@ -125,12 +128,16 @@ export const DraggableItem = <T,>({
             y: dragY,
         };
 
-        const currentX = hasPageCoordinates
-            ? coordinates.pageX - eventToMeasuredOffsetRef.current.x
-            : initialPositionRef.current.pageX + gestureState.dx;
-        const currentY = hasPageCoordinates
-            ? coordinates.pageY - eventToMeasuredOffsetRef.current.y
-            : initialPositionRef.current.pageY + gestureState.dy;
+        const currentX = dragHitPoint === "center"
+            ? initialItemCenterRef.current.x + dragX
+            : hasPageCoordinates
+                ? coordinates.pageX - eventToMeasuredOffsetRef.current.x
+                : initialPositionRef.current.pageX + gestureState.dx;
+        const currentY = dragHitPoint === "center"
+            ? initialItemCenterRef.current.y + dragY
+            : hasPageCoordinates
+                ? coordinates.pageY - eventToMeasuredOffsetRef.current.y
+                : initialPositionRef.current.pageY + gestureState.dy;
 
         checkDropZones(currentX, currentY);
     };
@@ -206,6 +213,7 @@ export const DraggableItem = <T,>({
                 pan.setValue({ x: 0, y: 0 });
                 globalPositionRef.current = { x: 0, y: 0 };
                 dragStartMetricsRef.current = null;
+                initialItemCenterRef.current = { x: 0, y: 0 };
                 // Reset position ready state
                 setPositionReady(false);
                 dragActivatedRef.current = false;
@@ -220,11 +228,19 @@ export const DraggableItem = <T,>({
                     pageX: coordinates.pageX,
                     pageY: coordinates.pageY,
                 };
+                initialItemCenterRef.current = {
+                    x: coordinates.pageX,
+                    y: coordinates.pageY,
+                };
                 eventToMeasuredOffsetRef.current = { x: 0, y: 0 };
 
                 viewRef.current?.measureInWindow((x, y, width, height) => {
                     const metrics = resolveDragStartMetrics(coordinates, { x, y, width, height });
                     dragStartMetricsRef.current = metrics;
+                    initialItemCenterRef.current = {
+                        x: x + width / 2,
+                        y: y + height / 2,
+                    };
                     initialPositionRef.current = {
                         pageX: metrics.pointerWindowX,
                         pageY: metrics.pointerWindowY,
@@ -263,6 +279,10 @@ export const DraggableItem = <T,>({
                         viewRef.current.measureInWindow((x, y, width, height) => {
                             const metrics = resolveDragStartMetrics(coordinates, { x, y, width, height });
                             dragStartMetricsRef.current = metrics;
+                            initialItemCenterRef.current = {
+                                x: x + width / 2,
+                                y: y + height / 2,
+                            };
                             eventToMeasuredOffsetRef.current = {
                                 x: coordinates.pageX - metrics.pointerWindowX,
                                 y: coordinates.pageY - metrics.pointerWindowY,
@@ -308,6 +328,7 @@ export const DraggableItem = <T,>({
         activeDropZone$,
         checkDropZones,
         disabled,
+        dragHitPoint,
         dragOverlayMode,
         draggedItem$,
         handleDragEnd,
