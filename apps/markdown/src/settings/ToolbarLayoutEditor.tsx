@@ -122,7 +122,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
           <Text className="text-text-tertiary" style={styles.groupCount}>{items.length}</Text>
         </View>
       </View>
-      <View className="py-2">
+      <View className="rounded-lg border border-border-primary/40 bg-background-primary/45 px-2 py-2">
         <View className={cn("flex-row flex-wrap items-center", hasItems ? undefined : "justify-center")}>
           <ToolbarDropZone
             index={0}
