@@ -1,5 +1,4 @@
-import { ThemeSelectorSection } from "@legend-desktop/appearance-settings";
-import { SegmentedOptions } from "@legend-desktop/design-system";
+import { SegmentedOptions, SelectControl } from "@legend-desktop/design-system";
 import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-desktop/theme";
 import {
   SettingsPage,
@@ -7,6 +6,7 @@ import {
   SettingsSection,
 } from "@legend-desktop/settings-window";
 import { useMemo } from "react";
+import { Text, View } from "react-native";
 import {
   setMarkdownContentWidthSetting,
   setMarkdownDocumentDensitySetting,
@@ -70,6 +70,12 @@ function formatThemeLabel(name: string) {
     .join(" ");
 }
 
+function getSelectedThemeValue(options: readonly { value: string }[], selectedTheme: string) {
+  return options.some((theme) => theme.value === selectedTheme)
+    ? selectedTheme
+    : options[0]?.value ?? selectedTheme;
+}
+
 export function AppearanceSettingsPage() {
   return (
     <SettingsPage>
@@ -98,21 +104,37 @@ export function AppearanceSettingsContent() {
 
   return (
     <>
-      <ThemeSelectorSection
+      <SettingsSection
         first
-        issues={userThemeLoadResult.displayThemes.issues}
-        onThemeChange={setMarkdownDisplayThemeSetting}
-        selectedTheme={selectedDisplayTheme}
-        themes={displayThemeOptions}
-        title="Display Theme"
-      />
-      <ThemeSelectorSection
-        issues={userThemeLoadResult.layoutThemes.issues}
-        onThemeChange={setMarkdownLayoutThemeSetting}
-        selectedTheme={selectedLayoutTheme}
-        themes={layoutThemeOptions}
-        title="Layout Theme"
-      />
+        title={null}
+      >
+        <SettingsRow
+          align="center"
+          control={(
+            <SelectControl
+              accessibilityLabel="Display Theme"
+              onChange={setMarkdownDisplayThemeSetting}
+              options={displayThemeOptions}
+              value={getSelectedThemeValue(displayThemeOptions, selectedDisplayTheme)}
+            />
+          )}
+          title="Display Theme"
+        />
+        <ThemeIssueMessages issues={userThemeLoadResult.displayThemes.issues} />
+        <SettingsRow
+          align="center"
+          control={(
+            <SelectControl
+              accessibilityLabel="Layout Theme"
+              onChange={setMarkdownLayoutThemeSetting}
+              options={layoutThemeOptions}
+              value={getSelectedThemeValue(layoutThemeOptions, selectedLayoutTheme)}
+            />
+          )}
+          title="Layout Theme"
+        />
+        <ThemeIssueMessages issues={userThemeLoadResult.layoutThemes.issues} />
+      </SettingsSection>
       <SettingsSection
         title="Document"
       >
@@ -178,5 +200,21 @@ export function AppearanceSettingsContent() {
         />
       </SettingsSection>
     </>
+  );
+}
+
+function ThemeIssueMessages({ issues }: { issues: readonly { filename: string; message: string }[] }) {
+  if (issues.length === 0) {
+    return null;
+  }
+
+  return (
+    <View className="gap-1 px-4 pb-3.5">
+      {issues.map((issue) => (
+        <Text className="text-sm text-text-secondary" key={`${issue.filename}-${issue.message}`}>
+          {issue.filename}: {issue.message}
+        </Text>
+      ))}
+    </View>
   );
 }
