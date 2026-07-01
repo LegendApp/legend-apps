@@ -5,6 +5,7 @@
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
+    "@legendapp/list": "catalog:",
     "@legend-desktop/appkit-split-view": "0.0.0",
     "@legend-desktop/classnames": "0.0.0",
     "@legend-desktop/window-manager": "0.0.0"

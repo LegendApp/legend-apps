@@ -1,3 +1,8 @@
+import {
+  LegendList,
+  type LegendListRef,
+  type LegendListRenderItemProps,
+} from "@legendapp/list/react-native";
 import { cn } from "@legend-desktop/classnames";
 import {
   SidebarSplitView,
@@ -9,8 +14,7 @@ import {
   WindowStyleMask,
   type WindowOptions,
 } from "@legend-desktop/window-manager";
-import { Children, Fragment, type ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Children, Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -26,6 +30,12 @@ export type SettingsWindowPage<PageId extends string = string> = {
   id: PageId;
   title: string;
   render: () => ReactNode;
+};
+
+export type VirtualizedSettingsWindowPage<PageId extends string = string> = {
+  id: PageId;
+  title: string;
+  renderContent: () => ReactNode;
 };
 
 export type CreateSettingsWindowOptionsInput = Omit<WindowOptions, "windowStyle" | "transparentBackground"> & {
@@ -85,6 +95,19 @@ type SettingsWindowProps<PageId extends string = string> = {
   pages: readonly SettingsWindowPage<PageId>[];
   sidebarMinWidth?: number;
   windowIdentifier: string;
+};
+
+type VirtualizedSettingsWindowProps<PageId extends string = string> = {
+  appearance?: SidebarSplitViewAppearance;
+  backgroundClassName?: string;
+  contentBackgroundClassName?: string;
+  contentMinWidth?: number;
+  defaultPageId?: PageId;
+  estimatedItemSize?: number;
+  initialPage?: string;
+  pages: readonly VirtualizedSettingsWindowPage<PageId>[];
+  sidebarMinWidth?: number;
+  windowIdentifier?: string;
 };
 
 function reportSettingsWindowError(error: unknown) {
@@ -151,6 +174,129 @@ export function SettingsWindow<PageId extends string = string>({
         <SettingsToolbarBackground />
       </View>
     </SidebarSplitView>
+  );
+}
+
+export function VirtualizedSettingsWindow<PageId extends string = string>({
+  appearance = "system",
+  backgroundClassName = "bg-background",
+  contentBackgroundClassName = backgroundClassName,
+  contentMinWidth = 340,
+  defaultPageId,
+  estimatedItemSize = 520,
+  initialPage,
+  pages,
+  sidebarMinWidth = 180,
+  windowIdentifier,
+}: VirtualizedSettingsWindowProps<PageId>) {
+  const listRef = useRef<LegendListRef | null>(null);
+  const initialSelectedPage = useMemo(() => {
+    const fallback = defaultPageId ?? pages[0]?.id;
+    return pages.find((page) => page.id === initialPage)?.id ?? fallback;
+  }, [defaultPageId, initialPage, pages]);
+  const [selectedPage, setSelectedPage] = useState<PageId | undefined>(initialSelectedPage);
+  const pageIndexById = useMemo(() => new Map(pages.map((page, index) => [page.id, index])), [pages]);
+
+  useEffect(() => {
+    if (windowIdentifier) {
+      setWindowOptions(windowIdentifier, {
+        windowStyle: {
+          appearance,
+        },
+      }).catch(reportSettingsWindowError);
+    }
+  }, [appearance, windowIdentifier]);
+
+  useEffect(() => {
+    const initialIndex = initialSelectedPage ? pageIndexById.get(initialSelectedPage) : undefined;
+    if (initialIndex && initialIndex > 0) {
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({
+          animated: false,
+          index: initialIndex,
+          viewOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
+          viewPosition: 0,
+        }).catch(reportSettingsWindowError);
+      });
+    }
+  }, [initialSelectedPage, pageIndexById]);
+
+  const scrollToPage = useCallback((pageId: PageId) => {
+    const index = pageIndexById.get(pageId);
+    if (index !== undefined) {
+      setSelectedPage(pageId);
+      listRef.current?.scrollToIndex({
+        animated: true,
+        index,
+        viewOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
+        viewPosition: 0,
+      }).catch(reportSettingsWindowError);
+    }
+  }, [pageIndexById]);
+
+  const handleFirstVisibleItemChanged = useCallback((info: { index: number }) => {
+    const page = pages[info.index];
+    if (page) {
+      setSelectedPage(page.id);
+    }
+  }, [pages]);
+
+  const renderSettingsPage = useCallback((props: LegendListRenderItemProps<VirtualizedSettingsWindowPage<PageId>>) => (
+    <VirtualizedSettingsListPageRow {...props} />
+  ), []);
+
+  if (!selectedPage) {
+    return null;
+  }
+
+  return (
+    <SidebarSplitView
+      appearance={appearance}
+      className={cn("flex-1", backgroundClassName)}
+      contentMinWidth={contentMinWidth}
+      sidebarMinWidth={sidebarMinWidth}
+      style={styles.root}
+    >
+      <View className="flex-1 overflow-hidden" style={styles.pane}>
+        <SettingsSidebar
+          onSelectionChange={scrollToPage}
+          pages={pages}
+          selectedPage={selectedPage}
+        />
+        <SettingsToolbarBackground />
+      </View>
+      <View className={cn("flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
+        <LegendList
+          contentContainerStyle={styles.virtualizedSettingsListContent}
+          data={pages}
+          estimatedItemSize={estimatedItemSize}
+          keyExtractor={virtualizedSettingsPageKeyExtractor}
+          onFirstVisibleItemChanged={handleFirstVisibleItemChanged}
+          ref={listRef}
+          renderItem={renderSettingsPage}
+          style={styles.virtualizedSettingsList}
+        />
+        <SettingsToolbarBackground />
+      </View>
+    </SidebarSplitView>
+  );
+}
+
+const virtualizedSettingsPageKeyExtractor = (page: VirtualizedSettingsWindowPage) => page.id;
+
+function VirtualizedSettingsListPageRow<PageId extends string>({
+  index,
+  item,
+}: LegendListRenderItemProps<VirtualizedSettingsWindowPage<PageId>>) {
+  return (
+    <View className="flex-col gap-5" style={index > 0 ? styles.virtualizedSettingsListPageAfterFirst : undefined}>
+      <View className="flex-col gap-1.5">
+        <Text className="text-xl font-semibold text-text-primary leading-tight">{item.title}</Text>
+      </View>
+      <View className="flex-col">
+        {item.renderContent()}
+      </View>
+    </View>
   );
 }
 
@@ -363,6 +509,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
     width: "100%",
+  },
+  virtualizedSettingsList: {
+    flex: 1,
+  },
+  virtualizedSettingsListContent: {
+    alignSelf: "center",
+    flexDirection: "column",
+    maxWidth: 896,
+    paddingBottom: 28,
+    paddingHorizontal: 30,
+    paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
+    width: "100%",
+  },
+  virtualizedSettingsListPageAfterFirst: {
+    marginTop: 42,
   },
   pane: {
     flex: 1,
