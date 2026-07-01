@@ -7,8 +7,11 @@ import {
   SidebarSplitView,
   type SidebarSplitViewAppearance,
 } from "@legend-desktop/appkit-split-view";
+import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
 import {
+  SettingsRow,
   SettingsSidebar,
+  SettingsSection,
 } from "@legend-desktop/settings-window";
 import { SyntaxThemeSelectorSection } from "@legend-desktop/syntax-settings";
 import { setWindowOptions } from "@legend-desktop/window-manager";
@@ -16,7 +19,17 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { StyleSheet, Text, View } from "react-native";
 import { codeSettingsWindowIdentifier } from "./appConstants";
 import {
+  codeFontFamilyOptions,
+  codeFontSizeOptions,
+  setCodeFontFamilySetting,
+  setCodeFontSizeSetting,
+  setCodeSyntaxHighlightingEnabledSetting,
+  setCodeSyntaxPrewarmEnabledSetting,
   setCodeSyntaxThemeSetting,
+  useCodeFontFamilySetting,
+  useCodeFontSizeSetting,
+  useCodeSyntaxHighlightingEnabledSetting,
+  useCodeSyntaxPrewarmEnabledSetting,
   useCodeSyntaxTheme,
   useCodeSyntaxThemeSetting,
 } from "./codeSettings";
@@ -31,15 +44,79 @@ type CodeSettingsListPage = {
 
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
 
+const codeFontSizeSettingOptions = codeFontSizeOptions.map((fontSize) => ({
+  label: String(fontSize),
+  value: fontSize,
+}));
+
 function AppearanceSettingsContent() {
+  const fontFamily = useCodeFontFamilySetting();
+  const fontSize = useCodeFontSizeSetting();
+  const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
+  const syntaxPrewarmEnabled = useCodeSyntaxPrewarmEnabledSetting();
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
 
   return (
-    <SyntaxThemeSelectorSection
+    <SettingsSection
       first
-      onThemeChange={setCodeSyntaxThemeSetting}
-      selectedTheme={selectedSyntaxTheme}
-    />
+      title={null}
+    >
+      <SettingsRow
+        align="center"
+        control={(
+          <SelectControl
+            accessibilityLabel="Code font"
+            onChange={setCodeFontFamilySetting}
+            options={codeFontFamilyOptions}
+            value={fontFamily}
+          />
+        )}
+        title="Font"
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SelectControl
+            accessibilityLabel="Code font size"
+            onChange={setCodeFontSizeSetting}
+            options={codeFontSizeSettingOptions}
+            value={fontSize}
+          />
+        )}
+        title="Font size"
+      />
+      <SyntaxThemeSelectorSection
+        description={null}
+        onThemeChange={setCodeSyntaxThemeSetting}
+        rowDescription={null}
+        selectedTheme={selectedSyntaxTheme}
+        title={null}
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Syntax highlighting"
+            checked={syntaxHighlightingEnabled}
+            onChange={setCodeSyntaxHighlightingEnabledSetting}
+          />
+        )}
+        title="Syntax highlighting"
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Prewarm highlighters"
+            checked={syntaxPrewarmEnabled}
+            disabled={!syntaxHighlightingEnabled}
+            onChange={setCodeSyntaxPrewarmEnabledSetting}
+          />
+        )}
+        disabled={!syntaxHighlightingEnabled}
+        title="Prewarm highlighters"
+      />
+    </SettingsSection>
   );
 }
 

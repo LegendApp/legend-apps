@@ -30,7 +30,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { codeBackgroundTokenizationChunkLineCount, codeFileTypes, codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
-import { useCodeSyntaxTheme, useCodeSyntaxThemeSetting, type CodeSettingsFile } from "./codeSettings";
+import {
+  useCodeFontFamilySetting,
+  useCodeFontSizeSetting,
+  useCodeSyntaxHighlightingEnabledSetting,
+  useCodeSyntaxTheme,
+  useCodeSyntaxThemeSetting,
+  type CodeSettingsFile,
+} from "./codeSettings";
 import { codeViewerFileRequest$ } from "./codeViewerRequests";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
@@ -87,8 +94,15 @@ function formatTimingSummary(timing: CodeViewerTiming) {
 
 type CodeViewerTiming = SourceDocumentTiming;
 
+function getCodeLineRowHeight(fontSize: number) {
+  return Math.max(20, fontSize + 9);
+}
+
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
+  const fontFamily = useCodeFontFamilySetting();
+  const fontSize = useCodeFontSizeSetting();
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
+  const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
   const syntaxTheme = useCodeSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const [state, setState] = useState<CodeViewerState>(emptyState);
@@ -112,6 +126,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const sourceRows = useSourceDocumentRows({
     backgroundTokenizationChunkLineCount: codeBackgroundTokenizationChunkLineCount,
     initialHighlightRowCount: sourceViewerInitialRequestRowCount,
+    syntaxHighlightingEnabled,
     snapshot: documentSnapshot,
   });
   const currentDocument = state.status === "loaded" ? state.document : null;
@@ -123,6 +138,20 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const mutedColor = displayTheme.colors.muted;
   const foregroundColor = syntaxTheme.foreground;
   const borderColor = displayTheme.colors.border;
+  const rowHeight = getCodeLineRowHeight(fontSize);
+  const lineTextStyle = useMemo(() => ({
+    fontFamily,
+    fontSize,
+    lineHeight: rowHeight,
+  }), [fontFamily, fontSize, rowHeight]);
+  const lineNumberStyle = useMemo(() => ({
+    fontFamily,
+    fontSize: Math.max(10, fontSize - 1),
+    lineHeight: rowHeight,
+  }), [fontFamily, fontSize, rowHeight]);
+  const lineRowStyle = useMemo(() => ({
+    height: rowHeight,
+  }), [rowHeight]);
 
   useEffect(() => {
     if (__DEV__) {
@@ -136,7 +165,11 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     };
   }, [currentDocument]);
 
-  const loadFile = useCallback(async (filePath: string, syntaxThemeName: CodeSettingsFile["syntaxTheme"]) => {
+  const loadFile = useCallback(async (
+    filePath: string,
+    syntaxThemeName: CodeSettingsFile["syntaxTheme"],
+    shouldHighlightSyntax: boolean,
+  ) => {
     const loadStartedAt = nowMs();
 
     try {
@@ -145,7 +178,12 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         filePath,
         error: null,
       });
-      const highlighted = await loadCodeFile(filePath, getCodeLanguage(filePath), syntaxThemeName, codeInitialLineCount);
+      const highlighted = await loadCodeFile(
+        filePath,
+        getCodeLanguage(filePath),
+        syntaxThemeName,
+        shouldHighlightSyntax ? codeInitialLineCount : 0,
+      );
       const loadFinishedAt = nowMs();
       const timing = toSourceDocumentTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
 
@@ -178,7 +216,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     const path = paths?.find(isCodePath) ?? null;
 
     if (path) {
-      await loadFile(path, selectedSyntaxTheme);
+      await loadFile(path, selectedSyntaxTheme, syntaxHighlightingEnabled);
     } else if (paths && paths.length > 0) {
       setState({
         status: "error",
@@ -187,7 +225,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         timing: null,
       });
     }
-  }, [loadFile, selectedSyntaxTheme, state.filePath]);
+  }, [loadFile, selectedSyntaxTheme, state.filePath, syntaxHighlightingEnabled]);
 
   const renderLine = useCallback(
     ({ index: lineIndex, row: line }: VirtualizedFixedDocumentListRenderRowProps<SyntaxRenderLine>) => {
@@ -196,20 +234,23 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           foregroundColor={foregroundColor}
           index={lineIndex}
           line={line}
+          lineNumberStyle={lineNumberStyle}
           mutedColor={mutedColor}
+          rowStyle={lineRowStyle}
+          textStyle={lineTextStyle}
           tokenStyleById={tokenStyleById}
         />
       );
     },
-    [foregroundColor, mutedColor, tokenStyleById],
+    [foregroundColor, lineNumberStyle, lineRowStyle, lineTextStyle, mutedColor, tokenStyleById],
   );
 
   useEffect(() => {
     if (launchFile && loadedLaunchFileRef.current !== launchFile) {
       loadedLaunchFileRef.current = launchFile;
-      loadFile(launchFile, selectedSyntaxTheme);
+      loadFile(launchFile, selectedSyntaxTheme, syntaxHighlightingEnabled);
     }
-  }, [launchFile, loadFile, selectedSyntaxTheme]);
+  }, [launchFile, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
 
   useEffect(() => {
     if (
@@ -218,15 +259,15 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     ) {
       loadedFileRequestVersionRef.current = fileRequest.version;
       loadedLaunchFileRef.current = fileRequest.path;
-      loadFile(fileRequest.path, selectedSyntaxTheme);
+      loadFile(fileRequest.path, selectedSyntaxTheme, syntaxHighlightingEnabled);
     }
-  }, [fileRequest.path, fileRequest.version, loadFile, selectedSyntaxTheme]);
+  }, [fileRequest.path, fileRequest.version, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
 
   useEffect(() => {
     if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
-      loadFile(state.filePath, selectedSyntaxTheme);
+      loadFile(state.filePath, selectedSyntaxTheme, syntaxHighlightingEnabled);
     }
-  }, [loadFile, selectedSyntaxTheme, state]);
+  }, [loadFile, selectedSyntaxTheme, state, syntaxHighlightingEnabled]);
 
   useEffect(() => {
     if (!loadedFilePath) {
@@ -239,7 +280,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         clearTimeout(reloadTimeout);
       }
       reloadTimeout = setTimeout(() => {
-        loadFile(loadedFilePath, selectedSyntaxTheme);
+        loadFile(loadedFilePath, selectedSyntaxTheme, syntaxHighlightingEnabled);
       }, 100);
     });
 
@@ -249,7 +290,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       }
       subscription.remove();
     };
-  }, [loadFile, loadedFilePath, selectedSyntaxTheme]);
+  }, [loadFile, loadedFilePath, selectedSyntaxTheme, syntaxHighlightingEnabled]);
 
   useEffect(() => {
     setCodeViewerWindowOptions({
@@ -294,6 +335,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           lineOverscan={sourceViewerLineOverscan}
           overscanRequestDelayMs={sourceViewerOverscanRequestDelayMs}
           renderRow={renderLine}
+          rowHeight={rowHeight}
           sourceRows={sourceRows}
           style={styles.list}
         />

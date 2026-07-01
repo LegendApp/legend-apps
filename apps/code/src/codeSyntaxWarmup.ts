@@ -3,11 +3,15 @@ import {
   warmSyntaxHighlighters,
   type SyntaxHighlighterWarmupResult,
 } from "@legend-desktop/syntax-parser";
-import { getCodeSyntaxThemeSetting } from "./codeSettings";
+import { getCodeSyntaxPrewarmEnabledSetting, getCodeSyntaxThemeSetting } from "./codeSettings";
 
 let warmupPromise: Promise<SyntaxHighlighterWarmupResult[]> | null = null;
 
-export function warmCodeSyntaxHighlighters(languages = ["tsx"]) {
+export function warmCodeSyntaxHighlighters(languages = ["tsx", "typescript"]) {
+  if (!getCodeSyntaxPrewarmEnabledSetting()) {
+    return Promise.resolve([]);
+  }
+
   const installedLanguages = languages.filter(isSyntaxGrammarInstalled);
   if (installedLanguages.length === 0) {
     return Promise.resolve([]);

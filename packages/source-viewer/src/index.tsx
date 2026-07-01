@@ -171,6 +171,7 @@ export type UseSourceDocumentRowsOptions = {
   backgroundTokenizationChunkLineCount?: number;
   debugName?: string;
   initialHighlightRowCount?: number;
+  syntaxHighlightingEnabled?: boolean;
   snapshot: SourceDocumentSnapshot | null;
 };
 
@@ -209,13 +210,14 @@ export function useSourceDocumentRows({
   backgroundTokenizationChunkLineCount = 500,
   debugName,
   initialHighlightRowCount = sourceViewerInitialRequestRowCount,
+  syntaxHighlightingEnabled = true,
   snapshot,
 }: UseSourceDocumentRowsOptions): SourceDocumentRowsState {
   const highlightedInitialRangeRef = useRef<string | null>(null);
   const backgroundTokenizationDocumentRef = useRef<SyntaxDocument | null>(null);
   const requestRows = useCallback((document: SyntaxDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const reason = options?.reason ?? "scroll";
-    const shouldHighlight = reason === "highlight";
+    const shouldHighlight = syntaxHighlightingEnabled && reason === "highlight";
     if (shouldHighlight) {
       document.getRenderLines(start, count);
     }
@@ -223,9 +225,9 @@ export function useSourceDocumentRows({
       ? {
           styles: document.getStyles(),
           timing: toSourceDocumentTiming(document.getTiming(), 0),
-        }
+      }
       : undefined;
-  }, []);
+  }, [syntaxHighlightingEnabled]);
   const getStyles = useCallback((document: SyntaxDocument) => document.getStyles(), []);
   const getTiming = useCallback((document: SyntaxDocument) => {
     return toSourceDocumentTiming(document.getTiming(), 0);
@@ -246,17 +248,17 @@ export function useSourceDocumentRows({
     return undefined;
   }, [currentDocument]);
   const startBackgroundTokenization = useCallback((document: SyntaxDocument) => {
-    if (backgroundTokenizationDocumentRef.current !== document) {
+    if (syntaxHighlightingEnabled && backgroundTokenizationDocumentRef.current !== document) {
       backgroundTokenizationDocumentRef.current = document;
       document.startBackgroundTokenization(backgroundTokenizationChunkLineCount);
     }
-  }, [backgroundTokenizationChunkLineCount]);
+  }, [backgroundTokenizationChunkLineCount, syntaxHighlightingEnabled]);
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     virtualizedRows.requestRange(start, count, options);
-    if (currentDocument && options?.reason === "overscan") {
+    if (currentDocument && syntaxHighlightingEnabled && options?.reason === "overscan") {
       startBackgroundTokenization(currentDocument);
     }
-  }, [currentDocument, startBackgroundTokenization, virtualizedRows]);
+  }, [currentDocument, startBackgroundTokenization, syntaxHighlightingEnabled, virtualizedRows]);
 
   useEffect(() => () => {
     currentDocument?.stopBackgroundTokenization();
@@ -271,7 +273,15 @@ export function useSourceDocumentRows({
   }, [currentDocument]);
 
   useEffect(() => {
-    if (currentDocument) {
+    if (!syntaxHighlightingEnabled) {
+      currentDocument?.stopBackgroundTokenization();
+      highlightedInitialRangeRef.current = null;
+      backgroundTokenizationDocumentRef.current = null;
+    }
+  }, [currentDocument, syntaxHighlightingEnabled]);
+
+  useEffect(() => {
+    if (currentDocument && syntaxHighlightingEnabled) {
       const initialHighlightCount = Math.min(initialHighlightRowCount, currentDocument.lineCount);
       const rangeKey = `0:${initialHighlightCount}`;
       if (initialHighlightCount > 0 && highlightedInitialRangeRef.current !== rangeKey) {
@@ -284,7 +294,7 @@ export function useSourceDocumentRows({
         });
       }
     }
-  }, [currentDocument, initialHighlightRowCount, requestRange]);
+  }, [currentDocument, initialHighlightRowCount, requestRange, syntaxHighlightingEnabled]);
 
   const handleInitialRowsRequested = useCallback((_start: number, _count: number) => {
     highlightedInitialRangeRef.current = null;
