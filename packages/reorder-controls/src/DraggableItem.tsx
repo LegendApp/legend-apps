@@ -17,11 +17,16 @@ type DragDataResolver<T> = T | (() => T);
 const DRAG_ACTIVATION_DISTANCE = 8;
 const DRAG_ACTIVATION_DELAY_MS = 120;
 
+function finiteNumber(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
 interface DraggableItemProps<T = any> {
     id: string;
     zoneId: string;
     data: DragDataResolver<T>;
     children: ReactNode;
+    dragOverlayMode?: "local" | "portal";
     disabled?: boolean;
     onDragStart?: () => void;
     onDragEnd?: () => void;
@@ -33,6 +38,7 @@ export const DraggableItem = <T,>({
     zoneId,
     data,
     children,
+    dragOverlayMode = "portal",
     disabled = false,
     onDragStart,
     onDragEnd,
@@ -44,6 +50,8 @@ export const DraggableItem = <T,>({
     // State for tracking position and dimensions
     const [_layout, setLayout] = useState<LayoutRectangle | null>(null);
     const initialPositionRef = useRef({ pageX: 0, pageY: 0 });
+    const initialEventPositionRef = useRef({ pageX: 0, pageY: 0 });
+    const eventToMeasuredOffsetRef = useRef({ x: 0, y: 0 });
     const dragStartMetricsRef = useRef<DragStartMetrics | null>(null);
     const dragActivatedRef = useRef(false);
     const dragStartTimeRef = useRef(0);
@@ -96,6 +104,36 @@ export const DraggableItem = <T,>({
         pageX: event.nativeEvent.pageX,
         pageY: event.nativeEvent.pageY,
     });
+
+    const updateDragPosition = (event: GestureResponderEvent, gestureState: { dx: number; dy: number }) => {
+        const coordinates = eventCoordinates(event);
+        const hasPageCoordinates = finiteNumber(coordinates.pageX) && finiteNumber(coordinates.pageY);
+        const dragX = hasPageCoordinates
+            ? coordinates.pageX - initialEventPositionRef.current.pageX
+            : gestureState.dx;
+        const dragY = hasPageCoordinates
+            ? coordinates.pageY - initialEventPositionRef.current.pageY
+            : gestureState.dy;
+
+        pan.setValue({
+            x: dragX,
+            y: dragY,
+        });
+
+        globalPositionRef.current = {
+            x: dragX,
+            y: dragY,
+        };
+
+        const currentX = hasPageCoordinates
+            ? coordinates.pageX - eventToMeasuredOffsetRef.current.x
+            : initialPositionRef.current.pageX + gestureState.dx;
+        const currentY = hasPageCoordinates
+            ? coordinates.pageY - eventToMeasuredOffsetRef.current.y
+            : initialPositionRef.current.pageY + gestureState.dy;
+
+        checkDropZones(currentX, currentY);
+    };
 
     // Shared function to handle drag end
     const handleDragEnd = useCallback(() => {
@@ -178,9 +216,23 @@ export const DraggableItem = <T,>({
                     pageX: coordinates.pageX,
                     pageY: coordinates.pageY,
                 };
+                initialEventPositionRef.current = {
+                    pageX: coordinates.pageX,
+                    pageY: coordinates.pageY,
+                };
+                eventToMeasuredOffsetRef.current = { x: 0, y: 0 };
 
                 viewRef.current?.measureInWindow((x, y, width, height) => {
-                    dragStartMetricsRef.current = resolveDragStartMetrics(coordinates, { x, y, width, height });
+                    const metrics = resolveDragStartMetrics(coordinates, { x, y, width, height });
+                    dragStartMetricsRef.current = metrics;
+                    initialPositionRef.current = {
+                        pageX: metrics.pointerWindowX,
+                        pageY: metrics.pointerWindowY,
+                    };
+                    eventToMeasuredOffsetRef.current = {
+                        x: coordinates.pageX - metrics.pointerWindowX,
+                        y: coordinates.pageY - metrics.pointerWindowY,
+                    };
                 });
             },
 
@@ -199,9 +251,10 @@ export const DraggableItem = <T,>({
                     // Trigger the drag start callback
                     onDragStart?.();
                     // Set the dragged item in the context
+                    const dragData = resolveData();
                     draggedItem$.set({
                         id,
-                        data: resolveData(),
+                        data: dragData,
                         sourceZoneId: zoneId,
                     });
 
@@ -210,9 +263,9 @@ export const DraggableItem = <T,>({
                         viewRef.current.measureInWindow((x, y, width, height) => {
                             const metrics = resolveDragStartMetrics(coordinates, { x, y, width, height });
                             dragStartMetricsRef.current = metrics;
-                            initialPositionRef.current = {
-                                pageX: metrics.pointerWindowX,
-                                pageY: metrics.pointerWindowY,
+                            eventToMeasuredOffsetRef.current = {
+                                x: coordinates.pageX - metrics.pointerWindowX,
+                                y: coordinates.pageY - metrics.pointerWindowY,
                             };
                             setPortalPosition({
                                 left: metrics.itemWindowX,
@@ -223,10 +276,6 @@ export const DraggableItem = <T,>({
                     } else {
                         const metrics = resolveDragStartMetrics(_e.nativeEvent);
                         dragStartMetricsRef.current = metrics;
-                        initialPositionRef.current = {
-                            pageX: metrics.pointerWindowX,
-                            pageY: metrics.pointerWindowY,
-                        };
                         setPortalPosition({
                             left: metrics.itemWindowX,
                             top: metrics.itemWindowY,
@@ -245,28 +294,13 @@ export const DraggableItem = <T,>({
                     return;
                 }
 
-                // Update the position of the item
-                pan.setValue({
-                    x: gestureState.dx,
-                    y: gestureState.dy,
-                });
-
-                // Update global position
-                globalPositionRef.current = {
-                    x: gestureState.dx,
-                    y: gestureState.dy,
-                };
-
-                // Calculate current absolute position of the dragged item
-                const metrics = dragStartMetricsRef.current;
-                const currentX = (metrics?.pointerWindowX ?? initialPositionRef.current.pageX) + gestureState.dx;
-                const currentY = (metrics?.pointerWindowY ?? initialPositionRef.current.pageY) + gestureState.dy;
-
-                // Check if the item is over any drop zones
-                checkDropZones(currentX, currentY);
+                updateDragPosition(_e, gestureState);
             },
 
-            onPanResponderRelease: () => {
+            onPanResponderRelease: (event, gestureState) => {
+                if (dragActivatedRef.current) {
+                    updateDragPosition(event, gestureState);
+                }
                 handleDragEnd();
             },
         }));
@@ -274,6 +308,7 @@ export const DraggableItem = <T,>({
         activeDropZone$,
         checkDropZones,
         disabled,
+        dragOverlayMode,
         draggedItem$,
         handleDragEnd,
         id,
@@ -289,6 +324,27 @@ export const DraggableItem = <T,>({
         setChildMeasurements(event.nativeEvent.layout);
     };
 
+    const dragOverlay = isDragging && positionReady && childMeasurements ? (
+        <Animated.View
+            className="rounded-md"
+            pointerEvents="none"
+            style={[
+                {
+                    position: "absolute",
+                    top: dragOverlayMode === "local" ? -1 : portalPosition.top - 1,
+                    left: dragOverlayMode === "local" ? -1 : portalPosition.left - 1,
+                    width: childMeasurements.width + 2,
+                    height: childMeasurements.height + 2,
+                    zIndex: 9999,
+                    transform: [{ translateX: pan.x }, { translateY: pan.y }],
+                    // Apply drop shadow styling here if desired,
+                },
+            ]}
+        >
+            <View className="rounded-md overflow-hidden">{children}</View>
+        </Animated.View>
+    ) : null;
+
     return (
         <View className="flex-grow-0">
             {/* Placeholder that stays in place */}
@@ -302,28 +358,11 @@ export const DraggableItem = <T,>({
                 >
                     {children}
                 </View>
+                {dragOverlayMode === "local" ? dragOverlay : null}
             </View>
 
             {/* Dragged item in portal */}
-            {isDragging && positionReady && childMeasurements && (
-                <Portal>
-                    <Animated.View
-                        className="rounded-md z-[9999] absolute"
-                        style={[
-                            {
-                                top: portalPosition.top - 1,
-                                left: portalPosition.left - 1,
-                                width: childMeasurements.width + 2,
-                                height: childMeasurements.height + 2,
-                                transform: [{ translateX: pan.x }, { translateY: pan.y }],
-                                // Apply drop shadow styling here if desired,
-                            },
-                        ]}
-                    >
-                        <View className="rounded-md overflow-hidden">{children}</View>
-                    </Animated.View>
-                </Portal>
-            )}
+            {dragOverlayMode === "portal" && dragOverlay ? <Portal>{dragOverlay}</Portal> : null}
         </View>
     );
 };

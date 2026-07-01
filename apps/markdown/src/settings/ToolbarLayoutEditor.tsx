@@ -127,6 +127,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
           <ToolbarDropZone
             index={0}
             isExpanded={!hasItems}
+            items={items}
             onMove={onMove}
             targetGroup={group}
           />
@@ -135,6 +136,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
               <DraggableItem<ToolbarDragData>
                 className="flex-shrink-0"
                 data={() => ({ group, itemId })}
+                dragOverlayMode="local"
                 id={`${layoutId}-${group}-${itemId}`}
                 zoneId={zoneId}
               >
@@ -143,6 +145,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
               {index < items.length - 1 ? (
                 <ToolbarDropZone
                   index={index + 1}
+                  items={items}
                   onMove={onMove}
                   targetGroup={group}
                 />
@@ -152,7 +155,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
           {hasItems ? (
             <ToolbarDropZone
               index={items.length}
-              isExpanded
+              items={items}
               onMove={onMove}
               targetGroup={group}
             />
@@ -168,24 +171,30 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
 type ToolbarDropZoneProps = {
   index: number;
   isExpanded?: boolean;
+  items: MarkdownToolbarItemId[];
   onMove: (params: MoveToolbarItemParams) => void;
   targetGroup: MarkdownToolbarControlGroup;
 };
 
-function ToolbarDropZone({ index, isExpanded = false, onMove, targetGroup }: ToolbarDropZoneProps) {
+function ToolbarDropZone({ index, isExpanded = false, items, onMove, targetGroup }: ToolbarDropZoneProps) {
   const baseClassName = isExpanded ? "h-9 flex-1 w-full basis-full px-2" : "h-9 w-2 flex-shrink-0";
   const indicatorClassName = isExpanded
     ? "rounded-xl border border-primary/40 bg-primary/10"
     : "rounded-full bg-primary/50";
   const hitSlop = isExpanded
     ? { bottom: 10, left: 8, right: 8, top: 10 }
-    : { bottom: 10, left: 16, right: 16, top: 10 };
+    : { bottom: 6, left: 10, right: 10, top: 6 };
 
   return (
     <DroppableZone
       activeClassName="opacity-100"
-      allowDrop={() => true}
+      allowDrop={(item) => {
+        const payload = item.data as ToolbarDragData;
+        const sourceIndex = payload.group === targetGroup ? items.indexOf(payload.itemId) : -1;
+        return sourceIndex === -1 || (index !== sourceIndex && index !== sourceIndex + 1);
+      }}
       className={baseClassName}
+      disableProximityDetection={!isExpanded}
       hitSlop={hitSlop}
       id={`markdown-toolbar-${targetGroup}-drop-${index}`}
       onDrop={(item) => {

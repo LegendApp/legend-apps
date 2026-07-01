@@ -78,6 +78,29 @@ describe("ToolbarLayoutEditor", () => {
     await view.unmount();
   });
 
+  it("rejects drop zones adjacent to the dragged source item", async () => {
+    const view = await render(
+      <ToolbarLayoutEditor
+        description="Customize toolbar"
+        layoutId="top"
+        title="Top and Bottom Toolbars"
+      />,
+    );
+
+    const draggedBold = {
+      data: {
+        group: "shown",
+        itemId: "bold",
+      },
+    };
+
+    expect(view.getByTestId("markdown-toolbar-shown-drop-2").props.allowDrop(draggedBold)).toBe(false);
+    expect(view.getByTestId("markdown-toolbar-shown-drop-3").props.allowDrop(draggedBold)).toBe(false);
+    expect(view.getByTestId("markdown-toolbar-shown-drop-1").props.allowDrop(draggedBold)).toBe(true);
+    expect(view.getByTestId("markdown-toolbar-hidden-drop-0").props.allowDrop(draggedBold)).toBe(true);
+    await view.unmount();
+  });
+
   it("exposes stable draggable ids for toolbar controls", async () => {
     const view = await render(
       <ToolbarLayoutEditor
