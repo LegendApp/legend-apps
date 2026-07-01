@@ -8,12 +8,16 @@ import {
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
 } from "@legend-desktop/settings-window";
-import { SyntaxThemeSelectorSection } from "@legend-desktop/syntax-settings";
+import {
+  getSyntaxLanguageLabel,
+  SourceSyntaxToggleSettingsRows,
+  SourceTypographySettingsRows,
+  SyntaxThemeSelectorSection,
+} from "@legend-desktop/syntax-settings";
 import { diffSettingsWindowIdentifier } from "./appConstants";
 import { getDiffCliInstallStatus, installDiffCli, type DiffCliInstallStatus } from "./diffCli";
 import {
   diffFontFamilyOptions,
-  diffFontSizeOptions,
   diffRowRendererOptions,
   setDiffAdaptiveLightModeEnabledSetting,
   setDiffFontFamilySetting,
@@ -37,11 +41,6 @@ import {
 
 type DiffSettingsPage = "appearance" | "syntax" | "commandLine";
 
-const diffFontSizeSettingOptions = diffFontSizeOptions.map((fontSize) => ({
-  label: String(fontSize),
-  value: fontSize,
-}));
-
 function AppearanceSettingsPage() {
   return (
     <SettingsPage>
@@ -63,29 +62,14 @@ function AppearanceSettingsContent() {
         first
         title={null}
       >
-        <SettingsRow
-          align="center"
-          control={(
-            <SelectControl
-              accessibilityLabel="Diff font"
-              onChange={setDiffFontFamilySetting}
-              options={diffFontFamilyOptions}
-              value={fontFamily}
-            />
-          )}
-          title="Font"
-        />
-        <SettingsRow
-          align="center"
-          control={(
-            <SelectControl
-              accessibilityLabel="Diff font size"
-              onChange={setDiffFontSizeSetting}
-              options={diffFontSizeSettingOptions}
-              value={fontSize}
-            />
-          )}
-          title="Font size"
+        <SourceTypographySettingsRows
+          fontAccessibilityLabel="Diff font"
+          fontFamily={fontFamily}
+          fontFamilyOptions={diffFontFamilyOptions}
+          fontSize={fontSize}
+          fontSizeAccessibilityLabel="Diff font size"
+          onFontFamilyChange={setDiffFontFamilySetting}
+          onFontSizeChange={setDiffFontSizeSetting}
         />
         <SyntaxThemeSelectorSection
           description={null}
@@ -124,22 +108,6 @@ function AppearanceSettingsContent() {
   );
 }
 
-function getSyntaxLanguageLabel(language: string) {
-  if (language === "tsx") {
-    return "TSX";
-  }
-  if (language === "typescript") {
-    return "TypeScript";
-  }
-  if (language === "javascript") {
-    return "JavaScript";
-  }
-  if (language === "json") {
-    return "JSON";
-  }
-  return language.slice(0, 1).toUpperCase() + language.slice(1);
-}
-
 function SyntaxSettingsPage() {
   return (
     <SettingsPage>
@@ -171,29 +139,11 @@ function SyntaxSettingsContent() {
         first
         title={null}
       >
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Syntax highlighting"
-              checked={syntaxHighlightingEnabled}
-              onChange={setDiffSyntaxHighlightingEnabledSetting}
-            />
-          )}
-          title="Syntax highlighting"
-        />
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Prewarm highlighters"
-              checked={syntaxPrewarmEnabled}
-              disabled={!syntaxHighlightingEnabled}
-              onChange={setDiffSyntaxPrewarmEnabledSetting}
-            />
-          )}
-          disabled={!syntaxHighlightingEnabled}
-          title="Prewarm highlighters"
+        <SourceSyntaxToggleSettingsRows
+          onSyntaxHighlightingChange={setDiffSyntaxHighlightingEnabledSetting}
+          onSyntaxPrewarmChange={setDiffSyntaxPrewarmEnabledSetting}
+          syntaxHighlightingEnabled={syntaxHighlightingEnabled}
+          syntaxPrewarmEnabled={syntaxPrewarmEnabled}
         />
       </SettingsSection>
       <SettingsSection title="Prewarm languages">

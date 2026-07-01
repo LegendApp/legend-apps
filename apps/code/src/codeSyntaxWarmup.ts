@@ -1,8 +1,4 @@
-import {
-  isSyntaxGrammarInstalled,
-  warmSyntaxHighlighters,
-  type SyntaxHighlighterWarmupResult,
-} from "@legend-desktop/syntax-parser";
+import { warmInstalledSyntaxHighlighters, type SyntaxHighlighterWarmupResult } from "@legend-desktop/syntax-settings";
 import { getCodeSyntaxPrewarmEnabledSetting, getCodeSyntaxThemeSetting } from "./codeSettings";
 
 let warmupPromise: Promise<SyntaxHighlighterWarmupResult[]> | null = null;
@@ -12,15 +8,10 @@ export function warmCodeSyntaxHighlighters(languages = ["tsx", "typescript"]) {
     return Promise.resolve([]);
   }
 
-  const installedLanguages = languages.filter(isSyntaxGrammarInstalled);
-  if (installedLanguages.length === 0) {
-    return Promise.resolve([]);
-  }
-
   const syntaxTheme = getCodeSyntaxThemeSetting();
-  warmupPromise ??= warmSyntaxHighlighters({
+  warmupPromise ??= warmInstalledSyntaxHighlighters({
     label: "CodeViewer",
-    languages: installedLanguages,
+    languages,
     theme: syntaxTheme,
   }).catch((error: unknown) => {
     warmupPromise = null;

@@ -1,5 +1,14 @@
 import { createObservableSettings } from "@legend-desktop/storage";
 import {
+  normalizeBooleanSetting,
+  normalizeSourceFontFamily,
+  normalizeSourceFontSize,
+  normalizeSyntaxLanguageList,
+  sourceFontFamilyOptions,
+  sourceFontSizeOptions,
+  type SourceFontFamilySetting,
+} from "@legend-desktop/syntax-settings";
+import {
   defaultSyntaxThemeName,
   getSyntaxTheme,
   normalizeSyntaxThemeName,
@@ -21,17 +30,11 @@ export type DiffSettingsFile = {
   viewMode?: DiffViewMode;
 };
 
-export type DiffFontFamilySetting = typeof diffFontFamilyOptions[number]["value"];
+export type DiffFontFamilySetting = SourceFontFamilySetting;
 export type DiffRowRendererSetting = typeof diffRowRendererOptions[number]["value"];
 export type DiffViewMode = typeof diffViewModeOptions[number]["value"];
 
-export const diffFontFamilyOptions = [
-  { label: "Menlo", value: "Menlo" },
-  { label: "SF Mono", value: "SF Mono" },
-  { label: "Monaco", value: "Monaco" },
-  { label: "Courier New", value: "Courier New" },
-  { label: "Courier", value: "Courier" },
-] as const;
+export const diffFontFamilyOptions = sourceFontFamilyOptions;
 export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
@@ -40,7 +43,7 @@ export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const defaultDiffSyntaxPrewarmEnabled = true;
-export const diffFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+export const diffFontSizeOptions = sourceFontSizeOptions;
 export const diffRowRendererOptions = [
   { label: "React Native", value: "react-native" },
   { label: "Native (experimental)", value: "native" },
@@ -51,15 +54,11 @@ export const diffViewModeOptions = [
 ] as const;
 
 function normalizeDiffFontSize(fontSize: unknown): number {
-  return typeof fontSize === "number" && diffFontSizeOptions.includes(fontSize as typeof diffFontSizeOptions[number])
-    ? fontSize
-    : defaultDiffFontSize;
+  return normalizeSourceFontSize(fontSize, defaultDiffFontSize);
 }
 
 function normalizeDiffFontFamily(fontFamily: unknown): DiffFontFamilySetting {
-  return typeof fontFamily === "string" && diffFontFamilyOptions.some((option) => option.value === fontFamily)
-    ? fontFamily as DiffFontFamilySetting
-    : defaultDiffFontFamily;
+  return normalizeSourceFontFamily(fontFamily, defaultDiffFontFamily);
 }
 
 function normalizeDiffViewMode(viewMode: unknown): DiffViewMode {
@@ -74,24 +73,6 @@ function normalizeDiffRowRenderer(rowRenderer: unknown): DiffRowRendererSetting 
     : defaultDiffRowRenderer;
 }
 
-function normalizeBoolean(value: unknown, defaultValue: boolean): boolean {
-  return typeof value === "boolean" ? value : defaultValue;
-}
-
-function normalizeSyntaxLanguageList(value: unknown): string[] {
-  const values = Array.isArray(value) ? value : [];
-  const languages = new Set<string>();
-  for (const entry of values) {
-    if (typeof entry === "string") {
-      const language = entry.trim();
-      if (language) {
-        languages.add(language);
-      }
-    }
-  }
-  return [...languages].sort();
-}
-
 export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
   return typeof viewMode === "string" && diffViewModeOptions.some((option) => option.value === viewMode);
 }
@@ -100,7 +81,7 @@ const diffSettings = createObservableSettings({
   fields: {
     adaptiveLightModeEnabled: {
       defaultValue: defaultDiffAdaptiveLightModeEnabled,
-      normalize: (value) => normalizeBoolean(value, defaultDiffAdaptiveLightModeEnabled),
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffAdaptiveLightModeEnabled),
     },
     fontFamily: {
       defaultValue: defaultDiffFontFamily,
@@ -112,11 +93,11 @@ const diffSettings = createObservableSettings({
     },
     syntaxHighlightingEnabled: {
       defaultValue: defaultDiffSyntaxHighlightingEnabled,
-      normalize: (value) => normalizeBoolean(value, defaultDiffSyntaxHighlightingEnabled),
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffSyntaxHighlightingEnabled),
     },
     syntaxPrewarmEnabled: {
       defaultValue: defaultDiffSyntaxPrewarmEnabled,
-      normalize: (value) => normalizeBoolean(value, defaultDiffSyntaxPrewarmEnabled),
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffSyntaxPrewarmEnabled),
     },
     syntaxPrewarmLanguages: {
       defaultValue: [] as string[],
@@ -136,7 +117,7 @@ const diffSettings = createObservableSettings({
     },
     showOnlyHunks: {
       defaultValue: defaultDiffShowOnlyHunks,
-      normalize: (value) => normalizeBoolean(value, defaultDiffShowOnlyHunks),
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffShowOnlyHunks),
     },
     viewMode: {
       defaultValue: defaultDiffViewMode,
@@ -211,7 +192,7 @@ export function useDiffFontFamilySetting(): DiffFontFamilySetting {
 }
 
 export function useDiffAdaptiveLightModeEnabledSetting(): boolean {
-  return normalizeBoolean(useValue(diffSettings$.adaptiveLightModeEnabled), defaultDiffAdaptiveLightModeEnabled);
+  return normalizeBooleanSetting(useValue(diffSettings$.adaptiveLightModeEnabled), defaultDiffAdaptiveLightModeEnabled);
 }
 
 export function useDiffFontSizeSetting(): number {
@@ -236,15 +217,15 @@ export function useDiffRowRendererSetting(): DiffRowRendererSetting {
 }
 
 export function useDiffShowOnlyHunksSetting(): boolean {
-  return normalizeBoolean(useValue(diffSettings$.showOnlyHunks), defaultDiffShowOnlyHunks);
+  return normalizeBooleanSetting(useValue(diffSettings$.showOnlyHunks), defaultDiffShowOnlyHunks);
 }
 
 export function useDiffSyntaxHighlightingEnabledSetting(): boolean {
-  return normalizeBoolean(useValue(diffSettings$.syntaxHighlightingEnabled), defaultDiffSyntaxHighlightingEnabled);
+  return normalizeBooleanSetting(useValue(diffSettings$.syntaxHighlightingEnabled), defaultDiffSyntaxHighlightingEnabled);
 }
 
 export function useDiffSyntaxPrewarmEnabledSetting(): boolean {
-  return normalizeBoolean(useValue(diffSettings$.syntaxPrewarmEnabled), defaultDiffSyntaxPrewarmEnabled);
+  return normalizeBooleanSetting(useValue(diffSettings$.syntaxPrewarmEnabled), defaultDiffSyntaxPrewarmEnabled);
 }
 
 export function useDiffSyntaxPrewarmLanguagesSetting(): string[] {

@@ -1,13 +1,215 @@
-import { SelectControl } from "@legend-desktop/design-system";
+import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
 import { SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
 import {
   ensureSyntaxTheme,
   getAvailableSyntaxThemes,
   getSyntaxAssetDirectoryUri,
+  getSyntaxLanguageForPath,
+  isSyntaxGrammarInstalled,
+  warmSyntaxHighlighters,
+  type SyntaxHighlighterWarmupResult,
   type SyntaxThemeAssetEntry,
 } from "@legend-desktop/syntax-parser";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
+
+export type { SyntaxHighlighterWarmupResult } from "@legend-desktop/syntax-parser";
+
+export type SourceFontFamilySetting = typeof sourceFontFamilyOptions[number]["value"];
+
+export const sourceFontFamilyOptions = [
+  { label: "Menlo", value: "Menlo" },
+  { label: "SF Mono", value: "SF Mono" },
+  { label: "Monaco", value: "Monaco" },
+  { label: "Courier New", value: "Courier New" },
+  { label: "Courier", value: "Courier" },
+] as const;
+
+export const sourceFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+
+const sourceFontSizeSettingOptions = sourceFontSizeOptions.map((fontSize) => ({
+  label: String(fontSize),
+  value: fontSize,
+}));
+
+export function normalizeSourceFontFamily(
+  fontFamily: unknown,
+  defaultFontFamily: SourceFontFamilySetting,
+): SourceFontFamilySetting {
+  return typeof fontFamily === "string" && sourceFontFamilyOptions.some((option) => option.value === fontFamily)
+    ? fontFamily as SourceFontFamilySetting
+    : defaultFontFamily;
+}
+
+export function normalizeSourceFontSize(fontSize: unknown, defaultFontSize: number): number {
+  return typeof fontSize === "number" && sourceFontSizeOptions.includes(fontSize as typeof sourceFontSizeOptions[number])
+    ? fontSize
+    : defaultFontSize;
+}
+
+export function normalizeBooleanSetting(value: unknown, defaultValue: boolean): boolean {
+  return typeof value === "boolean" ? value : defaultValue;
+}
+
+export function normalizeSyntaxLanguageList(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [];
+  const languages = new Set<string>();
+  for (const entry of values) {
+    if (typeof entry === "string") {
+      const language = entry.trim();
+      if (language) {
+        languages.add(language);
+      }
+    }
+  }
+  return [...languages].sort();
+}
+
+export function getSyntaxLanguageLabel(language: string) {
+  if (language === "tsx") {
+    return "TSX";
+  }
+  if (language === "typescript") {
+    return "TypeScript";
+  }
+  if (language === "javascript") {
+    return "JavaScript";
+  }
+  if (language === "json") {
+    return "JSON";
+  }
+  return language.slice(0, 1).toUpperCase() + language.slice(1);
+}
+
+export function getInstalledSyntaxLanguages(languages: readonly string[]) {
+  return languages.filter((language) => isSyntaxGrammarInstalled(language));
+}
+
+export function getWarmupLanguagesForPaths(paths: readonly string[]) {
+  const languages = new Set<string>();
+  for (const path of paths) {
+    const language = getSyntaxLanguageForPath(path);
+    if (language && isSyntaxGrammarInstalled(language)) {
+      languages.add(language);
+    }
+  }
+  return [...languages];
+}
+
+export function warmInstalledSyntaxHighlighters({
+  label,
+  languages,
+  theme,
+}: {
+  label: string;
+  languages: readonly string[];
+  theme: string;
+}): Promise<SyntaxHighlighterWarmupResult[]> {
+  const installedLanguages = getInstalledSyntaxLanguages(languages);
+  if (installedLanguages.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return warmSyntaxHighlighters({
+    label,
+    languages: installedLanguages,
+    theme,
+  });
+}
+
+export type SourceTypographySettingsRowsProps<FontFamily extends string = SourceFontFamilySetting> = {
+  fontAccessibilityLabel: string;
+  fontFamily: FontFamily;
+  fontFamilyOptions: readonly { label: string; value: FontFamily }[];
+  fontSize: number;
+  fontSizeAccessibilityLabel: string;
+  fontSizeOptions?: readonly { label: string; value: number }[];
+  onFontFamilyChange: (fontFamily: FontFamily) => void;
+  onFontSizeChange: (fontSize: number) => void;
+};
+
+export function SourceTypographySettingsRows<FontFamily extends string = SourceFontFamilySetting>({
+  fontAccessibilityLabel,
+  fontFamily,
+  fontFamilyOptions,
+  fontSize,
+  fontSizeAccessibilityLabel,
+  fontSizeOptions = sourceFontSizeSettingOptions,
+  onFontFamilyChange,
+  onFontSizeChange,
+}: SourceTypographySettingsRowsProps<FontFamily>) {
+  return (
+    <>
+      <SettingsRow
+        align="center"
+        control={(
+          <SelectControl
+            accessibilityLabel={fontAccessibilityLabel}
+            onChange={onFontFamilyChange}
+            options={fontFamilyOptions}
+            value={fontFamily}
+          />
+        )}
+        title="Font"
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SelectControl
+            accessibilityLabel={fontSizeAccessibilityLabel}
+            onChange={onFontSizeChange}
+            options={fontSizeOptions}
+            value={fontSize}
+          />
+        )}
+        title="Font size"
+      />
+    </>
+  );
+}
+
+export type SourceSyntaxToggleSettingsRowsProps = {
+  onSyntaxHighlightingChange: (enabled: boolean) => void;
+  onSyntaxPrewarmChange: (enabled: boolean) => void;
+  syntaxHighlightingEnabled: boolean;
+  syntaxPrewarmEnabled: boolean;
+};
+
+export function SourceSyntaxToggleSettingsRows({
+  onSyntaxHighlightingChange,
+  onSyntaxPrewarmChange,
+  syntaxHighlightingEnabled,
+  syntaxPrewarmEnabled,
+}: SourceSyntaxToggleSettingsRowsProps) {
+  return (
+    <>
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Syntax highlighting"
+            checked={syntaxHighlightingEnabled}
+            onChange={onSyntaxHighlightingChange}
+          />
+        )}
+        title="Syntax highlighting"
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Prewarm highlighters"
+            checked={syntaxPrewarmEnabled}
+            disabled={!syntaxHighlightingEnabled}
+            onChange={onSyntaxPrewarmChange}
+          />
+        )}
+        disabled={!syntaxHighlightingEnabled}
+        title="Prewarm highlighters"
+      />
+    </>
+  );
+}
 
 export type SyntaxThemeSelectorSectionProps = {
   description?: string | null;

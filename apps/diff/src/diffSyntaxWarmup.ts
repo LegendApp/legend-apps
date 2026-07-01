@@ -1,4 +1,8 @@
-import { getSyntaxLanguageForPath, isSyntaxGrammarInstalled, warmSyntaxHighlighters } from "@legend-desktop/syntax-parser";
+import {
+  getInstalledSyntaxLanguages,
+  getWarmupLanguagesForPaths,
+  warmInstalledSyntaxHighlighters,
+} from "@legend-desktop/syntax-settings";
 import {
   getDiffSyntaxHighlightingEnabledSetting,
   getDiffSyntaxPrewarmEnabledSetting,
@@ -10,18 +14,7 @@ import {
 } from "./diffSettings";
 
 export function getDiffWarmupLanguagesForPaths(paths: readonly string[]) {
-  const languages = new Set<string>();
-  for (const path of paths) {
-    const language = getSyntaxLanguageForPath(path);
-    if (language && isSyntaxGrammarInstalled(language)) {
-      languages.add(language);
-    }
-  }
-  return [...languages];
-}
-
-function getInstalledSyntaxLanguages(languages: readonly string[]) {
-  return languages.filter((language) => isSyntaxGrammarInstalled(language));
+  return getWarmupLanguagesForPaths(paths);
 }
 
 export function recordDiffSyntaxLanguagesForPaths(paths: readonly string[]) {
@@ -59,7 +52,7 @@ export function warmDiffSyntaxHighlightersForStartup() {
   }
 
   const syntaxTheme = getDiffSyntaxThemeSetting();
-  return warmSyntaxHighlighters({
+  return warmInstalledSyntaxHighlighters({
     label: "DiffStartup",
     languages: installedLanguages,
     theme: syntaxTheme,
