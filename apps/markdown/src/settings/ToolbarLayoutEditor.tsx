@@ -127,6 +127,7 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
           <ToolbarDropZone
             index={0}
             isExpanded={!hasItems}
+            isLeading={hasItems}
             items={items}
             onMove={onMove}
             targetGroup={group}
@@ -172,16 +173,20 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
 type ToolbarDropZoneProps = {
   index: number;
   isExpanded?: boolean;
+  isLeading?: boolean;
   items: MarkdownToolbarItemId[];
   onMove: (params: MoveToolbarItemParams) => void;
   targetGroup: MarkdownToolbarControlGroup;
 };
 
-function ToolbarDropZone({ index, isExpanded = false, items, onMove, targetGroup }: ToolbarDropZoneProps) {
-  const baseClassName = isExpanded ? "h-9 flex-1 w-full basis-full px-2" : "h-9 w-2 flex-shrink-0";
+function ToolbarDropZone({ index, isExpanded = false, isLeading = false, items, onMove, targetGroup }: ToolbarDropZoneProps) {
+  const baseClassName = isExpanded
+    ? "h-9 flex-1 w-full basis-full px-2"
+    : cn("h-9 flex-shrink-0", isLeading ? "w-0" : "w-2");
   const indicatorClassName = isExpanded
     ? "rounded-xl border border-primary/40 bg-primary/10"
     : "rounded-full bg-primary/50";
+  const indicatorSizeClassName = isExpanded ? "w-full" : isLeading ? "w-1" : "w-full";
   const hitSlop = isExpanded
     ? { bottom: 10, left: 8, right: 8, top: 10 }
     : { bottom: 6, left: 10, right: 10, top: 6 };
@@ -211,7 +216,8 @@ function ToolbarDropZone({ index, isExpanded = false, items, onMove, targetGroup
       {(isActive) => (
         <View
           className={cn(
-            "h-full w-full transition-opacity",
+            "h-full transition-opacity",
+            indicatorSizeClassName,
             indicatorClassName,
             isActive ? "opacity-100" : "opacity-0",
           )}
