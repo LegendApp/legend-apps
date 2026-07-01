@@ -71,6 +71,14 @@ function formatThemeLabel(name: string) {
 }
 
 export function AppearanceSettingsPage() {
+  return (
+    <SettingsPage>
+      <AppearanceSettingsContent />
+    </SettingsPage>
+  );
+}
+
+export function AppearanceSettingsContent() {
   const userThemeLoadResult = useMemo(() => loadMarkdownUserThemesSync({ force: true }), []);
   const displayThemeOptions = useMemo(
     () => getLegendDisplayThemeFiles().map((theme) => ({ label: formatThemeLabel(theme.name), value: theme.name })),
@@ -89,7 +97,7 @@ export function AppearanceSettingsPage() {
   const selectedDensity = useMarkdownDocumentDensitySetting();
 
   return (
-    <SettingsPage>
+    <>
       <ThemeSelectorSection
         first
         issues={userThemeLoadResult.displayThemes.issues}
@@ -169,6 +177,6 @@ export function AppearanceSettingsPage() {
           title="Density"
         />
       </SettingsSection>
-    </SettingsPage>
+    </>
   );
 }

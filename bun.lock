@@ -108,6 +108,7 @@
         "@legend-desktop/theme": "workspace:*",
         "@legend-desktop/window-manager": "0.0.0",
         "@legend-desktop/windows": "0.0.0",
+        "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
         "uniwind": "^1.6.3",

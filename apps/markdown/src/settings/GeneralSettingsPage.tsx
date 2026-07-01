@@ -32,12 +32,20 @@ const formattingToolbarModeOptions = [
 ] as const satisfies readonly { label: string; value: MarkdownFormattingToolbarModeSetting }[];
 
 export function GeneralSettingsPage() {
+  return (
+    <SettingsPage>
+      <GeneralSettingsContent />
+    </SettingsPage>
+  );
+}
+
+export function GeneralSettingsContent() {
   const startupBehavior = useMarkdownStartupBehaviorSetting();
   const autosave = useMarkdownAutosaveSetting();
   const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
 
   return (
-    <SettingsPage>
+    <>
       <SettingsSection
         first
         title="Editor"
@@ -93,6 +101,6 @@ export function GeneralSettingsPage() {
           title="Floating Toolbar"
         />
       </SettingsSection>
-    </SettingsPage>
+    </>
   );
 }

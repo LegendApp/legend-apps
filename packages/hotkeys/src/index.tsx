@@ -511,16 +511,61 @@ type HotkeysSettingsPageProps<HotkeyId extends string> = {
   onCaptureChange?: (isCapturing: boolean) => void;
   onChange: (id: HotkeyId, value: HotkeyValue | null) => void;
   renderFooter?: () => ReactNode;
+  showTitle?: boolean;
   values: HotkeyState<HotkeyId>;
 };
 
-export function HotkeysSettingsPage<HotkeyId extends string>({
+export function HotkeysSettingsContent<HotkeyId extends string>({
   definitions,
   onCaptureChange,
   onChange,
   renderFooter,
+  showTitle = true,
   values,
 }: HotkeysSettingsPageProps<HotkeyId>) {
+  return (
+    <>
+      <View className="flex-col gap-6">
+        {showTitle ? (
+          <View className="flex-col gap-1.5">
+            <Text className="text-xl font-semibold text-text-primary leading-tight">Hotkeys</Text>
+          </View>
+        ) : null}
+        <View className="overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20">
+          {definitions.map((definition, index) => (
+            <View key={definition.id}>
+              {index > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
+              <View
+                className="flex-row items-center justify-between gap-6 px-4 py-3.5"
+              >
+                <View className="min-w-0 flex-1 flex-col gap-1 pr-6" style={styles.rowText}>
+                  <Text className="font-semibold text-text-primary leading-tight" style={styles.rowTitle}>
+                    {definition.title}
+                  </Text>
+                  {definition.description ? (
+                    <Text className="leading-relaxed text-text-secondary" style={styles.rowDescription}>
+                      {definition.description}
+                    </Text>
+                  ) : null}
+                </View>
+                <View className="max-w-full flex-shrink" style={styles.rowControl}>
+                  <HotkeyCapture
+                    onCaptureChange={onCaptureChange}
+                    onChange={(value) => onChange(definition.id, value)}
+                    value={values[definition.id] ?? definition.defaultValue}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+      {renderFooter?.()}
+    </>
+  );
+}
+
+export function HotkeysSettingsPage<HotkeyId extends string>(props: HotkeysSettingsPageProps<HotkeyId>) {
   return (
     <View className="flex-1 overflow-hidden" style={styles.page}>
       <ScrollView
@@ -529,40 +574,7 @@ export function HotkeysSettingsPage<HotkeyId extends string>({
         contentContainerStyle={styles.pageContent}
         horizontal={false}
       >
-        <View className="flex-col gap-6">
-          <View className="flex-col gap-1.5">
-            <Text className="text-xl font-semibold text-text-primary leading-tight">Hotkeys</Text>
-          </View>
-          <View className="overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20">
-            {definitions.map((definition, index) => (
-              <View key={definition.id}>
-                {index > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
-                <View
-                  className="flex-row items-center justify-between gap-6 px-4 py-3.5"
-                >
-                  <View className="min-w-0 flex-1 flex-col gap-1 pr-6" style={styles.rowText}>
-                    <Text className="font-semibold text-text-primary leading-tight" style={styles.rowTitle}>
-                      {definition.title}
-                    </Text>
-                    {definition.description ? (
-                      <Text className="leading-relaxed text-text-secondary" style={styles.rowDescription}>
-                        {definition.description}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View className="max-w-full flex-shrink" style={styles.rowControl}>
-                    <HotkeyCapture
-                      onCaptureChange={onCaptureChange}
-                      onChange={(value) => onChange(definition.id, value)}
-                      value={values[definition.id] ?? definition.defaultValue}
-                    />
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-        {renderFooter?.()}
+        <HotkeysSettingsContent {...props} />
       </ScrollView>
     </View>
   );
