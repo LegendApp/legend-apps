@@ -3,12 +3,9 @@ import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import {
   createSyntaxStyleMap,
-  elapsedMs,
   formatMs,
-  measureAfterEffect,
   nowMs,
   SourceDocumentView,
-  type SourceDocumentRowsTrace,
   type SourceDocumentSnapshot,
   type SourceDocumentTiming,
   SourceLineRow,
@@ -37,22 +34,8 @@ import { useCodeSyntaxTheme, useCodeSyntaxThemeSetting, type CodeSettingsFile } 
 import { codeViewerFileRequest$ } from "./codeViewerRequests";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
-const debugPrefix = "[DEBUG-code-cold-v1]";
-let debugSequence = 0;
-const moduleEvaluatedAt = nowMs();
-
 type CodeViewerWindowProps = {
   launchArguments?: string[];
-};
-
-type CodeViewerLoadTrace = {
-  document: SyntaxDocument | null;
-  filePath: string;
-  loadStartedAt: number;
-  nativeResolvedAt: number;
-  noteRecentFinishedAt: number;
-  noteRecentStartedAt: number;
-  setStateAt: number;
 };
 
 type CodeViewerState =
@@ -93,17 +76,6 @@ function formatLineCount(count: number) {
   return `${count.toLocaleString()} ${count === 1 ? "line" : "lines"}`;
 }
 
-function debugLog(event: string, payload: Record<string, unknown>) {
-  if (__DEV__) {
-    debugSequence += 1;
-    console.info(`${debugPrefix} ${event} ${JSON.stringify({
-      seq: debugSequence,
-      t: Number(nowMs().toFixed(1)),
-      ...payload,
-    })}`);
-  }
-}
-
 function formatTimingSummary(timing: CodeViewerTiming) {
   return [
     `${formatLineCount(timing.lineCount)}`,
@@ -115,143 +87,7 @@ function formatTimingSummary(timing: CodeViewerTiming) {
 
 type CodeViewerTiming = SourceDocumentTiming;
 
-function logCodeLoadTiming(filePath: string, timing: SourceDocumentTiming) {
-  console.info(
-    [
-      `[CodeViewer] loaded ${filePath}`,
-      `nativeTotal=${formatMs(timing.nativeTotalMs)}`,
-      `jsAwait=${formatMs(timing.jsLoadMs)}`,
-      `map=${formatMs(timing.mapFileMs)}`,
-      `index=${formatMs(timing.indexLinesMs)}`,
-      `context=${formatMs(timing.contextMs)}`,
-      `initialLines=${formatMs(timing.initialLinesMs)}`,
-      `tokenize=${formatMs(timing.tokenizeMs)}`,
-      `lines=${timing.lineCount}`,
-      `tokens=${timing.tokenCount}`,
-      `colors=${timing.colorCount}`,
-    ].join(" "),
-  );
-}
-
-function logCodeUiTiming({
-  effectAt,
-  frameAt,
-  microtaskAt,
-  secondFrameAt,
-  timeoutAt,
-  trace,
-}: {
-  effectAt: number;
-  frameAt: number;
-  microtaskAt: number;
-  secondFrameAt: number;
-  timeoutAt: number;
-  trace: CodeViewerLoadTrace;
-}) {
-  console.info(
-    [
-      `[CodeViewer] ui ${trace.filePath}`,
-      `loadToNative=${formatMs(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt))}`,
-      `nativeToSetState=${formatMs(elapsedMs(trace.nativeResolvedAt, trace.setStateAt))}`,
-      `setStateToEffect=${formatMs(elapsedMs(trace.setStateAt, effectAt))}`,
-      `effectToMicrotask=${formatMs(elapsedMs(effectAt, microtaskAt))}`,
-      `effectToTimeout=${formatMs(elapsedMs(effectAt, timeoutAt))}`,
-      `effectToFrame=${formatMs(elapsedMs(effectAt, frameAt))}`,
-      `frameToFrame=${formatMs(elapsedMs(frameAt, secondFrameAt))}`,
-      `loadToEffect=${formatMs(elapsedMs(trace.loadStartedAt, effectAt))}`,
-      `loadToFrame=${formatMs(elapsedMs(trace.loadStartedAt, frameAt))}`,
-      `loadToSecondFrame=${formatMs(elapsedMs(trace.loadStartedAt, secondFrameAt))}`,
-      `noteRecent=${formatMs(elapsedMs(trace.noteRecentStartedAt, trace.noteRecentFinishedAt))}`,
-    ].join(" "),
-  );
-}
-
-function logCodeRowsTiming({
-  effectAt,
-  frameAt,
-  loadTrace,
-  microtaskAt,
-  rowsTrace,
-  secondFrameAt,
-  timeoutAt,
-}: {
-  effectAt: number;
-  frameAt: number;
-  loadTrace: CodeViewerLoadTrace;
-  microtaskAt: number;
-  rowsTrace: SourceDocumentRowsTrace;
-  secondFrameAt: number;
-  timeoutAt: number;
-}) {
-  console.info(
-    [
-      `[CodeViewer] rows ${loadTrace.filePath}`,
-      `reason=${rowsTrace.reason}`,
-      `start=${rowsTrace.start}`,
-      `count=${rowsTrace.count}`,
-      `getRows=${formatMs(elapsedMs(rowsTrace.startedAt, rowsTrace.finishedAt))}`,
-      `loadToRowsFetched=${formatMs(elapsedMs(loadTrace.loadStartedAt, rowsTrace.finishedAt))}`,
-      `rowsFetchedToEffect=${formatMs(elapsedMs(rowsTrace.finishedAt, effectAt))}`,
-      `effectToMicrotask=${formatMs(elapsedMs(effectAt, microtaskAt))}`,
-      `effectToTimeout=${formatMs(elapsedMs(effectAt, timeoutAt))}`,
-      `effectToFrame=${formatMs(elapsedMs(effectAt, frameAt))}`,
-      `frameToFrame=${formatMs(elapsedMs(frameAt, secondFrameAt))}`,
-      `loadToRowsFrame=${formatMs(elapsedMs(loadTrace.loadStartedAt, frameAt))}`,
-      `loadToRowsSecondFrame=${formatMs(elapsedMs(loadTrace.loadStartedAt, secondFrameAt))}`,
-    ].join(" "),
-  );
-}
-
-type RowLayoutDebugBatch = {
-  count: number;
-  first: number | null;
-  highlighted: number;
-  last: number | null;
-  missing: number;
-  plain: number;
-};
-
-let rowLayoutBatch: RowLayoutDebugBatch | null = null;
-
-function recordRowLayout(index: number, line: SyntaxRenderLine | undefined) {
-  if (__DEV__) {
-    rowLayoutBatch ??= {
-      count: 0,
-      first: null,
-      highlighted: 0,
-      last: null,
-      missing: 0,
-      plain: 0,
-    };
-    rowLayoutBatch.count += 1;
-    rowLayoutBatch.first = rowLayoutBatch.first === null ? index : Math.min(rowLayoutBatch.first, index);
-    rowLayoutBatch.last = rowLayoutBatch.last === null ? index : Math.max(rowLayoutBatch.last, index);
-    if (!line) {
-      rowLayoutBatch.missing += 1;
-    } else if (line.tokens.length === 0) {
-      rowLayoutBatch.plain += 1;
-    } else {
-      rowLayoutBatch.highlighted += 1;
-    }
-
-    if (rowLayoutBatch.count === 1) {
-      requestAnimationFrame(() => {
-        const completedBatch = rowLayoutBatch;
-        rowLayoutBatch = null;
-        if (completedBatch) {
-          debugLog("row.layoutFrame", completedBatch as unknown as Record<string, unknown>);
-        }
-      });
-    }
-  }
-}
-
-debugLog("module.evaluated", {
-  moduleEvaluatedAt,
-});
-
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
-  const renderCountRef = useRef(0);
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
   const syntaxTheme = useCodeSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
@@ -260,9 +96,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const fileRequest = useValue(codeViewerFileRequest$);
   const loadedLaunchFileRef = useRef<string | null>(null);
   const loadedFileRequestVersionRef = useRef(0);
-  const loadTraceRef = useRef<CodeViewerLoadTrace | null>(null);
-  const loggedTraceDocumentRef = useRef<SyntaxDocument | null>(null);
-  const loggedRowsRequestVersionRef = useRef(-1);
   const loadedFilePath = state.status === "loaded" ? state.filePath : null;
   const documentSnapshot = useMemo<SourceDocumentSnapshot | null>(
     () => state.status === "loaded"
@@ -280,42 +113,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     backgroundTokenizationChunkLineCount: codeBackgroundTokenizationChunkLineCount,
     debugName: "code",
     initialHighlightRowCount: sourceViewerInitialRequestRowCount,
-    onBackgroundTokenizationStart: ({ tokenizedLineCount }) => {
-      if (state.status === "loaded") {
-        console.info(
-          [
-            `[CodeViewer] backgroundTokenization ${state.filePath}`,
-            `chunk=${codeBackgroundTokenizationChunkLineCount}`,
-            `tokenized=${tokenizedLineCount}`,
-            `lines=${state.document.lineCount}`,
-          ].join(" "),
-        );
-      }
-    },
-    onRowsFetched: (rowsTrace, requestVersion) => {
-      const loadTrace = loadTraceRef.current;
-      if (
-        state.status === "loaded" &&
-        loadTrace?.document === state.document &&
-        rowsTrace.document === state.document &&
-        requestVersion > 0 &&
-        loggedRowsRequestVersionRef.current !== requestVersion
-      ) {
-        loggedRowsRequestVersionRef.current = requestVersion;
-        const effectAt = nowMs();
-        measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
-          logCodeRowsTiming({
-            effectAt,
-            frameAt,
-            loadTrace,
-            microtaskAt,
-            rowsTrace,
-            secondFrameAt,
-            timeoutAt,
-          });
-        });
-      }
-    },
     snapshot: documentSnapshot,
   });
   const currentDocument = state.status === "loaded" ? state.document : null;
@@ -329,16 +126,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const borderColor = displayTheme.colors.border;
 
   useEffect(() => {
-    renderCountRef.current += 1;
-    debugLog("window.renderCommitted", {
-      dataVersion: sourceRows.dataVersion,
-      itemCount: sourceRows.itemIndexes.length,
-      renderCount: renderCountRef.current,
-      state: state.status,
-    });
-  });
-
-  useEffect(() => {
     if (__DEV__) {
       globalThis.__legendCodeBenchmarkGetTokenizedLineCount = () => currentDocument?.getTokenizedLineCount() ?? 0;
     }
@@ -350,37 +137,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     };
   }, [currentDocument]);
 
-  useEffect(() => {
-    debugLog("window.mounted", {
-      sinceModuleMs: Number((nowMs() - moduleEvaluatedAt).toFixed(1)),
-    });
-
-    return () => {
-      debugLog("window.unmounted", {
-        renderCount: renderCountRef.current,
-      });
-    };
-  }, []);
-
   const loadFile = useCallback(async (filePath: string, syntaxThemeName: CodeSettingsFile["syntaxTheme"]) => {
     const loadStartedAt = nowMs();
-    debugLog("load.start", {
-      filePath,
-      language: getCodeLanguage(filePath),
-      syntaxTheme: syntaxThemeName,
-    });
-    const trace: CodeViewerLoadTrace = {
-      document: null,
-      filePath,
-      loadStartedAt,
-      nativeResolvedAt: loadStartedAt,
-      noteRecentFinishedAt: loadStartedAt,
-      noteRecentStartedAt: loadStartedAt,
-      setStateAt: loadStartedAt,
-    };
 
     try {
-      loadTraceRef.current = trace;
       setState({
         status: "opening",
         filePath,
@@ -390,15 +150,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       const loadFinishedAt = nowMs();
       const timing = toSourceDocumentTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
 
-      trace.document = highlighted.document;
-      trace.nativeResolvedAt = loadFinishedAt;
-      logCodeLoadTiming(filePath, timing);
-      trace.setStateAt = nowMs();
-      debugLog("load.setLoaded", {
-        filePath,
-        lineCount: highlighted.document.lineCount,
-        nativeTotalMs: Number(timing.nativeTotalMs.toFixed(1)),
-      });
       setState({
         status: "loaded",
         filePath,
@@ -409,11 +160,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         syntaxTheme: syntaxThemeName,
         timing,
       });
-      trace.noteRecentStartedAt = nowMs();
       noteRecentDocument(filePath);
-      trace.noteRecentFinishedAt = nowMs();
     } catch (error) {
-      loadTraceRef.current = null;
       setState({
         status: "error",
         filePath,
@@ -422,24 +170,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       });
     }
   }, []);
-
-  useEffect(() => {
-    const trace = loadTraceRef.current;
-    if (state.status === "loaded" && trace?.document === state.document && loggedTraceDocumentRef.current !== state.document) {
-      loggedTraceDocumentRef.current = state.document;
-      const effectAt = nowMs();
-      measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
-        logCodeUiTiming({
-          effectAt,
-          frameAt,
-          microtaskAt,
-          secondFrameAt,
-          timeoutAt,
-          trace,
-        });
-      });
-    }
-  }, [state]);
 
   const openCodeDialog = useCallback(async () => {
     const paths = await openFileDialog({
@@ -468,7 +198,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           index={lineIndex}
           line={line}
           mutedColor={mutedColor}
-          onLayout={() => recordRowLayout(lineIndex, line)}
           tokenStyleById={tokenStyleById}
         />
       );
