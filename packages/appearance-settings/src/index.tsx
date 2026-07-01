@@ -1,6 +1,6 @@
 import {
   ColorValueInput,
-  RadioOption,
+  SelectControl,
   SegmentedOptions,
   SwitchControl,
 } from "@legend-desktop/design-system";
@@ -152,19 +152,24 @@ export function ThemeSelectorSection({
   title = "Theme",
   themes,
 }: ThemeSelectorSectionProps) {
+  const selectedThemeValue = themes.some((theme) => theme.value === selectedTheme)
+    ? selectedTheme
+    : themes[0]?.value ?? selectedTheme;
+
   return (
-    <SettingsSection first={first} title={title}>
-      <View accessibilityRole="radiogroup" className="gap-2 px-4 py-3.5">
-        {themes.map((theme) => (
-          <RadioOption
-            key={theme.value}
-            label={theme.label}
-            onSelect={onThemeChange}
-            selected={selectedTheme === theme.value}
-            value={theme.value}
+    <SettingsSection first={first} title={null}>
+      <SettingsRow
+        align="center"
+        control={(
+          <SelectControl
+            accessibilityLabel={title}
+            onChange={onThemeChange}
+            options={themes}
+            value={selectedThemeValue}
           />
-        ))}
-      </View>
+        )}
+        title={title}
+      />
       {issues.length > 0 ? (
         <View className="gap-1 px-4 pb-3.5">
           {issues.map((issue) => (
