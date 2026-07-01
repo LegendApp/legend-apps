@@ -1,6 +1,6 @@
 import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
-import { createContext, type ReactNode, useContext, useRef } from "react";
+import { useObservable } from "@legendapp/state/react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 import { type LayoutRectangle, View } from "react-native";
 
 import { cn } from "@legend-desktop/classnames";
@@ -79,10 +79,7 @@ export const DragDropProvider = ({ children, className }: DragDropProviderProps)
     // Ref for the drop zones
     const dropZonesRef = useRef<Map<string, DropZone>>(new Map());
 
-    // Access current values
-    const activeDropZone = useValue(activeDropZone$);
-
-    const resolveHitSlop = (hitSlop?: DropZoneHitSlop) => {
+    const resolveHitSlop = useCallback((hitSlop?: DropZoneHitSlop) => {
         if (typeof hitSlop === "number") {
             return { top: hitSlop, right: hitSlop, bottom: hitSlop, left: hitSlop };
         }
@@ -93,55 +90,62 @@ export const DragDropProvider = ({ children, className }: DragDropProviderProps)
             bottom: hitSlop?.bottom ?? 0,
             left: hitSlop?.left ?? 0,
         };
-    };
+    }, []);
 
-    const applyHitSlopToRect = (rect: LayoutRectangle, hitSlop?: DropZoneHitSlop): LayoutRectangle => {
-        const slop = resolveHitSlop(hitSlop);
+    const applyHitSlopToRect = useCallback(
+        (rect: LayoutRectangle, hitSlop?: DropZoneHitSlop): LayoutRectangle => {
+            const slop = resolveHitSlop(hitSlop);
 
-        return {
-            x: rect.x - slop.left,
-            y: rect.y - slop.top,
-            width: Math.max(0, rect.width + slop.left + slop.right),
-            height: Math.max(0, rect.height + slop.top + slop.bottom),
-        };
-    };
+            return {
+                x: rect.x - slop.left,
+                y: rect.y - slop.top,
+                width: Math.max(0, rect.width + slop.left + slop.right),
+                height: Math.max(0, rect.height + slop.top + slop.bottom),
+            };
+        },
+        [resolveHitSlop],
+    );
 
     // Register a drop zone
-    const registerDropZone = (
-        id: string,
-        rect: LayoutRectangle,
-        allowDrop: (item: DraggedItem) => boolean,
-        onDrop: (item: DraggedItem) => void,
-        options?: { disableProximityDetection?: boolean; hitSlop?: DropZoneHitSlop },
-    ) => {
-        const rectWithHitSlop = applyHitSlopToRect(rect, options?.hitSlop);
-        dropZonesRef.current.set(id, { id, rect: rectWithHitSlop, allowDrop, onDrop, ...options });
-    };
+    const registerDropZone = useCallback(
+        (
+            id: string,
+            rect: LayoutRectangle,
+            allowDrop: (item: DraggedItem) => boolean,
+            onDrop: (item: DraggedItem) => void,
+            options?: { disableProximityDetection?: boolean; hitSlop?: DropZoneHitSlop },
+        ) => {
+            const rectWithHitSlop = applyHitSlopToRect(rect, options?.hitSlop);
+            dropZonesRef.current.set(id, { id, rect: rectWithHitSlop, allowDrop, onDrop, ...options });
+        },
+        [applyHitSlopToRect],
+    );
 
     // Unregister a drop zone
-    const unregisterDropZone = (id: string) => {
+    const unregisterDropZone = useCallback((id: string) => {
         dropZonesRef.current.delete(id);
-    };
+    }, []);
 
     // Update a drop zone's rect
-    const updateDropZoneRect = (id: string, rect: LayoutRectangle) => {
+    const updateDropZoneRect = useCallback((id: string, rect: LayoutRectangle) => {
         const dropZone = dropZonesRef.current.get(id);
         if (dropZone) {
             const rectWithHitSlop = applyHitSlopToRect(rect, dropZone.hitSlop);
             dropZonesRef.current.set(id, { ...dropZone, rect: rectWithHitSlop });
         }
-    };
+    }, [applyHitSlopToRect]);
 
     // Get a drop zone by id
-    const getDropZoneById = (id: string) => {
+    const getDropZoneById = useCallback((id: string) => {
         return dropZonesRef.current.get(id);
-    };
+    }, []);
 
     // Check if an item is over any drop zones
-    const checkDropZones = (x: number, y: number) => {
+    const checkDropZones = useCallback((x: number, y: number) => {
         const draggedItem = draggedItem$.get();
         if (!draggedItem) return;
 
+        const activeDropZone = activeDropZone$.get();
         let foundDropZone = false;
         let closestZoneId: string | null = null;
         let closestDistance = Number.POSITIVE_INFINITY;
@@ -188,18 +192,29 @@ export const DragDropProvider = ({ children, className }: DragDropProviderProps)
         if (!foundDropZone && activeDropZone !== null) {
             activeDropZone$.set(null);
         }
-    };
+    }, [activeDropZone$, draggedItem$]);
 
     // Value for the context
-    const value: DragDropContextValue = {
-        draggedItem$,
-        registerDropZone,
-        unregisterDropZone,
-        updateDropZoneRect,
-        getDropZoneById,
-        activeDropZone$,
-        checkDropZones,
-    };
+    const value = useMemo<DragDropContextValue>(
+        () => ({
+            draggedItem$,
+            registerDropZone,
+            unregisterDropZone,
+            updateDropZoneRect,
+            getDropZoneById,
+            activeDropZone$,
+            checkDropZones,
+        }),
+        [
+            activeDropZone$,
+            checkDropZones,
+            draggedItem$,
+            getDropZoneById,
+            registerDropZone,
+            unregisterDropZone,
+            updateDropZoneRect,
+        ],
+    );
 
     return (
         <DragDropContext.Provider value={value}>
