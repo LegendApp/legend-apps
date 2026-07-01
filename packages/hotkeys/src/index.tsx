@@ -591,10 +591,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rowDescription: {
-    fontSize: 13,
+    fontSize: 12,
   },
   rowTitle: {
-    fontSize: 15,
+    fontSize: 13,
   },
   rowSeparator: {
     height: StyleSheet.hairlineWidth,

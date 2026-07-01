@@ -377,20 +377,20 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   rowDescription: {
-    fontSize: 13,
+    fontSize: 12,
   },
   rowText: {
     minWidth: 0,
   },
   rowTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "600",
   },
   sectionDescription: {
     fontSize: 12,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 13,
   },
   rowSeparator: {
     height: StyleSheet.hairlineWidth,

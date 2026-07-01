@@ -106,7 +106,6 @@ export function AppearanceSettingsPage() {
         title="Layout Theme"
       />
       <SettingsSection
-        description="Shape the reading surface without changing the Markdown source."
         title="Document"
       >
         <SettingsRow
