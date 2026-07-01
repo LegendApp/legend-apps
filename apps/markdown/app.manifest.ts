@@ -25,6 +25,7 @@ const manifest = {
       "@legend-desktop/markdown-block-editor",
       "@legend-desktop/markdown-parser",
       "@legend-desktop/native-menu",
+      "@legend-desktop/native-select",
       "@legend-desktop/recent-documents",
       "@legend-desktop/sf-symbol",
       "@legend-desktop/storage",

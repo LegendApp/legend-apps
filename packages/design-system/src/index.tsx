@@ -1,6 +1,6 @@
 import { cn } from "@legend-desktop/classnames";
 import { showContextMenu } from "@legend-desktop/context-menu";
-import { NativeSelect } from "@legend-desktop/native-select";
+import { NativeSegmentedControl, NativeSelect } from "@legend-desktop/native-select";
 import { useCallback, useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";
@@ -43,11 +43,40 @@ export type SegmentedOptionsProps<Value extends OptionValue> = {
   value: Value;
 };
 
+function getNativeSegmentedControlWidth(options: readonly { label: string }[]) {
+  return options.reduce((width, option) => width + Math.max(64, option.label.length * 8 + 28), 0);
+}
+
 export function SegmentedOptions<Value extends OptionValue>({
   onChange,
   options,
   value,
 }: SegmentedOptionsProps<Value>) {
+  const nativeSegments = useMemo(() => options.map((option, index) => ({
+    label: option.label,
+    value: String(index),
+  })), [options]);
+  const nativeSelectedIndex = options.findIndex((option) => option.value === value);
+  const nativeValue = nativeSelectedIndex >= 0 ? String(nativeSelectedIndex) : "";
+  const handleNativeChange = useCallback((nextValue: string) => {
+    const selected = options[Number(nextValue)];
+    if (selected) {
+      onChange(selected.value);
+    }
+  }, [onChange, options]);
+  const nativeWidth = useMemo(() => getNativeSegmentedControlWidth(options), [options]);
+
+  if (Platform.OS === "macos") {
+    return (
+      <NativeSegmentedControl
+        onChange={handleNativeChange}
+        segments={nativeSegments}
+        style={[styles.nativeSegmentedControl, { width: nativeWidth }]}
+        value={nativeValue}
+      />
+    );
+  }
+
   return (
     <View className="flex-row overflow-hidden rounded-md border border-border bg-surface">
       {options.map((option) => (
@@ -241,6 +270,9 @@ const styles = StyleSheet.create({
   nativeSelect: {
     height: 28,
     minWidth: 180,
+  },
+  nativeSegmentedControl: {
+    height: 28,
   },
   radioOptionText: {
     fontSize: 13,

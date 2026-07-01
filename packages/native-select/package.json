@@ -10,7 +10,8 @@
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
-        "NativeSelect": "RNNativeSelect"
+        "NativeSelect": "RNNativeSelect",
+        "NativeSegmentedControl": "RNNativeSegmentedControl"
       }
     }
   },

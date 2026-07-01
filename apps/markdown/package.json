@@ -19,6 +19,7 @@
     "@legend-desktop/markdown-block-editor": "0.0.0",
     "@legend-desktop/markdown-document": "workspace:*",
     "@legend-desktop/native-menu": "0.0.0",
+    "@legend-desktop/native-select": "workspace:*",
     "@legend-desktop/recent-documents": "0.0.0",
     "@legend-desktop/reorder-controls": "0.0.0",
     "@legend-desktop/settings-window": "0.0.0",
