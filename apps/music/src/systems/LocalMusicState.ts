@@ -23,8 +23,8 @@ import { stateSaved$ } from "@/systems/State";
 import { ensureCacheDirectory, getCacheDirectory, getPlaylistsDirectory } from "@/utils/cacheDirectories";
 import { type M3UTrack, parseM3U, writeM3U } from "@/utils/m3u";
 import { loadQueueFromM3U } from "@/utils/m3uManager";
-import { perfCount, perfLog } from "@/utils/perfLogger";
-import { runAfterInteractions, runAfterInteractionsWithLabel } from "@/utils/runAfterInteractions";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
+import { runAfterInteractions, runAfterInteractionsWithLabel } from "@legend-desktop/runtime-utils";
 import { buildThumbnailUri } from "@/utils/thumbnails";
 import { DEFAULT_LOCAL_PLAYLIST_ID } from "./localMusicConstants";
 

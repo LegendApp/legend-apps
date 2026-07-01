@@ -35,7 +35,7 @@ import {
     renamePlaylist,
 } from "@/systems/LocalPlaylists";
 import { cn } from "@legend-desktop/classnames";
-import { perfCount } from "@/utils/perfLogger";
+import { perfCount } from "@legend-desktop/runtime-utils";
 import { getQueueAction } from "@/utils/queueActions";
 import { buildTrackLookup, resolvePlaylistTracks } from "@/utils/trackResolution";
 import { MediaLibrarySearchBar } from "./SearchBar";

@@ -18,7 +18,7 @@ import {
 } from "@/systems/LocalMusicState";
 import { stateSaved$ } from "@/systems/State";
 
-import { perfLog } from "@/utils/perfLogger";
+import { perfLog } from "@legend-desktop/runtime-utils";
 import type { QueueAction } from "@/utils/queueActions";
 import { buildTrackLookup, getTracksForLibraryItem, resolvePlaylistTracks } from "@/utils/trackResolution";
 

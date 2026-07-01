@@ -13,8 +13,8 @@ import { stateSaved$ } from "@/systems/State";
 import { getPersistPlugin } from "@legend-desktop/storage";
 import { parseDurationToSeconds } from "@/utils/m3u";
 import { clearQueueM3U, loadQueueFromM3U, saveQueueToM3U } from "@/utils/m3uManager";
-import { perfCount, perfDelta, perfLog, perfMark } from "@/utils/perfLogger";
-import { runAfterInteractionsWithLabel } from "@/utils/runAfterInteractions";
+import { perfCount, perfDelta, perfLog, perfMark } from "@legend-desktop/runtime-utils";
+import { runAfterInteractionsWithLabel } from "@legend-desktop/runtime-utils";
 
 export interface LocalPlayerState {
     isPlaying: boolean;

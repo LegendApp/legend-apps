@@ -1,0 +1,14 @@
+{
+  "name": "@legend-desktop/runtime-utils",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "dependencies": {
+    "@legendapp/state": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-native": "catalog:"
+  }
+}

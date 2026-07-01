@@ -2,7 +2,7 @@ import { useMount } from "@legendapp/state/react";
 
 import { useWindowManager } from "@legend-desktop/window-manager";
 import { state$ } from "@/systems/State";
-import { perfCount, perfLog } from "@/utils/perfLogger";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 import { WindowsNavigator } from "@/windows";
 
 const SETTINGS_WINDOW_KEY = "SettingsWindow" as const;

@@ -14,7 +14,7 @@ import { type RepeatMode, settings$ } from "@/systems/Settings";
 import { state$, stateSaved$ } from "@/systems/State";
 import { hotkeys$ } from "@/systems/hotkeys";
 import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import { perfCount, perfLog } from "@/utils/perfLogger";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 
 const MENU_OWNER_ID = "music";
 const APP_MENU_ID = "app";

@@ -9,7 +9,7 @@ import { IS_TAHOE } from "@/systems/constants";
 import { settings$ } from "@/systems/Settings";
 import { state$ } from "@/systems/State";
 import { cn } from "@legend-desktop/classnames";
-import { perfCount, perfLog } from "@/utils/perfLogger";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 
 type MotionViewProps = Parameters<typeof Motion.View>[0];
 const MotionView = Motion.View as unknown as (props: MotionViewProps) => JSX.Element;

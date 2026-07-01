@@ -5,7 +5,7 @@ import { Dimensions } from "react-native";
 import { useWindowManager } from "@legend-desktop/window-manager";
 import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
 import { stateSaved$ } from "@/systems/State";
-import { perfCount, perfLog } from "@/utils/perfLogger";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 import { WindowsNavigator } from "@/windows";
 
 const MEDIA_LIBRARY_WINDOW_KEY = "MediaLibraryWindow" as const;

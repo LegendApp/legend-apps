@@ -140,6 +140,7 @@
         "@legend-desktop/media-tags": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/reorder-controls": "0.0.0",
+        "@legend-desktop/runtime-utils": "0.0.0",
         "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/sidebar": "0.0.0",
@@ -473,6 +474,17 @@
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/classnames": "0.0.0",
+        "@legendapp/state": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/runtime-utils": {
+      "name": "@legend-desktop/runtime-utils",
+      "version": "0.0.0",
+      "dependencies": {
         "@legendapp/state": "catalog:",
       },
       "peerDependencies": {
@@ -1036,6 +1048,8 @@
     "@legend-desktop/recent-documents": ["@legend-desktop/recent-documents@workspace:packages/recent-documents"],
 
     "@legend-desktop/reorder-controls": ["@legend-desktop/reorder-controls@workspace:packages/reorder-controls"],
+
+    "@legend-desktop/runtime-utils": ["@legend-desktop/runtime-utils@workspace:packages/runtime-utils"],
 
     "@legend-desktop/settings-window": ["@legend-desktop/settings-window@workspace:packages/settings-window"],
 

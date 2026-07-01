@@ -6,7 +6,7 @@ import { getHotkey, getHotkeyMetadata, type HotkeyName } from "@/systems/hotkeys
 import KeyboardManager, { type KeyboardEvent, KeyCodes, KeyText } from "@/systems/keyboard/KeyboardManager";
 import { state$ } from "@/systems/State";
 import { ax } from "@/utils/ax";
-import { perfCount, perfLog } from "@/utils/perfLogger";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 
 export type KeyboardEventCodeHotkey = HotkeyValue;
 

@@ -7,7 +7,7 @@ import { MusicLayoutRenderer } from "@/layout/MusicLayoutRenderer";
 import { mainLayout$, normalizeMusicLayoutFile } from "@/layout/MusicLayoutState";
 import { SUPPORT_ACCOUNTS } from "@/systems/constants";
 import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
-import { perfCount, perfLog } from "@/utils/perfLogger";
+import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 import { preloadPersistence } from "@/utils/preloadPersistence";
 
 preloadPersistence();

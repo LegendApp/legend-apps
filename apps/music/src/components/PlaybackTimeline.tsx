@@ -5,7 +5,7 @@ import { type LayoutChangeEvent, Text, View } from "react-native";
 import type { OverlayPlaybackMode } from "@/components/PlaybackArea";
 import { PlaybackTimelineSlider } from "@/components/PlaybackTimelineSlider";
 import { cn } from "@legend-desktop/classnames";
-import { perfCount } from "@/utils/perfLogger";
+import { perfCount } from "@legend-desktop/runtime-utils";
 
 type PlaybackTimelineProps = {
     currentLocalTime$: Observable<number>;
