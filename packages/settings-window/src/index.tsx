@@ -9,7 +9,7 @@ import {
   WindowStyleMask,
   type WindowOptions,
 } from "@legend-desktop/window-manager";
-import type { ReactNode } from "react";
+import { Children, Fragment, type ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
@@ -191,7 +191,7 @@ export function SettingsSidebar<PageId extends string = string>({
               accessibilityState={{ selected: isSelected }}
               className={cn(
                 "h-7 justify-center rounded-md px-2",
-                isSelected ? "bg-surface-muted" : "hover:bg-surface-muted active:bg-surface-muted",
+                isSelected ? "bg-primary/15" : "hover:bg-background-secondary/60 active:bg-background-secondary",
               )}
               key={page.id}
               onPress={() => onSelectionChange(page.id)}
@@ -245,7 +245,7 @@ interface SettingsSectionProps {
 }
 
 export function SettingsSection({
-  card = false,
+  card = true,
   children,
   className,
   contentClassName,
@@ -254,15 +254,31 @@ export function SettingsSection({
   headerRight,
   title,
 }: SettingsSectionProps) {
-  const containerClassName = cn("flex flex-col gap-3", !first && "mt-7", className);
+  const containerClassName = cn("flex flex-col gap-2.5", !first && "mt-7", className);
   const hasHeader = Boolean(title || description || headerRight);
-  const content = (
-    <>
+  const childArray = Children.toArray(children);
+  const contentNode = childArray.length > 0
+    ? card
+      ? (
+          <View className={cn("overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20", contentClassName)}>
+            {childArray.map((child, index) => (
+              <Fragment key={index}>
+                {index > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
+                {child}
+              </Fragment>
+            ))}
+          </View>
+        )
+      : <View className={cn("flex flex-col gap-3.5", contentClassName)}>{children}</View>
+    : null;
+
+  return (
+    <View className={containerClassName}>
       {hasHeader ? (
         <View className="flex-row items-start justify-between gap-4">
-          <View className="flex-1 flex-col gap-1">
+          <View className="flex-1 flex-col gap-0.5">
             {title ? (
-              <Text className="font-semibold text-text-primary leading-tight" style={styles.sectionTitle}>{title}</Text>
+              <Text className="font-semibold text-text-secondary leading-tight" style={styles.sectionTitle}>{title}</Text>
             ) : null}
             {description ? (
               <Text className="leading-relaxed text-text-secondary" style={styles.sectionDescription}>{description}</Text>
@@ -271,15 +287,9 @@ export function SettingsSection({
           {headerRight ? <View className="flex-none ml-4">{headerRight}</View> : null}
         </View>
       ) : null}
-      {children ? <View className={cn("flex flex-col gap-3", contentClassName)}>{children}</View> : null}
-    </>
+      {contentNode}
+    </View>
   );
-
-  if (!card) {
-    return <View className={containerClassName}>{content}</View>;
-  }
-
-  return <SettingsCard className={containerClassName}>{content}</SettingsCard>;
 }
 
 interface SettingsCardProps {
@@ -289,7 +299,7 @@ interface SettingsCardProps {
 
 export function SettingsCard({ children, className }: SettingsCardProps) {
   return (
-    <View className={cn("rounded-lg border border-border-primary bg-background-secondary p-3", className)}>
+    <View className={cn("overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20", className)}>
       {children}
     </View>
   );
@@ -319,7 +329,7 @@ export function SettingsRow({
   return (
     <View
       className={cn(
-        "flex-row justify-between gap-5 px-1 py-1.5",
+        "flex-row justify-between gap-5 px-4 py-3.5",
         align === "center" ? "items-center" : "items-start",
         disabled ? "opacity-60" : "",
         className,
@@ -367,19 +377,24 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   rowDescription: {
-    fontSize: 12,
+    fontSize: 13,
   },
   rowText: {
     minWidth: 0,
   },
   rowTitle: {
-    fontSize: 13,
+    fontSize: 15,
+    fontWeight: "600",
   },
   sectionDescription: {
     fontSize: 12,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 15,
+  },
+  rowSeparator: {
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.75,
   },
   sidebarContent: {
     paddingHorizontal: 8,

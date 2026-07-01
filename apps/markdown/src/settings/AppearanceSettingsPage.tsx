@@ -106,8 +106,6 @@ export function AppearanceSettingsPage() {
         title="Layout Theme"
       />
       <SettingsSection
-        card={false}
-        contentClassName="gap-3"
         description="Shape the reading surface without changing the Markdown source."
         title="Document"
       >

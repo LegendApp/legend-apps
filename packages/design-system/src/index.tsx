@@ -2,7 +2,7 @@ import { cn } from "@legend-desktop/classnames";
 import { showContextMenu } from "@legend-desktop/context-menu";
 import { NativeSegmentedControl, NativeSelect } from "@legend-desktop/native-select";
 import { useCallback, useMemo } from "react";
-import { Platform, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
+import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
 type OptionValue = string | number;
@@ -20,18 +20,20 @@ export function RadioOption<Value extends OptionValue = string>({
   selected,
   value,
 }: RadioOptionProps<Value>) {
-  const selectedStyle = useResolveClassNames(selected ? "border-primary bg-surface-muted" : "border-border bg-surface");
-  const indicatorStyle = useResolveClassNames(selected ? "border-primary bg-primary" : "border-border bg-surface");
+  const selectedStyle = useResolveClassNames(selected ? "border-primary/70 bg-primary/10" : "border-transparent");
+  const indicatorStyle = useResolveClassNames(selected ? "border-primary" : "border-border");
 
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
-      className="flex-row items-center gap-3 rounded-md border px-3 py-2"
+      className="flex-row items-center gap-3 rounded-md border px-2 py-1.5"
       onPress={() => onSelect(value)}
       style={selectedStyle}
     >
-      <View className="h-3 w-3 rounded-full border" style={indicatorStyle} />
+      <View className="h-3.5 w-3.5 items-center justify-center rounded-full border" style={indicatorStyle}>
+        {selected ? <View className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
+      </View>
       <Text className="text-foreground" style={styles.radioOptionText}>{label}</Text>
     </Pressable>
   );
@@ -78,14 +80,14 @@ export function SegmentedOptions<Value extends OptionValue>({
   }
 
   return (
-    <View className="flex-row overflow-hidden rounded-md border border-border bg-surface">
+    <View className="flex-row overflow-hidden rounded-md border border-border-primary bg-background-primary">
       {options.map((option) => (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ selected: option.value === value }}
           className={cn(
-            "h-8 justify-center px-3",
-            option.value === value ? "bg-surface-muted" : "hover:bg-surface-muted",
+            "h-7 justify-center px-3",
+            option.value === value ? "bg-primary/15" : "hover:bg-background-secondary/70",
           )}
           key={option.value}
           onPress={() => onChange(option.value)}
@@ -214,24 +216,14 @@ export type SwitchControlProps = {
 
 export function SwitchControl({ accessibilityLabel, checked, disabled = false, onChange }: SwitchControlProps) {
   return (
-    <Pressable
+    <Switch
       accessibilityLabel={accessibilityLabel}
-      accessibilityRole="switch"
       accessibilityState={{ checked, disabled }}
-      className="flex-row items-center gap-2"
       disabled={disabled}
-      onPress={() => onChange(!checked)}
+      onValueChange={onChange}
       style={disabled ? styles.disabled : null}
-    >
-      <View
-        className={cn(
-          "h-5 w-5 items-center justify-center rounded-md border",
-          checked ? "border-primary bg-primary" : "border-border bg-surface",
-        )}
-      >
-        {checked ? <View className="h-2 w-2 rounded-sm bg-foreground" /> : null}
-      </View>
-    </Pressable>
+      value={checked}
+    />
   );
 }
 
@@ -257,7 +249,7 @@ export function ColorValueInput({ label, onChange, value }: ColorValueInputProps
         placeholder="#101014cc"
         autoCapitalize="none"
         autoCorrect={false}
-        className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-foreground"
+        className="h-8 rounded-md border border-border-primary bg-background-primary px-2 text-sm text-foreground"
       />
     </View>
   );

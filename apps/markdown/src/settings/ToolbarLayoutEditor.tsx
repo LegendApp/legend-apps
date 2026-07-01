@@ -3,7 +3,7 @@ import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-desktop/
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { Fragment, useCallback, useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   resetMarkdownToolbarLayoutSetting,
@@ -63,18 +63,20 @@ export function ToolbarLayoutEditor({ description, layoutId, title }: ToolbarLay
   );
 
   return (
-    <View className="flex-col gap-4 rounded-xl border border-border bg-surface-muted p-4">
+    <View className="flex-col gap-4 px-4 py-3.5">
       <View className="flex-row items-start justify-between gap-4">
         <View className="min-w-0 flex-1 flex-col gap-1">
-          <Text className="text-base font-semibold text-text-primary">{title}</Text>
-          <Text className="text-sm leading-relaxed text-text-secondary">{description}</Text>
+          <Text className="font-medium text-text-primary" style={styles.subsectionTitle}>{title}</Text>
+          <Text className="leading-relaxed text-text-secondary" style={styles.subsectionDescription}>
+            {description}
+          </Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          className="h-8 justify-center rounded-md border border-border bg-surface px-3 hover:bg-surface-muted"
+          className="h-7 justify-center rounded-md px-2.5 hover:bg-background-secondary/60 active:bg-background-secondary"
           onPress={() => resetMarkdownToolbarLayoutSetting(layoutId)}
         >
-          <Text className="text-sm font-medium text-foreground">Reset</Text>
+          <Text className="text-text-secondary" style={styles.resetButton}>Reset</Text>
         </Pressable>
       </View>
       <DragDropProvider className="flex-none flex-col gap-4">
@@ -114,11 +116,13 @@ function ToolbarControlGroup({ group, iconColor, items, label, layoutId, onMove 
 
   return (
     <View className="flex-col gap-2">
-      <View className="flex-row items-center justify-between gap-3">
-        <Text className="text-sm font-semibold text-text-secondary">{label}</Text>
-        <Text className="text-xs text-text-tertiary">{items.length}</Text>
+      <View className="flex-row items-center gap-2">
+        <Text className="text-text-secondary" style={styles.groupLabel}>{label}</Text>
+        <View className="rounded-full bg-background-secondary/60 px-1.5 py-px">
+          <Text className="text-text-tertiary" style={styles.groupCount}>{items.length}</Text>
+        </View>
       </View>
-      <View className="rounded-lg border border-border bg-surface px-2 py-2">
+      <View className="py-2">
         <View className={cn("flex-row flex-wrap items-center", hasItems ? undefined : "justify-center")}>
           <ToolbarDropZone
             index={0}
@@ -211,7 +215,7 @@ function ToolbarChip({ iconColor, itemId }: { iconColor: string; itemId: Markdow
   const item = markdownToolbarItemMap[itemId];
 
   return (
-    <View className="flex-row items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
+    <View className="flex-row items-center gap-1.5 rounded-md border border-border-primary/40 bg-background-secondary/30 px-2.5 py-1.5">
       {item.icon ? (
         <SFSymbol color={iconColor} name={item.icon} size={12} />
       ) : (
@@ -225,3 +229,22 @@ function ToolbarChip({ iconColor, itemId }: { iconColor: string; itemId: Markdow
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  groupCount: {
+    fontSize: 11,
+  },
+  groupLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  resetButton: {
+    fontSize: 13,
+  },
+  subsectionDescription: {
+    fontSize: 12,
+  },
+  subsectionTitle: {
+    fontSize: 13,
+  },
+});

@@ -482,7 +482,7 @@ export function HotkeyCapture({
     <Pressable
       accessibilityRole="button"
       className={cn(
-        "min-h-9 min-w-44 justify-center rounded-md border border-border-primary bg-background-secondary px-3 py-2",
+        "min-h-8 min-w-44 justify-center rounded-md border border-border-primary bg-background-primary px-3 py-1.5",
         isCapturing && "border-accent-primary",
         disabled && "opacity-60",
         className,
@@ -533,27 +533,33 @@ export function HotkeysSettingsPage<HotkeyId extends string>({
           <View className="flex-col gap-1.5">
             <Text className="text-xl font-semibold text-text-primary leading-tight">Hotkeys</Text>
           </View>
-          <View className="gap-3">
-          {definitions.map((definition) => (
-            <View
-              className="flex-row items-center justify-between gap-6 rounded-xl border border-border-primary bg-background-tertiary px-5 py-4"
-              key={definition.id}
-            >
-              <View className="min-w-0 flex-1 flex-col gap-1.5 pr-6" style={styles.rowText}>
-                <Text className="text-base font-semibold text-text-primary leading-tight">{definition.title}</Text>
-                {definition.description ? (
-                  <Text className="text-sm leading-relaxed text-text-secondary">{definition.description}</Text>
-                ) : null}
+          <View className="overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20">
+            {definitions.map((definition, index) => (
+              <View key={definition.id}>
+                {index > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
+                <View
+                  className="flex-row items-center justify-between gap-6 px-4 py-3.5"
+                >
+                  <View className="min-w-0 flex-1 flex-col gap-1 pr-6" style={styles.rowText}>
+                    <Text className="font-semibold text-text-primary leading-tight" style={styles.rowTitle}>
+                      {definition.title}
+                    </Text>
+                    {definition.description ? (
+                      <Text className="leading-relaxed text-text-secondary" style={styles.rowDescription}>
+                        {definition.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View className="max-w-full flex-shrink" style={styles.rowControl}>
+                    <HotkeyCapture
+                      onCaptureChange={onCaptureChange}
+                      onChange={(value) => onChange(definition.id, value)}
+                      value={values[definition.id] ?? definition.defaultValue}
+                    />
+                  </View>
+                </View>
               </View>
-              <View className="max-w-full flex-shrink" style={styles.rowControl}>
-                <HotkeyCapture
-                  onCaptureChange={onCaptureChange}
-                  onChange={(value) => onChange(definition.id, value)}
-                  value={values[definition.id] ?? definition.defaultValue}
-                />
-              </View>
-            </View>
-          ))}
+            ))}
           </View>
         </View>
         {renderFooter?.()}
@@ -583,5 +589,15 @@ const styles = StyleSheet.create({
   },
   rowText: {
     minWidth: 0,
+  },
+  rowDescription: {
+    fontSize: 13,
+  },
+  rowTitle: {
+    fontSize: 15,
+  },
+  rowSeparator: {
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.75,
   },
 });

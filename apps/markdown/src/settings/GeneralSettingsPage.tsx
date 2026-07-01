@@ -39,8 +39,6 @@ export function GeneralSettingsPage() {
   return (
     <SettingsPage>
       <SettingsSection
-        card={false}
-        contentClassName="gap-3"
         description="Choose how Markdown opens documents, saves changes, and presents formatting controls."
         first
         title="Editor"
@@ -83,8 +81,6 @@ export function GeneralSettingsPage() {
         />
       </SettingsSection>
       <SettingsSection
-        card={false}
-        contentClassName="gap-6"
         description="Tune which controls are shown and the order they appear in."
         title="Toolbar Layout"
       >

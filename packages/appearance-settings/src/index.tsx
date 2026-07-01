@@ -153,8 +153,8 @@ export function ThemeSelectorSection({
   themes,
 }: ThemeSelectorSectionProps) {
   return (
-    <SettingsSection card={false} contentClassName="gap-3" first={first} title={title}>
-      <View accessibilityRole="radiogroup" className="gap-2">
+    <SettingsSection first={first} title={title}>
+      <View accessibilityRole="radiogroup" className="gap-2 px-4 py-3.5">
         {themes.map((theme) => (
           <RadioOption
             key={theme.value}
@@ -166,7 +166,7 @@ export function ThemeSelectorSection({
         ))}
       </View>
       {issues.length > 0 ? (
-        <View className="gap-1">
+        <View className="gap-1 px-4 pb-3.5">
           {issues.map((issue) => (
             <Text className="text-sm text-text-secondary" key={`${issue.filename}-${issue.message}`}>
               {issue.filename}: {issue.message}
@@ -189,7 +189,7 @@ export function BackgroundSettingsSection({
   const imagePath = source.type === "image" ? source.imagePath : "";
 
   return (
-    <SettingsSection card={false} className="mt-6" contentClassName="gap-3" title="Background">
+    <SettingsSection title="Background">
       <SettingsRow
         title="Liquid Glass"
         description="Use the native translucent glass background"
@@ -237,12 +237,12 @@ export function BackgroundSettingsSection({
                 placeholder="/path/to/image.jpg"
                 autoCapitalize="none"
                 autoCorrect={false}
-                className="h-9 w-72 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-text-primary"
+                className="h-8 w-72 rounded-md border border-border-primary bg-background-primary px-2 text-sm text-text-primary"
               />
               {onChooseImage ? (
                 <Pressable
                   accessibilityRole="button"
-                  className="h-9 justify-center rounded-md bg-background-secondary px-3"
+                  className="h-8 justify-center rounded-md border border-border-primary bg-background-primary px-3 hover:bg-background-secondary/70"
                   onPress={async () => {
                     const nextImagePath = await onChooseImage();
                     if (nextImagePath) {
@@ -268,7 +268,7 @@ export function BackgroundSettingsSection({
                 value={normalizePercent(background.opacity)}
                 onChangeText={(value) => onBackgroundChange(setBackgroundOpacity(background, value))}
                 keyboardType="numeric"
-                className="h-9 w-20 rounded-md border border-border-primary bg-background-secondary px-2 text-center text-sm text-text-primary"
+                className="h-8 w-20 rounded-md border border-border-primary bg-background-primary px-2 text-center text-sm text-text-primary"
               />
               <Text className="text-sm text-text-secondary">%</Text>
             </View>
