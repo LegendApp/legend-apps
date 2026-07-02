@@ -37,11 +37,11 @@ Do not run release builds by default while iterating. Use `bun run typecheck`, t
 
 There is no dedicated test runner configured yet. Treat `bun run typecheck` and targeted app verification as the baseline before submitting changes. For native package work, run `bun run <app> verify <platform>` against an app that consumes the package, and prefer `test-kitchen-sink` for integration coverage.
 
-## UI Verification With Agent Device
+## Optional UI Verification With Agent Device
 
-Use `agent-device` as the default runtime debugging and UI automation surface for React Native macOS apps in this repo. Prefer it for app UI inspection, action injection, screenshots, logs, Metro reloads, React DevTools checks, and repeatable verification flows before reaching for manual OS interaction or raw platform tools.
+Do not run or test apps with `agent-device` unless the user explicitly asks for runtime debugging, UI automation, screenshots, logs, Metro reloads, React DevTools checks, or repeatable verification flows. Prefer code inspection, focused unit tests, typecheck, and targeted non-runtime verification by default.
 
-For macOS app inspection, prefer an app-scoped session, which captures and targets the app window without foregrounding the app or disrupting the user's desktop:
+When the user does ask for macOS app inspection with `agent-device`, prefer an app-scoped session, which captures and targets the app window without foregrounding the app or disrupting the user's desktop:
 
 - Open or bind a macOS app session with `agent-device open <app> --platform macos --surface app`.
 - Capture app-window screenshots with `agent-device --session <name> screenshot <path>`.
@@ -57,7 +57,7 @@ For macOS app inspection, prefer an app-scoped session, which captures and targe
 
 ### Runtime Logs With Agent Device
 
-For React Native macOS app debugging, do not rely on Metro output for runtime logs. Metro often only shows bundling status, and JS `console.info` may be routed to React Native DevTools instead of the app log.
+When the user explicitly asks for React Native macOS app runtime debugging, do not rely on Metro output for runtime logs. Metro often only shows bundling status, and JS `console.info` may be routed to React Native DevTools instead of the app log.
 
 Use the normal `agent-device logs clear --restart` / `mark before` / repro / `mark after` / `logs path` loop above, with these extra checks when logs are empty or confusing:
 
