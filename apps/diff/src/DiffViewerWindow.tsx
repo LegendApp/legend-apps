@@ -604,12 +604,14 @@ function DiffDocumentErrorBody({
 }
 
 function DiffUnsavedMergeDraftBanner({
+  dangerColor,
   disabled,
   fileCount,
   onDiscard,
   onSave,
   primaryColor,
 }: {
+  dangerColor: string;
   disabled: boolean;
   fileCount: number;
   onDiscard: () => void;
@@ -621,7 +623,7 @@ function DiffUnsavedMergeDraftBanner({
     <View style={styles.unsavedMergeBanner}>
       <View style={styles.unsavedMergeBannerShadow}>
         <View style={styles.unsavedMergeBannerFrame}>
-          <GlassEffectView glassStyle="regular" tintColor="#00000022" style={styles.unsavedMergeBannerGlass} />
+          <GlassEffectView glassStyle="regular" tintColor={`${dangerColor}24`} style={styles.unsavedMergeBannerGlass} />
           <View style={styles.unsavedMergeBannerInner}>
             <View style={styles.unsavedMergeBannerText}>
               <Text numberOfLines={1} style={styles.unsavedMergeBannerTitle}>
@@ -3758,6 +3760,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (
     <DiffUnsavedMergeDraftBanner
+      dangerColor={displayTheme.colors.danger}
       disabled={isSavingMergeDrafts}
       fileCount={unsavedMergeDraftFiles.length}
       onDiscard={discardMergeDraftsFromCommand}
