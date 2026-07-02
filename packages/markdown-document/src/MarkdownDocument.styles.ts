@@ -54,6 +54,12 @@ export const markdownDocumentStyles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
+  editorInputShell: {
+    backgroundColor: "transparent",
+    minHeight: 25,
+    padding: 0,
+    width: "100%",
+  },
   emptyParagraphPlaceholder: {
     width: "100%",
   },

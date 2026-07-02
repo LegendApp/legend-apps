@@ -111,7 +111,6 @@ export const MarkdownOverlayEditorInput = memo(
   function MarkdownOverlayEditorInput({
     activeBlock,
     activeInputRef,
-    activeStyleBlock,
     markdownStyle,
     onBlurRef,
     onChangeMarkdownRef,
@@ -122,7 +121,6 @@ export const MarkdownOverlayEditorInput = memo(
   }: {
     activeBlock?: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
-    activeStyleBlock?: MarkdownBlockMetadata;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
@@ -161,7 +159,7 @@ export const MarkdownOverlayEditorInput = memo(
         }}
         scrollEnabled={false}
         style={StyleSheet.flatten([
-          activeStyleBlock ? editableTextStyleForBlock(activeStyleBlock, markdownStyle) : styles.editorInput,
+          styles.editorInputShell,
           styles.overlayEditorInput,
         ])}
       />
@@ -171,9 +169,6 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.activeBlock?.id === nextProps.activeBlock?.id &&
     previousProps.activeBlock?.type === nextProps.activeBlock?.type &&
     previousProps.activeBlock?.headingLevel === nextProps.activeBlock?.headingLevel &&
-    previousProps.activeStyleBlock?.id === nextProps.activeStyleBlock?.id &&
-    previousProps.activeStyleBlock?.type === nextProps.activeStyleBlock?.type &&
-    previousProps.activeStyleBlock?.headingLevel === nextProps.activeStyleBlock?.headingLevel &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.onBlurRef === nextProps.onBlurRef &&

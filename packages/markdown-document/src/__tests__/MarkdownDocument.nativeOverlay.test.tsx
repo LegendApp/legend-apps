@@ -297,7 +297,7 @@ describe("MarkdownDocument native editor overlay", () => {
     }));
   });
 
-  it("updates the overlay editor style when heading level changes", async () => {
+  it("keeps the overlay editor style stable when heading level changes", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -338,7 +338,19 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 18 }));
+    const initialOverlayStyle = flattenStyle(editorInput(renderer!).props.style);
+    expect(initialOverlayStyle).toEqual(expect.objectContaining({
+      left: -10000,
+      minHeight: 25,
+      padding: 0,
+      position: "absolute",
+      top: -10000,
+      width: "100%",
+    }));
+    expect(initialOverlayStyle).toEqual(expect.not.objectContaining({
+      fontSize: expect.any(Number),
+      lineHeight: expect.any(Number),
+    }));
 
     const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
     activeInput?.setValue.mockClear();
@@ -350,10 +362,10 @@ describe("MarkdownDocument native editor overlay", () => {
 
     expect(host.props.activeBlockId).toBe("d1:b0");
     expect(activeInput?.setValue).toHaveBeenCalledWith("## Heading");
-    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(initialOverlayStyle);
   });
 
-  it("uses block metadata for the overlay editor style while the full block loads", async () => {
+  it("does not derive overlay editor font metrics from block metadata while the full block loads", async () => {
     const adapter = new NativeOverlayAdapter(
       snapshot([
         headingBlock("d1:b0", 0, "## Heading", 2),
@@ -396,14 +408,18 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+    const pendingOverlayStyle = flattenStyle(editorInput(renderer!).props.style);
+    expect(pendingOverlayStyle).toEqual(expect.not.objectContaining({
+      fontSize: expect.any(Number),
+      lineHeight: expect.any(Number),
+    }));
 
     resolveGetBlock();
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(pendingOverlayStyle);
   });
 
   it("keeps measured row size while typed heading changes are still committing", async () => {

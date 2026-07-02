@@ -2792,14 +2792,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markdown: draftMarkdown,
       }
       : undefined);
-    const activeStyleBlock = activeBlock ?? (() => {
-      if (!activeBlockId) {
-        return undefined;
-      }
-
-      const blockIndex = getBlockIndexById(activeBlockId);
-      return blockIndex >= 0 ? getBlockAtIndexForRender(activeBlockId, blockIndex) : undefined;
-    })();
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
       const { blockId, height, rowHeight, width, x, y } = frame;
       const blockIndex = getBlockIndexById(blockId);
@@ -2948,7 +2940,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           <MarkdownOverlayEditorInput
             activeBlock={activeBlock}
             activeInputRef={activeInputRef}
-            activeStyleBlock={activeStyleBlock}
             markdownStyle={resolvedMarkdownStyle}
             onBlurRef={handleEditorBlurRef}
             onChangeMarkdownRef={handleChangeMarkdownRef}

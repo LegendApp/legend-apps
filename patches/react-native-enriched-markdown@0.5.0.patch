@@ -1305,11 +1305,12 @@ index 96969e8..a8de429 100644
    [self updatePlaceholderVisibility];
  
    _blockEmitting = NO;
-@@ -514,10 +691,66 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -514,10 +691,67 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  - (void)resetBaseTypingAttributes
  {
 -  ENRMSetDefaultTypingAttributes(_textView, @{
++  _textView.font = _formatterStyle.baseFont;
 +  NSMutableDictionary *attrs = [@{
      NSFontAttributeName : _formatterStyle.baseFont,
      NSForegroundColorAttributeName : _formatterStyle.baseTextColor,
@@ -1374,7 +1375,7 @@ index 96969e8..a8de429 100644
  }
  
  - (void)applyFormatting
-@@ -534,6 +767,9 @@ - (void)applyFormatting
+@@ -534,6 +768,9 @@ - (void)applyFormatting
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges toTextView:_textView style:_formatterStyle];
    [_detectorPipeline refreshAllStyling];
@@ -1630,6 +1631,14 @@ diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
 index fd76ab3..064aa2c 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
+@@ -2,6 +2,7 @@
+ 
+ #import "ENRMInputFormatter.h"
+ #import "ENRMUIKit.h"
++#import "FontUtils.h"
+ #import <React/RCTConversions.h>
+ 
+ #if !TARGET_OS_OSX
 @@ -63,6 +63,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
      changed = YES;
    }
