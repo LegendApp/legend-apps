@@ -5,6 +5,7 @@ import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
 import { defaultMarkdownStyle } from "../styles";
 import type {
+  MarkdownBlockMetadata,
   MarkdownBlockSnapshot,
   MarkdownDocumentAdapter,
   MarkdownDocumentCommands,
@@ -60,6 +61,11 @@ function headingLevelFromMarkdown(markdown: string) {
   return match ? match[1]!.length : 0;
 }
 
+function metadataOnly(block: MarkdownBlockSnapshot): MarkdownBlockMetadata {
+  const { markdown: _markdown, ...metadata } = block;
+  return metadata;
+}
+
 function snapshot(initialBlocks: MarkdownBlockSnapshot[]): MarkdownDocumentSnapshot {
   return {
     blockCount: initialBlocks.length,
@@ -77,11 +83,15 @@ function snapshot(initialBlocks: MarkdownBlockSnapshot[]): MarkdownDocumentSnaps
 
 class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   applyTransactions: MarkdownTransaction[] = [];
+  pendingGetBlockGate: Promise<void> | undefined;
   pendingTransactionGate: Promise<void> | undefined;
   private blocks: MarkdownBlockSnapshot[] = [];
   private revision = 0;
 
-  constructor(private documentSnapshot: MarkdownDocumentSnapshot) {}
+  constructor(
+    private documentSnapshot: MarkdownDocumentSnapshot,
+    private options: { metadataOnlySyncBlocks?: boolean } = {},
+  ) {}
 
   async load() {
     this.blocks = [...this.documentSnapshot.initialBlocks] as MarkdownBlockSnapshot[];
@@ -89,6 +99,11 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   }
 
   async getBlock(_documentId: string, blockId: string) {
+    if (this.pendingGetBlockGate) {
+      await this.pendingGetBlockGate;
+      this.pendingGetBlockGate = undefined;
+    }
+
     const blockSnapshot = this.blocks.find((candidate) => candidate.id === blockId);
     if (!blockSnapshot) {
       throw new Error(`Missing test block: ${blockId}`);
@@ -97,7 +112,8 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   }
 
   getBlockAtIndexSync(_documentId: string, index: number) {
-    return this.blocks[index];
+    const blockSnapshot = this.blocks[index];
+    return this.options.metadataOnlySyncBlocks && blockSnapshot ? metadataOnly(blockSnapshot) : blockSnapshot;
   }
 
   async getBlocks(_documentId: string, startIndex: number, count: number) {
@@ -334,6 +350,59 @@ describe("MarkdownDocument native editor overlay", () => {
 
     expect(host.props.activeBlockId).toBe("d1:b0");
     expect(activeInput?.setValue).toHaveBeenCalledWith("## Heading");
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+  });
+
+  it("uses block metadata for the overlay editor style while the full block loads", async () => {
+    const adapter = new NativeOverlayAdapter(
+      snapshot([
+        headingBlock("d1:b0", 0, "## Heading", 2),
+      ]),
+      { metadataOnlySyncBlocks: true },
+    );
+    let resolveGetBlock!: () => void;
+    adapter.pendingGetBlockGate = new Promise<void>((resolve) => {
+      resolveGetBlock = resolve;
+    });
+    const markdownStyle = {
+      ...defaultMarkdownStyle,
+      h2: { ...defaultMarkdownStyle.h2, fontSize: 22 },
+      paragraph: { ...defaultMarkdownStyle.paragraph, fontSize: 12 },
+    };
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          markdownStyle={markdownStyle}
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      nativeHost(renderer!).props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          rowHeight: 44,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
+
+    resolveGetBlock();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({ fontSize: 22 }));
   });
 

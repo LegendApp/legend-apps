@@ -77,7 +77,7 @@ export function resolveSelectionColor(selectionColor: string | undefined): Color
 }
 
 export function editableTextStyleForBlock(
-  block: MarkdownBlockSnapshot,
+  block: MarkdownBlockMetadata,
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>,
 ) {
   const headingLevel = getHeadingLevel(block);
