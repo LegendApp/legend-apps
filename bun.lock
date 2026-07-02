@@ -63,6 +63,7 @@
         "@legend-desktop/drag-drop": "0.0.0",
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/file-system-watcher": "0.0.0",
+        "@legend-desktop/glass-effect-view": "0.0.0",
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/native-select": "workspace:*",

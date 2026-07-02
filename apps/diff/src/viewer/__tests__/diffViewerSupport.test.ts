@@ -128,6 +128,7 @@ describe("diffViewerSupport", () => {
   it("builds comparable toolbar models", () => {
     const state = createLoadedState();
     const model = getDiffWindowToolbarModel({
+      hasUnsavedMergeDrafts: false,
       loadingSource: null,
       sidebarCollapsed: false,
       state,
@@ -135,6 +136,7 @@ describe("diffViewerSupport", () => {
     });
 
     expect(diffToolbarModelsEqual(model, { ...model })).toBe(true);
+    expect(diffToolbarModelsEqual(model, { ...model, hasUnsavedMergeDrafts: true })).toBe(false);
     expect(diffToolbarModelsEqual(model, { ...model, sidebarCollapsed: true })).toBe(false);
     expect(diffToolbarModelsEqual(model, { ...model, viewMode: "blocks" })).toBe(false);
   });

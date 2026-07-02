@@ -19,6 +19,7 @@ import {
 } from "@legend-desktop/diff-parser";
 import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
+import { GlassEffectView } from "@legend-desktop/glass-effect-view";
 import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
 import { LightText, nowMs, TokenizedText, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
@@ -26,6 +27,8 @@ import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-desktop/syntax-parser";
 import { TextInputSearch, type TextInputSearchRef } from "@legend-desktop/text-input-search";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
+import { addWindowCloseRequestedListener, closeWindow } from "@legend-desktop/window-manager";
+import { useWindowId } from "@legend-desktop/windows";
 import {
   VirtualizedFixedDocumentList,
   type VirtualizedDocumentRowsState,
@@ -42,6 +45,7 @@ import type { Observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import {
   createDiffMergeDraftFileWithResolvedBlock,
@@ -62,6 +66,12 @@ import {
   writeDiffMergeFileContent,
 } from "./diffMerge";
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
+import {
+  areDiffMergeConflictActionsDisabled,
+  diffMergeSaveConflictKey,
+  getMergeConflictKey,
+  isDiffMergeSavePending,
+} from "./diffMergeControls";
 import {
   getDiffViewModeSetting,
   getDiffShowOnlyHunksSetting,
@@ -160,6 +170,7 @@ import {
 
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffMergeSaveWatchSuppressMs = 2_000;
+const diffUnsavedMergeBannerHeight = 48;
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
@@ -172,6 +183,11 @@ type DiffLoadedCacheEntry = {
 type DiffMergeDraftFile = {
   content: string;
   file: DiffMergeConflictFile;
+};
+
+type DiffMergeFileResolveQueue = {
+  chain: Promise<void>;
+  completedOriginalBlockIndexes: number[];
 };
 
 type DiffViewerWindowProps = {
@@ -238,6 +254,10 @@ function clearDiffMergeDraftFlag(file: DiffMergeConflictFile) {
   return savedFile;
 }
 
+function getUnsavedDiffMergeDraftFiles(mergeState: DiffMergeState) {
+  return mergeState.status === "ready" ? mergeState.files.filter((file) => file.hasUnsavedDraft) : [];
+}
+
 function isSaveKeyEvent(event: { keyCode: number; modifiers: number }) {
   const saveModifiers = KeyCodes.MODIFIER_COMMAND;
   const relevantModifiers =
@@ -268,9 +288,11 @@ type DiffLoadedBodyProps = {
   diffContentHeight: number;
   diffListHeight: number;
   diffPaneHeight: number;
+  diffTopChromeHeight: number;
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
   documentErrorBody: ReactNode;
   fileFilterInputRef: RefObject<TextInputSearchRef | null>;
+  floatingDocumentBanner: ReactNode;
   getItemSize: (index: number) => number;
   getItemType: (index: number) => string;
   getRow: (index: number) => DiffRenderRow | undefined;
@@ -298,7 +320,7 @@ type DiffLoadedBodyProps = {
   renderSidebarFile: (props: LegendListRenderItemProps<DiffFileSummary>) => ReactElement;
   renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
   requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
-  resolvingMergeConflictKey: string | null;
+  resolvingMergeConflictKeys: ReadonlySet<string>;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   rowHeight: number;
   sidebarCollapsed: boolean;
@@ -581,6 +603,70 @@ function DiffDocumentErrorBody({
   ) : null;
 }
 
+function DiffUnsavedMergeDraftBanner({
+  disabled,
+  fileCount,
+  onDiscard,
+  onSave,
+  primaryColor,
+}: {
+  disabled: boolean;
+  fileCount: number;
+  onDiscard: () => void;
+  onSave: () => void;
+  primaryColor: string;
+}) {
+  const fileLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
+  return (
+    <View style={styles.unsavedMergeBanner}>
+      <View style={styles.unsavedMergeBannerShadow}>
+        <View style={styles.unsavedMergeBannerFrame}>
+          <GlassEffectView glassStyle="regular" tintColor="#00000022" style={styles.unsavedMergeBannerGlass} />
+          <View style={styles.unsavedMergeBannerInner}>
+            <View style={styles.unsavedMergeBannerText}>
+              <Text numberOfLines={1} style={styles.unsavedMergeBannerTitle}>
+                Unsaved merge resolutions - {fileLabel}
+              </Text>
+            </View>
+            <View style={styles.unsavedMergeBannerActions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={disabled}
+                onPress={onDiscard}
+                style={({ pressed }) => [
+                  styles.unsavedMergeBannerButton,
+                  {
+                    borderColor: "#ffffff66",
+                    opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
+                  },
+                ]}
+              >
+                <Text style={styles.unsavedMergeBannerButtonText}>Discard</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={disabled}
+                onPress={onSave}
+                style={({ pressed }) => [
+                  styles.unsavedMergeBannerButton,
+                  styles.unsavedMergeBannerSaveButton,
+                  {
+                    backgroundColor: primaryColor,
+                    borderColor: primaryColor,
+                    opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
+                  },
+                ]}
+              >
+                <Text style={styles.unsavedMergeBannerButtonText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function DiffFatalBody({
   borderColor,
   dangerColor,
@@ -612,24 +698,35 @@ function DiffFatalBody({
 
 function DiffNoChangesBody({
   documentErrorBody,
+  floatingDocumentBanner,
+  hasDocumentChrome,
   foregroundColor,
   mutedColor,
   visibleSourceLabel,
 }: {
   documentErrorBody: ReactNode;
+  floatingDocumentBanner: ReactNode;
+  hasDocumentChrome: boolean;
   foregroundColor: string;
   mutedColor: string;
   visibleSourceLabel: string;
 }) {
   return (
-    <View style={styles.empty}>
-      {documentErrorBody}
-      <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-        No changes
-      </Text>
-      <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
-        {visibleSourceLabel}
-      </Text>
+    <View style={styles.noChangesRoot}>
+      {hasDocumentChrome ? (
+        <View style={styles.noChangesTopChrome}>
+          {documentErrorBody}
+        </View>
+      ) : null}
+      <View style={styles.empty}>
+        <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
+          No changes
+        </Text>
+        <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
+          {visibleSourceLabel}
+        </Text>
+      </View>
+      {floatingDocumentBanner}
     </View>
   );
 }
@@ -774,9 +871,11 @@ function DiffLoadedBody({
   diffContentHeight,
   diffListHeight,
   diffPaneHeight,
+  diffTopChromeHeight,
   diffRows,
   documentErrorBody,
   fileFilterInputRef,
+  floatingDocumentBanner,
   getItemSize,
   getItemType,
   getRow,
@@ -803,7 +902,7 @@ function DiffLoadedBody({
   renderSidebarFile,
   renderSideBySideRow,
   requestSideBySideRange,
-  resolvingMergeConflictKey,
+  resolvingMergeConflictKeys,
   onResolveMergeConflict,
   rowHeight,
   sidebarCollapsed,
@@ -835,7 +934,7 @@ function DiffLoadedBody({
     mutedColor,
     onResolveMergeConflict,
     primaryColor,
-    resolvingMergeConflictKey,
+    resolvingMergeConflictKeys,
     rowHeight,
     rowRenderer: listExtraData.rowRenderer,
     showOnlyHunks: listExtraData.showOnlyHunks,
@@ -915,7 +1014,9 @@ function DiffLoadedBody({
     const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
     const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
     const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
-    const listHeader = <View style={styles.diffTitlebarSpacer} />;
+    const hasTopChrome = diffTopChromeHeight > 0;
+    const listHeader = hasTopChrome ? undefined : <View style={styles.diffTitlebarSpacer} />;
+    const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
     let list: ReactElement;
     if (viewMode === "unified") {
       list = (
@@ -929,7 +1030,7 @@ function DiffLoadedBody({
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
           getItemSize={(index) => inlineMergeModel.getItemSize(index, getItemSize)}
           getItemType={(index) => inlineMergeModel.getItemType(index, getItemType)}
-          listHeaderHeight={diffTitlebarTopInset}
+          listHeaderHeight={listHeaderHeight}
           lineOverscan={diffLineOverscan}
           listRef={listRef}
           onTopItemChanged={(index) => {
@@ -967,7 +1068,7 @@ function DiffLoadedBody({
           getItemSize={(index) => inlineMergeModel.getItemSize(index, getSideBySideItemSize)}
           getItemType={(index) => inlineMergeModel.getItemType(index, getSideBySideItemType)}
           getRow={(index) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeSideBySideRows ? undefined : getSideBySideRow(index))}
-          listHeaderHeight={diffTitlebarTopInset}
+          listHeaderHeight={listHeaderHeight}
           lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
           listRef={listRef}
           onTopItemChanged={(index) => {
@@ -1003,7 +1104,11 @@ function DiffLoadedBody({
           },
         ]}
       >
-        {documentErrorBody}
+        {hasTopChrome ? (
+          <View style={[styles.diffPaneTopChrome, { height: diffTopChromeHeight, minHeight: diffTopChromeHeight }]}>
+            {documentErrorBody}
+          </View>
+        ) : null}
         {nativeRowConfig ? (
           <DiffNativeRowConfig
             addAccentColor={nativeRowConfig.addAccentColor}
@@ -1113,6 +1218,7 @@ function DiffLoadedBody({
         <View style={styles.diffWorkspace}>
           <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
             {diffContent}
+            {floatingDocumentBanner}
             <DiffSyntaxProgressBar
               foregroundColor={syntaxAppearance === "dark" ? "#58a6ffe6" : "#0969dadb"}
               progress={syntaxTokenizationProgress.progress}
@@ -1174,10 +1280,6 @@ function getActiveMergeFile({
   }
   const activeFile = getActiveDiffFile(files, activeFileIndex);
   return getMergeConflictFileForDiffFile(mergeState, activeFile);
-}
-
-function getMergeConflictKey(file: DiffMergeConflictFile, block: DiffMergeConflictBlock) {
-  return `${file.path}:${block.startLine}`;
 }
 
 function DiffMergeActionButton({
@@ -1455,7 +1557,7 @@ function DiffMergeCenterGutter({
   mutedColor,
   onResolveMergeConflict,
   primaryColor,
-  resolvingMergeConflictKey,
+  resolvingMergeConflictKeys,
 }: {
   block: DiffMergeConflictBlock | null;
   borderColor: string;
@@ -1463,10 +1565,10 @@ function DiffMergeCenterGutter({
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
-  resolvingMergeConflictKey: string | null;
+  resolvingMergeConflictKeys: ReadonlySet<string>;
 }) {
-  const controlsDisabled = resolvingMergeConflictKey !== null;
-  const isResolving = block ? resolvingMergeConflictKey === getMergeConflictKey(file, block) : false;
+  const controlsDisabled = areDiffMergeConflictActionsDisabled(file, block, resolvingMergeConflictKeys);
+  const isResolving = block ? resolvingMergeConflictKeys.has(getMergeConflictKey(file, block)) : false;
   return (
     <View style={[styles.mergeCommonMiddle, { borderColor }]}>
       {block ? (
@@ -1526,7 +1628,7 @@ function DiffMergeLineRow({
   onResolveMergeConflict,
   primaryColor,
   renderer,
-  resolvingMergeConflictKey,
+  resolvingMergeConflictKeys,
   rightSyntaxLine,
   rightTokens,
   row,
@@ -1547,7 +1649,7 @@ function DiffMergeLineRow({
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
   renderer: DiffRowRendererSetting;
-  resolvingMergeConflictKey: string | null;
+  resolvingMergeConflictKeys: ReadonlySet<string>;
   rightSyntaxLine: SyntaxRenderLine;
   rightTokens: string;
   row: DiffMergeDisplayRow | undefined;
@@ -1599,7 +1701,7 @@ function DiffMergeLineRow({
           mutedColor={mutedColor}
           onResolveMergeConflict={onResolveMergeConflict}
           primaryColor={primaryColor}
-          resolvingMergeConflictKey={resolvingMergeConflictKey}
+          resolvingMergeConflictKeys={resolvingMergeConflictKeys}
         />
         <View style={styles.mergeCommonPane}>
           <DiffMergeCodePane
@@ -1637,7 +1739,7 @@ function useDiffInlineMergeModel({
   mutedColor,
   onResolveMergeConflict,
   primaryColor,
-  resolvingMergeConflictKey,
+  resolvingMergeConflictKeys,
   rowRenderer,
   rowHeight,
   showOnlyHunks,
@@ -1660,7 +1762,7 @@ function useDiffInlineMergeModel({
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
-  resolvingMergeConflictKey: string | null;
+  resolvingMergeConflictKeys: ReadonlySet<string>;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   showOnlyHunks: boolean;
@@ -1710,7 +1812,7 @@ function useDiffInlineMergeModel({
     mergeSyntaxVersion,
     mutedColor,
     primaryColor,
-    resolvingMergeConflictKey,
+    resolvingMergeConflictKeys,
     rowHeight,
     rowRenderer,
     showOnlyHunks,
@@ -1724,7 +1826,7 @@ function useDiffInlineMergeModel({
     mergeSyntaxVersion,
     mutedColor,
     primaryColor,
-    resolvingMergeConflictKey,
+    resolvingMergeConflictKeys,
     rowHeight,
     rowRenderer,
     showOnlyHunks,
@@ -1900,7 +2002,7 @@ function useDiffInlineMergeModel({
           onResolveMergeConflict={onResolveMergeConflict}
           primaryColor={primaryColor}
           renderer={rowRenderer}
-          resolvingMergeConflictKey={resolvingMergeConflictKey}
+          resolvingMergeConflictKeys={resolvingMergeConflictKeys}
           rightSyntaxLine={rightSyntaxLine}
           rightTokens={encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor)}
           row={displayRow}
@@ -1910,7 +2012,7 @@ function useDiffInlineMergeModel({
         />
       );
     },
-    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKey, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {
@@ -2051,6 +2153,7 @@ export function DiffViewerWindow(props: DiffViewerWindowProps) {
 }
 
 function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
+  const windowIdentifier = useWindowId();
   const renderCountRef = useRef(0);
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
@@ -2102,6 +2205,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const diffPaneHeight = useValue(diffPaneHeight$);
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
+  const unsavedMergeDraftFiles = useMemo(() => getUnsavedDiffMergeDraftFiles(mergeState), [mergeState]);
+  const hasUnsavedMergeDrafts = unsavedMergeDraftFiles.length > 0;
   const collapsedFileIndexesKey = useMemo(
     () => [...collapsedFileIndexes].sort((left, right) => left - right).join(","),
     [collapsedFileIndexes],
@@ -2126,7 +2231,28 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     version: 0,
     visible: false,
   });
-  const [resolvingMergeConflictKey, setResolvingMergeConflictKey] = useState<string | null>(null);
+  const [resolvingMergeConflictKeys, setResolvingMergeConflictKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
+  const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
+  const isSavingMergeDrafts = resolvingMergeConflictKeys.has(diffMergeSaveConflictKey);
+
+  const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
+    const nextKeys = new Set(resolvingMergeConflictKeysRef.current);
+    if (active) {
+      nextKeys.add(key);
+    } else {
+      nextKeys.delete(key);
+    }
+    resolvingMergeConflictKeysRef.current = nextKeys;
+    setResolvingMergeConflictKeys(nextKeys);
+  }, []);
+
+  const waitForMergeResolveQueues = useCallback(async () => {
+    const queues = [...mergeResolveQueuesRef.current.values()];
+    if (queues.length > 0) {
+      await Promise.all(queues.map((queue) => queue.chain.catch(() => undefined)));
+    }
+  }, []);
   const isLoading = loadingSource !== null;
   const isLoadingGithub = loadingSource?.kind === "github";
   const isRenderingInitialLoadedFrame =
@@ -2712,89 +2838,144 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [nativeDiffRows, setDocumentErrorValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
 
-  const saveMergeDrafts = useCallback(() => {
+  const saveMergeDrafts = useCallback(async () => {
+    if (savingMergeDraftsRef.current) {
+      return false;
+    }
+
+    await waitForMergeResolveQueues();
+
     const currentState = state$.peek();
     const draftEntries = [...mergeDraftsRef.current.entries()];
     const sourceKey = currentState.source ? getDiffSourceCacheKey(currentState.source) : null;
-    let didStartSave = false;
     if (
-      currentState.status === "loaded" &&
-      currentState.source.kind === "folder" &&
-      draftEntries.length > 0 &&
-      mergeDraftsSourceKeyRef.current === sourceKey &&
-      resolvingMergeConflictKey === null &&
-      !savingMergeDraftsRef.current
+      currentState.status !== "loaded" ||
+      currentState.source.kind !== "folder" ||
+      draftEntries.length === 0 ||
+      mergeDraftsSourceKeyRef.current !== sourceKey ||
+      resolvingMergeConflictKeysRef.current.size !== 0
     ) {
-      didStartSave = true;
-      savingMergeDraftsRef.current = true;
-      suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
-      setResolvingMergeConflictKey("__merge-save__");
-      setDocumentErrorValue(null);
-      Promise.resolve()
-        .then(async () => {
-          const draftPaths = new Set(draftEntries.map(([path]) => path));
-          for (const [path, draft] of draftEntries) {
-            await writeDiffMergeFileContent({
-              content: draft.content,
-              folderPath: currentState.source.value,
-              path,
-            });
-          }
-          suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
-          for (const key of loadedCacheRef.current.keys()) {
-            if (key.startsWith(`${sourceKey}:`)) {
-              loadedCacheRef.current.delete(key);
-            }
-          }
-          mergeDraftsRef.current = new Map();
-          mergeDraftsSourceKeyRef.current = null;
-          const currentMergeState = mergeState$.peek();
-          if (currentMergeState.status === "ready") {
-            setMergeStateValue(createReadyMergeState(
-              currentMergeState.files.map((file) => (
-                draftPaths.has(file.path) ? clearDiffMergeDraftFlag(file) : file
-              )),
-            ));
-          }
-        })
-        .catch((error: unknown) => {
-          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        })
-        .finally(() => {
-          savingMergeDraftsRef.current = false;
-          setResolvingMergeConflictKey(null);
-        });
+      return false;
     }
-    return didStartSave;
-  }, [mergeState$, resolvingMergeConflictKey, setDocumentErrorValue, setMergeStateValue, state$]);
+
+    savingMergeDraftsRef.current = true;
+    suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
+    setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, true);
+    setDocumentErrorValue(null);
+    try {
+      const draftPaths = new Set(draftEntries.map(([path]) => path));
+      for (const [path, draft] of draftEntries) {
+        await writeDiffMergeFileContent({
+          content: draft.content,
+          folderPath: currentState.source.value,
+          path,
+        });
+      }
+      suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
+      for (const key of loadedCacheRef.current.keys()) {
+        if (key.startsWith(`${sourceKey}:`)) {
+          loadedCacheRef.current.delete(key);
+        }
+      }
+      mergeDraftsRef.current = new Map();
+      mergeDraftsSourceKeyRef.current = null;
+      const currentMergeState = mergeState$.peek();
+      if (currentMergeState.status === "ready") {
+        setMergeStateValue(createReadyMergeState(
+          currentMergeState.files.map((file) => (
+            draftPaths.has(file.path) ? clearDiffMergeDraftFlag(file) : file
+          )),
+        ));
+      }
+      return true;
+    } catch (error: unknown) {
+      setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+      return false;
+    } finally {
+      savingMergeDraftsRef.current = false;
+      setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, false);
+    }
+  }, [mergeState$, setDocumentErrorValue, setMergeStateValue, setResolvingMergeConflictKeyActive, state$, waitForMergeResolveQueues]);
+
+  const saveMergeDraftsFromCommand = useCallback(() => {
+    const hasSaveWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
+    if (hasSaveWork && !savingMergeDraftsRef.current) {
+      saveMergeDrafts().catch((error: unknown) => {
+        const currentState = state$.peek();
+        if (currentState.status === "loaded") {
+          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+        }
+      });
+      return true;
+    }
+    return false;
+  }, [saveMergeDrafts, setDocumentErrorValue, state$]);
 
   useEffect(() => addKeyDownListener((event) => {
     let handled = false;
     if (isSaveKeyEvent(event)) {
-      handled = saveMergeDrafts();
+      handled = saveMergeDraftsFromCommand();
     }
     return handled;
-  }), [saveMergeDrafts]);
+  }), [saveMergeDraftsFromCommand]);
+
+  const getCurrentMergeFileForResolve = useCallback((path: string) => {
+    const existingDraft = mergeDraftsRef.current.get(path);
+    if (existingDraft) {
+      return existingDraft.file;
+    }
+    const currentMergeState = mergeState$.peek();
+    return currentMergeState.status === "ready" ? currentMergeState.fileByPath.get(path) ?? null : null;
+  }, [mergeState$]);
 
   const resolveMergeConflict = useCallback((file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => {
     const currentState = state$.peek();
-    if (currentState.status === "loaded" && currentState.source.kind === "folder" && resolvingMergeConflictKey === null && !savingMergeDraftsRef.current) {
-      const conflictKey = getMergeConflictKey(file, block);
-      setResolvingMergeConflictKey(conflictKey);
+    const resolvingKeys = resolvingMergeConflictKeysRef.current;
+    const conflictKey = getMergeConflictKey(file, block);
+    if (
+      currentState.status === "loaded" &&
+      currentState.source.kind === "folder" &&
+      !savingMergeDraftsRef.current &&
+      !isDiffMergeSavePending(resolvingKeys) &&
+      !resolvingKeys.has(conflictKey)
+    ) {
+      setResolvingMergeConflictKeyActive(conflictKey, true);
       setDocumentErrorValue(null);
-      Promise.resolve()
-        .then(async () => {
+
+      const originalBlockIndex = Math.max(
+        0,
+        file.markerBlocks.findIndex((candidate) => candidate === block || candidate.startLine === block.startLine),
+      );
+      const queue = mergeResolveQueuesRef.current.get(file.path) ?? {
+        chain: Promise.resolve(),
+        completedOriginalBlockIndexes: [],
+      };
+      const runResolve = async () => {
+        try {
           const existingDraft = mergeDraftsRef.current.get(file.path);
+          const currentFile = getCurrentMergeFileForResolve(file.path) ?? file;
+          const resolvedEarlierBlocks = queue.completedOriginalBlockIndexes.filter((index) => index < originalBlockIndex).length;
+          const currentBlockIndex = Math.max(0, originalBlockIndex - resolvedEarlierBlocks);
+          const currentBlock = currentFile.markerBlocks[currentBlockIndex] ?? currentFile.markerBlocks.find((candidate) => (
+            candidate.oursLines.length === block.oursLines.length &&
+            candidate.theirsLines.length === block.theirsLines.length &&
+            candidate.oursLines.every((line, index) => line === block.oursLines[index]) &&
+            candidate.theirsLines.every((line, index) => line === block.theirsLines[index])
+          ));
+          if (!currentBlock) {
+            throw new Error(`Unable to find conflict block in ${file.path}.`);
+          }
+
           const currentContent = existingDraft?.content ?? await readDiffMergeFileContent({
             folderPath: currentState.source.value,
             path: file.path,
           });
-          const resolvedContent = resolveDiffMergeConflictContent(currentContent, block.startLine, choice);
+          const resolvedContent = resolveDiffMergeConflictContent(currentContent, currentBlock.startLine, choice);
           const nextFile = createDiffMergeDraftFileWithResolvedBlock({
-            block,
+            block: currentBlock,
             choice,
             content: resolvedContent,
-            file,
+            file: currentFile,
           });
           const nextDrafts = new Map(mergeDraftsRef.current);
           nextDrafts.set(file.path, {
@@ -2812,15 +2993,105 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                 .filter((currentFile) => currentFile.markerBlocks.length > 0 || currentFile.hasUnsavedDraft),
             ));
           }
-        })
-        .catch((error: unknown) => {
+
+          queue.completedOriginalBlockIndexes.push(originalBlockIndex);
+        } catch (error: unknown) {
           setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        })
-        .finally(() => {
-          setResolvingMergeConflictKey(null);
-        });
+        } finally {
+          setResolvingMergeConflictKeyActive(conflictKey, false);
+        }
+      };
+
+      const nextChain = queue.chain
+        .catch(() => undefined)
+        .then(runResolve);
+      queue.chain = nextChain;
+      mergeResolveQueuesRef.current.set(file.path, queue);
+      nextChain.finally(() => {
+        if (mergeResolveQueuesRef.current.get(file.path)?.chain === nextChain) {
+          mergeResolveQueuesRef.current.delete(file.path);
+        }
+      });
     }
-  }, [mergeState$, resolvingMergeConflictKey, setDocumentErrorValue, setMergeStateValue, state$]);
+  }, [getCurrentMergeFileForResolve, mergeState$, setDocumentErrorValue, setMergeStateValue, setResolvingMergeConflictKeyActive, state$]);
+
+  const discardMergeDrafts = useCallback(async () => {
+    await waitForMergeResolveQueues();
+    const currentState = state$.peek();
+    if (currentState.status !== "loaded" || currentState.source.kind !== "folder") {
+      return false;
+    }
+
+    mergeDraftsRef.current = new Map();
+    mergeDraftsSourceKeyRef.current = null;
+    const nextMergeState = await loadDiffMergeState(currentState.source.value);
+    setMergeStateValue(nextMergeState);
+    return true;
+  }, [setMergeStateValue, state$, waitForMergeResolveQueues]);
+
+  const discardMergeDraftsFromCommand = useCallback(() => {
+    if (hasUnsavedMergeDrafts && !isSavingMergeDrafts) {
+      discardMergeDrafts().catch((error: unknown) => {
+        const currentState = state$.peek();
+        if (currentState.status === "loaded") {
+          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+        }
+      });
+    }
+  }, [discardMergeDrafts, hasUnsavedMergeDrafts, isSavingMergeDrafts, setDocumentErrorValue, state$]);
+
+  const prepareMergeDraftsForClose = useCallback(async () => {
+    await waitForMergeResolveQueues();
+    const currentState = state$.peek();
+    const draftFiles = getUnsavedDiffMergeDraftFiles(mergeState$.peek());
+    if (currentState.status !== "loaded" || draftFiles.length === 0) {
+      return true;
+    }
+
+    const action = await confirmUnsavedDiffMergeDrafts({
+      fileCount: draftFiles.length,
+      sourceLabel: getDiffSourceLabel(currentState.source),
+    });
+
+    if (action === "discard") {
+      return true;
+    }
+
+    if (action === "save") {
+      return saveMergeDrafts();
+    }
+
+    return false;
+  }, [mergeState$, saveMergeDrafts, state$, waitForMergeResolveQueues]);
+
+  useEffect(() => {
+    let isCloseInFlight = false;
+    const subscription = addWindowCloseRequestedListener((event) => {
+      if (event.identifier === windowIdentifier && !isCloseInFlight) {
+        isCloseInFlight = true;
+        prepareMergeDraftsForClose()
+          .then((canClose) => {
+            if (canClose) {
+              return closeWindow(windowIdentifier);
+            }
+            return null;
+          })
+          .catch((error: unknown) => {
+            const currentState = state$.peek();
+            if (currentState.status === "loaded") {
+              setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+            }
+            return null;
+          })
+          .finally(() => {
+            isCloseInFlight = false;
+          });
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [prepareMergeDraftsForClose, setDocumentErrorValue, state$, windowIdentifier]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {
@@ -3461,7 +3732,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       ? diffDocumentPermissionErrorHeight
       : diffDocumentErrorHeight
     : 0;
-  const diffListHeight = Math.max(0, diffContentHeight - documentErrorHeight);
+  const diffTopChromeContentHeight = documentErrorHeight;
+  const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
+  const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
   const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
   const currentActiveFileIndex = useValue(activeFileIndex$);
@@ -3483,6 +3756,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       onRetry={reloadCurrentSource}
     />
   );
+  const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (
+    <DiffUnsavedMergeDraftBanner
+      disabled={isSavingMergeDrafts}
+      fileCount={unsavedMergeDraftFiles.length}
+      onDiscard={discardMergeDraftsFromCommand}
+      onSave={saveMergeDraftsFromCommand}
+      primaryColor={displayTheme.colors.primary}
+    />
+  ) : null;
   let body: ReactNode;
 
   if (state.status === "fatal") {
@@ -3500,6 +3782,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     body = activeItemIndexes.length === 0 && !activeMergeFile ? (
       <DiffNoChangesBody
         documentErrorBody={documentErrorBody}
+        floatingDocumentBanner={unsavedMergeDraftBanner}
+        hasDocumentChrome={diffTopChromeContentHeight > 0}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         visibleSourceLabel={visibleSourceLabel}
@@ -3513,9 +3797,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         diffContentHeight={diffContentHeight}
         diffListHeight={diffListHeight}
         diffPaneHeight={diffPaneHeight}
+        diffTopChromeHeight={diffTopChromeHeight}
         diffRows={diffRows}
         documentErrorBody={documentErrorBody}
         fileFilterInputRef={fileFilterInputRef}
+        floatingDocumentBanner={unsavedMergeDraftBanner}
         getItemSize={getItemSize}
         getItemType={getItemType}
         getRow={getRow}
@@ -3542,7 +3828,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         renderSidebarFile={renderSidebarFile}
         renderSideBySideRow={renderSideBySideRow}
         requestSideBySideRange={requestSideBySideRange}
-        resolvingMergeConflictKey={resolvingMergeConflictKey}
+        resolvingMergeConflictKeys={resolvingMergeConflictKeys}
         onResolveMergeConflict={resolveMergeConflict}
         rowHeight={rowHeight}
         sidebarCollapsed={sidebarCollapsed}
@@ -3584,8 +3870,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   return (
     <>
-      <DiffWindowChromeController />
-      <DiffNativeMenuController />
+      <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
+      <DiffNativeMenuController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} isSavingMergeDrafts={isSavingMergeDrafts} />
       <DiffWindowToolbarItemController toggleSidebar={toggleSidebar} />
       <DiffLaunchController
         focusUrlInputRequestId={focusUrlInputRequestId}
@@ -3608,6 +3894,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         focusFileFilter={focusFileFilter}
         reloadCurrentSource={reloadCurrentSource}
         revealCurrentFolder={revealCurrentFolder}
+        saveMergeDrafts={saveMergeDraftsFromCommand}
         toggleShowOnlyHunks={toggleShowOnlyHunks}
         toggleSidebar={toggleSidebar}
       />
@@ -3802,6 +4089,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  diffPaneTopChrome: {
+    paddingTop: diffTitlebarTopInset,
+  },
   diffWorkspace: {
     flex: 1,
     flexDirection: "row",
@@ -3812,6 +4102,13 @@ const styles = StyleSheet.create({
     height: 0,
     overflow: "hidden",
     width: 0,
+  },
+  noChangesRoot: {
+    flex: 1,
+    minHeight: 0,
+  },
+  noChangesTopChrome: {
+    paddingTop: diffTitlebarTopInset,
   },
   diffTitlebarSpacer: {
     height: diffTitlebarTopInset,
@@ -3887,7 +4184,7 @@ const styles = StyleSheet.create({
   },
   sidebarConflictBadge: {
     alignItems: "center",
-    backgroundColor: "#f59e0b",
+    backgroundColor: "#ff453a",
     borderRadius: 7,
     height: 15,
     justifyContent: "center",
@@ -3895,7 +4192,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   sidebarConflictBadgeText: {
-    color: "#111827",
+    color: "#ffffff",
     fontSize: 10,
     fontWeight: "700",
     lineHeight: 12,
@@ -3931,6 +4228,74 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     textTransform: "uppercase",
+  },
+  unsavedMergeBanner: {
+    alignItems: "center",
+    left: 0,
+    paddingHorizontal: 20,
+    position: "absolute",
+    right: 0,
+    top: diffTitlebarTopInset + 10,
+    zIndex: 35,
+  },
+  unsavedMergeBannerActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  unsavedMergeBannerButton: {
+    alignItems: "center",
+    borderRadius: 5,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  unsavedMergeBannerButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+  unsavedMergeBannerFrame: {
+    borderRadius: 8,
+    maxWidth: 420,
+    minHeight: 40,
+    overflow: "hidden",
+  },
+  unsavedMergeBannerGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 8,
+  },
+  unsavedMergeBannerInner: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    maxWidth: 420,
+    minHeight: 40,
+    paddingHorizontal: 10,
+  },
+  unsavedMergeBannerShadow: {
+    alignSelf: "center",
+    borderRadius: 8,
+    maxWidth: 420,
+    shadowColor: "#000000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+  },
+  unsavedMergeBannerSaveButton: {
+    backgroundColor: "#ffffff24",
+    minWidth: 56,
+  },
+  unsavedMergeBannerText: {
+    maxWidth: 230,
+    minWidth: 0,
+  },
+  unsavedMergeBannerTitle: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 17,
   },
   mergeChoiceButton: {
     alignItems: "center",

@@ -15,6 +15,7 @@ export type DiffVisibleSourceModel = {
 };
 
 export type DiffWindowToolbarModel = {
+  hasUnsavedMergeDrafts: boolean;
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
@@ -136,11 +137,13 @@ export function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource:
 
 export function getDiffWindowToolbarModel({
   loadingSource,
+  hasUnsavedMergeDrafts,
   sidebarCollapsed,
   state,
   viewMode,
 }: {
   loadingSource: DiffOpenSource | null;
+  hasUnsavedMergeDrafts: boolean;
   sidebarCollapsed: boolean;
   state: DiffViewerState;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
@@ -150,6 +153,7 @@ export function getDiffWindowToolbarModel({
   const showViewModeToolbar = toolbarSource !== null;
 
   return {
+    hasUnsavedMergeDrafts,
     showSidebarControl: showViewModeToolbar,
     showViewModeToolbar,
     sidebarCollapsed,
@@ -172,6 +176,7 @@ function diffOpenSourcesEqual(left: DiffOpenSource | null, right: DiffOpenSource
 export function diffToolbarModelsEqual(left: DiffWindowToolbarModel | null, right: DiffWindowToolbarModel) {
   return left !== null &&
     left.showSidebarControl === right.showSidebarControl &&
+    left.hasUnsavedMergeDrafts === right.hasUnsavedMergeDrafts &&
     left.showViewModeToolbar === right.showViewModeToolbar &&
     left.sidebarCollapsed === right.sidebarCollapsed &&
     left.viewMode === right.viewMode &&

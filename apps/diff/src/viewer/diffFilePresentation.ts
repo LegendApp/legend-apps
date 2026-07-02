@@ -10,8 +10,8 @@ type FileStatusPresentation = {
 
 export function getConflictedFileStatusPresentation(): FileStatusPresentation {
   return {
-    backgroundColor: "#ffab2d",
-    color: "#1f1300",
+    backgroundColor: "#ff453a",
+    color: "#ffffff",
     iconYOffset: -0.75,
     symbolName: "exclamationmark.triangle.fill",
     title: "Conflicted",

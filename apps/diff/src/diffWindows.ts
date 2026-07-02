@@ -8,8 +8,9 @@ import {
   diffViewerWindowIdentifier,
   diffViewerWindowModuleName,
 } from "./appConstants";
-import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
+import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
+import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
@@ -167,7 +168,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
   const shouldShowSourceToolbar = source !== null;
   const focusUrlInputRequestId = options.focusUrlInput ? ++diffViewerUrlFocusRequestId : undefined;
   const initialProperties = source || options.focusUrlInput
-    ? {
+      ? {
         ...(source ? { source } : {}),
         ...(focusUrlInputRequestId ? { focusUrlInputRequestId } : {}),
         windowIdentifier,
@@ -183,8 +184,9 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     identifier: windowIdentifier,
     initialProperties,
+    interceptClose: true,
     representedURL: source?.value,
-    title: getDiffSourceLabel(source),
+    title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
     transparentBackground: true,
     windowStyle: createDiffViewerWindowStyle({
       includeFrame: true,
@@ -226,6 +228,7 @@ export function setDiffViewerWindowAppearance({
 
 export function setDiffViewerWindowToolbarOptions({
   source,
+  hasUnsavedMergeDrafts,
   showSidebarControl,
   showViewModeToolbar,
   sidebarCollapsed,
@@ -233,6 +236,7 @@ export function setDiffViewerWindowToolbarOptions({
   windowIdentifier,
 }: {
   source: DiffOpenSource | null;
+  hasUnsavedMergeDrafts: boolean;
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
@@ -241,7 +245,7 @@ export function setDiffViewerWindowToolbarOptions({
 }) {
   return setWindowOptions(windowIdentifier, {
     representedURL: source?.value,
-    title: getDiffSourceLabel(source),
+    title: diffViewerWindowTitle({ hasUnsavedMergeDrafts, source }),
     windowStyle: createDiffViewerWindowStyle({
       includeFrame: false,
       showSidebarControl,

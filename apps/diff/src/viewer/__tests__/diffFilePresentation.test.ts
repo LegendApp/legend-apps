@@ -44,7 +44,8 @@ describe("diffFilePresentation", () => {
       title: "Renamed",
     });
     expect(getFileStatusPresentation(createFile({ status: "conflicted" }))).toMatchObject({
-      backgroundColor: "#ffab2d",
+      backgroundColor: "#ff453a",
+      color: "#ffffff",
       iconYOffset: -0.75,
       symbolName: "exclamationmark.triangle.fill",
       title: "Conflicted",

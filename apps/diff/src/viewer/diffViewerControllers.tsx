@@ -5,7 +5,7 @@ import { elapsedMs, measureAfterEffect, nowMs } from "@legend-desktop/source-vie
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { useWindowId } from "@legend-desktop/windows";
 import { useObserveEffect } from "@legendapp/state/react";
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
 import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
@@ -39,19 +39,25 @@ import {
   type DiffWindowToolbarModel,
 } from "./diffViewerSupport";
 
-export function DiffNativeMenuController() {
+export function DiffNativeMenuController({
+  hasUnsavedMergeDrafts,
+  isSavingMergeDrafts,
+}: {
+  hasUnsavedMergeDrafts: boolean;
+  isSavingMergeDrafts: boolean;
+}) {
   const {
     loadingSource$,
     sidebarCollapsed$,
     state$,
   } = useDiffViewerModel();
 
-  useObserveEffect(() => {
-    const currentState = state$.get();
+  const updateDiffNativeMenuItems = useCallback((observe: boolean) => {
+    const currentState = observe ? state$.get() : state$.peek();
     const currentShowOnlyHunks = getDiffShowOnlyHunksSetting();
     const currentViewMode = getDiffViewModeSetting();
-    const currentLoadingSource = loadingSource$.get();
-    const currentSidebarCollapsed = sidebarCollapsed$.get();
+    const currentLoadingSource = observe ? loadingSource$.get() : loadingSource$.peek();
+    const currentSidebarCollapsed = observe ? sidebarCollapsed$.get() : sidebarCollapsed$.peek();
     const currentVisibleSource = currentState.source;
     const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
     const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
@@ -63,6 +69,10 @@ export function DiffNativeMenuController() {
       {
         enabled: currentState.status === "loaded",
         id: "reload",
+      },
+      {
+        enabled: hasUnsavedMergeDrafts && !isSavingMergeDrafts,
+        id: "save",
       },
       {
         enabled: currentVisibleFolderPath !== null,
@@ -107,7 +117,15 @@ export function DiffNativeMenuController() {
         id: "showOnlyHunks",
       },
     ]);
+  }, [hasUnsavedMergeDrafts, isSavingMergeDrafts, loadingSource$, sidebarCollapsed$, state$]);
+
+  useObserveEffect(() => {
+    updateDiffNativeMenuItems(true);
   });
+
+  useEffect(() => {
+    updateDiffNativeMenuItems(false);
+  }, [updateDiffNativeMenuItems]);
 
   return null;
 }
@@ -135,7 +153,11 @@ export function DiffWindowToolbarItemController({
   return null;
 }
 
-export function DiffWindowChromeController() {
+export function DiffWindowChromeController({
+  hasUnsavedMergeDrafts,
+}: {
+  hasUnsavedMergeDrafts: boolean;
+}) {
   const {
     loadingSource$,
     sidebarCollapsed$,
@@ -144,21 +166,12 @@ export function DiffWindowChromeController() {
   const windowIdentifier = useWindowId();
   const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
 
-  useObserveEffect(() => {
-    const syntaxTheme = getDiffSyntaxTheme();
-    setDiffViewerWindowAppearance({
-      appearance: syntaxTheme.appearance,
-      windowIdentifier,
-    }).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
-    });
-  });
-
-  useObserveEffect(() => {
+  const updateDiffWindowToolbar = useCallback((observe: boolean) => {
     const toolbarModel = getDiffWindowToolbarModel({
-      loadingSource: loadingSource$.get(),
-      sidebarCollapsed: sidebarCollapsed$.get(),
-      state: state$.get(),
+      hasUnsavedMergeDrafts,
+      loadingSource: observe ? loadingSource$.get() : loadingSource$.peek(),
+      sidebarCollapsed: observe ? sidebarCollapsed$.get() : sidebarCollapsed$.peek(),
+      state: observe ? state$.get() : state$.peek(),
       viewMode: getDiffViewModeSetting(),
     });
 
@@ -166,6 +179,7 @@ export function DiffWindowChromeController() {
       lastToolbarModelRef.current = toolbarModel;
       const startedAt = nowMs();
       setDiffViewerWindowToolbarOptions({
+        hasUnsavedMergeDrafts: toolbarModel.hasUnsavedMergeDrafts,
         source: toolbarModel.source,
         showSidebarControl: toolbarModel.showSidebarControl,
         showViewModeToolbar: toolbarModel.showViewModeToolbar,
@@ -183,7 +197,25 @@ export function DiffWindowChromeController() {
           console.error(error instanceof Error ? error.message : String(error));
         });
     }
+  }, [hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
+
+  useObserveEffect(() => {
+    const syntaxTheme = getDiffSyntaxTheme();
+    setDiffViewerWindowAppearance({
+      appearance: syntaxTheme.appearance,
+      windowIdentifier,
+    }).catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+    });
   });
+
+  useObserveEffect(() => {
+    updateDiffWindowToolbar(true);
+  });
+
+  useEffect(() => {
+    updateDiffWindowToolbar(false);
+  }, [updateDiffWindowToolbar]);
 
   return null;
 }
@@ -195,6 +227,7 @@ export function DiffActionHandlersController({
   focusFileFilter,
   reloadCurrentSource,
   revealCurrentFolder,
+  saveMergeDrafts,
   toggleShowOnlyHunks,
   toggleSidebar,
 }: {
@@ -204,6 +237,7 @@ export function DiffActionHandlersController({
   focusFileFilter: () => boolean;
   reloadCurrentSource: () => boolean;
   revealCurrentFolder: () => boolean;
+  saveMergeDrafts: () => boolean;
   toggleShowOnlyHunks: () => boolean;
   toggleSidebar: () => boolean;
 }) {
@@ -214,6 +248,7 @@ export function DiffActionHandlersController({
     filterFiles: focusFileFilter,
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
+    save: saveMergeDrafts,
     showOnlyHunks: toggleShowOnlyHunks,
     toggleSidebar,
   }), [
@@ -223,6 +258,7 @@ export function DiffActionHandlersController({
     focusFileFilter,
     reloadCurrentSource,
     revealCurrentFolder,
+    saveMergeDrafts,
     toggleShowOnlyHunks,
     toggleSidebar,
   ]);

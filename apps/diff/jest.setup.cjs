@@ -43,3 +43,49 @@ jest.mock("@legendapp/list/react-native", () => {
     useAdaptiveRender: () => "normal",
   };
 });
+
+jest.mock("@legend-desktop/context-menu", () => ({
+  __esModule: true,
+  showContextMenu: jest.fn(async () => null),
+}));
+
+jest.mock("@legend-desktop/glass-effect-view", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+
+  return {
+    __esModule: true,
+    GlassEffectView: (props) => React.createElement(View, props, props.children),
+    NativeGlassEffectView: View,
+  };
+});
+
+jest.mock("@legend-desktop/native-select", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+
+  return {
+    __esModule: true,
+    NativeSelect: (props) => React.createElement(View, props),
+    NativeSegmentedControl: (props) => React.createElement(View, props),
+  };
+});
+
+jest.mock("@legend-desktop/settings-window", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+
+  return {
+    __esModule: true,
+    createSettingsWindowOptions: (options = {}) => options,
+    SettingsRow: (props) => React.createElement(View, props, props.control),
+    SettingsSection: (props) => React.createElement(View, props, props.children),
+    SettingsWindow: (props) => React.createElement(View, props),
+    VirtualizedSettingsWindow: (props) => React.createElement(View, props),
+  };
+});
+
+jest.mock("uniwind", () => ({
+  __esModule: true,
+  useResolveClassNames: () => ({}),
+}), { virtual: true });

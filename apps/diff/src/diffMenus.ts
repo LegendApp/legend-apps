@@ -105,9 +105,9 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         shortcut: { key: "c", modifiers: commandModifier | optionModifier | shiftModifier },
       },
       {
-        id: "hideSave",
+        id: "save",
         targetTitles: saveTargetTitles,
-        hidden: true,
+        enabled: false,
       },
       {
         id: "hideSaveAs",

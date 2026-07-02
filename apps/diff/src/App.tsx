@@ -166,6 +166,7 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
     filterFiles: dispatchDiffViewerAction,
     reload: dispatchDiffViewerAction,
     revealInFinder: dispatchDiffViewerAction,
+    save: dispatchDiffViewerAction,
     showOnlyHunks: (action) => {
       if (!dispatchDiffViewerAction(action)) {
         setDiffShowOnlyHunksSetting(!getDiffShowOnlyHunksSetting());

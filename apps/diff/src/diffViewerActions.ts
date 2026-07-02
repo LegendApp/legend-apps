@@ -7,6 +7,7 @@ type DiffViewerActionId =
   | "filterFiles"
   | "reload"
   | "revealInFinder"
+  | "save"
   | "showOnlyHunks"
   | "toggleSidebar";
 type DiffViewerActionHandlers = Partial<Record<DiffViewerActionId, (action?: NativeMenuAction) => boolean | void>>;
