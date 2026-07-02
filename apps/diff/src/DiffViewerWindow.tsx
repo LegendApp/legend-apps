@@ -19,7 +19,6 @@ import {
 } from "@legend-desktop/diff-parser";
 import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
-import { GlassEffectView } from "@legend-desktop/glass-effect-view";
 import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
 import { LightText, nowMs, TokenizedText, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
@@ -66,6 +65,7 @@ import {
   writeDiffMergeFileContent,
 } from "./diffMerge";
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
+import { GlassToast } from "./GlassToast";
 import {
   areDiffMergeConflictActionsDisabled,
   diffMergeSaveConflictKey,
@@ -620,52 +620,15 @@ function DiffUnsavedMergeDraftBanner({
 }) {
   const fileLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
   return (
-    <View style={styles.unsavedMergeBanner}>
-      <View style={styles.unsavedMergeBannerShadow}>
-        <View style={styles.unsavedMergeBannerFrame}>
-          <GlassEffectView glassStyle="regular" tintColor={`${dangerColor}24`} style={styles.unsavedMergeBannerGlass} />
-          <View style={styles.unsavedMergeBannerInner}>
-            <View style={styles.unsavedMergeBannerText}>
-              <Text numberOfLines={1} style={styles.unsavedMergeBannerTitle}>
-                Unsaved merge resolutions - {fileLabel}
-              </Text>
-            </View>
-            <View style={styles.unsavedMergeBannerActions}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={disabled}
-                onPress={onDiscard}
-                style={({ pressed }) => [
-                  styles.unsavedMergeBannerButton,
-                  {
-                    borderColor: "#ffffff66",
-                    opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
-                  },
-                ]}
-              >
-                <Text style={styles.unsavedMergeBannerButtonText}>Discard</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={disabled}
-                onPress={onSave}
-                style={({ pressed }) => [
-                  styles.unsavedMergeBannerButton,
-                  styles.unsavedMergeBannerSaveButton,
-                  {
-                    backgroundColor: primaryColor,
-                    borderColor: primaryColor,
-                    opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
-                  },
-                ]}
-              >
-                <Text style={styles.unsavedMergeBannerButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </View>
-    </View>
+    <GlassToast
+      actions={[
+        { disabled, label: "Discard", onPress: onDiscard },
+        { color: primaryColor, disabled, label: "Save", minWidth: 56, onPress: onSave, variant: "primary" },
+      ]}
+      style={styles.unsavedMergeBanner}
+      tintColor={`${dangerColor}24`}
+      title={`Unsaved merge resolutions - ${fileLabel}`}
+    />
   );
 }
 
@@ -4240,65 +4203,6 @@ const styles = StyleSheet.create({
     right: 0,
     top: diffTitlebarTopInset + 10,
     zIndex: 35,
-  },
-  unsavedMergeBannerActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  unsavedMergeBannerButton: {
-    alignItems: "center",
-    borderRadius: 5,
-    borderWidth: 1,
-    height: 28,
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  unsavedMergeBannerButtonText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
-  },
-  unsavedMergeBannerFrame: {
-    borderRadius: 8,
-    maxWidth: 420,
-    minHeight: 40,
-    overflow: "hidden",
-  },
-  unsavedMergeBannerGlass: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 8,
-  },
-  unsavedMergeBannerInner: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    maxWidth: 420,
-    minHeight: 40,
-    paddingHorizontal: 10,
-  },
-  unsavedMergeBannerShadow: {
-    alignSelf: "center",
-    borderRadius: 8,
-    maxWidth: 420,
-    shadowColor: "#000000",
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-  },
-  unsavedMergeBannerSaveButton: {
-    backgroundColor: "#ffffff24",
-    minWidth: 56,
-  },
-  unsavedMergeBannerText: {
-    maxWidth: 230,
-    minWidth: 0,
-  },
-  unsavedMergeBannerTitle: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 17,
   },
   mergeChoiceButton: {
     alignItems: "center",
