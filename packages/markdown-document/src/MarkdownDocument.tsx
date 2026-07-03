@@ -1564,18 +1564,104 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       ],
     );
 
+    const mergeActiveBlockIntoPrevious = useCallback(
+      async (block: MarkdownBlockSnapshot) => {
+        if (documentState.status !== "loaded" || !adapter.applyTransaction) {
+          return;
+        }
+
+        const currentBlockIds = blockStateRef.current.blockIds;
+        const blockIndex = getBlockIndexById(block.id);
+        const previousBlockId = currentBlockIds[blockIndex - 1];
+        const previousBlock = await loadBlockAtIndex(previousBlockId, blockIndex - 1);
+        if (blockIndex <= 0 || !previousBlock) {
+          return;
+        }
+
+        const currentMarkdown = draftMarkdownRef.current;
+        const previousMarkdown = previousBlock.markdown;
+        const mergedMarkdown = `${previousMarkdown}${currentMarkdown}`;
+        const originalRangeMarkdown = `${previousMarkdown}\n\n${currentMarkdown}`;
+        const joinSelection = previousMarkdown.length;
+
+        try {
+          clearTypingHistoryGroup();
+          const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+            type: "replaceBlockRange",
+            startBlockId: previousBlock.id,
+            endBlockId: block.id,
+            markdown: mergedMarkdown,
+          });
+          validateTransactionResult(result);
+          applyTransactionResult(result);
+
+          const firstChangedBlockId = result.changedRange.blockIds[0];
+          const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
+          if (!suppressHistoryRef.current && firstChangedBlockId && lastChangedBlockId) {
+            undoStackRef.current.push({
+              type: "replaceBlockRange",
+              startBlockId: firstChangedBlockId,
+              endBlockId: lastChangedBlockId,
+              replacementMarkdown: originalRangeMarkdown,
+              inverseMarkdown: mergedMarkdown,
+            });
+            redoStackRef.current = [];
+            publishCommandState();
+          }
+
+          const nextActiveBlock = result.changedBlocks[0];
+          if (nextActiveBlock) {
+            activeBlockSnapshotRef.current = nextActiveBlock;
+            activeBlockIdRef.current = nextActiveBlock.id;
+            nativeEditingBlockIdRef.current = nextActiveBlock.id;
+            draftMarkdownRef.current = nextActiveBlock.markdown;
+            committedMarkdownRef.current = nextActiveBlock.markdown;
+            setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveSelection(Math.min(joinSelection, nextActiveBlock.markdown.length));
+            setActiveBlockId(nextActiveBlock.id);
+            const activeInput = activeInputRef.current;
+            if (activeInput) {
+              const nextSelection = Math.min(joinSelection, nextActiveBlock.markdown.length);
+              activeInput.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
+              activeInput.setSelection(nextSelection, nextSelection);
+            }
+          }
+          markDirty();
+        } catch (error) {
+          const nextError = error instanceof Error ? error : new Error(String(error));
+          onErrorRef.current?.(nextError);
+        }
+      },
+      [
+        adapter,
+        applyTransactionResult,
+        clearTypingHistoryGroup,
+        documentState,
+        getBlockIndexById,
+        loadBlockAtIndex,
+        markDirty,
+        onErrorRef,
+        publishCommandState,
+        validateTransactionResult,
+      ],
+    );
+
     const handleNativeBackspaceAtStart = useCallback(
       (event: NativeBackspaceAtStartEvent) => {
         const activeBlock = activeBlockSnapshotRef.current;
-        if (activeBlock && activeBlock.id === event.nativeEvent.blockId && activeBlock.type === "heading") {
-          const headingLevel = activeBlock.headingLevel;
-          const markdown = headingLevel > 1
-            ? setHeadingMarkdown(draftMarkdownRef.current, (headingLevel - 1) as HeadingLevel)
-            : setParagraphMarkdown(draftMarkdownRef.current);
-          replaceActiveBlockMarkdown(markdown).catch(reportAsyncError);
+        if (activeBlock && activeBlock.id === event.nativeEvent.blockId) {
+          if (activeBlock.type === "heading") {
+            const headingLevel = activeBlock.headingLevel;
+            const markdown = headingLevel > 1
+              ? setHeadingMarkdown(draftMarkdownRef.current, (headingLevel - 1) as HeadingLevel)
+              : setParagraphMarkdown(draftMarkdownRef.current);
+            replaceActiveBlockMarkdown(markdown).catch(reportAsyncError);
+          } else {
+            mergeActiveBlockIntoPrevious(activeBlock).catch(reportAsyncError);
+          }
         }
       },
-      [replaceActiveBlockMarkdown, reportAsyncError],
+      [mergeActiveBlockIntoPrevious, replaceActiveBlockMarkdown, reportAsyncError],
     );
 
     const formatCurrentBlockRange = useCallback(

@@ -127,6 +127,44 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
       await this.pendingTransactionGate;
       this.pendingTransactionGate = undefined;
     }
+    if (transaction.type === "replaceBlockRange") {
+      const startIndex = this.blocks.findIndex((candidate) => candidate.id === transaction.startBlockId);
+      const endIndex = this.blocks.findIndex((candidate) => candidate.id === transaction.endBlockId);
+      if (startIndex < 0 || endIndex < startIndex) {
+        throw new Error(`Missing test block range: ${transaction.startBlockId} ${transaction.endBlockId}`);
+      }
+
+      const markdown = transaction.markdown ?? "";
+      const nextHeadingLevel = headingLevelFromMarkdown(markdown);
+      const nextBlock = {
+        ...this.blocks[startIndex]!,
+        contentEndByte: markdown.length,
+        contentStartByte: 0,
+        headingLevel: nextHeadingLevel,
+        markdown,
+        sourceEndByte: markdown.length,
+        textRevision: this.blocks[startIndex]!.textRevision + 1,
+        type: nextHeadingLevel > 0 ? "heading" : "paragraph",
+      } satisfies MarkdownBlockSnapshot;
+      const deleteCount = endIndex - startIndex + 1;
+      const retiredBlockIds = this.blocks.slice(startIndex + 1, endIndex + 1).map((candidate) => candidate.id);
+      this.blocks.splice(startIndex, deleteCount, nextBlock);
+      this.blocks = this.blocks.map((candidate, index) => ({ ...candidate, index }));
+      this.revision += 1;
+
+      return {
+        changedBlocks: [nextBlock],
+        changedRange: {
+          blockIds: [nextBlock.id],
+          deleteCount,
+          startBlockIndex: startIndex,
+        },
+        retiredBlockIds,
+        revision: this.revision,
+        sourceLength: markdown.length,
+      };
+    }
+
     if (transaction.type !== "updateBlockMarkdown") {
       throw new Error(`Unexpected native overlay transaction: ${transaction.type}`);
     }
@@ -489,6 +527,63 @@ describe("MarkdownDocument native row editor", () => {
     expect(headingMarkerStyle(renderer!)).toEqual(expect.objectContaining({
       opacity: 0,
     }));
+  });
+
+  it("merges a non-heading block into the previous block on native backspace at the editable start", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b1",
+          height: 25,
+          markdown: "Second",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 105,
+        },
+      });
+    });
+
+    const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+    activeInput?.setSelection.mockClear();
+    activeInput?.setValue.mockClear();
+
+    await act(async () => {
+      host.props.onBackspaceAtStart({
+        nativeEvent: {
+          blockId: "d1:b1",
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(adapter.applyTransactions.at(-1)).toEqual({
+      endBlockId: "d1:b1",
+      markdown: "FirstSecond",
+      startBlockId: "d1:b0",
+      type: "replaceBlockRange",
+    });
+    expect(activeInput?.setValue).toHaveBeenCalledWith("FirstSecond");
+    expect(activeInput?.setSelection).toHaveBeenCalledWith("First".length, "First".length);
   });
 
   it("uses native event markdown for row editor font metrics while the full block loads", async () => {

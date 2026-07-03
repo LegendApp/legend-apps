@@ -535,9 +535,12 @@ static void registerNativeMarkdownProvider()
     id editorInput = [strongSelf activeEditorInput];
     NSRange selection = callSelectedRange(editorInput);
     NSInteger headingPrefixLength = hangingPrefixLengthForMarkdown([[strongSelf activeBlockView] currentMarkdown]);
-    BOOL isAtStart = selection.location <= (NSUInteger)headingPrefixLength && selection.length == 0;
-    BOOL isHeading = headingPrefixLength > 0;
-    if (!isAtStart || !isHeading) {
+    BOOL isAtStart = selection.length == 0 && (
+      headingPrefixLength > 0
+        ? selection.location <= (NSUInteger)headingPrefixLength
+        : selection.location == 0
+    );
+    if (!isAtStart) {
       return event;
     }
 
