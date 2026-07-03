@@ -576,14 +576,15 @@ describe("MarkdownDocument native row editor", () => {
       await Promise.resolve();
     });
 
+    const mergedInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
     expect(adapter.applyTransactions.at(-1)).toEqual({
       endBlockId: "d1:b1",
       markdown: "FirstSecond",
       startBlockId: "d1:b0",
       type: "replaceBlockRange",
     });
-    expect(activeInput?.setValue).toHaveBeenCalledWith("FirstSecond");
-    expect(activeInput?.setSelection).toHaveBeenCalledWith("First".length, "First".length);
+    expect(activeInput?.setValue).not.toHaveBeenCalled();
+    expect(mergedInput?.setSelection).toHaveBeenCalledWith("First".length, "First".length);
   });
 
   it("uses native event markdown for row editor font metrics while the full block loads", async () => {

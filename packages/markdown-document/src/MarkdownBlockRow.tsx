@@ -112,6 +112,7 @@ export const MarkdownRowEditorInput = memo(
   function MarkdownRowEditorInput({
     block,
     activeInputRef,
+    initialSelection,
     markdownStyle,
     onBlurRef,
     onChangeMarkdownRef,
@@ -122,6 +123,7 @@ export const MarkdownRowEditorInput = memo(
   }: {
     block: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
+    initialSelection: number;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
     onBlurRef: RefObject<() => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
@@ -131,6 +133,20 @@ export const MarkdownRowEditorInput = memo(
     style?: StyleProp<TextStyle>;
   }) {
     const blockRef = useLatestRef(block);
+    const initialSelectionRef = useLatestRef(initialSelection);
+
+    useEffect(() => {
+      const applyInitialSelection = () => {
+        const input = activeInputRef.current;
+        const selection = initialSelectionRef.current;
+        input?.focus();
+        input?.setSelection(selection, selection);
+      };
+      applyInitialSelection();
+      const timeout = setTimeout(applyInitialSelection, 0);
+
+      return () => clearTimeout(timeout);
+    }, [activeInputRef, block.id, initialSelectionRef]);
 
     return (
       <EnrichedMarkdownTextInput
@@ -163,6 +179,7 @@ export const MarkdownRowEditorInput = memo(
     previousProps.block.type === nextProps.block.type &&
     previousProps.block.headingLevel === nextProps.block.headingLevel &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
+    previousProps.initialSelection === nextProps.initialSelection &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
@@ -344,6 +361,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
     <MarkdownRowEditorInput
       activeInputRef={activeInputRef}
       block={activeEditorBlock}
+      initialSelection={initialSelection}
       markdownStyle={markdownStyle}
       onBlurRef={onBlurRef}
       onChangeMarkdownRef={onChangeMarkdownRef}

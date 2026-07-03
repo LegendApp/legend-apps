@@ -1611,20 +1611,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
           const nextActiveBlock = result.changedBlocks[0];
           if (nextActiveBlock) {
+            const nextSelection = Math.min(joinSelection, nextActiveBlock.markdown.length);
             activeBlockSnapshotRef.current = nextActiveBlock;
             activeBlockIdRef.current = nextActiveBlock.id;
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
+            activeInputSelectionRef.current = { start: nextSelection, end: nextSelection };
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
             setDraftMarkdown(nextActiveBlock.markdown);
-            setActiveSelection(Math.min(joinSelection, nextActiveBlock.markdown.length));
+            setActiveSelection(nextSelection);
             setActiveBlockId(nextActiveBlock.id);
-            const activeInput = activeInputRef.current;
-            if (activeInput) {
-              const nextSelection = Math.min(joinSelection, nextActiveBlock.markdown.length);
-              activeInput.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
-              activeInput.setSelection(nextSelection, nextSelection);
-            }
           }
           markDirty();
         } catch (error) {
