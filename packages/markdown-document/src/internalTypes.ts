@@ -94,6 +94,7 @@ export type OverlayFrame = {
 };
 
 export type ActiveBlockRenderState = {
+  activationMode: "nativePointer" | "programmatic";
   block: MarkdownBlockSnapshot;
   draftMarkdown: string;
   editorFrame?: OverlayFrame;

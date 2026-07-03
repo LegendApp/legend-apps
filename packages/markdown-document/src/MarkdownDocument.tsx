@@ -461,6 +461,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockIndexByIdRef = useRef(new Map<string, number>());
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
     const [activeSelection, setActiveSelection] = useState(0);
+    const activeActivationModeRef = useRef<ActiveBlockRenderState["activationMode"]>("programmatic");
+    const [activeActivationMode, setActiveActivationModeState] =
+      useState<ActiveBlockRenderState["activationMode"]>("programmatic");
     const [blockSelection, setBlockSelection] = useState<BlockSelectionState | null>(null);
     const blockSelectionRef = useRef<BlockSelectionState | null>(null);
     const blockSelectionInputText$ = useObservable("");
@@ -489,6 +492,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const resolvedContentMaxWidth = resolvedMarkdownLayout.content?.maxWidth ?? contentMaxWidth;
     const resolvedContentHorizontalPadding = resolvedMarkdownLayout.content?.horizontalPadding ?? contentHorizontalPadding;
     const resolvedContentVerticalPadding = resolvedMarkdownLayout.content?.verticalPadding ?? 48;
+
+    const setActiveActivationMode = useCallback((activationMode: ActiveBlockRenderState["activationMode"]) => {
+      activeActivationModeRef.current = activationMode;
+      setActiveActivationModeState(activationMode);
+    }, []);
 
     const reportAsyncError = useCallback(
       (error: unknown) => {
@@ -883,6 +891,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const previousRenderState = documentRenderState$.activeBlocksById.get(blockId).peek();
         const pendingEditorFrame = overlayFrameBlockIdRef.current === blockId ? overlayFrameRef.current : undefined;
         documentRenderState$.activeBlocksById.get(blockId).set({
+          activationMode: previousRenderState?.activationMode ?? activeActivationModeRef.current,
           block: nextBlock,
           draftMarkdown: markdown,
           editorFrame: previousRenderState?.editorFrame ?? pendingEditorFrame,
@@ -962,6 +971,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             committedMarkdownRef.current = nextActiveBlock.markdown;
             if (updateReactState || !usesNativeEditorOverlay) {
               setDraftMarkdown(nextActiveBlock.markdown);
+              setActiveActivationMode("programmatic");
               setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
             }
             setActiveBlockId(nextActiveBlock.id);
@@ -982,6 +992,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           draftMarkdownRef.current = committedMarkdownRef.current;
           setDraftMarkdown(committedMarkdownRef.current);
           activeInputRef.current?.setValue(activeInputMarkdownForBlock(activeBlockSnapshotRef.current, committedMarkdownRef.current));
+          setActiveActivationMode("programmatic");
           setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
         }
         const nextError = error instanceof Error ? error : new Error(String(error));
@@ -1007,17 +1018,22 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return commitPromise;
     }, [runCommitActiveBlock]);
 
-    const setActiveBlock = useCallback((block: MarkdownBlockSnapshot, selection: number) => {
+    const setActiveBlock = useCallback((
+      block: MarkdownBlockSnapshot,
+      selection: number,
+      activationMode: ActiveBlockRenderState["activationMode"] = "programmatic",
+    ) => {
       activeBlockSnapshotRef.current = block;
       nativeEditingBlockIdRef.current = block.id;
       activeBlockIdRef.current = block.id;
       activeInputSelectionRef.current = { start: selection, end: selection };
       draftMarkdownRef.current = block.markdown;
       committedMarkdownRef.current = block.markdown;
+      setActiveActivationMode(activationMode);
       setDraftMarkdown(block.markdown);
       setActiveSelection(selection);
       setActiveBlockId(block.id);
-    }, []);
+    }, [setActiveActivationMode]);
 
     const activateBlock = useCallback(
       (block: MarkdownBlockSnapshot, selection: number) => {
@@ -1047,6 +1063,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           activeBlockSnapshotRef.current = undefined;
           activeBlockIdRef.current = null;
           setActiveBlockId(null);
+          setActiveActivationMode("programmatic");
           setActiveSelection(0);
         }
         const nextBlockSelection = { anchorBlockId, focusBlockId };
@@ -1248,6 +1265,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           draftMarkdownRef.current = afterMarkdown;
           committedMarkdownRef.current = afterMarkdown;
           setDraftMarkdown(afterMarkdown);
+          setActiveActivationMode("programmatic");
           setActiveSelection(afterMarkdown.length);
           setActiveBlockId(nextActiveBlockId);
           markDirty();
@@ -1329,6 +1347,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeBlockSnapshotRef.current = undefined;
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
+        setActiveActivationMode("programmatic");
         setActiveSelection(0);
         clearTextSelectionAnchor();
         clearTypingHistoryGroup();
@@ -1352,6 +1371,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeBlockSnapshotRef.current = undefined;
         activeBlockIdRef.current = null;
         setActiveBlockId(null);
+        setActiveActivationMode("programmatic");
         setActiveSelection(0);
         clearTextSelectionAnchor();
         clearTypingHistoryGroup();
@@ -1468,6 +1488,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
             setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveActivationMode("programmatic");
             setActiveSelection(nextSelection);
             setActiveBlockId(nextActiveBlock.id);
           }
@@ -1533,6 +1554,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
             setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveActivationMode("programmatic");
             setActiveBlockId(nextActiveBlock.id);
             setActiveSelection(0);
             const activeInput = activeInputRef.current;
@@ -1547,6 +1569,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           draftMarkdownRef.current = committedMarkdownRef.current;
           setDraftMarkdown(committedMarkdownRef.current);
           activeInputRef.current?.setValue(activeInputMarkdownForBlock(activeBlockSnapshotRef.current, committedMarkdownRef.current));
+          setActiveActivationMode("programmatic");
           setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
@@ -1619,6 +1642,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
             setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveActivationMode("programmatic");
             setActiveSelection(nextSelection);
             setActiveBlockId(nextActiveBlock.id);
           }
@@ -1764,6 +1788,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             draftMarkdownRef.current = nextActiveBlock.markdown;
             committedMarkdownRef.current = nextActiveBlock.markdown;
             setDraftMarkdown(nextActiveBlock.markdown);
+            setActiveActivationMode("programmatic");
             setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
             setActiveBlockId(nextActiveBlock.id);
           }
@@ -1944,6 +1969,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockSelectionGestureRef.current = null;
       clearTextSelectionAnchor();
       setActiveBlockId(null);
+      setActiveActivationMode("programmatic");
       setActiveSelection(0);
       setNextBlockSelection({ anchorBlockId, focusBlockId });
     }, [clearOverlayFrame, clearTextSelectionAnchor, setNextBlockSelection]);
@@ -2156,6 +2182,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const emptyBlockState = createMarkdownDocumentBlockState([]);
       commitBlockState(emptyBlockState);
       setActiveBlockId(null);
+      setActiveActivationMode("programmatic");
       setActiveSelection(0);
       setNextBlockSelection(null);
       blockSelectionInputText$.set("");
@@ -2203,6 +2230,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             if (firstBlock) {
               activeBlockIdRef.current = firstBlock.id;
               nativeEditingBlockIdRef.current = firstBlock.id;
+              setActiveActivationMode("programmatic");
               setActiveSelection(0);
               setActiveBlockId(firstBlock.id);
               if (isMarkdownBlockSnapshot(firstBlock)) {
@@ -2444,6 +2472,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               draftMarkdownRef.current = nextActiveBlock.markdown;
               committedMarkdownRef.current = nextActiveBlock.markdown;
               setDraftMarkdown(nextActiveBlock.markdown);
+              setActiveActivationMode("programmatic");
               setActiveSelection(nextActiveBlock.markdown.length);
               setActiveBlockId(nextActiveBlock.id);
             }
@@ -2490,6 +2519,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               draftMarkdownRef.current = nextActiveBlock.markdown;
               committedMarkdownRef.current = nextActiveBlock.markdown;
               setDraftMarkdown(nextActiveBlock.markdown);
+              setActiveActivationMode("programmatic");
               setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
               setActiveBlockId(nextActiveBlock.id);
             }
@@ -2524,6 +2554,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             draftMarkdownRef.current = firstChangedBlock.markdown;
             committedMarkdownRef.current = firstChangedBlock.markdown;
             setDraftMarkdown(firstChangedBlock.markdown);
+            setActiveActivationMode("programmatic");
             setActiveSelection(0);
             setActiveBlockId(firstChangedBlock.id);
           }
@@ -2748,6 +2779,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const previousRenderState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
         const pendingEditorFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
         documentRenderState$.activeBlocksById.get(activeBlockId).set({
+          activationMode: activeActivationMode,
           block: {
             ...activeBlock,
             markdown: draftMarkdown,
@@ -2760,7 +2792,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       } else {
         activeRenderBlockIdRef.current = null;
       }
-    }, [activeBlockId, activeSelection, documentRenderState$, draftMarkdown]);
+    }, [activeActivationMode, activeBlockId, activeSelection, documentRenderState$, draftMarkdown]);
     useEffect(() => {
       const previousSelectedBlockIds = selectedRenderBlockIdsRef.current;
       previousSelectedBlockIds.forEach((blockId) => {
@@ -2959,16 +2991,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             clearTextSelectionAnchor();
             activeBlockIdRef.current = block.id;
             nativeEditingBlockIdRef.current = block.id;
+            setActiveActivationMode("nativePointer");
             setActiveSelection(0);
             setActiveBlockId(block.id);
             if (isMarkdownBlockSnapshot(block)) {
-              setActiveBlock(block, 0);
+              setActiveBlock(block, 0, "nativePointer");
             } else if (documentState.status === "loaded") {
               const documentId = documentState.snapshot.documentId;
               adapter.getBlock(documentId, block.id)
                 .then((nextBlock) => {
                   if (activeBlockIdRef.current === nextBlock.id) {
-                    setActiveBlock(nextBlock, 0);
+                    setActiveBlock(nextBlock, 0, "nativePointer");
                   }
                 })
                 .catch(reportAsyncError);
@@ -2984,6 +3017,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         documentState,
         reportAsyncError,
         schedulePendingVerticalNavigationSelection,
+        setActiveActivationMode,
         setActiveBlock,
         setNextBlockSelection,
       ],

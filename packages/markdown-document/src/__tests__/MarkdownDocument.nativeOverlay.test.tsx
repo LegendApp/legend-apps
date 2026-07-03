@@ -351,6 +351,43 @@ describe("MarkdownDocument native row editor", () => {
     }));
   });
 
+  it("lets native pointer activation own the initial row editor selection", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "Paragraph"),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 25,
+          markdown: "Paragraph",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+    expect(activeInput?.setSelection).not.toHaveBeenCalled();
+  });
+
   it("keeps full heading markdown in the row editor while heading level changes", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),

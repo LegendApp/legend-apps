@@ -12,8 +12,9 @@ import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type TextSt
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { usesNativeEditorOverlay } from "./constants";
 import type {
-  ChangeSelectionHandler,
+  ActiveBlockRenderState,
   ChangeMarkdownHandler,
+  ChangeSelectionHandler,
   MarkdownDocumentRenderState,
   SelectionDragOutsideHandler,
   VerticalNavigationOutsideHandler,
@@ -112,6 +113,7 @@ export const MarkdownRowEditorInput = memo(
   function MarkdownRowEditorInput({
     block,
     activeInputRef,
+    activationMode,
     initialSelection,
     markdownStyle,
     onBlurRef,
@@ -123,6 +125,7 @@ export const MarkdownRowEditorInput = memo(
   }: {
     block: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
+    activationMode: ActiveBlockRenderState["activationMode"];
     initialSelection: number;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
     onBlurRef: RefObject<() => void>;
@@ -140,13 +143,15 @@ export const MarkdownRowEditorInput = memo(
         const input = activeInputRef.current;
         const selection = initialSelectionRef.current;
         input?.focus();
-        input?.setSelection(selection, selection);
+        if (activationMode === "programmatic") {
+          input?.setSelection(selection, selection);
+        }
       };
       applyInitialSelection();
       const timeout = setTimeout(applyInitialSelection, 0);
 
       return () => clearTimeout(timeout);
-    }, [activeInputRef, block.id, initialSelectionRef]);
+    }, [activationMode, activeInputRef, block.id, initialSelectionRef]);
 
     return (
       <EnrichedMarkdownTextInput
@@ -178,6 +183,7 @@ export const MarkdownRowEditorInput = memo(
     previousProps.block.markdown === nextProps.block.markdown &&
     previousProps.block.type === nextProps.block.type &&
     previousProps.block.headingLevel === nextProps.block.headingLevel &&
+    previousProps.activationMode === nextProps.activationMode &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.initialSelection === nextProps.initialSelection &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
@@ -273,6 +279,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const previousBlockId = getBlockIdAtIndex(index - 1);
   const previousBlock = previousBlockId ? getBlockMetadata(previousBlockId, index - 1) : undefined;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
+  const activationMode = activeBlock?.activationMode ?? "programmatic";
   const initialSelection = activeBlock?.selection ?? 0;
   const isActive = activeBlock !== undefined;
   const hasPreviousBlock = index > 0;
@@ -360,6 +367,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const activeNativeEditor = usesNativeEditorOverlay && isActive && activeEditorBlock ? (
     <MarkdownRowEditorInput
       activeInputRef={activeInputRef}
+      activationMode={activationMode}
       block={activeEditorBlock}
       initialSelection={initialSelection}
       markdownStyle={markdownStyle}
