@@ -186,8 +186,54 @@ export function splitMarkdownAtFirstLineBreak(markdown: string) {
 }
 
 function hiddenLeadingMarkdownSyntaxLength(line: string) {
-  const headingMatch = /^(\s{0,3}#{1,6}\s+)/.exec(line);
+  const headingMatch = /^([ \t]{0,3}#{1,6}[ \t]+)/.exec(line);
   return headingMatch?.[1]?.length ?? 0;
+}
+
+function headingPrefixForMarkdown(markdown: string) {
+  const headingMatch = /^([ \t]{0,3}#{1,6}[ \t]+)/.exec(markdown);
+  return headingMatch?.[1] ?? "";
+}
+
+function headingPrefixForBlock(block: MarkdownBlockMetadata, previousMarkdown: string) {
+  if (getHeadingLevel(block) === undefined) {
+    return "";
+  }
+
+  const existingPrefix = headingPrefixForMarkdown(previousMarkdown);
+  if (existingPrefix) {
+    return existingPrefix;
+  }
+
+  return `${"#".repeat(block.headingLevel)} `;
+}
+
+export function editableMarkdownForBlock(block: MarkdownBlockMetadata, markdown: string) {
+  const prefixLength = headingPrefixForBlock(block, markdown).length;
+  return prefixLength > 0 ? markdown.slice(prefixLength) : markdown;
+}
+
+export function markdownFromEditableMarkdownForBlock(
+  block: MarkdownBlockMetadata,
+  editableMarkdown: string,
+  previousMarkdown: string,
+) {
+  const prefix = headingPrefixForBlock(block, previousMarkdown);
+  return prefix ? `${prefix}${editableMarkdown}` : editableMarkdown;
+}
+
+export function editableSelectionForBlock(block: MarkdownBlockMetadata, selection: number, markdown: string) {
+  const prefixLength = headingPrefixForBlock(block, markdown).length;
+  return Math.max(0, selection - prefixLength);
+}
+
+export function markdownSelectionFromEditableSelectionForBlock(
+  block: MarkdownBlockMetadata,
+  selection: number,
+  previousMarkdown: string,
+) {
+  const prefixLength = headingPrefixForBlock(block, previousMarkdown).length;
+  return prefixLength + selection;
 }
 
 export function estimateMarkdownSelection(

@@ -13,8 +13,10 @@ type EditorFrameEvent = Readonly<{
 
 export interface NativeProps extends ViewProps {
   activeBlockId?: string;
+  activeBlockMarkdown?: string;
   markdownLayoutConfigJson?: string;
   onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
+  onBackspaceAtStart?: DirectEventHandler<Readonly<{ blockId: string }>>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }
 

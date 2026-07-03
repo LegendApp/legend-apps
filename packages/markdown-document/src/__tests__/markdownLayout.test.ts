@@ -1,8 +1,12 @@
 import {
   blockRowSpacingStyle,
+  editableMarkdownForBlock,
+  editableSelectionForBlock,
   editableTextStyleForBlock,
   estimateMarkdownSelection,
   inputStyleFromMarkdownStyle,
+  markdownFromEditableMarkdownForBlock,
+  markdownSelectionFromEditableSelectionForBlock,
 } from "../markdownLayout";
 import { defaultMarkdownLayout, defaultMarkdownStyle } from "../styles";
 import type { MarkdownBlockSnapshot } from "../types";
@@ -32,6 +36,35 @@ describe("estimateMarkdownSelection", () => {
     expect(estimateMarkdownSelection("Paragraph", pressEvent(0, 46), 700, { paddingTop: 12, paddingBottom: 8 })).toBe(
       "Paragraph".length,
     );
+  });
+});
+
+describe("heading editable markdown mapping", () => {
+  const headingBlock: MarkdownBlockSnapshot = {
+    contentEndByte: 11,
+    contentStartByte: 0,
+    depth: 0,
+    headingLevel: 3,
+    id: "d1:b0",
+    index: 0,
+    markdown: "### Heading",
+    sourceEndByte: 11,
+    sourceStartByte: 0,
+    textRevision: 0,
+    type: "heading",
+  };
+
+  it("removes heading syntax from the editable value", () => {
+    expect(editableMarkdownForBlock(headingBlock, "### Heading")).toBe("Heading");
+  });
+
+  it("restores heading syntax when publishing edited markdown", () => {
+    expect(markdownFromEditableMarkdownForBlock(headingBlock, "Renamed", "### Heading")).toBe("### Renamed");
+  });
+
+  it("maps heading selections between canonical and editable offsets", () => {
+    expect(editableSelectionForBlock(headingBlock, "### He".length, "### Heading")).toBe("He".length);
+    expect(markdownSelectionFromEditableSelectionForBlock(headingBlock, "He".length, "### Heading")).toBe("### He".length);
   });
 });
 

@@ -38,6 +38,16 @@ static SEL setHangingMarkdownPrefixLengthSelector()
   return NSSelectorFromString(@"setHangingMarkdownPrefixLength:");
 }
 
+static SEL setBlockStyleMarkdownSelector()
+{
+  return NSSelectorFromString(@"setBlockStyleMarkdown:");
+}
+
+static SEL selectedRangeSelector()
+{
+  return NSSelectorFromString(@"selectedRange");
+}
+
 static SEL measureSizeSelector()
 {
   return NSSelectorFromString(@"measureSize:");
@@ -79,6 +89,12 @@ static NSInteger hangingPrefixLengthForMarkdown(NSString *markdown)
 {
   NSRange prefixRange = hangingPrefixRangeForMarkdown(markdown);
   return prefixRange.location != NSNotFound ? (NSInteger)NSMaxRange(prefixRange) : 0;
+}
+
+static NSString *editableMarkdownForMarkdown(NSString *markdown)
+{
+  NSInteger prefixLength = hangingPrefixLengthForMarkdown(markdown ?: @"");
+  return prefixLength > 0 ? [markdown substringFromIndex:(NSUInteger)prefixLength] : markdown ?: @"";
 }
 
 static void callSetValue(id target, NSString *markdown)
@@ -130,6 +146,26 @@ static void callSetHangingMarkdownPrefixLength(id target, NSInteger prefixLength
     void (*send)(id, SEL, NSInteger) = (void (*)(id, SEL, NSInteger))[target methodForSelector:selector];
     send(target, selector, prefixLength);
   }
+}
+
+static void callSetBlockStyleMarkdown(id target, NSString *markdown)
+{
+  SEL selector = setBlockStyleMarkdownSelector();
+  if ([target respondsToSelector:selector]) {
+    void (*send)(id, SEL, NSString *) = (void (*)(id, SEL, NSString *))[target methodForSelector:selector];
+    send(target, selector, markdown);
+  }
+}
+
+static NSRange callSelectedRange(id target)
+{
+  SEL selector = selectedRangeSelector();
+  if (![target respondsToSelector:selector]) {
+    return NSMakeRange(NSNotFound, 0);
+  }
+
+  NSRange (*send)(id, SEL) = (NSRange (*)(id, SEL))[target methodForSelector:selector];
+  return send(target, selector);
 }
 
 static CGFloat measuredInputHeight(id target, CGFloat width)
@@ -326,6 +362,7 @@ static void registerNativeMarkdownProvider()
   BOOL _isPositioningOverlay;
   MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
+  id _overlayKeyDownMonitor;
   id _overlayScrollWheelMonitor;
 }
 
@@ -340,6 +377,7 @@ static void registerNativeMarkdownProvider()
     registerNativeMarkdownProvider();
     _props = std::make_shared<const MarkdownEditorHostProps>();
     _activationViews = [NSMapTable strongToWeakObjectsMapTable];
+    [self installOverlayKeyDownMonitorIfNeeded];
     [self installOverlayScrollWheelMonitorIfNeeded];
   }
   return self;
@@ -408,6 +446,10 @@ static void registerNativeMarkdownProvider()
   if (_overlayScrollWheelMonitor != nil) {
     [NSEvent removeMonitor:_overlayScrollWheelMonitor];
     _overlayScrollWheelMonitor = nil;
+  }
+  if (_overlayKeyDownMonitor != nil) {
+    [NSEvent removeMonitor:_overlayKeyDownMonitor];
+    _overlayKeyDownMonitor = nil;
   }
 }
 
@@ -539,6 +581,61 @@ static void registerNativeMarkdownProvider()
 
   NSPoint overlayPoint = [_overlayInput convertPoint:event.locationInWindow fromView:nil];
   return NSPointInRect(overlayPoint, _overlayInput.bounds);
+}
+
+- (BOOL)overlayInputContainsFirstResponder
+{
+  if (_overlayInput == nil || _overlayInput.hidden || _overlayInput.window == nil) {
+    return NO;
+  }
+
+  NSResponder *firstResponder = _overlayInput.window.firstResponder;
+  if (firstResponder == _overlayInput) {
+    return YES;
+  }
+  return [firstResponder isKindOfClass:NSView.class] && [(NSView *)firstResponder isDescendantOf:_overlayInput];
+}
+
+- (void)emitBackspaceAtStart
+{
+  if (_activeBlockId.length == 0) {
+    return;
+  }
+
+  auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
+  if (!eventEmitter) {
+    return;
+  }
+
+  eventEmitter->onBackspaceAtStart({
+    .blockId = std::string([_activeBlockId UTF8String] ?: ""),
+  });
+}
+
+- (void)installOverlayKeyDownMonitorIfNeeded
+{
+  if (_overlayKeyDownMonitor != nil) {
+    return;
+  }
+
+  __weak RNMarkdownEditorHost *weakSelf = self;
+  _overlayKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                                                 handler:^NSEvent *_Nullable(NSEvent *event) {
+    RNMarkdownEditorHost *strongSelf = weakSelf;
+    if (strongSelf == nil || event.keyCode != 51 || ![strongSelf overlayInputContainsFirstResponder]) {
+      return event;
+    }
+
+    NSRange selection = callSelectedRange(strongSelf->_overlayInput);
+    BOOL isAtStart = selection.location == 0 && selection.length == 0;
+    BOOL isHeading = hangingPrefixLengthForMarkdown(strongSelf->_lastLoadedMarkdown ?: @"") > 0;
+    if (!isAtStart || !isHeading) {
+      return event;
+    }
+
+    [strongSelf emitBackspaceAtStart];
+    return nil;
+  }];
 }
 
 - (void)installOverlayScrollWheelMonitorIfNeeded
@@ -761,14 +858,16 @@ static void registerNativeMarkdownProvider()
   }
 
   if (loadValue) {
-    callSetValue(_overlayInput, markdown ?: @"");
+    NSString *resolvedMarkdown = markdown ?: @"";
+    callSetBlockStyleMarkdown(_overlayInput, resolvedMarkdown);
+    callSetValue(_overlayInput, editableMarkdownForMarkdown(resolvedMarkdown));
     _lastLoadedBlockId = [view.blockId copy];
-    _lastLoadedMarkdown = [markdown copy];
+    _lastLoadedMarkdown = [resolvedMarkdown copy];
   }
 
   [self setBlockView:view contentsHidden:YES];
   [self positionOverlayForBlockView:view];
-  callSetHangingMarkdownPrefixLength(_overlayInput, hangingPrefixLengthForMarkdown(markdown ?: @""));
+  callSetHangingMarkdownPrefixLength(_overlayInput, 0);
   _overlayInput.hidden = NO;
 
   callFocus(_overlayInput);
@@ -809,6 +908,7 @@ static void registerNativeMarkdownProvider()
   }
 
   NSString *nextActiveBlockId = [NSString stringWithUTF8String:newViewProps.activeBlockId.c_str()];
+  NSString *nextActiveBlockMarkdown = [NSString stringWithUTF8String:newViewProps.activeBlockMarkdown.c_str()];
   if (nextActiveBlockId.length == 0) {
     if (_activeBlockId != nil) {
       [self hideOverlay];
@@ -834,6 +934,23 @@ static void registerNativeMarkdownProvider()
 
   if (oldViewProps.activeBlockId != newViewProps.activeBlockId && nextActiveBlockId.length == 0) {
     [self hideOverlay];
+  }
+
+  if (
+    nextActiveBlockId.length > 0 &&
+    oldViewProps.activeBlockMarkdown != newViewProps.activeBlockMarkdown &&
+    (_activeBlockId == nil || [_activeBlockId isEqualToString:nextActiveBlockId])
+  ) {
+    _lastLoadedMarkdown = [nextActiveBlockMarkdown copy];
+    if (_overlayInput != nil) {
+      callSetBlockStyleMarkdown(_overlayInput, nextActiveBlockMarkdown);
+      callSetHangingMarkdownPrefixLength(_overlayInput, 0);
+    }
+    RNMarkdownBlockActivationView *view = [self activeBlockView];
+    if (view != nil && _overlayInput != nil && _overlayInput.superview != nil) {
+      [self positionOverlayForBlockView:view];
+      [self emitEditorFrameChangeForBlockView:view];
+    }
   }
 
   if (oldViewProps.markdownLayoutConfigJson != newViewProps.markdownLayoutConfigJson && _activeBlockId != nil) {

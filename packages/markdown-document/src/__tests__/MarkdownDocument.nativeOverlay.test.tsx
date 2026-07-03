@@ -1,6 +1,6 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
 import { defaultMarkdownStyle } from "../styles";
@@ -22,6 +22,7 @@ const { __legendListTestHooks } = jest.requireMock("@legendapp/list/react-native
 const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-markdown") as {
   __enrichedMarkdownTestHooks: {
     inputInstances: () => Array<{
+      setSelection: jest.Mock;
       setValue: jest.Mock;
     }>;
   };
@@ -225,6 +226,19 @@ function flattenStyle(style: unknown) {
   return flattened;
 }
 
+function headingMarkerText(renderer: TestRenderer.ReactTestRenderer) {
+  const marker = renderer.root.findByProps({ testID: "markdown-heading-edit-marker" });
+  return marker
+    .findAllByType(Text)
+    .map((node) => node.props.children)
+    .filter((child) => typeof child === "string" || typeof child === "number")
+    .map(String);
+}
+
+function headingMarkerStyle(renderer: TestRenderer.ReactTestRenderer) {
+  return flattenStyle(renderer.root.findByProps({ testID: "markdown-heading-edit-marker" }).props.style);
+}
+
 describe("MarkdownDocument native editor overlay", () => {
   it("keeps the editor as a host overlay while the toolbar renders from the list footer", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
@@ -297,7 +311,7 @@ describe("MarkdownDocument native editor overlay", () => {
     }));
   });
 
-  it("keeps the overlay editor style stable when heading level changes", async () => {
+  it("keeps heading syntax out of the overlay editor while heading level changes", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -340,6 +354,7 @@ describe("MarkdownDocument native editor overlay", () => {
 
     const initialOverlayStyle = flattenStyle(editorInput(renderer!).props.style);
     expect(initialOverlayStyle).toEqual(expect.objectContaining({
+      fontSize: 18,
       left: -10000,
       minHeight: 25,
       padding: 0,
@@ -347,10 +362,7 @@ describe("MarkdownDocument native editor overlay", () => {
       top: -10000,
       width: "100%",
     }));
-    expect(initialOverlayStyle).toEqual(expect.not.objectContaining({
-      fontSize: expect.any(Number),
-      lineHeight: expect.any(Number),
-    }));
+    expect(headingMarkerText(renderer!)).toEqual(["H", "3"]);
 
     const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
     activeInput?.setValue.mockClear();
@@ -361,11 +373,123 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     expect(host.props.activeBlockId).toBe("d1:b0");
-    expect(activeInput?.setValue).toHaveBeenCalledWith("## Heading");
-    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(initialOverlayStyle);
+    expect(host.props.activeBlockMarkdown).toBe("## Heading");
+    expect(activeInput?.setValue).toHaveBeenCalledWith("Heading");
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({
+      fontSize: 22,
+    }));
+    expect(headingMarkerText(renderer!)).toEqual(["H", "2"]);
   });
 
-  it("does not derive overlay editor font metrics from block metadata while the full block loads", async () => {
+  it("reduces heading level on native backspace at the editable start", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "### Heading", 3),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          rowHeight: 44,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+    activeInput?.setValue.mockClear();
+
+    await act(async () => {
+      host.props.onBackspaceAtStart({
+        nativeEvent: {
+          blockId: "d1:b0",
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(adapter.applyTransactions.at(-1)).toEqual({
+      blockId: "d1:b0",
+      markdown: "## Heading",
+      type: "updateBlockMarkdown",
+    });
+    expect(activeInput?.setValue).toHaveBeenCalledWith("Heading");
+    expect(headingMarkerText(renderer!)).toEqual(["H", "2"]);
+  });
+
+  it("converts an h1 to a paragraph on native backspace at the editable start", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      headingBlock("d1:b0", 0, "# Heading", 1),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          rowHeight: 44,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+    activeInput?.setValue.mockClear();
+
+    await act(async () => {
+      host.props.onBackspaceAtStart({
+        nativeEvent: {
+          blockId: "d1:b0",
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(adapter.applyTransactions.at(-1)).toEqual({
+      blockId: "d1:b0",
+      markdown: "Heading",
+      type: "updateBlockMarkdown",
+    });
+    expect(activeInput?.setValue).toHaveBeenCalledWith("Heading");
+    expect(headingMarkerStyle(renderer!)).toEqual(expect.objectContaining({
+      opacity: 0,
+    }));
+  });
+
+  it("waits for the full heading block before deriving overlay editor font metrics", async () => {
     const adapter = new NativeOverlayAdapter(
       snapshot([
         headingBlock("d1:b0", 0, "## Heading", 2),
@@ -419,7 +543,9 @@ describe("MarkdownDocument native editor overlay", () => {
       await Promise.resolve();
     });
 
-    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(pendingOverlayStyle);
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({
+      fontSize: 22,
+    }));
   });
 
   it("keeps measured row size while typed heading changes are still committing", async () => {
@@ -459,12 +585,12 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     __legendListTestHooks.setItemSize.mockClear();
-    await changeText(editorInput(renderer!), "## Heading");
+    await changeText(editorInput(renderer!), "Heading text");
 
     expect(adapter.applyTransactions).toEqual([
       {
         blockId: "d1:b0",
-        markdown: "## Heading",
+        markdown: "### Heading text",
         type: "updateBlockMarkdown",
       },
     ]);
@@ -527,7 +653,7 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     __legendListTestHooks.setItemSize.mockClear();
-    await changeText(editorInput(renderer!), "# Heading text");
+    await changeText(editorInput(renderer!), "Heading text");
 
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 

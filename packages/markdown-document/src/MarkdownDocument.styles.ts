@@ -60,6 +60,23 @@ export const markdownDocumentStyles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
+  headingEditMarker: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    left: -42,
+    minWidth: 32,
+    position: "absolute",
+    zIndex: 2,
+  },
+  headingEditMarkerLevel: {
+    fontWeight: "700",
+    marginLeft: 1,
+    transform: [{ translateY: 5 }],
+  },
+  headingEditMarkerText: {
+    fontWeight: "800",
+  },
   emptyParagraphPlaceholder: {
     width: "100%",
   },

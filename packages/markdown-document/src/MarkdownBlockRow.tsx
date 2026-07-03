@@ -2,13 +2,13 @@ import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownBlockActivationView, MarkdownBlockRenderer } from "@legend-desktop/markdown-block-editor";
-import { Fragment, memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
 } from "react-native-enriched-markdown";
-import { Linking, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { usesNativeEditorOverlay } from "./constants";
 import type {
@@ -24,7 +24,10 @@ import {
   emptyParagraphPlaceholderStyle,
   estimateMarkdownEditorHeight,
   estimateMarkdownSelection,
+  getHeadingLevel,
   inputStyleFromMarkdownStyle,
+  markdownFromEditableMarkdownForBlock,
+  markdownSelectionFromEditableSelectionForBlock,
   normalizeSelectionDragOutsideEvent,
 } from "./markdownLayout";
 import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
@@ -141,10 +144,20 @@ export const MarkdownOverlayEditorInput = memo(
         onChangeMarkdown={(markdown) => {
           const block = activeBlockRef.current;
           if (block) {
-            onChangeMarkdownRef.current(block, markdown);
+            onChangeMarkdownRef.current(block, markdownFromEditableMarkdownForBlock(block, markdown, block.markdown));
           }
         }}
-        onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
+        onChangeSelection={(selection) => {
+          const block = activeBlockRef.current;
+          if (block) {
+            onChangeSelectionRef.current({
+              end: markdownSelectionFromEditableSelectionForBlock(block, selection.end, block.markdown),
+              start: markdownSelectionFromEditableSelectionForBlock(block, selection.start, block.markdown),
+            });
+          } else {
+            onChangeSelectionRef.current(selection);
+          }
+        }}
         onSelectionDragOutside={(event) => {
           const blockId = sourceBlockIdRef.current ?? activeBlockRef.current?.id;
           if (blockId) {
@@ -160,6 +173,7 @@ export const MarkdownOverlayEditorInput = memo(
         scrollEnabled={false}
         style={StyleSheet.flatten([
           styles.editorInputShell,
+          activeBlock ? editableTextStyleForBlock(activeBlock, markdownStyle) : null,
           styles.overlayEditorInput,
         ])}
       />
@@ -178,6 +192,48 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.onVerticalNavigationOutsideRef === nextProps.onVerticalNavigationOutsideRef &&
     previousProps.sourceBlockIdRef === nextProps.sourceBlockIdRef,
 );
+
+function HeadingEditMarker({
+  block,
+  markdownStyle,
+  top,
+}: {
+  block: MarkdownBlockMetadata | undefined;
+  markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
+  top: number;
+}) {
+  const headingLevel = block ? getHeadingLevel(block) : undefined;
+  const headingStyle = headingLevel === 1
+    ? markdownStyle.h1
+    : headingLevel === 2
+      ? markdownStyle.h2
+      : headingLevel === 3
+        ? markdownStyle.h3
+        : headingLevel === 4
+          ? markdownStyle.h4
+          : headingLevel === 5
+            ? markdownStyle.h5
+            : markdownStyle.h6;
+  const fontSize = typeof headingStyle?.fontSize === "number" ? headingStyle.fontSize : 24;
+  const lineHeight = typeof headingStyle?.lineHeight === "number" ? headingStyle.lineHeight : Math.ceil(fontSize * 1.25);
+  const color = headingStyle?.color ?? markdownStyle.paragraph?.color ?? "#6b7280";
+  const opacity = headingLevel ? 1 : 0;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[styles.headingEditMarker, { height: lineHeight, opacity, top }]}
+      testID="markdown-heading-edit-marker"
+    >
+      <Text style={[styles.headingEditMarkerText, { color, fontSize: Math.max(16, Math.round(fontSize * 0.72)), lineHeight }]}>
+        H
+      </Text>
+      <Text style={[styles.headingEditMarkerLevel, { color, fontSize: Math.max(9, Math.round(fontSize * 0.42)), lineHeight }]}>
+        {headingLevel ?? ""}
+      </Text>
+    </View>
+  );
+}
 
 export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   activeInputRef,
@@ -309,7 +365,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
 
   if (usesNativeEditorOverlay) {
     return (
-      <Fragment>
+      <View style={styles.blockRow}>
         <MarkdownBlockActivationView
           ref={rowRef}
           blockId={block.id}
@@ -325,8 +381,9 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           {renderedMarkdown}
           {selectionOverlay}
         </MarkdownBlockActivationView>
+        <HeadingEditMarker block={isActive ? activeEditorBlock : undefined} markdownStyle={markdownStyle} top={rowPaddingTop} />
         {commentBubble}
-      </Fragment>
+      </View>
     );
   }
 

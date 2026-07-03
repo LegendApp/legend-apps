@@ -40,6 +40,8 @@ import type {
 } from "./internalTypes";
 import {
   blockRowSpacingStyle,
+  editableMarkdownForBlock,
+  editableSelectionForBlock,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -234,12 +236,20 @@ type NativeEditorFrameEvent = {
   nativeEvent: NativeEditorFramePayload;
 };
 
+type NativeBackspaceAtStartEvent = {
+  nativeEvent: {
+    blockId: string;
+  };
+};
+
 type MarkdownNativeEditorHostProps = {
   activeBlockId: string | null;
+  activeBlockMarkdown: string;
   children: ReactNode;
   containerRef: RefObject<View | null>;
   markdownLayoutConfigJson?: string;
   onBeginEditing: (event: NativeEditorFrameEvent) => void;
+  onBackspaceAtStart: (event: NativeBackspaceAtStartEvent) => void;
   onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
   style: StyleProp<ViewStyle>;
@@ -247,10 +257,12 @@ type MarkdownNativeEditorHostProps = {
 
 const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   activeBlockId,
+  activeBlockMarkdown,
   children,
   containerRef,
   markdownLayoutConfigJson,
   onBeginEditing,
+  onBackspaceAtStart,
   onEditorFrameChange,
   onLayout,
   style,
@@ -259,8 +271,10 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
     <MarkdownEditorHost
       ref={containerRef}
       activeBlockId={activeBlockId ?? ""}
+      activeBlockMarkdown={activeBlockMarkdown}
       markdownLayoutConfigJson={markdownLayoutConfigJson}
       onBeginEditing={onBeginEditing}
+      onBackspaceAtStart={onBackspaceAtStart}
       onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
       style={style}
@@ -303,6 +317,14 @@ function countMarkdownLineBreaks(markdown: string) {
 
 function waitForAnimationFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function activeInputMarkdownForBlock(block: MarkdownBlockSnapshot | undefined, markdown: string) {
+  return usesNativeEditorOverlay && block ? editableMarkdownForBlock(block, markdown) : markdown;
+}
+
+function activeInputSelectionForBlock(block: MarkdownBlockSnapshot | undefined, selection: number, markdown: string) {
+  return usesNativeEditorOverlay && block ? editableSelectionForBlock(block, selection, markdown) : selection;
 }
 
 type MarkdownLegendListState = ReturnType<LegendListRef["getState"]>;
@@ -961,7 +983,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
           draftMarkdownRef.current = committedMarkdownRef.current;
           setDraftMarkdown(committedMarkdownRef.current);
-          activeInputRef.current?.setValue(committedMarkdownRef.current);
+          activeInputRef.current?.setValue(activeInputMarkdownForBlock(activeBlockSnapshotRef.current, committedMarkdownRef.current));
           setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
         }
         const nextError = error instanceof Error ? error : new Error(String(error));
@@ -1517,7 +1539,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             setActiveSelection(0);
             const activeInput = activeInputRef.current;
             if (activeInput) {
-              activeInput.setValue(nextActiveBlock.markdown);
+              activeInput.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
               activeInput.setSelection(0, 0);
             }
           }
@@ -1526,7 +1548,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
           draftMarkdownRef.current = committedMarkdownRef.current;
           setDraftMarkdown(committedMarkdownRef.current);
-          activeInputRef.current?.setValue(committedMarkdownRef.current);
+          activeInputRef.current?.setValue(activeInputMarkdownForBlock(activeBlockSnapshotRef.current, committedMarkdownRef.current));
           setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
@@ -1542,6 +1564,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         updateRenderedBlockMarkdown,
         validateTransactionResult,
       ],
+    );
+
+    const handleNativeBackspaceAtStart = useCallback(
+      (event: NativeBackspaceAtStartEvent) => {
+        const activeBlock = activeBlockSnapshotRef.current;
+        if (activeBlock && activeBlock.id === event.nativeEvent.blockId && activeBlock.type === "heading") {
+          const headingLevel = activeBlock.headingLevel;
+          const markdown = headingLevel > 1
+            ? setHeadingMarkdown(draftMarkdownRef.current, (headingLevel - 1) as HeadingLevel)
+            : setParagraphMarkdown(draftMarkdownRef.current);
+          replaceActiveBlockMarkdown(markdown).catch(reportAsyncError);
+        }
+      },
+      [replaceActiveBlockMarkdown, reportAsyncError],
     );
 
     const formatCurrentBlockRange = useCallback(
@@ -1900,8 +1936,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       const selection = activeInputSelectionRef.current;
+      const activeBlock = activeBlockSnapshotRef.current;
       input.focus();
-      input.setSelection(selection.start, selection.end);
+      input.setSelection(
+        activeInputSelectionForBlock(activeBlock, selection.start, draftMarkdownRef.current),
+        activeInputSelectionForBlock(activeBlock, selection.end, draftMarkdownRef.current),
+      );
       command();
     }, []);
 
@@ -2287,7 +2327,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               setDraftMarkdown(entry.beforeMarkdown);
               const activeInput = activeInputRef.current;
               if (activeInput) {
-                activeInput.setValue(entry.beforeMarkdown);
+                activeInput.setValue(activeInputMarkdownForBlock(activeBlockSnapshotRef.current, entry.beforeMarkdown));
               }
             }
             markDirty();
@@ -2929,9 +2969,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return (
         <MarkdownNativeEditorHost
           activeBlockId={activeBlockId ?? ""}
+          activeBlockMarkdown={activeBlock?.markdown ?? ""}
           containerRef={containerRef}
           markdownLayoutConfigJson={nativeMarkdownLayoutConfigJson}
           onBeginEditing={handleNativeBeginEditing}
+          onBackspaceAtStart={handleNativeBackspaceAtStart}
           onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}
           style={containerStyle}
