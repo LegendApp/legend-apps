@@ -239,8 +239,8 @@ function headingMarkerStyle(renderer: TestRenderer.ReactTestRenderer) {
   return flattenStyle(renderer.root.findByProps({ testID: "markdown-heading-edit-marker" }).props.style);
 }
 
-describe("MarkdownDocument native editor overlay", () => {
-  it("keeps the editor as a host overlay while the toolbar renders from the list footer", async () => {
+describe("MarkdownDocument native row editor", () => {
+  it("renders the editor inside the active row while the toolbar renders from the list footer", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       block("d1:b0", 0, "First"),
       block("d1:b1", 1, "Second"),
@@ -282,6 +282,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 25,
+          markdown: "First",
           rowHeight: 25,
           width: 640,
           x: 40,
@@ -299,19 +300,20 @@ describe("MarkdownDocument native editor overlay", () => {
     expect(footer.findAll((node) => (
       String(node.type) === "View" && node.props.testID === "markdown-selection-toolbar"
     ))).toHaveLength(1);
-    expect(inputIndex).toBeGreaterThan(footerIndex);
+    expect(inputIndex).toBeLessThan(footerIndex);
+    expect(activationView(renderer!, "d1:b0").findAllByProps({ testID: "markdown-editor-input" })).toContain(input);
     expect(flattenStyle(input.props.style)).toEqual(expect.objectContaining({
-      left: -10000,
       position: "absolute",
-      top: -10000,
+      width: "100%",
     }));
     expect(flattenStyle(input.props.style)).toEqual(expect.not.objectContaining({
       height: 25,
+      left: -10000,
       width: 640,
     }));
   });
 
-  it("keeps heading syntax out of the overlay editor while heading level changes", async () => {
+  it("keeps full heading markdown in the row editor while heading level changes", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -344,6 +346,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "### Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -355,11 +358,8 @@ describe("MarkdownDocument native editor overlay", () => {
     const initialOverlayStyle = flattenStyle(editorInput(renderer!).props.style);
     expect(initialOverlayStyle).toEqual(expect.objectContaining({
       fontSize: 18,
-      left: -10000,
       minHeight: 25,
       padding: 0,
-      position: "absolute",
-      top: -10000,
       width: "100%",
     }));
     expect(headingMarkerText(renderer!)).toEqual(["H", "3"]);
@@ -374,7 +374,7 @@ describe("MarkdownDocument native editor overlay", () => {
 
     expect(host.props.activeBlockId).toBe("d1:b0");
     expect(host.props.activeBlockMarkdown).toBe("## Heading");
-    expect(activeInput?.setValue).toHaveBeenCalledWith("Heading");
+    expect(activeInput?.setValue).toHaveBeenCalledWith("## Heading");
     expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({
       fontSize: 22,
     }));
@@ -405,6 +405,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "### Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -430,7 +431,7 @@ describe("MarkdownDocument native editor overlay", () => {
       markdown: "## Heading",
       type: "updateBlockMarkdown",
     });
-    expect(activeInput?.setValue).toHaveBeenCalledWith("Heading");
+    expect(activeInput?.setValue).toHaveBeenCalledWith("## Heading");
     expect(headingMarkerText(renderer!)).toEqual(["H", "2"]);
   });
 
@@ -458,6 +459,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "# Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -489,7 +491,7 @@ describe("MarkdownDocument native editor overlay", () => {
     }));
   });
 
-  it("waits for the full heading block before deriving overlay editor font metrics", async () => {
+  it("uses native event markdown for row editor font metrics while the full block loads", async () => {
     const adapter = new NativeOverlayAdapter(
       snapshot([
         headingBlock("d1:b0", 0, "## Heading", 2),
@@ -524,6 +526,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "## Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -532,10 +535,8 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    const pendingOverlayStyle = flattenStyle(editorInput(renderer!).props.style);
-    expect(pendingOverlayStyle).toEqual(expect.not.objectContaining({
-      fontSize: expect.any(Number),
-      lineHeight: expect.any(Number),
+    expect(flattenStyle(editorInput(renderer!).props.style)).toEqual(expect.objectContaining({
+      fontSize: 22,
     }));
 
     resolveGetBlock();
@@ -548,7 +549,7 @@ describe("MarkdownDocument native editor overlay", () => {
     }));
   });
 
-  it("keeps measured row size while typed heading changes are still committing", async () => {
+  it("does not resize the list row while typed heading changes are still committing", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -576,6 +577,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "### Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -585,7 +587,7 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     __legendListTestHooks.setItemSize.mockClear();
-    await changeText(editorInput(renderer!), "Heading text");
+    await changeText(editorInput(renderer!), "### Heading text");
 
     expect(adapter.applyTransactions).toEqual([
       {
@@ -601,6 +603,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 35,
+          markdown: "### Heading text",
           rowHeight: 54.2,
           width: 640,
           x: 40,
@@ -609,10 +612,7 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(__legendListTestHooks.setItemSize).toHaveBeenCalledWith("d1:b0", {
-      height: 54.2,
-      width: 640,
-    });
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 
     resolveTransaction();
     await act(async () => {
@@ -620,7 +620,7 @@ describe("MarkdownDocument native editor overlay", () => {
     });
   });
 
-  it("keeps the measured native row size for text edits that do not change block presentation", async () => {
+  it("lets the active row measure itself for text edits that do not change block presentation", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "# Heading", 1),
     ]));
@@ -644,6 +644,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 44,
+          markdown: "# Heading",
           rowHeight: 68,
           width: 640,
           x: 40,
@@ -653,7 +654,7 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     __legendListTestHooks.setItemSize.mockClear();
-    await changeText(editorInput(renderer!), "Heading text");
+    await changeText(editorInput(renderer!), "# Heading text");
 
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
 
@@ -662,6 +663,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 60,
+          markdown: "# Heading text",
           rowHeight: 84,
           width: 640,
           x: 40,
@@ -670,18 +672,13 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(__legendListTestHooks.setItemSize).toHaveBeenCalledWith("d1:b0", {
-      height: 84,
-      width: 640,
-    });
-    expect(activationView(renderer!, "d1:b0").props.style).toEqual(
-      expect.arrayContaining([
-        { height: 84 },
-      ]),
-    );
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 84,
+    }));
   });
 
-  it("sizes the active native row from the native editor frame", async () => {
+  it("sizes the active native row locally from the activation frame", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -703,6 +700,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "### Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -711,13 +709,17 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 44 }));
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 44,
+    }));
+    __legendListTestHooks.setItemSize.mockClear();
 
     await act(async () => {
       nativeHost(renderer!).props.onEditorFrameChange({
         nativeEvent: {
           blockId: "d1:b0",
           height: 44,
+          markdown: "### Heading",
           rowHeight: 60,
           width: 640,
           x: 40,
@@ -726,10 +728,34 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({ height: 60 }));
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 60,
+    }));
+
+    await changeText(editorInput(renderer!), "### Heading changed");
+
+    await act(async () => {
+      nativeHost(renderer!).props.onEditorFrameChange({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 46,
+          markdown: "### Heading changed",
+          rowHeight: 62,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 62,
+    }));
   });
 
-  it("keeps the native row width stable when the editor frame has a negative x offset", async () => {
+  it("uses native editor frame changes only for the active row min height", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -752,6 +778,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "### Heading",
           rowHeight: 44,
           width: 640,
           x: -10,
@@ -760,12 +787,69 @@ describe("MarkdownDocument native editor overlay", () => {
       });
     });
 
-    expect(__legendListTestHooks.setItemSize).toHaveBeenLastCalledWith("d1:b0", expect.objectContaining({
-      width: 640,
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 44,
     }));
+
+    await act(async () => {
+      nativeHost(renderer!).props.onEditorFrameChange({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 28,
+          markdown: "### Heading",
+          rowHeight: 44,
+          width: 640,
+          x: -10,
+          y: 80,
+        },
+      });
+    });
+
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 44,
+    }));
+
+    await act(async () => {
+      nativeHost(renderer!).props.onEditorFrameChange({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 36,
+          markdown: "### Heading",
+          rowHeight: 52,
+          width: 640,
+          x: -10,
+          y: 80,
+        },
+      });
+    });
+
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+    expect(flattenStyle(activationView(renderer!, "d1:b0").props.style)).toEqual(expect.objectContaining({
+      minHeight: 52,
+    }));
+
+    await changeText(editorInput(renderer!), "### Heading changed");
+
+    await act(async () => {
+      nativeHost(renderer!).props.onEditorFrameChange({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 36,
+          markdown: "### Heading changed",
+          rowHeight: 52,
+          width: 640,
+          x: -10,
+          y: 80,
+        },
+      });
+    });
+
+    expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
   });
 
-  it("keeps rendered markdown mounted inside the active native row", async () => {
+  it("keeps rendered markdown mounted with the editor inside the active native row", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
     ]));
@@ -789,6 +873,7 @@ describe("MarkdownDocument native editor overlay", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 28,
+          markdown: "### Heading",
           rowHeight: 44,
           width: 640,
           x: 40,
@@ -798,6 +883,7 @@ describe("MarkdownDocument native editor overlay", () => {
     });
 
     expect(activationView(renderer!, "d1:b0").findAllByType(EnrichedMarkdownText)).toHaveLength(1);
+    expect(activationView(renderer!, "d1:b0").findAllByProps({ testID: "markdown-editor-input" }).length).toBeGreaterThan(0);
   });
 
 });

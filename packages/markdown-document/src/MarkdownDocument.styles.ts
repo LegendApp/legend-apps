@@ -60,6 +60,12 @@ export const markdownDocumentStyles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
+  editorInputOverlay: {
+    left: 0,
+    position: "absolute",
+    right: 0,
+    zIndex: 2,
+  },
   headingEditMarker: {
     alignItems: "baseline",
     flexDirection: "row",

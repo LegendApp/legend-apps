@@ -23,7 +23,7 @@ import {
   type MarkdownDocumentBlockState,
   validateMarkdownTransactionResultToBlockState,
 } from "./documentStateModel";
-import { MarkdownBlockRow, MarkdownOverlayEditorInput } from "./MarkdownBlockRow";
+import { MarkdownBlockRow } from "./MarkdownBlockRow";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { contentHorizontalPadding, contentMaxWidth, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
 import type {
@@ -40,8 +40,6 @@ import type {
 } from "./internalTypes";
 import {
   blockRowSpacingStyle,
-  editableMarkdownForBlock,
-  editableSelectionForBlock,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -226,6 +224,7 @@ type MarkdownBlockSelectionInputProps = {
 type NativeEditorFramePayload = {
   blockId: string;
   height: number;
+  markdown?: string;
   rowHeight: number;
   width: number;
   x: number;
@@ -319,12 +318,12 @@ function waitForAnimationFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function activeInputMarkdownForBlock(block: MarkdownBlockSnapshot | undefined, markdown: string) {
-  return usesNativeEditorOverlay && block ? editableMarkdownForBlock(block, markdown) : markdown;
+function activeInputMarkdownForBlock(_block: MarkdownBlockSnapshot | undefined, markdown: string) {
+  return markdown;
 }
 
-function activeInputSelectionForBlock(block: MarkdownBlockSnapshot | undefined, selection: number, markdown: string) {
-  return usesNativeEditorOverlay && block ? editableSelectionForBlock(block, selection, markdown) : selection;
+function activeInputSelectionForBlock(_block: MarkdownBlockSnapshot | undefined, selection: number, _markdown: string) {
+  return selection;
 }
 
 type MarkdownLegendListState = ReturnType<LegendListRef["getState"]>;
@@ -438,7 +437,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const commentAnchorBlockIdRef = useRef<string | null>(null);
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const overlayFrameBlockIdRef = useRef<string | undefined>(undefined);
-    const nativeEditorRowSizeRef = useRef(new Map<string, { height: number; width: number }>());
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -510,7 +508,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const clearOverlayFrame = useCallback(() => {
       overlayFrameRef.current = undefined;
       overlayFrameBlockIdRef.current = undefined;
-      nativeEditorRowSizeRef.current.clear();
     }, []);
 
     const cancelPendingVerticalNavigationFrame = useCallback(() => {
@@ -883,11 +880,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       };
       activeBlockSnapshotRef.current = nextBlock;
       if (activeBlockIdRef.current === blockId) {
-        const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
+        const previousRenderState = documentRenderState$.activeBlocksById.get(blockId).peek();
+        const pendingEditorFrame = overlayFrameBlockIdRef.current === blockId ? overlayFrameRef.current : undefined;
         documentRenderState$.activeBlocksById.get(blockId).set({
           block: nextBlock,
           draftMarkdown: markdown,
-          editorFrame: activeBlockState?.editorFrame,
+          editorFrame: previousRenderState?.editorFrame ?? pendingEditorFrame,
           selection: activeInputSelectionRef.current.start,
         });
       }
@@ -2665,15 +2663,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         ? activeBlockSnapshotRef.current
         : undefined;
       if (activeBlockId && activeBlock) {
-        const activeBlockState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
-        const cachedOverlayFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
+        const previousRenderState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
+        const pendingEditorFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
         documentRenderState$.activeBlocksById.get(activeBlockId).set({
           block: {
             ...activeBlock,
             markdown: draftMarkdown,
           },
           draftMarkdown,
-          editorFrame: activeBlockState?.editorFrame ?? cachedOverlayFrame,
+          editorFrame: previousRenderState?.editorFrame ?? pendingEditorFrame,
           selection: activeSelection,
         });
         activeRenderBlockIdRef.current = activeBlockId;
@@ -2835,7 +2833,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
       const { blockId, height, rowHeight, width, x, y } = frame;
       const blockIndex = getBlockIndexById(blockId);
-      const block = blockIndex >= 0 ? getBlockAtIndexForRender(blockId, blockIndex) : undefined;
+      const blockMetadata = blockIndex >= 0 ? getBlockAtIndexForRender(blockId, blockIndex) : undefined;
+      const block = blockMetadata && !isMarkdownBlockSnapshot(blockMetadata) && frame.markdown !== undefined
+        ? {
+          ...blockMetadata,
+          markdown: frame.markdown,
+        }
+        : blockMetadata;
       if (!block) {
         return undefined;
       }
@@ -2850,18 +2854,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       };
       overlayFrameRef.current = nextOverlayFrame;
       overlayFrameBlockIdRef.current = blockId;
-      const activeBlockState = documentRenderState$.activeBlocksById.get(blockId).peek();
-      if (activeBlockState) {
-        documentRenderState$.activeBlocksById.get(blockId).set({
-          ...activeBlockState,
+      const activeRenderState$ = documentRenderState$.activeBlocksById.get(blockId);
+      const activeRenderState = activeRenderState$.peek();
+      if (activeRenderState) {
+        activeRenderState$.set({
+          ...activeRenderState,
           editorFrame: nextOverlayFrame,
         });
-      }
-
-      const previousRowSize = nativeEditorRowSizeRef.current.get(blockId);
-      if (!previousRowSize || previousRowSize.height !== rowHeight || previousRowSize.width !== width) {
-        nativeEditorRowSizeRef.current.set(blockId, { height: rowHeight, width });
-        listRef.current?.setItemSize?.(blockId, { height: rowHeight, width });
       }
 
       return block;
@@ -2979,17 +2978,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           style={containerStyle}
         >
           {documentContent}
-          <MarkdownOverlayEditorInput
-            activeBlock={activeBlock}
-            activeInputRef={activeInputRef}
-            markdownStyle={resolvedMarkdownStyle}
-            onBlurRef={handleEditorBlurRef}
-            onChangeMarkdownRef={handleChangeMarkdownRef}
-            onChangeSelectionRef={handleChangeSelectionRef}
-            onSelectionDragOutsideRef={handleSelectionDragOutsideRef}
-            onVerticalNavigationOutsideRef={handleVerticalNavigationOutsideRef}
-            sourceBlockIdRef={nativeEditingBlockIdRef}
-          />
         </MarkdownNativeEditorHost>
       );
     }

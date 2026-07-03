@@ -23,11 +23,6 @@ static SEL focusSelector()
   return NSSelectorFromString(@"focus");
 }
 
-static SEL setSelectionSelector()
-{
-  return NSSelectorFromString(@"setSelection:end:");
-}
-
 static SEL setSelectionForWindowPointSelector()
 {
   return NSSelectorFromString(@"setSelectionForWindowPointX:y:");
@@ -61,6 +56,8 @@ static SEL mouseDownSelector()
 static NSString *const ENRMMarkdownTextInputContentSizeDidChangeNotification =
   @"ENRMMarkdownTextInputContentSizeDidChangeNotification";
 
+static void callSetBlockStyleMarkdown(id target, NSString *markdown);
+
 static NSRange hangingPrefixRangeForMarkdown(NSString *markdown)
 {
   NSRange prefixRange = NSMakeRange(NSNotFound, 0);
@@ -91,23 +88,6 @@ static NSInteger hangingPrefixLengthForMarkdown(NSString *markdown)
   return prefixRange.location != NSNotFound ? (NSInteger)NSMaxRange(prefixRange) : 0;
 }
 
-static NSString *editableMarkdownForMarkdown(NSString *markdown)
-{
-  NSInteger prefixLength = hangingPrefixLengthForMarkdown(markdown ?: @"");
-  return prefixLength > 0 ? [markdown substringFromIndex:(NSUInteger)prefixLength] : markdown ?: @"";
-}
-
-static void callSetValue(id target, NSString *markdown)
-{
-  SEL selector = setValueSelector();
-  if (![target respondsToSelector:selector]) {
-    return;
-  }
-
-  void (*send)(id, SEL, NSString *) = (void (*)(id, SEL, NSString *))[target methodForSelector:selector];
-  send(target, selector, markdown);
-}
-
 static void callFocus(id target)
 {
   SEL selector = focusSelector();
@@ -117,17 +97,6 @@ static void callFocus(id target)
 
   void (*send)(id, SEL) = (void (*)(id, SEL))[target methodForSelector:selector];
   send(target, selector);
-}
-
-static void callSetSelection(id target, NSInteger start, NSInteger end)
-{
-  SEL selector = setSelectionSelector();
-  if (![target respondsToSelector:selector]) {
-    return;
-  }
-
-  void (*send)(id, SEL, NSInteger, NSInteger) = (void (*)(id, SEL, NSInteger, NSInteger))[target methodForSelector:selector];
-  send(target, selector, start, end);
 }
 
 static void callSetSelectionForWindowPoint(id target, NSPoint windowPoint)
@@ -348,22 +317,22 @@ static void registerNativeMarkdownProvider()
   });
 }
 
+@interface RNMarkdownBlockActivationView () <RCTMarkdownBlockActivationViewViewProtocol>
+@property (nonatomic, readonly, nullable) id editorInput;
+- (void)activateEditorWithEvent:(nullable NSEvent *)event;
+@end
+
 @interface RNMarkdownEditorHost () <RCTMarkdownEditorHostViewProtocol>
+- (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view;
 @end
 
 @implementation RNMarkdownEditorHost {
-  RCTUIView<RCTComponentViewProtocol> *_overlayInput;
-  __weak NSView *_overlayInputHomeSuperview;
   NSMapTable<NSString *, RNMarkdownBlockActivationView *> *_activationViews;
   NSString *_activeBlockId;
   NSString *_layoutConfigJson;
-  NSString *_lastLoadedBlockId;
-  NSString *_lastLoadedMarkdown;
-  BOOL _isPositioningOverlay;
   MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
-  id _overlayKeyDownMonitor;
-  id _overlayScrollWheelMonitor;
+  id _editorKeyDownMonitor;
 }
 
 + (void)load
@@ -377,79 +346,17 @@ static void registerNativeMarkdownProvider()
     registerNativeMarkdownProvider();
     _props = std::make_shared<const MarkdownEditorHostProps>();
     _activationViews = [NSMapTable strongToWeakObjectsMapTable];
-    [self installOverlayKeyDownMonitorIfNeeded];
-    [self installOverlayScrollWheelMonitorIfNeeded];
+    [self installEditorKeyDownMonitorIfNeeded];
   }
   return self;
 }
 
-- (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
-                          index:(NSInteger)index
-{
-  [super mountChildComponentView:childComponentView index:index];
-
-  if (isEnrichedMarkdownInput(childComponentView)) {
-    _overlayInput = childComponentView;
-    _overlayInputHomeSuperview = childComponentView.superview;
-    _overlayInput.hidden = YES;
-    [_overlayInput setPostsFrameChangedNotifications:YES];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(overlayInputFrameDidChange:)
-                                                 name:NSViewFrameDidChangeNotification
-                                               object:_overlayInput];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(overlayInputContentSizeDidChange:)
-                                                 name:ENRMMarkdownTextInputContentSizeDidChangeNotification
-                                               object:_overlayInput];
-  }
-}
-
-- (void)unmountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
-                            index:(NSInteger)index
-{
-  if (childComponentView == _overlayInput) {
-    // The overlay input may be reparented next to the active block while editing.
-    // RCTViewComponentView asserts that a child is still at its original indexed
-    // parent during unmount, so remove this managed overlay child directly.
-    [self showActiveBlockContents];
-    [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                    name:NSViewFrameDidChangeNotification
-                                                  object:_overlayInput];
-    [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                    name:ENRMMarkdownTextInputContentSizeDidChangeNotification
-                                                  object:_overlayInput];
-    [self stopObservingScrollView];
-    [childComponentView removeFromSuperview];
-    _overlayInput = nil;
-    _overlayInputHomeSuperview = nil;
-    _activeBlockId = nil;
-    _lastLoadedBlockId = nil;
-    _lastLoadedMarkdown = nil;
-    _isPositioningOverlay = NO;
-    return;
-  }
-
-  [super unmountChildComponentView:childComponentView index:index];
-}
-
 - (void)dealloc
 {
-  if (_overlayInput != nil) {
-    [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                    name:NSViewFrameDidChangeNotification
-                                                  object:_overlayInput];
-    [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                    name:ENRMMarkdownTextInputContentSizeDidChangeNotification
-                                                  object:_overlayInput];
-  }
   [self stopObservingScrollView];
-  if (_overlayScrollWheelMonitor != nil) {
-    [NSEvent removeMonitor:_overlayScrollWheelMonitor];
-    _overlayScrollWheelMonitor = nil;
-  }
-  if (_overlayKeyDownMonitor != nil) {
-    [NSEvent removeMonitor:_overlayKeyDownMonitor];
-    _overlayKeyDownMonitor = nil;
+  if (_editorKeyDownMonitor != nil) {
+    [NSEvent removeMonitor:_editorKeyDownMonitor];
+    _editorKeyDownMonitor = nil;
   }
 }
 
@@ -461,10 +368,8 @@ static void registerNativeMarkdownProvider()
   [_activationViews setObject:view forKey:view.blockId];
   if (_activeBlockId != nil && [_activeBlockId isEqualToString:view.blockId]) {
     [self observeScrollViewForBlockView:view];
-    [self showOverlayForBlockView:view
-                         markdown:_lastLoadedMarkdown ?: [view currentMarkdown]
-                            event:nil
-                        loadValue:_lastLoadedBlockId == nil || ![_lastLoadedBlockId isEqualToString:view.blockId]];
+    [self setBlockView:view contentsHidden:YES];
+    [view activateEditorWithEvent:nil];
     [self emitBeginEditingForBlockView:view];
   }
 }
@@ -530,6 +435,11 @@ static void registerNativeMarkdownProvider()
   return [self activationViewForBlockId:_activeBlockId];
 }
 
+- (id)activeEditorInput
+{
+  return [self activeBlockView].editorInput;
+}
+
 - (nullable NSScrollView *)scrollViewForBlockView:(RNMarkdownBlockActivationView *)view
 {
   NSView *ancestor = view.superview;
@@ -573,27 +483,23 @@ static void registerNativeMarkdownProvider()
                                              object:_observedScrollView.contentView];
 }
 
-- (BOOL)eventIsInsideOverlayInput:(NSEvent *)event
+- (BOOL)activeEditorContainsFirstResponder
 {
-  if (_overlayInput == nil || _overlayInput.hidden || _overlayInput.window == nil || event.window != _overlayInput.window) {
+  id editorInput = [self activeEditorInput];
+  if (editorInput == nil || ![editorInput isKindOfClass:NSView.class]) {
     return NO;
   }
 
-  NSPoint overlayPoint = [_overlayInput convertPoint:event.locationInWindow fromView:nil];
-  return NSPointInRect(overlayPoint, _overlayInput.bounds);
-}
-
-- (BOOL)overlayInputContainsFirstResponder
-{
-  if (_overlayInput == nil || _overlayInput.hidden || _overlayInput.window == nil) {
+  NSView *editorView = (NSView *)editorInput;
+  if (editorView.hidden || editorView.window == nil) {
     return NO;
   }
 
-  NSResponder *firstResponder = _overlayInput.window.firstResponder;
-  if (firstResponder == _overlayInput) {
+  NSResponder *firstResponder = editorView.window.firstResponder;
+  if (firstResponder == editorView) {
     return YES;
   }
-  return [firstResponder isKindOfClass:NSView.class] && [(NSView *)firstResponder isDescendantOf:_overlayInput];
+  return [firstResponder isKindOfClass:NSView.class] && [(NSView *)firstResponder isDescendantOf:editorView];
 }
 
 - (void)emitBackspaceAtStart
@@ -612,54 +518,30 @@ static void registerNativeMarkdownProvider()
   });
 }
 
-- (void)installOverlayKeyDownMonitorIfNeeded
+- (void)installEditorKeyDownMonitorIfNeeded
 {
-  if (_overlayKeyDownMonitor != nil) {
+  if (_editorKeyDownMonitor != nil) {
     return;
   }
 
   __weak RNMarkdownEditorHost *weakSelf = self;
-  _overlayKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+  _editorKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                                                  handler:^NSEvent *_Nullable(NSEvent *event) {
     RNMarkdownEditorHost *strongSelf = weakSelf;
-    if (strongSelf == nil || event.keyCode != 51 || ![strongSelf overlayInputContainsFirstResponder]) {
+    if (strongSelf == nil || event.keyCode != 51 || ![strongSelf activeEditorContainsFirstResponder]) {
       return event;
     }
 
-    NSRange selection = callSelectedRange(strongSelf->_overlayInput);
-    BOOL isAtStart = selection.location == 0 && selection.length == 0;
-    BOOL isHeading = hangingPrefixLengthForMarkdown(strongSelf->_lastLoadedMarkdown ?: @"") > 0;
+    id editorInput = [strongSelf activeEditorInput];
+    NSRange selection = callSelectedRange(editorInput);
+    NSInteger headingPrefixLength = hangingPrefixLengthForMarkdown([[strongSelf activeBlockView] currentMarkdown]);
+    BOOL isAtStart = selection.location <= (NSUInteger)headingPrefixLength && selection.length == 0;
+    BOOL isHeading = headingPrefixLength > 0;
     if (!isAtStart || !isHeading) {
       return event;
     }
 
     [strongSelf emitBackspaceAtStart];
-    return nil;
-  }];
-}
-
-- (void)installOverlayScrollWheelMonitorIfNeeded
-{
-  if (_overlayScrollWheelMonitor != nil) {
-    return;
-  }
-
-  __weak RNMarkdownEditorHost *weakSelf = self;
-  _overlayScrollWheelMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
-                                                                     handler:^NSEvent *_Nullable(NSEvent *event) {
-    RNMarkdownEditorHost *strongSelf = weakSelf;
-    if (strongSelf == nil || ![strongSelf eventIsInsideOverlayInput:event]) {
-      return event;
-    }
-
-    RNMarkdownBlockActivationView *view = [strongSelf activeBlockView];
-    NSScrollView *scrollView = view == nil ? nil : [strongSelf scrollViewForBlockView:view];
-    if (scrollView == nil) {
-      return event;
-    }
-
-    [scrollView scrollWheel:event];
-    [strongSelf positionOverlayForBlockView:view];
     return nil;
   }];
 }
@@ -691,51 +573,25 @@ static void registerNativeMarkdownProvider()
   [self setBlockView:[self activeBlockView] contentsHidden:NO];
 }
 
-- (nullable NSView *)overlaySuperviewForBlockView:(RNMarkdownBlockActivationView *)view
+- (nullable NSView *)editorSuperviewForBlockView:(RNMarkdownBlockActivationView *)view
 {
-  if (view.superview != nil) {
-    return view.superview;
-  }
-  if (_overlayInputHomeSuperview != nil) {
-    return _overlayInputHomeSuperview;
-  }
-  return _overlayInput.superview;
+  return view.superview;
 }
 
-- (NSRect)overlayFrameForBlockView:(RNMarkdownBlockActivationView *)view
-                       inSuperview:(NSView *)overlaySuperview
+- (NSRect)editorFrameForBlockView:(RNMarkdownBlockActivationView *)view
+                       inSuperview:(NSView *)editorSuperview
 {
-  if (_overlayInput == nil || overlaySuperview == nil || view.window == nil) {
+  if (editorSuperview == nil || view.window == nil) {
     return NSZeroRect;
   }
 
-  NSRect frame = [view convertRect:view.contentBounds toView:overlaySuperview];
-  if (_lastLoadedBlockId != nil && [_lastLoadedBlockId isEqualToString:view.blockId]) {
-    CGFloat measuredHeight = measuredInputHeight(_overlayInput, frame.size.width);
+  NSRect frame = [view convertRect:view.contentBounds toView:editorSuperview];
+  id editorInput = view.editorInput;
+  if (editorInput != nil) {
+    CGFloat measuredHeight = measuredInputHeight(editorInput, frame.size.width);
     frame.size.height = measuredHeight > 0 ? measuredHeight : frame.size.height;
   }
   return frame;
-}
-
-- (void)positionOverlayForBlockView:(RNMarkdownBlockActivationView *)view
-{
-  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
-  if (_overlayInput == nil || overlaySuperview == nil || view.window == nil) {
-    return;
-  }
-
-  NSRect frame = [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
-  if (_overlayInput.superview == overlaySuperview && NSEqualRects(_overlayInput.frame, frame)) {
-    return;
-  }
-
-  _isPositioningOverlay = YES;
-  if (_overlayInput.superview != overlaySuperview) {
-    [_overlayInput removeFromSuperview];
-  }
-  [overlaySuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:view];
-  _overlayInput.frame = frame;
-  _isPositioningOverlay = NO;
 }
 
 - (void)emitBeginEditingForBlockView:(RNMarkdownBlockActivationView *)view
@@ -745,11 +601,12 @@ static void registerNativeMarkdownProvider()
     return;
   }
 
-  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
-  NSRect frame = overlaySuperview == nil ? NSZeroRect : [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
+  NSView *editorSuperview = [self editorSuperviewForBlockView:view];
+  NSRect frame = editorSuperview == nil ? NSZeroRect : [self editorFrameForBlockView:view inSuperview:editorSuperview];
   eventEmitter->onBeginEditing({
     .blockId = std::string([view.blockId UTF8String] ?: ""),
     .height = frame.size.height,
+    .markdown = std::string([[view currentMarkdown] UTF8String] ?: ""),
     .rowHeight = [self rowHeightForActivationView:view contentHeight:frame.size.height],
     .width = frame.size.width,
     .x = frame.origin.x,
@@ -764,11 +621,12 @@ static void registerNativeMarkdownProvider()
     return;
   }
 
-  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
-  NSRect frame = overlaySuperview == nil ? NSZeroRect : [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
+  NSView *editorSuperview = [self editorSuperviewForBlockView:view];
+  NSRect frame = editorSuperview == nil ? NSZeroRect : [self editorFrameForBlockView:view inSuperview:editorSuperview];
   eventEmitter->onEditorFrameChange({
     .blockId = std::string([view.blockId UTF8String] ?: ""),
     .height = frame.size.height,
+    .markdown = std::string([[view currentMarkdown] UTF8String] ?: ""),
     .rowHeight = [self rowHeightForActivationView:view contentHeight:frame.size.height],
     .width = frame.size.width,
     .x = frame.origin.x,
@@ -776,58 +634,25 @@ static void registerNativeMarkdownProvider()
   });
 }
 
-- (void)overlayInputFrameDidChange:(NSNotification *)notification
+- (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view
 {
-  if (_isPositioningOverlay || _overlayInput == nil || _overlayInput.hidden || _activeBlockId.length == 0) {
+  if (view == nil || _activeBlockId.length == 0 || ![_activeBlockId isEqualToString:view.blockId]) {
     return;
   }
-
-  RNMarkdownBlockActivationView *view = [self activeBlockView];
-  if (view == nil || _overlayInput.superview == nil) {
-    return;
-  }
-
-  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
-  if (overlaySuperview == nil) {
-    return;
-  }
-
-  NSRect targetFrame = [self overlayFrameForBlockView:view inSuperview:overlaySuperview];
-  if (NSEqualRects(_overlayInput.frame, targetFrame)) {
-    return;
-  }
-
-  [self positionOverlayForBlockView:view];
   [self emitEditorFrameChangeForBlockView:view];
-}
-
-- (void)overlayInputContentSizeDidChange:(NSNotification *)notification
-{
-  if (notification.object != _overlayInput || _overlayInput == nil || _overlayInput.hidden || _activeBlockId.length == 0) {
-    return;
-  }
-
-  RNMarkdownBlockActivationView *view = [self activeBlockView];
-  if (view != nil) {
-    [self positionOverlayForBlockView:view];
-    [self emitEditorFrameChangeForBlockView:view];
-  }
 }
 
 - (void)activeScrollViewBoundsDidChange:(NSNotification *)notification
 {
   RNMarkdownBlockActivationView *view = [self activeBlockView];
-  if (view == nil || _overlayInput == nil || _overlayInput.hidden || _overlayInput.superview == nil) {
-    return;
+  if (view != nil) {
+    [self emitEditorFrameChangeForBlockView:view];
   }
-
-  [self positionOverlayForBlockView:view];
-  [self emitEditorFrameChangeForBlockView:view];
 }
 
 - (void)activateBlockView:(RNMarkdownBlockActivationView *)view withEvent:(NSEvent *)event
 {
-  if (view.blockId.length == 0 || _overlayInput == nil) {
+  if (view.blockId.length == 0) {
     return;
   }
 
@@ -838,61 +663,14 @@ static void registerNativeMarkdownProvider()
   _activeBlockId = [view.blockId copy];
   [self setBlockView:view contentsHidden:YES];
   [self observeScrollViewForBlockView:view];
-  [self showOverlayForBlockView:view markdown:[view currentMarkdown] event:event loadValue:YES];
+  [view activateEditorWithEvent:event];
   [self emitBeginEditingForBlockView:view];
-  [self emitEditorFrameChangeForBlockView:view];
 }
 
-- (void)showOverlayForBlockView:(RNMarkdownBlockActivationView *)view
-                       markdown:(NSString *)markdown
-                          event:(nullable NSEvent *)event
-                      loadValue:(BOOL)loadValue
+- (void)clearActiveEditor
 {
-  if (_overlayInput == nil || _overlayInput.superview == nil || view.window == nil) {
-    return;
-  }
-
-  NSView *overlaySuperview = [self overlaySuperviewForBlockView:view];
-  if (overlaySuperview == nil) {
-    return;
-  }
-
-  if (loadValue) {
-    NSString *resolvedMarkdown = markdown ?: @"";
-    callSetBlockStyleMarkdown(_overlayInput, resolvedMarkdown);
-    callSetValue(_overlayInput, editableMarkdownForMarkdown(resolvedMarkdown));
-    _lastLoadedBlockId = [view.blockId copy];
-    _lastLoadedMarkdown = [resolvedMarkdown copy];
-  }
-
-  [self setBlockView:view contentsHidden:YES];
-  [self positionOverlayForBlockView:view];
-  callSetHangingMarkdownPrefixLength(_overlayInput, 0);
-  _overlayInput.hidden = NO;
-
-  callFocus(_overlayInput);
-  if (event != nil) {
-    NSPoint selectionPoint = event.locationInWindow;
-    NSPoint localPoint = [view convertPoint:selectionPoint fromView:nil];
-    NSRect contentBounds = view.contentBounds;
-    if (NSHeight(contentBounds) > 0) {
-      localPoint.y = MIN(MAX(localPoint.y, NSMinY(contentBounds)), NSMaxY(contentBounds));
-      selectionPoint = [view convertPoint:localPoint toView:nil];
-    }
-    callSetSelectionForWindowPoint(_overlayInput, selectionPoint);
-  }
-}
-
-- (void)hideOverlay
-{
-  _overlayInput.hidden = YES;
-  if (_overlayInput != nil && _overlayInputHomeSuperview != nil && _overlayInput.superview != _overlayInputHomeSuperview) {
-    [_overlayInput removeFromSuperview];
-    [_overlayInputHomeSuperview addSubview:_overlayInput positioned:NSWindowAbove relativeTo:nil];
-  }
+  [self showActiveBlockContents];
   [self stopObservingScrollView];
-  _lastLoadedBlockId = nil;
-  _lastLoadedMarkdown = nil;
   _activeBlockId = nil;
 }
 
@@ -909,54 +687,46 @@ static void registerNativeMarkdownProvider()
 
   NSString *nextActiveBlockId = [NSString stringWithUTF8String:newViewProps.activeBlockId.c_str()];
   NSString *nextActiveBlockMarkdown = [NSString stringWithUTF8String:newViewProps.activeBlockMarkdown.c_str()];
+  BOOL activeBlockIdChanged = oldViewProps.activeBlockId != newViewProps.activeBlockId;
   if (nextActiveBlockId.length == 0) {
     if (_activeBlockId != nil) {
-      [self hideOverlay];
+      [self clearActiveEditor];
     }
   } else if (_activeBlockId == nil || ![_activeBlockId isEqualToString:nextActiveBlockId]) {
     RNMarkdownBlockActivationView *view = [self activationViewForBlockId:nextActiveBlockId];
     if (view != nil) {
-      NSString *markdown = [view currentMarkdown];
       [self showActiveBlockContents];
       _activeBlockId = [nextActiveBlockId copy];
       [self setBlockView:view contentsHidden:YES];
       [self observeScrollViewForBlockView:view];
-      [self showOverlayForBlockView:view markdown:markdown event:nil loadValue:YES];
+      [view activateEditorWithEvent:nil];
       [self emitBeginEditingForBlockView:view];
-      [self emitEditorFrameChangeForBlockView:view];
     } else {
       _activeBlockId = [nextActiveBlockId copy];
-      _lastLoadedBlockId = nil;
-      _lastLoadedMarkdown = nativeMarkdownForBlockId(nextActiveBlockId);
       [self stopObservingScrollView];
     }
   }
 
-  if (oldViewProps.activeBlockId != newViewProps.activeBlockId && nextActiveBlockId.length == 0) {
-    [self hideOverlay];
+  if (activeBlockIdChanged && nextActiveBlockId.length == 0) {
+    [self clearActiveEditor];
   }
 
   if (
     nextActiveBlockId.length > 0 &&
     oldViewProps.activeBlockMarkdown != newViewProps.activeBlockMarkdown &&
+    (!activeBlockIdChanged || nextActiveBlockMarkdown.length > 0) &&
     (_activeBlockId == nil || [_activeBlockId isEqualToString:nextActiveBlockId])
   ) {
-    _lastLoadedMarkdown = [nextActiveBlockMarkdown copy];
-    if (_overlayInput != nil) {
-      callSetBlockStyleMarkdown(_overlayInput, nextActiveBlockMarkdown);
-      callSetHangingMarkdownPrefixLength(_overlayInput, 0);
-    }
-    RNMarkdownBlockActivationView *view = [self activeBlockView];
-    if (view != nil && _overlayInput != nil && _overlayInput.superview != nil) {
-      [self positionOverlayForBlockView:view];
-      [self emitEditorFrameChangeForBlockView:view];
+    id editorInput = [self activeEditorInput];
+    if (editorInput != nil) {
+      callSetBlockStyleMarkdown(editorInput, nextActiveBlockMarkdown);
+      callSetHangingMarkdownPrefixLength(editorInput, hangingPrefixLengthForMarkdown(nextActiveBlockMarkdown));
     }
   }
 
   if (oldViewProps.markdownLayoutConfigJson != newViewProps.markdownLayoutConfigJson && _activeBlockId != nil) {
     RNMarkdownBlockActivationView *view = [self activeBlockView];
-    if (view != nil && _overlayInput != nil && _overlayInput.superview != nil) {
-      [self positionOverlayForBlockView:view];
+    if (view != nil) {
       [self emitEditorFrameChangeForBlockView:view];
     }
   }
@@ -971,8 +741,7 @@ static void registerNativeMarkdownProvider()
 
   if (_activeBlockId != nil) {
     RNMarkdownBlockActivationView *view = [self activeBlockView];
-    if (view != nil && _overlayInput != nil && _overlayInput.superview != nil) {
-      [self positionOverlayForBlockView:view];
+    if (view != nil) {
       [self emitEditorFrameChangeForBlockView:view];
     }
   }
@@ -986,13 +755,8 @@ static void registerNativeMarkdownProvider()
   }
   [_activationViews removeAllObjects];
   [self stopObservingScrollView];
-  _overlayInput = nil;
-  _overlayInputHomeSuperview = nil;
   _activeBlockId = nil;
   _layoutConfigJson = nil;
-  _lastLoadedBlockId = nil;
-  _lastLoadedMarkdown = nil;
-  _isPositioningOverlay = NO;
   _layoutSpacingConfig = MarkdownLayoutSpacingConfig();
 }
 
@@ -1003,12 +767,11 @@ static void registerNativeMarkdownProvider()
 
 @end
 
-@interface RNMarkdownBlockActivationView () <RCTMarkdownBlockActivationViewViewProtocol>
-@end
-
 @implementation RNMarkdownBlockActivationView {
   NSString *_registeredBlockId;
   BOOL _contentsHidden;
+  RCTUIView<RCTComponentViewProtocol> *_editorInput;
+  NSValue *_pendingActivationWindowPoint;
 }
 
 - (instancetype)init
@@ -1046,8 +809,10 @@ static void registerNativeMarkdownProvider()
 
 - (void)applyContentsHidden
 {
+  BOOL shouldHideContentSubviews = _contentsHidden && _editorInput != nil;
   for (NSView *subview in self.subviews) {
-    subview.hidden = _contentsHidden;
+    BOOL isEditor = subview == _editorInput;
+    subview.hidden = isEditor ? !_contentsHidden : shouldHideContentSubviews;
   }
 }
 
@@ -1069,11 +834,115 @@ static void registerNativeMarkdownProvider()
   return nativeMarkdownForBlockId(_blockId);
 }
 
+- (id)editorInput
+{
+  return _editorInput;
+}
+
+- (void)configureEditorInput
+{
+  if (_editorInput == nil) {
+    return;
+  }
+
+  NSString *markdown = [self currentMarkdown];
+  callSetBlockStyleMarkdown(_editorInput, markdown);
+  callSetHangingMarkdownPrefixLength(_editorInput, hangingPrefixLengthForMarkdown(markdown));
+}
+
+- (void)activateEditorWithEvent:(nullable NSEvent *)event
+{
+  if (event != nil) {
+    _pendingActivationWindowPoint = [NSValue valueWithPoint:event.locationInWindow];
+  }
+  if (_editorInput == nil) {
+    return;
+  }
+
+  [self configureEditorInput];
+  _editorInput.hidden = NO;
+  callFocus(_editorInput);
+
+  NSValue *pendingWindowPoint = _pendingActivationWindowPoint;
+  _pendingActivationWindowPoint = nil;
+  if (pendingWindowPoint != nil) {
+    NSPoint selectionPoint = pendingWindowPoint.pointValue;
+    NSPoint localPoint = [self convertPoint:selectionPoint fromView:nil];
+    NSRect contentBounds = self.contentBounds;
+    if (NSHeight(contentBounds) > 0) {
+      localPoint.y = MIN(MAX(localPoint.y, NSMinY(contentBounds)), NSMaxY(contentBounds));
+      selectionPoint = [self convertPoint:localPoint toView:nil];
+    }
+    callSetSelectionForWindowPoint(_editorInput, selectionPoint);
+  }
+}
+
 - (void)mountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
                           index:(NSInteger)index
 {
   [super mountChildComponentView:childComponentView index:index];
-  childComponentView.hidden = _contentsHidden;
+  if (isEnrichedMarkdownInput(childComponentView)) {
+    _editorInput = childComponentView;
+    [_editorInput setPostsFrameChangedNotifications:YES];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(editorInputFrameDidChange:)
+                                                 name:NSViewFrameDidChangeNotification
+                                               object:_editorInput];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(editorInputContentSizeDidChange:)
+                                                 name:ENRMMarkdownTextInputContentSizeDidChangeNotification
+                                               object:_editorInput];
+    [self configureEditorInput];
+    [self activateEditorWithEvent:nil];
+  }
+  [self applyContentsHidden];
+}
+
+- (void)unmountChildComponentView:(RCTUIView<RCTComponentViewProtocol> *)childComponentView
+                            index:(NSInteger)index
+{
+  if (childComponentView == _editorInput) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSViewFrameDidChangeNotification
+                                                  object:_editorInput];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:ENRMMarkdownTextInputContentSizeDidChangeNotification
+                                                  object:_editorInput];
+    _editorInput = nil;
+  }
+  [super unmountChildComponentView:childComponentView index:index];
+}
+
+- (void)dealloc
+{
+  if (_editorInput != nil) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:NSViewFrameDidChangeNotification
+                                                  object:_editorInput];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:ENRMMarkdownTextInputContentSizeDidChangeNotification
+                                                  object:_editorInput];
+  }
+}
+
+- (void)editorInputFrameDidChange:(NSNotification *)notification
+{
+  RNMarkdownEditorHost *host = [self editorHost];
+  if (host != nil) {
+    [host editorFrameDidChangeForBlockView:self];
+  }
+}
+
+- (void)editorInputContentSizeDidChange:(NSNotification *)notification
+{
+  if (notification.object != _editorInput) {
+    return;
+  }
+
+  RNMarkdownEditorHost *host = [self editorHost];
+  if (host != nil) {
+    [host editorFrameDidChangeForBlockView:self];
+  }
 }
 
 - (nullable RNMarkdownEditorHost *)editorHost
@@ -1138,6 +1007,9 @@ static void registerNativeMarkdownProvider()
   self.nextBlockId = [NSString stringWithUTF8String:newViewProps.nextBlockId.c_str()];
   self.previousBlockId = [NSString stringWithUTF8String:newViewProps.previousBlockId.c_str()];
   [self setContentsHidden:newViewProps.contentsHidden];
+  if (_contentsHidden) {
+    [self configureEditorInput];
+  }
 
   [super updateProps:props oldProps:oldProps];
 
@@ -1157,7 +1029,13 @@ static void registerNativeMarkdownProvider()
 - (nullable NSView *)hitTest:(NSPoint)point
 {
   NSView *hitView = [super hitTest:point];
-  return hitView == nil ? nil : self;
+  if (hitView == nil) {
+    return nil;
+  }
+  if (_contentsHidden && _editorInput != nil && !_editorInput.hidden) {
+    return hitView;
+  }
+  return self;
 }
 
 - (void)prepareForRecycle
@@ -1168,6 +1046,8 @@ static void registerNativeMarkdownProvider()
   _blockId = @"";
   _nextBlockId = @"";
   _previousBlockId = @"";
+  _editorInput = nil;
+  _pendingActivationWindowPoint = nil;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider

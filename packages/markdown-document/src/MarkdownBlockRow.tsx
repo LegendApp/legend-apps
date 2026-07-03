@@ -26,8 +26,6 @@ import {
   estimateMarkdownSelection,
   getHeadingLevel,
   inputStyleFromMarkdownStyle,
-  markdownFromEditableMarkdownForBlock,
-  markdownSelectionFromEditableSelectionForBlock,
   normalizeSelectionDragOutsideEvent,
 } from "./markdownLayout";
 import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
@@ -110,9 +108,9 @@ export const MarkdownEditorInput = memo(
     previousProps.rowWidth$ === nextProps.rowWidth$,
 );
 
-export const MarkdownOverlayEditorInput = memo(
-  function MarkdownOverlayEditorInput({
-    activeBlock,
+export const MarkdownRowEditorInput = memo(
+  function MarkdownRowEditorInput({
+    block,
     activeInputRef,
     markdownStyle,
     onBlurRef,
@@ -120,9 +118,9 @@ export const MarkdownOverlayEditorInput = memo(
     onChangeSelectionRef,
     onSelectionDragOutsideRef,
     onVerticalNavigationOutsideRef,
-    sourceBlockIdRef,
+    style,
   }: {
-    activeBlock?: MarkdownBlockSnapshot;
+    block: MarkdownBlockSnapshot;
     activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
     onBlurRef: RefObject<() => void>;
@@ -130,59 +128,40 @@ export const MarkdownOverlayEditorInput = memo(
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
     onVerticalNavigationOutsideRef: RefObject<VerticalNavigationOutsideHandler>;
-    sourceBlockIdRef: RefObject<string | null>;
+    style?: StyleProp<TextStyle>;
   }) {
-    const activeBlockRef = useLatestRef(activeBlock);
+    const blockRef = useLatestRef(block);
 
     return (
       <EnrichedMarkdownTextInput
         ref={activeInputRef}
-        defaultValue=""
+        autoFocus
+        defaultValue={block.markdown}
         markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
         multiline
         onBlur={() => onBlurRef.current()}
-        onChangeMarkdown={(markdown) => {
-          const block = activeBlockRef.current;
-          if (block) {
-            onChangeMarkdownRef.current(block, markdownFromEditableMarkdownForBlock(block, markdown, block.markdown));
-          }
-        }}
-        onChangeSelection={(selection) => {
-          const block = activeBlockRef.current;
-          if (block) {
-            onChangeSelectionRef.current({
-              end: markdownSelectionFromEditableSelectionForBlock(block, selection.end, block.markdown),
-              start: markdownSelectionFromEditableSelectionForBlock(block, selection.start, block.markdown),
-            });
-          } else {
-            onChangeSelectionRef.current(selection);
-          }
-        }}
+        onChangeMarkdown={(markdown) => onChangeMarkdownRef.current(blockRef.current, markdown)}
+        onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
         onSelectionDragOutside={(event) => {
-          const blockId = sourceBlockIdRef.current ?? activeBlockRef.current?.id;
-          if (blockId) {
-            onSelectionDragOutsideRef.current(blockId, normalizeSelectionDragOutsideEvent(event));
-          }
+          onSelectionDragOutsideRef.current(blockRef.current.id, normalizeSelectionDragOutsideEvent(event));
         }}
         onVerticalNavigationOutside={(event) => {
-          const blockId = sourceBlockIdRef.current ?? activeBlockRef.current?.id;
-          if (blockId) {
-            onVerticalNavigationOutsideRef.current(blockId, event);
-          }
+          onVerticalNavigationOutsideRef.current(blockRef.current.id, event);
         }}
         scrollEnabled={false}
         style={StyleSheet.flatten([
           styles.editorInputShell,
-          activeBlock ? editableTextStyleForBlock(activeBlock, markdownStyle) : null,
-          styles.overlayEditorInput,
+          ...editableTextStyleForBlock(block, markdownStyle),
+          ...(Array.isArray(style) ? style : [style]),
         ])}
       />
     );
   },
   (previousProps, nextProps) =>
-    previousProps.activeBlock?.id === nextProps.activeBlock?.id &&
-    previousProps.activeBlock?.type === nextProps.activeBlock?.type &&
-    previousProps.activeBlock?.headingLevel === nextProps.activeBlock?.headingLevel &&
+    previousProps.block.id === nextProps.block.id &&
+    previousProps.block.markdown === nextProps.block.markdown &&
+    previousProps.block.type === nextProps.block.type &&
+    previousProps.block.headingLevel === nextProps.block.headingLevel &&
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
@@ -190,7 +169,7 @@ export const MarkdownOverlayEditorInput = memo(
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
     previousProps.onSelectionDragOutsideRef === nextProps.onSelectionDragOutsideRef &&
     previousProps.onVerticalNavigationOutsideRef === nextProps.onVerticalNavigationOutsideRef &&
-    previousProps.sourceBlockIdRef === nextProps.sourceBlockIdRef,
+    previousProps.style === nextProps.style,
 );
 
 function HeadingEditMarker({
@@ -293,9 +272,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const rowStyle = blockRowSpacingStyle(layoutBlock, previousBlock, hasPreviousBlock, hasNextBlock, markdownLayout);
   const rowPaddingTop = typeof rowStyle.paddingTop === "number" ? rowStyle.paddingTop : 0;
   const rowPaddingBottom = typeof rowStyle.paddingBottom === "number" ? rowStyle.paddingBottom : 0;
-  const activeNativeEditorRowStyle = isActive && activeBlock.editorFrame
-    ? { height: activeBlock.editorFrame.rowHeight }
-    : null;
+  const activeEditorFrame = activeBlock?.editorFrame;
+  const activeEditorRowStyle = activeEditorFrame ? { minHeight: activeEditorFrame.rowHeight } : null;
   const commentAnchor = rowState?.commentAnchor ?? null;
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
   const selectionOverlay = isBlockSelected ? (
@@ -362,6 +340,19 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       selectable
     />
   );
+  const activeNativeEditor = usesNativeEditorOverlay && isActive && activeEditorBlock ? (
+    <MarkdownRowEditorInput
+      activeInputRef={activeInputRef}
+      block={activeEditorBlock}
+      markdownStyle={markdownStyle}
+      onBlurRef={onBlurRef}
+      onChangeMarkdownRef={onChangeMarkdownRef}
+      onChangeSelectionRef={onChangeSelectionRef}
+      onSelectionDragOutsideRef={onSelectionDragOutsideRef}
+      onVerticalNavigationOutsideRef={onVerticalNavigationOutsideRef}
+      style={[styles.editorInputOverlay, { top: rowPaddingTop }]}
+    />
+  ) : null;
 
   if (usesNativeEditorOverlay) {
     return (
@@ -376,11 +367,12 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           }}
           previousBlockId={previousBlockId ?? ""}
           renderRevision={renderRevision}
-          style={[rowStyle, styles.blockRow, activeNativeEditorRowStyle]}
+          style={[rowStyle, activeEditorRowStyle, styles.blockRow]}
         >
           {renderedMarkdown}
-          {selectionOverlay}
+          {activeNativeEditor}
         </MarkdownBlockActivationView>
+        {selectionOverlay}
         <HeadingEditMarker block={isActive ? activeEditorBlock : undefined} markdownStyle={markdownStyle} top={rowPaddingTop} />
         {commentBubble}
       </View>

@@ -1014,7 +1014,6 @@ index 96969e8..ec23be1 100644
  - (void)applyFormatting;
 +- (void)applyBlockStyleForMarkdown:(NSString *)markdown;
 +- (NSString *)blockStyleMarkdownForMarkdown:(NSString *)markdown;
-+- (CGFloat)markdownPrefixWidthForLength:(NSInteger)prefixLength;
 +- (NSRange)selectedRange;
 +- (void)setBlockStyleMarkdown:(NSString *)markdown;
 +- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength;
@@ -1030,7 +1029,6 @@ index 96969e8..ec23be1 100644
    NSScrollView *_scrollView;
 +  NSString *_blockStyleMarkdownOverride;
 +  NSInteger _hangingPrefixLength;
-+  CGFloat _hangingPrefixWidth;
  #endif
 
    NSArray<NSString *> *_contextMenuItemTexts;
@@ -1058,22 +1056,6 @@ index 96969e8..ec23be1 100644
 
  #pragma mark - Measurement
 
-+- (CGFloat)markdownPrefixWidthForLength:(NSInteger)prefixLength
-+{
-+  NSAttributedString *attributedText = ENRMGetAttributedText(_textView);
-+  if (prefixLength <= 0 || (NSInteger)attributedText.length < prefixLength) {
-+    return 0;
-+  }
-+
-+  // Measure from the attributed text alone: view-dependent queries
-+  // (firstRectForCharacterRange, glyph locations) return different values
-+  // while the input is hidden or unfocused, which shifted the hanging prefix
-+  // offset a frame after the overlay became visible.
-+  NSAttributedString *prefixText = [attributedText attributedSubstringFromRange:NSMakeRange(0, (NSUInteger)prefixLength)];
-+  CGFloat prefixWidth = prefixText.size.width + _textView.textContainer.lineFragmentPadding + _textView.textContainerInset.left;
-+  return MAX(0, ceil(prefixWidth));
-+}
-+
 +#if TARGET_OS_OSX
 +- (void)applyHangingPrefixParagraphStyle
 +{
@@ -1091,23 +1073,31 @@ index 96969e8..ec23be1 100644
 +    ? [existingStyle mutableCopy]
 +    : [[NSMutableParagraphStyle alloc] init];
 +  paragraphStyle.firstLineHeadIndent = 0;
-+  paragraphStyle.headIndent = _hangingPrefixWidth;
++  paragraphStyle.headIndent = 0;
 +  [_textView.textStorage addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:range];
++  if (_hangingPrefixLength > 0) {
++    NSUInteger prefixLength = MIN((NSUInteger)_hangingPrefixLength, textLength);
++    [_textView.textStorage addAttribute:NSForegroundColorAttributeName
++                                  value:NSColor.clearColor
++                                  range:NSMakeRange(0, prefixLength)];
++    [_textView.textStorage addAttribute:NSFontAttributeName
++                                  value:[NSFont systemFontOfSize:0.1]
++                                  range:NSMakeRange(0, prefixLength)];
++  }
 +  [_textView.textStorage endEditing];
 +}
 +
-+- (void)applyHangingPrefixLayout
++- (void)applyTextViewLayout
 +{
 +  if (_scrollContainerView == nil || _scrollView == nil || _textView == nil) {
 +    return;
 +  }
 +
-+  CGFloat prefixWidth = MAX(0, _hangingPrefixWidth);
 +  NSRect bounds = self.bounds;
-+  CGFloat width = MAX(0, NSWidth(bounds) + prefixWidth);
++  CGFloat width = MAX(0, NSWidth(bounds));
 +  CGFloat height = MAX(0, NSHeight(bounds));
 +  _scrollContainerView.frame = bounds;
-+  _scrollView.frame = NSMakeRect(-prefixWidth, 0, width, height);
++  _scrollView.frame = NSMakeRect(0, 0, width, height);
 +
 +  NSRect textFrame = _textView.frame;
 +  textFrame.origin.x = 0;
@@ -1151,14 +1141,11 @@ index 96969e8..ec23be1 100644
 +- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength
 +{
 +  NSInteger clampedPrefixLength = MAX(0, prefixLength);
-+  CGFloat prefixWidth = clampedPrefixLength > 0 ? [self markdownPrefixWidthForLength:clampedPrefixLength] : 0;
-+  if (_hangingPrefixLength == clampedPrefixLength && _hangingPrefixWidth == prefixWidth) {
++  if (_hangingPrefixLength == clampedPrefixLength) {
 +    return;
 +  }
 +
 +  _hangingPrefixLength = clampedPrefixLength;
-+  _hangingPrefixWidth = prefixWidth;
-+  [self applyHangingPrefixLayout];
 +  [self applyHangingPrefixParagraphStyle];
 +  [self requestHeightUpdate];
 +}
@@ -1166,7 +1153,7 @@ index 96969e8..ec23be1 100644
 +- (void)layout
 +{
 +  [super layout];
-+  [self applyHangingPrefixLayout];
++  [self applyTextViewLayout];
 +}
 +#else
 +- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength
@@ -1181,11 +1168,7 @@ index 96969e8..ec23be1 100644
      }
    }
 
-+#if TARGET_OS_OSX
-+  CGFloat measurementWidth = maxWidth + MAX(0, _hangingPrefixWidth);
-+#else
 +  CGFloat measurementWidth = maxWidth;
-+#endif
 +
    CGRect boundingBox =
 -      [measuredText boundingRectWithSize:CGSizeMake(maxWidth, CGFLOAT_MAX)
@@ -1228,9 +1211,7 @@ index 96969e8..ec23be1 100644
 +      [self->_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
 +
 +      CGFloat measurementWidth = self.bounds.size.width;
-+#if TARGET_OS_OSX
-+      measurementWidth = measurementWidth > 0 ? measurementWidth : self->_textView.frame.size.width - self->_hangingPrefixWidth;
-+#endif
++      measurementWidth = measurementWidth > 0 ? measurementWidth : self->_textView.frame.size.width;
 +      CGSize measuredSize = [self measureSize:measurementWidth];
 +      ENRMSetContentSize(self->_textView, measuredSize);
 +      [[NSNotificationCenter defaultCenter] postNotificationName:@"ENRMMarkdownTextInputContentSizeDidChangeNotification" object:self];
@@ -1259,23 +1240,23 @@ index 96969e8..ec23be1 100644
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
 +#if TARGET_OS_OSX
-+    [self applyHangingPrefixLayout];
++    [self applyTextViewLayout];
 +#endif
      ENRMRefreshTextViewLayout(_textView);
 
      [self applyFormatting];
-@@ -453,6 +603,8 @@ - (void)updatePlaceholderVisibility
+@@ -453,6 +603,7 @@ - (void)updatePlaceholderVisibility
 
  - (void)importMarkdown:(NSString *)markdown
  {
-+  [self applyBlockStyleForMarkdown:[self blockStyleMarkdownForMarkdown:markdown]];
-+
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
++  NSString *blockStyleMarkdown = [self blockStyleMarkdownForMarkdown:markdown];
 
-@@ -466,6 +618,9 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -466,6 +617,10 @@ - (void)importMarkdown:(NSString *)markdown
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
++  [self applyBlockStyleForMarkdown:blockStyleMarkdown];
    [self applyFormatting];
 +#if TARGET_OS_OSX
 +  [self refreshHangingMarkdownPrefixForMarkdown:markdown ?: @""];
@@ -1389,10 +1370,9 @@ index 96969e8..ec23be1 100644
 
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -565,6 +804,23 @@ - (void)setValue:(NSString *)markdown
+@@ -565,5 +804,22 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
-
 +- (void)setValuePreservingSelection:(NSString *)markdown
 +{
 +  NSRange selection = _textView.selectedRange;

@@ -5,6 +5,7 @@ import { codegenNativeComponent } from "react-native";
 type EditorFrameEvent = Readonly<{
   blockId: string;
   height: Double;
+  markdown: string;
   rowHeight: Double;
   width: Double;
   x: Double;
