@@ -1,4 +1,5 @@
 import { act, render } from "@testing-library/react-native";
+import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
@@ -8,6 +9,7 @@ import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession
 
 const mockUseMarkdownAppExit = useMarkdownAppExit as jest.MockedFunction<typeof useMarkdownAppExit>;
 const mockUseMarkdownWindowCloseRequest = useMarkdownWindowCloseRequest as jest.MockedFunction<typeof useMarkdownWindowCloseRequest>;
+const mockWatchFiles = watchFiles as jest.MockedFunction<typeof watchFiles>;
 
 const mockMarkdownE2EEditorSmoke = jest.fn((props: { autoSelectBlocks?: boolean; variant?: string }) => (
   <Text>{`editor-smoke:${props.variant}:${props.autoSelectBlocks ? "auto" : "manual"}`}</Text>
@@ -21,6 +23,7 @@ const mockMarkdownDocument = jest.fn((_props: unknown) => {
   return React.createElement(Text, null, "markdown-document");
 });
 const mockInvalidateLayoutMeasurements = jest.fn();
+const mockReloadDocument = jest.fn();
 const mockSessionState$ = observable<MarkdownDocumentSessionState>({
   commandState: { canRedo: false, canUndo: false },
   documentSource: "untitled",
@@ -34,6 +37,7 @@ const mockSession = {
   documentCommandsRef: {
     current: {
       invalidateLayoutMeasurements: mockInvalidateLayoutMeasurements,
+      reload: mockReloadDocument,
     },
   },
   flushCurrentDocumentBeforeTransition: jest.fn(async () => true),
@@ -55,6 +59,59 @@ const mockSession = {
 
 jest.mock("@legend-desktop/file-system-watcher", () => ({
   watchFiles: jest.fn(() => ({ remove: jest.fn() })),
+}));
+
+jest.mock("@legend-desktop/document-app", () => {
+  const React = require("react");
+  const { watchFiles } = require("@legend-desktop/file-system-watcher");
+
+  return {
+    useWatchedDocumentReload: ({
+      delayMs = 100,
+      enabled = true,
+      onReload,
+      path,
+      shouldReload,
+    }: {
+      delayMs?: number;
+      enabled?: boolean;
+      onReload: () => void;
+      path: string | null;
+      shouldReload?: () => boolean;
+    }) => {
+      React.useEffect(() => {
+        if (enabled && path) {
+          let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
+          const subscription = watchFiles([path], () => {
+            if (!shouldReload || shouldReload()) {
+              if (reloadTimeout) {
+                clearTimeout(reloadTimeout);
+              }
+              reloadTimeout = setTimeout(() => {
+                if (!shouldReload || shouldReload()) {
+                  onReload();
+                }
+              }, delayMs);
+            }
+          });
+
+          return () => {
+            if (reloadTimeout) {
+              clearTimeout(reloadTimeout);
+            }
+            subscription.remove();
+          };
+        }
+
+        return undefined;
+      }, [delayMs, enabled, onReload, path, shouldReload]);
+    },
+  };
+});
+
+jest.mock("@legend-desktop/file-dialog", () => ({
+  openFileDialog: jest.fn(),
+  saveFileDialog: jest.fn(),
 }));
 
 jest.mock("@legend-desktop/markdown-document", () => ({
@@ -133,6 +190,9 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockMarkdownE2ERunner.mockClear();
     mockMarkdownDocument.mockClear();
     mockInvalidateLayoutMeasurements.mockClear();
+    mockReloadDocument.mockClear();
+    mockWatchFiles.mockClear();
+    mockWatchFiles.mockReturnValue({ remove: jest.fn() });
     mockUseMarkdownAppExit.mockClear();
     mockUseMarkdownWindowCloseRequest.mockClear();
     mockSessionState$.assign({
@@ -218,5 +278,51 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(view.getByText("Unable to save")).toBeTruthy();
     expect(mockMarkdownDocument).toHaveBeenCalledTimes(initialDocumentRenderCount);
     await view.unmount();
+  });
+
+  it("does not reload the document for the file watcher event caused by saving", async () => {
+    jest.useFakeTimers();
+    mockSessionState$.assign({
+      documentSource: "file",
+      filename: "/tmp/test.md",
+      isDirty: true,
+      saveState: "idle",
+    });
+
+    const view = await render(<MarkdownEditorWindow />);
+    const watchedFileChange = mockWatchFiles.mock.calls[0]?.[1];
+    expect(watchedFileChange).toBeDefined();
+
+    await act(async () => {
+      mockSessionState$.saveState.set("saving");
+    });
+    await act(async () => {
+      mockSessionState$.saveState.set("idle");
+      mockSessionState$.isDirty.set(false);
+    });
+
+    await act(async () => {
+      watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(mockReloadDocument).not.toHaveBeenCalled();
+
+    await act(async () => {
+      watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(mockReloadDocument).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(mockReloadDocument).toHaveBeenCalledTimes(1);
+    await view.unmount();
+    jest.useRealTimers();
   });
 });

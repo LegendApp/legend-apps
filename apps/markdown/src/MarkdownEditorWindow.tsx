@@ -57,6 +57,8 @@ type MarkdownEditorWindowProps = {
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
 
+const cleanSaveReloadSuppressionMs = 1000;
+
 function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): MarkdownE2EEditorSmokeVariant | null {
   if (scenario === "editor-selection-smoke") {
     return "selection";
@@ -239,8 +241,46 @@ export default MarkdownEditorWindow;
 function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) {
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
+  const isDirty = useValue(session.sessionState$.isDirty);
+  const saveState = useValue(session.sessionState$.saveState);
+  const hasPendingCleanSaveRef = useRef(false);
+  const wasSavingRef = useRef(false);
+  const suppressCleanReloadUntilRef = useRef(0);
   const watchedFilePath = filename && documentSource !== "untitled" ? filename : null;
-  const shouldReload = useCallback(() => !session.sessionState$.isDirty.peek(), [session.sessionState$]);
+  useEffect(() => {
+    suppressCleanReloadUntilRef.current = 0;
+    hasPendingCleanSaveRef.current = false;
+    wasSavingRef.current = false;
+  }, [watchedFilePath]);
+  useEffect(() => {
+    if (saveState === "saving") {
+      wasSavingRef.current = true;
+      hasPendingCleanSaveRef.current = false;
+    } else if (saveState === "idle" && wasSavingRef.current) {
+      wasSavingRef.current = false;
+      hasPendingCleanSaveRef.current = true;
+    } else if (saveState === "error") {
+      wasSavingRef.current = false;
+      hasPendingCleanSaveRef.current = false;
+    }
+
+    if (hasPendingCleanSaveRef.current && !isDirty) {
+      hasPendingCleanSaveRef.current = false;
+      suppressCleanReloadUntilRef.current = Date.now() + cleanSaveReloadSuppressionMs;
+    }
+  }, [isDirty, saveState]);
+  const shouldReload = useCallback(() => {
+    if (session.sessionState$.isDirty.peek()) {
+      return false;
+    }
+    if (session.sessionState$.saveState.peek() === "saving") {
+      return false;
+    }
+    if (Date.now() < suppressCleanReloadUntilRef.current) {
+      return false;
+    }
+    return true;
+  }, [session.sessionState$]);
   const reloadDocument = useCallback(() => {
     session.documentCommandsRef.current?.reload();
   }, [session.documentCommandsRef]);
