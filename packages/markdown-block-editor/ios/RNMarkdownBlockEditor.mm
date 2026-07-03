@@ -28,6 +28,11 @@ static SEL setSelectionForWindowPointSelector()
   return NSSelectorFromString(@"setSelectionForWindowPointX:y:");
 }
 
+static SEL setSelectionForWindowPointClickCountSelector()
+{
+  return NSSelectorFromString(@"setSelectionForWindowPointX:y:clickCount:");
+}
+
 static SEL setHangingMarkdownPrefixLengthSelector()
 {
   return NSSelectorFromString(@"setHangingMarkdownPrefixLength:");
@@ -99,12 +104,19 @@ static void callFocus(id target)
   send(target, selector);
 }
 
-static void callSetSelectionForWindowPoint(id target, NSPoint windowPoint)
+static void callSetSelectionForWindowPoint(id target, NSPoint windowPoint, NSInteger clickCount)
 {
-  SEL selector = setSelectionForWindowPointSelector();
-  if ([target respondsToSelector:selector]) {
-    void (*send)(id, SEL, CGFloat, CGFloat) = (void (*)(id, SEL, CGFloat, CGFloat))[target methodForSelector:selector];
-    send(target, selector, windowPoint.x, windowPoint.y);
+  SEL clickCountSelector = setSelectionForWindowPointClickCountSelector();
+  if ([target respondsToSelector:clickCountSelector]) {
+    void (*send)(id, SEL, CGFloat, CGFloat, NSInteger) =
+        (void (*)(id, SEL, CGFloat, CGFloat, NSInteger))[target methodForSelector:clickCountSelector];
+    send(target, clickCountSelector, windowPoint.x, windowPoint.y, clickCount);
+  } else {
+    SEL selector = setSelectionForWindowPointSelector();
+    if ([target respondsToSelector:selector]) {
+      void (*send)(id, SEL, CGFloat, CGFloat) = (void (*)(id, SEL, CGFloat, CGFloat))[target methodForSelector:selector];
+      send(target, selector, windowPoint.x, windowPoint.y);
+    }
   }
 }
 
@@ -775,6 +787,7 @@ static void registerNativeMarkdownProvider()
   BOOL _contentsHidden;
   RCTUIView<RCTComponentViewProtocol> *_editorInput;
   NSValue *_pendingActivationWindowPoint;
+  NSInteger _pendingActivationClickCount;
 }
 
 - (instancetype)init
@@ -857,6 +870,7 @@ static void registerNativeMarkdownProvider()
 {
   if (event != nil) {
     _pendingActivationWindowPoint = [NSValue valueWithPoint:event.locationInWindow];
+    _pendingActivationClickCount = event.clickCount;
   }
   if (_editorInput == nil) {
     return;
@@ -867,7 +881,9 @@ static void registerNativeMarkdownProvider()
   callFocus(_editorInput);
 
   NSValue *pendingWindowPoint = _pendingActivationWindowPoint;
+  NSInteger pendingClickCount = _pendingActivationClickCount;
   _pendingActivationWindowPoint = nil;
+  _pendingActivationClickCount = 0;
   if (pendingWindowPoint != nil) {
     NSPoint selectionPoint = pendingWindowPoint.pointValue;
     NSPoint localPoint = [self convertPoint:selectionPoint fromView:nil];
@@ -876,7 +892,7 @@ static void registerNativeMarkdownProvider()
       localPoint.y = MIN(MAX(localPoint.y, NSMinY(contentBounds)), NSMaxY(contentBounds));
       selectionPoint = [self convertPoint:localPoint toView:nil];
     }
-    callSetSelectionForWindowPoint(_editorInput, selectionPoint);
+    callSetSelectionForWindowPoint(_editorInput, selectionPoint, pendingClickCount);
   }
 }
 

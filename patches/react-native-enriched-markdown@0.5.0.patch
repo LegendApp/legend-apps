@@ -1008,7 +1008,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 index 96969e8..ec23be1 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -38,6 +38,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -38,6 +38,14 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  #endif
  - (void)setupTextView;
  - (void)applyFormatting;
@@ -1018,6 +1018,7 @@ index 96969e8..ec23be1 100644
 +- (void)setBlockStyleMarkdown:(NSString *)markdown;
 +- (void)setHangingMarkdownPrefixLength:(NSInteger)prefixLength;
 +- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y;
++- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y clickCount:(NSInteger)clickCount;
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
@@ -1449,11 +1450,19 @@ index 96969e8..ec23be1 100644
 +
 +- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y
 +{
++  [self setSelectionForWindowPointX:x y:y clickCount:1];
++}
++
++- (void)setSelectionForWindowPointX:(CGFloat)x y:(CGFloat)y clickCount:(NSInteger)clickCount
++{
 +#if TARGET_OS_OSX
-+  NSUInteger textLength = ENRMGetPlainText(_textView).length;
++  NSString *text = ENRMGetPlainText(_textView);
++  NSUInteger textLength = text.length;
 +  NSTextContainer *textContainer = _textView.textContainer;
 +  NSLayoutManager *layoutManager = _textView.layoutManager;
 +  NSUInteger characterIndex = 0;
++  NSUInteger hitCharacterIndex = 0;
++  BOOL hasHitCharacterIndex = NO;
 +
 +  if (textLength > 0 && textContainer != nil && layoutManager != nil) {
 +    [layoutManager ensureLayoutForTextContainer:textContainer];
@@ -1466,6 +1475,8 @@ index 96969e8..ec23be1 100644
 +                               fractionOfDistanceThroughGlyph:&fraction];
 +      glyphIndex = MIN(glyphIndex, layoutManager.numberOfGlyphs - 1);
 +      characterIndex = [layoutManager characterIndexForGlyphAtIndex:glyphIndex];
++      hitCharacterIndex = MIN(characterIndex, textLength - 1);
++      hasHitCharacterIndex = YES;
 +      if (fraction > 0.5) {
 +        characterIndex += 1;
 +      }
@@ -1473,8 +1484,29 @@ index 96969e8..ec23be1 100644
 +    }
 +  }
 +
++  NSRange selectedRange = NSMakeRange(characterIndex, 0);
++  if (clickCount > 1 && hasHitCharacterIndex) {
++    __block NSRange wordRange = NSMakeRange(NSNotFound, 0);
++    [text enumerateSubstringsInRange:NSMakeRange(0, textLength)
++                             options:NSStringEnumerationByWords | NSStringEnumerationLocalized
++                          usingBlock:^(
++                            NSString *_Nullable substring,
++                            NSRange substringRange,
++                            NSRange enclosingRange,
++                            BOOL *_Nonnull stop
++                          ) {
++                            if (substring.length > 0 && NSLocationInRange(hitCharacterIndex, substringRange)) {
++                              wordRange = substringRange;
++                              *stop = YES;
++                            }
++                          }];
++    if (wordRange.location != NSNotFound) {
++      selectedRange = wordRange;
++    }
++  }
++
 +  [self.window makeFirstResponder:_textView];
-+  _textView.selectedRange = NSMakeRange(characterIndex, 0);
++  _textView.selectedRange = selectedRange;
 +  [_textView scrollRangeToVisible:_textView.selectedRange];
 +  [self emitOnChangeSelection];
 +  [self emitOnChangeState];
