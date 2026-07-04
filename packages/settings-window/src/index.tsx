@@ -14,7 +14,7 @@ import {
   WindowStyleMask,
   type WindowOptions,
 } from "@legend-desktop/window-manager";
-import { Children, Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -25,6 +25,11 @@ import {
 
 const SETTINGS_SIDEBAR_TOP_INSET = 52;
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
+const SETTINGS_WINDOW_DEFAULT_HEIGHT = 640;
+const SETTINGS_WINDOW_DEFAULT_WIDTH = 820;
+const SETTINGS_WINDOW_MIN_HEIGHT = 500;
+const SETTINGS_WINDOW_MIN_WIDTH = 720;
+const SettingsRowGroupContext = createContext(false);
 
 export type SettingsWindowPage<PageId extends string = string> = {
   id: PageId;
@@ -65,7 +70,7 @@ export function createSettingsWindowOptions({
     transparentBackground,
     windowStyle: {
       hasToolbar: true,
-      height: 520,
+      height: SETTINGS_WINDOW_DEFAULT_HEIGHT,
       mask: [
         WindowStyleMask.Titled,
         WindowStyleMask.Closable,
@@ -73,13 +78,13 @@ export function createSettingsWindowOptions({
         WindowStyleMask.FullSizeContentView,
         WindowStyleMask.UnifiedTitleAndToolbar,
       ],
-      minHeight: 420,
-      minWidth: 600,
+      minHeight: SETTINGS_WINDOW_MIN_HEIGHT,
+      minWidth: SETTINGS_WINDOW_MIN_WIDTH,
       titlebarAppearsTransparent: true,
       titlebarSeparatorStyle: "none",
       titleVisibility: "visible",
       toolbarStyle: "unified",
-      width: 680,
+      width: SETTINGS_WINDOW_DEFAULT_WIDTH,
       ...(windowStyle ?? {}),
     },
   };
@@ -402,19 +407,9 @@ export function SettingsSection({
 }: SettingsSectionProps) {
   const containerClassName = cn("flex flex-col gap-2.5", !first && "mt-7", className);
   const hasHeader = Boolean(title || description || headerRight);
-  const childArray = Children.toArray(children);
-  const contentNode = childArray.length > 0
+  const contentNode = children
     ? card
-      ? (
-          <View className={cn("overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20", contentClassName)}>
-            {childArray.map((child, index) => (
-              <Fragment key={index}>
-                {index > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
-                {child}
-              </Fragment>
-            ))}
-          </View>
-        )
+      ? <SettingsRowGroup className={contentClassName}>{children}</SettingsRowGroup>
       : <View className={cn("flex flex-col gap-3.5", contentClassName)}>{children}</View>
     : null;
 
@@ -451,6 +446,21 @@ export function SettingsCard({ children, className }: SettingsCardProps) {
   );
 }
 
+interface SettingsRowGroupProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export function SettingsRowGroup({ children, className }: SettingsRowGroupProps) {
+  return (
+    <SettingsRowGroupContext.Provider value>
+      <View className={cn("overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20", className)}>
+        {children}
+      </View>
+    </SettingsRowGroupContext.Provider>
+  );
+}
+
 interface SettingsRowProps {
   align?: "start" | "center";
   className?: string;
@@ -472,14 +482,18 @@ export function SettingsRow({
   disabled = false,
   title,
 }: SettingsRowProps) {
+  const grouped = useContext(SettingsRowGroupContext);
+
   return (
     <View
       className={cn(
         "flex-row justify-between gap-5 px-4 py-3.5",
         align === "center" ? "items-center" : "items-start",
+        grouped ? "border-border-primary" : "",
         disabled ? "opacity-60" : "",
         className,
       )}
+      style={grouped ? styles.groupedRow : undefined}
     >
       <View className={cn("min-w-0 flex-1 flex-col gap-1 pr-6", contentClassName)} style={styles.rowText}>
         <Text className="text-text-primary leading-tight" style={styles.rowTitle}>{title}</Text>
@@ -553,9 +567,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
   },
-  rowSeparator: {
-    height: StyleSheet.hairlineWidth,
-    opacity: 0.75,
+  groupedRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sidebarContent: {
     paddingHorizontal: 8,
