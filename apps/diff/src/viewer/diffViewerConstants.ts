@@ -18,7 +18,7 @@ export const diffRowKindFileHeader = 0;
 export const diffChangeTypeAdd = 1;
 export const diffChangeTypeRemove = 2;
 export const diffSideBySideHorizontalPadding = 12;
-export const diffSidebarFileRowHeight = 46;
+export const diffSidebarFileRowHeight = 30;
 export const diffAdaptiveRender = {
   enterVelocity: 8,
   exitDelay: 150,

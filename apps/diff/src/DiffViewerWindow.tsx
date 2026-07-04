@@ -73,19 +73,22 @@ import {
   isDiffMergeSavePending,
 } from "./diffMergeControls";
 import {
+  defaultDiffSidebarWidth,
   getDiffViewModeSetting,
   getDiffShowOnlyHunksSetting,
+  setDiffShowOnlyHunksSetting,
+  setDiffSidebarWidthSetting,
   type DiffRowRendererSetting,
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
   useDiffShowOnlyHunksSetting,
+  useDiffSidebarWidthSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxTheme,
   useDiffViewModeSetting,
   type DiffSettingsFile,
-  setDiffShowOnlyHunksSetting,
 } from "./diffSettings";
 import {
   diffAdaptiveRender,
@@ -116,7 +119,6 @@ import {
   getActiveDiffFile,
   getConflictedFileStatusPresentation,
   getDirectoryPath,
-  getFilePathContext,
   getFileStatusPresentation,
   getJoinedPath,
 } from "./viewer/diffFilePresentation";
@@ -169,6 +171,7 @@ import {
 } from "./viewer/diffViewerSupport";
 
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
+const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
 const diffUnsavedMergeBannerHeight = 48;
 
@@ -270,18 +273,33 @@ function isSaveKeyEvent(event: { keyCode: number; modifiers: number }) {
 
 type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
-  borderColor: string;
   conflictBadgeBackgroundColor: string;
   conflictBadgeTextColor: string;
   file: DiffFileSummary;
   foregroundColor: string;
   mergeFile: DiffMergeConflictFile | null;
-  mutedColor: string;
   onPress: () => void;
   selectedBorderColor: string;
   selectedBackgroundColor: string;
   statusPresentation: ReturnType<typeof getFileStatusPresentation>;
 };
+
+type DiffSidebarFolderRowProps = {
+  mutedColor: string;
+  title: string;
+};
+
+type DiffSidebarEntry =
+  | {
+      id: string;
+      title: string;
+      type: "folder";
+    }
+  | {
+      file: DiffFileSummary;
+      id: string;
+      type: "file";
+    };
 
 type DiffLoadedBodyProps = {
   activeFileIndex$: Observable<number | null>;
@@ -319,7 +337,7 @@ type DiffLoadedBodyProps = {
   mutedColor: string;
   primaryColor: string;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
-  renderSidebarFile: (props: LegendListRenderItemProps<DiffFileSummary>) => ReactElement;
+  renderSidebarEntry: (props: LegendListRenderItemProps<DiffSidebarEntry>) => ReactElement;
   renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
   requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
   resolvingMergeConflictKeys: ReadonlySet<string>;
@@ -327,6 +345,7 @@ type DiffLoadedBodyProps = {
   rowHeight: number;
   sidebarCollapsed: boolean;
   sidebarListHeight: number;
+  sidebarWidth: number;
   sideBySideDataVersion: number;
   sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
   sideBySideItemIndexes: Array<number | undefined>;
@@ -473,15 +492,49 @@ function getReadableBadgeTextColor(backgroundColor: string) {
   return luminance > 0.55 ? "#111827" : "#ffffff";
 }
 
+function getDiffSidebarFolderTitle(file: DiffFileSummary) {
+  return getDirectoryPath(file.path) || "Files";
+}
+
+function createDiffSidebarEntries(files: readonly DiffFileSummary[]) {
+  const entries: DiffSidebarEntry[] = [];
+  let currentFolder = "";
+  for (const file of files) {
+    const folder = getDiffSidebarFolderTitle(file);
+    if (folder !== currentFolder) {
+      entries.push({
+        id: `folder:${folder}:${entries.length}`,
+        title: folder,
+        type: "folder",
+      });
+      currentFolder = folder;
+    }
+    entries.push({
+      file,
+      id: `file:${file.index}:${file.path}`,
+      type: "file",
+    });
+  }
+  return entries;
+}
+
+function DiffSidebarFolderRow({ mutedColor, title }: DiffSidebarFolderRowProps) {
+  return (
+    <View style={styles.sidebarFolder}>
+      <Text numberOfLines={1} style={[styles.sidebarFolderText, { color: mutedColor }]}>
+        {title}
+      </Text>
+    </View>
+  );
+}
+
 function DiffSidebarFileRow({
   activeFileIndex$,
-  borderColor,
   conflictBadgeBackgroundColor,
   conflictBadgeTextColor,
   file,
   foregroundColor,
   mergeFile,
-  mutedColor,
   onPress,
   selectedBorderColor,
   selectedBackgroundColor,
@@ -489,8 +542,6 @@ function DiffSidebarFileRow({
 }: DiffSidebarFileRowProps) {
   const isActive = useValue(() => activeFileIndex$.get() === file.index);
   const filename = getFilename(file.path);
-  const directory = getDirectoryPath(file.path);
-  const pathContext = getFilePathContext(file, directory);
 
   return (
     <Pressable
@@ -509,18 +560,11 @@ function DiffSidebarFileRow({
       ]}
     >
       <View style={[styles.sidebarStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
-        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={10} yOffset={statusPresentation.iconYOffset} />
+        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={11} yOffset={statusPresentation.iconYOffset} />
       </View>
-      <View style={styles.sidebarFileTextGroup}>
-        <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
-          {filename}{mergeFile?.hasUnsavedDraft ? " *" : ""}
-        </Text>
-        {pathContext ? (
-          <Text numberOfLines={1} style={[styles.sidebarFilePath, { color: mutedColor }]}>
-            {pathContext}
-          </Text>
-        ) : null}
-      </View>
+      <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
+        {filename}{mergeFile?.hasUnsavedDraft ? " *" : ""}
+      </Text>
       {mergeFile && mergeFile.markerBlocks.length > 0 ? (
         <View style={[styles.sidebarConflictBadge, { backgroundColor: conflictBadgeBackgroundColor }]}>
           <Text style={[styles.sidebarConflictBadgeText, { color: conflictBadgeTextColor }]}>
@@ -926,7 +970,7 @@ function DiffLoadedBody({
   mutedColor,
   primaryColor,
   renderRow,
-  renderSidebarFile,
+  renderSidebarEntry,
   renderSideBySideRow,
   requestSideBySideRange,
   resolvingMergeConflictKeys,
@@ -934,6 +978,7 @@ function DiffLoadedBody({
   rowHeight,
   sidebarCollapsed,
   sidebarListHeight,
+  sidebarWidth,
   sideBySideDataVersion,
   sideBySideFileHeaderByListIndex,
   sideBySideItemIndexes,
@@ -978,6 +1023,10 @@ function DiffLoadedBody({
   const filteredSidebarFiles = useMemo(
     () => state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter)),
     [normalizedFileFilter, state.files],
+  );
+  const sidebarEntries = useMemo(
+    () => createDiffSidebarEntries(filteredSidebarFiles),
+    [filteredSidebarFiles],
   );
 
   logDiffOpenTiming("viewer.body.start", {
@@ -1201,12 +1250,13 @@ function DiffLoadedBody({
       {isSidebarLayoutReady ? (
         filteredSidebarFiles.length > 0 ? (
           <LegendList
-            data={filteredSidebarFiles}
+            data={sidebarEntries}
             getFixedItemSize={() => diffSidebarFileRowHeight}
-            keyExtractor={(file) => `${file.index}:${file.path}`}
+            getItemType={(entry) => entry.type}
+            keyExtractor={(entry) => entry.id}
             onLayout={handleSidebarListLayout}
             recycleItems
-            renderItem={renderSidebarFile}
+            renderItem={renderSidebarEntry}
             style={[styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }]}
           />
         ) : (
@@ -1227,14 +1277,15 @@ function DiffLoadedBody({
     <View style={styles.loadedRoot}>
       <SidebarSplitView
         appearance={syntaxAppearance}
-        contentMinWidth={420}
+        contentMinWidth={diffContentMinWidth}
         contentTitlebarHeight={diffTitlebarTopInset}
         contentTitlebarMaterial="glass"
         contentTitlebarOverlayColor={backgroundColor}
         contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
         onSplitViewDidResize={handleSplitViewResize}
         sidebarCollapsed={sidebarCollapsed}
-        sidebarMinWidth={180}
+        sidebarMinWidth={defaultDiffSidebarWidth}
+        sidebarWidth={sidebarWidth}
         style={styles.content}
       >
         {sidebar}
@@ -2184,6 +2235,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const rowHeight = getDiffLineRowHeight(fontSize);
   const rowRenderer = useDiffRowRendererSetting();
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
+  const sidebarWidth = useDiffSidebarWidthSetting();
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
@@ -3600,38 +3652,43 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   }, [activeFileIndex$, scrollToFile]);
 
-  const renderSidebarFile = useCallback(({ item: file }: LegendListRenderItemProps<DiffFileSummary>) => {
-    const mergeFile = getMergeConflictFileForDiffFile(mergeState, file);
-    const statusPresentation = mergeFile?.markerBlocks.length
-      ? getConflictedFileStatusPresentation()
-      : getFileStatusPresentation(file);
-    if (!loggedFirstSidebarFileRenderRef.current) {
-      loggedFirstSidebarFileRenderRef.current = true;
-      logDiffOpenTiming("viewer.sidebarFile.render.first", {
-        fileIndex: file.index,
-        filePath: file.path,
-      });
+  const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
+    let row: ReactElement;
+    if (item.type === "folder") {
+      row = <DiffSidebarFolderRow mutedColor={mutedColor} title={item.title} />;
+    } else {
+      const file = item.file;
+      const mergeFile = getMergeConflictFileForDiffFile(mergeState, file);
+      const statusPresentation = mergeFile?.markerBlocks.length
+        ? getConflictedFileStatusPresentation()
+        : getFileStatusPresentation(file);
+      if (!loggedFirstSidebarFileRenderRef.current) {
+        loggedFirstSidebarFileRenderRef.current = true;
+        logDiffOpenTiming("viewer.sidebarFile.render.first", {
+          fileIndex: file.index,
+          filePath: file.path,
+        });
+      }
+
+      row = (
+        <DiffSidebarFileRow
+          activeFileIndex$={activeFileIndex$}
+          conflictBadgeBackgroundColor={sidebarConflictBadgeBackgroundColor}
+          conflictBadgeTextColor={sidebarConflictBadgeTextColor}
+          file={file}
+          foregroundColor={foregroundColor}
+          mergeFile={mergeFile}
+          onPress={() => handleSidebarFilePress(file)}
+          selectedBackgroundColor={selectedSidebarFileBackgroundColor}
+          selectedBorderColor={displayTheme.colors.primary}
+          statusPresentation={statusPresentation}
+        />
+      );
     }
 
-    return (
-      <DiffSidebarFileRow
-        activeFileIndex$={activeFileIndex$}
-        borderColor={displayTheme.colors.border}
-        conflictBadgeBackgroundColor={sidebarConflictBadgeBackgroundColor}
-        conflictBadgeTextColor={sidebarConflictBadgeTextColor}
-        file={file}
-        foregroundColor={foregroundColor}
-        mergeFile={mergeFile}
-        mutedColor={mutedColor}
-        onPress={() => handleSidebarFilePress(file)}
-        selectedBackgroundColor={selectedSidebarFileBackgroundColor}
-        selectedBorderColor={displayTheme.colors.primary}
-        statusPresentation={statusPresentation}
-      />
-    );
+    return row;
   }, [
     activeFileIndex$,
-    displayTheme.colors.border,
     displayTheme.colors.primary,
     foregroundColor,
     handleSidebarFilePress,
@@ -3665,10 +3722,17 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       sidebarWidth: nextMetrics.sidebarWidth,
     });
     setSplitPaneMetricsValue(nextMetrics);
+    const shouldSaveSidebarWidth =
+      nextMetrics.sidebarWidth >= defaultDiffSidebarWidth &&
+      !sidebarCollapsed$.peek() &&
+      (nextMetrics.sidebarWidth >= sidebarWidth || nextMetrics.contentWidth > diffContentMinWidth);
+    if (shouldSaveSidebarWidth) {
+      setDiffSidebarWidthSetting(nextMetrics.sidebarWidth);
+    }
     if (nextMetrics.contentHeight > 0 && previousDiffPaneHeight !== nextMetrics.contentHeight) {
       setDiffPaneHeightValue(nextMetrics.contentHeight);
     }
-  }, [diffPaneHeight$, setDiffPaneHeightValue, setSplitPaneMetricsValue, splitPaneMetrics$]);
+  }, [diffPaneHeight$, setDiffPaneHeightValue, setSplitPaneMetricsValue, sidebarCollapsed$, sidebarWidth, splitPaneMetrics$]);
 
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -3882,7 +3946,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         mutedColor={mutedColor}
         primaryColor={displayTheme.colors.primary}
         renderRow={renderRow}
-        renderSidebarFile={renderSidebarFile}
+        renderSidebarEntry={renderSidebarEntry}
         renderSideBySideRow={renderSideBySideRow}
         requestSideBySideRange={requestSideBySideRange}
         resolvingMergeConflictKeys={resolvingMergeConflictKeys}
@@ -3890,6 +3954,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         rowHeight={rowHeight}
         sidebarCollapsed={sidebarCollapsed}
         sidebarListHeight={sidebarListHeight}
+        sidebarWidth={sidebarWidth}
         sideBySideDataVersion={sideBySideDataVersion}
         sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
         sideBySideItemIndexes={sideBySideItemIndexes}
@@ -4218,26 +4283,30 @@ const styles = StyleSheet.create({
   sidebarFile: {
     alignItems: "center",
     borderColor: "transparent",
-    borderRadius: 6,
+    borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
     height: diffSidebarFileRowHeight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   sidebarFileName: {
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 16,
-  },
-  sidebarFilePath: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  sidebarFileTextGroup: {
     flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
     minWidth: 0,
+  },
+  sidebarFolder: {
+    height: diffSidebarFileRowHeight,
+    justifyContent: "flex-end",
+    paddingBottom: 3,
+    paddingHorizontal: 20,
+  },
+  sidebarFolderText: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
   },
   sidebarConflictBadge: {
     alignItems: "center",
@@ -4271,9 +4340,9 @@ const styles = StyleSheet.create({
   sidebarStatusIcon: {
     alignItems: "center",
     borderRadius: 3,
-    height: 14,
+    height: 16,
     justifyContent: "center",
-    width: 14,
+    width: 16,
   },
   unsavedMergeBanner: {
     alignItems: "center",

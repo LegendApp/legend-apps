@@ -22,6 +22,7 @@ export interface NativeProps extends ViewProps {
   onSplitViewDidResize?: DirectEventHandler<SidebarSplitViewResizeEvent>;
   sidebarCollapsed?: boolean;
   sidebarMinWidth?: Double;
+  sidebarWidth?: Double;
 }
 
 export default codegenNativeComponent<NativeProps>("SidebarSplitView") as HostComponent<NativeProps>;

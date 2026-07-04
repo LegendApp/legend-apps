@@ -183,6 +183,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   LayoutMetrics _sidebarReactLayoutMetrics;
   LayoutMetrics _contentReactLayoutMetrics;
   CGFloat _sidebarMinWidth;
+  CGFloat _sidebarWidth;
   CGFloat _contentMinWidth;
   BOOL _sidebarCollapsed;
   CGFloat _lastSidebarWidth;
@@ -210,6 +211,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
     _contentReactLayoutMetrics = EmptyLayoutMetrics;
     _sidebarMinWidth = 180;
+    _sidebarWidth = 0;
     _contentMinWidth = 320;
     _sidebarCollapsed = NO;
     _lastSidebarWidth = -1;
@@ -285,6 +287,15 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   _sidebarItem.minimumThickness = MAX(120, _sidebarMinWidth);
   _sidebarItem.preferredThicknessFraction = 0.26;
   _contentItem.minimumThickness = MAX(240, _contentMinWidth);
+}
+
+- (CGFloat)preferredSidebarWidthForBounds:(CGRect)bounds
+{
+  CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
+  CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness;
+  CGFloat preferredSidebarWidth = _sidebarWidth > 0 ? _sidebarWidth : _sidebarMinWidth;
+  CGFloat sidebarWidth = MIN(MAX(_sidebarMinWidth, preferredSidebarWidth), maxSidebarWidth);
+  return MAX(0, sidebarWidth);
 }
 
 - (void)updateSidebarCollapsed
@@ -449,9 +460,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
   CGFloat sidebarWidth = 0;
   if (!_sidebarCollapsed) {
-    CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness;
-    sidebarWidth = MIN(_sidebarMinWidth, maxSidebarWidth);
-    sidebarWidth = MAX(0, sidebarWidth);
+    sidebarWidth = [self preferredSidebarWidthForBounds:bounds];
   }
   CGFloat contentX = sidebarWidth > 0 ? sidebarWidth + dividerThickness : 0;
   CGFloat contentWidth = MAX(0, bounds.size.width - contentX);
@@ -528,9 +537,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     return;
   }
 
-  CGFloat dividerThickness = _splitViewController.splitView.dividerThickness;
-  CGFloat maxSidebarWidth = bounds.size.width - _contentMinWidth - dividerThickness;
-  CGFloat sidebarWidth = MIN(_sidebarMinWidth, maxSidebarWidth);
+  CGFloat sidebarWidth = [self preferredSidebarWidthForBounds:bounds];
   if (sidebarWidth <= 0) {
     return;
   }
@@ -660,6 +667,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   }
   BOOL shouldRelayout =
     fabs(_sidebarMinWidth - newProps.sidebarMinWidth) >= 0.5 ||
+    fabs(_sidebarWidth - newProps.sidebarWidth) >= 0.5 ||
     fabs(_contentMinWidth - newProps.contentMinWidth) >= 0.5 ||
     _sidebarCollapsed != newProps.sidebarCollapsed ||
     fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
@@ -679,6 +687,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     fabs(_contentTitlebarOverlayOpacity - nextContentTitlebarOverlayOpacity) >= 0.001 ||
     fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
   _sidebarMinWidth = newProps.sidebarMinWidth;
+  _sidebarWidth = newProps.sidebarWidth;
   _contentMinWidth = newProps.contentMinWidth;
   _sidebarCollapsed = newProps.sidebarCollapsed;
   _contentTitlebarHeight = newProps.contentTitlebarHeight;
@@ -782,6 +791,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   _sidebarReactLayoutMetrics = EmptyLayoutMetrics;
   _contentReactLayoutMetrics = EmptyLayoutMetrics;
   _sidebarMinWidth = 180;
+  _sidebarWidth = 0;
   _contentMinWidth = 320;
   _sidebarCollapsed = NO;
   _lastSidebarWidth = -1;

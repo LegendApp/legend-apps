@@ -36,6 +36,11 @@ public class SidebarSplitViewManager extends SimpleViewManager<SidebarSplitView>
   }
 
   @Override
+  public void setSidebarWidth(SidebarSplitView view, double value) {
+    view.setSidebarWidth(value);
+  }
+
+  @Override
   public void setContentMinWidth(SidebarSplitView view, double value) {
     view.setContentMinWidth(value);
   }

@@ -27,6 +27,7 @@ export type DiffSettingsFile = {
   syntaxTheme: string;
   rowRenderer?: DiffRowRendererSetting;
   showOnlyHunks?: boolean;
+  sidebarWidth?: number;
   viewMode?: DiffViewMode;
 };
 
@@ -39,6 +40,7 @@ export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
 export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
+export const defaultDiffSidebarWidth = 180;
 export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
@@ -59,6 +61,12 @@ function normalizeDiffFontSize(fontSize: unknown): number {
 
 function normalizeDiffFontFamily(fontFamily: unknown): DiffFontFamilySetting {
   return normalizeSourceFontFamily(fontFamily, defaultDiffFontFamily);
+}
+
+function normalizeDiffSidebarWidth(sidebarWidth: unknown): number {
+  return typeof sidebarWidth === "number" && Number.isFinite(sidebarWidth)
+    ? Math.max(defaultDiffSidebarWidth, Math.min(640, Math.round(sidebarWidth)))
+    : defaultDiffSidebarWidth;
 }
 
 function normalizeDiffViewMode(viewMode: unknown): DiffViewMode {
@@ -119,6 +127,10 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffShowOnlyHunks,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffShowOnlyHunks),
     },
+    sidebarWidth: {
+      defaultValue: defaultDiffSidebarWidth,
+      normalize: normalizeDiffSidebarWidth,
+    },
     viewMode: {
       defaultValue: defaultDiffViewMode,
       normalize: normalizeDiffViewMode,
@@ -136,6 +148,7 @@ const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnow
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const rowRendererSetting = diffSettings.field("rowRenderer");
 const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
+const sidebarWidthSetting = diffSettings.field("sidebarWidth");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
 
@@ -169,6 +182,10 @@ export function getDiffRowRendererSetting(): DiffRowRendererSetting {
 
 export function getDiffShowOnlyHunksSetting(): boolean {
   return showOnlyHunksSetting.get();
+}
+
+export function getDiffSidebarWidthSetting(): number {
+  return sidebarWidthSetting.get();
 }
 
 export function getDiffSyntaxHighlightingEnabledSetting(): boolean {
@@ -220,6 +237,10 @@ export function useDiffShowOnlyHunksSetting(): boolean {
   return normalizeBooleanSetting(useValue(diffSettings$.showOnlyHunks), defaultDiffShowOnlyHunks);
 }
 
+export function useDiffSidebarWidthSetting(): number {
+  return normalizeDiffSidebarWidth(useValue(diffSettings$.sidebarWidth));
+}
+
 export function useDiffSyntaxHighlightingEnabledSetting(): boolean {
   return normalizeBooleanSetting(useValue(diffSettings$.syntaxHighlightingEnabled), defaultDiffSyntaxHighlightingEnabled);
 }
@@ -262,6 +283,10 @@ export function setDiffRowRendererSetting(rowRenderer: DiffRowRendererSetting) {
 
 export function setDiffShowOnlyHunksSetting(enabled: boolean) {
   showOnlyHunksSetting.set(enabled);
+}
+
+export function setDiffSidebarWidthSetting(sidebarWidth: number) {
+  sidebarWidthSetting.set(sidebarWidth);
 }
 
 export function setDiffSyntaxHighlightingEnabledSetting(enabled: boolean) {
