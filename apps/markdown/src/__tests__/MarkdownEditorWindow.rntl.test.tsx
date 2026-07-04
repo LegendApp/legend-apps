@@ -316,13 +316,55 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(mockReloadDocument).not.toHaveBeenCalled();
 
     await act(async () => {
-      jest.advanceTimersByTime(1000);
+      jest.advanceTimersByTime(5000);
       watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
       jest.advanceTimersByTime(100);
     });
 
     expect(mockReloadDocument).toHaveBeenCalledTimes(1);
     await view.unmount();
+    jest.useRealTimers();
+  });
+
+  it("shares own-save reload suppression across watcher instances for the same file", async () => {
+    jest.useFakeTimers();
+    mockSessionState$.assign({
+      documentSource: "file",
+      filename: "/tmp/test.md",
+      isDirty: true,
+      saveState: "idle",
+    });
+
+    const savingView = await render(<MarkdownEditorWindow />);
+
+    await act(async () => {
+      mockSessionState$.saveState.set("saving");
+    });
+    await act(async () => {
+      mockSessionState$.saveState.set("idle");
+      mockSessionState$.isDirty.set(false);
+    });
+
+    const laterView = await render(<MarkdownEditorWindow />);
+    const laterWatchedFileChange = mockWatchFiles.mock.calls[1]?.[1];
+    expect(laterWatchedFileChange).toBeDefined();
+
+    await act(async () => {
+      laterWatchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(mockReloadDocument).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+      laterWatchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(mockReloadDocument).toHaveBeenCalledTimes(1);
+    await savingView.unmount();
+    await laterView.unmount();
     jest.useRealTimers();
   });
 });

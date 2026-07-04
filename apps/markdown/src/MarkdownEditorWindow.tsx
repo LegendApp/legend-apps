@@ -57,7 +57,23 @@ type MarkdownEditorWindowProps = {
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
 
-const cleanSaveReloadSuppressionMs = 1000;
+const cleanSaveReloadSuppressionMs = 5000;
+const cleanSaveReloadSuppressionsByPath = new Map<string, number>();
+
+function suppressCleanSaveReload(path: string, now: number) {
+  cleanSaveReloadSuppressionsByPath.set(path, now + cleanSaveReloadSuppressionMs);
+}
+
+function shouldSuppressCleanSaveReload(path: string, now: number) {
+  const suppressUntil = cleanSaveReloadSuppressionsByPath.get(path) ?? 0;
+  if (now < suppressUntil) {
+    return true;
+  }
+  if (suppressUntil > 0) {
+    cleanSaveReloadSuppressionsByPath.delete(path);
+  }
+  return false;
+}
 
 function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): MarkdownE2EEditorSmokeVariant | null {
   if (scenario === "editor-selection-smoke") {
@@ -245,10 +261,8 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
   const saveState = useValue(session.sessionState$.saveState);
   const hasPendingCleanSaveRef = useRef(false);
   const wasSavingRef = useRef(false);
-  const suppressCleanReloadUntilRef = useRef(0);
   const watchedFilePath = filename && documentSource !== "untitled" ? filename : null;
   useEffect(() => {
-    suppressCleanReloadUntilRef.current = 0;
     hasPendingCleanSaveRef.current = false;
     wasSavingRef.current = false;
   }, [watchedFilePath]);
@@ -264,11 +278,11 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
       hasPendingCleanSaveRef.current = false;
     }
 
-    if (hasPendingCleanSaveRef.current && !isDirty) {
+    if (hasPendingCleanSaveRef.current && !isDirty && watchedFilePath) {
       hasPendingCleanSaveRef.current = false;
-      suppressCleanReloadUntilRef.current = Date.now() + cleanSaveReloadSuppressionMs;
+      suppressCleanSaveReload(watchedFilePath, Date.now());
     }
-  }, [isDirty, saveState]);
+  }, [isDirty, saveState, watchedFilePath]);
   const shouldReload = useCallback(() => {
     if (session.sessionState$.isDirty.peek()) {
       return false;
@@ -276,11 +290,11 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
     if (session.sessionState$.saveState.peek() === "saving") {
       return false;
     }
-    if (Date.now() < suppressCleanReloadUntilRef.current) {
+    if (watchedFilePath && shouldSuppressCleanSaveReload(watchedFilePath, Date.now())) {
       return false;
     }
     return true;
-  }, [session.sessionState$]);
+  }, [session.sessionState$, watchedFilePath]);
   const reloadDocument = useCallback(() => {
     session.documentCommandsRef.current?.reload();
   }, [session.documentCommandsRef]);
