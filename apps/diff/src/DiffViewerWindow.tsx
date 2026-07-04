@@ -271,6 +271,8 @@ function isSaveKeyEvent(event: { keyCode: number; modifiers: number }) {
 type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
   borderColor: string;
+  conflictBadgeBackgroundColor: string;
+  conflictBadgeTextColor: string;
   file: DiffFileSummary;
   foregroundColor: string;
   mergeFile: DiffMergeConflictFile | null;
@@ -413,9 +415,69 @@ function hashDiffNativeRowConfigVersion(parts: readonly unknown[]) {
   return hash >>> 0;
 }
 
+function parseHexColor(color: string) {
+  const normalized = color.trim().replace(/^#/, "");
+  const hex = normalized.length === 3
+    ? normalized.split("").map((part) => part + part).join("")
+    : normalized.slice(0, 6);
+  if (!/^[0-9a-f]{6}$/i.test(hex)) {
+    return null;
+  }
+  return {
+    b: Number.parseInt(hex.slice(4, 6), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    r: Number.parseInt(hex.slice(0, 2), 16),
+  };
+}
+
+function toHexColor({ b, g, r }: { b: number; g: number; r: number }) {
+  const toHexComponent = (value: number) =>
+    Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
+  return `#${toHexComponent(r)}${toHexComponent(g)}${toHexComponent(b)}`;
+}
+
+function mixHexColor(color: string, targetColor: string, amount: number, fallbackColor: string) {
+  const parsedColor = parseHexColor(color);
+  const parsedTarget = parseHexColor(targetColor);
+  if (!parsedColor || !parsedTarget) {
+    return fallbackColor;
+  }
+  return toHexColor({
+    b: parsedColor.b + (parsedTarget.b - parsedColor.b) * amount,
+    g: parsedColor.g + (parsedTarget.g - parsedColor.g) * amount,
+    r: parsedColor.r + (parsedTarget.r - parsedColor.r) * amount,
+  });
+}
+
+function getThemeAdjustedBackground(
+  backgroundColor: string,
+  appearance: "dark" | "light",
+  darkAmount: number,
+  lightAmount: number,
+  fallbackColor: string,
+) {
+  return mixHexColor(
+    backgroundColor,
+    appearance === "dark" ? "#ffffff" : "#000000",
+    appearance === "dark" ? darkAmount : lightAmount,
+    fallbackColor,
+  );
+}
+
+function getReadableBadgeTextColor(backgroundColor: string) {
+  const parsedColor = parseHexColor(backgroundColor);
+  if (!parsedColor) {
+    return "#ffffff";
+  }
+  const luminance = (0.2126 * parsedColor.r + 0.7152 * parsedColor.g + 0.0722 * parsedColor.b) / 255;
+  return luminance > 0.55 ? "#111827" : "#ffffff";
+}
+
 function DiffSidebarFileRow({
   activeFileIndex$,
   borderColor,
+  conflictBadgeBackgroundColor,
+  conflictBadgeTextColor,
   file,
   foregroundColor,
   mergeFile,
@@ -460,8 +522,8 @@ function DiffSidebarFileRow({
         ) : null}
       </View>
       {mergeFile && mergeFile.markerBlocks.length > 0 ? (
-        <View style={styles.sidebarConflictBadge}>
-          <Text style={styles.sidebarConflictBadgeText}>
+        <View style={[styles.sidebarConflictBadge, { backgroundColor: conflictBadgeBackgroundColor }]}>
+          <Text style={[styles.sidebarConflictBadgeText, { color: conflictBadgeTextColor }]}>
             {mergeFile.markerBlocks.length}
           </Text>
         </View>
@@ -2225,11 +2287,29 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
-  const fileHeaderBackgroundColor = displayTheme.colors.surfaceMuted;
+  const fileHeaderBackgroundColor = getThemeAdjustedBackground(
+    backgroundColor,
+    syntaxTheme.appearance,
+    0.11,
+    0.065,
+    displayTheme.colors.surfaceMuted,
+  );
+  const hunkHeaderBackgroundColor = getThemeAdjustedBackground(
+    backgroundColor,
+    syntaxTheme.appearance,
+    0.055,
+    0.035,
+    displayTheme.colors.surface,
+  );
   const mutedColor = displayTheme.colors.muted;
-  const selectedSidebarFileBackgroundColor = syntaxTheme.appearance === "dark"
-    ? "rgba(88, 166, 255, 0.24)"
-    : "rgba(9, 105, 218, 0.16)";
+  const selectedSidebarFileBackgroundColor = mixHexColor(
+    backgroundColor,
+    displayTheme.colors.primary,
+    syntaxTheme.appearance === "dark" ? 0.28 : 0.18,
+    displayTheme.colors.selection === "auto" ? displayTheme.colors.surfaceMuted : displayTheme.colors.selection,
+  );
+  const sidebarConflictBadgeBackgroundColor = displayTheme.colors.danger;
+  const sidebarConflictBadgeTextColor = getReadableBadgeTextColor(sidebarConflictBadgeBackgroundColor);
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -3446,7 +3526,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
-      hunkHeaderBackgroundColor: displayTheme.colors.surface,
+      hunkHeaderBackgroundColor,
       mutedColor,
       nativeSideBySideRowConfigId: nativeSideBySideRowConfig.configId,
       nativeSideBySideRowConfigVersion: nativeSideBySideRowConfig.configVersion,
@@ -3467,7 +3547,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }),
     [
       displayTheme.colors.border,
-      displayTheme.colors.surface,
       collapsedFileIndexList,
       fileHeaderBackgroundColor,
       fileByIndex,
@@ -3476,6 +3555,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      hunkHeaderBackgroundColor,
       mutedColor,
       nativeSideBySideRowConfig.configId,
       nativeSideBySideRowConfig.configVersion,
@@ -3537,6 +3617,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       <DiffSidebarFileRow
         activeFileIndex$={activeFileIndex$}
         borderColor={displayTheme.colors.border}
+        conflictBadgeBackgroundColor={sidebarConflictBadgeBackgroundColor}
+        conflictBadgeTextColor={sidebarConflictBadgeTextColor}
         file={file}
         foregroundColor={foregroundColor}
         mergeFile={mergeFile}
@@ -3547,7 +3629,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         statusPresentation={statusPresentation}
       />
     );
-  }, [activeFileIndex$, displayTheme.colors.border, displayTheme.colors.primary, foregroundColor, handleSidebarFilePress, mergeState, mutedColor, selectedSidebarFileBackgroundColor]);
+  }, [
+    activeFileIndex$,
+    displayTheme.colors.border,
+    displayTheme.colors.primary,
+    foregroundColor,
+    handleSidebarFilePress,
+    mergeState,
+    mutedColor,
+    selectedSidebarFileBackgroundColor,
+    sidebarConflictBadgeBackgroundColor,
+    sidebarConflictBadgeTextColor,
+  ]);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     const nextMetrics = {
@@ -4148,7 +4241,6 @@ const styles = StyleSheet.create({
   },
   sidebarConflictBadge: {
     alignItems: "center",
-    backgroundColor: "#ff453a",
     borderRadius: 7,
     height: 15,
     justifyContent: "center",
@@ -4156,7 +4248,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   sidebarConflictBadgeText: {
-    color: "#ffffff",
     fontSize: 10,
     fontWeight: "700",
     lineHeight: 12,
