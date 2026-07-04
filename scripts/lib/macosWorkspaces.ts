@@ -61,6 +61,7 @@ export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: s
   ensureReleaseWorkspaceLinks();
   ensureReleaseAppRoot(manifest, configPath);
   copyMacOSTemplate(workspaceDir);
+  copyAppMacOSTemplate(workspaceDir, manifest);
   patchMacOSProjectForApp(workspaceDir, manifest);
   return workspaceDir;
 }
@@ -71,6 +72,7 @@ export function ensureMacOSDevWorkspace(manifest: AppManifest) {
   ensureDevWorkspaceLinks();
   ensureDevAppRoot(manifest);
   copyMacOSTemplate(workspaceDir);
+  copyAppMacOSTemplate(workspaceDir, manifest);
   patchMacOSProjectForApp(workspaceDir, manifest);
   return workspaceDir;
 }
@@ -79,6 +81,23 @@ function copyMacOSTemplate(workspaceDir: string) {
   for (const entry of macosTemplateEntries) {
     copyTemplateEntry(entry, workspaceDir);
   }
+}
+
+function copyAppMacOSTemplate(workspaceDir: string, manifest: AppManifest) {
+  const appMacOSDir = path.join(appsDir, manifest.id, "macos");
+
+  if (!fs.existsSync(appMacOSDir)) {
+    return;
+  }
+
+  fs.cpSync(appMacOSDir, workspaceDir, {
+    recursive: true,
+    force: true,
+    filter: (source) => {
+      const name = path.basename(source);
+      return name !== "xcuserdata" && name !== "Pods" && name !== "build" && name !== "Podfile.lock";
+    },
+  });
 }
 
 function ensureReleaseWorkspaceLinks() {
