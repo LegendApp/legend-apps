@@ -48,6 +48,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     fontFamily: "Menlo",
     fontSize: 12,
     foregroundColor: "#f0f6fc",
+    hunkHeaderBackgroundColor: "#0d1117",
     mutedColor: "#8b949e",
     nativeSideBySideRowConfigId: "test:blocks",
     nativeSideBySideRowConfigVersion: 1,

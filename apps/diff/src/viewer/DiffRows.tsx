@@ -23,6 +23,7 @@ import type { DiffRowRendererSetting } from "../diffSettings";
 import {
   diffChangeTypeAdd,
   diffChangeTypeRemove,
+  diffFileHeaderRowHeight,
   diffRowKindFileHeader,
   diffSideBySideHorizontalPadding,
 } from "./diffViewerConstants";
@@ -43,6 +44,7 @@ export type DiffRenderFields = {
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
+  hunkHeaderBackgroundColor: string;
   mutedColor: string;
   nativeSideBySideRowConfigId: string;
   nativeSideBySideRowConfigVersion: number;
@@ -69,9 +71,9 @@ type DiffHunkHeaderInfo = {
 
 type DiffHunkHeaderProps = {
   borderColor: string;
-  fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
+  hunkHeaderBackgroundColor: string;
   info: DiffHunkHeaderInfo;
   mutedColor: string;
 };
@@ -339,14 +341,14 @@ export function getDiffSideBySideHunkHeaderInfo(
 
 const DiffHunkHeader = memo(function DiffHunkHeader({
   borderColor,
-  fileHeaderBackgroundColor,
   fontFamily,
   fontSize,
+  hunkHeaderBackgroundColor,
   info,
   mutedColor,
 }: DiffHunkHeaderProps) {
   return (
-    <View style={[styles.hunkHeader, { backgroundColor: fileHeaderBackgroundColor, borderColor }]}>
+    <View style={[styles.hunkHeader, { backgroundColor: hunkHeaderBackgroundColor, borderColor }]}>
       <Text selectable={false} style={[{ color: mutedColor, fontFamily, fontSize }, styles.hunkHeaderTitle]}>
         Hunk {info.hunkNumber}: {info.lineLabel}
       </Text>
@@ -624,6 +626,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const fontFamily = renderFields.fontFamily;
   const fontSize = renderFields.fontSize;
   const foregroundColor = renderFields.foregroundColor;
+  const hunkHeaderBackgroundColor = renderFields.hunkHeaderBackgroundColor;
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
   const syntaxAppearance = renderFields.syntaxAppearance;
@@ -679,9 +682,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
         {hunkHeaderInfo ? (
           <DiffHunkHeader
             borderColor={borderColor}
-            fileHeaderBackgroundColor={fileHeaderBackgroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
             info={hunkHeaderInfo}
             mutedColor={mutedColor}
           />
@@ -701,9 +704,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
         {hunkHeaderInfo ? (
           <DiffHunkHeader
             borderColor={borderColor}
-            fileHeaderBackgroundColor={fileHeaderBackgroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
             info={hunkHeaderInfo}
             mutedColor={mutedColor}
           />
@@ -733,9 +736,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
       {hunkHeaderInfo ? (
         <DiffHunkHeader
           borderColor={borderColor}
-          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
+          hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
           info={hunkHeaderInfo}
           mutedColor={mutedColor}
         />
@@ -768,6 +771,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const fontFamily = renderFields.fontFamily;
   const fontSize = renderFields.fontSize;
   const foregroundColor = renderFields.foregroundColor;
+  const hunkHeaderBackgroundColor = renderFields.hunkHeaderBackgroundColor;
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
   const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleById;
@@ -825,9 +829,9 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         {hunkHeaderInfo ? (
           <DiffHunkHeader
             borderColor={borderColor}
-            fileHeaderBackgroundColor={fileHeaderBackgroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
             info={hunkHeaderInfo}
             mutedColor={mutedColor}
           />
@@ -850,9 +854,9 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
       {hunkHeaderInfo ? (
         <DiffHunkHeader
           borderColor={borderColor}
-          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
+          hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
           info={hunkHeaderInfo}
           mutedColor={mutedColor}
         />
@@ -964,14 +968,12 @@ const styles = StyleSheet.create({
   },
   fileRow: {
     alignItems: "center",
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 6,
-    height: 32,
-    marginHorizontal: 8,
-    marginVertical: 4,
-    paddingHorizontal: 8,
+    height: diffFileHeaderRowHeight,
+    paddingHorizontal: 10,
   },
   fileStatusIcon: {
     alignItems: "center",

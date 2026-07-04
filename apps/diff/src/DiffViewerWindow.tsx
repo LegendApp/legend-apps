@@ -1117,9 +1117,6 @@ function DiffLoadedBody({
     sidebarWidth: splitPaneMetrics.sidebarWidth,
     viewMode,
   });
-  const sidebarTitle = mergeState.status === "ready" && mergeState.conflictBlockCount > 0
-    ? `Files - ${mergeState.conflictBlockCount} conflicts`
-    : "Files";
   const sidebar = (
     <View
       style={[
@@ -1131,7 +1128,6 @@ function DiffLoadedBody({
         },
       ]}
     >
-      <Text style={[styles.sidebarTitle, { color: mutedColor }]}>{sidebarTitle}</Text>
       <TextInputSearch
         appearance={syntaxAppearance}
         defaultValue={fileFilter}
@@ -3450,6 +3446,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      hunkHeaderBackgroundColor: displayTheme.colors.surface,
       mutedColor,
       nativeSideBySideRowConfigId: nativeSideBySideRowConfig.configId,
       nativeSideBySideRowConfigVersion: nativeSideBySideRowConfig.configVersion,
@@ -3470,6 +3467,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }),
     [
       displayTheme.colors.border,
+      displayTheme.colors.surface,
       collapsedFileIndexList,
       fileHeaderBackgroundColor,
       fileByIndex,
@@ -3701,7 +3699,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
   const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 70) : 0;
+  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 43) : 0;
   const currentActiveFileIndex = useValue(activeFileIndex$);
   const activeMergeFile = state.status === "loaded"
     ? getActiveMergeFile({ activeFileIndex: currentActiveFileIndex, files: state.files, mergeState })
@@ -4185,15 +4183,6 @@ const styles = StyleSheet.create({
     height: 14,
     justifyContent: "center",
     width: 14,
-  },
-  sidebarTitle: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    textTransform: "uppercase",
   },
   unsavedMergeBanner: {
     alignItems: "center",
