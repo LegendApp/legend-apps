@@ -704,6 +704,65 @@ describe("MarkdownDocument native row editor", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("splits the active block from native enter without first inserting a newline", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First line"),
+    ]));
+    const onError = jest.fn();
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          onError={onError}
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 25,
+          markdown: "First line",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    await act(async () => {
+      host.props.onEnterPressed({
+        nativeEvent: {
+          blockId: "d1:b0",
+          selectionEnd: "First".length,
+          selectionStart: "First".length,
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: " line",
+        beforeMarkdown: "First",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+    ]);
+    expect(adapter.sourceMarkdown).toBe("First\n\n line");
+    expect(nativeHost(renderer!).props.activeBlockId).toBe("d1:b100");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("keeps full heading markdown in the row editor while heading level changes", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),

@@ -241,6 +241,14 @@ type NativeBackspaceAtStartEvent = {
   };
 };
 
+type NativeEnterPressedEvent = {
+  nativeEvent: {
+    blockId: string;
+    selectionEnd: number;
+    selectionStart: number;
+  };
+};
+
 type MarkdownNativeEditorHostProps = {
   activeBlockId: string | null;
   activeBlockMarkdown: string;
@@ -249,6 +257,7 @@ type MarkdownNativeEditorHostProps = {
   markdownLayoutConfigJson?: string;
   onBeginEditing: (event: NativeEditorFrameEvent) => void;
   onBackspaceAtStart: (event: NativeBackspaceAtStartEvent) => void;
+  onEnterPressed: (event: NativeEnterPressedEvent) => void;
   onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
   style: StyleProp<ViewStyle>;
@@ -262,6 +271,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   markdownLayoutConfigJson,
   onBeginEditing,
   onBackspaceAtStart,
+  onEnterPressed,
   onEditorFrameChange,
   onLayout,
   style,
@@ -274,6 +284,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
       markdownLayoutConfigJson={markdownLayoutConfigJson}
       onBeginEditing={onBeginEditing}
       onBackspaceAtStart={onBackspaceAtStart}
+      onEnterPressed={onEnterPressed}
       onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
       style={style}
@@ -1813,6 +1824,31 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [mergeActiveBlockIntoPrevious, replaceActiveBlockMarkdown, reportAsyncError],
     );
 
+    const handleNativeEnterPressed = useCallback(
+      (event: NativeEnterPressedEvent) => {
+        const activeBlock = activeBlockSnapshotRef.current;
+        const { blockId, selectionEnd, selectionStart } = event.nativeEvent;
+        if (activeBlock && activeBlock.id === blockId) {
+          const markdown = draftMarkdownRef.current;
+          const selectionRangeStart = Math.min(selectionStart, selectionEnd);
+          const selectionRangeEnd = Math.max(selectionStart, selectionEnd);
+          const clampedSelectionStart = Math.max(0, Math.min(markdown.length, selectionRangeStart));
+          const clampedSelectionEnd = Math.max(clampedSelectionStart, Math.min(markdown.length, selectionRangeEnd));
+          if (clampedSelectionStart === clampedSelectionEnd && activeBlock.type !== "codeBlock" && !isFencedCodeMarkdown(markdown)) {
+            const beforeMarkdown = markdown.slice(0, clampedSelectionStart);
+            const afterMarkdown = markdown.slice(clampedSelectionEnd);
+            const continuationMarkdown = getSplitContinuationMarkdown(beforeMarkdown, afterMarkdown);
+            splitActiveBlock(
+              activeBlock,
+              continuationMarkdown.beforeMarkdown ?? beforeMarkdown,
+              continuationMarkdown.afterMarkdown,
+            ).catch(reportAsyncError);
+          }
+        }
+      },
+      [reportAsyncError, splitActiveBlock],
+    );
+
     const formatCurrentBlockRange = useCallback(
       (transform: (markdown: string) => string) => {
         async function runFormat() {
@@ -2900,6 +2936,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const previousActiveBlockId = activeRenderBlockIdRef.current;
       if (previousActiveBlockId && previousActiveBlockId !== activeBlockId) {
         documentRenderState$.activeBlocksById.get(previousActiveBlockId).delete();
+        if (overlayFrameBlockIdRef.current === previousActiveBlockId) {
+          clearOverlayFrame();
+        }
       }
       const activeBlock = activeBlockId && activeBlockSnapshotRef.current?.id === activeBlockId
         ? activeBlockSnapshotRef.current
@@ -2921,7 +2960,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       } else {
         activeRenderBlockIdRef.current = null;
       }
-    }, [activeActivationMode, activeBlockId, activeSelection, documentRenderState$, draftMarkdown]);
+    }, [activeActivationMode, activeBlockId, activeSelection, clearOverlayFrame, documentRenderState$, draftMarkdown]);
     useEffect(() => {
       const previousSelectedBlockIds = selectedRenderBlockIdsRef.current;
       previousSelectedBlockIds.forEach((blockId) => {
@@ -3073,7 +3112,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markdown: draftMarkdown,
       }
       : undefined);
-    const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload) => {
+    const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload, source: "begin" | "change") => {
       const { blockId, height, rowHeight, width, x, y } = frame;
       const blockIndex = getBlockIndexById(blockId);
       const blockMetadata = blockIndex >= 0 ? getBlockAtIndexForRender(blockId, blockIndex) : undefined;
@@ -3084,6 +3123,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
         : blockMetadata;
       if (!block) {
+        return undefined;
+      }
+
+      if (source === "change" && activeBlockIdRef.current && activeBlockIdRef.current !== blockId) {
         return undefined;
       }
 
@@ -3110,7 +3153,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [documentRenderState$, getBlockAtIndexForRender, getBlockIndexById]);
     const handleNativeBeginEditing = useCallback(
       (event: NativeEditorFrameEvent) => {
-        const block = applyNativeEditorFrame(event.nativeEvent);
+        const block = applyNativeEditorFrame(event.nativeEvent, "begin");
         if (block) {
           schedulePendingVerticalNavigationSelection();
           if (activeBlockIdRef.current !== block.id) {
@@ -3153,7 +3196,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
     const handleNativeEditorFrameChange = useCallback(
       (event: NativeEditorFrameEvent) => {
-        const block = applyNativeEditorFrame(event.nativeEvent);
+        const block = applyNativeEditorFrame(event.nativeEvent, "change");
         if (block) {
           schedulePendingVerticalNavigationSelection();
         }
@@ -3218,6 +3261,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownLayoutConfigJson={nativeMarkdownLayoutConfigJson}
           onBeginEditing={handleNativeBeginEditing}
           onBackspaceAtStart={handleNativeBackspaceAtStart}
+          onEnterPressed={handleNativeEnterPressed}
           onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}
           style={containerStyle}

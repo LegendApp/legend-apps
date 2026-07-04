@@ -18,6 +18,11 @@ export interface NativeProps extends ViewProps {
   markdownLayoutConfigJson?: string;
   onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
   onBackspaceAtStart?: DirectEventHandler<Readonly<{ blockId: string }>>;
+  onEnterPressed?: DirectEventHandler<Readonly<{
+    blockId: string;
+    selectionEnd: Double;
+    selectionStart: Double;
+  }>>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }
 

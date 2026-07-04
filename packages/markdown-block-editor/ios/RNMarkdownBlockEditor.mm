@@ -93,6 +93,39 @@ static NSInteger hangingPrefixLengthForMarkdown(NSString *markdown)
   return prefixRange.location != NSNotFound ? (NSInteger)NSMaxRange(prefixRange) : 0;
 }
 
+static BOOL markdownContainsLineBreak(NSString *markdown)
+{
+  return [markdown rangeOfCharacterFromSet:[NSCharacterSet newlineCharacterSet]].location != NSNotFound;
+}
+
+static BOOL isFencedCodeMarkdown(NSString *markdown)
+{
+  if (markdown.length == 0) {
+    return NO;
+  }
+
+  static NSRegularExpression *fenceStartRegex = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    fenceStartRegex = [NSRegularExpression regularExpressionWithPattern:@"^\\s*(?:```|~~~)"
+                                                                options:0
+                                                                  error:nil];
+  });
+
+  return [fenceStartRegex firstMatchInString:markdown options:0 range:NSMakeRange(0, markdown.length)] != nil;
+}
+
+static BOOL shouldInterceptStructuralEnterForBlock(NSString *blockId, NSString *markdown)
+{
+  if (blockId.length == 0 || markdownContainsLineBreak(markdown) || isFencedCodeMarkdown(markdown)) {
+    return NO;
+  }
+
+  const auto metadata =
+      margelo::nitro::legenddesktop::markdownparser::metadataForRegisteredBlockId(std::string([blockId UTF8String]));
+  return metadata.type != "codeBlock";
+}
+
 static void callFocus(id target)
 {
   SEL selector = focusSelector();
@@ -530,6 +563,24 @@ static void registerNativeMarkdownProvider()
   });
 }
 
+- (void)emitEnterPressedWithSelection:(NSRange)selection
+{
+  if (_activeBlockId.length == 0) {
+    return;
+  }
+
+  auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
+  if (!eventEmitter) {
+    return;
+  }
+
+  eventEmitter->onEnterPressed({
+    .blockId = std::string([_activeBlockId UTF8String] ?: ""),
+    .selectionEnd = (double)NSMaxRange(selection),
+    .selectionStart = (double)selection.location,
+  });
+}
+
 - (void)installEditorKeyDownMonitorIfNeeded
 {
   if (_editorKeyDownMonitor != nil) {
@@ -540,24 +591,41 @@ static void registerNativeMarkdownProvider()
   _editorKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                                                  handler:^NSEvent *_Nullable(NSEvent *event) {
     RNMarkdownEditorHost *strongSelf = weakSelf;
-    if (strongSelf == nil || event.keyCode != 51 || ![strongSelf activeEditorContainsFirstResponder]) {
+    if (strongSelf == nil || ![strongSelf activeEditorContainsFirstResponder]) {
       return event;
     }
 
     id editorInput = [strongSelf activeEditorInput];
     NSRange selection = callSelectedRange(editorInput);
-    NSInteger headingPrefixLength = hangingPrefixLengthForMarkdown([[strongSelf activeBlockView] currentMarkdown]);
-    BOOL isAtStart = selection.length == 0 && (
-      headingPrefixLength > 0
-        ? selection.location <= (NSUInteger)headingPrefixLength
-        : selection.location == 0
-    );
-    if (!isAtStart) {
-      return event;
+    if (event.keyCode == 51) {
+      NSInteger headingPrefixLength = hangingPrefixLengthForMarkdown([[strongSelf activeBlockView] currentMarkdown]);
+      BOOL isAtStart = selection.length == 0 && (
+        headingPrefixLength > 0
+          ? selection.location <= (NSUInteger)headingPrefixLength
+          : selection.location == 0
+      );
+      if (!isAtStart) {
+        return event;
+      }
+
+      [strongSelf emitBackspaceAtStart];
+      return nil;
     }
 
-    [strongSelf emitBackspaceAtStart];
-    return nil;
+    BOOL isPlainEnter = (event.keyCode == 36 || event.keyCode == 76) &&
+      (event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagShift)) == 0;
+    RNMarkdownBlockActivationView *activeBlockView = [strongSelf activeBlockView];
+    NSString *markdown = [activeBlockView currentMarkdown];
+    if (
+      isPlainEnter &&
+      selection.length == 0 &&
+      shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)
+    ) {
+      [strongSelf emitEnterPressedWithSelection:selection];
+      return nil;
+    }
+
+    return event;
   }];
 }
 
