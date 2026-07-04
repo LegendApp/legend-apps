@@ -1,6 +1,6 @@
 import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import {
   SettingsPage,
   SettingsRow,
@@ -163,8 +163,8 @@ function SyntaxSettingsContent() {
             title={getSyntaxLanguageLabel(language)}
           />
         )) : (
-          <View className="px-1 py-1.5">
-            <Text className="text-text-secondary" style={styles.noteText}>
+          <View className="px-1 py-2">
+            <Text className="text-xs text-text-secondary">
               No languages recorded yet.
             </Text>
           </View>
@@ -186,12 +186,11 @@ function CommandLineButton({
   return (
     <Pressable
       accessibilityRole="button"
-      className="h-8 justify-center rounded-md border border-border-primary bg-surface px-3 hover:bg-surface-muted active:bg-surface-muted"
+      className={`h-8 justify-center rounded-md border border-border-primary bg-surface px-3 hover:bg-surface-muted active:bg-surface-muted${disabled ? " opacity-60" : ""}`}
       disabled={disabled}
       onPress={onPress}
-      style={disabled ? styles.disabled : null}
     >
-      <Text className="font-medium text-text-primary" style={styles.buttonText}>{label}</Text>
+      <Text className="text-sm font-medium text-text-primary">{label}</Text>
     </Pressable>
   );
 }
@@ -199,8 +198,7 @@ function CommandLineButton({
 function CliStatusText({ status }: { status: DiffCliInstallStatus | null }) {
   return (
     <Text
-      className={status?.installed ? "font-medium text-text-primary" : "font-medium text-text-secondary"}
-      style={styles.statusText}
+      className={status?.installed ? "text-sm font-medium text-text-primary" : "text-sm font-medium text-text-secondary"}
     >
       {status?.installed ? "Installed" : "Not installed"}
     </Text>
@@ -288,7 +286,7 @@ function CommandLineSettingsContent() {
           <SettingsRow
             align="center"
             control={(
-              <Text className="text-text-secondary" numberOfLines={1} style={styles.pathText}>
+              <Text className="max-w-64 text-xs text-text-secondary" numberOfLines={1}>
                 {status.profileInstalled ? "Configured" : "Missing"}
               </Text>
             )}
@@ -298,14 +296,14 @@ function CommandLineSettingsContent() {
         ) : null}
         {sourceCommand ? (
           <View className="px-1 pt-1">
-            <Text className="text-text-secondary leading-relaxed" style={styles.noteText}>
+            <Text className="text-xs leading-relaxed text-text-secondary">
               New terminal windows will pick up ld automatically. In an existing terminal, run {sourceCommand}.
             </Text>
           </View>
         ) : null}
         {error ? (
           <View className="px-1 pt-1">
-            <Text className="text-danger" style={styles.errorText}>{error}</Text>
+            <Text className="text-xs text-danger">{error}</Text>
           </View>
         ) : null}
       </SettingsSection>
@@ -345,25 +343,3 @@ export function SettingsWindow() {
 }
 
 export default SettingsWindow;
-
-const styles = StyleSheet.create({
-  buttonText: {
-    fontSize: 13,
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  errorText: {
-    fontSize: 12,
-  },
-  noteText: {
-    fontSize: 12,
-  },
-  pathText: {
-    fontSize: 12,
-    maxWidth: 260,
-  },
-  statusText: {
-    fontSize: 13,
-  },
-});

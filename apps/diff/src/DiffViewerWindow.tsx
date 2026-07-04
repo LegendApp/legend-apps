@@ -175,7 +175,6 @@ const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
 const diffSidebarFilterHeight = 28;
 const diffSidebarFilterMarginTop = 4;
-const diffSidebarFolderPaddingTop = 12;
 const diffSidebarFilterReservedHeight =
   diffSidebarFilterMarginTop +
   diffSidebarFilterHeight;
@@ -526,8 +525,8 @@ function createDiffSidebarEntries(files: readonly DiffFileSummary[]) {
 
 function DiffSidebarFolderRow({ color, title }: DiffSidebarFolderRowProps) {
   return (
-    <View style={styles.sidebarFolder}>
-      <Text numberOfLines={1} style={[styles.sidebarFolderText, { color }]}>
+    <View className="justify-center px-3 pb-1 pt-3" style={styles.sidebarFolder}>
+      <Text className="text-xs font-medium leading-4" numberOfLines={1} style={{ color }}>
         {title}
       </Text>
     </View>
@@ -553,6 +552,7 @@ function DiffSidebarFileRow({
     <Pressable
       accessibilityLabel={`${filename}, ${statusPresentation.title}`}
       accessibilityRole="button"
+      className="flex-row items-center gap-2 px-3"
       onPress={onPress}
       style={({ pressed }) => [
         styles.sidebarFile,
@@ -565,15 +565,15 @@ function DiffSidebarFileRow({
         { opacity: pressed ? 0.72 : 1 },
       ]}
     >
-      <View style={[styles.sidebarStatusIcon, { backgroundColor: statusPresentation.backgroundColor }]}>
+      <View className="h-4 w-4 items-center justify-center rounded" style={{ backgroundColor: statusPresentation.backgroundColor }}>
         <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={11} yOffset={statusPresentation.iconYOffset} />
       </View>
-      <Text numberOfLines={1} style={[styles.sidebarFileName, { color: foregroundColor }]}>
+      <Text className="min-w-0 flex-1 text-sm font-normal leading-5" numberOfLines={1} style={{ color: foregroundColor }}>
         {filename}{mergeFile?.hasUnsavedDraft ? " *" : ""}
       </Text>
       {mergeFile && mergeFile.markerBlocks.length > 0 ? (
-        <View style={[styles.sidebarConflictBadge, { backgroundColor: conflictBadgeBackgroundColor }]}>
-          <Text style={[styles.sidebarConflictBadgeText, { color: conflictBadgeTextColor }]}>
+        <View className="h-4 min-w-4 items-center justify-center rounded-full px-1" style={{ backgroundColor: conflictBadgeBackgroundColor }}>
+          <Text className="text-xs font-bold leading-3" style={{ color: conflictBadgeTextColor }}>
             {mergeFile.markerBlocks.length}
           </Text>
         </View>
@@ -4294,50 +4294,16 @@ const styles = StyleSheet.create({
     paddingTop: diffSidebarTopInset,
   },
   sidebarFile: {
-    alignItems: "center",
     borderColor: "transparent",
-    borderRadius: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 8,
     height: diffSidebarFileRowHeight,
-    paddingHorizontal: 10,
-  },
-  sidebarFileName: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "400",
-    lineHeight: 18,
-    minWidth: 0,
   },
   sidebarFolder: {
     height: diffSidebarFileRowHeight,
-    justifyContent: "center",
-    paddingBottom: 4,
-    paddingHorizontal: 10,
-    paddingTop: diffSidebarFolderPaddingTop,
-  },
-  sidebarFolderText: {
-    fontSize: 11,
-    fontWeight: "500",
-    lineHeight: 14,
-  },
-  sidebarConflictBadge: {
-    alignItems: "center",
-    borderRadius: 7,
-    height: 15,
-    justifyContent: "center",
-    minWidth: 15,
-    paddingHorizontal: 4,
-  },
-  sidebarConflictBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    lineHeight: 12,
   },
   sidebarFilter: {
-    marginHorizontal: 10,
+    marginHorizontal: 12,
     marginTop: diffSidebarFilterMarginTop,
     minHeight: diffSidebarFilterHeight,
   },
@@ -4351,13 +4317,6 @@ const styles = StyleSheet.create({
   },
   sidebarList: {
     flex: 1,
-  },
-  sidebarStatusIcon: {
-    alignItems: "center",
-    borderRadius: 3,
-    height: 16,
-    justifyContent: "center",
-    width: 16,
   },
   unsavedMergeBanner: {
     alignItems: "center",

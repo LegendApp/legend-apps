@@ -21,28 +21,28 @@ export type GlassToastProps = {
 export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000022", title }: GlassToastProps) {
   const maxWidthStyle = { maxWidth };
   return (
-    <View style={[styles.root, style]}>
+    <View className="items-center" style={style}>
       <View style={[styles.shadow, maxWidthStyle]}>
-        <View style={[styles.frame, maxWidthStyle]}>
+        <View className="min-h-10 overflow-hidden rounded-lg" style={maxWidthStyle}>
           <GlassEffectView glassStyle="regular" tintColor={tintColor} style={styles.glass} />
-          <View style={[styles.inner, maxWidthStyle]}>
-            <View style={styles.text}>
-              <Text numberOfLines={1} style={styles.title}>
+          <View className="min-h-10 flex-row items-center gap-3 px-3" style={maxWidthStyle}>
+            <View className="min-w-0 max-w-56">
+              <Text className="text-sm font-bold leading-5 text-white" numberOfLines={1}>
                 {title}
               </Text>
             </View>
             {actions && actions.length > 0 ? (
-              <View style={styles.actions}>
+              <View className="flex-row gap-2">
                 {actions.map((action) => {
                   const isPrimary = action.variant === "primary";
                   return (
                     <Pressable
                       accessibilityRole="button"
+                      className="h-7 items-center justify-center rounded border px-3"
                       disabled={action.disabled}
                       key={action.label}
                       onPress={action.onPress}
                       style={({ pressed }) => [
-                        styles.button,
                         isPrimary ? styles.primaryButton : null,
                         action.minWidth ? { minWidth: action.minWidth } : null,
                         {
@@ -52,7 +52,7 @@ export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000
                         },
                       ]}
                     >
-                      <Text style={styles.buttonText}>{action.label}</Text>
+                      <Text className="text-xs font-bold leading-4 text-white">{action.label}</Text>
                     </Pressable>
                   );
                 })}
@@ -66,45 +66,12 @@ export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000
 }
 
 const styles = StyleSheet.create({
-  actions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  button: {
-    alignItems: "center",
-    borderRadius: 5,
-    borderWidth: 1,
-    height: 28,
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
-  },
-  frame: {
-    borderRadius: 8,
-    minHeight: 40,
-    overflow: "hidden",
-  },
   glass: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 8,
   },
-  inner: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 40,
-    paddingHorizontal: 10,
-  },
   primaryButton: {
     backgroundColor: "#ffffff24",
-  },
-  root: {
-    alignItems: "center",
   },
   shadow: {
     alignSelf: "center",
@@ -113,15 +80,5 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 8, width: 0 },
     shadowOpacity: 0.28,
     shadowRadius: 18,
-  },
-  text: {
-    maxWidth: 230,
-    minWidth: 0,
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 17,
   },
 });
