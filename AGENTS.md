@@ -21,6 +21,12 @@ Use Bun from the repo root.
 
 TypeScript is strict, ESM-based, and uses React JSX (`react-jsx`). Follow the existing style: two-space indentation, double quotes, semicolons, and named exports for package APIs. Package names use `@legend-desktop/<kebab-name>`. Native module files follow the existing `Native<Name>.ts`, `RN<Name>.podspec`, and platform class naming patterns.
 
+## UI Styling
+
+Prefer Uniwind `className` for static layout, spacing, borders, colors, typography, and app chrome. Use `StyleSheet` or inline style objects when they are clearer or more appropriate for hot render paths, highly dynamic values, native/platform-specific behavior, measured layout, `StyleSheet.hairlineWidth`, or APIs that require stable style objects.
+
+When converting existing `StyleSheet` values to Uniwind, favor whole-number Tailwind spacing steps and standard text sizes. Do not preserve odd pixel values by moving them to fractional classes unless there is a specific visual, native, or measured-layout reason.
+
 ## Native View Lifecycle
 
 Custom Fabric native view components that own native subviews, controllers, delegates, cached props, or other mutable native state should implement `prepareForRecycle` and reset that state before reuse. Keep the reset local to the component that owns the native state; TurboModules and stateless native views do not need this hook.
