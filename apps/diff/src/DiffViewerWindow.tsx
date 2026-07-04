@@ -173,6 +173,12 @@ import {
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
+const diffSidebarFilterHeight = 28;
+const diffSidebarFilterMarginTop = 4;
+const diffSidebarFolderPaddingTop = 12;
+const diffSidebarFilterReservedHeight =
+  diffSidebarFilterMarginTop +
+  diffSidebarFilterHeight;
 const diffUnsavedMergeBannerHeight = 48;
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
@@ -285,7 +291,7 @@ type DiffSidebarFileRowProps = {
 };
 
 type DiffSidebarFolderRowProps = {
-  mutedColor: string;
+  color: string;
   title: string;
 };
 
@@ -518,10 +524,10 @@ function createDiffSidebarEntries(files: readonly DiffFileSummary[]) {
   return entries;
 }
 
-function DiffSidebarFolderRow({ mutedColor, title }: DiffSidebarFolderRowProps) {
+function DiffSidebarFolderRow({ color, title }: DiffSidebarFolderRowProps) {
   return (
     <View style={styles.sidebarFolder}>
-      <Text numberOfLines={1} style={[styles.sidebarFolderText, { color: mutedColor }]}>
+      <Text numberOfLines={1} style={[styles.sidebarFolderText, { color }]}>
         {title}
       </Text>
     </View>
@@ -2354,6 +2360,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     displayTheme.colors.surface,
   );
   const mutedColor = displayTheme.colors.muted;
+  const sidebarFolderColor = mixHexColor(
+    mutedColor,
+    backgroundColor,
+    0.22,
+    mutedColor,
+  );
   const selectedSidebarFileBackgroundColor = mixHexColor(
     backgroundColor,
     displayTheme.colors.primary,
@@ -3655,7 +3667,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
     let row: ReactElement;
     if (item.type === "folder") {
-      row = <DiffSidebarFolderRow mutedColor={mutedColor} title={item.title} />;
+      row = <DiffSidebarFolderRow color={sidebarFolderColor} title={item.title} />;
     } else {
       const file = item.file;
       const mergeFile = getMergeConflictFileForDiffFile(mergeState, file);
@@ -3695,6 +3707,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     mergeState,
     mutedColor,
     selectedSidebarFileBackgroundColor,
+    sidebarFolderColor,
     sidebarConflictBadgeBackgroundColor,
     sidebarConflictBadgeTextColor,
   ]);
@@ -3856,7 +3869,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
   const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - 43) : 0;
+  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - diffSidebarFilterReservedHeight) : 0;
   const currentActiveFileIndex = useValue(activeFileIndex$);
   const activeMergeFile = state.status === "loaded"
     ? getActiveMergeFile({ activeFileIndex: currentActiveFileIndex, files: state.files, mergeState })
@@ -4294,20 +4307,21 @@ const styles = StyleSheet.create({
   sidebarFileName: {
     flex: 1,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "400",
     lineHeight: 18,
     minWidth: 0,
   },
   sidebarFolder: {
     height: diffSidebarFileRowHeight,
-    justifyContent: "flex-end",
-    paddingBottom: 3,
-    paddingHorizontal: 20,
+    justifyContent: "center",
+    paddingBottom: 4,
+    paddingHorizontal: 10,
+    paddingTop: diffSidebarFolderPaddingTop,
   },
   sidebarFolderText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
-    lineHeight: 16,
+    lineHeight: 14,
   },
   sidebarConflictBadge: {
     alignItems: "center",
@@ -4323,9 +4337,9 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   sidebarFilter: {
-    marginBottom: 8,
     marginHorizontal: 10,
-    minHeight: 28,
+    marginTop: diffSidebarFilterMarginTop,
+    minHeight: diffSidebarFilterHeight,
   },
   sidebarEmpty: {
     alignItems: "center",
