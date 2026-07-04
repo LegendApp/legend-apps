@@ -428,6 +428,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
+    const pendingSplitRef = useRef<{
+      afterMarkdown: string;
+      beforeMarkdown: string;
+      sourceBlockId: string;
+    } | null>(null);
+    const pendingMergeRef = useRef<{
+      currentMarkdown: string;
+      mergedMarkdown: string;
+      previousMarkdown: string;
+      sourceBlockId: string;
+    } | null>(null);
     const focusAdjacentBlockQueueRef = useRef<FocusAdjacentBlockRequest[]>([]);
     const focusAdjacentBlockInFlightRef = useRef(false);
     const pendingVerticalNavigationSelectionRef = useRef<PendingVerticalNavigationSelection | null>(null);
@@ -1211,6 +1222,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
+        const pendingSplit = {
+          afterMarkdown,
+          beforeMarkdown,
+          sourceBlockId: block.id,
+        };
+        pendingSplitRef.current = pendingSplit;
+
         try {
           clearTypingHistoryGroup();
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
@@ -1255,21 +1273,62 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             nextActiveBlockId = block.id;
           }
           const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === nextActiveBlockId);
-          activeBlockSnapshotRef.current = nextActiveBlock ?? {
+          const pendingAfterMarkdown = pendingSplitRef.current === pendingSplit
+            ? pendingSplit.afterMarkdown
+            : afterMarkdown;
+          if (pendingSplitRef.current === pendingSplit) {
+            pendingSplitRef.current = null;
+          }
+          const nextActiveBlockSnapshot = nextActiveBlock ?? {
             ...block,
             id: nextActiveBlockId,
             markdown: afterMarkdown,
           };
+          activeBlockSnapshotRef.current = nextActiveBlockSnapshot;
           activeBlockIdRef.current = nextActiveBlockId;
           nativeEditingBlockIdRef.current = nextActiveBlockId;
-          draftMarkdownRef.current = afterMarkdown;
-          committedMarkdownRef.current = afterMarkdown;
-          setDraftMarkdown(afterMarkdown);
+          draftMarkdownRef.current = nextActiveBlockSnapshot.markdown;
+          committedMarkdownRef.current = nextActiveBlockSnapshot.markdown;
+          setDraftMarkdown(nextActiveBlockSnapshot.markdown);
           setActiveActivationMode("programmatic");
-          setActiveSelection(afterMarkdown.length);
+          setActiveSelection(nextActiveBlockSnapshot.markdown.length);
           setActiveBlockId(nextActiveBlockId);
+
+          if (pendingAfterMarkdown !== nextActiveBlockSnapshot.markdown) {
+            updateRenderedBlockMarkdown(nextActiveBlockId, pendingAfterMarkdown);
+            const updateResult = await adapter.applyTransaction(documentState.snapshot.documentId, {
+              type: "updateBlockMarkdown",
+              blockId: nextActiveBlockId,
+              markdown: pendingAfterMarkdown,
+            });
+            validateTransactionResult(updateResult);
+            pushUpdateBlockHistoryEntry({
+              type: "updateBlockMarkdown",
+              blockId: nextActiveBlockId,
+              beforeMarkdown: nextActiveBlockSnapshot.markdown,
+              afterMarkdown: pendingAfterMarkdown,
+            });
+            applyTransactionResult(updateResult);
+
+            const updatedActiveBlock = updateResult.changedBlocks[0];
+            if (updatedActiveBlock) {
+              activeBlockSnapshotRef.current = updatedActiveBlock;
+              draftMarkdownRef.current = updatedActiveBlock.markdown;
+              committedMarkdownRef.current = updatedActiveBlock.markdown;
+              setDraftMarkdown(updatedActiveBlock.markdown);
+              setActiveSelection(updatedActiveBlock.markdown.length);
+              const activeInput = activeInputRef.current;
+              if (activeInput) {
+                activeInput.setValue(activeInputMarkdownForBlock(updatedActiveBlock, updatedActiveBlock.markdown));
+                activeInput.setSelection(updatedActiveBlock.markdown.length, updatedActiveBlock.markdown.length);
+              }
+            }
+          }
           markDirty();
         } catch (error) {
+          if (pendingSplitRef.current === pendingSplit) {
+            pendingSplitRef.current = null;
+          }
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
         }
@@ -1282,6 +1341,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+        pushUpdateBlockHistoryEntry,
+        updateRenderedBlockMarkdown,
         validateTransactionResult,
       ],
     );
@@ -1289,6 +1350,23 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const handleChangeMarkdown = useCallback(
       (block: MarkdownBlockSnapshot, markdown: string) => {
         if (activeBlockIdRef.current !== block.id) {
+          return;
+        }
+
+        const pendingSplit = pendingSplitRef.current;
+        if (pendingSplit?.sourceBlockId === block.id) {
+          const splitMarkdown = getStructuralSplitMarkdown(markdown, committedMarkdownRef.current, activeInputSelectionRef.current);
+          if (splitMarkdown && splitMarkdown.beforeMarkdown === pendingSplit.beforeMarkdown) {
+            const continuationMarkdown = getSplitContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
+            pendingSplit.afterMarkdown = continuationMarkdown.afterMarkdown;
+            return;
+          }
+        }
+
+        const pendingMerge = pendingMergeRef.current;
+        if (pendingMerge?.sourceBlockId === block.id) {
+          pendingMerge.currentMarkdown = markdown;
+          pendingMerge.mergedMarkdown = `${pendingMerge.previousMarkdown}${markdown}`;
           return;
         }
 
@@ -1606,6 +1684,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const mergedMarkdown = `${previousMarkdown}${currentMarkdown}`;
         const originalRangeMarkdown = `${previousMarkdown}\n\n${currentMarkdown}`;
         const joinSelection = previousMarkdown.length;
+        const pendingMerge = {
+          currentMarkdown,
+          mergedMarkdown,
+          previousMarkdown,
+          sourceBlockId: block.id,
+        };
+        pendingMergeRef.current = pendingMerge;
 
         try {
           clearTypingHistoryGroup();
@@ -1634,6 +1719,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
           const nextActiveBlock = result.changedBlocks[0];
           if (nextActiveBlock) {
+            const pendingMergedMarkdown = pendingMergeRef.current === pendingMerge
+              ? pendingMerge.mergedMarkdown
+              : mergedMarkdown;
+            if (pendingMergeRef.current === pendingMerge) {
+              pendingMergeRef.current = null;
+            }
             const nextSelection = Math.min(joinSelection, nextActiveBlock.markdown.length);
             activeBlockSnapshotRef.current = nextActiveBlock;
             activeBlockIdRef.current = nextActiveBlock.id;
@@ -1645,9 +1736,45 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             setActiveActivationMode("programmatic");
             setActiveSelection(nextSelection);
             setActiveBlockId(nextActiveBlock.id);
+
+            if (pendingMergedMarkdown !== nextActiveBlock.markdown) {
+              updateRenderedBlockMarkdown(nextActiveBlock.id, pendingMergedMarkdown);
+              const updateResult = await adapter.applyTransaction(documentState.snapshot.documentId, {
+                type: "updateBlockMarkdown",
+                blockId: nextActiveBlock.id,
+                markdown: pendingMergedMarkdown,
+              });
+              validateTransactionResult(updateResult);
+              pushUpdateBlockHistoryEntry({
+                type: "updateBlockMarkdown",
+                blockId: nextActiveBlock.id,
+                beforeMarkdown: nextActiveBlock.markdown,
+                afterMarkdown: pendingMergedMarkdown,
+              });
+              applyTransactionResult(updateResult);
+
+              const updatedActiveBlock = updateResult.changedBlocks[0];
+              if (updatedActiveBlock) {
+                const updatedSelection = Math.min(joinSelection, updatedActiveBlock.markdown.length);
+                activeBlockSnapshotRef.current = updatedActiveBlock;
+                draftMarkdownRef.current = updatedActiveBlock.markdown;
+                committedMarkdownRef.current = updatedActiveBlock.markdown;
+                activeInputSelectionRef.current = { start: updatedSelection, end: updatedSelection };
+                setDraftMarkdown(updatedActiveBlock.markdown);
+                setActiveSelection(updatedSelection);
+                const activeInput = activeInputRef.current;
+                if (activeInput) {
+                  activeInput.setValue(activeInputMarkdownForBlock(updatedActiveBlock, updatedActiveBlock.markdown));
+                  activeInput.setSelection(updatedSelection, updatedSelection);
+                }
+              }
+            }
           }
           markDirty();
         } catch (error) {
+          if (pendingMergeRef.current === pendingMerge) {
+            pendingMergeRef.current = null;
+          }
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
         }
@@ -1662,6 +1789,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+        pushUpdateBlockHistoryEntry,
+        updateRenderedBlockMarkdown,
         validateTransactionResult,
       ],
     );

@@ -87,12 +87,21 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   pendingGetBlockGate: Promise<void> | undefined;
   pendingTransactionGate: Promise<void> | undefined;
   private blocks: MarkdownBlockSnapshot[] = [];
+  private nextBlockNumber = 100;
   private revision = 0;
 
   constructor(
     private documentSnapshot: MarkdownDocumentSnapshot,
     private options: { metadataOnlySyncBlocks?: boolean } = {},
   ) {}
+
+  get blockIds() {
+    return this.blocks.map((candidate) => candidate.id);
+  }
+
+  get sourceMarkdown() {
+    return this.blocks.map((candidate) => candidate.markdown).join("\n\n");
+  }
 
   async load() {
     this.blocks = [...this.documentSnapshot.initialBlocks] as MarkdownBlockSnapshot[];
@@ -165,6 +174,56 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
       };
     }
 
+    if (transaction.type === "splitBlock") {
+      const index = this.blocks.findIndex((candidate) => candidate.id === transaction.blockId);
+      if (index < 0) {
+        throw new Error(`Missing test block: ${transaction.blockId}`);
+      }
+
+      const originalBlock = this.blocks[index]!;
+      const beforeHeadingLevel = headingLevelFromMarkdown(transaction.beforeMarkdown);
+      const afterHeadingLevel = headingLevelFromMarkdown(transaction.afterMarkdown);
+      const beforeBlock = {
+        ...originalBlock,
+        contentEndByte: transaction.beforeMarkdown.length,
+        contentStartByte: 0,
+        headingLevel: beforeHeadingLevel,
+        markdown: transaction.beforeMarkdown,
+        sourceEndByte: transaction.beforeMarkdown.length,
+        textRevision: originalBlock.textRevision + 1,
+        type: beforeHeadingLevel > 0 ? "heading" : "paragraph",
+      } satisfies MarkdownBlockSnapshot;
+      const afterBlock = {
+        ...originalBlock,
+        contentEndByte: transaction.afterMarkdown.length,
+        contentStartByte: 0,
+        headingLevel: afterHeadingLevel,
+        id: this.nextBlockId(),
+        index: index + 1,
+        markdown: transaction.afterMarkdown,
+        sourceEndByte: transaction.afterMarkdown.length,
+        sourceStartByte: 0,
+        textRevision: 0,
+        type: afterHeadingLevel > 0 ? "heading" : "paragraph",
+      } satisfies MarkdownBlockSnapshot;
+
+      this.blocks.splice(index, 1, beforeBlock, afterBlock);
+      this.blocks = this.blocks.map((candidate, nextIndex) => ({ ...candidate, index: nextIndex }));
+      this.revision += 1;
+
+      return {
+        changedBlocks: [this.blocks[index]!, this.blocks[index + 1]!],
+        changedRange: {
+          blockIds: [beforeBlock.id, afterBlock.id],
+          deleteCount: 1,
+          startBlockIndex: index,
+        },
+        retiredBlockIds: [],
+        revision: this.revision,
+        sourceLength: this.blocks.reduce((total, blockSnapshot) => total + blockSnapshot.markdown.length, 0),
+      };
+    }
+
     if (transaction.type !== "updateBlockMarkdown") {
       throw new Error(`Unexpected native overlay transaction: ${transaction.type}`);
     }
@@ -206,6 +265,17 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
   async saveAs() {}
 
   async close() {}
+
+  private nextBlockId() {
+    const existingBlockIds = new Set(this.blocks.map((candidate) => candidate.id));
+    let id = `d1:b${this.nextBlockNumber}`;
+    while (existingBlockIds.has(id)) {
+      this.nextBlockNumber += 1;
+      id = `d1:b${this.nextBlockNumber}`;
+    }
+    this.nextBlockNumber += 1;
+    return id;
+  }
 }
 
 function renderedNodeIndex(renderer: TestRenderer.ReactTestRenderer, predicate: (node: TestRenderer.ReactTestInstance) => boolean) {
@@ -237,6 +307,76 @@ async function changeText(input: TestRenderer.ReactTestInstance, markdown: strin
     input.props.onChangeText(markdown);
   });
   await Promise.resolve();
+}
+
+async function changeSelection(input: TestRenderer.ReactTestInstance, start: number, end = start) {
+  await act(async () => {
+    input.props.onChangeSelection({ end, start });
+  });
+  await Promise.resolve();
+}
+
+function expectUniqueBlockIds(adapter: NativeOverlayAdapter) {
+  expect(new Set(adapter.blockIds).size).toBe(adapter.blockIds.length);
+}
+
+async function expectStableKeyboardState(
+  renderer: TestRenderer.ReactTestRenderer,
+  adapter: NativeOverlayAdapter,
+  onError: jest.Mock,
+) {
+  await Promise.resolve();
+  expect(editorInput(renderer).props.defaultValue).toEqual(expect.any(String));
+  expectUniqueBlockIds(adapter);
+  expect(onError).not.toHaveBeenCalled();
+}
+
+class MarkdownKeyboardDriver {
+  private selection = { end: 0, start: 0 };
+  private value = "";
+
+  constructor(
+    private renderer: TestRenderer.ReactTestRenderer,
+    private adapter: NativeOverlayAdapter,
+    private onError: jest.Mock,
+  ) {
+    this.syncFromInput();
+  }
+
+  async setSelection(start: number, end = start) {
+    this.selection = { end, start };
+    await changeSelection(editorInput(this.renderer), start, end);
+    await expectStableKeyboardState(this.renderer, this.adapter, this.onError);
+  }
+
+  async pressEnter() {
+    const nextValue = this.replaceSelection("\n");
+    const nextSelection = Math.min(this.selection.start, this.selection.end) + 1;
+    await changeText(editorInput(this.renderer), nextValue);
+    this.syncFromInput(nextValue, nextSelection);
+    await expectStableKeyboardState(this.renderer, this.adapter, this.onError);
+  }
+
+  async typeText(text: string) {
+    const nextValue = this.replaceSelection(text);
+    const nextSelection = Math.min(this.selection.start, this.selection.end) + text.length;
+    await changeText(editorInput(this.renderer), nextValue);
+    this.syncFromInput(nextValue, nextSelection);
+    await expectStableKeyboardState(this.renderer, this.adapter, this.onError);
+  }
+
+  private replaceSelection(text: string) {
+    const selectionStart = Math.min(this.selection.start, this.selection.end);
+    const selectionEnd = Math.max(this.selection.start, this.selection.end);
+    return `${this.value.slice(0, selectionStart)}${text}${this.value.slice(selectionEnd)}`;
+  }
+
+  private syncFromInput(fallbackValue?: string, fallbackSelection?: number) {
+    const inputValue = editorInput(this.renderer).props.defaultValue;
+    this.value = typeof inputValue === "string" && inputValue !== this.value ? inputValue : fallbackValue ?? this.value;
+    const nextSelection = Math.min(fallbackSelection ?? this.selection.start, this.value.length);
+    this.selection = { end: nextSelection, start: nextSelection };
+  }
 }
 
 function flattenStyle(style: unknown) {
@@ -386,6 +526,182 @@ describe("MarkdownDocument native row editor", () => {
 
     const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
     expect(activeInput?.setSelection).not.toHaveBeenCalled();
+  });
+
+  it("keeps block ids unique when pressing enter and typing in the new native row editor block", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+    ]));
+    const onError = jest.fn();
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          onError={onError}
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 25,
+          markdown: "First",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    const keyboard = new MarkdownKeyboardDriver(renderer!, adapter, onError);
+    await keyboard.setSelection("First".length);
+    await keyboard.pressEnter();
+    await keyboard.typeText("Second");
+
+    expect(adapter.applyTransactions).toEqual([
+      {
+        afterMarkdown: "",
+        beforeMarkdown: "First",
+        blockId: "d1:b0",
+        type: "splitBlock",
+      },
+      {
+        blockId: "d1:b100",
+        markdown: "Second",
+        type: "updateBlockMarkdown",
+      },
+    ]);
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps enter-then-type stable when typing starts before the split transaction resolves", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+    ]));
+    let resolvePendingTransaction!: () => void;
+    adapter.pendingTransactionGate = new Promise<void>((resolve) => {
+      resolvePendingTransaction = resolve;
+    });
+    const onError = jest.fn();
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          onError={onError}
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 25,
+          markdown: "First",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    const keyboard = new MarkdownKeyboardDriver(renderer!, adapter, onError);
+    await keyboard.setSelection("First".length);
+    await keyboard.pressEnter();
+    await keyboard.typeText("Second");
+
+    await act(async () => {
+      resolvePendingTransaction();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("keeps backspace-merge-then-type stable when typing starts before the merge resolves", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    let resolvePendingTransaction!: () => void;
+    adapter.pendingTransactionGate = new Promise<void>((resolve) => {
+      resolvePendingTransaction = resolve;
+    });
+    const onError = jest.fn();
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          onError={onError}
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b1",
+          height: 25,
+          markdown: "Second",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 105,
+        },
+      });
+    });
+
+    const keyboard = new MarkdownKeyboardDriver(renderer!, adapter, onError);
+    await keyboard.setSelection(0);
+    await act(async () => {
+      host.props.onBackspaceAtStart({
+        nativeEvent: {
+          blockId: "d1:b1",
+        },
+      });
+      await Promise.resolve();
+    });
+    await keyboard.typeText("!");
+
+    await act(async () => {
+      resolvePendingTransaction();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(adapter.sourceMarkdown).toBe("First!Second");
+    expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("keeps full heading markdown in the row editor while heading level changes", async () => {
