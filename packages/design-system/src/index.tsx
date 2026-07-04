@@ -27,14 +27,14 @@ export function RadioOption<Value extends OptionValue = string>({
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
-      className="flex-row items-center gap-3 rounded-md border px-2 py-1.5"
+      className="flex-row items-center gap-3 rounded-md border px-2 py-2"
       onPress={() => onSelect(value)}
       style={selectedStyle}
     >
-      <View className="h-3.5 w-3.5 items-center justify-center rounded-full border" style={indicatorStyle}>
-        {selected ? <View className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
+      <View className="h-4 w-4 items-center justify-center rounded-full border" style={indicatorStyle}>
+        {selected ? <View className="h-2 w-2 rounded-full bg-primary" /> : null}
       </View>
-      <Text className="text-foreground" style={styles.radioOptionText}>{label}</Text>
+      <Text className="text-sm font-medium text-foreground">{label}</Text>
     </Pressable>
   );
 }
@@ -92,7 +92,7 @@ export function SegmentedOptions<Value extends OptionValue>({
           key={option.value}
           onPress={() => onChange(option.value)}
         >
-          <Text className="text-foreground" style={styles.segmentedOptionText}>{option.label}</Text>
+          <Text className="text-sm text-foreground">{option.label}</Text>
         </Pressable>
       ))}
     </View>
@@ -197,10 +197,10 @@ export function SelectControl<Value extends OptionValue = string>({
       onPress={handlePress}
       style={disabled ? styles.disabled : null}
     >
-      <Text className="min-w-0 flex-1 text-foreground" numberOfLines={1} style={styles.selectText}>
+      <Text className="min-w-0 flex-1 text-sm font-medium text-foreground" numberOfLines={1}>
         {selectedOption?.label ?? value}
       </Text>
-      <Text className="text-text-secondary" selectable={false} style={styles.selectChevron}>
+      <Text className="text-xs font-bold text-text-secondary" selectable={false}>
         v
       </Text>
     </Pressable>
@@ -265,20 +265,5 @@ const styles = StyleSheet.create({
   },
   nativeSegmentedControl: {
     height: 28,
-  },
-  radioOptionText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  segmentedOptionText: {
-    fontSize: 13,
-  },
-  selectChevron: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  selectText: {
-    fontSize: 13,
-    fontWeight: "500",
   },
 });

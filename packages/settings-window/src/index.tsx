@@ -161,9 +161,8 @@ export function SettingsWindow<PageId extends string = string>({
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       sidebarMinWidth={sidebarMinWidth}
-      style={styles.root}
     >
-      <View className="flex-1 overflow-hidden" style={styles.pane}>
+      <View className="min-w-0 flex-1 overflow-hidden">
         <SettingsSidebar
           onSelectionChange={setSelectedPage}
           pages={pages}
@@ -172,8 +171,7 @@ export function SettingsWindow<PageId extends string = string>({
         <SettingsToolbarBackground />
       </View>
       <View
-        className={cn("flex-1 overflow-hidden", contentBackgroundClassName)}
-        style={styles.pane}
+        className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}
       >
         {selectedPageConfig.render()}
         <SettingsToolbarBackground />
@@ -260,9 +258,8 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       sidebarMinWidth={sidebarMinWidth}
-      style={styles.root}
     >
-      <View className="flex-1 overflow-hidden" style={styles.pane}>
+      <View className="min-w-0 flex-1 overflow-hidden">
         <SettingsSidebar
           onSelectionChange={scrollToPage}
           pages={pages}
@@ -270,7 +267,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
         />
         <SettingsToolbarBackground />
       </View>
-      <View className={cn("flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
+      <View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}>
         <LegendList
           contentContainerStyle={styles.virtualizedSettingsListContent}
           data={pages}
@@ -295,7 +292,7 @@ function VirtualizedSettingsListPageRow<PageId extends string>({
 }: LegendListRenderItemProps<VirtualizedSettingsWindowPage<PageId>>) {
   return (
     <View className="flex-col gap-5" style={index > 0 ? styles.virtualizedSettingsListPageAfterFirst : undefined}>
-      <View className="flex-col gap-1.5">
+      <View className="flex-col gap-2">
         <Text className="text-xl font-semibold text-text-primary leading-tight">{item.title}</Text>
       </View>
       <View className="flex-col">
@@ -348,9 +345,8 @@ export function SettingsSidebar<PageId extends string = string>({
               onPress={() => onSelectionChange(page.id)}
             >
               <Text
-                className={isSelected ? "text-text-primary font-medium" : "text-text-secondary"}
+                className={isSelected ? "text-sm font-medium text-text-primary" : "text-sm text-text-secondary"}
                 numberOfLines={1}
-                style={styles.sidebarItemText}
               >
                 {page.title}
               </Text>
@@ -370,12 +366,11 @@ interface SettingsPageProps {
 
 export function SettingsPage({ actions, children, contentClassName }: SettingsPageProps) {
   return (
-    <View className="flex-1 overflow-hidden" style={styles.page}>
+    <View className="w-full flex-1 self-stretch overflow-hidden">
       {actions ? <View className="flex-row justify-end px-6 pt-4">{actions}</View> : null}
       <ScrollView
         className="flex-1"
-        contentContainerClassName={cn("flex flex-col", contentClassName)}
-        contentContainerStyle={styles.pageContent}
+        contentContainerClassName={cn("w-full max-w-4xl flex-col self-center px-8 pb-7 pt-14", contentClassName)}
         horizontal={false}
       >
         {children}
@@ -405,24 +400,24 @@ export function SettingsSection({
   headerRight,
   title,
 }: SettingsSectionProps) {
-  const containerClassName = cn("flex flex-col gap-2.5", !first && "mt-7", className);
+  const containerClassName = cn("flex flex-col gap-3", !first && "mt-7", className);
   const hasHeader = Boolean(title || description || headerRight);
   const contentNode = children
     ? card
       ? <SettingsRowGroup className={contentClassName}>{children}</SettingsRowGroup>
-      : <View className={cn("flex flex-col gap-3.5", contentClassName)}>{children}</View>
+      : <View className={cn("flex flex-col gap-4", contentClassName)}>{children}</View>
     : null;
 
   return (
     <View className={containerClassName}>
       {hasHeader ? (
         <View className="flex-row items-start justify-between gap-4">
-          <View className="flex-1 flex-col gap-0.5">
+          <View className="flex-1 flex-col gap-1">
             {title ? (
-              <Text className="font-semibold text-text-secondary leading-tight" style={styles.sectionTitle}>{title}</Text>
+              <Text className="text-sm font-semibold leading-tight text-text-secondary">{title}</Text>
             ) : null}
             {description ? (
-              <Text className="leading-relaxed text-text-secondary" style={styles.sectionDescription}>{description}</Text>
+              <Text className="text-xs leading-relaxed text-text-secondary">{description}</Text>
             ) : null}
           </View>
           {headerRight ? <View className="flex-none ml-4">{headerRight}</View> : null}
@@ -487,7 +482,7 @@ export function SettingsRow({
   return (
     <View
       className={cn(
-        "flex-row justify-between gap-5 px-4 py-3.5",
+        "flex-row justify-between gap-5 px-4 py-4",
         align === "center" ? "items-center" : "items-start",
         grouped ? "border-border-primary" : "",
         disabled ? "opacity-60" : "",
@@ -495,13 +490,13 @@ export function SettingsRow({
       )}
       style={grouped ? styles.groupedRow : undefined}
     >
-      <View className={cn("min-w-0 flex-1 flex-col gap-1 pr-6", contentClassName)} style={styles.rowText}>
-        <Text className="text-text-primary leading-tight" style={styles.rowTitle}>{title}</Text>
+      <View className={cn("min-w-0 flex-1 flex-col gap-1 pr-6", contentClassName)}>
+        <Text className="text-sm font-semibold leading-tight text-text-primary">{title}</Text>
         {description ? (
-          <Text className="leading-relaxed text-text-secondary" style={styles.rowDescription}>{description}</Text>
+          <Text className="text-xs leading-relaxed text-text-secondary">{description}</Text>
         ) : null}
       </View>
-      <View className={cn("max-w-full flex-shrink", controlWrapperClassName)} style={styles.rowControl}>
+      <View className={cn("max-w-full flex-shrink items-end", controlWrapperClassName)}>
         {control}
       </View>
     </View>
@@ -509,21 +504,6 @@ export function SettingsRow({
 }
 
 const styles = StyleSheet.create({
-  page: {
-    alignSelf: "stretch",
-    flex: 1,
-    overflow: "hidden",
-    width: "100%",
-  },
-  pageContent: {
-    alignSelf: "center",
-    flexDirection: "column",
-    maxWidth: 896,
-    paddingBottom: 28,
-    paddingHorizontal: 30,
-    paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
-    width: "100%",
-  },
   virtualizedSettingsList: {
     flex: 1,
   },
@@ -532,40 +512,12 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     maxWidth: 896,
     paddingBottom: 28,
-    paddingHorizontal: 30,
+    paddingHorizontal: 32,
     paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
     width: "100%",
   },
   virtualizedSettingsListPageAfterFirst: {
-    marginTop: 42,
-  },
-  pane: {
-    flex: 1,
-    minWidth: 0,
-  },
-  root: {
-    flex: 1,
-  },
-  rowControl: {
-    alignItems: "flex-end",
-    flexShrink: 0,
-    maxWidth: "100%",
-  },
-  rowDescription: {
-    fontSize: 12,
-  },
-  rowText: {
-    minWidth: 0,
-  },
-  rowTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  sectionDescription: {
-    fontSize: 12,
-  },
-  sectionTitle: {
-    fontSize: 13,
+    marginTop: 40,
   },
   groupedRow: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -573,9 +525,6 @@ const styles = StyleSheet.create({
   sidebarContent: {
     paddingHorizontal: 8,
     paddingTop: SETTINGS_SIDEBAR_TOP_INSET,
-  },
-  sidebarItemText: {
-    fontSize: 13,
   },
   toolbarBackground: {
     height: SETTINGS_TITLEBAR_CONTENT_INSET,
