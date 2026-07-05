@@ -334,12 +334,6 @@ const MarkdownBlockSelectionInput = memo(function MarkdownBlockSelectionInput({
   );
 });
 
-function logMarkdownDocumentDiagnostics(event: string, data: Record<string, unknown>) {
-  if (__DEV__) {
-    console.info(`[MarkdownDocument] ${event}`, data);
-  }
-}
-
 function countMarkdownLineBreaks(markdown: string) {
   return markdown.match(markdownLineBreakPattern)?.length ?? 0;
 }
@@ -2321,10 +2315,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         cancelHydration();
 
         let startIndex = snapshot.initialBlocks.length;
-        let hydratedBlockCount = 0;
-        let hydrationChunkCount = 0;
         const requestRevision = currentRevisionRef.current;
-        const hydrationStartedAt = Date.now();
         const hydrateNextChunk = () => {
           hydrateFrameRef.current = undefined;
           if (loadVersion !== loadVersionRef.current || requestRevision !== currentRevisionRef.current || startIndex >= snapshot.blockCount) {
@@ -2345,19 +2336,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const blocks = blocksOrIds as MarkdownBlockMetadata[];
               mergeBlocks(blocks, requestRevision);
               startIndex += blocks.length;
-              hydratedBlockCount += blocks.length;
-              hydrationChunkCount += 1;
 
               if (blocksOrIds.length > 0 && startIndex < snapshot.blockCount) {
                 hydrateFrameRef.current = requestAnimationFrame(hydrateNextChunk);
-              } else {
-                logMarkdownDocumentDiagnostics("hydrated", {
-                  blockCount: snapshot.blockCount,
-                  chunks: hydrationChunkCount,
-                  durationMs: Date.now() - hydrationStartedAt,
-                  hydratedBlockCount,
-                  initialBlockCount: snapshot.initialBlocks.length,
-                });
               }
             })
             .catch((error: unknown) => {
@@ -2458,14 +2439,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           loadedSnapshotRef.current = snapshot;
           commitBlockState(nextBlockState);
           setDocumentState({ status: "loaded", snapshot });
-          logMarkdownDocumentDiagnostics("loaded", {
-            blockCount: snapshot.blockCount,
-            documentMs: snapshot.timing.documentMs,
-            initialBlockCount: snapshot.initialBlocks.length,
-            parseMs: snapshot.timing.parseMs,
-            readMs: snapshot.timing.readMs,
-            sourceSize: snapshot.sourceSize,
-          });
           if (autoFocusFirstBlock) {
             const firstBlock = snapshot.initialBlocks[0];
             if (firstBlock) {
