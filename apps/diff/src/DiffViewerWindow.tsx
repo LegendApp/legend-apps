@@ -115,6 +115,10 @@ import {
   useDiffSideBySideRuntime,
 } from "./viewer/diffLoadedDocumentModel";
 import {
+  createDiffInlineMergeList,
+  type DiffInlineMergeRow,
+} from "./viewer/diffInlineMergeModel";
+import {
   fileMatchesFilter,
   getActiveDiffFile,
   getConflictedFileStatusPresentation,
@@ -411,15 +415,6 @@ type DiffNativeRowConfigProps = {
   syntaxHighlightingEnabled: boolean;
   themeName: string;
   tokenizationVersion: number;
-};
-
-type DiffInlineMergeRow = {
-  file: DiffMergeConflictFile;
-  itemIndex: number;
-  row: DiffMergeDisplayRow;
-  rowIndex: number;
-  sourceFileIndex: number;
-  sourceRowIndex: number;
 };
 
 function noopVirtualizedDocumentRequestRange() {
@@ -1966,117 +1961,30 @@ function useDiffInlineMergeModel({
     return map;
   }, [mergeDisplayModelByPath, mergeState]);
 
-  const createInlineRowsForFile = useCallback((
-    file: DiffMergeConflictFile,
-    sourceFileIndex: number,
-    sourceRowIndex: number,
-    nextItemIndex: { current: number },
-    rowByItemIndex: Map<number, DiffInlineMergeRow>,
-  ) => {
-    const model = mergeDisplayModelByPath.get(file.path);
-    if (!model || model.rows.length === 0) {
-      return [];
-    }
-
-    const itemIndexes: number[] = [];
-    for (let rowIndex = 0; rowIndex < model.rows.length; rowIndex += 1) {
-      const itemIndex = nextItemIndex.current;
-      nextItemIndex.current -= 1;
-      itemIndexes.push(itemIndex);
-      rowByItemIndex.set(itemIndex, {
-        file,
-        itemIndex,
-        row: model.rows[rowIndex],
-        rowIndex,
-        sourceFileIndex,
-        sourceRowIndex,
-      });
-    }
-    return itemIndexes;
-  }, [mergeDisplayModelByPath]);
-
-  const inlineList = useMemo(() => {
-    const rowByItemIndex = new Map<number, DiffInlineMergeRow>();
-    const nextItemIndex = { current: -1 };
-    const fileByIndex = new Map(files.map((file) => [file.index, file]));
-    const getMergeFile = (file: DiffFileSummary | undefined) => file ? getMergeConflictFileForDiffFile(mergeState, file) : null;
-    const sourceRowByItemIndex = new Map<number, number>();
-    let itemIndexes: number[];
-
-    if (viewMode === "unified") {
-      itemIndexes = [];
-      let fileCursor = 0;
-      for (const itemIndex of unifiedItemIndexes) {
-        const rowIndex = itemIndex ?? itemIndexes.length;
-        while (fileCursor < files.length) {
-          const currentFile = files[fileCursor];
-          const rowStart = Math.max(0, Math.floor(currentFile.rowStart));
-          const rowEnd = rowStart + Math.max(0, Math.floor(currentFile.rowCount));
-          if (rowEnd > rowIndex || fileCursor === files.length - 1) {
-            break;
-          }
-          fileCursor += 1;
-        }
-
-        const file = files[fileCursor];
-        const rowStart = file ? Math.max(0, Math.floor(file.rowStart)) : -1;
-        const rowEnd = file ? rowStart + Math.max(0, Math.floor(file.rowCount)) : -1;
-        const mergeFile = getMergeFile(file);
-        if (file && mergeFile && rowIndex === rowStart) {
-          itemIndexes.push(rowIndex);
-          sourceRowByItemIndex.set(rowIndex, rowIndex);
-          if (!collapsedFileIndexes.has(file.index)) {
-            itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, rowStart, nextItemIndex, rowByItemIndex));
-          }
-        } else if (file && mergeFile && !collapsedFileIndexes.has(file.index) && rowIndex > rowStart && rowIndex < rowEnd) {
-          // The merge rows replace the original conflicted file body.
-        } else {
-          itemIndexes.push(rowIndex);
-          sourceRowByItemIndex.set(rowIndex, rowIndex);
-        }
-      }
-    } else {
-      itemIndexes = [];
-      const headerListIndexes = [...sideBySideFileHeaderByListIndex.keys()].sort((left, right) => left - right);
-      let skipUntil = -1;
-      for (let listIndex = 0; listIndex < sideBySideItemIndexes.length; listIndex += 1) {
-        if (listIndex < skipUntil) {
-          continue;
-        }
-
-        const header = sideBySideFileHeaderByListIndex.get(listIndex);
-        const file = header ? fileByIndex.get(header.fileIndex) : undefined;
-        const mergeFile = getMergeFile(file);
-        if (header && file && mergeFile && !collapsedFileIndexes.has(file.index)) {
-          const nextHeader = headerListIndexes.find((headerIndex) => headerIndex > listIndex) ?? sideBySideItemIndexes.length;
-          const rowIndex = sideBySideItemIndexes[listIndex] ?? listIndex;
-          itemIndexes.push(rowIndex);
-          sourceRowByItemIndex.set(rowIndex, rowIndex);
-          itemIndexes.push(...createInlineRowsForFile(mergeFile, file.index, header.sourceStart, nextItemIndex, rowByItemIndex));
-          skipUntil = nextHeader;
-        } else {
-          const rowIndex = sideBySideItemIndexes[listIndex] ?? listIndex;
-          itemIndexes.push(rowIndex);
-          sourceRowByItemIndex.set(rowIndex, rowIndex);
-        }
-      }
-    }
-
-    return {
-      itemIndexes,
-      rowByItemIndex,
-      sourceRowByItemIndex,
-    };
-  }, [
-    collapsedFileIndexes,
-    createInlineRowsForFile,
-    files,
-    mergeState,
-    sideBySideFileHeaderByListIndex,
-    sideBySideItemIndexes,
-    unifiedItemIndexes,
-    viewMode,
-  ]);
+  const emptyMergeFileByPath = useMemo(() => new Map<string, DiffMergeConflictFile>(), []);
+  const mergeFileByPath = mergeState.status === "ready" ? mergeState.fileByPath : emptyMergeFileByPath;
+  const inlineList = useMemo(
+    () => createDiffInlineMergeList({
+      collapsedFileIndexes,
+      files,
+      mergeDisplayModelByPath,
+      mergeFileByPath,
+      sideBySideFileHeaderByListIndex,
+      sideBySideItemIndexes,
+      unifiedItemIndexes,
+      viewMode,
+    }),
+    [
+      collapsedFileIndexes,
+      files,
+      mergeDisplayModelByPath,
+      mergeFileByPath,
+      sideBySideFileHeaderByListIndex,
+      sideBySideItemIndexes,
+      unifiedItemIndexes,
+      viewMode,
+    ],
+  );
 
   const getInlineMergeRow = useCallback((index: number) => inlineList.rowByItemIndex.get(index), [inlineList]);
   const getDocumentIndex = useCallback((index: number) => {
