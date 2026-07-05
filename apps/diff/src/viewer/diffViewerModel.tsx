@@ -173,7 +173,16 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
     }
   }, [collapsedFileIndexes$]);
   const setSplitPaneMetricsValue = useCallback((nextMetrics: DiffSplitPaneMetrics) => {
-    splitPaneMetrics$.set(nextMetrics);
+    const currentMetrics = splitPaneMetrics$.peek();
+    if (
+      currentMetrics.contentHeight !== nextMetrics.contentHeight ||
+      currentMetrics.contentWidth !== nextMetrics.contentWidth ||
+      currentMetrics.contentX !== nextMetrics.contentX ||
+      currentMetrics.sidebarHeight !== nextMetrics.sidebarHeight ||
+      currentMetrics.sidebarWidth !== nextMetrics.sidebarWidth
+    ) {
+      splitPaneMetrics$.set(nextMetrics);
+    }
   }, [splitPaneMetrics$]);
   const setDiffPaneHeightValue = useCallback((nextHeight: number) => {
     diffPaneHeight$.set(nextHeight);

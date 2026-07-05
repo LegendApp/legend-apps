@@ -41,8 +41,8 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
-import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
+import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
@@ -67,7 +67,6 @@ import {
 import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
 import { GlassToast } from "./GlassToast";
 import {
-  areDiffMergeConflictActionsDisabled,
   diffMergeSaveConflictKey,
   getMergeConflictKey,
   isDiffMergeSavePending,
@@ -349,7 +348,7 @@ type DiffLoadedBodyProps = {
   renderSidebarEntry: (props: LegendListRenderItemProps<DiffSidebarEntry>) => ReactElement;
   renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
   requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
-  resolvingMergeConflictKeys: ReadonlySet<string>;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   rowHeight: number;
   sidebarCollapsed: boolean;
@@ -361,9 +360,13 @@ type DiffLoadedBodyProps = {
   splitPaneMetrics: DiffSplitPaneMetrics;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
-  syntaxTokenizationProgress: DiffSyntaxTokenizationProgress;
+  syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
   visibleItemIndexes: Array<number | undefined>;
+};
+
+type DiffLoadedBodyGateProps = DiffLoadedBodyProps & {
+  noChangesBody: ReactElement;
 };
 
 type DiffSyntaxTokenizationProgress = {
@@ -414,7 +417,12 @@ type DiffNativeRowConfigProps = {
   rowHeight: number;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
-  tokenizationVersion: number;
+};
+
+const initialDiffSyntaxTokenizationProgress: DiffSyntaxTokenizationProgress = {
+  progress: 0,
+  version: 0,
+  visible: false,
 };
 
 function noopVirtualizedDocumentRequestRange() {
@@ -739,6 +747,50 @@ function DiffUnsavedMergeDraftBanner({
   );
 }
 
+function DiffUnsavedMergeDraftBannerWithSavingState({
+  dangerColor,
+  fileCount,
+  onDiscard,
+  onSave,
+  primaryColor,
+  resolvingMergeConflictKeys$,
+}: {
+  dangerColor: string;
+  fileCount: number;
+  onDiscard: () => void;
+  onSave: () => void;
+  primaryColor: string;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+}) {
+  const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
+  return (
+    <DiffUnsavedMergeDraftBanner
+      dangerColor={dangerColor}
+      disabled={isSavingMergeDrafts}
+      fileCount={fileCount}
+      onDiscard={onDiscard}
+      onSave={onSave}
+      primaryColor={primaryColor}
+    />
+  );
+}
+
+function DiffNativeMenuSavingStateController({
+  hasUnsavedMergeDrafts,
+  resolvingMergeConflictKeys$,
+}: {
+  hasUnsavedMergeDrafts: boolean;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+}) {
+  const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
+  return (
+    <DiffNativeMenuController
+      hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}
+      isSavingMergeDrafts={isSavingMergeDrafts}
+    />
+  );
+}
+
 function DiffFatalBody({
   borderColor,
   dangerColor,
@@ -936,7 +988,23 @@ function DiffOpenBody({
   );
 }
 
-function DiffLoadedBody({
+function DiffLoadedBodyGate({
+  noChangesBody,
+  ...loadedBodyProps
+}: DiffLoadedBodyGateProps) {
+  const activeFileIndex = useValue(loadedBodyProps.activeFileIndex$);
+  const activeMergeFile = getActiveMergeFile({
+    activeFileIndex,
+    files: loadedBodyProps.state.files,
+    mergeState: loadedBodyProps.mergeState,
+  });
+
+  return loadedBodyProps.activeItemIndexes.length === 0 && !activeMergeFile
+    ? noChangesBody
+    : <DiffLoadedBody {...loadedBodyProps} />;
+}
+
+const DiffLoadedBody = memo(function DiffLoadedBody({
   activeFileIndex$,
   activeItemIndexes,
   backgroundColor,
@@ -974,7 +1042,7 @@ function DiffLoadedBody({
   renderSidebarEntry,
   renderSideBySideRow,
   requestSideBySideRange,
-  resolvingMergeConflictKeys,
+  resolvingMergeConflictKeys$,
   onResolveMergeConflict,
   rowHeight,
   sidebarCollapsed,
@@ -987,14 +1055,12 @@ function DiffLoadedBody({
   state,
   adaptiveLightModeEnabled,
   syntaxAppearance,
-  syntaxTokenizationProgress,
+  syntaxTokenizationProgress$,
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedBodyProps) {
   const [fileFilter, setFileFilter] = useState("");
   const bodyStartedAt = nowMs();
-  const activeFileIndex = useValue(activeFileIndex$);
-  const activeMergeFile = getActiveMergeFile({ activeFileIndex, files: state.files, mergeState });
   const inlineMergeModel = useDiffInlineMergeModel({
     borderColor: listExtraData.borderColor,
     collapsedFileIndexes: listExtraData.collapsedFileIndexes,
@@ -1007,7 +1073,7 @@ function DiffLoadedBody({
     mutedColor,
     onResolveMergeConflict,
     primaryColor,
-    resolvingMergeConflictKeys,
+    resolvingMergeConflictKeys$,
     rowHeight,
     rowRenderer: listExtraData.rowRenderer,
     showOnlyHunks: listExtraData.showOnlyHunks,
@@ -1135,11 +1201,6 @@ function DiffLoadedBody({
     });
   };
 
-  if (activeItemIndexes.length === 0 && !activeMergeFile) {
-    logBodyFinish("no-changes");
-    return null;
-  }
-
   let diffContent: ReactElement;
   if (diffListHeight <= 0) {
     logDiffOpenTiming("viewer.body.diffList.deferred", {
@@ -1228,30 +1289,9 @@ function DiffLoadedBody({
           </View>
         ) : null}
         {nativeRowConfig ? (
-          <DiffNativeRowConfig
-            addAccentColor={nativeRowConfig.addAccentColor}
-            addBackgroundColor={nativeRowConfig.addBackgroundColor}
-            changeBarWidth={nativeRowConfig.changeBarWidth}
-            collapsedFileIndexes={nativeRowConfig.collapsedFileIndexes}
-            collapsable={false}
-            configId={nativeRowConfig.configId}
-            configVersion={nativeRowConfig.configVersion}
-            dividerColor={nativeRowConfig.dividerColor}
-            documentId={nativeRowConfig.documentId}
-            fontFamily={nativeRowConfig.fontFamily}
-            fontSize={nativeRowConfig.fontSize}
-            foregroundColor={nativeRowConfig.foregroundColor}
-            lineNumberWidth={nativeRowConfig.lineNumberWidth}
-            markerWidth={nativeRowConfig.markerWidth}
-            mutedColor={nativeRowConfig.mutedColor}
-            presentation={nativeRowConfig.presentation}
-            removeAccentColor={nativeRowConfig.removeAccentColor}
-            removeBackgroundColor={nativeRowConfig.removeBackgroundColor}
-            rowHeight={nativeRowConfig.rowHeight}
-            style={styles.nativeDiffRowConfig}
-            syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
-            themeName={nativeRowConfig.themeName}
-            tokenizationVersion={nativeRowConfig.tokenizationVersion}
+          <DiffNativeRowConfigView
+            nativeRowConfig={nativeRowConfig}
+            syntaxTokenizationProgress$={syntaxTokenizationProgress$}
           />
         ) : null}
         {list}
@@ -1337,25 +1377,24 @@ function DiffLoadedBody({
             {floatingDocumentBanner}
             <DiffSyntaxProgressBar
               foregroundColor={syntaxAppearance === "dark" ? "#58a6ffe6" : "#0969dadb"}
-              progress={syntaxTokenizationProgress.progress}
-              visible={syntaxTokenizationProgress.visible}
+              syntaxTokenizationProgress$={syntaxTokenizationProgress$}
             />
           </View>
         </View>
       </SidebarSplitView>
     </View>
   );
-}
+});
 
 function DiffSyntaxProgressBar({
   foregroundColor,
-  progress,
-  visible,
+  syntaxTokenizationProgress$,
 }: {
   foregroundColor: string;
-  progress: number;
-  visible: boolean;
+  syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
 }) {
+  const progress = useValue(() => syntaxTokenizationProgress$.get().progress);
+  const visible = useValue(() => syntaxTokenizationProgress$.get().visible);
   if (!visible) {
     return null;
   }
@@ -1372,6 +1411,43 @@ function DiffSyntaxProgressBar({
         ]}
       />
     </View>
+  );
+}
+
+function DiffNativeRowConfigView({
+  nativeRowConfig,
+  syntaxTokenizationProgress$,
+}: {
+  nativeRowConfig: DiffNativeRowConfigProps;
+  syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
+}) {
+  const tokenizationVersion = useValue(() => syntaxTokenizationProgress$.get().version);
+  return (
+    <DiffNativeRowConfig
+      addAccentColor={nativeRowConfig.addAccentColor}
+      addBackgroundColor={nativeRowConfig.addBackgroundColor}
+      changeBarWidth={nativeRowConfig.changeBarWidth}
+      collapsedFileIndexes={nativeRowConfig.collapsedFileIndexes}
+      collapsable={false}
+      configId={nativeRowConfig.configId}
+      configVersion={nativeRowConfig.configVersion}
+      dividerColor={nativeRowConfig.dividerColor}
+      documentId={nativeRowConfig.documentId}
+      fontFamily={nativeRowConfig.fontFamily}
+      fontSize={nativeRowConfig.fontSize}
+      foregroundColor={nativeRowConfig.foregroundColor}
+      lineNumberWidth={nativeRowConfig.lineNumberWidth}
+      markerWidth={nativeRowConfig.markerWidth}
+      mutedColor={nativeRowConfig.mutedColor}
+      presentation={nativeRowConfig.presentation}
+      removeAccentColor={nativeRowConfig.removeAccentColor}
+      removeBackgroundColor={nativeRowConfig.removeBackgroundColor}
+      rowHeight={nativeRowConfig.rowHeight}
+      style={styles.nativeDiffRowConfig}
+      syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
+      themeName={nativeRowConfig.themeName}
+      tokenizationVersion={tokenizationVersion}
+    />
   );
 }
 
@@ -1673,7 +1749,7 @@ function DiffMergeCenterGutter({
   mutedColor,
   onResolveMergeConflict,
   primaryColor,
-  resolvingMergeConflictKeys,
+  resolvingMergeConflictKeys$,
 }: {
   block: DiffMergeConflictBlock | null;
   borderColor: string;
@@ -1681,10 +1757,16 @@ function DiffMergeCenterGutter({
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
-  resolvingMergeConflictKeys: ReadonlySet<string>;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
 }) {
-  const controlsDisabled = areDiffMergeConflictActionsDisabled(file, block, resolvingMergeConflictKeys);
-  const isResolving = block ? resolvingMergeConflictKeys.has(getMergeConflictKey(file, block)) : false;
+  const conflictKey = block ? getMergeConflictKey(file, block) : null;
+  const resolvingState = useValue(() => {
+    const resolvingKeys = resolvingMergeConflictKeys$.get();
+    return (resolvingKeys.has(diffMergeSaveConflictKey) ? 1 : 0)
+      | (conflictKey && resolvingKeys.has(conflictKey) ? 2 : 0);
+  });
+  const controlsDisabled = resolvingState !== 0;
+  const isResolving = (resolvingState & 2) !== 0;
   return (
     <View style={[styles.mergeCommonMiddle, { borderColor }]}>
       {block ? (
@@ -1744,7 +1826,7 @@ function DiffMergeLineRow({
   onResolveMergeConflict,
   primaryColor,
   renderer,
-  resolvingMergeConflictKeys,
+  resolvingMergeConflictKeys$,
   rightSyntaxLine,
   rightTokens,
   row,
@@ -1765,7 +1847,7 @@ function DiffMergeLineRow({
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
   renderer: DiffRowRendererSetting;
-  resolvingMergeConflictKeys: ReadonlySet<string>;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
   rightSyntaxLine: SyntaxRenderLine;
   rightTokens: string;
   row: DiffMergeDisplayRow | undefined;
@@ -1817,7 +1899,7 @@ function DiffMergeLineRow({
           mutedColor={mutedColor}
           onResolveMergeConflict={onResolveMergeConflict}
           primaryColor={primaryColor}
-          resolvingMergeConflictKeys={resolvingMergeConflictKeys}
+          resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
         />
         <View style={styles.mergeCommonPane}>
           <DiffMergeCodePane
@@ -1855,7 +1937,7 @@ function useDiffInlineMergeModel({
   mutedColor,
   onResolveMergeConflict,
   primaryColor,
-  resolvingMergeConflictKeys,
+  resolvingMergeConflictKeys$,
   rowRenderer,
   rowHeight,
   showOnlyHunks,
@@ -1878,7 +1960,7 @@ function useDiffInlineMergeModel({
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
-  resolvingMergeConflictKeys: ReadonlySet<string>;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
   rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   showOnlyHunks: boolean;
@@ -1928,7 +2010,6 @@ function useDiffInlineMergeModel({
     mergeSyntaxVersion,
     mutedColor,
     primaryColor,
-    resolvingMergeConflictKeys,
     rowHeight,
     rowRenderer,
     showOnlyHunks,
@@ -1942,7 +2023,6 @@ function useDiffInlineMergeModel({
     mergeSyntaxVersion,
     mutedColor,
     primaryColor,
-    resolvingMergeConflictKeys,
     rowHeight,
     rowRenderer,
     showOnlyHunks,
@@ -2031,7 +2111,7 @@ function useDiffInlineMergeModel({
           onResolveMergeConflict={onResolveMergeConflict}
           primaryColor={primaryColor}
           renderer={rowRenderer}
-          resolvingMergeConflictKeys={resolvingMergeConflictKeys}
+          resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
           rightSyntaxLine={rightSyntaxLine}
           rightTokens={encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor)}
           row={displayRow}
@@ -2041,7 +2121,7 @@ function useDiffInlineMergeModel({
         />
       );
     },
-    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys$, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {
@@ -2256,26 +2336,24 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const mergeDraftsSourceKeyRef = useRef<string | null>(null);
   const savingMergeDraftsRef = useRef(false);
   const suppressFileWatcherReloadUntilRef = useRef(0);
-  const [syntaxTokenizationProgress, setSyntaxTokenizationProgress] = useState<DiffSyntaxTokenizationProgress>({
-    progress: 0,
-    version: 0,
-    visible: false,
-  });
-  const [resolvingMergeConflictKeys, setResolvingMergeConflictKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const syntaxTokenizationProgress$ = useObservable<DiffSyntaxTokenizationProgress>(initialDiffSyntaxTokenizationProgress);
+  const resolvingMergeConflictKeys$ = useObservable<ReadonlySet<string>>(new Set());
   const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
   const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
-  const isSavingMergeDrafts = resolvingMergeConflictKeys.has(diffMergeSaveConflictKey);
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
-    const nextKeys = new Set(resolvingMergeConflictKeysRef.current);
-    if (active) {
-      nextKeys.add(key);
-    } else {
-      nextKeys.delete(key);
+    const currentKeys = resolvingMergeConflictKeysRef.current;
+    if (currentKeys.has(key) !== active) {
+      const nextKeys = new Set(currentKeys);
+      if (active) {
+        nextKeys.add(key);
+      } else {
+        nextKeys.delete(key);
+      }
+      resolvingMergeConflictKeysRef.current = nextKeys;
+      resolvingMergeConflictKeys$.set(nextKeys);
     }
-    resolvingMergeConflictKeysRef.current = nextKeys;
-    setResolvingMergeConflictKeys(nextKeys);
-  }, []);
+  }, [resolvingMergeConflictKeys$]);
 
   const waitForMergeResolveQueues = useCallback(async () => {
     const queues = [...mergeResolveQueuesRef.current.values()];
@@ -2435,17 +2513,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         const tokenizationVersion = document.getTokenizedRowVersion();
         const nextProgress = totalRows > 0 ? tokenizedRows / totalRows : 1;
         const nextVisible = totalRows > 0 && tokenizedRows < totalRows;
-        setSyntaxTokenizationProgress((current) => (
-          current.visible === nextVisible &&
-          current.version === tokenizationVersion &&
-          Math.abs(current.progress - nextProgress) < 0.001
-            ? current
-            : {
-              progress: nextProgress,
-              version: tokenizationVersion,
-              visible: nextVisible,
-            }
-        ));
+        const currentProgress = syntaxTokenizationProgress$.peek();
+        if (
+          currentProgress.visible !== nextVisible ||
+          currentProgress.version !== tokenizationVersion ||
+          Math.abs(currentProgress.progress - nextProgress) >= 0.001
+        ) {
+          syntaxTokenizationProgress$.set({
+            progress: nextProgress,
+            version: tokenizationVersion,
+            visible: nextVisible,
+          });
+        }
       };
 
       updateProgress();
@@ -2455,17 +2534,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       };
     }
 
-    setSyntaxTokenizationProgress((current) => (
-      current.visible || current.progress !== 0 || current.version !== 0
-        ? {
-          progress: 0,
-          version: 0,
-          visible: false,
-        }
-        : current
-    ));
+    const currentProgress = syntaxTokenizationProgress$.peek();
+    if (currentProgress.visible || currentProgress.progress !== 0 || currentProgress.version !== 0) {
+      syntaxTokenizationProgress$.set(initialDiffSyntaxTokenizationProgress);
+    }
     return undefined;
-  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled]);
+  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled, syntaxTokenizationProgress$]);
   useEffect(() => {
     resetSideBySideRuntime();
     if (state.status === "loaded") {
@@ -3084,7 +3158,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   }, [setMergeStateValue, state$, waitForMergeResolveQueues]);
 
   const discardMergeDraftsFromCommand = useCallback(() => {
-    if (hasUnsavedMergeDrafts && !isSavingMergeDrafts) {
+    if (hasUnsavedMergeDrafts && !savingMergeDraftsRef.current) {
       discardMergeDrafts().catch((error: unknown) => {
         const currentState = state$.peek();
         if (currentState.status === "loaded") {
@@ -3092,7 +3166,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         }
       });
     }
-  }, [discardMergeDrafts, hasUnsavedMergeDrafts, isSavingMergeDrafts, setDocumentErrorValue, state$]);
+  }, [discardMergeDrafts, hasUnsavedMergeDrafts, setDocumentErrorValue, state$]);
 
   const prepareMergeDraftsForClose = useCallback(async () => {
     await waitForMergeResolveQueues();
@@ -3306,7 +3380,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const currentState = state$.peek();
     const currentVisibleFolderPath = currentState.source?.kind === "folder" ? currentState.source.value : null;
     if (currentState.status === "loaded" && currentVisibleFolderPath) {
-      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.get());
+      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
       if (activeFile) {
         didCopy = copyText(getJoinedPath(currentVisibleFolderPath, activeFile.path));
       }
@@ -3318,7 +3392,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     let didCopy = false;
     const currentState = state$.peek();
     if (currentState.status === "loaded") {
-      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.get());
+      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
       if (activeFile) {
         didCopy = copyText(activeFile.path);
       }
@@ -3454,7 +3528,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
-      tokenizationVersion: syntaxTokenizationProgress.version,
     };
   }, [
     fontFamily,
@@ -3465,7 +3538,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     rowHeight,
     state.status === "loaded" ? state.document : null,
     syntaxHighlightingEnabled,
-    syntaxTokenizationProgress.version,
     syntaxTheme.appearance,
   ]);
   const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
@@ -3512,7 +3584,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
-      tokenizationVersion: syntaxTokenizationProgress.version,
     };
   }, [
     collapsedFileIndexesKey,
@@ -3524,7 +3595,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     rowHeight,
     state.status === "loaded" ? state.document : null,
     syntaxHighlightingEnabled,
-    syntaxTokenizationProgress.version,
     syntaxTheme.appearance,
   ]);
   const renderFields = useMemo<DiffRenderFields>(
@@ -3819,10 +3889,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
   const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - diffSidebarFilterReservedHeight) : 0;
-  const currentActiveFileIndex = useValue(activeFileIndex$);
-  const activeMergeFile = state.status === "loaded"
-    ? getActiveMergeFile({ activeFileIndex: currentActiveFileIndex, files: state.files, mergeState })
-    : null;
   const activeItemIndexes = renderViewMode === "unified"
     ? visibleItemIndexes
     : sideBySideItemIndexes;
@@ -3839,13 +3905,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     />
   );
   const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (
-    <DiffUnsavedMergeDraftBanner
+    <DiffUnsavedMergeDraftBannerWithSavingState
       dangerColor={displayTheme.colors.danger}
-      disabled={isSavingMergeDrafts}
       fileCount={unsavedMergeDraftFiles.length}
       onDiscard={discardMergeDraftsFromCommand}
       onSave={saveMergeDraftsFromCommand}
       primaryColor={displayTheme.colors.primary}
+      resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
     />
   ) : null;
   let body: ReactNode;
@@ -3862,17 +3928,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       />
     );
   } else if (state.status === "loaded") {
-    body = activeItemIndexes.length === 0 && !activeMergeFile ? (
-      <DiffNoChangesBody
-        documentErrorBody={documentErrorBody}
-        floatingDocumentBanner={unsavedMergeDraftBanner}
-        hasDocumentChrome={diffTopChromeContentHeight > 0}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        visibleSourceLabel={visibleSourceLabel}
-      />
-    ) : (
-      <DiffLoadedBody
+    body = (
+      <DiffLoadedBodyGate
         activeFileIndex$={activeFileIndex$}
         activeItemIndexes={activeItemIndexes}
         adaptiveLightModeEnabled={adaptiveLightModeEnabled}
@@ -3906,12 +3963,22 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         nativeSideBySideRowConfig={nativeSideBySideRowConfig}
         nativeUnifiedRowConfig={nativeUnifiedRowConfig}
         mutedColor={mutedColor}
+        noChangesBody={(
+          <DiffNoChangesBody
+            documentErrorBody={documentErrorBody}
+            floatingDocumentBanner={unsavedMergeDraftBanner}
+            hasDocumentChrome={diffTopChromeContentHeight > 0}
+            foregroundColor={foregroundColor}
+            mutedColor={mutedColor}
+            visibleSourceLabel={visibleSourceLabel}
+          />
+        )}
         primaryColor={displayTheme.colors.primary}
         renderRow={renderRow}
         renderSidebarEntry={renderSidebarEntry}
         renderSideBySideRow={renderSideBySideRow}
         requestSideBySideRange={requestSideBySideRange}
-        resolvingMergeConflictKeys={resolvingMergeConflictKeys}
+        resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
         onResolveMergeConflict={resolveMergeConflict}
         rowHeight={rowHeight}
         sidebarCollapsed={sidebarCollapsed}
@@ -3923,7 +3990,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         splitPaneMetrics={splitPaneMetrics}
         state={state}
         syntaxAppearance={syntaxTheme.appearance}
-        syntaxTokenizationProgress={syntaxTokenizationProgress}
+        syntaxTokenizationProgress$={syntaxTokenizationProgress$}
         viewMode={renderViewMode}
         visibleItemIndexes={visibleItemIndexes}
       />
@@ -3955,7 +4022,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   return (
     <>
       <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
-      <DiffNativeMenuController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} isSavingMergeDrafts={isSavingMergeDrafts} />
+      <DiffNativeMenuSavingStateController
+        hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}
+        resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
+      />
       <DiffWindowToolbarItemController toggleSidebar={toggleSidebar} />
       <DiffLaunchController
         focusUrlInputRequestId={focusUrlInputRequestId}
