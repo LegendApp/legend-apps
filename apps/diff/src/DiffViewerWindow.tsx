@@ -313,9 +313,7 @@ type DiffLoadedBodyProps = {
   activeFileIndex$: Observable<number | null>;
   activeItemIndexes: readonly (number | undefined)[];
   backgroundColor: string;
-  diffContentHeight: number;
-  diffListHeight: number;
-  diffPaneHeight: number;
+  diffPaneHeight$: Observable<number>;
   diffTopChromeHeight: number;
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
   documentErrorBody: ReactNode;
@@ -352,12 +350,11 @@ type DiffLoadedBodyProps = {
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   rowHeight: number;
   sidebarCollapsed: boolean;
-  sidebarListHeight: number;
   sidebarWidth: number;
   sideBySideDataVersion: number;
   sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
   sideBySideItemIndexes: Array<number | undefined>;
-  splitPaneMetrics: DiffSplitPaneMetrics;
+  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
   syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
@@ -1008,9 +1005,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   activeFileIndex$,
   activeItemIndexes,
   backgroundColor,
-  diffContentHeight,
-  diffListHeight,
-  diffPaneHeight,
+  diffPaneHeight$,
   diffTopChromeHeight,
   diffRows,
   documentErrorBody,
@@ -1046,12 +1041,11 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   onResolveMergeConflict,
   rowHeight,
   sidebarCollapsed,
-  sidebarListHeight,
   sidebarWidth,
   sideBySideDataVersion,
   sideBySideFileHeaderByListIndex,
   sideBySideItemIndexes,
-  splitPaneMetrics,
+  splitPaneMetrics$,
   state,
   adaptiveLightModeEnabled,
   syntaxAppearance,
@@ -1061,6 +1055,10 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
 }: DiffLoadedBodyProps) {
   const [fileFilter, setFileFilter] = useState("");
   const bodyStartedAt = nowMs();
+  const diffPaneHeight = useValue(diffPaneHeight$);
+  const splitPaneMetrics = useValue(splitPaneMetrics$);
+  const diffContentHeight = diffPaneHeight;
+  const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const inlineMergeModel = useDiffInlineMergeModel({
     borderColor: listExtraData.borderColor,
     collapsedFileIndexes: listExtraData.collapsedFileIndexes,
@@ -1086,6 +1084,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     viewMode,
   });
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - diffSidebarFilterReservedHeight) : 0;
   const normalizedFileFilter = fileFilter.trim().toLowerCase();
   const filteredSidebarFiles = useMemo(
     () => state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter)),
@@ -2312,8 +2311,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadingSource = useValue(loadingSource$);
   const mergeState = useValue(mergeState$);
   const sidebarCollapsed = useValue(sidebarCollapsed$);
-  const splitPaneMetrics = useValue(splitPaneMetrics$);
-  const diffPaneHeight = useValue(diffPaneHeight$);
   const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const unsavedMergeDraftFiles = useMemo(() => getUnsavedDiffMergeDraftFiles(mergeState), [mergeState]);
   const hasUnsavedMergeDrafts = unsavedMergeDraftFiles.length > 0;
@@ -2455,11 +2452,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   } = useDiffSideBySideRuntime({
     activeFileIndex$,
     collapsedFileIndexes$,
-    diffPaneHeight,
+    diffPaneHeight$,
     nativeSideBySideRows,
     rowHeight,
     sideBySideRowCount,
-    state,
     state$,
     viewMode: renderViewMode,
   });
@@ -3878,7 +3874,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     setOpenErrorValue(null);
   }, [setOpenErrorValue]);
 
-  const diffContentHeight = diffPaneHeight;
   const documentErrorHeight = documentError
     ? documentError.kind === "permission"
       ? diffDocumentPermissionErrorHeight
@@ -3886,9 +3881,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     : 0;
   const diffTopChromeContentHeight = documentErrorHeight;
   const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
-  const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
-  const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - diffSidebarFilterReservedHeight) : 0;
   const activeItemIndexes = renderViewMode === "unified"
     ? visibleItemIndexes
     : sideBySideItemIndexes;
@@ -3934,9 +3926,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         activeItemIndexes={activeItemIndexes}
         adaptiveLightModeEnabled={adaptiveLightModeEnabled}
         backgroundColor={backgroundColor}
-        diffContentHeight={diffContentHeight}
-        diffListHeight={diffListHeight}
-        diffPaneHeight={diffPaneHeight}
+        diffPaneHeight$={diffPaneHeight$}
         diffTopChromeHeight={diffTopChromeHeight}
         diffRows={diffRows}
         documentErrorBody={documentErrorBody}
@@ -3982,12 +3972,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         onResolveMergeConflict={resolveMergeConflict}
         rowHeight={rowHeight}
         sidebarCollapsed={sidebarCollapsed}
-        sidebarListHeight={sidebarListHeight}
         sidebarWidth={sidebarWidth}
         sideBySideDataVersion={sideBySideDataVersion}
         sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
         sideBySideItemIndexes={sideBySideItemIndexes}
-        splitPaneMetrics={splitPaneMetrics}
+        splitPaneMetrics$={splitPaneMetrics$}
         state={state}
         syntaxAppearance={syntaxTheme.appearance}
         syntaxTokenizationProgress$={syntaxTokenizationProgress$}

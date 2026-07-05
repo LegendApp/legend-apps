@@ -17,6 +17,7 @@ import {
   type VirtualizedDocumentSnapshot,
 } from "@legend-desktop/virtualized-document";
 import type { Observable } from "@legendapp/state";
+import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { DiffSettingsFile } from "../diffSettings";
 import type { DiffSyntaxStyleStore } from "./DiffRows";
@@ -405,21 +406,19 @@ export function useDiffLoadedModel({
 export function useDiffSideBySideRuntime({
   activeFileIndex$,
   collapsedFileIndexes$,
-  diffPaneHeight,
+  diffPaneHeight$,
   nativeSideBySideRows,
   rowHeight,
   sideBySideRowCount,
-  state,
   state$,
   viewMode,
 }: {
   activeFileIndex$: Observable<number | null>;
   collapsedFileIndexes$: Observable<Set<number>>;
-  diffPaneHeight: number;
+  diffPaneHeight$: Observable<number>;
   nativeSideBySideRows: boolean;
   rowHeight: number;
   sideBySideRowCount: number;
-  state: DiffViewerState;
   state$: Observable<DiffViewerState>;
   viewMode: DiffSettingsFile["viewMode"];
 }) {
@@ -474,12 +473,14 @@ export function useDiffSideBySideRuntime({
     }
   }, [state$]);
 
-  useEffect(() => {
-    if (!nativeSideBySideRows && state.status === "loaded" && viewMode !== "unified" && diffPaneHeight > 0 && sideBySideRowCount > 0) {
-      const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(diffPaneHeight / rowHeight)));
+  useObserveEffect(() => {
+    const currentDiffPaneHeight = diffPaneHeight$.get();
+    const currentState = state$.get();
+    if (!nativeSideBySideRows && currentState.status === "loaded" && viewMode !== "unified" && currentDiffPaneHeight > 0 && sideBySideRowCount > 0) {
+      const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(currentDiffPaneHeight / rowHeight)));
       requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
     }
-  }, [diffPaneHeight, nativeSideBySideRows, requestSideBySideRange, rowHeight, sideBySideRowCount, state, viewMode]);
+  });
 
   return {
     getSideBySideRow,
