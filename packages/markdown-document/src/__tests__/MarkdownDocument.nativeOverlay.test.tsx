@@ -316,6 +316,14 @@ async function changeSelection(input: TestRenderer.ReactTestInstance, start: num
   await Promise.resolve();
 }
 
+async function flushPromises(iterations = 20) {
+  await act(async () => {
+    for (let index = 0; index < iterations; index += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
 function expectUniqueBlockIds(adapter: NativeOverlayAdapter) {
   expect(new Set(adapter.blockIds).size).toBe(adapter.blockIds.length);
 }
@@ -728,9 +736,9 @@ describe("MarkdownDocument native row editor", () => {
       host.props.onBeginEditing({
         nativeEvent: {
           blockId: "d1:b0",
-          height: 25,
+          height: 24,
           markdown: "First line",
-          rowHeight: 25,
+          rowHeight: 43.2,
           width: 640,
           x: 40,
           y: 80,
@@ -746,8 +754,8 @@ describe("MarkdownDocument native row editor", () => {
           selectionStart: "First".length,
         },
       });
-      await Promise.resolve();
     });
+    await flushPromises();
 
     expect(adapter.applyTransactions).toEqual([
       {
@@ -759,6 +767,7 @@ describe("MarkdownDocument native row editor", () => {
     ]);
     expect(adapter.sourceMarkdown).toBe("First\n\n line");
     expect(nativeHost(renderer!).props.activeBlockId).toBe("d1:b100");
+    expect(flattenStyle(activationView(renderer!, "d1:b100").props.style).minHeight).toBeCloseTo(62.4);
     expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();
   });

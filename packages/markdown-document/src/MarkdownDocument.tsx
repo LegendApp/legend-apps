@@ -40,6 +40,7 @@ import type {
 } from "./internalTypes";
 import {
   blockRowSpacingStyle,
+  estimateMarkdownEditorHeight,
   resolveSelectionColor,
   splitMarkdownAtFirstLineBreak,
 } from "./markdownLayout";
@@ -248,6 +249,24 @@ type NativeEnterPressedEvent = {
     selectionStart: number;
   };
 };
+
+function hasSameBlockPresentation(left: MarkdownBlockMetadata, right: MarkdownBlockMetadata) {
+  return left.type === right.type && left.headingLevel === right.headingLevel && left.depth === right.depth;
+}
+
+function estimateSplitEditorContentHeight(
+  block: MarkdownBlockSnapshot,
+  sourceBlock: MarkdownBlockSnapshot,
+  sourceFrame: OverlayFrame,
+) {
+  const estimatedHeight = estimateMarkdownEditorHeight(block.markdown, sourceFrame.width);
+  const sourceEstimatedHeight = estimateMarkdownEditorHeight(sourceBlock.markdown, sourceFrame.width);
+  if (!hasSameBlockPresentation(block, sourceBlock) || sourceFrame.height <= 0 || sourceEstimatedHeight <= 0) {
+    return estimatedHeight;
+  }
+
+  return Math.ceil(estimatedHeight * (sourceFrame.height / sourceEstimatedHeight));
+}
 
 type MarkdownNativeEditorHostProps = {
   activeBlockId: string | null;
@@ -459,6 +478,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const commentAnchorBlockIdRef = useRef<string | null>(null);
     const overlayFrameRef = useRef<OverlayFrame | undefined>(undefined);
     const overlayFrameBlockIdRef = useRef<string | undefined>(undefined);
+    const pendingInitialEditorFrameRef = useRef<{ blockId: string; frame: OverlayFrame } | undefined>(undefined);
     const draftMarkdownRef = useRef("");
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
@@ -1227,6 +1247,36 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
     const handleSelectionDragOutsideRef = useLatestRef(handleSelectionDragOutside);
 
+    const estimateInitialNativeEditorFrame = useCallback(
+      (
+        block: MarkdownBlockSnapshot,
+        sourceBlock: MarkdownBlockSnapshot,
+        previousBlock: MarkdownBlockMetadata | undefined,
+        hasPreviousBlock: boolean,
+        hasNextBlock: boolean,
+      ): OverlayFrame | undefined => {
+        const sourceFrame = activeBlockIdRef.current && overlayFrameBlockIdRef.current === activeBlockIdRef.current
+          ? overlayFrameRef.current
+          : undefined;
+        if (!sourceFrame) {
+          return undefined;
+        }
+
+        const rowStyle = blockRowSpacingStyle(block, previousBlock, hasPreviousBlock, hasNextBlock, resolvedMarkdownLayout);
+        const paddingTop = typeof rowStyle.paddingTop === "number" ? rowStyle.paddingTop : 0;
+        const paddingBottom = typeof rowStyle.paddingBottom === "number" ? rowStyle.paddingBottom : 0;
+        const height = estimateSplitEditorContentHeight(block, sourceBlock, sourceFrame);
+        return {
+          height,
+          left: sourceFrame.left,
+          rowHeight: height + paddingTop + paddingBottom,
+          top: sourceFrame.top + sourceFrame.rowHeight,
+          width: sourceFrame.width,
+        };
+      },
+      [resolvedMarkdownLayout],
+    );
+
     const splitActiveBlock = useCallback(
       async (block: MarkdownBlockSnapshot, beforeMarkdown: string, afterMarkdown: string) => {
         if (documentState.status !== "loaded" || !adapter.applyTransaction) {
@@ -1295,6 +1345,31 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             id: nextActiveBlockId,
             markdown: afterMarkdown,
           };
+          const nextActiveBlockOffset = result.changedRange.blockIds.indexOf(nextActiveBlockId);
+          const previousActiveBlockId = nextActiveBlockOffset > 0
+            ? result.changedRange.blockIds[nextActiveBlockOffset - 1]
+            : undefined;
+          const previousActiveBlock = previousActiveBlockId
+            ? result.changedBlocks.find((candidate) => candidate.id === previousActiveBlockId)
+            : undefined;
+          const nextBlockIndex = result.changedRange.startBlockIndex + Math.max(0, nextActiveBlockOffset);
+          const nextBlockCount =
+            documentState.snapshot.blockCount -
+            result.changedRange.deleteCount +
+            result.changedRange.blockIds.length;
+          const initialEditorFrame = estimateInitialNativeEditorFrame(
+            nextActiveBlockSnapshot,
+            block,
+            previousActiveBlock,
+            nextBlockIndex > 0,
+            nextBlockIndex + 1 < nextBlockCount,
+          );
+          if (initialEditorFrame) {
+            pendingInitialEditorFrameRef.current = {
+              blockId: nextActiveBlockId,
+              frame: initialEditorFrame,
+            };
+          }
           activeBlockSnapshotRef.current = nextActiveBlockSnapshot;
           activeBlockIdRef.current = nextActiveBlockId;
           nativeEditingBlockIdRef.current = nextActiveBlockId;
@@ -1349,6 +1424,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         applyTransactionResult,
         clearTypingHistoryGroup,
         documentState,
+        estimateInitialNativeEditorFrame,
         markDirty,
         onErrorRef,
         publishCommandState,
@@ -2945,7 +3021,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         : undefined;
       if (activeBlockId && activeBlock) {
         const previousRenderState = documentRenderState$.activeBlocksById.get(activeBlockId).peek();
-        const pendingEditorFrame = overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined;
+        const pendingInitialEditorFrame = pendingInitialEditorFrameRef.current;
+        const pendingEditorFrame = previousRenderState?.editorFrame ??
+          (overlayFrameBlockIdRef.current === activeBlockId ? overlayFrameRef.current : undefined) ??
+          (pendingInitialEditorFrame?.blockId === activeBlockId ? pendingInitialEditorFrame.frame : undefined);
         documentRenderState$.activeBlocksById.get(activeBlockId).set({
           activationMode: activeActivationMode,
           block: {
@@ -2953,9 +3032,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             markdown: draftMarkdown,
           },
           draftMarkdown,
-          editorFrame: previousRenderState?.editorFrame ?? pendingEditorFrame,
+          editorFrame: pendingEditorFrame,
           selection: activeSelection,
         });
+        if (pendingInitialEditorFrame?.blockId === activeBlockId) {
+          pendingInitialEditorFrameRef.current = undefined;
+        }
         activeRenderBlockIdRef.current = activeBlockId;
       } else {
         activeRenderBlockIdRef.current = null;
@@ -3140,6 +3222,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       };
       overlayFrameRef.current = nextOverlayFrame;
       overlayFrameBlockIdRef.current = blockId;
+      if (pendingInitialEditorFrameRef.current?.blockId === blockId) {
+        pendingInitialEditorFrameRef.current = undefined;
+      }
       const activeRenderState$ = documentRenderState$.activeBlocksById.get(blockId);
       const activeRenderState = activeRenderState$.peek();
       if (activeRenderState) {
