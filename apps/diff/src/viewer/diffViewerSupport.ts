@@ -1,6 +1,6 @@
-import { logDiffTimingMark } from "@legend-desktop/diff-parser";
 import type { DiffLoadTiming } from "@legend-desktop/diff-parser";
 import { getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
+import { logDiffMemoryMark, logDiffOpenTiming } from "../diffInstrumentation";
 import { getDiffViewModeSetting } from "../diffSettings";
 import { diffViewerWindowTitle } from "../diffWindowTitle";
 import type { DiffRecoverableError, DiffViewerState } from "./diffViewerModel";
@@ -26,24 +26,12 @@ export type DiffWindowToolbarModel = {
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 };
 
-export function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
-  const message = `${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`;
-  console.info(message);
-  logDiffTimingMark(message);
-}
-
-export function logDiffMemoryMark(event: string, payload: Record<string, unknown>) {
-  const message = `${Date.now()} [DiffMemory] js.${event} ${JSON.stringify(payload)}`;
-  console.info(message);
-  logDiffTimingMark(message);
-}
-
 export function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource) {
   return left?.kind === right.kind && left.value === right.value;
 }
 
 export function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
-  logDiffOpenTiming("viewer.native.loaded", {
+  logDiffOpenTiming("viewer.native.loaded", () => ({
     copyFilesMs: Number(timing.copyFilesMs.toFixed(1)),
     copyInitialRowsMs: Number(timing.copyInitialRowsMs.toFixed(1)),
     createDiffMs: Number(timing.createDiffMs.toFixed(1)),
@@ -56,8 +44,10 @@ export function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
     openRepoMs: Number(timing.openRepoMs.toFixed(1)),
     rowCount: timing.rowCount,
     walkDiffMs: Number(timing.walkDiffMs.toFixed(1)),
-  });
+  }));
 }
+
+export { logDiffMemoryMark, logDiffOpenTiming };
 
 export function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);

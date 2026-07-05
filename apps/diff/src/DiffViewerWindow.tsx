@@ -1005,7 +1005,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     [inlineMergeModel, renderSideBySideRow],
   );
 
-  logDiffOpenTiming("viewer.body.start", {
+  logDiffOpenTiming("viewer.body.start", () => ({
     activeItemCount: activeItemIndexes.length,
     diffListHeight,
     diffPaneHeight,
@@ -1018,10 +1018,10 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     sidebarWidth: splitPaneMetrics.sidebarWidth,
     source: state.source,
     viewMode,
-  });
+  }));
 
   const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
-    logDiffOpenTiming("viewer.body.finish", {
+    logDiffOpenTiming("viewer.body.finish", () => ({
       activeItemCount: activeItemIndexes.length,
       diffListHeight,
       diffPaneHeight,
@@ -1035,26 +1035,26 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
       sidebarWidth: splitPaneMetrics.sidebarWidth,
       viewMode,
       ...extra,
-    });
+    }));
   };
 
   let diffContent: ReactElement;
   if (diffListHeight <= 0) {
-    logDiffOpenTiming("viewer.body.diffList.deferred", {
+    logDiffOpenTiming("viewer.body.diffList.deferred", () => ({
       activeItemCount: activeItemIndexes.length,
       diffPaneHeight,
       isRenderingInitialLoadedFrame,
       rows: state.document.rowCount,
       viewMode,
-    });
+    }));
     diffContent = <View style={styles.diffPaneContent} />;
   } else {
-    logDiffOpenTiming("viewer.body.diffList.mount", {
+    logDiffOpenTiming("viewer.body.diffList.mount", () => ({
       activeItemCount: activeItemIndexes.length,
       diffListHeight,
       rows: state.document.rowCount,
       viewMode,
-    });
+    }));
     let list: ReactElement;
     if (viewMode === "unified") {
       list = (
@@ -1136,7 +1136,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     );
   }
 
-  logDiffOpenTiming("viewer.body.splitView.mount", {
+  logDiffOpenTiming("viewer.body.splitView.mount", () => ({
     activeItemCount: activeItemIndexes.length,
     diffPaneHeight,
     rows: state.document.rowCount,
@@ -1146,7 +1146,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     sidebarListHeight,
     sidebarWidth: splitPaneMetrics.sidebarWidth,
     viewMode,
-  });
+  }));
   const sidebar = (
     <View
       style={[
@@ -2198,12 +2198,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       currentState.status === "loaded" &&
       sourcesMatch(currentLoadingSource, currentState.source);
     if (currentState.status === "loaded" && loggedInitialLoadedFrameRef.current !== currentIsRenderingInitialLoadedFrame) {
-      logDiffOpenTiming("viewer.initialLoadedFrame.state", {
+      logDiffOpenTiming("viewer.initialLoadedFrame.state", () => ({
         isRenderingInitialLoadedFrame: currentIsRenderingInitialLoadedFrame,
         loadingSource: currentLoadingSource,
         rows: currentState.document.rowCount,
         source: currentState.source,
-      });
+      }));
     }
     loggedInitialLoadedFrameRef.current = currentIsRenderingInitialLoadedFrame;
   });
@@ -2266,12 +2266,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                   diffBackgroundTokenizeChunkRowCount,
                   diffBackgroundTokenizeChunkBudgetMs,
                 );
-                logDiffMemoryMark("viewer.syntaxTokenization.start", {
+                logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
                   durationMs: Number((nowMs() - startedAt).toFixed(1)),
                   files: state.files.length,
                   rows: document.rowCount,
                   scopes: document.scopeCount,
-                });
+                }));
               }
             })
             .catch((error: unknown) => {
@@ -2361,13 +2361,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   useEffect(() => {
     renderCountRef.current += 1;
-    logDiffOpenTiming("viewer.renderCommitted", {
+    logDiffOpenTiming("viewer.renderCommitted", () => ({
       dataVersion: diffRows.dataVersion,
       itemCount: diffRows.itemIndexes.length,
       renderCount: renderCountRef.current,
       state: state.status,
       visibleItemCount: visibleItemIndexes.length,
-    });
+    }));
   });
 
   const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
@@ -2415,12 +2415,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         loadComplete: cachedEntry.loadComplete,
         timing: cachedEntry.loaded.timing,
       });
-      logDiffOpenTiming("viewer.load.cacheHit", {
+      logDiffOpenTiming("viewer.load.cacheHit", () => ({
         requestId,
         rows: cachedEntry.loaded.document.rowCount,
         showOnlyHunks: loadShowOnlyHunks,
         source: nextSource,
-      });
+      }));
       return;
     }
 
@@ -2441,15 +2441,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         setOpenErrorValue(null);
       }
     }
-    logDiffOpenTiming("viewer.load.start", {
+    logDiffOpenTiming("viewer.load.start", () => ({
       source: nextSource,
       requestId,
-    });
-    logDiffMemoryMark("viewer.load.start", {
+    }));
+    logDiffMemoryMark("viewer.load.start", () => ({
       requestId,
       reason: options?.reason ?? "manual",
       source: nextSource,
-    });
+    }));
 
     const schedulePostLoadSideEffects = (loaded: DiffLoadedPayload) => {
       requestAnimationFrame(() => {
@@ -2457,35 +2457,35 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           if (loadRequestIdRef.current === requestId) {
             const filePaths = loaded.files.map((file) => file.path);
             const syntaxLanguages = recordDiffSyntaxLanguagesForPaths(filePaths);
-            logDiffMemoryMark("viewer.syntaxLanguagesRecorded", {
+            logDiffMemoryMark("viewer.syntaxLanguagesRecorded", () => ({
               files: loaded.files.length,
               languages: syntaxLanguages,
               requestId,
               rows: loaded.document.rowCount,
               scopes: loaded.document.scopeCount,
-            });
+            }));
             addRecentDiffSource(nextSource);
-            logDiffOpenTiming("viewer.recentSource.noted", {
+            logDiffOpenTiming("viewer.recentSource.noted", () => ({
               requestId,
               sourceKind: nextSource.kind,
-            });
+            }));
             const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
             if (recentDocumentPath) {
               const recentStartedAt = nowMs();
               noteRecentDocument(recentDocumentPath);
-              logDiffOpenTiming("viewer.recentDocument.noted", {
+              logDiffOpenTiming("viewer.recentDocument.noted", () => ({
                 durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
                 requestId,
-              });
-              logDiffMemoryMark("viewer.recentDocument.noted", {
+              }));
+              logDiffMemoryMark("viewer.recentDocument.noted", () => ({
                 durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
                 requestId,
-              });
+              }));
             } else {
-              logDiffOpenTiming("viewer.recentDocument.skipped", {
+              logDiffOpenTiming("viewer.recentDocument.skipped", () => ({
                 requestId,
                 sourceKind: nextSource.kind,
-              });
+              }));
             }
             if (nextSource.kind === "folder") {
               loadDiffMergeState(nextSource.value)
@@ -2493,11 +2493,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                   const currentState = state$.peek();
                   if (loadRequestIdRef.current === requestId && currentState.status === "loaded" && sourcesMatch(currentState.source, nextSource)) {
                     setMergeStateValue(applyDiffMergeDraftsToState(nextMergeState, mergeDraftsRef.current));
-                    logDiffOpenTiming("viewer.mergeState.loaded", {
+                    logDiffOpenTiming("viewer.mergeState.loaded", () => ({
                       files: nextMergeState.status === "ready" ? nextMergeState.conflictFileCount : 0,
                       requestId,
                       status: nextMergeState.status,
-                    });
+                    }));
                   }
                 })
                 .catch((error: unknown) => {
@@ -2547,7 +2547,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           loadComplete,
         });
       }
-      logDiffMemoryMark("viewer.statePublished", {
+      logDiffMemoryMark("viewer.statePublished", () => ({
         files: loaded.files.length,
         initialRows: loaded.initialRows.length,
         loadComplete,
@@ -2555,14 +2555,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         requestId,
         rows: loaded.document.rowCount,
         scopes: loaded.document.scopeCount,
-      });
-      logDiffOpenTiming("viewer.load.setLoaded", {
+      }));
+      logDiffOpenTiming("viewer.load.setLoaded", () => ({
         loadComplete,
         reason,
         requestId,
         statePayloadMs: Number((statePayloadFinishedAt - statePayloadStartedAt).toFixed(1)),
         setStateCallMs: Number((nowMs() - statePayloadFinishedAt).toFixed(1)),
-      });
+      }));
     };
 
     let loadError: unknown = null;
@@ -2571,32 +2571,33 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       const nativeStartedAt = nowMs();
       let result: DiffLoadedPayload | null = null;
       if (nextSource.kind === "github") {
-        logDiffOpenTiming("viewer.native.start", {
+        logDiffOpenTiming("viewer.native.start", () => ({
           diffUrl: nextSource.diffUrl,
           initialRowCount,
           requestId,
           sourceLabel: nextSource.label,
           sourceKind: nextSource.kind,
-        });
+        }));
         result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, initialRowCount);
-        logDiffOpenTiming("viewer.native.finish", {
-          fetchMs: Number(result.timing.fetchMs.toFixed(1)),
-          files: result.files.length,
-          initialRows: result.initialRows.length,
+        const loadedResult = result;
+        logDiffOpenTiming("viewer.native.finish", () => ({
+          fetchMs: Number(loadedResult.timing.fetchMs.toFixed(1)),
+          files: loadedResult.files.length,
+          initialRows: loadedResult.initialRows.length,
           nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-          nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+          nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
           requestId,
-          rows: result.document.rowCount,
+          rows: loadedResult.document.rowCount,
           sourceKind: nextSource.kind,
-          scopes: result.document.scopeCount,
-        });
+          scopes: loadedResult.document.scopeCount,
+        }));
       } else if (nextSource.kind === "git") {
-        logDiffOpenTiming("viewer.git.start", {
+        logDiffOpenTiming("viewer.git.start", () => ({
           args: nextSource.args,
           cwd: nextSource.cwd,
           requestId,
           sourceKind: nextSource.kind,
-        });
+        }));
         const commandResult = await commandRunner.runCommand({
           args: ["diff", ...nextSource.args],
           command: "git",
@@ -2606,32 +2607,33 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         if (commandResult.exitCode !== 0) {
           loadError = createGitDiffCommandError(commandResult);
         } else {
-          logDiffOpenTiming("viewer.git.finish", {
+          logDiffOpenTiming("viewer.git.finish", () => ({
             requestId,
             stderrLength: commandResult.stderr.length,
             stdoutLength: commandResult.stdout.length,
             timedOut: commandResult.timedOut,
-          });
+          }));
           result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
-          logDiffOpenTiming("viewer.native.finish", {
-            files: result.files.length,
-            initialRows: result.initialRows.length,
+          const loadedResult = result;
+          logDiffOpenTiming("viewer.native.finish", () => ({
+            files: loadedResult.files.length,
+            initialRows: loadedResult.initialRows.length,
             nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-            nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
             requestId,
-            rows: result.document.rowCount,
+            rows: loadedResult.document.rowCount,
             sourceKind: nextSource.kind,
-            scopes: result.document.scopeCount,
-          });
+            scopes: loadedResult.document.scopeCount,
+          }));
         }
       } else {
-        logDiffOpenTiming("viewer.native.start", {
+        logDiffOpenTiming("viewer.native.start", () => ({
           folderPath: nextSource.value,
           initialRowCount,
           requestId,
           showOnlyHunks: loadShowOnlyHunks,
           sourceKind: nextSource.kind,
-        });
+        }));
         progressiveSession = startGitFolderDiff(nextSource.value, { showOnlyHunks: loadShowOnlyHunks });
         let progress = progressiveSession.consumeChanges(initialRowCount);
         while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress, initialRowCount)) {
@@ -2644,7 +2646,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           loadError = new Error(progress.error);
         } else {
           result = progress;
-          logDiffOpenTiming("viewer.native.initialProgress", {
+          logDiffOpenTiming("viewer.native.initialProgress", () => ({
             complete: progress.complete,
             files: progress.files.length,
             initialRows: progress.initialRows.length,
@@ -2654,7 +2656,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             rows: progress.document.rowCount,
             showOnlyHunks: loadShowOnlyHunks,
             sourceKind: nextSource.kind,
-          });
+          }));
         }
       }
 
@@ -2662,7 +2664,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         if (result) {
           const nativeResolvedAt = nowMs();
           trace.nativeResolvedAt = nativeResolvedAt;
-          logDiffOpenTiming("viewer.load.nativeResolved", {
+          logDiffOpenTiming("viewer.load.nativeResolved", () => ({
             files: result.files.length,
             grammarEnsureMs: 0,
             initialRows: result.initialRows.length,
@@ -2672,7 +2674,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             rows: result.document.rowCount,
             scopes: result.document.scopeCount,
             unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
-          });
+          }));
           logDiffLoadTiming(nextSource.value, result.timing);
           if (loadRequestIdRef.current === requestId) {
             const initialLoadComplete = "complete" in result ? result.complete : true;
@@ -2723,10 +2725,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             }
           } else {
             progressiveSession?.cancel();
-            logDiffOpenTiming("viewer.load.stale", {
+            logDiffOpenTiming("viewer.load.stale", () => ({
               activeRequestId: loadRequestIdRef.current,
               requestId,
-            });
+            }));
           }
         }
       }
@@ -2751,10 +2753,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         setOpenErrorValue(createOpenError(nextSource, message));
         setViewerState(emptyDiffViewerState);
       }
-      logDiffOpenTiming("viewer.load.error", {
+      logDiffOpenTiming("viewer.load.error", () => ({
         error: message,
         requestId,
-      });
+      }));
     }
   }, [nativeDiffRows, setDocumentErrorValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
 
@@ -3020,14 +3022,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         setOpenErrorValue(null);
         setDocumentErrorValue(null);
         const dialogStartedAt = nowMs();
-        logDiffOpenTiming("viewer.dialog.start", {
+        logDiffOpenTiming("viewer.dialog.start", () => ({
           currentFolderPath: currentState.folderPath,
-        });
+        }));
         const path = await openDiffFolderDialog();
-        logDiffOpenTiming("viewer.dialog.finish", {
+        logDiffOpenTiming("viewer.dialog.finish", () => ({
           dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
           path,
-        });
+        }));
         if (path) {
           const nextSource = normalizeDiffOpenSource(path);
           if (nextSource) {
@@ -3470,10 +3472,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         : getFileStatusPresentation(file);
       if (!loggedFirstSidebarFileRenderRef.current) {
         loggedFirstSidebarFileRenderRef.current = true;
-        logDiffOpenTiming("viewer.sidebarFile.render.first", {
+        logDiffOpenTiming("viewer.sidebarFile.render.first", () => ({
           fileIndex: file.index,
           filePath: file.path,
-        });
+        }));
       }
 
       row = (
@@ -3514,7 +3516,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
     };
     const previousDiffPaneHeight = diffPaneHeight$.peek();
-    logDiffOpenTiming("viewer.splitView.resize", {
+    logDiffOpenTiming("viewer.splitView.resize", () => ({
       contentHeight: nextMetrics.contentHeight,
       contentWidth: nextMetrics.contentWidth,
       contentX: nextMetrics.contentX,
@@ -3526,7 +3528,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       previousSidebarWidth: splitPaneMetrics$.peek().sidebarWidth,
       sidebarHeight: nextMetrics.sidebarHeight,
       sidebarWidth: nextMetrics.sidebarWidth,
-    });
+    }));
     setSplitPaneMetricsValue(nextMetrics);
     const shouldSaveSidebarWidth =
       nextMetrics.sidebarWidth >= defaultDiffSidebarWidth &&
@@ -3543,12 +3545,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
     const previousHeight = diffPaneHeight$.peek();
-    logDiffOpenTiming("viewer.diffPane.layout", {
+    logDiffOpenTiming("viewer.diffPane.layout", () => ({
       height: nextHeight,
       previousHeight,
       rawHeight: Number(event.nativeEvent.layout.height.toFixed(1)),
       width: Number(event.nativeEvent.layout.width.toFixed(1)),
-    });
+    }));
     if (nextHeight > 0 || previousHeight === 0) {
       setDiffPaneHeightValue(nextHeight);
     }
@@ -3556,12 +3558,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
     const currentState = state$.peek();
-    logDiffOpenTiming("viewer.sidebarList.layout", {
+    logDiffOpenTiming("viewer.sidebarList.layout", () => ({
       fileCount: currentState.status === "loaded" ? currentState.files.length : 0,
       height: Number(event.nativeEvent.layout.height.toFixed(1)),
       status: currentState.status,
       width: Number(event.nativeEvent.layout.width.toFixed(1)),
-    });
+    }));
   }, [state$]);
 
   const getItemType = useCallback((index: number) => (
@@ -3581,11 +3583,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
       if (!loggedFirstUnifiedRowRenderRef.current) {
         loggedFirstUnifiedRowRenderRef.current = true;
-        logDiffOpenTiming("viewer.unifiedRow.render.first", {
+        logDiffOpenTiming("viewer.unifiedRow.render.first", () => ({
           hasRow: row !== undefined,
           index,
           rowKind: row?.kind,
-        });
+        }));
       }
       return (
         <DiffUnifiedRow
@@ -3617,11 +3619,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
       if (!loggedFirstSideBySideRowRenderRef.current) {
         loggedFirstSideBySideRowRenderRef.current = true;
-        logDiffOpenTiming("viewer.sideBySideRow.render.first", {
+        logDiffOpenTiming("viewer.sideBySideRow.render.first", () => ({
           hasRow: row !== undefined,
           index,
           rowKind: row?.kind,
-        });
+        }));
       }
       return (
         <DiffSideBySideRow

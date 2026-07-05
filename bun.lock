@@ -65,6 +65,7 @@
         "@legend-desktop/file-dialog": "0.0.0",
         "@legend-desktop/file-system-watcher": "0.0.0",
         "@legend-desktop/glass-effect-view": "0.0.0",
+        "@legend-desktop/instrumentation": "workspace:*",
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/native-select": "workspace:*",
@@ -376,6 +377,14 @@
         "@legend-desktop/keyboard-manager": "0.0.0",
         "@legend-desktop/native-menu": "0.0.0",
       },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/instrumentation": {
+      "name": "@legend-desktop/instrumentation",
+      "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
@@ -1030,6 +1039,8 @@
     "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
 
     "@legend-desktop/hotkeys": ["@legend-desktop/hotkeys@workspace:packages/hotkeys"],
+
+    "@legend-desktop/instrumentation": ["@legend-desktop/instrumentation@workspace:packages/instrumentation"],
 
     "@legend-desktop/keyboard-manager": ["@legend-desktop/keyboard-manager@workspace:packages/keyboard-manager"],
 

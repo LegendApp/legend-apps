@@ -79,11 +79,11 @@ export function useDiffLoadedModel({
       return new Map<number, DiffFileSummary>();
     }
     const map = new Map(state.files.map((file) => [file.index, file]));
-    logDiffOpenTiming("viewer.derive.fileByIndex", {
+    logDiffOpenTiming("viewer.derive.fileByIndex", () => ({
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       files: state.files.length,
       rows: state.document.rowCount,
-    });
+    }));
     return map;
   }, [state]);
   const fileByRowStart = useMemo(() => {
@@ -92,11 +92,11 @@ export function useDiffLoadedModel({
       return new Map<number, DiffFileSummary>();
     }
     const map = new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
-    logDiffOpenTiming("viewer.derive.fileByRowStart", {
+    logDiffOpenTiming("viewer.derive.fileByRowStart", () => ({
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       files: state.files.length,
       rows: state.document.rowCount,
-    });
+    }));
     return map;
   }, [state]);
   const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
@@ -111,12 +111,12 @@ export function useDiffLoadedModel({
           styles: [],
           timing: state.timing,
         };
-        logDiffOpenTiming("viewer.derive.snapshot", {
+        logDiffOpenTiming("viewer.derive.snapshot", () => ({
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           initialRows: state.initialRows.length,
           rows: state.document.rowCount,
           scopes: state.document.scopeCount,
-        });
+        }));
       }
       return nextSnapshot;
     },
@@ -124,14 +124,14 @@ export function useDiffLoadedModel({
   );
   const requestRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const startedAt = nowMs();
-    logDiffOpenTiming("viewer.rowsFetched", {
+    logDiffOpenTiming("viewer.rowsFetched", () => ({
       count,
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       reason: options?.reason ?? "unknown",
       rows: count,
       start,
       tokenized: false,
-    });
+    }));
     return undefined;
   }, []);
   const getTiming = useCallback((document: DiffDocument) => document.getTiming(), []);
@@ -153,13 +153,13 @@ export function useDiffLoadedModel({
       ? state.document.getScopeStyles(syntaxThemeName, 0)
       : [];
     if (state.status === "loaded" && syntaxHighlightingEnabled) {
-      logDiffOpenTiming("viewer.scopeStylesFetched", {
+      logDiffOpenTiming("viewer.scopeStylesFetched", () => ({
         durationMs: Number((nowMs() - startedAt).toFixed(1)),
         fromScopeId: 0,
         scopes: state.document.scopeCount,
         styles: styles.length,
         theme: syntaxThemeName,
-      });
+      }));
     }
     return createDiffSyntaxStyleMap(styles);
   }, [state.status === "loaded" ? state.document : null, syntaxHighlightingEnabled, syntaxThemeName]);
@@ -240,11 +240,11 @@ export function useDiffLoadedModel({
       return new Set<number>();
     }
     const indexes = new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
-    logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", {
+    logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", () => ({
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       files: state.files.length,
       rows: state.document.rowCount,
-    });
+    }));
     return indexes;
   }, [state]);
   const visibleItemIndexes = useMemo(
@@ -254,12 +254,12 @@ export function useDiffLoadedModel({
         ? createVisibleDiffRowIndexes(state.files, collapsedFileIndexes, diffRows.itemIndexes)
         : diffRows.itemIndexes;
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.visibleItemIndexes", {
+        logDiffOpenTiming("viewer.derive.visibleItemIndexes", () => ({
           collapsedFiles: collapsedFileIndexes.size,
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           items: indexes.length,
           rows: state.document.rowCount,
-        });
+        }));
       }
       return indexes;
     },
@@ -275,13 +275,13 @@ export function useDiffLoadedModel({
       });
     }
     if (state.status === "loaded") {
-      logDiffOpenTiming("viewer.derive.visibleListIndexByRowIndex", {
+      logDiffOpenTiming("viewer.derive.visibleListIndexByRowIndex", () => ({
         collapsedFiles: collapsedFileIndexes.size,
         durationMs: Number((nowMs() - startedAt).toFixed(1)),
         eagerMap: indexes !== null,
         items: visibleItemIndexes.length,
         rows: state.document.rowCount,
-      });
+      }));
     }
     return indexes;
   }, [collapsedFileIndexes, state, visibleItemIndexes]);
@@ -303,13 +303,13 @@ export function useDiffLoadedModel({
         ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
         : 0;
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideRowCount", {
+        logDiffOpenTiming("viewer.derive.sideBySideRowCount", () => ({
           collapsedFiles: collapsedFileIndexList.length,
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           rows: state.document.rowCount,
           sideBySideRows: count,
           viewMode,
-        });
+        }));
       }
       return count;
     },
@@ -320,11 +320,11 @@ export function useDiffLoadedModel({
       const startedAt = nowMs();
       const indexes = createIdentityDiffRowIndexes(sideBySideRowCount);
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", {
+        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", () => ({
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           items: indexes.length,
           rows: state.document.rowCount,
-        });
+        }));
       }
       return indexes;
     },
@@ -337,13 +337,13 @@ export function useDiffLoadedModel({
         ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
         : [];
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", {
+        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", () => ({
           collapsedFiles: collapsedFileIndexList.length,
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           files: headers.length,
           rows: state.document.rowCount,
           viewMode,
-        });
+        }));
       }
       return headers;
     },
@@ -354,11 +354,11 @@ export function useDiffLoadedModel({
       const startedAt = nowMs();
       const indexes = createSideBySideFileHeaderIndexes(sideBySideFileHeaders);
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", {
+        logDiffOpenTiming("viewer.derive.sideBySideFileHeaderIndexes", () => ({
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           files: sideBySideFileHeaders.length,
           rows: state.document.rowCount,
-        });
+        }));
       }
       return indexes;
     },
@@ -373,11 +373,11 @@ export function useDiffLoadedModel({
       const startedAt = nowMs();
       const indexes = createSideBySideListIndexByRowIndex(sideBySideFileHeaders);
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", {
+        logDiffOpenTiming("viewer.derive.sideBySideListIndexByRowIndex", () => ({
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           files: sideBySideFileHeaders.length,
           rows: state.document.rowCount,
-        });
+        }));
       }
       return indexes;
     },

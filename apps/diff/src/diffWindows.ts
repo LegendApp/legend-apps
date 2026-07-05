@@ -1,4 +1,3 @@
-import { logDiffTimingMark } from "@legend-desktop/diff-parser";
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import { setWindowOptions } from "@legend-desktop/window-manager";
@@ -9,6 +8,7 @@ import {
   diffViewerWindowModuleName,
 } from "./appConstants";
 import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
+import { logDiffOpenTiming } from "./diffInstrumentation";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
@@ -144,12 +144,6 @@ function nowMs() {
   return globalThis.performance?.now?.() ?? Date.now();
 }
 
-function logDiffOpenTiming(event: string, payload: Record<string, unknown>) {
-  const message = `${Date.now()} [DiffOpenTiming] ${event} ${JSON.stringify(payload)}`;
-  console.info(message);
-  logDiffTimingMark(message);
-}
-
 function hashString(value: string) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -175,11 +169,11 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
       }
     : undefined;
   const startedAt = nowMs();
-  logDiffOpenTiming("window.open.start", {
+  logDiffOpenTiming("window.open.start", () => ({
     focusUrlInput: options.focusUrlInput === true,
     source,
     windowIdentifier,
-  });
+  }));
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     identifier: windowIdentifier,
@@ -194,12 +188,12 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
       showViewModeToolbar: shouldShowSourceToolbar,
     }),
   }).then((result) => {
-    logDiffOpenTiming("window.open.finish", {
+    logDiffOpenTiming("window.open.finish", () => ({
       focusUrlInput: options.focusUrlInput === true,
       source,
       windowIdentifier,
       windowOpenMs: Number((nowMs() - startedAt).toFixed(1)),
-    });
+    }));
     return result;
   });
 }

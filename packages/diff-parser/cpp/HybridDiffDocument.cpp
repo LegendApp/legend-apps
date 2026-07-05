@@ -53,10 +53,13 @@ os_log_t diffMemoryLog() {
 #endif
 
 void logDiffMemoryMessage(const std::string& message) {
+  (void)message;
+#if DEBUG
 #ifdef __APPLE__
   os_log_with_type(diffMemoryLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
 #else
   std::fprintf(stderr, "%s\n", message.c_str());
+#endif
 #endif
 }
 
@@ -817,6 +820,8 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
 }
 
 void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
+  (void)reason;
+#if DEBUG
   try {
     std::lock_guard<std::mutex> lock(mutex_);
     size_t rowTextBytes = 0;
@@ -905,6 +910,7 @@ void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
   } catch (...) {
     logDiffMemoryMessage("[DiffMemory] snapshot.failed");
   }
+#endif
 }
 
 void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {

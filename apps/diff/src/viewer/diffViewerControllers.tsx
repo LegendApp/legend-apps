@@ -189,10 +189,10 @@ export function DiffWindowChromeController({
         windowIdentifier,
       })
         .then(() => {
-          logDiffOpenTiming("viewer.toolbarOptions.finish", {
+          logDiffOpenTiming("viewer.toolbarOptions.finish", () => ({
             source: toolbarModel.source,
             setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
-          });
+          }));
         })
         .catch((error: unknown) => {
           console.error(error instanceof Error ? error.message : String(error));
@@ -287,7 +287,7 @@ export function DiffLoadCompletionController({
       const effectAt = nowMs();
       measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
         setLoadingSourceValue((current) => sourcesMatch(current, currentState.source) ? null : current);
-        logDiffOpenTiming("viewer.ui.loaded", {
+        logDiffOpenTiming("viewer.ui.loaded", () => ({
           effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
           effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
           effectToSecondFrameMs: Number(elapsedMs(effectAt, secondFrameAt).toFixed(1)),
@@ -298,7 +298,7 @@ export function DiffLoadCompletionController({
           loadToSecondFrameMs: Number(elapsedMs(trace.loadStartedAt, secondFrameAt).toFixed(1)),
           nativeToSetStateMs: Number(elapsedMs(trace.nativeResolvedAt, trace.setStateAt).toFixed(1)),
           setStateToEffectMs: Number(elapsedMs(trace.setStateAt, effectAt).toFixed(1)),
-        });
+        }));
       });
     }
   });
@@ -336,15 +336,15 @@ export function DiffLaunchController({
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
       let loadTimeout: ReturnType<typeof setTimeout> | undefined;
-      logDiffOpenTiming("viewer.launchSource.effect", {
+      logDiffOpenTiming("viewer.launchSource.effect", () => ({
         source: initialSource,
-      });
+      }));
       setLoadingSourceValue(initialSource);
       const frameHandle = requestAnimationFrame(() => {
         loadTimeout = setTimeout(() => {
-          logDiffOpenTiming("viewer.launchSource.deferredLoad", {
+          logDiffOpenTiming("viewer.launchSource.deferredLoad", () => ({
             source: initialSource,
-          });
+          }));
           loadSource(initialSource, { reason: "launch" }).catch((error: unknown) => {
             console.error(getErrorMessage(error));
           });

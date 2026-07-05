@@ -28,10 +28,13 @@ os_log_t diffTimingLog() {
 #endif
 
 void logDiffTimingMessage(const std::string& message) {
+  (void)message;
+#if DEBUG
 #ifdef __APPLE__
   os_log_with_type(diffTimingLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
 #else
   std::fprintf(stderr, "%s\n", message.c_str());
+#endif
 #endif
 }
 

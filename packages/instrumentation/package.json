@@ -1,0 +1,21 @@
+{
+  "name": "@legend-desktop/instrumentation",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNInstrumentationSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "ios": {
+      "modulesProvider": {
+        "NativeInstrumentation": "RNInstrumentation"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-native": "catalog:"
+  }
+}

@@ -113,6 +113,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos", "ios", "android"],
   },
   {
+    name: "@legend-desktop/instrumentation",
+    root: path.join(packagesDir, "instrumentation"),
+    platforms: ["macos", "ios"],
+  },
+  {
     name: "@legend-desktop/media-library-scanner",
     root: path.join(packagesDir, "media-library-scanner"),
     platforms: ["macos", "ios", "android"],

@@ -28,6 +28,7 @@ const manifest = {
       "@legend-desktop/file-dialog",
       "@legend-desktop/file-system-watcher",
       "@legend-desktop/glass-effect-view",
+      "@legend-desktop/instrumentation",
       "@legend-desktop/keyboard-manager",
       "@legend-desktop/native-menu",
       "@legend-desktop/native-select",
