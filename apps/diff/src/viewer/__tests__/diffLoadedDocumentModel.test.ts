@@ -59,7 +59,11 @@ describe("diffLoadedDocumentModel", () => {
   });
 
   it("creates stable side-by-side identity indexes", () => {
-    expect(createIdentityDiffRowIndexes(3.8)).toEqual([0, 1, 2]);
+    const indexes = createIdentityDiffRowIndexes(3.8);
+    expect(indexes).toHaveLength(3);
+    expect(indexes[0]).toBeUndefined();
+    expect(indexes[1]).toBeUndefined();
+    expect(indexes[2]).toBeUndefined();
     expect(createIdentityDiffRowIndexes(-1)).toEqual([]);
   });
 

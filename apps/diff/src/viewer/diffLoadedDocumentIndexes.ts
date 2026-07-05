@@ -24,9 +24,10 @@ export function createVisibleDiffRowIndexes(
       }
     }
   } else {
-    fallbackItemIndexes.forEach((rowIndex, listIndex) => {
+    for (let listIndex = 0; listIndex < fallbackItemIndexes.length; listIndex += 1) {
+      const rowIndex = fallbackItemIndexes[listIndex];
       indexes.push(rowIndex ?? listIndex);
-    });
+    }
   }
 
   return indexes;
@@ -34,7 +35,7 @@ export function createVisibleDiffRowIndexes(
 
 export function createIdentityDiffRowIndexes(length: number) {
   const count = Math.max(0, Math.floor(length));
-  return Array.from({ length: count }, (_, index) => index);
+  return new Array<number | undefined>(count);
 }
 
 export function createCollapsedFileIndexList(collapsedFileIndexes: ReadonlySet<number>) {
