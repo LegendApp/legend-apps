@@ -186,7 +186,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     initialProperties,
     interceptClose: true,
     representedURL: source?.value,
-    title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
+    title: source ? diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }) : "",
     transparentBackground: true,
     windowStyle: createDiffViewerWindowStyle({
       includeFrame: true,
@@ -232,6 +232,7 @@ export function setDiffViewerWindowToolbarOptions({
   showSidebarControl,
   showViewModeToolbar,
   sidebarCollapsed,
+  title,
   viewMode,
   windowIdentifier,
 }: {
@@ -240,12 +241,13 @@ export function setDiffViewerWindowToolbarOptions({
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
+  title: string;
   viewMode: DiffViewMode;
   windowIdentifier: string;
 }) {
   return setWindowOptions(windowIdentifier, {
     representedURL: source?.value,
-    title: diffViewerWindowTitle({ hasUnsavedMergeDrafts, source }),
+    title,
     windowStyle: createDiffViewerWindowStyle({
       includeFrame: false,
       showSidebarControl,

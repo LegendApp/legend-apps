@@ -47,6 +47,7 @@ import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChang
 import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
 import { addRecentDiffSource } from "./diffAppMetadata";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
+import { getDiffPalette } from "./diffPalette";
 import {
   createDiffMergeDraftFileWithResolvedBlock,
   createReadyMergeState,
@@ -438,64 +439,6 @@ function hashDiffNativeRowConfigVersion(parts: readonly unknown[]) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
-}
-
-function parseHexColor(color: string) {
-  const normalized = color.trim().replace(/^#/, "");
-  const hex = normalized.length === 3
-    ? normalized.split("").map((part) => part + part).join("")
-    : normalized.slice(0, 6);
-  if (!/^[0-9a-f]{6}$/i.test(hex)) {
-    return null;
-  }
-  return {
-    b: Number.parseInt(hex.slice(4, 6), 16),
-    g: Number.parseInt(hex.slice(2, 4), 16),
-    r: Number.parseInt(hex.slice(0, 2), 16),
-  };
-}
-
-function toHexColor({ b, g, r }: { b: number; g: number; r: number }) {
-  const toHexComponent = (value: number) =>
-    Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
-  return `#${toHexComponent(r)}${toHexComponent(g)}${toHexComponent(b)}`;
-}
-
-function mixHexColor(color: string, targetColor: string, amount: number, fallbackColor: string) {
-  const parsedColor = parseHexColor(color);
-  const parsedTarget = parseHexColor(targetColor);
-  if (!parsedColor || !parsedTarget) {
-    return fallbackColor;
-  }
-  return toHexColor({
-    b: parsedColor.b + (parsedTarget.b - parsedColor.b) * amount,
-    g: parsedColor.g + (parsedTarget.g - parsedColor.g) * amount,
-    r: parsedColor.r + (parsedTarget.r - parsedColor.r) * amount,
-  });
-}
-
-function getThemeAdjustedBackground(
-  backgroundColor: string,
-  appearance: "dark" | "light",
-  darkAmount: number,
-  lightAmount: number,
-  fallbackColor: string,
-) {
-  return mixHexColor(
-    backgroundColor,
-    appearance === "dark" ? "#ffffff" : "#000000",
-    appearance === "dark" ? darkAmount : lightAmount,
-    fallbackColor,
-  );
-}
-
-function getReadableBadgeTextColor(backgroundColor: string) {
-  const parsedColor = parseHexColor(backgroundColor);
-  if (!parsedColor) {
-    return "#ffffff";
-  }
-  const luminance = (0.2126 * parsedColor.r + 0.7152 * parsedColor.g + 0.0722 * parsedColor.b) / 255;
-  return luminance > 0.55 ? "#111827" : "#ffffff";
 }
 
 function getDiffSidebarFolderTitle(file: DiffFileSummary) {
@@ -2222,37 +2165,29 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
-  const backgroundColor = syntaxTheme.background;
-  const foregroundColor = syntaxTheme.foreground;
-  const fileHeaderBackgroundColor = getThemeAdjustedBackground(
-    backgroundColor,
-    syntaxTheme.appearance,
-    0.11,
-    0.065,
-    displayTheme.colors.surfaceMuted,
+  const diffPalette = useMemo(
+    () => getDiffPalette(syntaxTheme, displayTheme.colors),
+    [
+      displayTheme.colors.border,
+      displayTheme.colors.danger,
+      displayTheme.colors.muted,
+      displayTheme.colors.primary,
+      displayTheme.colors.surface,
+      displayTheme.colors.surfaceMuted,
+      syntaxTheme.appearance,
+      syntaxTheme.background,
+      syntaxTheme.foreground,
+    ],
   );
-  const hunkHeaderBackgroundColor = getThemeAdjustedBackground(
-    backgroundColor,
-    syntaxTheme.appearance,
-    0.055,
-    0.035,
-    displayTheme.colors.surface,
-  );
-  const mutedColor = displayTheme.colors.muted;
-  const sidebarFolderColor = mixHexColor(
-    mutedColor,
-    backgroundColor,
-    0.22,
-    mutedColor,
-  );
-  const selectedSidebarFileBackgroundColor = mixHexColor(
-    backgroundColor,
-    displayTheme.colors.primary,
-    syntaxTheme.appearance === "dark" ? 0.28 : 0.18,
-    displayTheme.colors.selection === "auto" ? displayTheme.colors.surfaceMuted : displayTheme.colors.selection,
-  );
-  const sidebarConflictBadgeBackgroundColor = displayTheme.colors.danger;
-  const sidebarConflictBadgeTextColor = getReadableBadgeTextColor(sidebarConflictBadgeBackgroundColor);
+  const backgroundColor = diffPalette.background;
+  const foregroundColor = diffPalette.foreground;
+  const fileHeaderBackgroundColor = diffPalette.fileHeaderBackground;
+  const hunkHeaderBackgroundColor = diffPalette.hunkHeaderBackground;
+  const mutedColor = diffPalette.muted;
+  const sidebarFolderColor = diffPalette.sidebarFolder;
+  const selectedSidebarFileBackgroundColor = diffPalette.sidebarSelectedBackground;
+  const sidebarConflictBadgeBackgroundColor = diffPalette.sidebarConflictBadgeBackground;
+  const sidebarConflictBadgeTextColor = diffPalette.sidebarConflictBadgeText;
   const loadedDocument = state.status === "loaded" ? state.document : null;
   const loadedDocumentId = loadedDocument?.documentId ?? 0;
 
@@ -3296,7 +3231,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const listExtraData = useMemo<DiffListExtraData>(
     () => ({
       adaptiveLightModeEnabled,
-      borderColor: displayTheme.colors.border,
+      borderColor: diffPalette.border,
       collapsedFileIndexes,
       collapsedFileIndexesKey,
       fileHeaderBackgroundColor,
@@ -3316,7 +3251,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       adaptiveLightModeEnabled,
       collapsedFileIndexes,
       collapsedFileIndexesKey,
-      displayTheme.colors.border,
+      diffPalette.border,
       fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
@@ -3442,7 +3377,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   ]);
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
-      borderColor: displayTheme.colors.border,
+      borderColor: diffPalette.border,
       collapsedFileIndexList,
       document: loadedDocument,
       fileHeaderBackgroundColor,
@@ -3470,7 +3405,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       toggleFileCollapsed,
     }),
     [
-      displayTheme.colors.border,
+      diffPalette.border,
       collapsedFileIndexList,
       fileHeaderBackgroundColor,
       fileByIndex,
@@ -3551,7 +3486,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           mergeFile={mergeFile}
           onPressFile={handleSidebarFilePress}
           selectedBackgroundColor={selectedSidebarFileBackgroundColor}
-          selectedBorderColor={displayTheme.colors.primary}
+          selectedBorderColor={diffPalette.sidebarSelectedBorder}
           statusPresentation={statusPresentation}
         />
       );
@@ -3560,7 +3495,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return row;
   }, [
     activeFileIndex$,
-    displayTheme.colors.primary,
+    diffPalette.sidebarSelectedBorder,
     foregroundColor,
     handleSidebarFilePress,
     mergeState,
@@ -3713,8 +3648,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     : sideBySideItemIndexes;
   const documentErrorBody = (
     <DiffDocumentErrorBody
-      borderColor={displayTheme.colors.border}
-      dangerColor={displayTheme.colors.danger}
+      borderColor={diffPalette.border}
+      dangerColor={diffPalette.danger}
       documentError={documentError}
       foregroundColor={foregroundColor}
       mutedColor={mutedColor}
@@ -3725,19 +3660,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (
     <DiffUnsavedMergeDraftBannerWithSavingState
-      dangerColor={displayTheme.colors.danger}
+      dangerColor={diffPalette.danger}
       fileCount={unsavedMergeDraftFiles.length}
       onDiscard={discardMergeDraftsFromCommand}
       onSave={saveMergeDraftsFromCommand}
-      primaryColor={displayTheme.colors.primary}
+      primaryColor={diffPalette.primary}
       resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
     />
   ) : null;
   const startScreenOpenErrorBody = startScreenController.openError ? (
     <DiffErrorPanel
-      borderColor={displayTheme.colors.border}
+      borderColor={diffPalette.border}
       chooseFolderLabel={startScreenController.openError.kind === "permission" ? "Choose Another Folder" : undefined}
-      dangerColor={displayTheme.colors.danger}
+      dangerColor={diffPalette.danger}
       error={startScreenController.openError}
       foregroundColor={foregroundColor}
       mutedColor={mutedColor}
@@ -3752,8 +3687,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   if (state.status === "fatal") {
     body = (
       <DiffFatalBody
-        borderColor={displayTheme.colors.border}
-        dangerColor={displayTheme.colors.danger}
+        borderColor={diffPalette.border}
+        dangerColor={diffPalette.danger}
         error={state.error}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
@@ -3804,7 +3739,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             visibleSourceLabel={visibleSourceLabel}
           />
         )}
-        primaryColor={displayTheme.colors.primary}
+        primaryColor={diffPalette.primary}
         renderRow={renderRow}
         renderSidebarEntry={renderSidebarEntry}
         renderSideBySideRow={renderSideBySideRow}
@@ -3829,8 +3764,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     body = (
       <DiffStartScreen
         backgroundColor={backgroundColor}
-        borderColor={displayTheme.colors.border}
-        dangerColor={displayTheme.colors.danger}
+        borderColor={diffPalette.border}
+        dangerColor={diffPalette.danger}
         foregroundColor={foregroundColor}
         isLoading={isLoading}
         isLoadingGithub={isLoadingGithub}
@@ -3843,7 +3778,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         recentFilter={startScreenController.recentFilter}
         recentSources={startScreenController.recentSources}
         setRecentFilter={startScreenController.setRecentFilter}
-        sidebarBackgroundColor={displayTheme.colors.surface}
+        sidebarBackgroundColor={diffPalette.sidebarBackground}
         urlInput={startScreenController.urlInput}
         urlInputError={startScreenController.urlInputError}
         urlInputRef={urlInputRef}
@@ -3886,7 +3821,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       />
       <DiffDropSurface
         backgroundColor={backgroundColor}
-        borderColor={displayTheme.colors.primary}
+        borderColor={diffPalette.primary}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         onDropDiff={handleDropDiff}

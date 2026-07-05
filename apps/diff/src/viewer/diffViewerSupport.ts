@@ -2,6 +2,7 @@ import { logDiffTimingMark } from "@legend-desktop/diff-parser";
 import type { DiffLoadTiming } from "@legend-desktop/diff-parser";
 import { getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
 import { getDiffViewModeSetting } from "../diffSettings";
+import { diffViewerWindowTitle } from "../diffWindowTitle";
 import type { DiffRecoverableError, DiffViewerState } from "./diffViewerModel";
 
 export type DiffVisibleSourceModel = {
@@ -20,6 +21,7 @@ export type DiffWindowToolbarModel = {
   showViewModeToolbar: boolean;
   sidebarCollapsed: boolean;
   source: DiffOpenSource | null;
+  title: string;
   toolbarSource: DiffOpenSource | null;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 };
@@ -151,13 +153,18 @@ export function getDiffWindowToolbarModel({
   const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
   const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? state.source : null);
   const showViewModeToolbar = toolbarSource !== null;
+  const source = toolbarSource ?? state.source;
+  const title = state.status === "empty" && toolbarSource === null
+    ? ""
+    : diffViewerWindowTitle({ hasUnsavedMergeDrafts, source });
 
   return {
     hasUnsavedMergeDrafts,
     showSidebarControl: showViewModeToolbar,
     showViewModeToolbar,
     sidebarCollapsed,
-    source: toolbarSource ?? state.source,
+    source,
+    title,
     toolbarSource,
     viewMode,
   };
@@ -179,6 +186,7 @@ export function diffToolbarModelsEqual(left: DiffWindowToolbarModel | null, righ
     left.hasUnsavedMergeDrafts === right.hasUnsavedMergeDrafts &&
     left.showViewModeToolbar === right.showViewModeToolbar &&
     left.sidebarCollapsed === right.sidebarCollapsed &&
+    left.title === right.title &&
     left.viewMode === right.viewMode &&
     diffOpenSourcesEqual(left.source, right.source) &&
     diffOpenSourcesEqual(left.toolbarSource, right.toolbarSource);

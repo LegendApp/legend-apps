@@ -184,6 +184,7 @@ export function DiffWindowChromeController({
         showSidebarControl: toolbarModel.showSidebarControl,
         showViewModeToolbar: toolbarModel.showViewModeToolbar,
         sidebarCollapsed: toolbarModel.sidebarCollapsed,
+        title: toolbarModel.title,
         viewMode: toolbarModel.viewMode,
         windowIdentifier,
       })

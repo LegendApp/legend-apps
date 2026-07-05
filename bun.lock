@@ -7,6 +7,7 @@
       "devDependencies": {
         "@babel/core": "^7.29.0",
         "@babel/runtime": "^7.29.7",
+        "@react-native/assets-registry": "0.81.6",
         "@react-native/babel-preset": "0.81.6",
         "@testing-library/react-native": "14.0.0",
         "@types/jest": "29.5.14",

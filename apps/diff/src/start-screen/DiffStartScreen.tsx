@@ -1,7 +1,7 @@
 import { NativeSegmentedControl } from "@legend-desktop/native-select";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
 import type { DiffOpenSource } from "../diffFiles";
 import {
@@ -19,6 +19,7 @@ const diffStartScreenMaxContentWidth = 1080;
 const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
+const diffAppIconSource = require("../../macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset/icon_32x32.png");
 
 export type DiffStartScreenProps = {
   backgroundColor: string;
@@ -177,60 +178,70 @@ export function DiffStartScreen({
   return (
     <View style={[styles.root, { backgroundColor }]}>
       <View style={[styles.sidebar, { backgroundColor: sidebarBackgroundColor, borderColor }]}>
-        <View style={styles.launcher}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={isLoading}
-            onPress={onChooseFolder}
-            style={({ pressed }) => [
-              styles.openFolderButton,
-              {
-                backgroundColor: diffStartScreenAccentColor,
-                opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
-              },
-            ]}
-          >
-            <SFSymbol color="#ffffff" name="folder" size={17} />
-            <Text style={styles.openFolderText}>Open Folder</Text>
-          </Pressable>
-          <View style={[styles.urlField, { borderColor }]}>
-            <SFSymbol color={mutedColor} name="link" size={15} />
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={onChangeUrlInput}
-              onSubmitEditing={onOpenUrl}
-              placeholder="Paste GitHub URL"
-              placeholderTextColor={mutedColor}
-              ref={urlInputRef}
-              returnKeyType="go"
-              style={[styles.urlInput, { color: foregroundColor }]}
-              value={urlInput}
-            />
+        <View style={styles.sidebarLaunchCluster}>
+          <View style={styles.identity}>
+            <View style={[styles.identityIconFrame, { borderColor }]}>
+              <Image source={diffAppIconSource} style={styles.identityIcon} />
+            </View>
+            <View style={styles.identityText}>
+              <Text style={[styles.identityTitle, { color: foregroundColor }]}>Legend Diff</Text>
+            </View>
+          </View>
+          <View style={styles.launcher}>
             <Pressable
               accessibilityRole="button"
-              disabled={isLoading || !urlInput.trim()}
-              onPress={onOpenUrl}
+              disabled={isLoading}
+              onPress={onChooseFolder}
               style={({ pressed }) => [
-                styles.urlOpenButton,
+                styles.openFolderButton,
                 {
-                  borderColor,
-                  opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                  backgroundColor: diffStartScreenAccentColor,
+                  opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
                 },
               ]}
             >
-              {isLoadingGithub ? (
-                <ActivityIndicator color={foregroundColor} size="small" />
-              ) : (
-                <Text style={[styles.urlOpenButtonText, { color: foregroundColor }]}>Open</Text>
-              )}
+              <SFSymbol color="#ffffff" name="folder" size={17} />
+              <Text style={styles.openFolderText}>Open Folder</Text>
             </Pressable>
+            <View style={[styles.urlField, { borderColor }]}>
+              <SFSymbol color={mutedColor} name="link" size={15} />
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={onChangeUrlInput}
+                onSubmitEditing={onOpenUrl}
+                placeholder="Paste GitHub URL"
+                placeholderTextColor={mutedColor}
+                ref={urlInputRef}
+                returnKeyType="go"
+                style={[styles.urlInput, { color: foregroundColor }]}
+                value={urlInput}
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={isLoading || !urlInput.trim()}
+                onPress={onOpenUrl}
+                style={({ pressed }) => [
+                  styles.urlOpenButton,
+                  {
+                    borderColor,
+                    opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                  },
+                ]}
+              >
+                {isLoadingGithub ? (
+                  <ActivityIndicator color={foregroundColor} size="small" />
+                ) : (
+                  <Text style={[styles.urlOpenButtonText, { color: foregroundColor }]}>Open</Text>
+                )}
+              </Pressable>
+            </View>
+            {urlInputError ? (
+              <Text style={[styles.validationText, { color: dangerColor }]}>
+                {urlInputError}
+              </Text>
+            ) : null}
           </View>
-          {urlInputError ? (
-            <Text style={[styles.validationText, { color: dangerColor }]}>
-              {urlInputError}
-            </Text>
-          ) : null}
         </View>
       </View>
       <View style={styles.content}>
@@ -287,6 +298,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 32,
     width: "100%",
+  },
+  identity: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 2,
+  },
+  identityIconFrame: {
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 52,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 52,
+  },
+  identityIcon: {
+    height: 52,
+    width: 52,
+  },
+  identityText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  identityTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 26,
   },
   launcher: {
     gap: 12,
@@ -387,9 +426,12 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     borderRightWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
     paddingHorizontal: 28,
-    paddingTop: 128,
     width: diffStartScreenSidebarWidth,
+  },
+  sidebarLaunchCluster: {
+    gap: 28,
   },
   urlField: {
     alignItems: "center",

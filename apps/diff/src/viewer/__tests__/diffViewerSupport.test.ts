@@ -135,9 +135,38 @@ describe("diffViewerSupport", () => {
       viewMode: "unified",
     });
 
+    expect(model.title.trim()).toBe("repo");
     expect(diffToolbarModelsEqual(model, { ...model })).toBe(true);
     expect(diffToolbarModelsEqual(model, { ...model, hasUnsavedMergeDrafts: true })).toBe(false);
     expect(diffToolbarModelsEqual(model, { ...model, sidebarCollapsed: true })).toBe(false);
+    expect(diffToolbarModelsEqual(model, { ...model, title: "" })).toBe(false);
     expect(diffToolbarModelsEqual(model, { ...model, viewMode: "blocks" })).toBe(false);
+  });
+
+  it("uses an empty window title for the empty start screen", () => {
+    const emptyState: DiffViewerState = { folderPath: null, source: null, status: "empty" };
+    expect(getDiffWindowToolbarModel({
+      hasUnsavedMergeDrafts: false,
+      loadingSource: null,
+      sidebarCollapsed: false,
+      state: emptyState,
+      viewMode: "unified",
+    })).toMatchObject({
+      source: null,
+      title: "",
+      toolbarSource: null,
+    });
+
+    expect(getDiffWindowToolbarModel({
+      hasUnsavedMergeDrafts: false,
+      loadingSource: folderSource,
+      sidebarCollapsed: false,
+      state: emptyState,
+      viewMode: "unified",
+    })).toMatchObject({
+      source: folderSource,
+      title: "repo  ",
+      toolbarSource: folderSource,
+    });
   });
 });
