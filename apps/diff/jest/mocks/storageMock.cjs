@@ -29,7 +29,12 @@ function createObservableSettings({ fields }) {
   };
 }
 
+function createObservableFile({ initialValue }) {
+  return observable(initialValue);
+}
+
 module.exports = {
   __esModule: true,
+  createObservableFile,
   createObservableSettings,
 };
