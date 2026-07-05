@@ -286,7 +286,7 @@ type DiffSidebarFileRowProps = {
   file: DiffFileSummary;
   foregroundColor: string;
   mergeFile: DiffMergeConflictFile | null;
-  onPress: () => void;
+  onPressFile: (file: DiffFileSummary) => void;
   selectedBorderColor: string;
   selectedBackgroundColor: string;
   statusPresentation: ReturnType<typeof getFileStatusPresentation>;
@@ -386,11 +386,9 @@ type DiffListExtraData = {
   rowHeight: number;
   showOnlyHunks: boolean;
   sideBySideRowCount: number;
-  sideBySideTokenStyleCount: number;
   syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
   syntaxTheme: DiffSettingsFile["syntaxTheme"];
-  tokenStyleCount: number;
 };
 
 type DiffNativeRowConfigProps = {
@@ -523,7 +521,7 @@ function createDiffSidebarEntries(files: readonly DiffFileSummary[]) {
   return entries;
 }
 
-function DiffSidebarFolderRow({ color, title }: DiffSidebarFolderRowProps) {
+const DiffSidebarFolderRow = memo(function DiffSidebarFolderRow({ color, title }: DiffSidebarFolderRowProps) {
   return (
     <View className="justify-center px-3 pb-1 pt-3" style={styles.sidebarFolder}>
       <Text className="text-xs font-medium leading-4" numberOfLines={1} style={{ color }}>
@@ -531,29 +529,56 @@ function DiffSidebarFolderRow({ color, title }: DiffSidebarFolderRowProps) {
       </Text>
     </View>
   );
+});
+
+function diffFileStatusPresentationsEqual(
+  previous: ReturnType<typeof getFileStatusPresentation>,
+  next: ReturnType<typeof getFileStatusPresentation>,
+) {
+  return previous.backgroundColor === next.backgroundColor
+    && previous.color === next.color
+    && previous.iconYOffset === next.iconYOffset
+    && previous.symbolName === next.symbolName
+    && previous.title === next.title;
 }
 
-function DiffSidebarFileRow({
+function diffSidebarFileRowPropsEqual(previous: DiffSidebarFileRowProps, next: DiffSidebarFileRowProps) {
+  return previous.activeFileIndex$ === next.activeFileIndex$
+    && previous.conflictBadgeBackgroundColor === next.conflictBadgeBackgroundColor
+    && previous.conflictBadgeTextColor === next.conflictBadgeTextColor
+    && previous.file === next.file
+    && previous.foregroundColor === next.foregroundColor
+    && previous.mergeFile === next.mergeFile
+    && previous.onPressFile === next.onPressFile
+    && previous.selectedBackgroundColor === next.selectedBackgroundColor
+    && previous.selectedBorderColor === next.selectedBorderColor
+    && diffFileStatusPresentationsEqual(previous.statusPresentation, next.statusPresentation);
+}
+
+const DiffSidebarFileRow = memo(function DiffSidebarFileRow({
   activeFileIndex$,
   conflictBadgeBackgroundColor,
   conflictBadgeTextColor,
   file,
   foregroundColor,
   mergeFile,
-  onPress,
+  onPressFile,
   selectedBorderColor,
   selectedBackgroundColor,
   statusPresentation,
 }: DiffSidebarFileRowProps) {
   const isActive = useValue(() => activeFileIndex$.get() === file.index);
   const filename = getFilename(file.path);
+  const handlePress = useCallback(() => {
+    onPressFile(file);
+  }, [file, onPressFile]);
 
   return (
     <Pressable
       accessibilityLabel={`${filename}, ${statusPresentation.title}`}
       accessibilityRole="button"
       className="flex-row items-center gap-2 px-3"
-      onPress={onPress}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.sidebarFile,
         isActive
@@ -580,7 +605,7 @@ function DiffSidebarFileRow({
       ) : null}
     </Pressable>
   );
-}
+}, diffSidebarFileRowPropsEqual);
 
 function getDiffLineRowHeight(fontSize: number) {
   return Math.max(20, fontSize + 9);
@@ -2061,31 +2086,6 @@ function useDiffInlineMergeModel({
       return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
     }).join("|");
   }, [mergeDisplayModelByPath, mergeState]);
-  const mergeListExtraData = useMemo(() => ({
-    borderColor,
-    dataVersion,
-    foregroundColor,
-    fontFamily,
-    fontSize,
-    mutedColor,
-    primaryColor,
-    rowHeight,
-    rowRenderer,
-    showOnlyHunks,
-    syntaxAppearance,
-  }), [
-    borderColor,
-    dataVersion,
-    foregroundColor,
-    fontFamily,
-    fontSize,
-    mutedColor,
-    primaryColor,
-    rowHeight,
-    rowRenderer,
-    showOnlyHunks,
-    syntaxAppearance,
-  ]);
   const controlRowByFilePath = useMemo(() => {
     const map = new Map<string, Map<string, number>>();
     if (mergeState.status === "ready") {
@@ -2239,7 +2239,6 @@ function useDiffInlineMergeModel({
     getItemSize,
     getItemType,
     itemIndexes: inlineList.itemIndexes,
-    mergeListExtraData,
     renderMergeRow,
   };
 }
@@ -2447,6 +2446,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const sidebarConflictBadgeBackgroundColor = displayTheme.colors.danger;
   const sidebarConflictBadgeTextColor = getReadableBadgeTextColor(sidebarConflictBadgeBackgroundColor);
+  const loadedDocument = state.status === "loaded" ? state.document : null;
+  const loadedDocumentId = loadedDocument?.documentId ?? 0;
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -2479,7 +2480,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
     syntaxStyleStore,
-    tokenStyleById,
     visibleItemIndexes,
   } = useDiffLoadedModel({
     collapsedFileIndexes,
@@ -3505,11 +3505,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       showOnlyHunks,
       sideBySideRowCount,
-      sideBySideTokenStyleCount: tokenStyleById.size,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxHighlightingEnabled,
       syntaxTheme: listSyntaxTheme,
-      tokenStyleCount: tokenStyleById.size,
     }),
     [
       adaptiveLightModeEnabled,
@@ -3528,13 +3526,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       sideBySideRowCount,
       syntaxHighlightingEnabled,
       syntaxTheme.appearance,
-      tokenStyleById.size,
     ],
   );
   const nativeUnifiedRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
     const palette = getDiffRowPalette(syntaxTheme.appearance);
-    const documentId = state.status === "loaded" ? state.document.documentId : 0;
-    const configId = `diff:${documentId}:unified`;
+    const configId = `diff:${loadedDocumentId}:unified`;
     const configVersion = hashDiffNativeRowConfigVersion([
       configId,
       diffUnifiedChangeBarWidth,
@@ -3560,7 +3556,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       configId,
       configVersion,
       dividerColor: "transparent",
-      documentId,
+      documentId: loadedDocumentId,
       fontFamily,
       fontSize,
       foregroundColor,
@@ -3579,17 +3575,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fontSize,
     foregroundColor,
     listSyntaxTheme,
+    loadedDocumentId,
     mutedColor,
     rowHeight,
-    state.status === "loaded" ? state.document : null,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
   const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
     const palette = getDiffRowPalette(syntaxTheme.appearance);
     const dividerColor = getSideBySideDividerColor(syntaxTheme.appearance);
-    const documentId = state.status === "loaded" ? state.document.documentId : 0;
-    const configId = `diff:${documentId}:blocks`;
+    const configId = `diff:${loadedDocumentId}:blocks`;
     const configVersion = hashDiffNativeRowConfigVersion([
       configId,
       collapsedFileIndexesKey,
@@ -3616,7 +3611,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       configId,
       configVersion,
       dividerColor,
-      documentId,
+      documentId: loadedDocumentId,
       fontFamily,
       fontSize,
       foregroundColor,
@@ -3636,9 +3631,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fontSize,
     foregroundColor,
     listSyntaxTheme,
+    loadedDocumentId,
     mutedColor,
     rowHeight,
-    state.status === "loaded" ? state.document : null,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
@@ -3646,7 +3641,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     () => ({
       borderColor: displayTheme.colors.border,
       collapsedFileIndexList,
-      document: state.status === "loaded" ? state.document : null,
+      document: loadedDocument,
       fileHeaderBackgroundColor,
       fileByIndex,
       fileByRowStart,
@@ -3665,12 +3660,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
-      sideBySideTokenStyleById: tokenStyleById,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxHighlightingEnabled,
       syntaxStyleStore,
       syntaxThemeName: listSyntaxTheme,
-      tokenStyleById,
       toggleFileCollapsed,
     }),
     [
@@ -3694,13 +3687,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
-      state.status === "loaded" ? state.document : null,
+      loadedDocument,
       syntaxHighlightingEnabled,
       syntaxStyleStore,
       syntaxTheme.appearance,
       listSyntaxTheme,
       toggleFileCollapsed,
-      tokenStyleById,
     ],
   );
 
@@ -3754,7 +3746,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           file={file}
           foregroundColor={foregroundColor}
           mergeFile={mergeFile}
-          onPress={() => handleSidebarFilePress(file)}
+          onPressFile={handleSidebarFilePress}
           selectedBackgroundColor={selectedSidebarFileBackgroundColor}
           selectedBorderColor={displayTheme.colors.primary}
           statusPresentation={statusPresentation}
@@ -3844,10 +3836,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return diffFileHeaderRowHeight;
     }
 
-    const document = state.status === "loaded" ? state.document : null;
-    const row = document?.getPlainRows(index, 1)[0];
-    return rowHeight + (showOnlyHunks && isDiffUnifiedHunkStart(document, index, row) ? diffHunkHeaderHeight : 0);
-  }, [getItemType, rowHeight, showOnlyHunks, state]);
+    const row = loadedDocument?.getPlainRows(index, 1)[0];
+    return rowHeight + (showOnlyHunks && isDiffUnifiedHunkStart(loadedDocument, index, row) ? diffHunkHeaderHeight : 0);
+  }, [getItemType, loadedDocument, rowHeight, showOnlyHunks]);
 
   const renderRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
@@ -3881,10 +3872,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return diffFileHeaderRowHeight;
     }
 
-    const document = state.status === "loaded" ? state.document : null;
-    const row = document?.getPlainSideBySideRow(index, collapsedFileIndexList);
-    return rowHeight + (showOnlyHunks && isDiffSideBySideHunkStart(document, index, collapsedFileIndexList, row) ? diffHunkHeaderHeight : 0);
-  }, [collapsedFileIndexList, rowHeight, showOnlyHunks, sideBySideFileHeaderIndexes, state]);
+    const row = loadedDocument?.getPlainSideBySideRow(index, collapsedFileIndexList);
+    return rowHeight + (showOnlyHunks && isDiffSideBySideHunkStart(loadedDocument, index, collapsedFileIndexList, row) ? diffHunkHeaderHeight : 0);
+  }, [collapsedFileIndexList, loadedDocument, rowHeight, showOnlyHunks, sideBySideFileHeaderIndexes]);
 
   const renderSideBySideRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {

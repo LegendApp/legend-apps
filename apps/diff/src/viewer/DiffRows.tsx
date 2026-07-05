@@ -55,12 +55,10 @@ export type DiffRenderFields = {
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
   sideBySideRowCount: number;
-  sideBySideTokenStyleById: SyntaxStyleMap;
   syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
   syntaxStyleStore: DiffSyntaxStyleStore;
   syntaxThemeName: string;
-  tokenStyleById: SyntaxStyleMap;
   toggleFileCollapsed: (fileIndex: number) => void;
 };
 
@@ -609,7 +607,7 @@ const DiffReactNativeUnifiedLineRow = memo(function DiffReactNativeUnifiedLineRo
   const rowHeight = renderFields.rowHeight;
   const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, renderFields.syntaxStyleStore);
   const displayRow = tokenizedState?.row ?? row;
-  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? renderFields.tokenStyleById;
+  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? renderFields.syntaxStyleStore.current;
 
   return (
     <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
@@ -795,7 +793,6 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const hunkHeaderBackgroundColor = renderFields.hunkHeaderBackgroundColor;
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
-  const sideBySideTokenStyleById = renderFields.sideBySideTokenStyleById;
   const syntaxAppearance = renderFields.syntaxAppearance;
   const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
@@ -895,7 +892,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           side="old"
           syntaxAppearance={syntaxAppearance}
           syntaxStyleStore={syntaxStyleStore}
-          tokenStyleById={sideBySideTokenStyleById}
+          tokenStyleById={syntaxStyleStore.current}
         />
         <DiffSideBySideLine
           adaptiveRender={adaptiveRender}
@@ -911,7 +908,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           side="new"
           syntaxAppearance={syntaxAppearance}
           syntaxStyleStore={syntaxStyleStore}
-          tokenStyleById={sideBySideTokenStyleById}
+          tokenStyleById={syntaxStyleStore.current}
         />
       </View>
     </>

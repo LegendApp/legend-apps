@@ -59,7 +59,6 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     showOnlyHunks: true,
     sideBySideFileHeaderByListIndex: new Map(),
     sideBySideRowCount: 0,
-    sideBySideTokenStyleById: new Map(),
     syntaxAppearance: "dark",
     syntaxHighlightingEnabled: true,
     syntaxStyleStore: {
@@ -72,7 +71,6 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     },
     syntaxThemeName: "dark-plus",
     toggleFileCollapsed: jest.fn(),
-    tokenStyleById: new Map(),
     ...overrides,
   };
 }
