@@ -985,6 +985,69 @@ function DiffOpenBody({
   );
 }
 
+function DiffOpenBodyContainer({
+  borderColor,
+  dangerColor,
+  foregroundColor,
+  isLoading,
+  isLoadingGithub,
+  mutedColor,
+  onChangeUrlInput,
+  onChooseFolder,
+  onDismissOpenError,
+  onOpenPermissionSettings,
+  onOpenUrl,
+  onRetryOpenError,
+  openError$,
+  primaryColor,
+  urlInput$,
+  urlInputError$,
+  urlInputRef,
+}: {
+  borderColor: string;
+  dangerColor: string;
+  foregroundColor: string;
+  isLoading: boolean;
+  isLoadingGithub: boolean;
+  mutedColor: string;
+  onChangeUrlInput: (text: string) => void;
+  onChooseFolder: () => void;
+  onDismissOpenError: () => void;
+  onOpenPermissionSettings: () => void;
+  onOpenUrl: () => void;
+  onRetryOpenError: () => void;
+  openError$: Observable<DiffRecoverableError | null>;
+  primaryColor: string;
+  urlInput$: Observable<string>;
+  urlInputError$: Observable<string | null>;
+  urlInputRef: RefObject<TextInput | null>;
+}) {
+  const openError = useValue(openError$);
+  const urlInput = useValue(urlInput$);
+  const urlInputError = useValue(urlInputError$);
+  return (
+    <DiffOpenBody
+      borderColor={borderColor}
+      dangerColor={dangerColor}
+      foregroundColor={foregroundColor}
+      isLoading={isLoading}
+      isLoadingGithub={isLoadingGithub}
+      mutedColor={mutedColor}
+      onChangeUrlInput={onChangeUrlInput}
+      onChooseFolder={onChooseFolder}
+      onDismissOpenError={onDismissOpenError}
+      onOpenPermissionSettings={onOpenPermissionSettings}
+      onOpenUrl={onOpenUrl}
+      onRetryOpenError={onRetryOpenError}
+      openError={openError}
+      primaryColor={primaryColor}
+      urlInput={urlInput}
+      urlInputError={urlInputError}
+      urlInputRef={urlInputRef}
+    />
+  );
+}
+
 function DiffLoadedBodyGate({
   noChangesBody,
   ...loadedBodyProps
@@ -2304,9 +2367,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     urlInputError$,
   } = model;
   const state = useValue(state$);
-  const urlInput = useValue(urlInput$);
-  const urlInputError = useValue(urlInputError$);
-  const openError = useValue(openError$);
   const documentError = useValue(documentError$);
   const loadingSource = useValue(loadingSource$);
   const mergeState = useValue(mergeState$);
@@ -3986,7 +4046,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     );
   } else {
     body = (
-      <DiffOpenBody
+      <DiffOpenBodyContainer
         borderColor={displayTheme.colors.border}
         dangerColor={displayTheme.colors.danger}
         foregroundColor={foregroundColor}
@@ -3999,10 +4059,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         onOpenPermissionSettings={openPermissionSettings}
         onOpenUrl={openUrl}
         onRetryOpenError={retryOpenError}
-        openError={openError}
+        openError$={openError$}
         primaryColor={displayTheme.colors.primary}
-        urlInput={urlInput}
-        urlInputError={urlInputError}
+        urlInput$={urlInput$}
+        urlInputError$={urlInputError$}
         urlInputRef={urlInputRef}
       />
     );
