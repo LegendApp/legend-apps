@@ -1590,6 +1590,8 @@ type DiffMergeSyntaxState = {
   tokenStyleById: SyntaxStyleMap;
 };
 
+type DiffMergeSyntaxByPath = Record<string, DiffMergeSyntaxState | undefined>;
+
 function createMergeSyntaxStyleMap(styles: readonly SyntaxStyle[]): SyntaxStyleMap {
   return new Map(styles.map((style) => [style.id, style]));
 }
@@ -1882,19 +1884,16 @@ function DiffMergeLineRow({
   foregroundColor,
   fontFamily,
   fontSize,
-  leftSyntaxLine,
-  leftTokens,
+  mergeSyntaxByPath$,
   mutedColor,
   onResolveMergeConflict,
   primaryColor,
   renderer,
   resolvingMergeConflictKeys$,
-  rightSyntaxLine,
-  rightTokens,
   row,
+  rowIndex,
   rowHeight,
   syntaxAppearance,
-  tokenStyleById,
 }: {
   borderColor: string;
   controlBlock: DiffMergeConflictBlock | null;
@@ -1903,20 +1902,23 @@ function DiffMergeLineRow({
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
-  leftSyntaxLine: SyntaxRenderLine;
-  leftTokens: string;
+  mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
   renderer: DiffRowRendererSetting;
   resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
-  rightSyntaxLine: SyntaxRenderLine;
-  rightTokens: string;
   row: DiffMergeDisplayRow | undefined;
+  rowIndex: number;
   rowHeight: number;
   syntaxAppearance: "dark" | "light";
-  tokenStyleById: SyntaxStyleMap;
 }) {
+  const mergeSyntax = useValue(() => mergeSyntaxByPath$[file.path].get());
+  const tokenStyleById = mergeSyntax?.tokenStyleById ?? new Map<number, SyntaxStyle>();
+  const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, rowIndex, row?.leftText ?? "");
+  const rightSyntaxLine = getMergeSyntaxLine(mergeSyntax?.rightLines, rowIndex, row?.rightText ?? "");
+  const leftTokens = encodeMergeNativeTokens(leftSyntaxLine, tokenStyleById, foregroundColor);
+  const rightTokens = encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor);
   const isConflictRow = row?.conflictBlock !== undefined;
   const leftColors = getMergeSideColors(row?.leftChangeType, isConflictRow, "left", mutedColor, syntaxAppearance);
   const rightColors = getMergeSideColors(row?.rightChangeType, isConflictRow, "right", mutedColor, syntaxAppearance);
@@ -2034,7 +2036,7 @@ function useDiffInlineMergeModel({
   unifiedItemIndexes: Array<number | undefined>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }) {
-  const [mergeSyntaxByPath, setMergeSyntaxByPath] = useState<Map<string, DiffMergeSyntaxState>>(() => new Map());
+  const mergeSyntaxByPath$ = useObservable<DiffMergeSyntaxByPath>({});
   const mergeDisplayModelByPath = useMemo(() => {
     const map = new Map<string, DiffMergeDisplayModel>();
     if (mergeState.status === "ready") {
@@ -2059,17 +2061,12 @@ function useDiffInlineMergeModel({
       return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
     }).join("|");
   }, [mergeDisplayModelByPath, mergeState]);
-  const mergeSyntaxVersion = useMemo(
-    () => [...mergeSyntaxByPath.values()].reduce((version, syntax) => version + syntax.configVersion, 0),
-    [mergeSyntaxByPath],
-  );
   const mergeListExtraData = useMemo(() => ({
     borderColor,
     dataVersion,
     foregroundColor,
     fontFamily,
     fontSize,
-    mergeSyntaxVersion,
     mutedColor,
     primaryColor,
     rowHeight,
@@ -2082,7 +2079,6 @@ function useDiffInlineMergeModel({
     foregroundColor,
     fontFamily,
     fontSize,
-    mergeSyntaxVersion,
     mutedColor,
     primaryColor,
     rowHeight,
@@ -2154,10 +2150,6 @@ function useDiffInlineMergeModel({
         && controlRowByBlockKey.get(getMergeConflictKey(file, displayRow.conflictBlock)) === rowIndex
         ? displayRow.conflictBlock
         : null;
-      const mergeSyntax = mergeSyntaxByPath.get(file.path);
-      const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, rowIndex, displayRow?.leftText ?? "");
-      const rightSyntaxLine = getMergeSyntaxLine(mergeSyntax?.rightLines, rowIndex, displayRow?.rightText ?? "");
-      const tokenStyleById = mergeSyntax?.tokenStyleById ?? new Map<number, SyntaxStyle>();
       return (
         <DiffMergeLineRow
           borderColor={borderColor}
@@ -2167,28 +2159,25 @@ function useDiffInlineMergeModel({
           foregroundColor={foregroundColor}
           fontFamily={fontFamily}
           fontSize={fontSize}
-          leftSyntaxLine={leftSyntaxLine}
-          leftTokens={encodeMergeNativeTokens(leftSyntaxLine, tokenStyleById, foregroundColor)}
+          mergeSyntaxByPath$={mergeSyntaxByPath$}
           mutedColor={mutedColor}
           onResolveMergeConflict={onResolveMergeConflict}
           primaryColor={primaryColor}
           renderer={rowRenderer}
           resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-          rightSyntaxLine={rightSyntaxLine}
-          rightTokens={encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor)}
           row={displayRow}
+          rowIndex={rowIndex}
           rowHeight={rowHeight}
           syntaxAppearance={syntaxAppearance}
-          tokenStyleById={tokenStyleById}
         />
       );
     },
-    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys$, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath$, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys$, rowHeight, rowRenderer, syntaxAppearance],
   );
 
   useEffect(() => {
     if (mergeState.status !== "ready" || !syntaxHighlightingEnabled || mergeState.files.length === 0) {
-      setMergeSyntaxByPath(new Map());
+      mergeSyntaxByPath$.set({});
       return;
     }
 
@@ -2208,31 +2197,31 @@ function useDiffInlineMergeModel({
       })))
       .then((results) => {
         if (!cancelled) {
-          const nextSyntaxByPath = new Map<string, DiffMergeSyntaxState>();
+          const nextSyntaxByPath: DiffMergeSyntaxByPath = {};
           results.forEach(({ file, leftResult, rightResult }) => {
             const styles = [...leftResult.styles, ...rightResult.styles];
             const syntaxKey = `${dataVersion}:${file.path}:${syntaxThemeName}`;
-            nextSyntaxByPath.set(file.path, {
+            nextSyntaxByPath[file.path] = {
               configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
               key: syntaxKey,
               leftLines: leftResult.lines,
               rightLines: rightResult.lines,
               tokenStyleById: createMergeSyntaxStyleMap(styles),
-            });
+            };
           });
-          setMergeSyntaxByPath(nextSyntaxByPath);
+          mergeSyntaxByPath$.set(nextSyntaxByPath);
         }
       }).catch((error: unknown) => {
         if (!cancelled) {
           console.error(error instanceof Error ? error.message : String(error));
-          setMergeSyntaxByPath(new Map());
+          mergeSyntaxByPath$.set({});
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [dataVersion, mergeDisplayModelByPath, mergeState, syntaxHighlightingEnabled, syntaxThemeName]);
+  }, [dataVersion, mergeDisplayModelByPath, mergeState, mergeSyntaxByPath$, syntaxHighlightingEnabled, syntaxThemeName]);
 
   const emptyMessage = mergeState.status === "loading"
     ? "Checking merge conflicts..."
