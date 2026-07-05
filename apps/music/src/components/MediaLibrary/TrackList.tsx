@@ -368,8 +368,8 @@ export function TrackList(_props: TrackListProps) {
                 }
             >
                 <LegendList
-                    key={selectedView}
                     data={trackIds}
+                    dataVersion={selectedView}
                     keyExtractor={keyExtractor}
                     renderItem={renderTrack}
                     getItemType={getItemType}
