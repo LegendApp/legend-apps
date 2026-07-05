@@ -3840,10 +3840,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         onOpenRecentSource={startScreenController.onOpenRecentSource}
         onOpenUrl={startScreenController.onOpenUrl}
         openErrorBody={startScreenOpenErrorBody}
-        primaryColor={displayTheme.colors.primary}
         recentFilter={startScreenController.recentFilter}
         recentSources={startScreenController.recentSources}
         setRecentFilter={startScreenController.setRecentFilter}
+        sidebarBackgroundColor={displayTheme.colors.surface}
         urlInput={startScreenController.urlInput}
         urlInputError={startScreenController.urlInputError}
         urlInputRef={urlInputRef}

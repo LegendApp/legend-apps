@@ -1,3 +1,4 @@
+import { NativeSegmentedControl } from "@legend-desktop/native-select";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -9,13 +10,13 @@ import {
   getGroupedRecentDiffSources,
   getRecentDiffSourceDetail,
   getRecentDiffSourceKind,
-  getRecentDiffSourceTypeLabel,
   type DiffRecentFilter,
   type DiffRecentSourceGroup,
 } from "./diffStartScreenModel";
 
 const diffStartScreenSidebarWidth = 312;
 const diffStartScreenMaxContentWidth = 1080;
+const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
 
@@ -32,10 +33,10 @@ export type DiffStartScreenProps = {
   onOpenRecentSource: (source: DiffOpenSource) => void;
   onOpenUrl: () => void | Promise<void>;
   openErrorBody: ReactNode;
-  primaryColor: string;
   recentFilter: DiffRecentFilter;
   recentSources: RecentDiffSource[];
   setRecentFilter: (filter: DiffRecentFilter) => void;
+  sidebarBackgroundColor: string;
   urlInput: string;
   urlInputError: string | null;
   urlInputRef: RefObject<TextInput | null>;
@@ -52,10 +53,10 @@ function getSourceIconName(source: DiffOpenSource) {
   return "point.3.connected.trianglepath.dotted";
 }
 
-function getSourceAccentColor(source: DiffOpenSource, primaryColor: string, mutedColor: string) {
+function getSourceAccentColor(source: DiffOpenSource, mutedColor: string) {
   const kind = getRecentDiffSourceKind(source);
   if (kind === "folder") {
-    return primaryColor;
+    return diffStartScreenAccentColor;
   }
   if (kind === "pullRequest") {
     return pullRequestAccentColor;
@@ -72,7 +73,6 @@ function DiffStartScreenRecentRow({
   isLoading,
   mutedColor,
   onOpenSource,
-  primaryColor,
   recentSource,
 }: {
   borderColor: string;
@@ -80,11 +80,10 @@ function DiffStartScreenRecentRow({
   isLoading: boolean;
   mutedColor: string;
   onOpenSource: (source: DiffOpenSource) => void;
-  primaryColor: string;
   recentSource: RecentDiffSource;
 }) {
   const source = recentSource.source;
-  const accentColor = getSourceAccentColor(source, primaryColor, mutedColor);
+  const accentColor = getSourceAccentColor(source, mutedColor);
   return (
     <Pressable
       accessibilityRole="button"
@@ -112,11 +111,6 @@ function DiffStartScreenRecentRow({
       <Text style={[styles.recentRowTime, { color: mutedColor }]} numberOfLines={1}>
         {formatRecentDiffSourceOpenedAt(recentSource.lastOpenedAt)}
       </Text>
-      <View style={[styles.recentRowBadge, { borderColor: accentColor }]}>
-        <Text style={[styles.recentRowBadgeText, { color: accentColor }]} numberOfLines={1}>
-          {getRecentDiffSourceTypeLabel(source)}
-        </Text>
-      </View>
     </Pressable>
   );
 }
@@ -128,7 +122,6 @@ function DiffStartScreenRecentGroup({
   isLoading,
   mutedColor,
   onOpenSource,
-  primaryColor,
 }: {
   borderColor: string;
   foregroundColor: string;
@@ -136,7 +129,6 @@ function DiffStartScreenRecentGroup({
   isLoading: boolean;
   mutedColor: string;
   onOpenSource: (source: DiffOpenSource) => void;
-  primaryColor: string;
 }) {
   return (
     <View style={styles.recentGroup}>
@@ -152,7 +144,6 @@ function DiffStartScreenRecentGroup({
             key={recentSource.id}
             mutedColor={mutedColor}
             onOpenSource={onOpenSource}
-            primaryColor={primaryColor}
             recentSource={recentSource}
           />
         ))}
@@ -174,10 +165,10 @@ export function DiffStartScreen({
   onOpenRecentSource,
   onOpenUrl,
   openErrorBody,
-  primaryColor,
   recentFilter,
   recentSources,
   setRecentFilter,
+  sidebarBackgroundColor,
   urlInput,
   urlInputError,
   urlInputRef,
@@ -185,17 +176,7 @@ export function DiffStartScreen({
   const recentGroups = getGroupedRecentDiffSources(recentSources, recentFilter);
   return (
     <View style={[styles.root, { backgroundColor }]}>
-      <View style={[styles.sidebar, { borderColor }]}>
-        <View style={styles.identity}>
-          <View style={[styles.identityIcon, { borderColor }]}>
-            <SFSymbol color={primaryColor} name="arrow.left.arrow.right" size={16} />
-          </View>
-          <View style={styles.identityText}>
-            <Text style={[styles.identityTitle, { color: foregroundColor }]}>Legend Diff</Text>
-            <Text style={[styles.identitySubtitle, { color: mutedColor }]}>Review changes</Text>
-          </View>
-        </View>
-        <View style={[styles.sidebarDivider, { backgroundColor: borderColor }]} />
+      <View style={[styles.sidebar, { backgroundColor: sidebarBackgroundColor, borderColor }]}>
         <View style={styles.launcher}>
           <Pressable
             accessibilityRole="button"
@@ -204,7 +185,7 @@ export function DiffStartScreen({
             style={({ pressed }) => [
               styles.openFolderButton,
               {
-                backgroundColor: primaryColor,
+                backgroundColor: diffStartScreenAccentColor,
                 opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
               },
             ]}
@@ -259,29 +240,15 @@ export function DiffStartScreen({
               <View style={styles.recentHeader}>
                 <Text style={[styles.recentTitle, { color: foregroundColor }]}>Recent</Text>
               </View>
-              <View style={[styles.segmentedControl, { borderColor }]}>
-                {diffRecentFilters.map((filter) => {
-                  const isSelected = filter.key === recentFilter;
-                  return (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={filter.key}
-                      onPress={() => setRecentFilter(filter.key)}
-                      style={[
-                        styles.segmentedOption,
-                        isSelected ? { borderColor: primaryColor } : null,
-                      ]}
-                    >
-                      <Text style={[
-                        styles.segmentedOptionText,
-                        { color: isSelected ? primaryColor : mutedColor },
-                      ]}>
-                        {filter.title}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <NativeSegmentedControl
+                onChange={(nextFilter) => setRecentFilter(nextFilter as typeof recentFilter)}
+                segments={diffRecentFilters.map((filter) => ({
+                  label: filter.title,
+                  value: filter.key,
+                }))}
+                style={styles.segmentedControl}
+                value={recentFilter}
+              />
               <View style={styles.recentGroups}>
                 {recentGroups.map((group) => (
                   <DiffStartScreenRecentGroup
@@ -292,7 +259,6 @@ export function DiffStartScreen({
                     key={group.key}
                     mutedColor={mutedColor}
                     onOpenSource={onOpenRecentSource}
-                    primaryColor={primaryColor}
                   />
                 ))}
               </View>
@@ -319,34 +285,8 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     maxWidth: diffStartScreenMaxContentWidth,
     paddingHorizontal: 48,
-    paddingTop: 78,
+    paddingTop: 32,
     width: "100%",
-  },
-  identity: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-  },
-  identityIcon: {
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  identitySubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  identityText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  identityTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 20,
   },
   launcher: {
     gap: 12,
@@ -403,20 +343,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  recentRowBadge: {
-    alignItems: "center",
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 24,
-    justifyContent: "center",
-    minWidth: 54,
-    paddingHorizontal: 8,
-  },
-  recentRowBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
-  },
   recentRowDetail: {
     fontSize: 13,
     lineHeight: 18,
@@ -455,37 +381,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   segmentedControl: {
-    alignSelf: "flex-start",
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
+    height: 28,
     marginTop: 18,
-    overflow: "hidden",
-  },
-  segmentedOption: {
-    alignItems: "center",
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
-    height: 34,
-    justifyContent: "center",
-    minWidth: 78,
-    paddingHorizontal: 16,
-  },
-  segmentedOptionText: {
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
+    width: 312,
   },
   sidebar: {
     borderRightWidth: StyleSheet.hairlineWidth,
-    gap: 22,
     paddingHorizontal: 28,
-    paddingTop: 52,
+    paddingTop: 128,
     width: diffStartScreenSidebarWidth,
-  },
-  sidebarDivider: {
-    height: StyleSheet.hairlineWidth,
   },
   urlField: {
     alignItems: "center",
