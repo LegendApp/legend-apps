@@ -23,6 +23,17 @@ export type DiffLoadSourceOptions = {
   reason?: "launch" | "manual" | "merge-resolve" | "mode-toggle" | "reload" | "watch";
 };
 
+export type DiffLoadProgressState = {
+  complete: boolean;
+  fileCount: number;
+  fileVersion: number;
+  requestId: number;
+  rowCount: number;
+  rowVersion: number;
+  source: DiffOpenSource | null;
+  visible: boolean;
+};
+
 export type DiffSplitPaneMetrics = {
   contentHeight: number;
   contentWidth: number;
@@ -80,17 +91,30 @@ export const unavailableDiffMergeState: DiffMergeState = {
   reason: "Merge mode is available for local Git repositories.",
 };
 
+export const emptyDiffLoadProgressState: DiffLoadProgressState = {
+  complete: false,
+  fileCount: 0,
+  fileVersion: 0,
+  requestId: 0,
+  rowCount: 0,
+  rowVersion: 0,
+  source: null,
+  visible: false,
+};
+
 export type DiffViewerModel = {
   activeFileIndex$: Observable<number | null>;
   collapsedFileIndexes$: Observable<Set<number>>;
   diffPaneHeight$: Observable<number>;
   documentError$: Observable<DiffRecoverableError | null>;
+  loadProgress$: Observable<DiffLoadProgressState>;
   loadingSource$: Observable<DiffOpenSource | null>;
   mergeState$: Observable<DiffMergeState>;
   openError$: Observable<DiffRecoverableError | null>;
   setCollapsedFileIndexesValue: (nextValue: SetStateAction<Set<number>>) => void;
   setDiffPaneHeightValue: (nextHeight: number) => void;
   setDocumentErrorValue: (nextError: DiffRecoverableError | null) => void;
+  setLoadProgressValue: (nextProgress: DiffLoadProgressState) => void;
   setLoadingSourceValue: (nextValue: SetStateAction<DiffOpenSource | null>) => void;
   setMergeStateValue: (nextMergeState: DiffMergeState) => void;
   setOpenErrorValue: (nextError: DiffRecoverableError | null) => void;
@@ -120,6 +144,7 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
   const urlInputError$ = useObservable<string | null>(null);
   const openError$ = useObservable<DiffRecoverableError | null>(null);
   const documentError$ = useObservable<DiffRecoverableError | null>(null);
+  const loadProgress$ = useObservable<DiffLoadProgressState>(emptyDiffLoadProgressState);
   const loadingSource$ = useObservable<DiffOpenSource | null>(null);
   const mergeState$ = useObservable<DiffMergeState>(unavailableDiffMergeState);
   const sidebarCollapsed$ = useObservable(false);
@@ -148,6 +173,21 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
   const setDocumentErrorValue = useCallback((nextError: DiffRecoverableError | null) => {
     documentError$.set(nextError);
   }, [documentError$]);
+  const setLoadProgressValue = useCallback((nextProgress: DiffLoadProgressState) => {
+    const currentProgress = loadProgress$.peek();
+    if (
+      currentProgress.complete !== nextProgress.complete ||
+      currentProgress.fileCount !== nextProgress.fileCount ||
+      currentProgress.fileVersion !== nextProgress.fileVersion ||
+      currentProgress.requestId !== nextProgress.requestId ||
+      currentProgress.rowCount !== nextProgress.rowCount ||
+      currentProgress.rowVersion !== nextProgress.rowVersion ||
+      currentProgress.source !== nextProgress.source ||
+      currentProgress.visible !== nextProgress.visible
+    ) {
+      loadProgress$.set(nextProgress);
+    }
+  }, [loadProgress$]);
   const setLoadingSourceValue = useCallback((nextValue: SetStateAction<DiffOpenSource | null>) => {
     const currentLoadingSource = loadingSource$.peek();
     const nextLoadingSource = resolveSetStateAction(currentLoadingSource, nextValue);
@@ -193,12 +233,14 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
       collapsedFileIndexes$,
       diffPaneHeight$,
       documentError$,
+      loadProgress$,
       loadingSource$,
       mergeState$,
       openError$,
       setCollapsedFileIndexesValue,
       setDiffPaneHeightValue,
       setDocumentErrorValue,
+      setLoadProgressValue,
       setLoadingSourceValue,
       setMergeStateValue,
       setOpenErrorValue,
@@ -218,12 +260,14 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
       collapsedFileIndexes$,
       diffPaneHeight$,
       documentError$,
+      loadProgress$,
       loadingSource$,
       mergeState$,
       openError$,
       setCollapsedFileIndexesValue,
       setDiffPaneHeightValue,
       setDocumentErrorValue,
+      setLoadProgressValue,
       setLoadingSourceValue,
       setMergeStateValue,
       setOpenErrorValue,

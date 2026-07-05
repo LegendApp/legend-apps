@@ -24,6 +24,7 @@ import {
   setDiffViewerWindowToolbarOptions,
 } from "../diffWindows";
 import {
+  emptyDiffLoadProgressState,
   emptyDiffViewerState,
   useDiffViewerModel,
   type DiffLoadSourceOptions,
@@ -325,6 +326,7 @@ export function DiffLaunchController({
 }) {
   const {
     setDocumentErrorValue,
+    setLoadProgressValue,
     setLoadingSourceValue,
     setOpenErrorValue,
     setUrlInputErrorValue,
@@ -365,6 +367,7 @@ export function DiffLaunchController({
     if (shouldFocusUrlInput) {
       loadRequestIdRef.current += 1;
       loadTraceRef.current = null;
+      setLoadProgressValue(emptyDiffLoadProgressState);
       setLoadingSourceValue(null);
       setViewerState(emptyDiffViewerState);
       setOpenErrorValue(null);
@@ -381,6 +384,7 @@ export function DiffLaunchController({
     loadRequestIdRef,
     loadTraceRef,
     setDocumentErrorValue,
+    setLoadProgressValue,
     setLoadingSourceValue,
     setOpenErrorValue,
     setUrlInputErrorValue,

@@ -104,6 +104,7 @@ import {
   diffInitialRowCount,
   diffLineOverscan,
   diffOverscanRequestDelayMs,
+  diffProgressiveLoadedStatePublishMs,
   diffProgressiveLoadPollMs,
   diffRowKindFileHeader,
   diffSidebarFileRowHeight,
@@ -153,6 +154,7 @@ import {
 } from "./viewer/diffViewerControllers";
 import {
   DiffViewerModelProvider,
+  emptyDiffLoadProgressState,
   emptyDiffViewerState,
   unavailableDiffMergeState,
   useDiffViewerModel,
@@ -160,6 +162,7 @@ import {
   type DiffLoadedState,
   type DiffLoadSourceOptions,
   type DiffLoadTrace,
+  type DiffLoadProgressState,
   type DiffRecoverableError,
   type DiffSplitPaneMetrics,
   type DiffViewerState,
@@ -229,6 +232,23 @@ function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCoun
     || (initialRowCount <= 0 && progress.files.length > 0)
     || progress.complete
     || !!progress.error;
+}
+
+function getDiffLoadProgressState(
+  source: DiffOpenSource,
+  requestId: number,
+  progress: DiffLoadProgress,
+): DiffLoadProgressState {
+  return {
+    complete: progress.complete,
+    fileCount: Math.max(0, Math.floor(progress.fileCount)),
+    fileVersion: progress.fileVersion,
+    requestId,
+    rowCount: Math.max(0, Math.floor(progress.rowCount)),
+    rowVersion: progress.rowVersion,
+    source,
+    visible: !progress.complete && !progress.error,
+  };
 }
 
 function getDiffSourceCacheKey(source: DiffOpenSource) {
@@ -2090,6 +2110,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     setCollapsedFileIndexesValue,
     setDiffPaneHeightValue,
     setDocumentErrorValue,
+    setLoadProgressValue,
     setLoadingSourceValue,
     setMergeStateValue,
     setOpenErrorValue,
@@ -2402,6 +2423,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       : undefined;
     if (cachedEntry) {
       loadTraceRef.current = null;
+      setLoadProgressValue(emptyDiffLoadProgressState);
       setLoadingSourceValue(null);
       setDocumentErrorValue(null);
       setOpenErrorValue(null);
@@ -2433,6 +2455,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     };
     loadTraceRef.current = trace;
     if (!isBackgroundWatchRefresh) {
+      setLoadProgressValue(nextSource.kind === "folder"
+        ? {
+            ...emptyDiffLoadProgressState,
+            requestId,
+            source: nextSource,
+            visible: true,
+          }
+        : emptyDiffLoadProgressState);
       setLoadingSourceValue(nextSource);
       setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
       if (stateBeforeLoad.status === "loaded") {
@@ -2546,6 +2576,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           loaded,
           loadComplete,
         });
+        setLoadProgressValue(emptyDiffLoadProgressState);
       }
       logDiffMemoryMark("viewer.statePublished", () => ({
         files: loaded.files.length,
@@ -2636,9 +2667,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         }));
         progressiveSession = startGitFolderDiff(nextSource.value, { showOnlyHunks: loadShowOnlyHunks });
         let progress = progressiveSession.consumeChanges(initialRowCount);
+        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
         while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress, initialRowCount)) {
           await waitForDiffProgressPoll();
           progress = progressiveSession.consumeChanges(initialRowCount);
+          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
         }
         if (loadRequestIdRef.current !== requestId) {
           progressiveSession.cancel();
@@ -2680,9 +2713,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             const initialLoadComplete = "complete" in result ? result.complete : true;
             if (isBackgroundWatchRefresh && progressiveSession && "complete" in result && !result.complete) {
               let progress = result;
+              setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
               while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
                 await waitForDiffProgressPoll();
                 progress = progressiveSession.consumeChanges(initialRowCount);
+                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
               }
               if (loadRequestIdRef.current !== requestId) {
                 progressiveSession.cancel();
@@ -2697,6 +2732,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               if (progressiveSession && "complete" in result && !result.complete) {
                 let lastFileVersion = result.fileVersion;
                 let lastRowVersion = result.rowVersion;
+                let lastStatePublishedAt = nowMs();
                 let progress = result;
                 while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
                   await waitForDiffProgressPoll();
@@ -2707,9 +2743,17 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                     progress.complete ||
                     !!progress.error;
                   if (hasChanges && loadRequestIdRef.current === requestId) {
+                    const shouldPublishLoadedState =
+                      progress.complete ||
+                      progress.error ||
+                      nowMs() - lastStatePublishedAt >= diffProgressiveLoadedStatePublishMs;
+                    setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
                     lastFileVersion = progress.fileVersion;
                     lastRowVersion = progress.rowVersion;
-                    publishLoadedState(progress, progress.complete, progress.complete ? "complete" : "progress");
+                    if (shouldPublishLoadedState) {
+                      lastStatePublishedAt = nowMs();
+                      publishLoadedState(progress, progress.complete, progress.complete ? "complete" : "progress");
+                    }
                   }
                 }
                 if (loadRequestIdRef.current !== requestId) {
@@ -2740,6 +2784,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       if (!isBackgroundWatchRefresh) {
         loadTraceRef.current = null;
         setMergeStateValue(unavailableDiffMergeState);
+        setLoadProgressValue(emptyDiffLoadProgressState);
         setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
       }
       const message = getErrorMessage(loadError);
@@ -2758,7 +2803,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         requestId,
       }));
     }
-  }, [nativeDiffRows, setDocumentErrorValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
+  }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
 
   const saveMergeDrafts = useCallback(async () => {
     if (savingMergeDraftsRef.current) {
