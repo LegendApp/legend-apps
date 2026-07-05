@@ -90,6 +90,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
   dataVersion?: string | number;
   debugName?: string;
+  estimatedItemSize?: number;
   extraData?: unknown;
   getItemSize?: (index: number) => number;
   getItemType?: (index: number) => string | undefined;
@@ -384,6 +385,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   adaptiveRender,
   dataVersion,
   debugName,
+  estimatedItemSize,
   extraData,
   getRow,
   getDocumentIndex,
@@ -706,6 +708,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     <LegendList
       data={itemIndexes}
       dataVersion={dataVersion}
+      estimatedItemSize={estimatedItemSize ?? rowHeight}
       extraData={listExtraData}
       experimental_adaptiveRender={adaptiveRender}
       getFixedItemSize={getFixedItemSize}

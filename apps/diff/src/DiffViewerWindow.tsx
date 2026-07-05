@@ -1081,6 +1081,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
+          estimatedItemSize={rowHeight}
           key="unified"
           extraData={listExtraData}
           itemIndexes={inlineMergeModel.itemIndexes}
@@ -1107,6 +1108,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
+          estimatedItemSize={rowHeight}
           key={viewMode}
           extraData={listExtraData}
           itemIndexes={inlineMergeModel.itemIndexes}
@@ -1190,6 +1192,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         filteredSidebarFiles.length > 0 ? (
           <LegendList
             data={sidebarEntries}
+            estimatedItemSize={diffSidebarFileRowHeight}
             getFixedItemSize={() => diffSidebarFileRowHeight}
             getItemType={(entry) => entry.type}
             keyExtractor={(entry) => entry.id}
