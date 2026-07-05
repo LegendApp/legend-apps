@@ -1034,6 +1034,78 @@ function DiffLoadedBody({
     () => createDiffSidebarEntries(filteredSidebarFiles),
     [filteredSidebarFiles],
   );
+  const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
+  const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode !== "unified";
+  const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
+  const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
+  const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
+  const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
+  const hasTopChrome = diffTopChromeHeight > 0;
+  const listHeader = useMemo(() => (
+    hasTopChrome ? undefined : <View style={styles.diffTitlebarSpacer} />
+  ), [hasTopChrome]);
+  const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
+  const sideBySideLineOverscan = Math.max(12, Math.floor(diffLineOverscan / 10));
+  const diffListStyle = useMemo(
+    () => [styles.list, { height: diffListHeight, minHeight: diffListHeight }],
+    [diffListHeight],
+  );
+  const getUnifiedItemSize = useCallback(
+    (index: number) => inlineMergeModel.getItemSize(index, getItemSize),
+    [getItemSize, inlineMergeModel],
+  );
+  const getUnifiedItemType = useCallback(
+    (index: number) => inlineMergeModel.getItemType(index, getItemType),
+    [getItemType, inlineMergeModel],
+  );
+  const getUnifiedRow = useCallback(
+    (index: number) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeUnifiedRows ? undefined : getRow(index)),
+    [getRow, inlineMergeModel, nativeUnifiedRows],
+  );
+  const handleUnifiedTopItemChanged = useCallback((index: number) => {
+    const mergeRow = inlineMergeModel.getInlineMergeRow(index);
+    if (mergeRow) {
+      activeFileIndex$.set(mergeRow.sourceFileIndex);
+    } else {
+      handleTopItemChanged(index);
+    }
+  }, [activeFileIndex$, handleTopItemChanged, inlineMergeModel]);
+  const renderUnifiedRow = useCallback(
+    (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow | DiffInlineMergeRow>) => (
+      inlineMergeModel.getInlineMergeRow(props.index)
+        ? inlineMergeModel.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
+        : renderRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>)
+    ),
+    [inlineMergeModel, renderRow],
+  );
+  const getSideBySideListItemSize = useCallback(
+    (index: number) => inlineMergeModel.getItemSize(index, getSideBySideItemSize),
+    [getSideBySideItemSize, inlineMergeModel],
+  );
+  const getSideBySideListItemType = useCallback(
+    (index: number) => inlineMergeModel.getItemType(index, getSideBySideItemType),
+    [getSideBySideItemType, inlineMergeModel],
+  );
+  const getSideBySideListRow = useCallback(
+    (index: number) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeSideBySideRows ? undefined : getSideBySideRow(index)),
+    [getSideBySideRow, inlineMergeModel, nativeSideBySideRows],
+  );
+  const handleSideBySideListTopItemChanged = useCallback((index: number) => {
+    const mergeRow = inlineMergeModel.getInlineMergeRow(index);
+    if (mergeRow) {
+      activeFileIndex$.set(mergeRow.sourceFileIndex);
+    } else {
+      handleSideBySideTopItemChanged(index);
+    }
+  }, [activeFileIndex$, handleSideBySideTopItemChanged, inlineMergeModel]);
+  const renderSideBySideListRow = useCallback(
+    (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow | DiffInlineMergeRow>) => (
+      inlineMergeModel.getInlineMergeRow(props.index)
+        ? inlineMergeModel.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
+        : renderSideBySideRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>)
+    ),
+    [inlineMergeModel, renderSideBySideRow],
+  );
 
   logDiffOpenTiming("viewer.body.start", {
     activeItemCount: activeItemIndexes.length,
@@ -1090,15 +1162,6 @@ function DiffLoadedBody({
       rows: state.document.rowCount,
       viewMode,
     });
-    const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
-    const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode !== "unified";
-    const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
-    const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
-    const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
-    const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
-    const hasTopChrome = diffTopChromeHeight > 0;
-    const listHeader = hasTopChrome ? undefined : <View style={styles.diffTitlebarSpacer} />;
-    const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
     let list: ReactElement;
     if (viewMode === "unified") {
       list = (
@@ -1110,31 +1173,20 @@ function DiffLoadedBody({
           itemIndexes={inlineMergeModel.itemIndexes}
           ListHeaderComponent={listHeader}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
-          getItemSize={(index) => inlineMergeModel.getItemSize(index, getItemSize)}
-          getItemType={(index) => inlineMergeModel.getItemType(index, getItemType)}
+          getItemSize={getUnifiedItemSize}
+          getItemType={getUnifiedItemType}
           listHeaderHeight={listHeaderHeight}
           lineOverscan={diffLineOverscan}
           listRef={listRef}
-          onTopItemChanged={(index) => {
-            const mergeRow = inlineMergeModel.getInlineMergeRow(index);
-            if (mergeRow) {
-              activeFileIndex$.set(mergeRow.sourceFileIndex);
-            } else {
-              handleTopItemChanged(index);
-            }
-          }}
+          onTopItemChanged={handleUnifiedTopItemChanged}
           onVisibleRowsRequested={nativeUnifiedRows ? undefined : handleVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={requestUnifiedRange}
           requestRangesOnScroll={!nativeUnifiedRows}
-          getRow={(index) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeUnifiedRows ? undefined : getRow(index))}
+          getRow={getUnifiedRow}
           rowHeight={rowHeight}
-          renderRow={(props) => (
-            inlineMergeModel.getInlineMergeRow(props.index)
-              ? inlineMergeModel.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
-              : renderRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>)
-          )}
-          style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
+          renderRow={renderUnifiedRow}
+          style={diffListStyle}
         />
       );
     } else {
@@ -1147,31 +1199,20 @@ function DiffLoadedBody({
           itemIndexes={inlineMergeModel.itemIndexes}
           ListHeaderComponent={listHeader}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
-          getItemSize={(index) => inlineMergeModel.getItemSize(index, getSideBySideItemSize)}
-          getItemType={(index) => inlineMergeModel.getItemType(index, getSideBySideItemType)}
-          getRow={(index) => inlineMergeModel.getInlineMergeRow(index) ?? (nativeSideBySideRows ? undefined : getSideBySideRow(index))}
+          getItemSize={getSideBySideListItemSize}
+          getItemType={getSideBySideListItemType}
+          getRow={getSideBySideListRow}
           listHeaderHeight={listHeaderHeight}
-          lineOverscan={Math.max(12, Math.floor(diffLineOverscan / 10))}
+          lineOverscan={sideBySideLineOverscan}
           listRef={listRef}
-          onTopItemChanged={(index) => {
-            const mergeRow = inlineMergeModel.getInlineMergeRow(index);
-            if (mergeRow) {
-              activeFileIndex$.set(mergeRow.sourceFileIndex);
-            } else {
-              handleSideBySideTopItemChanged(index);
-            }
-          }}
+          onTopItemChanged={handleSideBySideListTopItemChanged}
           onVisibleRowsRequested={nativeSideBySideRows ? undefined : handleSideBySideVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={requestBlocksRange}
           requestRangesOnScroll={!nativeSideBySideRows}
           rowHeight={rowHeight}
-          renderRow={(props) => (
-            inlineMergeModel.getInlineMergeRow(props.index)
-              ? inlineMergeModel.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
-              : renderSideBySideRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>)
-          )}
-          style={[styles.list, { height: diffListHeight, minHeight: diffListHeight }]}
+          renderRow={renderSideBySideListRow}
+          style={diffListStyle}
         />
       );
     }
