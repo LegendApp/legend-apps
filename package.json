@@ -27,6 +27,7 @@
     "test:diff": "jest --config apps/diff/jest.config.cjs",
     "test:diff:fast": "bun run test:diff --runInBand && bun run test:diff-parser --runInBand && bun run test:syntax-parser --runInBand && bun run diff verify macos && bun run test:diff-parser:native && bun run typecheck",
     "test:diff-e2e": "bun scripts/test-diff-e2e.ts",
+    "test:diff-e2e:file-filter-smoke": "DIFF_E2E_SCENARIO=file-filter-smoke bun scripts/test-diff-e2e.ts",
     "test:diff-parser": "jest --config packages/diff-parser/jest.config.cjs",
     "test:diff-parser:native": "bash packages/diff-parser/tests/run-native.sh",
     "test:syntax-parser": "jest --config packages/syntax-parser/jest.config.cjs",

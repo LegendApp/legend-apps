@@ -10,6 +10,7 @@ const artifactsDir = path.join(rootDir, ".artifacts", "diff-e2e");
 const fixtureDir = path.join(artifactsDir, "fixtures", scenario);
 const stepsFileByScenario: Record<string, string> = {
   "app-surface-smoke": "diff-app-surface-smoke.steps.json",
+  "file-filter-smoke": "diff-file-filter-smoke.steps.json",
   "local-folder-smoke": "diff-local-folder-smoke.steps.json",
 };
 const stepsFileName = stepsFileByScenario[scenario] ?? stepsFileByScenario["local-folder-smoke"];
