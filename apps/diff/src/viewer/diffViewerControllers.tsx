@@ -1,6 +1,6 @@
 import type { DiffDocument } from "@legend-desktop/diff-parser";
 import { watchDirectories } from "@legend-desktop/file-system-watcher";
-import { updateMenuItems } from "@legend-desktop/native-menu";
+import { updateMenuItems, type NativeMenuItemPatch } from "@legend-desktop/native-menu";
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-desktop/source-viewer";
 import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
 import { useWindowId } from "@legend-desktop/windows";
@@ -40,6 +40,21 @@ import {
   type DiffWindowToolbarModel,
 } from "./diffViewerSupport";
 
+function nativeMenuPatchesEqual(
+  previous: readonly NativeMenuItemPatch[] | null,
+  next: readonly NativeMenuItemPatch[],
+) {
+  return previous !== null &&
+    previous.length === next.length &&
+    previous.every((previousPatch, index) => {
+      const nextPatch = next[index];
+      return previousPatch.id === nextPatch.id &&
+        previousPatch.enabled === nextPatch.enabled &&
+        previousPatch.checked === nextPatch.checked &&
+        previousPatch.title === nextPatch.title;
+    });
+}
+
 export function DiffNativeMenuController({
   hasUnsavedMergeDrafts,
   isSavingMergeDrafts,
@@ -52,6 +67,7 @@ export function DiffNativeMenuController({
     sidebarCollapsed$,
     state$,
   } = useDiffViewerModel();
+  const lastMenuPatchesRef = useRef<NativeMenuItemPatch[] | null>(null);
 
   const updateDiffNativeMenuItems = useCallback((observe: boolean) => {
     const currentState = observe ? state$.get() : state$.peek();
@@ -66,7 +82,7 @@ export function DiffNativeMenuController({
     const currentShowViewModeToolbar = currentToolbarSource !== null;
     const currentShowSidebarControl = currentShowViewModeToolbar;
     const hasLoadedFiles = currentLoadedFileCount > 0;
-    updateMenuItems(diffMenuOwnerId, [
+    const patches: NativeMenuItemPatch[] = [
       {
         enabled: currentState.status === "loaded",
         id: "reload",
@@ -117,7 +133,11 @@ export function DiffNativeMenuController({
         enabled: currentVisibleFolderPath !== null,
         id: "showOnlyHunks",
       },
-    ]);
+    ];
+    if (!nativeMenuPatchesEqual(lastMenuPatchesRef.current, patches)) {
+      lastMenuPatchesRef.current = patches;
+      updateMenuItems(diffMenuOwnerId, patches);
+    }
   }, [hasUnsavedMergeDrafts, isSavingMergeDrafts, loadingSource$, sidebarCollapsed$, state$]);
 
   useObserveEffect(() => {
