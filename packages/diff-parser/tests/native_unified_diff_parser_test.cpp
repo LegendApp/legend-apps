@@ -151,6 +151,8 @@ void assertFileSummaries(const diffparser::DiffParsedDocument& parsed) {
   expectEqual(added.status, "added", "added status");
   expectEqual(added.additions, 2, "added additions");
   expectEqual(added.deletions, 0, "added deletions");
+  // Catches added/deleted files whose sidebar status and rendered rows drift apart.
+  expectEqual(added.rowCount, 3, "added row count should include header and added rows");
 
   const auto& deleted = fileAt(parsed, 2);
   expectEqual(deleted.path, "src/Deleted.ts", "deleted path");
@@ -158,6 +160,7 @@ void assertFileSummaries(const diffparser::DiffParsedDocument& parsed) {
   expectEqual(deleted.status, "deleted", "deleted status");
   expectEqual(deleted.additions, 0, "deleted additions");
   expectEqual(deleted.deletions, 2, "deleted deletions");
+  expectEqual(deleted.rowCount, 3, "deleted row count should include header and removed rows");
 
   const auto& renamed = fileAt(parsed, 3);
   expectEqual(renamed.path, "src/NewName.ts", "renamed path");
@@ -171,6 +174,8 @@ void assertFileSummaries(const diffparser::DiffParsedDocument& parsed) {
   expectEqual(binary.oldPath, "assets/logo.png", "binary old path");
   expectEqual(binary.status, "modified", "binary status");
   expect(binary.isBinary, "binary file should be marked binary");
+  // Catches binary diffs leaking bogus text rows into the document body.
+  expectEqual(binary.rowCount, 1, "binary row count should include only the file header");
 }
 
 void assertRenderRows(const diffparser::DiffParsedDocument& parsed) {
@@ -317,17 +322,22 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
   expectEqual(added.additions, 1, "git added additions");
   expectEqual(added.deletions, 0, "git added deletions");
   expect(!added.isBinary, "git added file should not be binary");
+  // Catches added/deleted files whose sidebar status and rendered rows drift apart.
+  expectEqual(added.rowCount, 2, "git added row count should include header and added row");
 
   const auto& deleted = findFile(parsed, "src/Deleted.ts");
   expectEqual(deleted.oldPath, "src/Deleted.ts", "git deleted old path");
   expectEqual(deleted.status, "deleted", "git deleted status");
   expectEqual(deleted.additions, 0, "git deleted additions");
   expectEqual(deleted.deletions, 1, "git deleted deletions");
+  expectEqual(deleted.rowCount, 2, "git deleted row count should include header and removed row");
 
   const auto& binary = findFile(parsed, "assets/logo.bin");
   expectEqual(binary.oldPath, "assets/logo.bin", "git binary old path");
   expectEqual(binary.status, "modified", "git binary status");
   expect(binary.isBinary, "git binary file should be marked binary");
+  // Catches binary diffs leaking bogus text rows into the document body.
+  expectEqual(binary.rowCount, 1, "git binary row count should include only the file header");
 
   const auto& conflicted = findFile(parsed, "src/Conflict.ts");
   expectEqual(conflicted.oldPath, "src/Conflict.ts", "git conflicted old path");
@@ -359,6 +369,11 @@ void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
 
   const auto& modified = findFile(parsed, "src/App.tsx");
   expect(!rowTextExistsForFile(parsed, modified, "export const outsideFullFileContext = \"base\";"), "git by-file hunk mode should omit distant context");
+
+  const auto& binary = findFile(parsed, "assets/logo.bin");
+  // Catches progressive by-file parsing rendering binary payloads as text rows.
+  expect(binary.isBinary, "git by-file binary file should be marked binary");
+  expectEqual(binary.rowCount, 1, "git by-file binary row count should include only the file header");
 
   const auto& conflicted = findFile(parsed, "src/Conflict.ts");
   expectEqual(conflicted.oldPath, "src/Conflict.ts", "git by-file conflicted old path");
