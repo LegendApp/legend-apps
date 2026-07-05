@@ -93,6 +93,10 @@ type DiffFileHeaderRowProps = {
   syntaxAppearance: "dark" | "light";
 };
 
+type DiffObservedFileHeaderRowProps = Omit<DiffFileHeaderRowProps, "isCollapsed"> & {
+  collapsedFileIndexes$: Observable<Set<number>>;
+};
+
 type DiffUnifiedRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
@@ -570,6 +574,24 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
   );
 });
 
+const DiffObservedFileHeaderRow = memo(function DiffObservedFileHeaderRow({
+  collapsedFileIndexes$,
+  fallbackFileIndex,
+  file,
+  ...props
+}: DiffObservedFileHeaderRowProps) {
+  const fileIndex = file?.index ?? fallbackFileIndex;
+  const isCollapsed = useValue(() => collapsedFileIndexes$.get().has(fileIndex));
+  return (
+    <DiffFileHeaderRow
+      {...props}
+      fallbackFileIndex={fallbackFileIndex}
+      file={file}
+      isCollapsed={isCollapsed}
+    />
+  );
+});
+
 const DiffReactNativeUnifiedLineRow = memo(function DiffReactNativeUnifiedLineRow({
   accentColor,
   adaptiveRender,
@@ -631,7 +653,6 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const rowHeight = renderFields.rowHeight;
   const syntaxAppearance = renderFields.syntaxAppearance;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
-  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const changeType = row?.changeType ?? 0;
   const isAdd = changeType === diffChangeTypeAdd;
   const isRemove = changeType === diffChangeTypeRemove;
@@ -659,8 +680,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   if (isFileHeader) {
     const fileIndex = file?.index ?? row?.fileIndex ?? index;
     return (
-      <DiffFileHeaderRow
+      <DiffObservedFileHeaderRow
         borderColor={borderColor}
+        collapsedFileIndexes$={collapsedFileIndexes$}
         fallbackFileIndex={fileIndex}
         fallbackPath={row?.text ?? ""}
         file={file}
@@ -668,7 +690,6 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
         fontFamily={fontFamily}
         fontSize={fontSize}
         foregroundColor={foregroundColor}
-        isCollapsed={collapsedFileIndexes.has(fileIndex)}
         mutedColor={mutedColor}
         onToggleFileCollapsed={toggleFileCollapsed}
         syntaxAppearance={syntaxAppearance}
@@ -778,7 +799,6 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const syntaxAppearance = renderFields.syntaxAppearance;
   const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
-  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
   const sideBySideDividerColor = getSideBySideDividerColor(syntaxAppearance);
   const displayRow = row ?? (
     renderFields.rowRenderer === "native" && renderFields.document
@@ -806,8 +826,9 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
     const file = fileByRowStart.get(fileHeader.sourceStart) ?? fileByIndex.get(fileHeader.fileIndex);
     const fileIndex = file?.index ?? index;
     return (
-      <DiffFileHeaderRow
+      <DiffObservedFileHeaderRow
         borderColor={borderColor}
+        collapsedFileIndexes$={collapsedFileIndexes$}
         fallbackFileIndex={fileIndex}
         fallbackPath={file?.path ?? ""}
         file={file}
@@ -815,7 +836,6 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         fontFamily={fontFamily}
         fontSize={fontSize}
         foregroundColor={foregroundColor}
-        isCollapsed={collapsedFileIndexes.has(fileIndex)}
         mutedColor={mutedColor}
         onToggleFileCollapsed={toggleFileCollapsed}
         syntaxAppearance={syntaxAppearance}
