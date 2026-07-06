@@ -25,6 +25,7 @@ import type { DiffSettingsFile } from "../diffSettings";
 import type { DiffSyntaxStyleStore } from "./DiffRows";
 import {
   diffBackgroundTokenizePollMs,
+  diffProgressiveInitialPaintRowCount,
 } from "./diffViewerConstants";
 import {
   createCollapsedFileIndexList,
@@ -179,6 +180,7 @@ function requestTokenizedSideBySideRowsAfterGrammarLoad({
 
 export function useDiffLoadedModel({
   collapsedFileIndexes,
+  initialItemCountLimit,
   nativeUnifiedRows,
   state,
   syntaxHighlightingEnabled,
@@ -188,6 +190,7 @@ export function useDiffLoadedModel({
   collapsedFileIndexes: ReadonlySet<number>;
   fontFamily: string;
   fontSize: number;
+  initialItemCountLimit?: number | null;
   nativeUnifiedRows: boolean;
   rowHeight: number;
   state: DiffViewerState;
@@ -232,23 +235,31 @@ export function useDiffLoadedModel({
       const startedAt = nowMs();
       let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
       if (state.status === "loaded") {
+        const rowCount = Math.max(0, Math.floor(state.document.rowCount));
+        const itemCountLimit = initialItemCountLimit ?? (state.loadComplete === false ? diffProgressiveInitialPaintRowCount : null);
+        const itemCount = itemCountLimit !== null
+          ? Math.min(rowCount, itemCountLimit)
+          : rowCount;
         nextSnapshot = {
           document: state.document,
           initialRows: state.initialRows,
-          itemCount: state.document.rowCount,
+          itemCount,
           styles: [],
           timing: state.timing,
         };
         logDiffOpenTiming("viewer.derive.snapshot", () => ({
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          initialItemCountLimit: itemCountLimit,
           initialRows: state.initialRows.length,
-          rows: state.document.rowCount,
+          itemCount,
+          loadComplete: state.loadComplete !== false,
+          rows: rowCount,
           scopes: state.document.scopeCount,
         }));
       }
       return nextSnapshot;
     },
-    [state],
+    [initialItemCountLimit, state],
   );
   const requestRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const startedAt = nowMs();

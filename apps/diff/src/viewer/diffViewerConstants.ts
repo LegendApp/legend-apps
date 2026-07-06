@@ -1,8 +1,8 @@
 export const diffInitialRowCount = 160;
 export const diffProgressiveLoadPollMs = 16;
 export const diffProgressiveLoadedStatePublishMs = 120;
-export const diffProgressiveLargeInitialRowThreshold = 100_000;
-export const diffProgressiveLargeInitialPublishDelayMs = 1_000;
+export const diffProgressiveInitialPaintRowCount = 1_000;
+export const diffProgressiveInitialPaintMaxDelayMs = 160;
 export const diffLoadedCacheMaxRows = 100_000;
 export const diffInitialHighlightChunkRowCount = 40;
 export const diffBackgroundTokenizeChunkBudgetMs = 3;

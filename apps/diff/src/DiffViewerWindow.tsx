@@ -106,8 +106,8 @@ import {
   diffLineOverscan,
   diffLoadedCacheMaxRows,
   diffOverscanRequestDelayMs,
-  diffProgressiveLargeInitialPublishDelayMs,
-  diffProgressiveLargeInitialRowThreshold,
+  diffProgressiveInitialPaintMaxDelayMs,
+  diffProgressiveInitialPaintRowCount,
   diffProgressiveLoadedStatePublishMs,
   diffProgressiveLoadPollMs,
   diffRowKindFileHeader,
@@ -239,8 +239,8 @@ function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCoun
 
   if (initialRowCount <= 0 && progress.files.length > 0) {
     const rowCount = Math.max(0, Math.floor(progress.rowCount));
-    return rowCount < diffProgressiveLargeInitialRowThreshold ||
-      elapsedMs >= diffProgressiveLargeInitialPublishDelayMs;
+    return rowCount >= diffProgressiveInitialPaintRowCount ||
+      elapsedMs >= diffProgressiveInitialPaintMaxDelayMs;
   }
 
   return false;
@@ -2239,6 +2239,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const sidebarConflictBadgeTextColor = diffPalette.sidebarConflictBadgeText;
   const loadedDocument = state.status === "loaded" ? state.document : null;
   const loadedDocumentId = loadedDocument?.documentId ?? 0;
+  const [uncappedInitialPaintDocumentId, setUncappedInitialPaintDocumentId] = useState<number | null>(null);
+  const initialItemCountLimit = loadedDocument !== null && uncappedInitialPaintDocumentId !== loadedDocumentId
+    ? diffProgressiveInitialPaintRowCount
+    : null;
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -2276,6 +2280,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     collapsedFileIndexes,
     fontFamily,
     fontSize,
+    initialItemCountLimit,
     nativeUnifiedRows,
     rowHeight,
     state,
@@ -3702,6 +3707,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return rowHeight + (showOnlyHunks && isDiffUnifiedHunkStart(loadedDocument, index, row) ? diffHunkHeaderHeight : 0);
   }, [getItemType, loadedDocument, rowHeight, showOnlyHunks]);
 
+  const releaseInitialItemCountLimit = useCallback((documentId: number, reason: "side-by-side-row-render" | "unified-row-render") => {
+    requestAnimationFrame(() => {
+      setUncappedInitialPaintDocumentId(documentId);
+      logDiffOpenTiming("viewer.initialItemCountLimit.release", () => ({
+        documentId,
+        reason,
+      }));
+    });
+  }, []);
+
   const renderRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
       if (!loggedFirstUnifiedRowRenderRef.current) {
@@ -3711,6 +3726,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index,
           rowKind: row?.kind,
         }));
+        releaseInitialItemCountLimit(loadedDocumentId, "unified-row-render");
       }
       return (
         <DiffUnifiedRow
@@ -3722,7 +3738,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, renderFields],
+    [collapsedFileIndexes$, loadedDocumentId, releaseInitialItemCountLimit, renderFields],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -3747,6 +3763,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index,
           rowKind: row?.kind,
         }));
+        releaseInitialItemCountLimit(loadedDocumentId, "side-by-side-row-render");
       }
       return (
         <DiffSideBySideRow
@@ -3758,7 +3775,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, renderFields],
+    [collapsedFileIndexes$, loadedDocumentId, releaseInitialItemCountLimit, renderFields],
   );
 
   const documentErrorHeight = documentError
