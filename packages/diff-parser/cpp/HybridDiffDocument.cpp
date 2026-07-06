@@ -328,9 +328,9 @@ DiffCachedRow HybridDiffDocument::getRow(double index) {
   }
 
   auto plain = rows_[safeIndex];
-  auto tokens = std::move(plain.tokens);
   plain.tokens = {};
   if (plain.kind == diffRowKindLine && safeIndex < rowTokenized_.size() && rowTokenized_[safeIndex]) {
+    auto tokens = cachedTokensForRowLocked(plain);
     return DiffCachedRow(std::move(plain), std::move(tokens));
   }
   return DiffCachedRow(std::move(plain), nitro::NullType());
@@ -349,8 +349,18 @@ std::vector<DiffRenderRow> HybridDiffDocument::getRows(double start, double coun
   for (size_t index = safeStart; index < end; index += 1) {
     ensureRowTokens(index);
   }
+  std::vector<DiffRenderRow> requestedRows;
+  requestedRows.reserve(end - safeStart);
+  for (size_t index = safeStart; index < end; index += 1) {
+    auto row = rows_[index];
+    row.tokens = {};
+    if (index < rowTokenized_.size() && rowTokenized_[index]) {
+      row.tokens = cachedTokensForRowLocked(row);
+    }
+    requestedRows.push_back(std::move(row));
+  }
   markTokenizedRangeLocked(safeStart, end);
-  return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
+  return requestedRows;
 }
 
 std::vector<DiffRenderRow> HybridDiffDocument::getPlainRows(double start, double count) {
@@ -531,6 +541,17 @@ DiffSideBySideRenderRow HybridDiffDocument::createSideBySideRenderRow(const Diff
     }
   }
 
+  auto oldRow = oldRowVisible ? rows_[oldRowIndex] : emptyRow;
+  auto newRow = newRowVisible && !newRowEqualsOldRow ? rows_[newRowIndex] : emptyRow;
+  oldRow.tokens = {};
+  newRow.tokens = {};
+  if (oldRowVisible && oldRowIndex < rowTokenized_.size() && rowTokenized_[oldRowIndex]) {
+    oldRow.tokens = cachedTokensForRowLocked(oldRow);
+  }
+  if (newRowVisible && !newRowEqualsOldRow && newRowIndex < rowTokenized_.size() && rowTokenized_[newRowIndex]) {
+    newRow.tokens = cachedTokensForRowLocked(newRow);
+  }
+
   return DiffSideBySideRenderRow(
       index,
       sideBySideKindString(line.kind),
@@ -541,8 +562,8 @@ DiffSideBySideRenderRow HybridDiffDocument::createSideBySideRenderRow(const Diff
       oldRowVisible,
       newRowVisible,
       newRowEqualsOldRow,
-      oldRowVisible ? rows_[oldRowIndex] : emptyRow,
-      newRowVisible && !newRowEqualsOldRow ? rows_[newRowIndex] : emptyRow);
+      std::move(oldRow),
+      std::move(newRow));
 }
 
 DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRowForIndex(
@@ -890,7 +911,6 @@ size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
   size += backgroundTokenizeRanges_.size() * sizeof(DiffTokenizationRange);
   for (const auto& row : rows_) {
     size += row.text.capacity();
-    size += row.tokens.capacity() * sizeof(DiffSyntaxTokenRun);
   }
   for (const auto& file : files_) {
     size += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();
@@ -965,7 +985,6 @@ void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
 
     for (const auto& row : rows_) {
       rowTextBytes += row.text.capacity();
-      rowTokenRuns += row.tokens.capacity();
     }
     for (const auto tokenized : rowTokenized_) {
       if (tokenized) {
@@ -1049,6 +1068,38 @@ void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
 #endif
 }
 
+std::vector<DiffSyntaxTokenRun> HybridDiffDocument::cachedTokensForRowLocked(const DiffRenderRow& row) {
+  if (row.kind != diffRowKindLine) {
+    return {};
+  }
+
+  const auto fileIndex = static_cast<size_t>(std::max(0.0, row.fileIndex));
+  if (fileIndex >= fileSources_.size()) {
+    return {};
+  }
+
+  auto& sources = fileSources_[fileIndex];
+  const bool oldSource = row.changeType == diffChangeTypeRemove;
+  auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
+  auto& source = oldSource ? sources.oldSource : sources.newSource;
+  const auto loaded = oldSource ? sources.oldSourceLoaded : sources.newSourceLoaded;
+  if (!loaded || (row.oldLineNumber < 1 && row.newLineNumber < 1)) {
+    return {};
+  }
+
+  const auto lineNumber = oldSource ? row.oldLineNumber : row.newLineNumber;
+  if (lineNumber < 1) {
+    return {};
+  }
+
+  std::lock_guard<std::mutex> sourceLock(*sourceMutex);
+  const auto lineIndex = static_cast<size_t>(lineNumber - 1);
+  if (lineIndex < source.tokenCache.size() && source.tokenCache[lineIndex].has_value()) {
+    return *source.tokenCache[lineIndex];
+  }
+  return {};
+}
+
 void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   if (rowIndex >= rows_.size()) {
     return;
@@ -1069,9 +1120,9 @@ void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
   std::lock_guard<std::mutex> sourceLock(*sourceMutex);
   if (oldSource) {
-    row.tokens = tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
+    tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
   } else {
-    row.tokens = tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
+    tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
   }
   if (rowIndex < rowTokenized_.size()) {
     rowTokenized_[rowIndex] = true;
@@ -1122,10 +1173,9 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
 
     const auto row = rows_[rowIndex];
     lock.unlock();
-    auto tokens = tokenizeRowOutsideDocumentLock(row);
+    tokenizeRowOutsideDocumentLock(row);
     lock.lock();
     if (rowIndex < rows_.size() && rowIndex < rowTokenized_.size() && !rowTokenized_[rowIndex]) {
-      rows_[rowIndex].tokens = std::move(tokens);
       rowTokenized_[rowIndex] = true;
       changedStart = std::min(changedStart, rowIndex);
       changedEnd = std::max(changedEnd, rowIndex + 1);
@@ -1241,7 +1291,7 @@ std::vector<DiffSyntaxTokenRun> HybridDiffDocument::tokensForLine(DiffTokenizedS
 }
 
 void HybridDiffDocument::releaseCompletedSourceCaches() {
-  if (backgroundTokenizeNextRowIndex_ < rows_.size()) {
+  if (backgroundTokenizeRowIndex_ < rows_.size()) {
     return;
   }
 
@@ -1251,8 +1301,6 @@ void HybridDiffDocument::releaseCompletedSourceCaches() {
       auto& source = sources.oldSource;
       source.lines.clear();
       source.lines.shrink_to_fit();
-      source.tokenCache.clear();
-      source.tokenCache.shrink_to_fit();
       source.state.reset();
     }
     {
@@ -1260,8 +1308,6 @@ void HybridDiffDocument::releaseCompletedSourceCaches() {
       auto& source = sources.newSource;
       source.lines.clear();
       source.lines.shrink_to_fit();
-      source.tokenCache.clear();
-      source.tokenCache.shrink_to_fit();
       source.state.reset();
     }
   }

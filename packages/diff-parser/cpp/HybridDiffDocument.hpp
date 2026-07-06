@@ -141,6 +141,7 @@ private:
       double count,
       const std::vector<double>& collapsedFileIndexes,
       bool tokenizeRows);
+  std::vector<DiffSyntaxTokenRun> cachedTokensForRowLocked(const DiffRenderRow& row);
   void ensureRowTokens(size_t rowIndex);
   std::vector<DiffSyntaxTokenRun> tokenizeRowOutsideDocumentLock(const DiffRenderRow& row);
   bool ensureNextBackgroundTokenChunk(
