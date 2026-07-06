@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -13,6 +14,7 @@
 #include <map>
 #include <sstream>
 #include <unordered_set>
+#include <unordered_map>
 #include <utility>
 
 #ifdef __APPLE__
@@ -194,6 +196,36 @@ std::string readWorkdirFileText(const std::string& workdirPath, const std::strin
   return readFileText(std::filesystem::path(workdirPath) / path);
 }
 
+std::string sanitizeBackingStorePathComponent(const std::string& value) {
+  std::string sanitized;
+  sanitized.reserve(value.size());
+  for (const char character : value) {
+    const auto byte = static_cast<unsigned char>(character);
+    sanitized.push_back(std::isalnum(byte) || character == '.' || character == '-' || character == '_' ? character : '_');
+  }
+  if (sanitized.empty()) {
+    return "source";
+  }
+  constexpr size_t maxFilenameComponentLength = 96;
+  if (sanitized.size() > maxFilenameComponentLength) {
+    sanitized.resize(maxFilenameComponentLength);
+  }
+  return sanitized;
+}
+
+void writeSourceLinesFile(const std::filesystem::path& path, const std::vector<std::string>& lines) {
+  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    return;
+  }
+  for (size_t index = 0; index < lines.size(); index += 1) {
+    output << lines[index];
+    if (index + 1 < lines.size()) {
+      output << '\n';
+    }
+  }
+}
+
 class LocalRepoDiffBackingStore final : public DiffBackingStore {
 public:
   LocalRepoDiffBackingStore(std::string repositoryPath, std::string workdirPath, std::string headTreeOid)
@@ -234,15 +266,82 @@ private:
   std::string headTreeOid_;
 };
 
-class UnifiedDiffBackingStore : public DiffBackingStore {
+class UnifiedDiffBackingStore final : public DiffBackingStore {
 public:
-  DiffTokenizedSource loadSource(
-      const DiffFileSources&,
-      bool,
-      const DiffSourceFactory& unifiedDiffSourceFactory) override {
-    return unifiedDiffSourceFactory();
+  UnifiedDiffBackingStore() {
+    const auto basePath = std::filesystem::temp_directory_path() / "legend-diff-sources";
+    std::error_code error;
+    std::filesystem::create_directories(basePath, error);
+    directoryPath_ = basePath / std::to_string(nextBackingStoreId_.fetch_add(1));
+    std::filesystem::create_directories(directoryPath_, error);
   }
+
+  ~UnifiedDiffBackingStore() override {
+    std::error_code error;
+    std::filesystem::remove_all(directoryPath_, error);
+  }
+
+  DiffTokenizedSource loadSource(
+      const DiffFileSources& sources,
+      bool oldSource,
+      const DiffSourceFactory& unifiedDiffSourceFactory) override {
+    const auto path = sourceFilePath(sources, oldSource);
+    if (!path.empty() && std::filesystem::exists(path)) {
+      const auto& sourcePath = oldSource ? sources.oldPath : sources.newPath;
+      return makeTokenizedSource(sourcePath, readFileText(path));
+    }
+
+    auto source = unifiedDiffSourceFactory();
+    if (!path.empty() && !source.lines.empty()) {
+      std::error_code error;
+      std::filesystem::create_directories(directoryPath_, error);
+      writeSourceLinesFile(path, source.lines);
+    }
+    return source;
+  }
+
+  size_t getExternalMemorySize() const noexcept override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    size_t size = directoryPath_.string().capacity();
+    for (const auto& entry : sourcePaths_) {
+      size += entry.first.capacity() + entry.second.string().capacity();
+    }
+    return size;
+  }
+
+private:
+  std::string sourceKey(const DiffFileSources& sources, bool oldSource) const {
+    return std::to_string(static_cast<size_t>(std::max(0.0, sources.fileIndex))) + (oldSource ? ":old:" : ":new:") + (oldSource ? sources.oldPath : sources.newPath);
+  }
+
+  std::filesystem::path sourceFilePath(const DiffFileSources& sources, bool oldSource) {
+    if (directoryPath_.empty()) {
+      return {};
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto key = sourceKey(sources, oldSource);
+    auto existing = sourcePaths_.find(key);
+    if (existing != sourcePaths_.end()) {
+      return existing->second;
+    }
+
+    const auto sourcePath = oldSource ? sources.oldPath : sources.newPath;
+    const auto filename = std::to_string(sourcePaths_.size()) + "-" +
+        sanitizeBackingStorePathComponent(sourcePath) +
+        (oldSource ? ".old" : ".new");
+    auto path = directoryPath_ / filename;
+    sourcePaths_.emplace(key, path);
+    return path;
+  }
+
+  static std::atomic<uint64_t> nextBackingStoreId_;
+  mutable std::mutex mutex_;
+  std::filesystem::path directoryPath_;
+  std::unordered_map<std::string, std::filesystem::path> sourcePaths_;
 };
+
+std::atomic<uint64_t> UnifiedDiffBackingStore::nextBackingStoreId_{1};
 
 double getSideBySideSourceStart(double oldRowIndex, double newRowIndex, double fallbackIndex) {
   if (oldRowIndex >= 0 && newRowIndex >= 0) {
