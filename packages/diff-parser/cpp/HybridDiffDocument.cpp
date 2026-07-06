@@ -13,6 +13,7 @@
 #include <map>
 #include <sstream>
 #include <unordered_set>
+#include <utility>
 
 #ifdef __APPLE__
 #include <os/log.h>
@@ -193,6 +194,56 @@ std::string readWorkdirFileText(const std::string& workdirPath, const std::strin
   return readFileText(std::filesystem::path(workdirPath) / path);
 }
 
+class LocalRepoDiffBackingStore final : public DiffBackingStore {
+public:
+  LocalRepoDiffBackingStore(std::string repositoryPath, std::string workdirPath, std::string headTreeOid)
+      : repositoryPath_(std::move(repositoryPath)),
+        workdirPath_(std::move(workdirPath)),
+        headTreeOid_(std::move(headTreeOid)) {}
+
+  DiffTokenizedSource loadSource(
+      const DiffFileSources& sources,
+      bool oldSource,
+      const DiffSourceFactory& unifiedDiffSourceFactory) override {
+    if (sources.isUnifiedDiff) {
+      return unifiedDiffSourceFactory();
+    }
+    if (sources.isBinary) {
+      return {};
+    }
+
+    const auto& path = oldSource ? sources.oldPath : sources.newPath;
+    const bool canReadOldSource = oldSource && sources.status != "added" && sources.status != "untracked";
+    const bool canReadNewSource = !oldSource && sources.status != "deleted";
+    if (canReadOldSource) {
+      return makeTokenizedSource(path, readHeadBlobText(repositoryPath_, headTreeOid_, path));
+    }
+    if (canReadNewSource) {
+      return makeTokenizedSource(path, readWorkdirFileText(workdirPath_, path));
+    }
+    return {};
+  }
+
+  size_t getExternalMemorySize() const noexcept override {
+    return repositoryPath_.capacity() + workdirPath_.capacity() + headTreeOid_.capacity();
+  }
+
+private:
+  std::string repositoryPath_;
+  std::string workdirPath_;
+  std::string headTreeOid_;
+};
+
+class UnifiedDiffBackingStore : public DiffBackingStore {
+public:
+  DiffTokenizedSource loadSource(
+      const DiffFileSources&,
+      bool,
+      const DiffSourceFactory& unifiedDiffSourceFactory) override {
+    return unifiedDiffSourceFactory();
+  }
+};
+
 double getSideBySideSourceStart(double oldRowIndex, double newRowIndex, double fallbackIndex) {
   if (oldRowIndex >= 0 && newRowIndex >= 0) {
     return std::min(oldRowIndex, newRowIndex);
@@ -287,6 +338,24 @@ bool shouldIncludeSideBySideLine(
 
 } // namespace
 
+size_t DiffBackingStore::getExternalMemorySize() const noexcept {
+  return 0;
+}
+
+std::shared_ptr<DiffBackingStore> createLocalRepoDiffBackingStore(
+    std::string repositoryPath,
+    std::string workdirPath,
+    std::string headTreeOid) {
+  return std::make_shared<LocalRepoDiffBackingStore>(
+      std::move(repositoryPath),
+      std::move(workdirPath),
+      std::move(headTreeOid));
+}
+
+std::shared_ptr<DiffBackingStore> createUnifiedDiffBackingStore() {
+  return std::make_shared<UnifiedDiffBackingStore>();
+}
+
 HybridDiffDocument::HybridDiffDocument(
     std::vector<DiffFileSummary> files,
     std::vector<DiffRenderRow> rows,
@@ -294,6 +363,7 @@ HybridDiffDocument::HybridDiffDocument(
     std::string repositoryPath,
     std::string workdirPath,
     std::string headTreeOid,
+    std::shared_ptr<DiffBackingStore> backingStore,
     DiffLoadTiming timing)
     : HybridObject(TAG),
       documentId_(nextDiffDocumentId.fetch_add(1)),
@@ -304,7 +374,11 @@ HybridDiffDocument::HybridDiffDocument(
       workdirPath_(std::move(workdirPath)),
       headTreeOid_(std::move(headTreeOid)),
       syntaxState_(std::make_shared<DiffSyntaxState>()),
+      backingStore_(std::move(backingStore)),
       timing_(timing) {
+  if (!backingStore_) {
+    backingStore_ = createLocalRepoDiffBackingStore(repositoryPath_, workdirPath_, headTreeOid_);
+  }
   rows_.reserve(rows.size());
   size_t rowTextBytes = 0;
   for (const auto& row : rows) {
@@ -1069,6 +1143,7 @@ void HybridDiffDocument::setProgressRepositoryMetadata(
   repositoryPath_ = std::move(repositoryPath);
   workdirPath_ = std::move(workdirPath);
   headTreeOid_ = std::move(headTreeOid);
+  backingStore_ = createLocalRepoDiffBackingStore(repositoryPath_, workdirPath_, headTreeOid_);
 }
 
 void HybridDiffDocument::setProgressTiming(const DiffLoadTiming& timing) {
@@ -1079,7 +1154,10 @@ void HybridDiffDocument::setProgressTiming(const DiffLoadTiming& timing) {
 }
 
 size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
-  size_t size = rows_.capacity() * sizeof(DiffStoredRow) + rowText_.capacity() + files_.capacity() * sizeof(DiffFileSummary);
+	  size_t size = rows_.capacity() * sizeof(DiffStoredRow) + rowText_.capacity() + files_.capacity() * sizeof(DiffFileSummary);
+	  if (backingStore_) {
+	    size += backingStore_->getExternalMemorySize();
+	  }
   size += rowTokenized_.capacity() * sizeof(uint8_t);
   size += backgroundTokenizeRanges_.size() * sizeof(DiffTokenizationRange);
   for (const auto& file : files_) {
@@ -1379,18 +1457,12 @@ DiffTokenizedSource& HybridDiffDocument::ensureSourceLoaded(DiffFileSources& sou
   auto& loaded = oldSource ? sources.oldSourceLoaded : sources.newSourceLoaded;
   if (!loaded) {
     loaded = true;
-    if (!sources.isBinary) {
-      const auto& path = oldSource ? sources.oldPath : sources.newPath;
-      const bool canReadOldSource = oldSource && sources.status != "added" && sources.status != "untracked";
-      const bool canReadNewSource = !oldSource && sources.status != "deleted";
-      if (sources.isUnifiedDiff) {
-        source = makeUnifiedDiffSource(sources, oldSource);
-      } else if (canReadOldSource) {
-        source = makeTokenizedSource(path, readHeadBlobText(repositoryPath_, headTreeOid_, path));
-      } else if (canReadNewSource) {
-        source = makeTokenizedSource(path, readWorkdirFileText(workdirPath_, path));
-      }
-    }
+    auto unifiedDiffSourceFactory = [this, &sources, oldSource] {
+      return makeUnifiedDiffSource(sources, oldSource);
+    };
+    source = backingStore_
+      ? backingStore_->loadSource(sources, oldSource, unifiedDiffSourceFactory)
+      : unifiedDiffSourceFactory();
   }
   return source;
 }

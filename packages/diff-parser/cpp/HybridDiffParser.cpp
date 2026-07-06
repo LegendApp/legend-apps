@@ -55,11 +55,13 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
       "",
       "",
       sourceLabel,
+      createUnifiedDiffBackingStore(),
       parsed.timing);
 }
 
 std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath, bool showOnlyHunks) {
   auto parsed = parseGitRepositoryDiff(folderPath, showOnlyHunks);
+  auto backingStore = createLocalRepoDiffBackingStore(parsed.repositoryPath, parsed.workdirPath, parsed.headTreeOid);
 
   return std::make_shared<HybridDiffDocument>(
       std::move(parsed.files),
@@ -68,6 +70,7 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folde
       std::move(parsed.repositoryPath),
       std::move(parsed.workdirPath),
       std::move(parsed.headTreeOid),
+      std::move(backingStore),
       parsed.timing);
 }
 

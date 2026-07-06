@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <memory>
@@ -41,6 +42,25 @@ struct DiffFileSources {
   DiffTokenizedSource oldSource;
   DiffTokenizedSource newSource;
 };
+
+using DiffSourceFactory = std::function<DiffTokenizedSource()>;
+
+class DiffBackingStore {
+public:
+  virtual ~DiffBackingStore() = default;
+  virtual DiffTokenizedSource loadSource(
+      const DiffFileSources& sources,
+      bool oldSource,
+      const DiffSourceFactory& unifiedDiffSourceFactory) = 0;
+  virtual size_t getExternalMemorySize() const noexcept;
+};
+
+std::shared_ptr<DiffBackingStore> createLocalRepoDiffBackingStore(
+    std::string repositoryPath,
+    std::string workdirPath,
+    std::string headTreeOid);
+
+std::shared_ptr<DiffBackingStore> createUnifiedDiffBackingStore();
 
 struct DiffSideBySideLine {
   double index = 0;
@@ -79,6 +99,7 @@ public:
       std::string repositoryPath,
       std::string workdirPath,
       std::string headTreeOid,
+      std::shared_ptr<DiffBackingStore> backingStore,
       DiffLoadTiming timing);
   ~HybridDiffDocument() override;
 
@@ -185,6 +206,7 @@ private:
   std::string workdirPath_;
   std::string headTreeOid_;
   std::shared_ptr<DiffSyntaxState> syntaxState_;
+  std::shared_ptr<DiffBackingStore> backingStore_;
   std::map<std::string, std::vector<DiffSyntaxStyle>> nativeScopeStyleCache_;
   DiffLoadTiming timing_;
   size_t backgroundTokenizeRowIndex_ = 0;

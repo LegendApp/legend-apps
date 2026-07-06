@@ -62,6 +62,7 @@ HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath, bool showOn
           "",
           "",
           "",
+          createLocalRepoDiffBackingStore("", "", ""),
           createEmptyTiming())) {}
 
 HybridDiffLoadSession::HybridDiffLoadSession(std::string diffUrl, std::string sourceLabel)
@@ -77,6 +78,7 @@ HybridDiffLoadSession::HybridDiffLoadSession(std::string diffUrl, std::string so
           "",
           "",
           sourceLabel_,
+          createUnifiedDiffBackingStore(),
           createEmptyTiming())) {}
 
 HybridDiffLoadSession::~HybridDiffLoadSession() {
