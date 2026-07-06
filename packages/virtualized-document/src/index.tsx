@@ -15,6 +15,15 @@ import type {
   ViewStyle,
 } from "react-native";
 
+declare const __DEV__: boolean | undefined;
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __LEGEND_INSTRUMENTATION_ENABLED__: boolean | Record<string, boolean> | undefined;
+  // eslint-disable-next-line no-var
+  var __LEGEND_BENCHMARK_LOG_URL__: boolean | string | undefined;
+}
+
 export type VirtualizedFixedDocumentListRef = LegendListRef;
 
 export type VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> = {
@@ -127,8 +136,86 @@ function debugNowMs() {
   return globalThis.performance?.now?.() ?? Date.now();
 }
 
+function isDev() {
+  return typeof __DEV__ !== "undefined" && __DEV__;
+}
+
+function getEnvValue(name: string) {
+  const processValue = (globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }).process;
+  return processValue?.env?.[name];
+}
+
+function isTruthyFlag(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function isFalseyFlag(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
+}
+
+function isNamespaceEnabled(namespace: string, value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (isTruthyFlag(normalized) || normalized === "all" || normalized === "*") {
+    return true;
+  }
+  if (isFalseyFlag(normalized)) {
+    return false;
+  }
+  return normalized
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .includes(namespace.toLowerCase());
+}
+
+function isDebugLogEnabled(debugName: string | undefined) {
+  if (!isDev() || !debugName) {
+    return false;
+  }
+
+  const globalValue = globalThis.__LEGEND_INSTRUMENTATION_ENABLED__;
+  if (typeof globalValue === "boolean") {
+    return globalValue;
+  }
+  if (globalValue && typeof globalValue === "object") {
+    return Boolean(globalValue[debugName]);
+  }
+
+  const envValue = getEnvValue("EXPO_PUBLIC_LEGEND_INSTRUMENTATION") ?? getEnvValue("LEGEND_INSTRUMENTATION");
+  return envValue !== undefined ? isNamespaceEnabled(debugName, envValue) : false;
+}
+
+function getBenchmarkLogUrl() {
+  const globalValue = globalThis.__LEGEND_BENCHMARK_LOG_URL__;
+  if (typeof globalValue === "string") {
+    return globalValue;
+  }
+  if (globalValue === true) {
+    return "http://127.0.0.1:19395/log";
+  }
+
+  const envValue = getEnvValue("EXPO_PUBLIC_LEGEND_BENCHMARK_LOG_URL") ?? getEnvValue("LEGEND_BENCHMARK_LOG_URL");
+  if (!envValue || isFalseyFlag(envValue)) {
+    return null;
+  }
+  return isTruthyFlag(envValue) ? "http://127.0.0.1:19395/log" : envValue;
+}
+
+function sendBenchmarkLog(message: string) {
+  const url = getBenchmarkLogUrl();
+  if (url) {
+    fetch(url, {
+      body: message,
+      method: "POST",
+    }).catch(() => {});
+  }
+}
+
 function debugLog(debugName: string | undefined, event: string, payload: Record<string, unknown>) {
-  if (__DEV__ && debugName) {
+  if (isDebugLogEnabled(debugName)) {
     debugSequence += 1;
     const message = `${debugPrefix} ${event} ${JSON.stringify({
       debugName,
@@ -137,10 +224,7 @@ function debugLog(debugName: string | undefined, event: string, payload: Record<
       ...payload,
     })}`;
     console.info(message);
-    fetch("http://127.0.0.1:19395/log", {
-      body: message,
-      method: "POST",
-    }).catch(() => {});
+    sendBenchmarkLog(message);
   }
 }
 
