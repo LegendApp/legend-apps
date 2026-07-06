@@ -2,6 +2,7 @@
 
 #include "DiffParserCore.hpp"
 #include "HybridDiffDocument.hpp"
+#include "HybridDiffLaunchPrefetch.hpp"
 #include "HybridDiffLoadSession.hpp"
 #include "HybridDiffUrlLoader.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
@@ -88,6 +89,10 @@ std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFromUrl(
     const std::string& diffUrl,
     const std::string& sourceLabel) {
+  auto prefetchedSession = claimLaunchPrefetchedUnifiedDiffUrl(diffUrl, sourceLabel);
+  if (prefetchedSession) {
+    return prefetchedSession;
+  }
   return HybridDiffLoadSession::createUnifiedDiffUrl(diffUrl, sourceLabel);
 }
 
