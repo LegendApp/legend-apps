@@ -36,6 +36,7 @@ constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
 constexpr double defaultBackgroundTokenizeChunkRowCount = 16;
 constexpr double defaultBackgroundTokenizeChunkBudgetMs = 3;
+constexpr size_t maxTokenizeLinesPerRequest = 256;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
@@ -1100,43 +1101,52 @@ std::vector<DiffSyntaxTokenRun> HybridDiffDocument::cachedTokensForRowLocked(con
   return {};
 }
 
-void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
+bool HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   if (rowIndex >= rows_.size()) {
-    return;
+    return false;
   }
 
   auto& row = rows_[rowIndex];
-  if ((rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex]) || row.kind != diffRowKindLine) {
-    return;
+  if (rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex]) {
+    return true;
+  }
+
+  if (row.kind != diffRowKindLine) {
+    if (rowIndex < rowTokenized_.size()) {
+      rowTokenized_[rowIndex] = true;
+    }
+    return true;
   }
 
   const auto fileIndex = static_cast<size_t>(std::max(0.0, row.fileIndex));
   if (fileIndex >= fileSources_.size()) {
-    return;
+    if (rowIndex < rowTokenized_.size()) {
+      rowTokenized_[rowIndex] = true;
+    }
+    return true;
   }
 
   auto& sources = fileSources_[fileIndex];
   const bool oldSource = row.changeType == diffChangeTypeRemove;
   auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
   std::lock_guard<std::mutex> sourceLock(*sourceMutex);
-  if (oldSource) {
-    tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
-  } else {
-    tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
-  }
-  if (rowIndex < rowTokenized_.size()) {
+  const auto tokens = oldSource
+      ? tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber)
+      : tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
+  if (tokens.has_value() && rowIndex < rowTokenized_.size()) {
     rowTokenized_[rowIndex] = true;
   }
+  return tokens.has_value();
 }
 
-std::vector<DiffSyntaxTokenRun> HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row) {
+bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row) {
   if (row.kind != diffRowKindLine) {
-    return {};
+    return true;
   }
 
   const auto fileIndex = static_cast<size_t>(std::max(0.0, row.fileIndex));
   if (fileIndex >= fileSources_.size()) {
-    return {};
+    return true;
   }
 
   auto& sources = fileSources_[fileIndex];
@@ -1144,9 +1154,9 @@ std::vector<DiffSyntaxTokenRun> HybridDiffDocument::tokenizeRowOutsideDocumentLo
   auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
   std::lock_guard<std::mutex> sourceLock(*sourceMutex);
   if (oldSource) {
-    return tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
+    return tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber).has_value();
   }
-  return tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
+  return tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber).has_value();
 }
 
 bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
@@ -1173,12 +1183,16 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
 
     const auto row = rows_[rowIndex];
     lock.unlock();
-    tokenizeRowOutsideDocumentLock(row);
+    const auto rowTokenized = tokenizeRowOutsideDocumentLock(row);
     lock.lock();
     if (rowIndex < rows_.size() && rowIndex < rowTokenized_.size() && !rowTokenized_[rowIndex]) {
-      rowTokenized_[rowIndex] = true;
-      changedStart = std::min(changedStart, rowIndex);
-      changedEnd = std::max(changedEnd, rowIndex + 1);
+      if (rowTokenized) {
+        rowTokenized_[rowIndex] = true;
+        changedStart = std::min(changedStart, rowIndex);
+        changedEnd = std::max(changedEnd, rowIndex + 1);
+      } else {
+        backgroundTokenizeRanges_.push_front(DiffTokenizationRange{rowIndex, rowIndex + 1});
+      }
     }
     tokenizedCount += 1;
     if (tokenizedCount > 0 && std::chrono::steady_clock::now() - startedAt >= chunkBudget) {
@@ -1233,14 +1247,18 @@ DiffTokenizedSource HybridDiffDocument::makeUnifiedDiffSource(const DiffFileSour
   return makeTokenizedSource(path, std::move(lines));
 }
 
-void HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive) {
+bool HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget) {
   if (!source.enabled || source.language.empty()) {
-    return;
+    return true;
   }
 
   const auto end = std::min(source.lines.size(), lineIndexExclusive);
   if (source.tokenizedLineCount >= end) {
-    return;
+    return true;
+  }
+
+  if (lineBudget == 0) {
+    return false;
   }
 
   try {
@@ -1254,7 +1272,8 @@ void HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lin
 
     std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
     std::lock_guard<std::mutex> contextLock(source.state->context->mutex);
-    while (source.tokenizedLineCount < end) {
+    const auto budgetEnd = std::min(end, source.tokenizedLineCount + lineBudget);
+    while (source.tokenizedLineCount < budgetEnd) {
       auto tokenizedLine = syntaxparser::tokenizeSyntaxScopeLine(
           *source.state->context,
           source.lines[source.tokenizedLineCount],
@@ -1268,26 +1287,30 @@ void HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lin
       source.tokenCache[source.tokenizedLineCount] = std::move(tokens);
       source.tokenizedLineCount += 1;
     }
+    return source.tokenizedLineCount >= end;
   } catch (const std::exception&) {
     source.enabled = false;
   }
+  return true;
 }
 
-std::vector<DiffSyntaxTokenRun> HybridDiffDocument::tokensForLine(DiffTokenizedSource& source, double lineNumber) {
+std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine(DiffTokenizedSource& source, double lineNumber) {
   if (!source.enabled || lineNumber < 1) {
-    return {};
+    return std::vector<DiffSyntaxTokenRun>{};
   }
 
   const auto lineIndex = static_cast<size_t>(lineNumber - 1);
   if (lineIndex >= source.lines.size()) {
-    return {};
+    return std::vector<DiffSyntaxTokenRun>{};
   }
 
-  ensureTokenized(source, lineIndex + 1);
+  if (!ensureTokenized(source, lineIndex + 1, maxTokenizeLinesPerRequest)) {
+    return std::nullopt;
+  }
   if (lineIndex < source.tokenCache.size() && source.tokenCache[lineIndex].has_value()) {
     return *source.tokenCache[lineIndex];
   }
-  return {};
+  return std::vector<DiffSyntaxTokenRun>{};
 }
 
 void HybridDiffDocument::releaseCompletedSourceCaches() {

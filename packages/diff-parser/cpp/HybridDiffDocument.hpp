@@ -142,16 +142,16 @@ private:
       const std::vector<double>& collapsedFileIndexes,
       bool tokenizeRows);
   std::vector<DiffSyntaxTokenRun> cachedTokensForRowLocked(const DiffRenderRow& row);
-  void ensureRowTokens(size_t rowIndex);
-  std::vector<DiffSyntaxTokenRun> tokenizeRowOutsideDocumentLock(const DiffRenderRow& row);
+  bool ensureRowTokens(size_t rowIndex);
+  bool tokenizeRowOutsideDocumentLock(const DiffRenderRow& row);
   bool ensureNextBackgroundTokenChunk(
       std::unique_lock<std::mutex>& lock,
       size_t chunkRowCount,
       std::chrono::steady_clock::duration chunkBudget);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   DiffTokenizedSource makeUnifiedDiffSource(const DiffFileSources& sources, bool oldSource);
-  void ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive);
-  std::vector<DiffSyntaxTokenRun> tokensForLine(DiffTokenizedSource& source, double lineNumber);
+  bool ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget);
+  std::optional<std::vector<DiffSyntaxTokenRun>> tokensForLine(DiffTokenizedSource& source, double lineNumber);
   void releaseCompletedSourceCaches();
 
   uint64_t documentId_;
