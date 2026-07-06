@@ -945,14 +945,23 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   });
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
   const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - diffSidebarFilterReservedHeight) : 0;
+  const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
   const normalizedFileFilter = fileFilter.trim().toLowerCase();
   const filteredSidebarFiles = useMemo(
-    () => state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter)),
-    [normalizedFileFilter, state.files],
+    () => {
+      let files: readonly DiffFileSummary[] = [];
+      if (shouldRenderSidebarList) {
+        files = normalizedFileFilter
+          ? state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter))
+          : state.files;
+      }
+      return files;
+    },
+    [normalizedFileFilter, shouldRenderSidebarList, state.files],
   );
   const sidebarEntries = useMemo(
-    () => createDiffSidebarEntries(filteredSidebarFiles),
-    [filteredSidebarFiles],
+    () => shouldRenderSidebarList ? createDiffSidebarEntries(filteredSidebarFiles) : [],
+    [filteredSidebarFiles, shouldRenderSidebarList],
   );
   const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
   const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode !== "unified";
@@ -1190,7 +1199,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         ref={fileFilterInputRef}
         style={styles.sidebarFilter}
       />
-      {isSidebarLayoutReady ? (
+      {shouldRenderSidebarList ? (
         filteredSidebarFiles.length > 0 ? (
           <LegendList
             data={sidebarEntries}
