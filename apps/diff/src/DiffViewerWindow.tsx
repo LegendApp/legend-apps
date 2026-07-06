@@ -99,6 +99,7 @@ import {
   diffFileHeaderRowHeight,
   diffBackgroundTokenizeChunkBudgetMs,
   diffBackgroundTokenizeChunkRowCount,
+  diffBackgroundTokenizeMaxRowCount,
   diffBackgroundTokenizePollMs,
   diffBackgroundTokenizeStartDelayMs,
   diffInitialRowCount,
@@ -2280,27 +2281,38 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       if (syntaxHighlightingEnabled) {
         let cancelled = false;
         let startTimeout: ReturnType<typeof setTimeout> | undefined;
-        const filePaths = state.files.map((file) => file.path);
         const startedAt = nowMs();
         startTimeout = setTimeout(() => {
-          ensureSyntaxGrammarsForPaths(filePaths)
-            .then(() => {
-              if (!cancelled) {
-                document.startBackgroundTokenization(
-                  diffBackgroundTokenizeChunkRowCount,
-                  diffBackgroundTokenizeChunkBudgetMs,
-                );
-                logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
-                  durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                  files: state.files.length,
-                  rows: document.rowCount,
-                  scopes: document.scopeCount,
-                }));
-              }
-            })
-            .catch((error: unknown) => {
-              console.error(getErrorMessage(error));
-            });
+          if (document.rowCount <= diffBackgroundTokenizeMaxRowCount) {
+            const filePaths = state.files.map((file) => file.path);
+            ensureSyntaxGrammarsForPaths(filePaths)
+              .then(() => {
+                if (!cancelled) {
+                  document.startBackgroundTokenization(
+                    diffBackgroundTokenizeChunkRowCount,
+                    diffBackgroundTokenizeChunkBudgetMs,
+                  );
+                  logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
+                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                    files: state.files.length,
+                    rows: document.rowCount,
+                    rowLimit: diffBackgroundTokenizeMaxRowCount,
+                    scopes: document.scopeCount,
+                  }));
+                }
+              })
+              .catch((error: unknown) => {
+                console.error(getErrorMessage(error));
+              });
+          } else {
+            logDiffMemoryMark("viewer.syntaxTokenization.skipFullDocument", () => ({
+              durationMs: Number((nowMs() - startedAt).toFixed(1)),
+              files: state.files.length,
+              rows: document.rowCount,
+              rowLimit: diffBackgroundTokenizeMaxRowCount,
+              scopes: document.scopeCount,
+            }));
+          }
         }, diffBackgroundTokenizeStartDelayMs);
         return () => {
           cancelled = true;
@@ -2323,7 +2335,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         const tokenizedRows = Math.max(0, Math.min(totalRows, document.tokenizedMaxRow));
         const tokenizationVersion = document.getTokenizedRowVersion();
         const nextProgress = totalRows > 0 ? tokenizedRows / totalRows : 1;
-        const nextVisible = totalRows > 0 && tokenizedRows < totalRows;
+        const nextVisible = totalRows > 0 && tokenizedRows > 0 && tokenizedRows < totalRows;
         const currentProgress = syntaxTokenizationProgress$.peek();
         if (
           currentProgress.visible !== nextVisible ||
