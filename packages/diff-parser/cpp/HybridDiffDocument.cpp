@@ -37,6 +37,9 @@ constexpr double emptySideBySideRowIndex = -1;
 constexpr double defaultBackgroundTokenizeChunkRowCount = 16;
 constexpr double defaultBackgroundTokenizeChunkBudgetMs = 3;
 constexpr size_t maxTokenizeLinesPerRequest = 256;
+constexpr size_t retainedTokenizedRowWindowSize = 8192;
+constexpr size_t retainedTokenizedRowWindowPadding = retainedTokenizedRowWindowSize / 2;
+constexpr size_t retainedTokenizedRowEvictionMinRows = retainedTokenizedRowWindowSize * 2;
 constexpr double sideBySideKindFileHeader = 0;
 constexpr double sideBySideKindContext = 1;
 constexpr double sideBySideKindChange = 2;
@@ -515,6 +518,46 @@ void HybridDiffDocument::markTokenizedRangeLocked(size_t start, size_t end) {
   tokenizedRowVersion_.fetch_add(1);
 }
 
+void HybridDiffDocument::clearTokenizedRowRangeLocked(size_t start, size_t end) {
+  const auto safeStart = std::min(std::max(start, backgroundTokenizeRowIndex_), rowTokenized_.size());
+  const auto safeEnd = std::min(std::max(end, safeStart), rowTokenized_.size());
+  for (size_t index = safeStart; index < safeEnd; index += 1) {
+    rowTokenized_[index] = false;
+  }
+}
+
+void HybridDiffDocument::retainTokenizedRowsNearLocked(size_t start, size_t end) {
+  if (rowTokenized_.size() <= retainedTokenizedRowEvictionMinRows || start >= end) {
+    return;
+  }
+
+  const auto nextWindowStart = start > retainedTokenizedRowWindowPadding ? start - retainedTokenizedRowWindowPadding : 0;
+  const auto nextWindowEnd = std::min(rowTokenized_.size(), end + retainedTokenizedRowWindowPadding);
+  if (!retainedTokenizedRowWindowReady_) {
+    retainedTokenizedRowWindowReady_ = true;
+    retainedTokenizedRowWindowStart_ = nextWindowStart;
+    retainedTokenizedRowWindowEnd_ = nextWindowEnd;
+    return;
+  }
+
+  if (nextWindowStart >= retainedTokenizedRowWindowStart_ && nextWindowEnd <= retainedTokenizedRowWindowEnd_) {
+    return;
+  }
+
+  if (nextWindowStart > retainedTokenizedRowWindowStart_) {
+    clearTokenizedRowRangeLocked(retainedTokenizedRowWindowStart_, std::min(nextWindowStart, retainedTokenizedRowWindowEnd_));
+  }
+  if (nextWindowEnd < retainedTokenizedRowWindowEnd_) {
+    clearTokenizedRowRangeLocked(std::max(nextWindowEnd, retainedTokenizedRowWindowStart_), retainedTokenizedRowWindowEnd_);
+  }
+  if (nextWindowEnd < retainedTokenizedRowWindowStart_ || nextWindowStart > retainedTokenizedRowWindowEnd_) {
+    clearTokenizedRowRangeLocked(retainedTokenizedRowWindowStart_, retainedTokenizedRowWindowEnd_);
+  }
+
+  retainedTokenizedRowWindowStart_ = nextWindowStart;
+  retainedTokenizedRowWindowEnd_ = nextWindowEnd;
+}
+
 double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) {
   std::lock_guard<std::mutex> lock(mutex_);
   ensureSideBySideLinesLocked();
@@ -789,6 +832,7 @@ double HybridDiffDocument::requestTokenizedRows(double start, double count, cons
 
   std::lock_guard<std::mutex> lock(mutex_);
   const auto generation = backgroundGeneration_.load();
+  retainTokenizedRowsNearLocked(safeStart, safeStart + safeCount);
   enqueueTokenizationRangeLocked(safeStart, safeStart + safeCount);
   startQueuedTokenizationLocked(
       generation,
@@ -815,16 +859,22 @@ double HybridDiffDocument::requestTokenizedSideBySideRows(
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
   const auto safeEnd = safeStart + safeCount;
   size_t logicalIndex = 0;
+  size_t requestedRowStart = rows_.size();
+  size_t requestedRowEnd = 0;
 
   for (const auto& line : sideBySideLines_) {
     if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
       if (logicalIndex >= safeStart && logicalIndex < safeEnd) {
         if (line.oldRowIndex >= 0) {
           const auto oldRowIndex = static_cast<size_t>(line.oldRowIndex);
+          requestedRowStart = std::min(requestedRowStart, oldRowIndex);
+          requestedRowEnd = std::max(requestedRowEnd, oldRowIndex + 1);
           enqueueTokenizationRangeLocked(oldRowIndex, oldRowIndex + 1);
         }
         if (line.newRowIndex >= 0 && line.newRowIndex != line.oldRowIndex) {
           const auto newRowIndex = static_cast<size_t>(line.newRowIndex);
+          requestedRowStart = std::min(requestedRowStart, newRowIndex);
+          requestedRowEnd = std::max(requestedRowEnd, newRowIndex + 1);
           enqueueTokenizationRangeLocked(newRowIndex, newRowIndex + 1);
         }
       }
@@ -836,6 +886,9 @@ double HybridDiffDocument::requestTokenizedSideBySideRows(
   }
 
   const auto generation = backgroundGeneration_.load();
+  if (requestedRowStart < requestedRowEnd) {
+    retainTokenizedRowsNearLocked(requestedRowStart, requestedRowEnd);
+  }
   startQueuedTokenizationLocked(
       generation,
       static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount),

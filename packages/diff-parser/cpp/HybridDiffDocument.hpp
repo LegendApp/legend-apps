@@ -146,6 +146,8 @@ private:
       std::chrono::steady_clock::duration chunkBudget);
   void advanceTokenizedMaxRowLocked();
   void markTokenizedRangeLocked(size_t start, size_t end);
+  void clearTokenizedRowRangeLocked(size_t start, size_t end);
+  void retainTokenizedRowsNearLocked(size_t start, size_t end);
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,
@@ -187,6 +189,9 @@ private:
   size_t backgroundTokenizeNextRowIndex_ = 0;
   std::deque<DiffTokenizationRange> backgroundTokenizeRanges_;
   std::vector<DiffTokenizedRowRange> tokenizedRowRanges_;
+  bool retainedTokenizedRowWindowReady_ = false;
+  size_t retainedTokenizedRowWindowStart_ = 0;
+  size_t retainedTokenizedRowWindowEnd_ = 0;
   std::atomic<uint64_t> backgroundGeneration_{0};
   std::atomic<uint64_t> tokenizedRowVersion_{0};
   std::atomic<bool> backgroundTokenizationRunning_{false};
