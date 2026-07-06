@@ -114,6 +114,7 @@ import {
 } from "./viewer/diffViewerConstants";
 import {
   findFileIndexForRow,
+  requestDiffTokenizedRows,
   useDiffLoadedModel,
   useDiffSideBySideRuntime,
 } from "./viewer/diffLoadedDocumentModel";
@@ -356,7 +357,7 @@ type DiffLoadedBodyProps = {
   handleSideBySideVisibleRowsRequested: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
   handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
   handleTopItemChanged: (rowIndex: number) => void;
-  handleVisibleRowsRequested: (start: number, count: number, reason: string) => void;
+  handleVisibleRowsRequested: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
   isRenderingInitialLoadedFrame: boolean;
   listExtraData: DiffListExtraData;
   listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
@@ -1094,10 +1095,10 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           lineOverscan={diffLineOverscan}
           listRef={listRef}
           onTopItemChanged={handleUnifiedTopItemChanged}
-          onVisibleRowsRequested={nativeUnifiedRows ? undefined : handleVisibleRowsRequested}
+          onVisibleRowsRequested={handleVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={requestUnifiedRange}
-          requestRangesOnScroll={!nativeUnifiedRows}
+          requestRangesOnScroll
           getRow={getUnifiedRow}
           rowHeight={rowHeight}
           renderRow={renderUnifiedRow}
@@ -1122,10 +1123,10 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           lineOverscan={sideBySideLineOverscan}
           listRef={listRef}
           onTopItemChanged={handleSideBySideListTopItemChanged}
-          onVisibleRowsRequested={nativeSideBySideRows ? undefined : handleSideBySideVisibleRowsRequested}
+          onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
           overscanRequestDelayMs={diffOverscanRequestDelayMs}
           requestRange={requestBlocksRange}
-          requestRangesOnScroll={!nativeSideBySideRows}
+          requestRangesOnScroll
           rowHeight={rowHeight}
           renderRow={renderSideBySideListRow}
           style={diffListStyle}
@@ -2273,6 +2274,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     rowHeight,
     sideBySideRowCount,
     state$,
+    syntaxHighlightingEnabled,
     viewMode: renderViewMode,
   });
   useEffect(() => {
@@ -2382,8 +2384,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       activeFileIndex$.set(null);
     }
   }, [activeFileIndex$, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
-  const handleVisibleRowsRequested = useCallback(() => {
-  }, []);
+  const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
+    const currentState = state$.peek();
+    if (syntaxHighlightingEnabled && currentState.status === "loaded") {
+      requestDiffTokenizedRows(currentState.document, currentState.files, start, count, reason);
+    }
+  }, [state$, syntaxHighlightingEnabled]);
 
   const handleTopItemChanged = useCallback((rowIndex: number) => {
     const currentState = state$.peek();

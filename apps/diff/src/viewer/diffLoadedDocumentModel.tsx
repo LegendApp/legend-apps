@@ -10,6 +10,7 @@ import {
   nowMs,
   type SyntaxStyleMap,
 } from "@legend-desktop/source-viewer";
+import { ensureSyntaxGrammarsForPaths } from "@legend-desktop/syntax-parser";
 import {
   useVirtualizedDocumentRows,
   type VirtualizedDocumentRequestOptions,
@@ -53,6 +54,125 @@ function createDiffSyntaxStyleMap(styles: readonly DiffSyntaxStyle[]) {
       id: style.scopeId,
     },
   ])) satisfies SyntaxStyleMap;
+}
+
+function getSyntaxPathsForFiles(files: readonly DiffFileSummary[]) {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  files.forEach((file) => {
+    [file.path, file.oldPath].forEach((path) => {
+      if (path && !seen.has(path)) {
+        seen.add(path);
+        paths.push(path);
+      }
+    });
+  });
+  return paths;
+}
+
+function getFilesForSourceRowRange(files: readonly DiffFileSummary[], start: number, count: number) {
+  const rangeStart = Math.max(0, Math.floor(start));
+  const rangeEnd = rangeStart + Math.max(0, Math.ceil(count));
+  if (rangeStart >= rangeEnd) {
+    return [];
+  }
+
+  return files.filter((file) => {
+    const rowStart = Math.max(0, Math.floor(file.rowStart));
+    const rowEnd = rowStart + Math.max(0, Math.floor(file.rowCount));
+    return rowStart < rangeEnd && rowEnd > rangeStart;
+  });
+}
+
+function getFilesForSideBySideRange(
+  document: DiffDocument,
+  files: readonly DiffFileSummary[],
+  start: number,
+  count: number,
+  collapsedFileIndexes: readonly number[],
+) {
+  const rows = document.getPlainSideBySideRows(start, count, [...collapsedFileIndexes]);
+  const fileIndexes = new Set<number>();
+  rows.forEach((row) => {
+    if (row.fileIndex >= 0) {
+      fileIndexes.add(row.fileIndex);
+    }
+  });
+  return files.filter((file) => fileIndexes.has(file.index));
+}
+
+function requestTokenizedRowsAfterGrammarLoad({
+  count,
+  document,
+  files,
+  reason,
+  start,
+}: {
+  count: number;
+  document: DiffDocument;
+  files: readonly DiffFileSummary[];
+  reason: VirtualizedDocumentRequestReason;
+  start: number;
+}) {
+  const paths = getSyntaxPathsForFiles(files);
+  if (paths.length === 0) {
+    document.requestTokenizedRows(start, count, reason);
+    return;
+  }
+
+  ensureSyntaxGrammarsForPaths(paths)
+    .then(() => {
+      document.requestTokenizedRows(start, count, reason);
+    })
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+    });
+}
+
+export function requestDiffTokenizedRows(
+  document: DiffDocument,
+  files: readonly DiffFileSummary[],
+  start: number,
+  count: number,
+  reason: VirtualizedDocumentRequestReason,
+) {
+  requestTokenizedRowsAfterGrammarLoad({
+    count,
+    document,
+    files: getFilesForSourceRowRange(files, start, count),
+    reason,
+    start,
+  });
+}
+
+function requestTokenizedSideBySideRowsAfterGrammarLoad({
+  collapsedFileIndexes,
+  count,
+  document,
+  files,
+  reason,
+  start,
+}: {
+  collapsedFileIndexes: readonly number[];
+  count: number;
+  document: DiffDocument;
+  files: readonly DiffFileSummary[];
+  reason: VirtualizedDocumentRequestReason;
+  start: number;
+}) {
+  const paths = getSyntaxPathsForFiles(files);
+  if (paths.length === 0) {
+    document.requestTokenizedSideBySideRows(start, count, [...collapsedFileIndexes], reason);
+    return;
+  }
+
+  ensureSyntaxGrammarsForPaths(paths)
+    .then(() => {
+      document.requestTokenizedSideBySideRows(start, count, [...collapsedFileIndexes], reason);
+    })
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+    });
 }
 
 export function useDiffLoadedModel({
@@ -411,6 +531,7 @@ export function useDiffSideBySideRuntime({
   rowHeight,
   sideBySideRowCount,
   state$,
+  syntaxHighlightingEnabled,
   viewMode,
 }: {
   activeFileIndex$: Observable<number | null>;
@@ -420,6 +541,7 @@ export function useDiffSideBySideRuntime({
   rowHeight: number;
   sideBySideRowCount: number;
   state$: Observable<DiffViewerState>;
+  syntaxHighlightingEnabled: boolean;
   viewMode: DiffSettingsFile["viewMode"];
 }) {
   const sideBySideVisibleRangeRef = useRef<{
@@ -462,7 +584,7 @@ export function useDiffSideBySideRuntime({
       }
     }
   }, [activeFileIndex$, getCurrentCollapsedFileIndexList, state$]);
-  const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, _reason: VirtualizedDocumentRequestReason) => {
+  const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
     const currentState = state$.peek();
     if (currentState.status === "loaded") {
       sideBySideVisibleRangeRef.current = {
@@ -470,8 +592,20 @@ export function useDiffSideBySideRuntime({
         document: currentState.document,
         start,
       };
+      if (syntaxHighlightingEnabled) {
+        const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
+        const files = getFilesForSideBySideRange(currentState.document, currentState.files, start, count, collapsedFileIndexList);
+        requestTokenizedSideBySideRowsAfterGrammarLoad({
+          collapsedFileIndexes: collapsedFileIndexList,
+          count,
+          document: currentState.document,
+          files,
+          reason,
+          start,
+        });
+      }
     }
-  }, [state$]);
+  }, [getCurrentCollapsedFileIndexList, state$, syntaxHighlightingEnabled]);
 
   useObserveEffect(() => {
     const currentDiffPaneHeight = diffPaneHeight$.get();
