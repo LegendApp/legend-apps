@@ -27,6 +27,7 @@ export type DiffSettingsFile = {
   syntaxTheme: string;
   rowRenderer?: DiffRowRendererSetting;
   showOnlyHunks?: boolean;
+  showStatisticsPanel?: boolean;
   sidebarWidth?: number;
   viewMode?: DiffViewMode;
 };
@@ -42,6 +43,7 @@ export const defaultDiffViewMode: DiffViewMode = "unified";
 export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
 export const defaultDiffSidebarWidth = 180;
 export const defaultDiffShowOnlyHunks = true;
+export const defaultDiffShowStatisticsPanel = false;
 export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const defaultDiffSyntaxPrewarmEnabled = true;
@@ -127,6 +129,10 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffShowOnlyHunks,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffShowOnlyHunks),
     },
+    showStatisticsPanel: {
+      defaultValue: defaultDiffShowStatisticsPanel,
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffShowStatisticsPanel),
+    },
     sidebarWidth: {
       defaultValue: defaultDiffSidebarWidth,
       normalize: normalizeDiffSidebarWidth,
@@ -148,6 +154,7 @@ const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnow
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const rowRendererSetting = diffSettings.field("rowRenderer");
 const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
+const showStatisticsPanelSetting = diffSettings.field("showStatisticsPanel");
 const sidebarWidthSetting = diffSettings.field("sidebarWidth");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
@@ -182,6 +189,10 @@ export function getDiffRowRendererSetting(): DiffRowRendererSetting {
 
 export function getDiffShowOnlyHunksSetting(): boolean {
   return showOnlyHunksSetting.get();
+}
+
+export function getDiffShowStatisticsPanelSetting(): boolean {
+  return showStatisticsPanelSetting.get();
 }
 
 export function getDiffSidebarWidthSetting(): number {
@@ -237,6 +248,10 @@ export function useDiffShowOnlyHunksSetting(): boolean {
   return normalizeBooleanSetting(useValue(diffSettings$.showOnlyHunks), defaultDiffShowOnlyHunks);
 }
 
+export function useDiffShowStatisticsPanelSetting(): boolean {
+  return normalizeBooleanSetting(useValue(diffSettings$.showStatisticsPanel), defaultDiffShowStatisticsPanel);
+}
+
 export function useDiffSidebarWidthSetting(): number {
   return normalizeDiffSidebarWidth(useValue(diffSettings$.sidebarWidth));
 }
@@ -283,6 +298,10 @@ export function setDiffRowRendererSetting(rowRenderer: DiffRowRendererSetting) {
 
 export function setDiffShowOnlyHunksSetting(enabled: boolean) {
   showOnlyHunksSetting.set(enabled);
+}
+
+export function setDiffShowStatisticsPanelSetting(enabled: boolean) {
+  showStatisticsPanelSetting.set(enabled);
 }
 
 export function setDiffSidebarWidthSetting(sidebarWidth: number) {

@@ -28,6 +28,7 @@ import {
   emptyDiffViewerState,
   useDiffViewerModel,
   type DiffLoadSourceOptions,
+  type DiffStatisticsState,
   type DiffLoadTrace,
 } from "./diffViewerModel";
 import {
@@ -296,6 +297,8 @@ export function DiffLoadCompletionController({
   loggedTraceDocumentRef: { current: DiffDocument | null };
 }) {
   const {
+    loadStatistics$,
+    setLoadStatisticsValue,
     setLoadingSourceValue,
     state$,
   } = useDiffViewerModel();
@@ -303,24 +306,58 @@ export function DiffLoadCompletionController({
   useObserveEffect(() => {
     const currentState = state$.get();
     const trace = loadTraceRef.current;
-    if (currentState.status === "loaded" && trace?.document === currentState.document && loggedTraceDocumentRef.current !== currentState.document) {
-      loggedTraceDocumentRef.current = currentState.document;
-      const effectAt = nowMs();
-      measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
-        setLoadingSourceValue((current) => sourcesMatch(current, currentState.source) ? null : current);
-        logDiffOpenTiming("viewer.ui.loaded", () => ({
-          effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
-          effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
-          effectToSecondFrameMs: Number(elapsedMs(effectAt, secondFrameAt).toFixed(1)),
-          effectToTimeoutMs: Number(elapsedMs(effectAt, timeoutAt).toFixed(1)),
-          loadToEffectMs: Number(elapsedMs(trace.loadStartedAt, effectAt).toFixed(1)),
-          loadToFrameMs: Number(elapsedMs(trace.loadStartedAt, frameAt).toFixed(1)),
-          loadToNativeMs: Number(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt).toFixed(1)),
-          loadToSecondFrameMs: Number(elapsedMs(trace.loadStartedAt, secondFrameAt).toFixed(1)),
-          nativeToSetStateMs: Number(elapsedMs(trace.nativeResolvedAt, trace.setStateAt).toFixed(1)),
-          setStateToEffectMs: Number(elapsedMs(trace.setStateAt, effectAt).toFixed(1)),
-        }));
-      });
+    if (currentState.status === "loaded" && trace?.document === currentState.document) {
+      const currentStatistics = loadStatistics$.get();
+      const downloadMs = Number(Math.max(0, currentState.timing.fetchMs).toFixed(1));
+      const nativeTotalMs = Number(Math.max(0, currentState.timing.nativeTotalMs).toFixed(1));
+
+      if (loggedTraceDocumentRef.current !== currentState.document || currentStatistics?.requestId !== trace.requestId) {
+        loggedTraceDocumentRef.current = currentState.document;
+        const effectAt = nowMs();
+        measureAfterEffect(({ frameAt, microtaskAt, secondFrameAt, timeoutAt }) => {
+          setLoadingSourceValue((current) => sourcesMatch(current, currentState.source) ? null : current);
+          const loadToFrameMs = Number(elapsedMs(trace.loadStartedAt, frameAt).toFixed(1));
+          const setStateToFrameMs = Number(elapsedMs(trace.setStateAt, frameAt).toFixed(1));
+          const statistics: DiffStatisticsState = {
+            cacheHit: trace.cacheHit === true,
+            downloadMs,
+            fileCount: currentState.files.length,
+            firstPaintMs: setStateToFrameMs,
+            loadComplete: currentState.loadComplete !== false,
+            loadToFrameMs,
+            loadToNativeMs: Number(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt).toFixed(1)),
+            nativeToSetStateMs: Number(elapsedMs(trace.nativeResolvedAt, trace.setStateAt).toFixed(1)),
+            nativeTotalMs,
+            requestId: trace.requestId,
+            rowCount: currentState.document.rowCount,
+            setStateToFrameMs,
+          };
+          setLoadStatisticsValue(statistics);
+          logDiffOpenTiming("viewer.ui.loaded", () => ({
+            effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
+            effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
+            effectToSecondFrameMs: Number(elapsedMs(effectAt, secondFrameAt).toFixed(1)),
+            effectToTimeoutMs: Number(elapsedMs(effectAt, timeoutAt).toFixed(1)),
+            loadToEffectMs: Number(elapsedMs(trace.loadStartedAt, effectAt).toFixed(1)),
+            loadToFrameMs,
+            loadToNativeMs: Number(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt).toFixed(1)),
+            loadToSecondFrameMs: Number(elapsedMs(trace.loadStartedAt, secondFrameAt).toFixed(1)),
+            nativeToSetStateMs: Number(elapsedMs(trace.nativeResolvedAt, trace.setStateAt).toFixed(1)),
+            setStateToEffectMs: Number(elapsedMs(trace.setStateAt, effectAt).toFixed(1)),
+            statistics,
+          }));
+        });
+      } else if (currentStatistics.requestId === trace.requestId) {
+        setLoadStatisticsValue({
+          ...currentStatistics,
+          cacheHit: trace.cacheHit === true,
+          downloadMs,
+          fileCount: currentState.files.length,
+          loadComplete: currentState.loadComplete !== false,
+          nativeTotalMs,
+          rowCount: currentState.document.rowCount,
+        });
+      }
     }
   });
 
@@ -347,6 +384,7 @@ export function DiffLaunchController({
   const {
     setDocumentErrorValue,
     setLoadProgressValue,
+    setLoadStatisticsValue,
     setLoadingSourceValue,
     setOpenErrorValue,
     setUrlInputErrorValue,
@@ -388,6 +426,7 @@ export function DiffLaunchController({
       loadRequestIdRef.current += 1;
       loadTraceRef.current = null;
       setLoadProgressValue(emptyDiffLoadProgressState);
+      setLoadStatisticsValue(null);
       setLoadingSourceValue(null);
       setViewerState(emptyDiffViewerState);
       setOpenErrorValue(null);
@@ -405,6 +444,7 @@ export function DiffLaunchController({
     loadTraceRef,
     setDocumentErrorValue,
     setLoadProgressValue,
+    setLoadStatisticsValue,
     setLoadingSourceValue,
     setOpenErrorValue,
     setUrlInputErrorValue,

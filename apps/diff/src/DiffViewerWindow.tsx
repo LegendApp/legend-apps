@@ -86,6 +86,7 @@ import {
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
   useDiffShowOnlyHunksSetting,
+  useDiffShowStatisticsPanelSetting,
   useDiffSidebarWidthSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxTheme,
@@ -2103,6 +2104,89 @@ function DiffDropSurface({
     </DragDropView>
   );
 }
+
+function formatStatNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(Math.max(0, Math.floor(value)));
+}
+
+function formatStatTime(value: number) {
+  return `${Math.max(0, value).toFixed(1)} ms`;
+}
+
+function DiffStatisticsPanel({
+  borderColor,
+  foregroundColor,
+  mutedColor,
+  syntaxAppearance,
+}: {
+  borderColor: string;
+  foregroundColor: string;
+  mutedColor: string;
+  syntaxAppearance: "dark" | "light";
+}) {
+  const showStatisticsPanel = useDiffShowStatisticsPanelSetting();
+  const {
+    loadStatistics$,
+    state$,
+  } = useDiffViewerModel();
+  const state = useValue(state$);
+  const statistics = useValue(loadStatistics$);
+
+  if (!showStatisticsPanel || state.status !== "loaded" || !statistics) {
+    return null;
+  }
+
+  const rows = state.document.rowCount;
+  const files = state.files.length;
+  const loadComplete = state.loadComplete !== false;
+  const panelBackgroundColor = syntaxAppearance === "dark" ? "rgba(16, 20, 26, 0.92)" : "rgba(255, 255, 255, 0.94)";
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.statisticsPanel,
+        {
+          backgroundColor: panelBackgroundColor,
+          borderColor,
+        },
+      ]}
+    >
+      <Text style={[styles.statisticsTitle, { color: foregroundColor }]}>
+        Statistics
+      </Text>
+      <View style={styles.statisticsRows}>
+        {statistics.downloadMs > 0 ? (
+          <View style={styles.statisticsRow}>
+            <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Download</Text>
+            <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatTime(statistics.downloadMs)}</Text>
+          </View>
+        ) : null}
+        <View style={styles.statisticsRow}>
+          <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Initial UI paint</Text>
+          <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatTime(statistics.firstPaintMs)}</Text>
+        </View>
+        <View style={styles.statisticsRow}>
+          <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Native/session total</Text>
+          <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatTime(statistics.nativeTotalMs)}</Text>
+        </View>
+        <View style={styles.statisticsRow}>
+          <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Files</Text>
+          <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatNumber(files)}</Text>
+        </View>
+        <View style={styles.statisticsRow}>
+          <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Rows</Text>
+          <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatNumber(rows)}</Text>
+        </View>
+        <View style={styles.statisticsRow}>
+          <Text style={[styles.statisticsLabel, { color: mutedColor }]}>State</Text>
+          <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{loadComplete ? "Complete" : "Loading"}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export function DiffViewerWindow(props: DiffViewerWindowProps) {
   return (
     <DiffViewerModelProvider>
@@ -2141,6 +2225,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     setDiffPaneHeightValue,
     setDocumentErrorValue,
     setLoadProgressValue,
+    setLoadStatisticsValue,
     setLoadingSourceValue,
     setMergeStateValue,
     setOpenErrorValue,
@@ -2545,9 +2630,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       ? loadedCacheRef.current.get(loadedCacheKey)
       : undefined;
     if (cachedEntry) {
-      loadTraceRef.current = null;
+      const trace: DiffLoadTrace = {
+        cacheHit: true,
+        document: cachedEntry.loaded.document,
+        folderPath: nextSource.value,
+        loadStartedAt,
+        nativeResolvedAt: loadStartedAt,
+        requestId,
+        setStateAt: nowMs(),
+      };
+      loadTraceRef.current = trace;
       setLoadProgressValue(emptyDiffLoadProgressState);
       setLoadingSourceValue(null);
+      setLoadStatisticsValue(null);
       setDocumentErrorValue(null);
       setOpenErrorValue(null);
       setViewerState({
@@ -2570,10 +2665,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     const trace: DiffLoadTrace = {
+      cacheHit: false,
       document: null,
       folderPath: nextSource.value,
       loadStartedAt,
       nativeResolvedAt: loadStartedAt,
+      requestId,
       setStateAt: loadStartedAt,
     };
     loadTraceRef.current = trace;
@@ -2587,6 +2684,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           }
         : emptyDiffLoadProgressState);
       setLoadingSourceValue(nextSource);
+      setLoadStatisticsValue(null);
       setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
       if (stateBeforeLoad.status === "loaded") {
         setDocumentErrorValue(null);
@@ -2933,6 +3031,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         loadTraceRef.current = null;
         setMergeStateValue(unavailableDiffMergeState);
         setLoadProgressValue(emptyDiffLoadProgressState);
+        setLoadStatisticsValue(null);
         setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
       }
       const message = getErrorMessage(loadError);
@@ -2951,7 +3050,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         requestId,
       }));
     }
-  }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
+  }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
 
   const saveMergeDrafts = useCallback(async () => {
     if (savingMergeDraftsRef.current) {
@@ -4029,6 +4128,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         syntaxAppearance={syntaxTheme.appearance}
       >
         {body}
+        <DiffStatisticsPanel
+          borderColor={diffPalette.border}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          syntaxAppearance={syntaxTheme.appearance}
+        />
       </DiffDropSurface>
     </>
   );
@@ -4204,6 +4309,42 @@ const styles = StyleSheet.create({
   },
   sidebarList: {
     flex: 1,
+  },
+  statisticsLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  statisticsPanel: {
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 14,
+    minWidth: 190,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    position: "absolute",
+    right: 14,
+    zIndex: 40,
+  },
+  statisticsRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 16,
+    justifyContent: "space-between",
+  },
+  statisticsRows: {
+    gap: 2,
+  },
+  statisticsTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  statisticsValue: {
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "600",
+    lineHeight: 15,
   },
   unsavedMergeBanner: {
     alignItems: "center",

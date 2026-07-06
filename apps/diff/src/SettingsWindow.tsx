@@ -23,6 +23,7 @@ import {
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffRowRendererSetting,
+  setDiffShowStatisticsPanelSetting,
   setDiffSyntaxHighlightingEnabledSetting,
   setDiffSyntaxPrewarmEnabledSetting,
   setDiffSyntaxPrewarmLanguagesSetting,
@@ -31,6 +32,7 @@ import {
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
+  useDiffShowStatisticsPanelSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxPrewarmEnabledSetting,
   useDiffSyntaxPrewarmKnownLanguagesSetting,
@@ -39,7 +41,7 @@ import {
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
 
-type DiffSettingsPage = "appearance" | "syntax" | "commandLine";
+type DiffSettingsPage = "appearance" | "syntax" | "debugging" | "commandLine";
 
 function AppearanceSettingsPage() {
   return (
@@ -195,6 +197,38 @@ function CommandLineButton({
   );
 }
 
+function DebuggingSettingsPage() {
+  return (
+    <SettingsPage>
+      <DebuggingSettingsContent />
+    </SettingsPage>
+  );
+}
+
+function DebuggingSettingsContent() {
+  const showStatisticsPanel = useDiffShowStatisticsPanelSetting();
+
+  return (
+    <SettingsSection
+      first
+      title={null}
+    >
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Show statistics panel"
+            checked={showStatisticsPanel}
+            onChange={setDiffShowStatisticsPanelSetting}
+          />
+        )}
+        description="Show a small overlay with load and document statistics."
+        title="Show statistics panel"
+      />
+    </SettingsSection>
+  );
+}
+
 function CliStatusText({ status }: { status: DiffCliInstallStatus | null }) {
   return (
     <Text
@@ -321,6 +355,11 @@ const pages: VirtualizedSettingsWindowPage<DiffSettingsPage>[] = [
     id: "syntax",
     renderContent: () => <SyntaxSettingsContent />,
     title: "Syntax",
+  },
+  {
+    id: "debugging",
+    renderContent: () => <DebuggingSettingsContent />,
+    title: "Debugging",
   },
   {
     id: "commandLine",
