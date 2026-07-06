@@ -46,6 +46,8 @@ NSMutableURLRequest* createDiffUrlRequest(const std::string& diffUrl) {
 
 } // namespace
 
+} // namespace margelo::nitro::legenddesktop::diffparser
+
 @interface DiffUrlStreamDelegate : NSObject <NSURLSessionDataDelegate> {
 @public
   dispatch_semaphore_t _semaphore;
@@ -131,12 +133,15 @@ didCompleteWithError:(NSError*)error
   (void)session;
   (void)task;
   if (_error.empty() && error != nil && error.code != NSURLErrorCancelled) {
-    _error = "Failed to fetch diff URL: " + nsStringToStdString(error.localizedDescription);
+    _error = "Failed to fetch diff URL: " +
+        margelo::nitro::legenddesktop::diffparser::nsStringToStdString(error.localizedDescription);
   }
   dispatch_semaphore_signal(_semaphore);
 }
 
 @end
+
+namespace margelo::nitro::legenddesktop::diffparser {
 
 DiffUrlLoadResult loadDiffUrlText(const std::string& diffUrl) {
   const auto startedAt = UrlClock::now();
