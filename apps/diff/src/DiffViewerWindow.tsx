@@ -1110,6 +1110,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           key="unified"
           extraData={listExtraData}
           itemIndexes={inlineMergeModel.itemIndexes}
+          itemKeyVersion={state.document.documentId}
           ListHeaderComponent={listHeader}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
           getItemSize={getUnifiedItemSize}
@@ -1137,6 +1138,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           key={viewMode}
           extraData={listExtraData}
           itemIndexes={inlineMergeModel.itemIndexes}
+          itemKeyVersion={state.document.documentId}
           ListHeaderComponent={listHeader}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
           getItemSize={getSideBySideListItemSize}
@@ -2372,8 +2374,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       const updateProgress = () => {
         const tokenizedRows = Math.max(0, Math.min(totalRows, document.tokenizedMaxRow));
         const tokenizationVersion = document.getTokenizedRowVersion();
-        const nextProgress = totalRows > 0 ? tokenizedRows / totalRows : 1;
-        const nextVisible = totalRows > 0 && tokenizedRows > 0 && tokenizedRows < totalRows;
+        const shouldShowBackgroundTokenizationProgress = totalRows > 0 && totalRows <= diffBackgroundTokenizeMaxRowCount;
+        const nextProgress = shouldShowBackgroundTokenizationProgress ? tokenizedRows / totalRows : 0;
+        const nextVisible = shouldShowBackgroundTokenizationProgress && tokenizedRows > 0 && tokenizedRows < totalRows;
         const currentProgress = syntaxTokenizationProgress$.peek();
         if (
           currentProgress.visible !== nextVisible ||
@@ -3703,8 +3706,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return diffFileHeaderRowHeight;
     }
 
+    if (!showOnlyHunks) {
+      return rowHeight;
+    }
+
     const row = loadedDocument?.getPlainRows(index, 1)[0];
-    return rowHeight + (showOnlyHunks && isDiffUnifiedHunkStart(loadedDocument, index, row) ? diffHunkHeaderHeight : 0);
+    return rowHeight + (isDiffUnifiedHunkStart(loadedDocument, index, row) ? diffHunkHeaderHeight : 0);
   }, [getItemType, loadedDocument, rowHeight, showOnlyHunks]);
 
   const releaseInitialItemCountLimit = useCallback((documentId: number, reason: "side-by-side-row-render" | "unified-row-render") => {

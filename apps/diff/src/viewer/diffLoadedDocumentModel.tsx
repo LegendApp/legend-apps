@@ -47,6 +47,8 @@ export {
   findFileIndexForRow,
 } from "./diffLoadedDocumentIndexes";
 
+const emptyDiffRenderRows: readonly DiffRenderRow[] = [];
+
 function createDiffSyntaxStyleMap(styles: readonly DiffSyntaxStyle[]) {
   const map: SyntaxStyleMap = new Map();
   for (const style of styles) {
@@ -230,36 +232,49 @@ export function useDiffLoadedModel({
     }));
     return map;
   }, [state]);
+  const snapshotDocument = state.status === "loaded" ? state.document : null;
+  const snapshotLoadComplete = state.status === "loaded" ? state.loadComplete !== false : true;
+  const snapshotRowCount = snapshotDocument ? Math.max(0, Math.floor(snapshotDocument.rowCount)) : 0;
+  const snapshotItemCountLimit = snapshotDocument
+    ? initialItemCountLimit ?? (!snapshotLoadComplete ? diffProgressiveInitialPaintRowCount : null)
+    : null;
+  const snapshotItemCount = snapshotDocument
+    ? snapshotItemCountLimit !== null
+      ? Math.min(snapshotRowCount, snapshotItemCountLimit)
+      : snapshotRowCount
+    : 0;
+  const snapshotInitialRows = state.status === "loaded" && state.initialRows.length > 0
+    ? state.initialRows
+    : emptyDiffRenderRows;
   const snapshot = useMemo<VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null>(
     () => {
       const startedAt = nowMs();
       let nextSnapshot: VirtualizedDocumentSnapshot<DiffDocument, DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming> | null = null;
-      if (state.status === "loaded") {
-        const rowCount = Math.max(0, Math.floor(state.document.rowCount));
-        const itemCountLimit = initialItemCountLimit ?? (state.loadComplete === false ? diffProgressiveInitialPaintRowCount : null);
-        const itemCount = itemCountLimit !== null
-          ? Math.min(rowCount, itemCountLimit)
-          : rowCount;
+      if (snapshotDocument) {
         nextSnapshot = {
-          document: state.document,
-          initialRows: state.initialRows,
-          itemCount,
+          document: snapshotDocument,
+          initialRows: snapshotInitialRows,
+          itemCount: snapshotItemCount,
           styles: [],
-          timing: state.timing,
+          timing: snapshotDocument.getTiming(),
         };
         logDiffOpenTiming("viewer.derive.snapshot", () => ({
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          initialItemCountLimit: itemCountLimit,
-          initialRows: state.initialRows.length,
-          itemCount,
-          loadComplete: state.loadComplete !== false,
-          rows: rowCount,
-          scopes: state.document.scopeCount,
+          initialItemCountLimit: snapshotItemCountLimit,
+          initialRows: snapshotInitialRows.length,
+          itemCount: snapshotItemCount,
+          loadComplete: snapshotLoadComplete,
+          rows: snapshotRowCount,
+          scopes: snapshotDocument.scopeCount,
         }));
       }
       return nextSnapshot;
     },
-    [initialItemCountLimit, state],
+    [
+      snapshotDocument,
+      snapshotInitialRows,
+      snapshotItemCount,
+    ],
   );
   const requestRows = useCallback((document: DiffDocument, start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const startedAt = nowMs();

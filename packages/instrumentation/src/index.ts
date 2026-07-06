@@ -55,6 +55,15 @@ function safeStringify(value: unknown) {
   }
 }
 
+function sendBenchmarkLog(message: string) {
+  if (isDev()) {
+    fetch("http://127.0.0.1:19395/log", {
+      body: message,
+      method: "POST",
+    }).catch(() => {});
+  }
+}
+
 export function logInstrumentation(
   kind: InstrumentationKind,
   namespace: string,
@@ -66,6 +75,7 @@ export function logInstrumentation(
     const resolvedPayload = resolvePayload(payload);
     const message = `${Date.now()} [${label}] ${event} ${safeStringify(resolvedPayload)}`;
     console.info(message);
+    sendBenchmarkLog(message);
     NativeInstrumentation?.log(kind, message);
   }
 }

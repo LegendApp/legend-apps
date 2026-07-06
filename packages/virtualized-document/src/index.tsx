@@ -97,6 +97,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   getDocumentIndex?: VirtualizedFixedDocumentListDocumentIndexMapper;
   initialRequestRowCount?: number;
   itemIndexes: Array<number | undefined>;
+  itemKeyVersion?: string | number;
   ListHeaderComponent?: ReactElement;
   listHeaderHeight?: number;
   listRef?: Ref<LegendListRef>;
@@ -124,12 +125,17 @@ function debugNowMs() {
 function debugLog(debugName: string | undefined, event: string, payload: Record<string, unknown>) {
   if (__DEV__ && debugName) {
     debugSequence += 1;
-    console.info(`${debugPrefix} ${event} ${JSON.stringify({
+    const message = `${debugPrefix} ${event} ${JSON.stringify({
       debugName,
       seq: debugSequence,
       t: Number(debugNowMs().toFixed(1)),
       ...payload,
-    })}`);
+    })}`;
+    console.info(message);
+    fetch("http://127.0.0.1:19395/log", {
+      body: message,
+      method: "POST",
+    }).catch(() => {});
   }
 }
 
@@ -412,6 +418,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   getItemType,
   initialRequestRowCount,
   itemIndexes,
+  itemKeyVersion,
   ListHeaderComponent,
   listHeaderHeight = 0,
   listRef,
@@ -705,12 +712,13 @@ export function VirtualizedFixedDocumentList<TRow>({
     return itemType;
   }, [debugName, getItemType]);
 
+  const keyVersion = itemKeyVersion ?? dataVersion;
   const keyExtractor = useCallback((item: number | undefined, index: number) => {
     const startedAt = debugNowMs();
     const rowIndex = item ?? index;
-    const key = dataVersion === undefined
+    const key = keyVersion === undefined
       ? String(rowIndex)
-      : `${dataVersion}:${rowIndex}`;
+      : `${keyVersion}:${rowIndex}`;
     if (!hasLoggedFirstKeyExtractorRef.current) {
       hasLoggedFirstKeyExtractorRef.current = true;
       debugLog(debugName, "list.keyExtractor.first", {
@@ -721,7 +729,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     }
     recordCallbackDebug(debugName, "list.keyExtractorFrame", keyExtractorBatchRef, rowIndex, startedAt);
     return key;
-  }, [dataVersion, debugName]);
+  }, [debugName, keyVersion]);
 
   return (
     <LegendList
