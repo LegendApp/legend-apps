@@ -148,6 +148,8 @@ private:
   void markTokenizedRangeLocked(size_t start, size_t end);
   void clearTokenizedRowRangeLocked(size_t start, size_t end);
   void retainTokenizedRowsNearLocked(size_t start, size_t end);
+  void retainTokenizationRangesNearLocked(size_t start, size_t end);
+  void releaseSourceCachesOutsideRowWindowLocked(size_t start, size_t end);
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,

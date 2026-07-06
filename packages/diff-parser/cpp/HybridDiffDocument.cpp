@@ -107,6 +107,23 @@ DiffTokenizedSource makeTokenizedSource(const std::string& path, const std::stri
   return makeTokenizedSource(path, syntaxparser::splitSyntaxLines(source));
 }
 
+void resetTokenizedSource(DiffTokenizedSource& source) {
+  source.enabled = false;
+  source.language.clear();
+  source.lines.clear();
+  source.lines.shrink_to_fit();
+  source.tokenCache.clear();
+  source.tokenCache.shrink_to_fit();
+  source.state.reset();
+  source.tokenizedLineCount = 0;
+}
+
+void releaseTokenizedSourceText(DiffTokenizedSource& source) {
+  source.lines.clear();
+  source.lines.shrink_to_fit();
+  source.state.reset();
+}
+
 void setSourceLine(std::vector<std::string>& lines, double lineNumber, const std::string& text) {
   if (lineNumber > 0) {
     const auto lineIndex = static_cast<size_t>(lineNumber - 1);
@@ -537,6 +554,8 @@ void HybridDiffDocument::retainTokenizedRowsNearLocked(size_t start, size_t end)
     retainedTokenizedRowWindowReady_ = true;
     retainedTokenizedRowWindowStart_ = nextWindowStart;
     retainedTokenizedRowWindowEnd_ = nextWindowEnd;
+    retainTokenizationRangesNearLocked(nextWindowStart, nextWindowEnd);
+    releaseSourceCachesOutsideRowWindowLocked(nextWindowStart, nextWindowEnd);
     return;
   }
 
@@ -556,6 +575,50 @@ void HybridDiffDocument::retainTokenizedRowsNearLocked(size_t start, size_t end)
 
   retainedTokenizedRowWindowStart_ = nextWindowStart;
   retainedTokenizedRowWindowEnd_ = nextWindowEnd;
+  retainTokenizationRangesNearLocked(nextWindowStart, nextWindowEnd);
+  releaseSourceCachesOutsideRowWindowLocked(nextWindowStart, nextWindowEnd);
+}
+
+void HybridDiffDocument::retainTokenizationRangesNearLocked(size_t start, size_t end) {
+  std::deque<DiffTokenizationRange> retainedRanges;
+  for (const auto& range : backgroundTokenizeRanges_) {
+    const auto retainedStart = std::max(range.start, start);
+    const auto retainedEnd = std::min(range.end, end);
+    if (retainedStart < retainedEnd) {
+      retainedRanges.push_back(DiffTokenizationRange{retainedStart, retainedEnd});
+    }
+  }
+  backgroundTokenizeRanges_ = std::move(retainedRanges);
+}
+
+void HybridDiffDocument::releaseSourceCachesOutsideRowWindowLocked(size_t start, size_t end) {
+  for (auto& sources : fileSources_) {
+    const auto fileIndex = static_cast<size_t>(std::max(0.0, sources.fileIndex));
+    if (sources.fileIndex < 0 || fileIndex >= files_.size()) {
+      continue;
+    }
+
+    const auto fileStart = static_cast<size_t>(std::max(0.0, files_[fileIndex].rowStart));
+    const auto fileEnd = fileStart + static_cast<size_t>(std::max(0.0, files_[fileIndex].rowCount));
+    if (fileEnd > start && fileStart < end) {
+      continue;
+    }
+
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
+      if (sources.oldSourceLoaded) {
+        resetTokenizedSource(sources.oldSource);
+        sources.oldSourceLoaded = false;
+      }
+    }
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
+      if (sources.newSourceLoaded) {
+        resetTokenizedSource(sources.newSource);
+        sources.newSourceLoaded = false;
+      }
+    }
+  }
 }
 
 double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) {
@@ -1423,20 +1486,14 @@ void HybridDiffDocument::releaseCompletedSourceCaches() {
   }
 
   for (auto& sources : fileSources_) {
-    {
-      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
-      auto& source = sources.oldSource;
-      source.lines.clear();
-      source.lines.shrink_to_fit();
-      source.state.reset();
-    }
-    {
-      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
-      auto& source = sources.newSource;
-      source.lines.clear();
-      source.lines.shrink_to_fit();
-      source.state.reset();
-    }
+	    {
+	      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
+	      releaseTokenizedSourceText(sources.oldSource);
+	    }
+	    {
+	      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
+	      releaseTokenizedSourceText(sources.newSource);
+	    }
   }
 }
 
