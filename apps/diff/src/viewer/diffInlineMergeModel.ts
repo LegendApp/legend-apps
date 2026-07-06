@@ -93,7 +93,10 @@ export function createDiffInlineMergeList({
   }
 
   const nextItemIndex = { current: -1 };
-  const fileByIndex = new Map(files.map((file) => [file.index, file]));
+  const fileByIndex = new Map<number, DiffFileSummary>();
+  for (const file of files) {
+    fileByIndex.set(file.index, file);
+  }
   let itemIndexes: Array<number | undefined>;
 
   if (viewMode === "unified") {

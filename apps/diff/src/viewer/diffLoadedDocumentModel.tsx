@@ -3,6 +3,7 @@ import {
   type DiffFileSummary,
   type DiffLoadTiming,
   type DiffRenderRow,
+  type DiffSideBySideFileHeader,
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
 } from "@legend-desktop/diff-parser";
@@ -46,14 +47,15 @@ export {
 } from "./diffLoadedDocumentIndexes";
 
 function createDiffSyntaxStyleMap(styles: readonly DiffSyntaxStyle[]) {
-  return new Map(styles.map((style) => [
-    style.scopeId,
-    {
+  const map: SyntaxStyleMap = new Map();
+  for (const style of styles) {
+    map.set(style.scopeId, {
       fontStyle: style.fontStyle,
       foreground: style.foreground,
       id: style.scopeId,
-    },
-  ])) satisfies SyntaxStyleMap;
+    });
+  }
+  return map satisfies SyntaxStyleMap;
 }
 
 function getSyntaxPathsForFiles(files: readonly DiffFileSummary[]) {
@@ -198,7 +200,10 @@ export function useDiffLoadedModel({
     if (state.status !== "loaded") {
       return new Map<number, DiffFileSummary>();
     }
-    const map = new Map(state.files.map((file) => [file.index, file]));
+    const map = new Map<number, DiffFileSummary>();
+    for (const file of state.files) {
+      map.set(file.index, file);
+    }
     logDiffOpenTiming("viewer.derive.fileByIndex", () => ({
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       files: state.files.length,
@@ -211,7 +216,10 @@ export function useDiffLoadedModel({
     if (state.status !== "loaded") {
       return new Map<number, DiffFileSummary>();
     }
-    const map = new Map(state.files.map((file) => [Math.max(0, Math.floor(file.rowStart)), file]));
+    const map = new Map<number, DiffFileSummary>();
+    for (const file of state.files) {
+      map.set(Math.max(0, Math.floor(file.rowStart)), file);
+    }
     logDiffOpenTiming("viewer.derive.fileByRowStart", () => ({
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       files: state.files.length,
@@ -359,7 +367,10 @@ export function useDiffLoadedModel({
     if (state.status !== "loaded") {
       return new Set<number>();
     }
-    const indexes = new Set(state.files.map((file) => Math.max(0, Math.floor(file.rowStart))));
+    const indexes = new Set<number>();
+    for (const file of state.files) {
+      indexes.add(Math.max(0, Math.floor(file.rowStart)));
+    }
     logDiffOpenTiming("viewer.derive.fileHeaderRowIndexes", () => ({
       durationMs: Number((nowMs() - startedAt).toFixed(1)),
       files: state.files.length,
@@ -485,7 +496,13 @@ export function useDiffLoadedModel({
     [sideBySideFileHeaders, state],
   );
   const sideBySideFileHeaderByListIndex = useMemo(
-    () => new Map(sideBySideFileHeaders.map((header) => [header.listIndex, header])),
+    () => {
+      const map = new Map<number, DiffSideBySideFileHeader>();
+      for (const header of sideBySideFileHeaders) {
+        map.set(header.listIndex, header);
+      }
+      return map;
+    },
     [sideBySideFileHeaders],
   );
   const sideBySideListIndexByRowIndex = useMemo(

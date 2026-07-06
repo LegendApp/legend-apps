@@ -62,7 +62,11 @@ export function createCollapsedFileIndexList(collapsedFileIndexes: ReadonlySet<n
 }
 
 export function createSideBySideFileHeaderIndexes(fileHeaders: readonly DiffSideBySideFileHeader[]) {
-  return new Set(fileHeaders.map((header) => header.listIndex));
+  const indexes = new Set<number>();
+  for (const header of fileHeaders) {
+    indexes.add(header.listIndex);
+  }
+  return indexes;
 }
 
 export function createSideBySideListIndexByRowIndex(fileHeaders: readonly DiffSideBySideFileHeader[]) {
