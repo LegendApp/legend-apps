@@ -58,6 +58,18 @@ struct DiffTokenizationRange {
   size_t end = 0;
 };
 
+struct DiffStoredRow {
+  double index = 0;
+  double kind = 0;
+  double fileIndex = -1;
+  double hunkIndex = -1;
+  double oldLineNumber = -1;
+  double newLineNumber = -1;
+  double changeType = 0;
+  size_t textOffset = 0;
+  size_t textLength = 0;
+};
+
 class HybridDiffDocument final : public HybridDiffDocumentSpec {
 public:
   HybridDiffDocument(
@@ -123,6 +135,9 @@ protected:
 
 private:
   size_t getExternalMemorySizeLocked() const noexcept;
+  void appendStoredRowLocked(DiffRenderRow row);
+  DiffRenderRow renderRowLocked(size_t index) const;
+  std::vector<DiffRenderRow> renderRowsLocked(size_t start, size_t end) const;
   void ensureSideBySideLinesLocked();
   void enqueueTokenizationRangeLocked(size_t start, size_t end);
   void startQueuedTokenizationLocked(
@@ -156,7 +171,8 @@ private:
 
   uint64_t documentId_;
   std::vector<DiffFileSummary> files_;
-  std::vector<DiffRenderRow> rows_;
+  std::vector<DiffStoredRow> rows_;
+  std::string rowText_;
   std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
   bool sideBySideLinesReady_ = false;
