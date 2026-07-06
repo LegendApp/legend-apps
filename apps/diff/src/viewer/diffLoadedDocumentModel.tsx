@@ -166,14 +166,14 @@ export function useDiffLoadedModel({
   const syntaxStyleStore = useMemo<DiffSyntaxStyleStore>(() => {
     const listeners = new Set<() => void>();
     let scopeCount = state.status === "loaded" && syntaxHighlightingEnabled ? state.document.scopeCount : 0;
-    let tokenizedMaxRow = state.status === "loaded" && syntaxHighlightingEnabled ? state.document.tokenizedMaxRow : 0;
+    let tokenizedRowVersion = state.status === "loaded" && syntaxHighlightingEnabled ? state.document.getTokenizedRowVersion() : 0;
     let tokenStyleMap = tokenStyleById;
     return {
       get current() {
         return tokenStyleMap;
       },
       getSnapshot() {
-        return tokenizedMaxRow;
+        return tokenizedRowVersion;
       },
       subscribe(listener: () => void) {
         listeners.add(listener);
@@ -183,9 +183,9 @@ export function useDiffLoadedModel({
       },
       refresh(document: DiffDocument) {
         if (!syntaxHighlightingEnabled) {
-          if (scopeCount !== 0 || tokenizedMaxRow !== 0 || tokenStyleMap.size !== 0) {
+          if (scopeCount !== 0 || tokenizedRowVersion !== 0 || tokenStyleMap.size !== 0) {
             scopeCount = 0;
-            tokenizedMaxRow = 0;
+            tokenizedRowVersion = 0;
             tokenStyleMap = new Map();
             listeners.forEach((listener) => listener());
           }
@@ -193,7 +193,7 @@ export function useDiffLoadedModel({
         }
 
         const nextScopeCount = document.scopeCount;
-        const nextTokenizedMaxRow = document.tokenizedMaxRow;
+        const nextTokenizedRowVersion = document.getTokenizedRowVersion();
         let changed = false;
         if (nextScopeCount !== scopeCount) {
           const styles = document.getScopeStyles(syntaxThemeName, scopeCount);
@@ -208,8 +208,8 @@ export function useDiffLoadedModel({
           scopeCount = nextScopeCount;
           changed = true;
         }
-        if (nextTokenizedMaxRow !== tokenizedMaxRow) {
-          tokenizedMaxRow = nextTokenizedMaxRow;
+        if (nextTokenizedRowVersion !== tokenizedRowVersion) {
+          tokenizedRowVersion = nextTokenizedRowVersion;
           changed = true;
         }
         if (changed) {

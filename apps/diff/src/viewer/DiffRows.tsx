@@ -188,7 +188,7 @@ function useTokenizedDiffRow(
   adaptiveRender: "light" | "normal",
   syntaxStyleStore: DiffSyntaxStyleStore,
 ) {
-  const tokenizedMaxRow = useSyncExternalStore(
+  const tokenizedRowVersion = useSyncExternalStore(
     syntaxStyleStore.subscribe,
     syntaxStyleStore.getSnapshot,
     syntaxStyleStore.getSnapshot,
@@ -197,7 +197,7 @@ function useTokenizedDiffRow(
   const shouldTokenize = adaptiveRender === "normal" && document !== null && row !== undefined && row.kind !== diffRowKindFileHeader;
 
   return useMemo<TokenizedDiffRowState | null>(() => {
-    if (shouldTokenize && document && rowIndex >= 0 && rowIndex < tokenizedMaxRow) {
+    if (shouldTokenize && document && rowIndex >= 0) {
       const cachedRow = document.getRow(rowIndex);
       if (cachedRow.tokens !== null) {
         return {
@@ -210,7 +210,7 @@ function useTokenizedDiffRow(
       }
     }
     return null;
-  }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedMaxRow]);
+  }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedRowVersion]);
 }
 
 function getPlainUnifiedRow(document: DiffDocument, index: number) {

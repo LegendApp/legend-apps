@@ -35,6 +35,9 @@ namespace margelo::nitro::legenddesktop::diffparser {
       prototype.registerHybridMethod("getScopes", &HybridDiffDocumentSpec::getScopes);
       prototype.registerHybridMethod("getScopeStyles", &HybridDiffDocumentSpec::getScopeStyles);
       prototype.registerHybridMethod("getTiming", &HybridDiffDocumentSpec::getTiming);
+      prototype.registerHybridMethod("requestTokenizedRows", &HybridDiffDocumentSpec::requestTokenizedRows);
+      prototype.registerHybridMethod("requestTokenizedSideBySideRows", &HybridDiffDocumentSpec::requestTokenizedSideBySideRows);
+      prototype.registerHybridMethod("cancelTokenizationRequests", &HybridDiffDocumentSpec::cancelTokenizationRequests);
       prototype.registerHybridMethod("startBackgroundTokenization", &HybridDiffDocumentSpec::startBackgroundTokenization);
       prototype.registerHybridMethod("stopBackgroundTokenization", &HybridDiffDocumentSpec::stopBackgroundTokenization);
     });

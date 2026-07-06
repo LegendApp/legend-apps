@@ -137,6 +137,9 @@ export interface DiffDocument
   getScopes(): DiffSyntaxScope[];
   getScopeStyles(themeName: string, fromScopeId: number): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
+  requestTokenizedRows(start: number, count: number, reason: string): number;
+  requestTokenizedSideBySideRows(start: number, count: number, collapsedFileIndexes: number[], reason: string): number;
+  cancelTokenizationRequests(reason: string): number;
   startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number): number;
   stopBackgroundTokenization(): number;
 }

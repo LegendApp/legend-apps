@@ -95,6 +95,9 @@ namespace margelo::nitro::legenddesktop::diffparser {
       virtual std::vector<DiffSyntaxScope> getScopes() = 0;
       virtual std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) = 0;
       virtual DiffLoadTiming getTiming() = 0;
+      virtual double requestTokenizedRows(double start, double count, const std::string& reason) = 0;
+      virtual double requestTokenizedSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes, const std::string& reason) = 0;
+      virtual double cancelTokenizationRequests(const std::string& reason) = 0;
       virtual double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) = 0;
       virtual double stopBackgroundTokenization() = 0;
 

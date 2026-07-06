@@ -278,6 +278,7 @@ HybridDiffDocument::HybridDiffDocument(
       documentId_(nextDiffDocumentId.fetch_add(1)),
       files_(std::move(files)),
       rows_(std::move(rows)),
+      rowTokenized_(rows_.size(), false),
       fileSources_(std::move(fileSources)),
       repositoryPath_(std::move(repositoryPath)),
       workdirPath_(std::move(workdirPath)),
@@ -329,7 +330,7 @@ DiffCachedRow HybridDiffDocument::getRow(double index) {
   auto plain = rows_[safeIndex];
   auto tokens = std::move(plain.tokens);
   plain.tokens = {};
-  if (plain.kind == diffRowKindLine && safeIndex < backgroundTokenizeRowIndex_) {
+  if (plain.kind == diffRowKindLine && safeIndex < rowTokenized_.size() && rowTokenized_[safeIndex]) {
     return DiffCachedRow(std::move(plain), std::move(tokens));
   }
   return DiffCachedRow(std::move(plain), nitro::NullType());
@@ -348,15 +349,7 @@ std::vector<DiffRenderRow> HybridDiffDocument::getRows(double start, double coun
   for (size_t index = safeStart; index < end; index += 1) {
     ensureRowTokens(index);
   }
-  if (safeStart <= backgroundTokenizeRowIndex_ && end > backgroundTokenizeRowIndex_) {
-    const auto previousTokenizedMaxRow = backgroundTokenizeRowIndex_;
-    backgroundTokenizeRowIndex_ = end;
-    backgroundTokenizeNextRowIndex_ = std::max(backgroundTokenizeNextRowIndex_, backgroundTokenizeRowIndex_);
-    tokenizedRowRanges_.push_back(DiffTokenizedRowRange(
-        static_cast<double>(previousTokenizedMaxRow),
-        static_cast<double>(backgroundTokenizeRowIndex_)));
-    tokenizedRowVersion_.fetch_add(1);
-  }
+  markTokenizedRangeLocked(safeStart, end);
   return std::vector<DiffRenderRow>(rows_.begin() + static_cast<std::ptrdiff_t>(safeStart), rows_.begin() + static_cast<std::ptrdiff_t>(end));
 }
 
@@ -378,6 +371,82 @@ void HybridDiffDocument::ensureSideBySideLinesLocked() {
     sideBySideLines_ = createDiffSideBySideLines(rows_);
     sideBySideLinesReady_ = true;
   }
+}
+
+void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end) {
+  if (rows_.empty()) {
+    return;
+  }
+
+  const auto safeStart = std::min(start, rows_.size());
+  const auto safeEnd = std::min(std::max(end, safeStart), rows_.size());
+  if (safeStart >= safeEnd) {
+    return;
+  }
+
+  backgroundTokenizeRanges_.push_back(DiffTokenizationRange{safeStart, safeEnd});
+  backgroundTokenizeNextRowIndex_ = std::max(backgroundTokenizeNextRowIndex_, safeEnd);
+}
+
+void HybridDiffDocument::startQueuedTokenizationLocked(
+    uint64_t generation,
+    size_t chunkRowCount,
+    std::chrono::steady_clock::duration chunkBudget) {
+  if (backgroundTokenizationRunning_.load() || backgroundTokenizeRanges_.empty()) {
+    return;
+  }
+
+  if (backgroundThread_.joinable()) {
+    backgroundThread_.detach();
+  }
+
+  backgroundTokenizationRunning_.store(true);
+  auto document = shared_cast<HybridDiffDocument>();
+
+  backgroundThread_ = std::thread([document, generation, chunkRowCount, chunkBudget]() {
+    bool shouldContinue = true;
+
+    while (shouldContinue && document->backgroundGeneration_.load() == generation) {
+      {
+        std::unique_lock<std::mutex> lock(document->mutex_);
+        shouldContinue = document->ensureNextBackgroundTokenChunk(lock, chunkRowCount, chunkBudget);
+      }
+
+      if (shouldContinue) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    }
+
+    if (document->backgroundGeneration_.load() == generation) {
+      document->backgroundTokenizationRunning_.store(false);
+      document->logMemorySnapshot("background.beforeSourceRelease");
+      {
+        std::lock_guard<std::mutex> lock(document->mutex_);
+        document->releaseCompletedSourceCaches();
+      }
+      document->logMemorySnapshot("background.complete");
+    }
+  });
+}
+
+void HybridDiffDocument::advanceTokenizedMaxRowLocked() {
+  while (
+      backgroundTokenizeRowIndex_ < rowTokenized_.size() &&
+      (rowTokenized_[backgroundTokenizeRowIndex_] || rows_[backgroundTokenizeRowIndex_].kind != diffRowKindLine)) {
+    backgroundTokenizeRowIndex_ += 1;
+  }
+}
+
+void HybridDiffDocument::markTokenizedRangeLocked(size_t start, size_t end) {
+  if (start >= end) {
+    return;
+  }
+
+  advanceTokenizedMaxRowLocked();
+  tokenizedRowRanges_.push_back(DiffTokenizedRowRange(
+      static_cast<double>(start),
+      static_cast<double>(end)));
+  tokenizedRowVersion_.fetch_add(1);
 }
 
 double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) {
@@ -633,6 +702,79 @@ DiffLoadTiming HybridDiffDocument::getTiming() {
   return timing_;
 }
 
+double HybridDiffDocument::requestTokenizedRows(double start, double count, const std::string& reason) {
+  (void)reason;
+  const auto safeStart = static_cast<size_t>(std::max(0.0, std::floor(start)));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, std::ceil(count)));
+  if (safeCount == 0) {
+    return getTokenizedRowVersion();
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto generation = backgroundGeneration_.load();
+  enqueueTokenizationRangeLocked(safeStart, safeStart + safeCount);
+  startQueuedTokenizationLocked(
+      generation,
+      static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount),
+      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+          std::chrono::duration<double, std::milli>(defaultBackgroundTokenizeChunkBudgetMs)));
+  return getTokenizedRowVersion();
+}
+
+double HybridDiffDocument::requestTokenizedSideBySideRows(
+    double start,
+    double count,
+    const std::vector<double>& collapsedFileIndexes,
+    const std::string& reason) {
+  (void)reason;
+  const auto safeStart = static_cast<size_t>(std::max(0.0, std::floor(start)));
+  const auto safeCount = static_cast<size_t>(std::max(0.0, std::ceil(count)));
+  if (safeCount == 0) {
+    return getTokenizedRowVersion();
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
+  const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
+  const auto safeEnd = safeStart + safeCount;
+  size_t logicalIndex = 0;
+
+  for (const auto& line : sideBySideLines_) {
+    if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
+      if (logicalIndex >= safeStart && logicalIndex < safeEnd) {
+        if (line.oldRowIndex >= 0) {
+          const auto oldRowIndex = static_cast<size_t>(line.oldRowIndex);
+          enqueueTokenizationRangeLocked(oldRowIndex, oldRowIndex + 1);
+        }
+        if (line.newRowIndex >= 0 && line.newRowIndex != line.oldRowIndex) {
+          const auto newRowIndex = static_cast<size_t>(line.newRowIndex);
+          enqueueTokenizationRangeLocked(newRowIndex, newRowIndex + 1);
+        }
+      }
+      logicalIndex += 1;
+      if (logicalIndex >= safeEnd) {
+        break;
+      }
+    }
+  }
+
+  const auto generation = backgroundGeneration_.load();
+  startQueuedTokenizationLocked(
+      generation,
+      static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount),
+      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+          std::chrono::duration<double, std::milli>(defaultBackgroundTokenizeChunkBudgetMs)));
+  return getTokenizedRowVersion();
+}
+
+double HybridDiffDocument::cancelTokenizationRequests(const std::string& reason) {
+  (void)reason;
+  stopBackgroundTokenization();
+  std::lock_guard<std::mutex> lock(mutex_);
+  backgroundTokenizeRanges_.clear();
+  return getTokenizedRowVersion();
+}
+
 double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) {
   stopBackgroundTokenization();
 
@@ -640,34 +782,12 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
   const auto safeChunkBudget = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
       std::chrono::duration<double, std::milli>(std::max(1.0, chunkBudgetMs)));
   const auto generation = backgroundGeneration_.fetch_add(1) + 1;
-  backgroundTokenizationRunning_.store(true);
-  auto document = shared_cast<HybridDiffDocument>();
-  logMemorySnapshot("background.start");
-
-  backgroundThread_ = std::thread([document, generation, safeChunkRowCount, safeChunkBudget]() {
-    bool shouldContinue = true;
-
-    while (shouldContinue && document->backgroundGeneration_.load() == generation) {
-      {
-        std::unique_lock<std::mutex> lock(document->mutex_);
-        shouldContinue = document->ensureNextBackgroundTokenChunk(lock, safeChunkRowCount, safeChunkBudget);
-      }
-
-      if (shouldContinue) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
-    }
-
-    if (document->backgroundGeneration_.load() == generation) {
-      document->backgroundTokenizationRunning_.store(false);
-      document->logMemorySnapshot("background.beforeSourceRelease");
-      {
-        std::lock_guard<std::mutex> lock(document->mutex_);
-        document->releaseCompletedSourceCaches();
-      }
-      document->logMemorySnapshot("background.complete");
-    }
-  });
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    backgroundTokenizeRanges_.clear();
+    enqueueTokenizationRangeLocked(backgroundTokenizeRowIndex_, rows_.size());
+    startQueuedTokenizationLocked(generation, safeChunkRowCount, safeChunkBudget);
+  }
 
   return getTokenizedRowVersion();
 }
@@ -687,6 +807,11 @@ double HybridDiffDocument::stopBackgroundTokenization() {
     } else {
       backgroundThread_.join();
     }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    backgroundTokenizeRanges_.clear();
   }
 
   if (wasRunning) {
@@ -721,6 +846,7 @@ void HybridDiffDocument::setProgressFiles(
 void HybridDiffDocument::appendProgressRow(DiffRenderRow row) {
   std::lock_guard<std::mutex> lock(mutex_);
   rows_.push_back(std::move(row));
+  rowTokenized_.push_back(false);
   timing_.rowCount = static_cast<double>(rows_.size());
   sideBySideLinesReady_ = false;
   sideBySideLines_.clear();
@@ -760,6 +886,8 @@ void HybridDiffDocument::setProgressTiming(const DiffLoadTiming& timing) {
 
 size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
   size_t size = rows_.capacity() * sizeof(DiffRenderRow) + files_.capacity() * sizeof(DiffFileSummary);
+  size += rowTokenized_.capacity() * sizeof(uint8_t);
+  size += backgroundTokenizeRanges_.size() * sizeof(DiffTokenizationRange);
   for (const auto& row : rows_) {
     size += row.text.capacity();
     size += row.tokens.capacity() * sizeof(DiffSyntaxTokenRun);
@@ -833,10 +961,16 @@ void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
     size_t sourceTokenCacheSlots = 0;
     size_t sourceTokenRuns = 0;
     size_t sourceTokenizedLines = 0;
+    size_t tokenizedRowCount = 0;
 
     for (const auto& row : rows_) {
       rowTextBytes += row.text.capacity();
       rowTokenRuns += row.tokens.capacity();
+    }
+    for (const auto tokenized : rowTokenized_) {
+      if (tokenized) {
+        tokenizedRowCount += 1;
+      }
     }
     for (const auto& file : files_) {
       filePathBytes += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();
@@ -901,8 +1035,10 @@ void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
         << " sourceTokenCacheSlots=" << sourceTokenCacheSlots
         << " sourceTokenizedLines=" << sourceTokenizedLines
         << " sourceTokenRuns=" << sourceTokenRuns
+        << " tokenizedRows=" << tokenizedRowCount
         << " tokenizedMaxRow=" << backgroundTokenizeRowIndex_
         << " tokenizedNextRow=" << backgroundTokenizeNextRowIndex_
+        << " tokenizationQueuedRanges=" << backgroundTokenizeRanges_.size()
         << " scopeGroups=" << scopeGroupCount
         << " scopeStrings=" << scopeStringCount
         << " scopeBytes=" << scopeBytes;
@@ -919,7 +1055,7 @@ void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   }
 
   auto& row = rows_[rowIndex];
-  if (!row.tokens.empty() || row.kind != diffRowKindLine) {
+  if ((rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex]) || row.kind != diffRowKindLine) {
     return;
   }
 
@@ -936,6 +1072,9 @@ void HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
     row.tokens = tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber);
   } else {
     row.tokens = tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
+  }
+  if (rowIndex < rowTokenized_.size()) {
+    rowTokenized_[rowIndex] = true;
   }
 }
 
@@ -963,36 +1102,45 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
     std::unique_lock<std::mutex>& lock,
     size_t chunkRowCount,
     std::chrono::steady_clock::duration chunkBudget) {
-  const auto start = backgroundTokenizeRowIndex_;
+  size_t changedStart = rows_.size();
+  size_t changedEnd = 0;
   size_t tokenizedCount = 0;
   const auto startedAt = std::chrono::steady_clock::now();
 
-  while (backgroundTokenizeNextRowIndex_ < rows_.size() && tokenizedCount < chunkRowCount) {
-    const auto rowIndex = backgroundTokenizeNextRowIndex_;
-    backgroundTokenizeNextRowIndex_ += 1;
+  while (!backgroundTokenizeRanges_.empty() && tokenizedCount < chunkRowCount) {
+    auto& range = backgroundTokenizeRanges_.front();
+    if (range.start >= range.end || range.start >= rows_.size()) {
+      backgroundTokenizeRanges_.pop_front();
+      continue;
+    }
+
+    const auto rowIndex = range.start;
+    range.start += 1;
+    if (rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex]) {
+      continue;
+    }
+
     const auto row = rows_[rowIndex];
     lock.unlock();
     auto tokens = tokenizeRowOutsideDocumentLock(row);
     lock.lock();
-    if (rowIndex < rows_.size() && rows_[rowIndex].tokens.empty()) {
+    if (rowIndex < rows_.size() && rowIndex < rowTokenized_.size() && !rowTokenized_[rowIndex]) {
       rows_[rowIndex].tokens = std::move(tokens);
+      rowTokenized_[rowIndex] = true;
+      changedStart = std::min(changedStart, rowIndex);
+      changedEnd = std::max(changedEnd, rowIndex + 1);
     }
-    backgroundTokenizeRowIndex_ = std::max(backgroundTokenizeRowIndex_, rowIndex + 1);
     tokenizedCount += 1;
     if (tokenizedCount > 0 && std::chrono::steady_clock::now() - startedAt >= chunkBudget) {
       break;
     }
   }
 
-  if (backgroundTokenizeRowIndex_ > start) {
-    tokenizedRowRanges_.push_back(DiffTokenizedRowRange(
-        static_cast<double>(start),
-        static_cast<double>(backgroundTokenizeRowIndex_)));
-    tokenizedRowVersion_.fetch_add(1);
-    return true;
+  if (changedStart < changedEnd) {
+    markTokenizedRangeLocked(changedStart, changedEnd);
   }
 
-  return false;
+  return !backgroundTokenizeRanges_.empty();
 }
 
 DiffTokenizedSource& HybridDiffDocument::ensureSourceLoaded(DiffFileSources& sources, bool oldSource) {

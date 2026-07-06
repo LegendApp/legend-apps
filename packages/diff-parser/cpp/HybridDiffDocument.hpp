@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <memory>
@@ -52,6 +53,11 @@ struct DiffSideBySideLine {
   double newRowIndex = -1;
 };
 
+struct DiffTokenizationRange {
+  size_t start = 0;
+  size_t end = 0;
+};
+
 class HybridDiffDocument final : public HybridDiffDocumentSpec {
 public:
   HybridDiffDocument(
@@ -86,6 +92,13 @@ public:
   std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) override;
   DiffSyntaxStyle getNativeScopeStyle(const std::string& themeName, double scopeId);
   DiffLoadTiming getTiming() override;
+  double requestTokenizedRows(double start, double count, const std::string& reason) override;
+  double requestTokenizedSideBySideRows(
+      double start,
+      double count,
+      const std::vector<double>& collapsedFileIndexes,
+      const std::string& reason) override;
+  double cancelTokenizationRequests(const std::string& reason) override;
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
@@ -111,6 +124,13 @@ protected:
 private:
   size_t getExternalMemorySizeLocked() const noexcept;
   void ensureSideBySideLinesLocked();
+  void enqueueTokenizationRangeLocked(size_t start, size_t end);
+  void startQueuedTokenizationLocked(
+      uint64_t generation,
+      size_t chunkRowCount,
+      std::chrono::steady_clock::duration chunkBudget);
+  void advanceTokenizedMaxRowLocked();
+  void markTokenizedRangeLocked(size_t start, size_t end);
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,
@@ -136,6 +156,7 @@ private:
   uint64_t documentId_;
   std::vector<DiffFileSummary> files_;
   std::vector<DiffRenderRow> rows_;
+  std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
   bool sideBySideLinesReady_ = false;
   std::vector<DiffFileSources> fileSources_;
@@ -147,6 +168,7 @@ private:
   DiffLoadTiming timing_;
   size_t backgroundTokenizeRowIndex_ = 0;
   size_t backgroundTokenizeNextRowIndex_ = 0;
+  std::deque<DiffTokenizationRange> backgroundTokenizeRanges_;
   std::vector<DiffTokenizedRowRange> tokenizedRowRanges_;
   std::atomic<uint64_t> backgroundGeneration_{0};
   std::atomic<uint64_t> tokenizedRowVersion_{0};
