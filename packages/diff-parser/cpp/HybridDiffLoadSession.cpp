@@ -102,7 +102,7 @@ DiffLoadProgress HybridDiffLoadSession::consumeChanges(double initialRowCount) {
       document_,
       document_->getFiles(),
       document_->getPlainRows(0, safeInitialRowCount),
-      document_->getScopes(),
+      std::vector<DiffSyntaxScope>(),
       document_->getTiming(),
       document_->getRowCount(),
       document_->getFileCount(),
