@@ -104,6 +104,7 @@ import {
   diffBackgroundTokenizeStartDelayMs,
   diffInitialRowCount,
   diffLineOverscan,
+  diffLoadedCacheMaxRows,
   diffOverscanRequestDelayMs,
   diffProgressiveLargeInitialPublishDelayMs,
   diffProgressiveLargeInitialRowThreshold,
@@ -275,6 +276,10 @@ function getDiffSourceCacheKey(source: DiffOpenSource) {
 function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean) {
   const mode = showOnlyHunks ? "hunks" : "full";
   return `${getDiffSourceCacheKey(source)}:${mode}`;
+}
+
+function shouldCacheLoadedDiff(loaded: DiffLoadedPayload) {
+  return loaded.document.rowCount <= diffLoadedCacheMaxRows;
 }
 
 function applyDiffMergeDraftsToState(
@@ -2455,6 +2460,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           loadedCacheRef.current.delete(key);
         }
       }
+    } else if (stateBeforeLoad.status === "loaded" && !sourcesMatch(stateBeforeLoad.source, nextSource)) {
+      loadedCacheRef.current.clear();
     }
 
     const cachedEntry = !options?.force && options?.reason === "mode-toggle"
@@ -2611,10 +2618,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         setDocumentErrorValue(null);
       }
       if (loadComplete) {
-        loadedCacheRef.current.set(loadedCacheKey, {
-          loaded,
-          loadComplete,
-        });
+        if (shouldCacheLoadedDiff(loaded)) {
+          loadedCacheRef.current.set(loadedCacheKey, {
+            loaded,
+            loadComplete,
+          });
+        } else {
+          loadedCacheRef.current.delete(loadedCacheKey);
+        }
         setLoadProgressValue(emptyDiffLoadProgressState);
       }
       logDiffMemoryMark("viewer.statePublished", () => ({
@@ -2752,24 +2763,26 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
       if (!loadError) {
         if (result) {
+          const loadedResult = result;
+          result = null;
           const nativeResolvedAt = nowMs();
           trace.nativeResolvedAt = nativeResolvedAt;
           logDiffOpenTiming("viewer.load.nativeResolved", () => ({
-            files: result.files.length,
+            files: loadedResult.files.length,
             grammarEnsureMs: 0,
-            initialRows: result.initialRows.length,
+            initialRows: loadedResult.initialRows.length,
             jsAwaitMs: Number((nativeResolvedAt - nativeStartedAt).toFixed(1)),
-            nativeTotalMs: Number(result.timing.nativeTotalMs.toFixed(1)),
+            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
             requestId,
-            rows: result.document.rowCount,
-            scopes: result.document.scopeCount,
-            unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - result.timing.nativeTotalMs).toFixed(1)),
+            rows: loadedResult.document.rowCount,
+            scopes: loadedResult.document.scopeCount,
+            unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - loadedResult.timing.nativeTotalMs).toFixed(1)),
           }));
-          logDiffLoadTiming(nextSource.value, result.timing);
+          logDiffLoadTiming(nextSource.value, loadedResult.timing);
           if (loadRequestIdRef.current === requestId) {
-            const initialLoadComplete = "complete" in result ? result.complete : true;
-            if (isBackgroundWatchRefresh && progressiveSession && "complete" in result && !result.complete) {
-              let progress = result;
+            const initialLoadComplete = "complete" in loadedResult ? loadedResult.complete : true;
+            if (isBackgroundWatchRefresh && progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
+              let progress = loadedResult;
               setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
               while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
                 await waitForDiffProgressPoll();
@@ -2785,12 +2798,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                 schedulePostLoadSideEffects(progress);
               }
             } else {
-              publishLoadedState(result, initialLoadComplete, "initial");
-              if (progressiveSession && "complete" in result && !result.complete) {
-                let lastFileVersion = result.fileVersion;
-                let lastRowVersion = result.rowVersion;
+              publishLoadedState(loadedResult, initialLoadComplete, "initial");
+              if (progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
+                let lastFileVersion = loadedResult.fileVersion;
+                let lastRowVersion = loadedResult.rowVersion;
                 let lastStatePublishedAt = nowMs();
-                let progress = result;
+                let progress = loadedResult;
                 while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
                   await waitForDiffProgressPoll();
                   progress = progressiveSession.consumeChanges(initialRowCount);
@@ -2821,7 +2834,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                   schedulePostLoadSideEffects(progress);
                 }
               } else {
-                schedulePostLoadSideEffects(result);
+                schedulePostLoadSideEffects(loadedResult);
               }
             }
           } else {

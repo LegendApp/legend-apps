@@ -3,6 +3,7 @@ export const diffProgressiveLoadPollMs = 16;
 export const diffProgressiveLoadedStatePublishMs = 120;
 export const diffProgressiveLargeInitialRowThreshold = 100_000;
 export const diffProgressiveLargeInitialPublishDelayMs = 1_000;
+export const diffLoadedCacheMaxRows = 100_000;
 export const diffInitialHighlightChunkRowCount = 40;
 export const diffBackgroundTokenizeChunkBudgetMs = 3;
 export const diffBackgroundTokenizeChunkRowCount = 16;
