@@ -105,6 +105,8 @@ import {
   diffInitialRowCount,
   diffLineOverscan,
   diffOverscanRequestDelayMs,
+  diffProgressiveLargeInitialPublishDelayMs,
+  diffProgressiveLargeInitialRowThreshold,
   diffProgressiveLoadedStatePublishMs,
   diffProgressiveLoadPollMs,
   diffRowKindFileHeader,
@@ -229,11 +231,18 @@ function waitForDiffProgressPoll() {
   });
 }
 
-function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCount: number) {
-  return progress.initialRows.length > 0
-    || (initialRowCount <= 0 && progress.files.length > 0)
-    || progress.complete
-    || !!progress.error;
+function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCount: number, elapsedMs: number) {
+  if (progress.complete || progress.error || progress.initialRows.length > 0) {
+    return true;
+  }
+
+  if (initialRowCount <= 0 && progress.files.length > 0) {
+    const rowCount = Math.max(0, Math.floor(progress.rowCount));
+    return rowCount < diffProgressiveLargeInitialRowThreshold ||
+      elapsedMs >= diffProgressiveLargeInitialPublishDelayMs;
+  }
+
+  return false;
 }
 
 function getDiffLoadProgressState(
@@ -2642,7 +2651,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
         let progress = progressiveSession.consumeChanges(initialRowCount);
         setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
-        while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress, initialRowCount)) {
+        while (
+          loadRequestIdRef.current === requestId &&
+          !shouldPublishInitialProgress(progress, initialRowCount, nowMs() - nativeStartedAt)
+        ) {
           await waitForDiffProgressPoll();
           progress = progressiveSession.consumeChanges(initialRowCount);
           setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
@@ -2710,7 +2722,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         progressiveSession = startGitFolderDiff(nextSource.value, { showOnlyHunks: loadShowOnlyHunks });
         let progress = progressiveSession.consumeChanges(initialRowCount);
         setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
-        while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress, initialRowCount)) {
+        while (
+          loadRequestIdRef.current === requestId &&
+          !shouldPublishInitialProgress(progress, initialRowCount, nowMs() - nativeStartedAt)
+        ) {
           await waitForDiffProgressPoll();
           progress = progressiveSession.consumeChanges(initialRowCount);
           setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
