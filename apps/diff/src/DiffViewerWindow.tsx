@@ -2208,7 +2208,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, []);
   const isLoading = loadingSource !== null;
-  const isLoadingGithub = loadingSource?.kind === "github";
   const isRenderingInitialLoadedFrame =
     state.status === "loaded" &&
     sourcesMatch(loadingSource, state.source);
@@ -3970,7 +3969,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         dangerColor={diffPalette.danger}
         foregroundColor={foregroundColor}
         isLoading={isLoading}
-        isLoadingGithub={isLoadingGithub}
+        loadingSource={loadingSource}
         mutedColor={mutedColor}
         onChangeUrlInput={startScreenController.onChangeUrlInput}
         onChooseFolder={openFolder}

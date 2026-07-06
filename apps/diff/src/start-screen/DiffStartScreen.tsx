@@ -3,7 +3,7 @@ import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
-import type { DiffOpenSource } from "../diffFiles";
+import { normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   diffRecentFilters,
   formatRecentDiffSourceOpenedAt,
@@ -26,7 +26,7 @@ export type DiffStartScreenProps = {
   dangerColor: string;
   foregroundColor: string;
   isLoading: boolean;
-  isLoadingGithub: boolean;
+  loadingSource: DiffOpenSource | null;
   mutedColor: string;
   onChangeUrlInput: (text: string) => void;
   onChooseFolder: () => void;
@@ -67,10 +67,15 @@ function getSourceAccentColor(source: DiffOpenSource, mutedColor: string) {
   return mutedColor;
 }
 
+function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource | null) {
+  return left !== null && right !== null && left.kind === right.kind && left.value === right.value;
+}
+
 function DiffStartScreenRecentRow({
   borderColor,
   foregroundColor,
   isLoading,
+  isRowLoading,
   mutedColor,
   onOpenSource,
   recentSource,
@@ -78,6 +83,7 @@ function DiffStartScreenRecentRow({
   borderColor: string;
   foregroundColor: string;
   isLoading: boolean;
+  isRowLoading: boolean;
   mutedColor: string;
   onOpenSource: (source: DiffOpenSource) => void;
   recentSource: RecentDiffSource;
@@ -108,9 +114,15 @@ function DiffStartScreenRecentRow({
           {getRecentDiffSourceDetail(source)}
         </Text>
       </View>
-      <Text style={[styles.recentRowTime, { color: mutedColor }]} numberOfLines={1}>
-        {formatRecentDiffSourceOpenedAt(recentSource.lastOpenedAt)}
-      </Text>
+      <View style={styles.recentRowStatus}>
+        {isRowLoading ? (
+          <ActivityIndicator color={mutedColor} size="small" />
+        ) : (
+          <Text style={[styles.recentRowTime, { color: mutedColor }]} numberOfLines={1}>
+            {formatRecentDiffSourceOpenedAt(recentSource.lastOpenedAt)}
+          </Text>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -120,6 +132,7 @@ function DiffStartScreenRecentGroup({
   foregroundColor,
   group,
   isLoading,
+  loadingSource,
   mutedColor,
   onOpenSource,
 }: {
@@ -127,6 +140,7 @@ function DiffStartScreenRecentGroup({
   foregroundColor: string;
   group: DiffRecentSourceGroup;
   isLoading: boolean;
+  loadingSource: DiffOpenSource | null;
   mutedColor: string;
   onOpenSource: (source: DiffOpenSource) => void;
 }) {
@@ -141,6 +155,7 @@ function DiffStartScreenRecentGroup({
             borderColor={borderColor}
             foregroundColor={foregroundColor}
             isLoading={isLoading}
+            isRowLoading={sourcesMatch(loadingSource, recentSource.source)}
             key={recentSource.id}
             mutedColor={mutedColor}
             onOpenSource={onOpenSource}
@@ -158,7 +173,7 @@ export function DiffStartScreen({
   dangerColor,
   foregroundColor,
   isLoading,
-  isLoadingGithub,
+  loadingSource,
   mutedColor,
   onChangeUrlInput,
   onChooseFolder,
@@ -173,6 +188,8 @@ export function DiffStartScreen({
   urlInputRef,
 }: DiffStartScreenProps) {
   const recentGroups = getGroupedRecentDiffSources(recentSources, recentFilter);
+  const urlInputSource = urlInput.trim() ? normalizeDiffOpenSource(urlInput) : null;
+  const isUrlLoading = sourcesMatch(loadingSource, urlInputSource);
   return (
     <View style={[styles.root, { backgroundColor }]}>
       <View style={styles.startPage}>
@@ -222,7 +239,7 @@ export function DiffStartScreen({
                     },
                   ]}
                 >
-                  {isLoadingGithub ? (
+                  {isUrlLoading ? (
                     <ActivityIndicator color={foregroundColor} size="small" />
                   ) : (
                     <Text style={[styles.urlOpenButtonText, { color: foregroundColor }]}>Open</Text>
@@ -261,6 +278,7 @@ export function DiffStartScreen({
                     group={group}
                     isLoading={isLoading}
                     key={group.key}
+                    loadingSource={loadingSource}
                     mutedColor={mutedColor}
                     onOpenSource={onOpenRecentSource}
                   />
@@ -353,6 +371,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 26,
   },
+  recentRowStatus: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 70,
+  },
   recentRowText: {
     flex: 1,
     gap: 2,
@@ -361,7 +384,6 @@ const styles = StyleSheet.create({
   recentRowTime: {
     fontSize: 13,
     lineHeight: 18,
-    minWidth: 70,
     textAlign: "right",
   },
   recentRowTitle: {
