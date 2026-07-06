@@ -794,6 +794,28 @@ void HybridDiffDocument::releaseSourceCachesOutsideRowWindowLocked(size_t start,
   }
 }
 
+void HybridDiffDocument::releaseAllSourceCachesLocked() {
+  retainedTokenizedRowWindowReady_ = false;
+  retainedTokenizedRowWindowStart_ = 0;
+  retainedTokenizedRowWindowEnd_ = 0;
+  for (auto& sources : fileSources_) {
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
+      if (sources.oldSourceLoaded) {
+        resetTokenizedSource(sources.oldSource);
+        sources.oldSourceLoaded = false;
+      }
+    }
+    {
+      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
+      if (sources.newSourceLoaded) {
+        resetTokenizedSource(sources.newSource);
+        sources.newSourceLoaded = false;
+      }
+    }
+  }
+}
+
 double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) {
   std::lock_guard<std::mutex> lock(mutex_);
   ensureSideBySideLinesLocked();
@@ -1138,6 +1160,7 @@ double HybridDiffDocument::cancelTokenizationRequests(const std::string& reason)
   stopBackgroundTokenization();
   std::lock_guard<std::mutex> lock(mutex_);
   backgroundTokenizeRanges_.clear();
+  releaseAllSourceCachesLocked();
   return getTokenizedRowVersion();
 }
 

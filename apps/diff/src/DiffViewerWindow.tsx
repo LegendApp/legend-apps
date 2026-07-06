@@ -2283,6 +2283,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     syntaxThemeName: syntaxTheme.name,
     viewMode: renderViewMode,
   });
+  useEffect(() => {
+    if (loadedDocument) {
+      return () => {
+        loadedDocument.cancelTokenizationRequests("viewer.cleanup");
+      };
+    }
+    return undefined;
+  }, [loadedDocument]);
   const {
     getSideBySideRow,
     handleSideBySideTopItemChanged,

@@ -171,6 +171,7 @@ private:
   void retainTokenizedRowsNearLocked(size_t start, size_t end);
   void retainTokenizationRangesNearLocked(size_t start, size_t end);
   void releaseSourceCachesOutsideRowWindowLocked(size_t start, size_t end);
+  void releaseAllSourceCachesLocked();
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,
