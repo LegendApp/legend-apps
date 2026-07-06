@@ -10,6 +10,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
 namespace {
 
 using UrlClock = std::chrono::steady_clock;
+constexpr NSUInteger diffUrlParserChunkBytes = 16 * 1024;
 
 double elapsedUrlMs(UrlClock::time_point start, UrlClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
@@ -115,14 +116,28 @@ didReceiveResponse:(NSURLResponse*)response
     return;
   }
 
-  try {
-    _onChunk(std::string_view(static_cast<const char*>(data.bytes), data.length));
-  } catch (const std::exception& error) {
-    _error = error.what();
-    [dataTask cancel];
-  } catch (...) {
-    _error = "Failed to parse diff URL";
-    [dataTask cancel];
+  const char* bytes = static_cast<const char*>(data.bytes);
+  NSUInteger offset = 0;
+  while (offset < data.length) {
+    if (_shouldCancel && _shouldCancel()) {
+      [dataTask cancel];
+      return;
+    }
+    const NSUInteger length = MIN(
+        margelo::nitro::legenddesktop::diffparser::diffUrlParserChunkBytes,
+        data.length - offset);
+    try {
+      _onChunk(std::string_view(bytes + offset, length));
+    } catch (const std::exception& error) {
+      _error = error.what();
+      [dataTask cancel];
+      return;
+    } catch (...) {
+      _error = "Failed to parse diff URL";
+      [dataTask cancel];
+      return;
+    }
+    offset += length;
   }
 }
 
