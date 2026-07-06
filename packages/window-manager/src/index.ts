@@ -191,6 +191,10 @@ export type WindowCloseRequestedEvent = {
   moduleName?: string;
 };
 
+export type ApplicationReopenRequestedEvent = {
+  hasVisibleWindows: boolean;
+};
+
 export type WindowFocusedEvent = {
   identifier: string;
   moduleName?: string;
@@ -383,6 +387,13 @@ export function addWindowFocusedListener(listener: (event: WindowFocusedEvent) =
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowFocused", listener);
 }
 
+export function addApplicationReopenRequestedListener(listener: (event: ApplicationReopenRequestedEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onApplicationReopenRequested", listener);
+}
+
 export function addWindowToolbarItemSelectedListener(listener: (event: WindowToolbarItemSelectedEvent) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -426,6 +437,7 @@ export function useWindowManager() {
     onWindowClosed: addWindowClosedListener,
     onWindowCloseRequested: addWindowCloseRequestedListener,
     onWindowFocused: addWindowFocusedListener,
+    onApplicationReopenRequested: addApplicationReopenRequestedListener,
     onWindowTitlebarControlPressed: addWindowTitlebarControlPressedListener,
     onWindowToolbarItemSelected: addWindowToolbarItemSelectedListener,
     onMainWindowMoved: addMainWindowMovedListener,

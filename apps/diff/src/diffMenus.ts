@@ -34,9 +34,11 @@ export const diffMenuConfig: NativeMenuConfig[] = [
     placement: { before: "Window" },
     items: [
       {
-        id: "hideNew",
+        id: "startWindow",
+        title: "New Window",
         targetTitle: "New",
-        hidden: true,
+        enabled: true,
+        shortcut: { key: "n", modifiers: commandModifier },
       },
       {
         id: "openFolder",

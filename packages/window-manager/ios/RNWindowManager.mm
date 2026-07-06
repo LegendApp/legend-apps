@@ -20,6 +20,8 @@
 @end
 
 #if TARGET_OS_OSX
+static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
+
 static inline NSAppearance *LegendDarkAppearance()
 {
   if (@available(macOS 10.14, *)) {
@@ -507,6 +509,12 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _toolbarItemConfigs = [NSMutableDictionary new];
     _windowBlurFilters = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
+#if TARGET_OS_OSX
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(applicationReopenRequested:)
+                                               name:LegendApplicationReopenRequestedNotification
+                                             object:nil];
+#endif
   }
   return self;
 }
@@ -518,6 +526,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     @"onWindowCloseRequested",
     @"onMainWindowMoved",
     @"onMainWindowResized",
+    @"onApplicationReopenRequested",
     @"onWindowFocused",
     @"onTitlebarControlPressed",
     @"onToolbarItemSelected",
@@ -1770,6 +1779,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
     return;
   }
   [self sendEventWithName:eventName body:body];
+}
+
+- (void)applicationReopenRequested:(NSNotification *)notification
+{
+  NSNumber *hasVisibleWindows = notification.userInfo[@"hasVisibleWindows"];
+  [self sendWindowEventWithName:@"onApplicationReopenRequested"
+                           body:@{@"hasVisibleWindows": hasVisibleWindows ?: @NO}];
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)window

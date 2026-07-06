@@ -93,6 +93,15 @@ async function openDiffViewerForUrl(controller: DocumentAppController) {
   }));
 }
 
+async function openDiffStartWindow(controller: DocumentAppController) {
+  const windowStartedAt = nowMs();
+  await openDiffViewerWindow(null);
+  controller.setDocumentWindowOpen(true);
+  logDiffOpenTiming("start.window.opened", () => ({
+    windowOpenMs: elapsedMs(windowStartedAt),
+  }));
+}
+
 async function openDiffViewerFromClipboard(controller: DocumentAppController) {
   const clipboardStartedAt = nowMs();
   const result = await commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 });
@@ -121,6 +130,14 @@ async function openDiffViewerFromClipboard(controller: DocumentAppController) {
 
 function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
   return {
+    startWindow: () => {
+      logDiffOpenTiming("menu.startWindow", () => ({}));
+      openDiffStartWindow(controller)
+        .then(() => {
+          logDiffOpenTiming("menu.startWindow.finish", () => ({}));
+        })
+        .catch(reportDiffAppControllerError);
+    },
     openFolder: () => {
       logDiffOpenTiming("menu.openFolder", () => ({}));
       openDiffViewerForSelectedFolder(controller)
@@ -214,6 +231,7 @@ export function App({ launchArguments }: DiffAppProps) {
     menus: diffMenuConfig,
     onInitialOpen: openInitialDiffViewer,
     onRecentDocumentOpen: openRecentDiffFolder,
+    onReopenRequested: openDiffStartWindow,
     ownerId: diffMenuOwnerId,
     reportError: reportDiffAppControllerError,
     windowIdentifier: diffViewerWindowIdentifier,

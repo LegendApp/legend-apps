@@ -6,6 +6,8 @@
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <Carbon/Carbon.h>
 
+static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
+
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
   if (![value isKindOfClass:NSString.class] || value.length == 0) {
@@ -248,6 +250,10 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
     if (targetWindow) {
       [targetWindow makeKeyAndOrderFront:self];
+    } else {
+      [NSNotificationCenter.defaultCenter postNotificationName:LegendApplicationReopenRequestedNotification
+                                                        object:self
+                                                      userInfo:@{@"hasVisibleWindows": @NO}];
     }
     [NSApp activateIgnoringOtherApps:YES];
     shouldHandleReopen = NO;

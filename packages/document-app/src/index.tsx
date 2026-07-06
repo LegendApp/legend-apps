@@ -2,7 +2,7 @@ import { openFileDialog } from "@legend-desktop/file-dialog";
 import { watchFiles } from "@legend-desktop/file-system-watcher";
 import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legend-desktop/native-menu";
 import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
-import { addWindowClosedListener } from "@legend-desktop/window-manager";
+import { addApplicationReopenRequestedListener, addWindowClosedListener } from "@legend-desktop/window-manager";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type DocumentAppController = {
@@ -17,6 +17,7 @@ export type UseDocumentAppControllerOptions = {
   menus: NativeMenuConfig[];
   onInitialOpen: (launchArguments: string[] | undefined, controller: DocumentAppController) => Promise<void> | void;
   onRecentDocumentOpen?: (path: string, controller: DocumentAppController) => Promise<void> | void;
+  onReopenRequested?: (controller: DocumentAppController) => Promise<void> | void;
   ownerId: string;
   reportError: (error: unknown) => void;
   windowIdentifier?: string;
@@ -133,6 +134,7 @@ export function useDocumentAppController({
   menus,
   onInitialOpen,
   onRecentDocumentOpen,
+  onReopenRequested,
   ownerId,
   reportError,
   windowIdentifier,
@@ -165,6 +167,22 @@ export function useDocumentAppController({
 
     return undefined;
   }, [controller, onRecentDocumentOpen, reportError]);
+
+  useEffect(() => {
+    if (onReopenRequested) {
+      const subscription = addApplicationReopenRequestedListener((event) => {
+        if (!event.hasVisibleWindows) {
+          Promise.resolve(onReopenRequested(controller)).catch(reportError);
+        }
+      });
+
+      return () => {
+        subscription.remove();
+      };
+    }
+
+    return undefined;
+  }, [controller, onReopenRequested, reportError]);
 
   useEffect(() => {
     if (windowIdentifier) {
