@@ -37,6 +37,8 @@ import {
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
+  getBoundedSideBySideFileHeaders,
+  getBoundedSideBySideRowCount,
 } from "./diffLoadedDocumentIndexes";
 import type { DiffViewerState } from "./diffViewerModel";
 import { logDiffOpenTiming } from "./diffViewerSupport";
@@ -48,6 +50,8 @@ export {
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
+  getBoundedSideBySideFileHeaders,
+  getBoundedSideBySideRowCount,
 } from "./diffLoadedDocumentIndexes";
 
 const emptyDiffRenderRows: readonly DiffRenderRow[] = [];
@@ -120,23 +124,6 @@ function getDiffFileIndexes(files: readonly DiffFileSummary[]) {
     }
   }
   return indexes;
-}
-
-function createInitialSideBySideFileHeaders(files: readonly DiffFileSummary[], rowCount: number) {
-  const safeRowCount = Math.max(0, Math.floor(rowCount));
-  const headers: DiffSideBySideFileHeader[] = [];
-  for (const file of files) {
-    const rowStart = Math.max(0, Math.floor(file.rowStart));
-    if (rowStart >= safeRowCount) {
-      break;
-    }
-    headers.push({
-      fileIndex: file.index,
-      listIndex: rowStart,
-      sourceStart: rowStart,
-    });
-  }
-  return headers;
 }
 
 function requestTokenizedFilesAfterGrammarLoad({
@@ -509,10 +496,7 @@ export function useDiffLoadedModel({
       const isInitialCountLimited = initialItemCountLimit !== null && initialItemCountLimit !== undefined;
       const count = state.status === "loaded" && viewMode !== "unified"
         ? isInitialCountLimited
-          ? Math.min(
-            Math.max(0, Math.floor(state.document.rowCount)),
-            Math.max(0, Math.floor(initialItemCountLimit)),
-          )
+          ? getBoundedSideBySideRowCount(state.document, initialItemCountLimit, collapsedFileIndexList)
           : Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
         : 0;
       if (state.status === "loaded") {
@@ -550,7 +534,7 @@ export function useDiffLoadedModel({
       const isInitialCountLimited = initialItemCountLimit !== null && initialItemCountLimit !== undefined;
       const headers = state.status === "loaded" && viewMode !== "unified"
         ? isInitialCountLimited
-          ? createInitialSideBySideFileHeaders(state.files, sideBySideRowCount)
+          ? getBoundedSideBySideFileHeaders(state.document, sideBySideRowCount, collapsedFileIndexList)
           : state.document.getSideBySideFileHeaders(collapsedFileIndexList)
         : [];
       if (state.status === "loaded") {

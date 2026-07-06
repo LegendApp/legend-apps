@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffSideBySideFileHeader } from "@legend-desktop/diff-parser";
+import type { DiffDocument, DiffFileSummary, DiffSideBySideFileHeader } from "@legend-desktop/diff-parser";
 
 function isArrayIndexProperty(property: string | symbol) {
   if (typeof property !== "string" || property.length === 0) {
@@ -75,6 +75,66 @@ export function createSideBySideListIndexByRowIndex(fileHeaders: readonly DiffSi
     indexes.set(header.sourceStart, header.listIndex);
   });
   return indexes;
+}
+
+function sideBySideRowExists(
+  document: Pick<DiffDocument, "getPlainSideBySideRows">,
+  index: number,
+  collapsedFileIndexes: readonly number[],
+) {
+  return document.getPlainSideBySideRows(index, 1, [...collapsedFileIndexes]).length > 0;
+}
+
+export function getBoundedSideBySideRowCount(
+  document: Pick<DiffDocument, "getPlainSideBySideRows">,
+  requestedCount: number,
+  collapsedFileIndexes: readonly number[],
+) {
+  const safeRequestedCount = Math.max(0, Math.floor(requestedCount));
+  if (safeRequestedCount === 0) {
+    return 0;
+  }
+
+  if (sideBySideRowExists(document, safeRequestedCount - 1, collapsedFileIndexes)) {
+    return safeRequestedCount;
+  }
+
+  let low = 0;
+  let high = safeRequestedCount - 1;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (sideBySideRowExists(document, middle, collapsedFileIndexes)) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
+}
+
+export function getBoundedSideBySideFileHeaders(
+  document: Pick<DiffDocument, "getPlainSideBySideRows">,
+  rowCount: number,
+  collapsedFileIndexes: readonly number[],
+) {
+  const safeRowCount = Math.max(0, Math.floor(rowCount));
+  const rows = safeRowCount > 0
+    ? document.getPlainSideBySideRows(0, safeRowCount, [...collapsedFileIndexes])
+    : [];
+  const headers: DiffSideBySideFileHeader[] = [];
+
+  rows.forEach((row, listIndex) => {
+    if (row.kind === "file-header") {
+      headers.push({
+        fileIndex: row.fileIndex,
+        listIndex,
+        sourceStart: row.sourceStart,
+      });
+    }
+  });
+
+  return headers;
 }
 
 export function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {

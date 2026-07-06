@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffSideBySideFileHeader } from "@legend-desktop/diff-parser";
+import type { DiffFileSummary, DiffRenderRow, DiffSideBySideFileHeader, DiffSideBySideRenderRow } from "@legend-desktop/diff-parser";
 import {
   createCollapsedFileIndexList,
   createIdentityDiffRowIndexes,
@@ -6,6 +6,8 @@ import {
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
+  getBoundedSideBySideFileHeaders,
+  getBoundedSideBySideRowCount,
 } from "../diffLoadedDocumentIndexes";
 
 function createFile(overrides: Partial<DiffFileSummary>): DiffFileSummary {
@@ -29,6 +31,42 @@ function createSideBySideHeader(overrides: Partial<DiffSideBySideFileHeader>): D
     listIndex: 0,
     sourceStart: 0,
     ...overrides,
+  };
+}
+
+function createRenderRow(overrides: Partial<DiffRenderRow> = {}): DiffRenderRow {
+  return {
+    changeType: 0,
+    fileIndex: overrides.fileIndex ?? 0,
+    hunkIndex: -1,
+    index: overrides.index ?? 0,
+    kind: 0,
+    newLineNumber: -1,
+    oldLineNumber: -1,
+    text: "",
+    tokens: [],
+    ...overrides,
+  };
+}
+
+function createSideBySideRow(overrides: {
+  fileIndex?: number;
+  index: number;
+  kind?: string;
+  sourceStart?: number;
+}): DiffSideBySideRenderRow {
+  return {
+    fileIndex: overrides.fileIndex ?? 0,
+    hunkIndex: -1,
+    index: overrides.index,
+    kind: overrides.kind ?? "line",
+    newRow: createRenderRow(),
+    newRowEqualsOldRow: true,
+    newRowVisible: true,
+    oldRow: createRenderRow(),
+    oldRowVisible: true,
+    sourceEnd: (overrides.sourceStart ?? overrides.index) + 1,
+    sourceStart: overrides.sourceStart ?? overrides.index,
   };
 }
 
@@ -78,6 +116,38 @@ describe("diffLoadedDocumentModel", () => {
     expect(Array.from(createSideBySideListIndexByRowIndex(headers).entries())).toEqual([
       [0, 0],
       [12, 5],
+    ]);
+  });
+
+  it("clamps bounded side-by-side row counts to available rows", () => {
+    const rows = [
+      createSideBySideRow({ index: 0 }),
+      createSideBySideRow({ index: 1 }),
+      createSideBySideRow({ index: 2 }),
+    ];
+    const document = {
+      getPlainSideBySideRows: (start: number, count: number) => rows.slice(start, start + count),
+    };
+
+    expect(getBoundedSideBySideRowCount(document, 8, [])).toBe(3);
+    expect(getBoundedSideBySideRowCount(document, 2, [])).toBe(2);
+    expect(getBoundedSideBySideRowCount(document, 0, [])).toBe(0);
+  });
+
+  it("creates bounded side-by-side file headers from side-by-side list rows", () => {
+    const rows = [
+      createSideBySideRow({ fileIndex: 0, index: 0, kind: "file-header", sourceStart: 0 }),
+      createSideBySideRow({ fileIndex: 0, index: 1, sourceStart: 1 }),
+      createSideBySideRow({ fileIndex: 1, index: 2, kind: "file-header", sourceStart: 8 }),
+      createSideBySideRow({ fileIndex: 1, index: 3, sourceStart: 9 }),
+    ];
+    const document = {
+      getPlainSideBySideRows: (start: number, count: number) => rows.slice(start, start + count),
+    };
+
+    expect(getBoundedSideBySideFileHeaders(document, 3, [])).toEqual([
+      { fileIndex: 0, listIndex: 0, sourceStart: 0 },
+      { fileIndex: 1, listIndex: 2, sourceStart: 8 },
     ]);
   });
 
