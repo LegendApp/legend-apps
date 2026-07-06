@@ -1,6 +1,7 @@
 #include "HybridDiffLoadSession.hpp"
 
 #include "DiffParserCore.hpp"
+#include "HybridDiffUrlLoader.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -41,8 +42,17 @@ std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::create(const std::
   return session;
 }
 
+std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::createUnifiedDiffUrl(
+    const std::string& diffUrl,
+    const std::string& sourceLabel) {
+  auto session = std::make_shared<HybridDiffLoadSession>(diffUrl, sourceLabel);
+  session->start();
+  return session;
+}
+
 HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks)
     : HybridObject(TAG),
+      kind_(Kind::GitFolder),
       folderPath_(std::move(folderPath)),
       showOnlyHunks_(showOnlyHunks),
       document_(std::make_shared<HybridDiffDocument>(
@@ -52,6 +62,21 @@ HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath, bool showOn
           "",
           "",
           "",
+          createEmptyTiming())) {}
+
+HybridDiffLoadSession::HybridDiffLoadSession(std::string diffUrl, std::string sourceLabel)
+    : HybridObject(TAG),
+      kind_(Kind::UnifiedDiffUrl),
+      diffUrl_(std::move(diffUrl)),
+      sourceLabel_(std::move(sourceLabel)),
+      showOnlyHunks_(true),
+      document_(std::make_shared<HybridDiffDocument>(
+          std::vector<DiffFileSummary>(),
+          std::vector<DiffRenderRow>(),
+          std::vector<DiffFileSources>(),
+          "",
+          "",
+          sourceLabel_,
           createEmptyTiming())) {}
 
 HybridDiffLoadSession::~HybridDiffLoadSession() {
@@ -102,6 +127,14 @@ void HybridDiffLoadSession::start() {
 }
 
 void HybridDiffLoadSession::run() {
+  if (kind_ == Kind::UnifiedDiffUrl) {
+    runUnifiedDiffUrl();
+  } else {
+    runGitFolder();
+  }
+}
+
+void HybridDiffLoadSession::runGitFolder() {
   const auto startedAt = DiffClock::now();
   document_->logMemorySnapshot("progressive.runStart");
   try {
@@ -157,6 +190,58 @@ void HybridDiffLoadSession::run() {
   rowVersion_.fetch_add(1);
   fileVersion_.fetch_add(1);
   document_->logMemorySnapshot("progressive.complete");
+}
+
+void HybridDiffLoadSession::runUnifiedDiffUrl() {
+  const auto startedAt = DiffClock::now();
+  document_->logMemorySnapshot("progressiveUrl.runStart");
+  try {
+    UnifiedDiffStreamParser parser(DiffProgressiveCallbacks{
+        .shouldCancel = [this] {
+          return cancelled_.load();
+        },
+        .onFile = [this](const DiffFileSummary& file, const DiffFileSources& fileSources, const DiffRenderRow& headerRow) {
+          document_->appendProgressFile(file, fileSources, headerRow);
+          rowVersion_.fetch_add(1);
+          fileVersion_.fetch_add(1);
+          if (!firstFilesLogged_.load() && document_->getFileCount() > 0 && !firstFilesLogged_.exchange(true)) {
+            document_->logMemorySnapshot("progressiveUrl.firstFiles");
+          }
+          noteRowsAvailable();
+        },
+        .onRow = [this](const DiffRenderRow& row) {
+          document_->appendProgressRow(row);
+          rowVersion_.fetch_add(1);
+          noteRowsAvailable();
+        },
+        .onFileFinished = [this](const DiffFileSummary& file) {
+          document_->updateProgressFile(file);
+          fileVersion_.fetch_add(1);
+        },
+    });
+    const auto fetchMs = loadDiffUrlChunks(
+        diffUrl_,
+        [&parser](std::string_view chunk) {
+          parser.append(chunk);
+        },
+        [this] {
+          return cancelled_.load();
+        });
+    auto timing = parser.finish();
+    timing.fetchMs = fetchMs;
+    timing.documentMs = elapsedSessionMs(startedAt, DiffClock::now());
+    timing.nativeTotalMs = timing.documentMs;
+    document_->setProgressTiming(timing);
+  } catch (const std::exception& error) {
+    setError(error.what());
+  } catch (...) {
+    setError("Failed to load diff URL");
+  }
+
+  complete_.store(true);
+  rowVersion_.fetch_add(1);
+  fileVersion_.fetch_add(1);
+  document_->logMemorySnapshot("progressiveUrl.complete");
 }
 
 void HybridDiffLoadSession::joinWorker() {

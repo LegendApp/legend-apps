@@ -24,6 +24,10 @@ export function startGitFolderDiff(folderPath: string, options?: Partial<DiffGit
   return getDiffParser().startGitFolderDiff(folderPath, normalizedOptions.showOnlyHunks);
 }
 
+export function startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string) {
+  return getDiffParser().startUnifiedDiffFromUrl(diffUrl, sourceLabel);
+}
+
 export function logDiffTimingMark(message: string) {
   try {
     getDiffParser().logTimingMark(message);

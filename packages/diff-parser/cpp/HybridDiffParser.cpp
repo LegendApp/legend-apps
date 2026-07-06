@@ -85,6 +85,12 @@ std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
   return HybridDiffLoadSession::create(folderPath, showOnlyHunks);
 }
 
+std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFromUrl(
+    const std::string& diffUrl,
+    const std::string& sourceLabel) {
+  return HybridDiffLoadSession::createUnifiedDiffUrl(diffUrl, sourceLabel);
+}
+
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,
     double initialRowCount,

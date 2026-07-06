@@ -5,6 +5,7 @@ function createParser() {
     loadUnifiedDiff: jest.fn(async () => ({ ok: "unified" })),
     loadUnifiedDiffFromUrl: jest.fn(async () => ({ ok: "url" })),
     startGitFolderDiff: jest.fn(() => ({ ok: "session" })),
+    startUnifiedDiffFromUrl: jest.fn(() => ({ ok: "url-session" })),
   };
 }
 
@@ -29,6 +30,10 @@ function loadModuleWithParser(parser = createParser()) {
   jest.doMock("../DiffNativeRowNativeComponent", () => ({
     __esModule: true,
     default: "DiffNativeRow",
+  }));
+  jest.doMock("../DiffMergeNativePaneNativeComponent", () => ({
+    __esModule: true,
+    default: "DiffMergeNativePane",
   }));
   const diffParser = require("../index") as typeof import("../index");
   return { diffParser, nitroModules, parser };
@@ -73,6 +78,17 @@ describe("@legend-desktop/diff-parser", () => {
     expect(diffParser.startGitFolderDiff("/tmp/repo", { showOnlyHunks: false })).toEqual({ ok: "session" });
 
     expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false);
+  });
+
+  it("starts progressive unified diff URL sessions", () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    expect(diffParser.startUnifiedDiffFromUrl("https://github.com/owner/repo/pull/1.diff", "owner/repo#1")).toEqual({ ok: "url-session" });
+
+    expect(parser.startUnifiedDiffFromUrl).toHaveBeenCalledWith(
+      "https://github.com/owner/repo/pull/1.diff",
+      "owner/repo#1",
+    );
   });
 
   it("logs timing diagnostics without throwing", () => {

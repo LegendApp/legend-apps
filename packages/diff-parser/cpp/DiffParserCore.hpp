@@ -3,7 +3,9 @@
 #include "HybridDiffDocument.hpp"
 
 #include <functional>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace margelo::nitro::legenddesktop::diffparser {
@@ -35,6 +37,20 @@ struct DiffProgressiveCallbacks {
 };
 
 DiffParsedDocument parseUnifiedDiffText(const std::string& diffText);
+
+class UnifiedDiffStreamParser {
+public:
+  explicit UnifiedDiffStreamParser(const DiffProgressiveCallbacks& callbacks);
+  ~UnifiedDiffStreamParser();
+
+  void append(std::string_view chunk);
+  DiffLoadTiming finish();
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
 DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath, bool showOnlyHunks = true);
 DiffLoadTiming parseGitRepositoryDiffProgressive(
     const std::string& folderPath,

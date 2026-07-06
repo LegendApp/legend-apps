@@ -551,6 +551,187 @@ struct UnifiedDiffBuildState {
   }
 };
 
+struct UnifiedDiffProgressiveBuildState {
+  const DiffProgressiveCallbacks& callbacks;
+  DiffFileSummary currentFile;
+  DiffFileSources currentSources;
+  std::string currentOldPath;
+  std::string currentNewPath;
+  double rowCount = 0;
+  double fileCount = 0;
+  int currentFileIndex = -1;
+  int currentHunkIndex = -1;
+  int currentOldLine = -1;
+  int currentNewLine = -1;
+  bool cancelled = false;
+
+  bool shouldCancel() {
+    cancelled = callbacks.shouldCancel ? callbacks.shouldCancel() : false;
+    return cancelled;
+  }
+
+  void applyHeaderPaths() {
+    if (currentFileIndex >= 0) {
+      if (currentFile.oldPath.empty() && !currentOldPath.empty()) {
+        currentFile.oldPath = currentOldPath;
+        currentSources.oldPath = currentOldPath;
+      }
+      if (currentFile.path.empty() && !currentNewPath.empty()) {
+        currentFile.path = currentNewPath;
+        currentSources.newPath = currentNewPath;
+      }
+      if (currentFile.path == "/dev/null") {
+        currentFile.path = currentFile.oldPath;
+      }
+      if (currentFile.oldPath == "/dev/null") {
+        currentFile.oldPath = currentFile.path;
+      }
+      currentFile.status = currentOldPath == "/dev/null"
+        ? "added"
+        : currentNewPath == "/dev/null"
+          ? "deleted"
+          : currentFile.oldPath != currentFile.path
+            ? "renamed"
+            : "modified";
+      currentSources.oldPath = currentFile.oldPath;
+      currentSources.newPath = currentFile.path;
+      currentSources.status = currentFile.status;
+      currentSources.isBinary = currentFile.isBinary;
+      currentSources.isUnifiedDiff = true;
+    }
+  }
+
+  void finishCurrentFile() {
+    if (currentFileIndex >= 0) {
+      applyHeaderPaths();
+      currentFile.rowCount = rowCount - currentFile.rowStart;
+      if (callbacks.onFileFinished) {
+        callbacks.onFileFinished(currentFile);
+      }
+    }
+    currentOldPath.clear();
+    currentNewPath.clear();
+  }
+
+  void startFile(const std::string& oldPath, const std::string& newPath) {
+    finishCurrentFile();
+
+    const double fileIndex = fileCount;
+    fileCount += 1;
+    currentFileIndex = static_cast<int>(fileIndex);
+    currentHunkIndex = -1;
+    currentOldLine = -1;
+    currentNewLine = -1;
+    currentOldPath = oldPath;
+    currentNewPath = newPath;
+
+    DiffFileSummary file;
+    file.index = fileIndex;
+    file.path = newPath;
+    file.oldPath = oldPath;
+    file.status = "modified";
+    file.additions = 0;
+    file.deletions = 0;
+    file.rowStart = rowCount;
+    file.rowCount = 0;
+    file.isBinary = false;
+
+    DiffFileSources sources;
+    sources.fileIndex = fileIndex;
+    sources.oldPath = oldPath;
+    sources.newPath = newPath;
+    sources.status = "modified";
+    sources.isBinary = false;
+    sources.isUnifiedDiff = true;
+
+    DiffRenderRow row;
+    row.index = rowCount;
+    row.kind = diffRowKindFileHeader;
+    row.fileIndex = fileIndex;
+    row.hunkIndex = -1;
+    row.oldLineNumber = -1;
+    row.newLineNumber = -1;
+    row.changeType = diffChangeTypeMeta;
+    row.text = newPath.empty() || newPath == "/dev/null" ? oldPath : newPath;
+    row.tokens = {};
+    rowCount += 1;
+
+    currentFile = file;
+    currentSources = sources;
+    if (callbacks.onFile) {
+      callbacks.onFile(currentFile, currentSources, row);
+    }
+  }
+
+  void updateOldPath(const std::string& oldPath) {
+    currentOldPath = oldPath;
+  }
+
+  void updateNewPath(const std::string& newPath) {
+    currentNewPath = newPath;
+    if (currentFileIndex >= 0) {
+      currentFile.path = currentNewPath == "/dev/null" ? currentOldPath : currentNewPath;
+      currentFile.oldPath = currentOldPath == "/dev/null" ? currentFile.path : currentOldPath;
+      currentSources.oldPath = currentFile.oldPath;
+      currentSources.newPath = currentFile.path;
+    }
+  }
+
+  void startHunk(int oldStart, int newStart) {
+    if (currentFileIndex >= 0) {
+      currentHunkIndex += 1;
+      currentOldLine = oldStart;
+      currentNewLine = newStart;
+    }
+  }
+
+  void appendLine(char origin, std::string_view text) {
+    if (currentFileIndex < 0 || currentHunkIndex < 0) {
+      return;
+    }
+
+    DiffRenderRow row;
+    row.index = rowCount;
+    row.kind = diffRowKindLine;
+    row.fileIndex = static_cast<double>(currentFileIndex);
+    row.hunkIndex = static_cast<double>(currentHunkIndex);
+    row.oldLineNumber = -1;
+    row.newLineNumber = -1;
+    row.changeType = diffChangeTypeContext;
+    row.text = std::string(text);
+    row.tokens = {};
+
+    if (origin == '+') {
+      row.newLineNumber = currentNewLine;
+      row.changeType = diffChangeTypeAdd;
+      currentNewLine += 1;
+      currentFile.additions += 1;
+    } else if (origin == '-') {
+      row.oldLineNumber = currentOldLine;
+      row.changeType = diffChangeTypeRemove;
+      currentOldLine += 1;
+      currentFile.deletions += 1;
+    } else {
+      row.oldLineNumber = currentOldLine;
+      row.newLineNumber = currentNewLine;
+      currentOldLine += 1;
+      currentNewLine += 1;
+    }
+
+    rowCount += 1;
+    if (callbacks.onRow) {
+      callbacks.onRow(row);
+    }
+  }
+
+  void markBinary() {
+    if (currentFileIndex >= 0) {
+      currentFile.isBinary = true;
+      currentSources.isBinary = true;
+    }
+  }
+};
+
 int onProgressiveGitFile(const git_diff_delta* delta, float, void* payload) {
   auto* state = static_cast<ProgressiveDiffBuildState*>(payload);
   if (state->shouldCancel()) {
@@ -774,6 +955,108 @@ std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<Diff
 
   flushPending();
   return lines;
+}
+
+struct UnifiedDiffStreamParser::Impl {
+  explicit Impl(const DiffProgressiveCallbacks& parserCallbacks)
+      : callbacks(parserCallbacks),
+        state{ .callbacks = this->callbacks },
+        startedAt(DiffClock::now()) {}
+
+  void append(std::string_view chunk) {
+    if (finished || state.shouldCancel()) {
+      return;
+    }
+
+    bufferedText.append(chunk.data(), chunk.size());
+    size_t lineStart = 0;
+    while (lineStart <= bufferedText.size()) {
+      const auto lineEnd = bufferedText.find('\n', lineStart);
+      if (lineEnd == std::string::npos) {
+        break;
+      }
+      processLine(trimCarriageReturn(std::string_view(bufferedText.data() + lineStart, lineEnd - lineStart)));
+      lineStart = lineEnd + 1;
+      if (state.shouldCancel()) {
+        break;
+      }
+    }
+
+    if (lineStart > 0) {
+      bufferedText.erase(0, lineStart);
+    }
+  }
+
+  DiffLoadTiming finish() {
+    if (!finished) {
+      if (!bufferedText.empty() && !state.shouldCancel()) {
+        processLine(trimCarriageReturn(std::string_view(bufferedText.data(), bufferedText.size())));
+      }
+      bufferedText.clear();
+      state.finishCurrentFile();
+      finished = true;
+    }
+
+    const auto finishedAt = DiffClock::now();
+    DiffLoadTiming timing;
+    timing.openRepoMs = 0;
+    timing.fetchMs = 0;
+    timing.createDiffMs = 0;
+    timing.walkDiffMs = elapsedDiffMs(startedAt, finishedAt);
+    timing.diffMs = timing.walkDiffMs;
+    timing.documentMs = 0;
+    timing.copyFilesMs = 0;
+    timing.copyInitialRowsMs = 0;
+    timing.nativeTotalMs = timing.walkDiffMs;
+    timing.rowCount = state.rowCount;
+    timing.fileCount = state.fileCount;
+    return timing;
+  }
+
+private:
+  void processLine(std::string_view line) {
+    if (state.shouldCancel()) {
+      return;
+    }
+
+    if (line.starts_with("diff --git ")) {
+      const auto [oldPath, newPath] = parseDiffGitPaths(line);
+      state.startFile(oldPath, newPath);
+    } else if (line.starts_with("--- ") && state.currentHunkIndex < 0) {
+      state.updateOldPath(parseHeaderPath(line));
+    } else if (line.starts_with("+++ ") && state.currentHunkIndex < 0) {
+      state.updateNewPath(parseHeaderPath(line));
+    } else if (line.starts_with("@@ ")) {
+      int oldStart = 0;
+      int newStart = 0;
+      if (parseHunkLineNumbers(line, oldStart, newStart)) {
+        state.startHunk(oldStart, newStart);
+      }
+    } else if (!line.empty() && (line[0] == ' ' || line[0] == '+' || line[0] == '-')) {
+      state.appendLine(line[0], line.substr(1));
+    } else if (line.starts_with("Binary files ")) {
+      state.markBinary();
+    }
+  }
+
+  DiffProgressiveCallbacks callbacks;
+  UnifiedDiffProgressiveBuildState state;
+  DiffClock::time_point startedAt;
+  std::string bufferedText;
+  bool finished = false;
+};
+
+UnifiedDiffStreamParser::UnifiedDiffStreamParser(const DiffProgressiveCallbacks& callbacks)
+    : impl_(std::make_unique<Impl>(callbacks)) {}
+
+UnifiedDiffStreamParser::~UnifiedDiffStreamParser() = default;
+
+void UnifiedDiffStreamParser::append(std::string_view chunk) {
+  impl_->append(chunk);
+}
+
+DiffLoadTiming UnifiedDiffStreamParser::finish() {
+  return impl_->finish();
 }
 
 DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {

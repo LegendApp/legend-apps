@@ -159,6 +159,7 @@ export interface DiffParser
   }> {
   logTimingMark(message: string): number;
   startGitFolderDiff(folderPath: string, showOnlyHunks: boolean): DiffLoadSession;
+  startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string): DiffLoadSession;
   loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
   loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;

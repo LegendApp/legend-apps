@@ -12,6 +12,9 @@ public:
   std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(
       const std::string& folderPath,
       bool showOnlyHunks) override;
+  std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(
+      const std::string& diffUrl,
+      const std::string& sourceLabel) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(
       const std::string& folderPath,
       double initialRowCount,

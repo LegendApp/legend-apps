@@ -87,6 +87,83 @@ bool rowTextExistsForFile(
   return false;
 }
 
+diffparser::DiffParsedDocument parseUnifiedDiffStreamForTest(const std::string& diffText, size_t chunkSize) {
+  std::vector<diffparser::DiffFileSummary> files;
+  std::vector<diffparser::DiffRenderRow> rows;
+  std::vector<diffparser::DiffFileSources> fileSources;
+
+  diffparser::UnifiedDiffStreamParser parser(diffparser::DiffProgressiveCallbacks{
+      .shouldCancel = [] {
+        return false;
+      },
+      .onFile = [&](const diffparser::DiffFileSummary& file, const diffparser::DiffFileSources& sources, const diffparser::DiffRenderRow& headerRow) {
+        files.push_back(file);
+        fileSources.push_back(sources);
+        rows.push_back(headerRow);
+      },
+      .onRow = [&](const diffparser::DiffRenderRow& row) {
+        rows.push_back(row);
+      },
+      .onFileFinished = [&](const diffparser::DiffFileSummary& file) {
+        const auto fileIndex = static_cast<size_t>(std::max(0.0, std::floor(file.index)));
+        if (fileIndex < files.size()) {
+          files[fileIndex] = file;
+          if (fileIndex < fileSources.size()) {
+            fileSources[fileIndex].oldPath = file.oldPath;
+            fileSources[fileIndex].newPath = file.path;
+            fileSources[fileIndex].status = file.status;
+            fileSources[fileIndex].isBinary = file.isBinary;
+          }
+        }
+      },
+  });
+
+  for (size_t offset = 0; offset < diffText.size(); offset += chunkSize) {
+    parser.append(std::string_view(diffText.data() + offset, std::min(chunkSize, diffText.size() - offset)));
+  }
+  const auto timing = parser.finish();
+
+  return {
+    .files = std::move(files),
+    .rows = std::move(rows),
+    .fileSources = std::move(fileSources),
+    .repositoryPath = "",
+    .workdirPath = "",
+    .headTreeOid = "",
+    .timing = timing,
+  };
+}
+
+void assertSameUnifiedParse(const diffparser::DiffParsedDocument& actual, const diffparser::DiffParsedDocument& expected) {
+  expectEqual(static_cast<double>(actual.files.size()), static_cast<double>(expected.files.size()), "stream file count");
+  expectEqual(static_cast<double>(actual.rows.size()), static_cast<double>(expected.rows.size()), "stream row count");
+  expectEqual(static_cast<double>(actual.fileSources.size()), static_cast<double>(expected.fileSources.size()), "stream file source count");
+  for (size_t index = 0; index < expected.files.size(); index += 1) {
+    const auto& actualFile = actual.files[index];
+    const auto& expectedFile = expected.files[index];
+    expectEqual(actualFile.path, expectedFile.path, "stream file path");
+    expectEqual(actualFile.oldPath, expectedFile.oldPath, "stream file old path");
+    expectEqual(actualFile.status, expectedFile.status, "stream file status");
+    expectEqual(actualFile.additions, expectedFile.additions, "stream file additions");
+    expectEqual(actualFile.deletions, expectedFile.deletions, "stream file deletions");
+    expectEqual(actualFile.rowStart, expectedFile.rowStart, "stream file row start");
+    expectEqual(actualFile.rowCount, expectedFile.rowCount, "stream file row count");
+    expect(actualFile.isBinary == expectedFile.isBinary, "stream file binary flag");
+  }
+  for (size_t index = 0; index < expected.rows.size(); index += 1) {
+    const auto& actualRow = actual.rows[index];
+    const auto& expectedRow = expected.rows[index];
+    expectEqual(actualRow.index, expectedRow.index, "stream row index");
+    expectEqual(actualRow.kind, expectedRow.kind, "stream row kind");
+    expectEqual(actualRow.fileIndex, expectedRow.fileIndex, "stream row file index");
+    expectEqual(actualRow.hunkIndex, expectedRow.hunkIndex, "stream row hunk index");
+    expectEqual(actualRow.oldLineNumber, expectedRow.oldLineNumber, "stream row old line");
+    expectEqual(actualRow.newLineNumber, expectedRow.newLineNumber, "stream row new line");
+    expectEqual(actualRow.changeType, expectedRow.changeType, "stream row change type");
+    expectEqual(actualRow.text, expectedRow.text, "stream row text");
+  }
+}
+
 std::string makeUnifiedDiffFixture() {
   return R"(diff --git a/src/App.tsx b/src/App.tsx
 index 0000000..1111111 100644
@@ -395,10 +472,13 @@ void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
 
 int main(int argc, char** argv) {
   try {
-    const auto parsed = diffparser::parseUnifiedDiffText(makeUnifiedDiffFixture());
+    const auto fixture = makeUnifiedDiffFixture();
+    const auto parsed = diffparser::parseUnifiedDiffText(fixture);
     assertFileSummaries(parsed);
     assertRenderRows(parsed);
     assertSideBySideRows(parsed);
+    assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 1), parsed);
+    assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 17), parsed);
     if (argc > 1) {
       assertGitRepositoryDiff(argv[1]);
       assertGitRepositoryDiffByFile(argv[1]);

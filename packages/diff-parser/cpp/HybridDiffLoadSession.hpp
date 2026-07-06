@@ -14,7 +14,11 @@ namespace margelo::nitro::legenddesktop::diffparser {
 class HybridDiffLoadSession final : public HybridDiffLoadSessionSpec {
 public:
   static std::shared_ptr<HybridDiffLoadSession> create(const std::string& folderPath, bool showOnlyHunks);
+  static std::shared_ptr<HybridDiffLoadSession> createUnifiedDiffUrl(
+      const std::string& diffUrl,
+      const std::string& sourceLabel);
   HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks);
+  HybridDiffLoadSession(std::string diffUrl, std::string sourceLabel);
   ~HybridDiffLoadSession() override;
 
   std::shared_ptr<HybridDiffDocumentSpec> getDocument() override;
@@ -25,13 +29,23 @@ protected:
   size_t getExternalMemorySize() noexcept override;
 
 private:
+  enum class Kind {
+    GitFolder,
+    UnifiedDiffUrl,
+  };
+
   void start();
   void run();
+  void runGitFolder();
+  void runUnifiedDiffUrl();
   void joinWorker();
   void noteRowsAvailable();
   void setError(std::string error);
 
+  Kind kind_;
   std::string folderPath_;
+  std::string diffUrl_;
+  std::string sourceLabel_;
   bool showOnlyHunks_;
   std::shared_ptr<HybridDiffDocument> document_;
   std::thread workerThread_;

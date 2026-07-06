@@ -4,8 +4,8 @@ import {
   DiffMergeNativePane,
   DiffNativeRowConfig,
   loadUnifiedDiff,
-  loadUnifiedDiffFromUrl,
   startGitFolderDiff,
+  startUnifiedDiffFromUrl,
   type DiffDocument,
   type DiffFileSummary,
   type DiffLoadProgress,
@@ -2630,19 +2630,31 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           sourceLabel: nextSource.label,
           sourceKind: nextSource.kind,
         }));
-        result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, initialRowCount);
-        const loadedResult = result;
-        logDiffOpenTiming("viewer.native.finish", () => ({
-          fetchMs: Number(loadedResult.timing.fetchMs.toFixed(1)),
-          files: loadedResult.files.length,
-          initialRows: loadedResult.initialRows.length,
-          nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-          nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
-          requestId,
-          rows: loadedResult.document.rowCount,
-          sourceKind: nextSource.kind,
-          scopes: loadedResult.document.scopeCount,
-        }));
+        progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
+        let progress = progressiveSession.consumeChanges(initialRowCount);
+        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+        while (loadRequestIdRef.current === requestId && !shouldPublishInitialProgress(progress, initialRowCount)) {
+          await waitForDiffProgressPoll();
+          progress = progressiveSession.consumeChanges(initialRowCount);
+          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+        }
+        if (loadRequestIdRef.current !== requestId) {
+          progressiveSession.cancel();
+        } else if (progress.error) {
+          loadError = new Error(progress.error);
+        } else {
+          result = progress;
+          logDiffOpenTiming("viewer.native.initialProgress", () => ({
+            complete: progress.complete,
+            files: progress.files.length,
+            initialRows: progress.initialRows.length,
+            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
+            requestId,
+            rowVersion: progress.rowVersion,
+            rows: progress.document.rowCount,
+            sourceKind: nextSource.kind,
+          }));
+        }
       } else if (nextSource.kind === "git") {
         logDiffOpenTiming("viewer.git.start", () => ({
           args: nextSource.args,

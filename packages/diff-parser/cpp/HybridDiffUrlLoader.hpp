@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <functional>
+#include <string_view>
 
 namespace margelo::nitro::legenddesktop::diffparser {
 
@@ -10,5 +12,10 @@ struct DiffUrlLoadResult {
 };
 
 DiffUrlLoadResult loadDiffUrlText(const std::string& diffUrl);
+
+double loadDiffUrlChunks(
+    const std::string& diffUrl,
+    const std::function<void(std::string_view)>& onChunk,
+    const std::function<bool()>& shouldCancel);
 
 } // namespace margelo::nitro::legenddesktop::diffparser
