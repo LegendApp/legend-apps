@@ -141,7 +141,7 @@ export interface DiffDocument
   requestTokenizedSideBySideRows(start: number, count: number, collapsedFileIndexes: number[], reason: string): number;
   requestTokenizedFiles(fileIndexes: number[], reason: string): number;
   cancelTokenizationRequests(reason: string): number;
-  startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number, maxRowCount: number): number;
+  startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number, maxRowCount: number, maxSourceLineCount: number): number;
   stopBackgroundTokenization(): number;
 }
 

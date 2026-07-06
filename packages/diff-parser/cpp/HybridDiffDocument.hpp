@@ -6,6 +6,7 @@
 #include <chrono>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <memory>
@@ -76,6 +77,7 @@ struct DiffSideBySideLine {
 struct DiffTokenizationRange {
   size_t start = 0;
   size_t end = 0;
+  size_t sourceLineBudget = std::numeric_limits<size_t>::max();
 };
 
 struct DiffStoredRow {
@@ -133,7 +135,7 @@ public:
       const std::string& reason) override;
   double requestTokenizedFiles(const std::vector<double>& fileIndexes, const std::string& reason) override;
   double cancelTokenizationRequests(const std::string& reason) override;
-  double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount) override;
+  double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount, double maxSourceLineCount) override;
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
   void logMemorySnapshot(const std::string& reason) noexcept;
@@ -161,7 +163,11 @@ private:
   DiffRenderRow renderRowLocked(size_t index) const;
   std::vector<DiffRenderRow> renderRowsLocked(size_t start, size_t end) const;
   void ensureSideBySideLinesLocked();
-  void enqueueTokenizationRangeLocked(size_t start, size_t end, bool highPriority = false);
+  void enqueueTokenizationRangeLocked(
+      size_t start,
+      size_t end,
+      bool highPriority = false,
+      size_t sourceLineBudget = std::numeric_limits<size_t>::max());
   bool enqueueTokenizationRangeIfNeededLocked(size_t start, size_t end);
   void startQueuedTokenizationLocked(
       uint64_t generation,
@@ -185,7 +191,10 @@ private:
       bool tokenizeRows);
   std::vector<DiffSyntaxTokenRun> cachedTokensForRowLocked(const DiffRenderRow& row);
   bool ensureRowTokens(size_t rowIndex);
-  bool tokenizeRowOutsideDocumentLock(const DiffRenderRow& row);
+  bool tokenizeRowOutsideDocumentLock(
+      const DiffRenderRow& row,
+      size_t lineBudget = std::numeric_limits<size_t>::max(),
+      size_t* tokenizedLineDelta = nullptr);
   bool ensureNextBackgroundTokenChunk(
       std::unique_lock<std::mutex>& lock,
       size_t chunkRowCount,
@@ -193,7 +202,11 @@ private:
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   DiffTokenizedSource makeUnifiedDiffSource(const DiffFileSources& sources, bool oldSource);
   bool ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget);
-  std::optional<std::vector<DiffSyntaxTokenRun>> tokensForLine(DiffTokenizedSource& source, double lineNumber);
+  std::optional<std::vector<DiffSyntaxTokenRun>> tokensForLine(
+      DiffTokenizedSource& source,
+      double lineNumber,
+      size_t lineBudget = std::numeric_limits<size_t>::max(),
+      size_t* tokenizedLineDelta = nullptr);
   void releaseCompletedSourceCaches();
 
   uint64_t documentId_;

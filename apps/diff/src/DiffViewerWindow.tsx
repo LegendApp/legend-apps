@@ -100,7 +100,8 @@ import {
   diffFileHeaderRowHeight,
   diffBackgroundTokenizeChunkBudgetMs,
   diffBackgroundTokenizeChunkRowCount,
-  diffBackgroundTokenizeMaxRowCount,
+  diffBackgroundTokenizeMaxFileCount,
+  diffBackgroundTokenizeMaxSourceLineCount,
   diffBackgroundTokenizePollMs,
   diffBackgroundTokenizeStartDelayMs,
   diffInitialRowCount,
@@ -220,6 +221,34 @@ type DiffViewerWindowProps = {
   folderPath?: string;
   source?: DiffOpenSource;
 };
+
+function getBackgroundTokenizationPlan(files: readonly DiffFileSummary[]) {
+  const selectedFiles: DiffFileSummary[] = [];
+  let sourceLineCount = 0;
+  let rowLimit = 0;
+
+  for (const file of files) {
+    if (selectedFiles.length >= diffBackgroundTokenizeMaxFileCount) {
+      break;
+    }
+
+    const rowCount = Math.max(0, Math.ceil(file.rowCount));
+    const rowStart = Math.max(0, Math.floor(file.rowStart));
+    if (rowCount > 0 && sourceLineCount + rowCount <= diffBackgroundTokenizeMaxSourceLineCount) {
+      selectedFiles.push(file);
+      sourceLineCount += rowCount;
+      rowLimit = Math.max(rowLimit, rowStart + rowCount);
+    } else {
+      break;
+    }
+  }
+
+  return {
+    files: selectedFiles,
+    rowLimit,
+    sourceLineCount,
+  };
+}
 
 function createGitDiffCommandError(commandResult: DiffCommandResult) {
   const message = commandResult.stderr
@@ -399,19 +428,13 @@ type DiffLoadedBodyProps = {
   splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
-  syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
+  syntaxTokenizationVersion$: Observable<number>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
   visibleItemIndexes: Array<number | undefined>;
 };
 
 type DiffLoadedBodyGateProps = DiffLoadedBodyProps & {
   noChangesBody: ReactElement;
-};
-
-type DiffSyntaxTokenizationProgress = {
-  progress: number;
-  version: number;
-  visible: boolean;
 };
 
 type DiffListExtraData = {
@@ -454,12 +477,6 @@ type DiffNativeRowConfigProps = {
   rowHeight: number;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
-};
-
-const initialDiffSyntaxTokenizationProgress: DiffSyntaxTokenizationProgress = {
-  progress: 0,
-  version: 0,
-  visible: false,
 };
 
 function noopVirtualizedDocumentRequestRange() {
@@ -925,7 +942,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   state,
   adaptiveLightModeEnabled,
   syntaxAppearance,
-  syntaxTokenizationProgress$,
+  syntaxTokenizationVersion$,
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedBodyProps) {
@@ -1179,7 +1196,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         {nativeRowConfig ? (
           <DiffNativeRowConfigView
             nativeRowConfig={nativeRowConfig}
-            syntaxTokenizationProgress$={syntaxTokenizationProgress$}
+            syntaxTokenizationVersion$={syntaxTokenizationVersion$}
           />
         ) : null}
         {list}
@@ -1264,10 +1281,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
             {diffContent}
             {floatingDocumentBanner}
-            <DiffSyntaxProgressBar
-              foregroundColor={syntaxAppearance === "dark" ? "#58a6ffe6" : "#0969dadb"}
-              syntaxTokenizationProgress$={syntaxTokenizationProgress$}
-            />
           </View>
         </View>
       </SidebarSplitView>
@@ -1275,42 +1288,14 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   );
 });
 
-function DiffSyntaxProgressBar({
-  foregroundColor,
-  syntaxTokenizationProgress$,
-}: {
-  foregroundColor: string;
-  syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
-}) {
-  const progress = useValue(() => syntaxTokenizationProgress$.get().progress);
-  const visible = useValue(() => syntaxTokenizationProgress$.get().visible);
-  if (!visible) {
-    return null;
-  }
-
-  return (
-    <View accessibilityLabel="Syntax highlighting progress" pointerEvents="none" style={styles.syntaxProgressTrack}>
-      <View
-        style={[
-          styles.syntaxProgressFill,
-          {
-            backgroundColor: foregroundColor,
-            width: `${Math.max(0.02, Math.min(1, progress)) * 100}%`,
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
 function DiffNativeRowConfigView({
   nativeRowConfig,
-  syntaxTokenizationProgress$,
+  syntaxTokenizationVersion$,
 }: {
   nativeRowConfig: DiffNativeRowConfigProps;
-  syntaxTokenizationProgress$: Observable<DiffSyntaxTokenizationProgress>;
+  syntaxTokenizationVersion$: Observable<number>;
 }) {
-  const tokenizationVersion = useValue(() => syntaxTokenizationProgress$.get().version);
+  const tokenizationVersion = useValue(() => syntaxTokenizationVersion$.get());
   return (
     <DiffNativeRowConfig
       addAccentColor={nativeRowConfig.addAccentColor}
@@ -2184,7 +2169,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const mergeDraftsSourceKeyRef = useRef<string | null>(null);
   const savingMergeDraftsRef = useRef(false);
   const suppressFileWatcherReloadUntilRef = useRef(0);
-  const syntaxTokenizationProgress$ = useObservable<DiffSyntaxTokenizationProgress>(initialDiffSyntaxTokenizationProgress);
+  const syntaxTokenizationVersion$ = useObservable(0);
   const resolvingMergeConflictKeys$ = useObservable<ReadonlySet<string>>(new Set());
   const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
   const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
@@ -2326,30 +2311,43 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         let startTimeout: ReturnType<typeof setTimeout> | undefined;
         const startedAt = nowMs();
         startTimeout = setTimeout(() => {
-          const backgroundRowCount = Math.min(document.rowCount, diffBackgroundTokenizeMaxRowCount);
-          const backgroundFiles = getFilesForSourceRowRange(state.files, 0, backgroundRowCount);
-          const filePaths = backgroundFiles.map((file) => file.path);
-          ensureSyntaxGrammarsForPaths(filePaths)
-            .then(() => {
-              if (!cancelled) {
-                document.startBackgroundTokenization(
-                  diffBackgroundTokenizeChunkRowCount,
-                  diffBackgroundTokenizeChunkBudgetMs,
-                  diffBackgroundTokenizeMaxRowCount,
-                );
-                logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
-                  backgroundRows: backgroundRowCount,
-                  durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                  files: backgroundFiles.length,
-                  rows: document.rowCount,
-                  rowLimit: diffBackgroundTokenizeMaxRowCount,
-                  scopes: document.scopeCount,
-                }));
-              }
-            })
-            .catch((error: unknown) => {
-              console.error(getErrorMessage(error));
-            });
+          const backgroundPlan = getBackgroundTokenizationPlan(state.files);
+          if (backgroundPlan.files.length > 0 && backgroundPlan.rowLimit > 0) {
+            const backgroundFiles = backgroundPlan.files;
+            const filePaths = backgroundFiles.map((file) => file.path);
+            ensureSyntaxGrammarsForPaths(filePaths)
+              .then(() => {
+                if (!cancelled) {
+                  document.startBackgroundTokenization(
+                    diffBackgroundTokenizeChunkRowCount,
+                    diffBackgroundTokenizeChunkBudgetMs,
+                    backgroundPlan.rowLimit,
+                    backgroundPlan.sourceLineCount,
+                  );
+                  logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
+                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                    files: backgroundFiles.length,
+                    rowLimit: backgroundPlan.rowLimit,
+                    rows: document.rowCount,
+                    scopes: document.scopeCount,
+                    sourceLineBudget: diffBackgroundTokenizeMaxSourceLineCount,
+                    sourceLines: backgroundPlan.sourceLineCount,
+                  }));
+                }
+              })
+              .catch((error: unknown) => {
+                console.error(getErrorMessage(error));
+              });
+          } else {
+            logDiffMemoryMark("viewer.syntaxTokenization.skipBackgroundBudget", () => ({
+              durationMs: Number((nowMs() - startedAt).toFixed(1)),
+              fileBudget: diffBackgroundTokenizeMaxFileCount,
+              files: state.files.length,
+              rows: document.rowCount,
+              scopes: document.scopeCount,
+              sourceLineBudget: diffBackgroundTokenizeMaxSourceLineCount,
+            }));
+          }
         }, diffBackgroundTokenizeStartDelayMs);
         return () => {
           cancelled = true;
@@ -2367,40 +2365,25 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     if (state.status === "loaded" && state.loadComplete !== false && syntaxHighlightingEnabled) {
       const document = state.document;
-      const totalRows = Math.max(0, document.rowCount);
-      const updateProgress = () => {
-        const tokenizedRows = Math.max(0, Math.min(totalRows, document.tokenizedMaxRow));
+      const updateTokenizationVersion = () => {
         const tokenizationVersion = document.getTokenizedRowVersion();
-        const shouldShowBackgroundTokenizationProgress = totalRows > 0 && totalRows <= diffBackgroundTokenizeMaxRowCount;
-        const nextProgress = shouldShowBackgroundTokenizationProgress ? tokenizedRows / totalRows : 0;
-        const nextVisible = shouldShowBackgroundTokenizationProgress && tokenizedRows > 0 && tokenizedRows < totalRows;
-        const currentProgress = syntaxTokenizationProgress$.peek();
-        if (
-          currentProgress.visible !== nextVisible ||
-          currentProgress.version !== tokenizationVersion ||
-          Math.abs(currentProgress.progress - nextProgress) >= 0.001
-        ) {
-          syntaxTokenizationProgress$.set({
-            progress: nextProgress,
-            version: tokenizationVersion,
-            visible: nextVisible,
-          });
+        if (syntaxTokenizationVersion$.peek() !== tokenizationVersion) {
+          syntaxTokenizationVersion$.set(tokenizationVersion);
         }
       };
 
-      updateProgress();
-      const intervalHandle = setInterval(updateProgress, diffBackgroundTokenizePollMs);
+      updateTokenizationVersion();
+      const intervalHandle = setInterval(updateTokenizationVersion, diffBackgroundTokenizePollMs);
       return () => {
         clearInterval(intervalHandle);
       };
     }
 
-    const currentProgress = syntaxTokenizationProgress$.peek();
-    if (currentProgress.visible || currentProgress.progress !== 0 || currentProgress.version !== 0) {
-      syntaxTokenizationProgress$.set(initialDiffSyntaxTokenizationProgress);
+    if (syntaxTokenizationVersion$.peek() !== 0) {
+      syntaxTokenizationVersion$.set(0);
     }
     return undefined;
-  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled, syntaxTokenizationProgress$]);
+  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled, syntaxTokenizationVersion$]);
   useEffect(() => {
     resetSideBySideRuntime();
     if (state.status === "loaded") {
@@ -3902,7 +3885,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         splitPaneMetrics$={splitPaneMetrics$}
         state={state}
         syntaxAppearance={syntaxTheme.appearance}
-        syntaxTokenizationProgress$={syntaxTokenizationProgress$}
+        syntaxTokenizationVersion$={syntaxTokenizationVersion$}
         viewMode={renderViewMode}
         visibleItemIndexes={visibleItemIndexes}
       />
@@ -4092,18 +4075,6 @@ const styles = StyleSheet.create({
   },
   diffTitlebarSpacer: {
     height: diffTitlebarTopInset,
-  },
-  syntaxProgressFill: {
-    height: 2,
-  },
-  syntaxProgressTrack: {
-    height: 2,
-    left: 0,
-    overflow: "hidden",
-    position: "absolute",
-    right: 0,
-    top: diffTitlebarTopInset,
-    zIndex: 20,
   },
   dropOverlay: {
     alignItems: "center",

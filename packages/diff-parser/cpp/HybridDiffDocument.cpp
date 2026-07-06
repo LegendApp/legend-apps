@@ -40,6 +40,7 @@ constexpr double emptySideBySideRowIndex = -1;
 constexpr double defaultBackgroundTokenizeChunkRowCount = 16;
 constexpr double defaultBackgroundTokenizeChunkBudgetMs = 3;
 constexpr size_t maxTokenizeLinesPerRequest = 256;
+constexpr size_t unlimitedTokenizeSourceLineBudget = std::numeric_limits<size_t>::max();
 constexpr size_t retainedTokenizedRowWindowSize = 8192;
 constexpr size_t retainedTokenizedRowWindowPadding = retainedTokenizedRowWindowSize / 2;
 constexpr size_t retainedTokenizedRowEvictionMinRows = retainedTokenizedRowWindowSize * 2;
@@ -632,7 +633,7 @@ void HybridDiffDocument::ensureSideBySideLinesLocked() {
   }
 }
 
-void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end, bool highPriority) {
+void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end, bool highPriority, size_t sourceLineBudget) {
   if (rows_.empty()) {
     return;
   }
@@ -643,10 +644,11 @@ void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end
     return;
   }
 
+  DiffTokenizationRange range{safeStart, safeEnd, sourceLineBudget};
   if (highPriority) {
-    backgroundTokenizeRanges_.push_front(DiffTokenizationRange{safeStart, safeEnd});
+    backgroundTokenizeRanges_.push_front(range);
   } else {
-    backgroundTokenizeRanges_.push_back(DiffTokenizationRange{safeStart, safeEnd});
+    backgroundTokenizeRanges_.push_back(range);
   }
   backgroundTokenizeNextRowIndex_ = std::max(backgroundTokenizeNextRowIndex_, safeEnd);
 }
@@ -1222,17 +1224,20 @@ double HybridDiffDocument::cancelTokenizationRequests(const std::string& reason)
   return getTokenizedRowVersion();
 }
 
-double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount) {
+double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount, double maxSourceLineCount) {
   const auto safeChunkRowCount = static_cast<size_t>(std::max(1.0, chunkRowCount));
   const auto safeChunkBudget = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
       std::chrono::duration<double, std::milli>(std::max(1.0, chunkBudgetMs)));
+  const auto safeSourceLineBudget = maxSourceLineCount > 0
+      ? static_cast<size_t>(std::floor(maxSourceLineCount))
+      : unlimitedTokenizeSourceLineBudget;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto safeMaxRowCount = maxRowCount > 0
         ? static_cast<size_t>(std::floor(maxRowCount))
         : rows_.size();
     const auto backgroundEnd = std::min(rows_.size(), std::max(backgroundTokenizeRowIndex_, safeMaxRowCount));
-    enqueueTokenizationRangeLocked(backgroundTokenizeRowIndex_, backgroundEnd);
+    enqueueTokenizationRangeLocked(backgroundTokenizeRowIndex_, backgroundEnd, false, safeSourceLineBudget);
     if (!backgroundTokenizationRunning_.load()) {
       const auto generation = backgroundGeneration_.fetch_add(1) + 1;
       startQueuedTokenizationLocked(generation, safeChunkRowCount, safeChunkBudget);
@@ -1243,7 +1248,7 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
 }
 
 double HybridDiffDocument::startDefaultBackgroundTokenization() {
-  return startBackgroundTokenization(defaultBackgroundTokenizeChunkRowCount, defaultBackgroundTokenizeChunkBudgetMs, 0);
+  return startBackgroundTokenization(defaultBackgroundTokenizeChunkRowCount, defaultBackgroundTokenizeChunkBudgetMs, 0, 0);
 }
 
 double HybridDiffDocument::stopBackgroundTokenization() {
@@ -1567,7 +1572,7 @@ bool HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
   return tokens.has_value();
 }
 
-bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row) {
+bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row, size_t lineBudget, size_t* tokenizedLineDelta) {
   if (row.kind != diffRowKindLine) {
     return true;
   }
@@ -1582,9 +1587,9 @@ bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row
   auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
   std::lock_guard<std::mutex> sourceLock(*sourceMutex);
   if (oldSource) {
-    return tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber).has_value();
+    return tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber, lineBudget, tokenizedLineDelta).has_value();
   }
-  return tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber).has_value();
+  return tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber, lineBudget, tokenizedLineDelta).has_value();
 }
 
 bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
@@ -1595,33 +1600,65 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
   size_t changedEnd = 0;
   size_t tokenizedCount = 0;
   const auto startedAt = std::chrono::steady_clock::now();
+  auto requeueRange = [this](const DiffTokenizationRange& range) {
+    if (range.start >= range.end || range.sourceLineBudget == 0) {
+      return;
+    }
+    if (range.sourceLineBudget == unlimitedTokenizeSourceLineBudget) {
+      backgroundTokenizeRanges_.push_front(range);
+    } else {
+      backgroundTokenizeRanges_.push_back(range);
+    }
+  };
 
   while (!backgroundTokenizeRanges_.empty() && tokenizedCount < chunkRowCount) {
-    auto& range = backgroundTokenizeRanges_.front();
+    auto range = backgroundTokenizeRanges_.front();
+    backgroundTokenizeRanges_.pop_front();
     if (range.start >= range.end || range.start >= rows_.size()) {
-      backgroundTokenizeRanges_.pop_front();
+      continue;
+    }
+    if (range.sourceLineBudget == 0) {
       continue;
     }
 
     const auto rowIndex = range.start;
     range.start += 1;
     if (rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex]) {
+      requeueRange(range);
       continue;
     }
 
+    const auto sourceLineBudget = range.sourceLineBudget;
     const auto row = renderRowLocked(rowIndex);
     lock.unlock();
-    const auto rowTokenized = tokenizeRowOutsideDocumentLock(row);
+    size_t tokenizedLineDelta = 0;
+    const auto rowTokenized = tokenizeRowOutsideDocumentLock(row, sourceLineBudget, &tokenizedLineDelta);
     lock.lock();
+    if (sourceLineBudget != unlimitedTokenizeSourceLineBudget) {
+      range.sourceLineBudget = tokenizedLineDelta >= sourceLineBudget ? 0 : sourceLineBudget - tokenizedLineDelta;
+    }
     if (rowIndex < rows_.size() && rowIndex < rowTokenized_.size() && !rowTokenized_[rowIndex]) {
       if (rowTokenized) {
         rowTokenized_[rowIndex] = true;
         changedStart = std::min(changedStart, rowIndex);
         changedEnd = std::max(changedEnd, rowIndex + 1);
-      } else {
-        backgroundTokenizeRanges_.push_front(DiffTokenizationRange{rowIndex, rowIndex + 1});
+      } else if (range.sourceLineBudget > 0) {
+        const auto retryRange = DiffTokenizationRange{rowIndex, rowIndex + 1, range.sourceLineBudget};
+        if (range.sourceLineBudget == unlimitedTokenizeSourceLineBudget) {
+          requeueRange(range);
+          requeueRange(retryRange);
+        } else {
+          requeueRange(retryRange);
+          requeueRange(range);
+        }
+        tokenizedCount += 1;
+        if (tokenizedCount > 0 && std::chrono::steady_clock::now() - startedAt >= chunkBudget) {
+          break;
+        }
+        continue;
       }
     }
+    requeueRange(range);
     tokenizedCount += 1;
     if (tokenizedCount > 0 && std::chrono::steady_clock::now() - startedAt >= chunkBudget) {
       break;
@@ -1716,7 +1753,11 @@ bool HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lin
   return true;
 }
 
-std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine(DiffTokenizedSource& source, double lineNumber) {
+std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine(
+    DiffTokenizedSource& source,
+    double lineNumber,
+    size_t lineBudget,
+    size_t* tokenizedLineDelta) {
   if (!source.enabled || lineNumber < 1) {
     return std::vector<DiffSyntaxTokenRun>{};
   }
@@ -1726,8 +1767,18 @@ std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine
     return std::vector<DiffSyntaxTokenRun>{};
   }
 
-  if (!ensureTokenized(source, lineIndex + 1, maxTokenizeLinesPerRequest)) {
+  const auto tokenizedLineCountBefore = source.tokenizedLineCount;
+  const auto requestLineBudget = lineBudget == unlimitedTokenizeSourceLineBudget
+      ? maxTokenizeLinesPerRequest
+      : std::min(maxTokenizeLinesPerRequest, lineBudget);
+  if (!ensureTokenized(source, lineIndex + 1, requestLineBudget)) {
+    if (tokenizedLineDelta) {
+      *tokenizedLineDelta += source.tokenizedLineCount - tokenizedLineCountBefore;
+    }
     return std::nullopt;
+  }
+  if (tokenizedLineDelta) {
+    *tokenizedLineDelta += source.tokenizedLineCount - tokenizedLineCountBefore;
   }
   if (lineIndex < source.tokenCache.size() && source.tokenCache[lineIndex].has_value()) {
     return *source.tokenCache[lineIndex];
