@@ -161,8 +161,9 @@ export function SettingsWindow<PageId extends string = string>({
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       sidebarMinWidth={sidebarMinWidth}
+      style={styles.root}
     >
-      <View className="min-w-0 flex-1 overflow-hidden">
+      <View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
         <SettingsSidebar
           onSelectionChange={setSelectedPage}
           pages={pages}
@@ -172,6 +173,7 @@ export function SettingsWindow<PageId extends string = string>({
       </View>
       <View
         className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}
+        style={styles.pane}
       >
         {selectedPageConfig.render()}
         <SettingsToolbarBackground />
@@ -258,8 +260,9 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
       sidebarMinWidth={sidebarMinWidth}
+      style={styles.root}
     >
-      <View className="min-w-0 flex-1 overflow-hidden">
+      <View className="min-w-0 flex-1 overflow-hidden" style={styles.pane}>
         <SettingsSidebar
           onSelectionChange={scrollToPage}
           pages={pages}
@@ -267,7 +270,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
         />
         <SettingsToolbarBackground />
       </View>
-      <View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}>
+      <View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
         <LegendList
           contentContainerStyle={styles.virtualizedSettingsListContent}
           data={pages}
@@ -276,6 +279,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
           onFirstVisibleItemChanged={handleFirstVisibleItemChanged}
           ref={listRef}
           renderItem={renderSettingsPage}
+          recycleItems
           style={styles.virtualizedSettingsList}
         />
         <SettingsToolbarBackground />
@@ -504,6 +508,13 @@ export function SettingsRow({
 }
 
 const styles = StyleSheet.create({
+  pane: {
+    flex: 1,
+    minWidth: 0,
+  },
+  root: {
+    flex: 1,
+  },
   virtualizedSettingsList: {
     flex: 1,
   },
