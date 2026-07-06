@@ -16,6 +16,14 @@ const themes = new Map([
   }],
 ]);
 const isSyntaxGrammarInstalled = jest.fn(() => false);
+const getAvailableSyntaxGrammars = jest.fn(() => (
+  ["tsx", "typescript", "javascript", "json", "swift"].map((name) => ({
+    filename: `${name}.wasm`,
+    label: name,
+    name,
+    status: isSyntaxGrammarInstalled(name) ? "installed" : "available",
+  }))
+));
 const getSyntaxLanguageForPath = jest.fn((path) => {
   const extension = path.split(".").pop()?.toLowerCase();
   if (extension === "tsx" || extension === "ts" || extension === "js" || extension === "json" || extension === "swift") {
@@ -46,6 +54,7 @@ const highlightString = jest.fn(async (source) => ({
 
 function resetSyntaxParserMock() {
   getSyntaxLanguageForPath.mockClear();
+  getAvailableSyntaxGrammars.mockClear();
   isSyntaxGrammarInstalled.mockReset();
   isSyntaxGrammarInstalled.mockReturnValue(false);
   highlightString.mockClear();
@@ -55,6 +64,7 @@ function resetSyntaxParserMock() {
 module.exports = {
   __esModule: true,
   defaultSyntaxThemeName,
+  getAvailableSyntaxGrammars,
   getSyntaxLanguageForPath,
   getSyntaxTheme: (name) => themes.get(name) ?? themes.get(defaultSyntaxThemeName),
   highlightString,

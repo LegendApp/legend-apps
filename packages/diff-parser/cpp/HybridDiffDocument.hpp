@@ -131,8 +131,9 @@ public:
       double count,
       const std::vector<double>& collapsedFileIndexes,
       const std::string& reason) override;
+  double requestTokenizedFiles(const std::vector<double>& fileIndexes, const std::string& reason) override;
   double cancelTokenizationRequests(const std::string& reason) override;
-  double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) override;
+  double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount) override;
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
   void logMemorySnapshot(const std::string& reason) noexcept;
@@ -160,7 +161,8 @@ private:
   DiffRenderRow renderRowLocked(size_t index) const;
   std::vector<DiffRenderRow> renderRowsLocked(size_t start, size_t end) const;
   void ensureSideBySideLinesLocked();
-  void enqueueTokenizationRangeLocked(size_t start, size_t end);
+  void enqueueTokenizationRangeLocked(size_t start, size_t end, bool highPriority = false);
+  bool enqueueTokenizationRangeIfNeededLocked(size_t start, size_t end);
   void startQueuedTokenizationLocked(
       uint64_t generation,
       size_t chunkRowCount,
@@ -169,7 +171,6 @@ private:
   void markTokenizedRangeLocked(size_t start, size_t end);
   void clearTokenizedRowRangeLocked(size_t start, size_t end);
   void retainTokenizedRowsNearLocked(size_t start, size_t end);
-  void retainTokenizationRangesNearLocked(size_t start, size_t end);
   void releaseSourceCachesOutsideRowWindowLocked(size_t start, size_t end);
   void releaseAllSourceCachesLocked();
   DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);

@@ -97,8 +97,9 @@ namespace margelo::nitro::legenddesktop::diffparser {
       virtual DiffLoadTiming getTiming() = 0;
       virtual double requestTokenizedRows(double start, double count, const std::string& reason) = 0;
       virtual double requestTokenizedSideBySideRows(double start, double count, const std::vector<double>& collapsedFileIndexes, const std::string& reason) = 0;
+      virtual double requestTokenizedFiles(const std::vector<double>& fileIndexes, const std::string& reason) = 0;
       virtual double cancelTokenizationRequests(const std::string& reason) = 0;
-      virtual double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) = 0;
+      virtual double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount) = 0;
       virtual double stopBackgroundTokenization() = 0;
 
     protected:

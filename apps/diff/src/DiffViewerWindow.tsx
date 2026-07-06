@@ -33,6 +33,7 @@ import {
   type VirtualizedDocumentRowsState,
   type VirtualizedDocumentRequestOptions,
   type VirtualizedDocumentRequestReason,
+  type VirtualizedDocumentVisibleRangeInfo,
   type VirtualizedFixedDocumentListRef,
   type VirtualizedFixedDocumentListRenderRowProps,
 } from "@legend-desktop/virtualized-document";
@@ -117,8 +118,9 @@ import {
 } from "./viewer/diffViewerConstants";
 import {
   findFileIndexForRow,
-  requestDiffTokenizedRows,
+  getFilesForSourceRowRange,
   useDiffLoadedModel,
+  useVisibleDiffFileTokenizationScheduler,
   useDiffSideBySideRuntime,
 } from "./viewer/diffLoadedDocumentModel";
 import {
@@ -368,10 +370,10 @@ type DiffLoadedBodyProps = {
   handleDiffPaneLayout: (event: LayoutChangeEvent) => void;
   handleSidebarListLayout: (event: LayoutChangeEvent) => void;
   handleSideBySideTopItemChanged: (lineIndex: number) => void;
-  handleSideBySideVisibleRowsRequested: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
+  handleSideBySideVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
   handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
   handleTopItemChanged: (rowIndex: number) => void;
-  handleVisibleRowsRequested: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
+  handleVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
   isRenderingInitialLoadedFrame: boolean;
   listExtraData: DiffListExtraData;
   listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
@@ -2290,6 +2292,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     syntaxThemeName: syntaxTheme.name,
     viewMode: renderViewMode,
   });
+  const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
   useEffect(() => {
     if (loadedDocument) {
       return () => {
@@ -2323,36 +2326,30 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         let startTimeout: ReturnType<typeof setTimeout> | undefined;
         const startedAt = nowMs();
         startTimeout = setTimeout(() => {
-          if (document.rowCount <= diffBackgroundTokenizeMaxRowCount) {
-            const filePaths = state.files.map((file) => file.path);
-            ensureSyntaxGrammarsForPaths(filePaths)
-              .then(() => {
-                if (!cancelled) {
-                  document.startBackgroundTokenization(
-                    diffBackgroundTokenizeChunkRowCount,
-                    diffBackgroundTokenizeChunkBudgetMs,
-                  );
-                  logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
-                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                    files: state.files.length,
-                    rows: document.rowCount,
-                    rowLimit: diffBackgroundTokenizeMaxRowCount,
-                    scopes: document.scopeCount,
-                  }));
-                }
-              })
-              .catch((error: unknown) => {
-                console.error(getErrorMessage(error));
-              });
-          } else {
-            logDiffMemoryMark("viewer.syntaxTokenization.skipFullDocument", () => ({
-              durationMs: Number((nowMs() - startedAt).toFixed(1)),
-              files: state.files.length,
-              rows: document.rowCount,
-              rowLimit: diffBackgroundTokenizeMaxRowCount,
-              scopes: document.scopeCount,
-            }));
-          }
+          const backgroundRowCount = Math.min(document.rowCount, diffBackgroundTokenizeMaxRowCount);
+          const backgroundFiles = getFilesForSourceRowRange(state.files, 0, backgroundRowCount);
+          const filePaths = backgroundFiles.map((file) => file.path);
+          ensureSyntaxGrammarsForPaths(filePaths)
+            .then(() => {
+              if (!cancelled) {
+                document.startBackgroundTokenization(
+                  diffBackgroundTokenizeChunkRowCount,
+                  diffBackgroundTokenizeChunkBudgetMs,
+                  diffBackgroundTokenizeMaxRowCount,
+                );
+                logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
+                  backgroundRows: backgroundRowCount,
+                  durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                  files: backgroundFiles.length,
+                  rows: document.rowCount,
+                  rowLimit: diffBackgroundTokenizeMaxRowCount,
+                  scopes: document.scopeCount,
+                }));
+              }
+            })
+            .catch((error: unknown) => {
+              console.error(getErrorMessage(error));
+            });
         }, diffBackgroundTokenizeStartDelayMs);
         return () => {
           cancelled = true;
@@ -2423,12 +2420,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       activeFileIndex$.set(null);
     }
   }, [activeFileIndex$, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
-  const handleVisibleRowsRequested = useCallback((start: number, count: number, reason: VirtualizedDocumentRequestReason) => {
+  const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
     const currentState = state$.peek();
     if (syntaxHighlightingEnabled && currentState.status === "loaded") {
-      requestDiffTokenizedRows(currentState.document, currentState.files, start, count, reason);
+      const files = getFilesForSourceRowRange(currentState.files, start, count);
+      scheduleVisibleFileTokenization(currentState.document, files, info);
     }
-  }, [state$, syntaxHighlightingEnabled]);
+  }, [scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
 
   const handleTopItemChanged = useCallback((rowIndex: number) => {
     const currentState = state$.peek();

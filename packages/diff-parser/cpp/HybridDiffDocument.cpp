@@ -632,7 +632,7 @@ void HybridDiffDocument::ensureSideBySideLinesLocked() {
   }
 }
 
-void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end) {
+void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end, bool highPriority) {
   if (rows_.empty()) {
     return;
   }
@@ -643,8 +643,36 @@ void HybridDiffDocument::enqueueTokenizationRangeLocked(size_t start, size_t end
     return;
   }
 
-  backgroundTokenizeRanges_.push_back(DiffTokenizationRange{safeStart, safeEnd});
+  if (highPriority) {
+    backgroundTokenizeRanges_.push_front(DiffTokenizationRange{safeStart, safeEnd});
+  } else {
+    backgroundTokenizeRanges_.push_back(DiffTokenizationRange{safeStart, safeEnd});
+  }
   backgroundTokenizeNextRowIndex_ = std::max(backgroundTokenizeNextRowIndex_, safeEnd);
+}
+
+bool HybridDiffDocument::enqueueTokenizationRangeIfNeededLocked(size_t start, size_t end) {
+  const auto safeStart = std::min(start, rows_.size());
+  const auto safeEnd = std::min(std::max(end, safeStart), rows_.size());
+  if (safeStart >= safeEnd) {
+    return false;
+  }
+
+  bool needsTokenization = false;
+  for (size_t rowIndex = safeStart; rowIndex < safeEnd; rowIndex += 1) {
+    if (
+        rowIndex < rowTokenized_.size() &&
+        rows_[rowIndex].kind == diffRowKindLine &&
+        !rowTokenized_[rowIndex]) {
+      needsTokenization = true;
+      break;
+    }
+  }
+
+  if (needsTokenization) {
+    enqueueTokenizationRangeLocked(safeStart, safeEnd, true);
+  }
+  return needsTokenization;
 }
 
 void HybridDiffDocument::startQueuedTokenizationLocked(
@@ -727,7 +755,6 @@ void HybridDiffDocument::retainTokenizedRowsNearLocked(size_t start, size_t end)
     retainedTokenizedRowWindowReady_ = true;
     retainedTokenizedRowWindowStart_ = nextWindowStart;
     retainedTokenizedRowWindowEnd_ = nextWindowEnd;
-    retainTokenizationRangesNearLocked(nextWindowStart, nextWindowEnd);
     releaseSourceCachesOutsideRowWindowLocked(nextWindowStart, nextWindowEnd);
     return;
   }
@@ -748,20 +775,7 @@ void HybridDiffDocument::retainTokenizedRowsNearLocked(size_t start, size_t end)
 
   retainedTokenizedRowWindowStart_ = nextWindowStart;
   retainedTokenizedRowWindowEnd_ = nextWindowEnd;
-  retainTokenizationRangesNearLocked(nextWindowStart, nextWindowEnd);
   releaseSourceCachesOutsideRowWindowLocked(nextWindowStart, nextWindowEnd);
-}
-
-void HybridDiffDocument::retainTokenizationRangesNearLocked(size_t start, size_t end) {
-  std::deque<DiffTokenizationRange> retainedRanges;
-  for (const auto& range : backgroundTokenizeRanges_) {
-    const auto retainedStart = std::max(range.start, start);
-    const auto retainedEnd = std::min(range.end, end);
-    if (retainedStart < retainedEnd) {
-      retainedRanges.push_back(DiffTokenizationRange{retainedStart, retainedEnd});
-    }
-  }
-  backgroundTokenizeRanges_ = std::move(retainedRanges);
 }
 
 void HybridDiffDocument::releaseSourceCachesOutsideRowWindowLocked(size_t start, size_t end) {
@@ -1091,7 +1105,7 @@ double HybridDiffDocument::requestTokenizedRows(double start, double count, cons
   std::lock_guard<std::mutex> lock(mutex_);
   const auto generation = backgroundGeneration_.load();
   retainTokenizedRowsNearLocked(safeStart, safeStart + safeCount);
-  enqueueTokenizationRangeLocked(safeStart, safeStart + safeCount);
+  enqueueTokenizationRangeLocked(safeStart, safeStart + safeCount, true);
   startQueuedTokenizationLocked(
       generation,
       static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount),
@@ -1127,13 +1141,13 @@ double HybridDiffDocument::requestTokenizedSideBySideRows(
           const auto oldRowIndex = static_cast<size_t>(line.oldRowIndex);
           requestedRowStart = std::min(requestedRowStart, oldRowIndex);
           requestedRowEnd = std::max(requestedRowEnd, oldRowIndex + 1);
-          enqueueTokenizationRangeLocked(oldRowIndex, oldRowIndex + 1);
+          enqueueTokenizationRangeLocked(oldRowIndex, oldRowIndex + 1, true);
         }
         if (line.newRowIndex >= 0 && line.newRowIndex != line.oldRowIndex) {
           const auto newRowIndex = static_cast<size_t>(line.newRowIndex);
           requestedRowStart = std::min(requestedRowStart, newRowIndex);
           requestedRowEnd = std::max(requestedRowEnd, newRowIndex + 1);
-          enqueueTokenizationRangeLocked(newRowIndex, newRowIndex + 1);
+          enqueueTokenizationRangeLocked(newRowIndex, newRowIndex + 1, true);
         }
       }
       logicalIndex += 1;
@@ -1155,6 +1169,50 @@ double HybridDiffDocument::requestTokenizedSideBySideRows(
   return getTokenizedRowVersion();
 }
 
+double HybridDiffDocument::requestTokenizedFiles(const std::vector<double>& fileIndexes, const std::string& reason) {
+  (void)reason;
+  if (fileIndexes.empty()) {
+    return getTokenizedRowVersion();
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto generation = backgroundGeneration_.load();
+  size_t requestedRowStart = rows_.size();
+  size_t requestedRowEnd = 0;
+  bool hasRequestedRange = false;
+
+  for (const auto fileIndexValue : fileIndexes) {
+    if (fileIndexValue < 0) {
+      continue;
+    }
+
+    const auto fileIndex = static_cast<size_t>(std::floor(fileIndexValue));
+    if (fileIndex >= files_.size()) {
+      continue;
+    }
+
+    const auto& file = files_[fileIndex];
+    const auto rowStart = static_cast<size_t>(std::max(0.0, std::floor(file.rowStart)));
+    const auto rowCount = static_cast<size_t>(std::max(0.0, std::ceil(file.rowCount)));
+    const auto rowEnd = std::min(rows_.size(), rowStart + rowCount);
+    if (enqueueTokenizationRangeIfNeededLocked(rowStart, rowEnd)) {
+      requestedRowStart = std::min(requestedRowStart, rowStart);
+      requestedRowEnd = std::max(requestedRowEnd, rowEnd);
+      hasRequestedRange = true;
+    }
+  }
+
+  if (hasRequestedRange) {
+    retainTokenizedRowsNearLocked(requestedRowStart, requestedRowEnd);
+    startQueuedTokenizationLocked(
+        generation,
+        static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount),
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+            std::chrono::duration<double, std::milli>(defaultBackgroundTokenizeChunkBudgetMs)));
+  }
+  return getTokenizedRowVersion();
+}
+
 double HybridDiffDocument::cancelTokenizationRequests(const std::string& reason) {
   (void)reason;
   stopBackgroundTokenization();
@@ -1164,25 +1222,28 @@ double HybridDiffDocument::cancelTokenizationRequests(const std::string& reason)
   return getTokenizedRowVersion();
 }
 
-double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs) {
-  stopBackgroundTokenization();
-
+double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount) {
   const auto safeChunkRowCount = static_cast<size_t>(std::max(1.0, chunkRowCount));
   const auto safeChunkBudget = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
       std::chrono::duration<double, std::milli>(std::max(1.0, chunkBudgetMs)));
-  const auto generation = backgroundGeneration_.fetch_add(1) + 1;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    backgroundTokenizeRanges_.clear();
-    enqueueTokenizationRangeLocked(backgroundTokenizeRowIndex_, rows_.size());
-    startQueuedTokenizationLocked(generation, safeChunkRowCount, safeChunkBudget);
+    const auto safeMaxRowCount = maxRowCount > 0
+        ? static_cast<size_t>(std::floor(maxRowCount))
+        : rows_.size();
+    const auto backgroundEnd = std::min(rows_.size(), std::max(backgroundTokenizeRowIndex_, safeMaxRowCount));
+    enqueueTokenizationRangeLocked(backgroundTokenizeRowIndex_, backgroundEnd);
+    if (!backgroundTokenizationRunning_.load()) {
+      const auto generation = backgroundGeneration_.fetch_add(1) + 1;
+      startQueuedTokenizationLocked(generation, safeChunkRowCount, safeChunkBudget);
+    }
   }
 
   return getTokenizedRowVersion();
 }
 
 double HybridDiffDocument::startDefaultBackgroundTokenization() {
-  return startBackgroundTokenization(defaultBackgroundTokenizeChunkRowCount, defaultBackgroundTokenizeChunkBudgetMs);
+  return startBackgroundTokenization(defaultBackgroundTokenizeChunkRowCount, defaultBackgroundTokenizeChunkBudgetMs, 0);
 }
 
 double HybridDiffDocument::stopBackgroundTokenization() {

@@ -32,6 +32,11 @@ export type VirtualizedDocumentRequestOptions = {
   reason?: VirtualizedDocumentRequestReason;
 };
 
+export type VirtualizedDocumentVisibleRangeInfo = {
+  reason: VirtualizedDocumentRequestReason;
+  scrollVelocity: number;
+};
+
 export type VirtualizedDocumentRowsRequestResult<TStyle, TTiming> = {
   styles?: readonly TStyle[];
   timing?: TTiming;
@@ -103,7 +108,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   listRef?: Ref<LegendListRef>;
   onInitialRowsRequested?: (start: number, count: number) => void;
   onTopItemChanged?: (index: number, listIndex: number) => void;
-  onVisibleRowsRequested?: (start: number, count: number, reason: VirtualizedDocumentRequestReason) => void;
+  onVisibleRowsRequested?: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
   lineOverscan?: number;
   overscanRequestDelayMs?: number;
   recycleItems?: boolean;
@@ -451,6 +456,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   const renderItemCallbackBatchRef = useRef<CallbackDebugBatch | null>(null);
   const renderCountRef = useRef(0);
   const internalListRef = useRef<LegendListRef | null>(null);
+  const lastScrollSampleRef = useRef<{ offsetY: number; timestamp: number } | null>(null);
   const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
   const listExtraData = useMemo(
     () => ({
@@ -529,7 +535,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     }
   }, [itemIndexes, onTopItemChanged]);
 
-  const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason) => {
+  const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason, scrollVelocity = 0) => {
     const rowOffsetY = Math.max(0, offsetY - listHeaderHeight);
     const visibleStart = Math.floor(rowOffsetY / rowHeight);
     const visibleCount = Math.ceil(height / rowHeight);
@@ -555,12 +561,12 @@ export function VirtualizedFixedDocumentList<TRow>({
     });
     requestRange(documentRange.start, documentRange.count, { reason });
     if (visibleDocumentRange.count > 0) {
-      onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, reason);
+      onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, { reason, scrollVelocity });
     }
     return documentRange;
   }, [debugName, getDocumentIndex, initialRequestRowCount, itemIndexes, lineOverscan, listHeaderHeight, onVisibleRowsRequested, requestRange, rowHeight]);
 
-  const requestLegendListRange = useCallback((reason: VirtualizedDocumentRequestReason) => {
+  const requestLegendListRange = useCallback((reason: VirtualizedDocumentRequestReason, scrollVelocity = 0) => {
     const listState = internalListRef.current?.getState();
     if (listState && listState.start >= 0 && listState.end >= listState.start) {
       const requestListStart = listState.startBuffered >= 0 ? listState.startBuffered : listState.start;
@@ -582,7 +588,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       });
       requestRange(documentRange.start, documentRange.count, { reason });
       if (visibleDocumentRange.count > 0) {
-        onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, reason);
+        onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, { reason, scrollVelocity });
       }
       return true;
     }
@@ -636,13 +642,22 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const timestamp = debugNowMs();
+    const previousSample = lastScrollSampleRef.current;
+    const elapsedMs = previousSample ? Math.max(1, timestamp - previousSample.timestamp) : 0;
+    const scrollVelocity = previousSample ? Math.abs(contentOffset.y - previousSample.offsetY) / elapsedMs : 0;
+    lastScrollSampleRef.current = {
+      offsetY: contentOffset.y,
+      timestamp,
+    };
     debugLog(debugName, "list.scroll", {
       height: layoutMeasurement.height,
       offsetY: contentOffset.y,
+      scrollVelocity,
     });
     if (requestRangesOnScroll) {
-      if (!requestLegendListRange("scroll")) {
-        requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll");
+      if (!requestLegendListRange("scroll", scrollVelocity)) {
+        requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll", scrollVelocity);
       }
     }
   }, [debugName, requestLegendListRange, requestRangesOnScroll, requestVisibleRange]);
