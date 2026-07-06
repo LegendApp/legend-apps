@@ -180,7 +180,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     initialProperties,
     interceptClose: true,
     representedURL: source?.value,
-    title: source ? diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }) : "",
+    title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
     transparentBackground: true,
     windowStyle: createDiffViewerWindowStyle({
       includeFrame: true,

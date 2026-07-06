@@ -1,7 +1,7 @@
 import { NativeSegmentedControl } from "@legend-desktop/native-select";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
 import type { DiffOpenSource } from "../diffFiles";
 import {
@@ -14,12 +14,12 @@ import {
   type DiffRecentSourceGroup,
 } from "./diffStartScreenModel";
 
-const diffStartScreenMaxContentWidth = 1080;
+const diffStartScreenMaxContentWidth = 900;
+const diffStartScreenTitlebarOffset = 34;
+const diffStartScreenSectionGap = 42;
 const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
-const diffAppIconSource = require("../../macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset/icon_32x32.png");
-
 export type DiffStartScreenProps = {
   backgroundColor: string;
   borderColor: string;
@@ -177,14 +177,6 @@ export function DiffStartScreen({
     <View style={[styles.root, { backgroundColor }]}>
       <View style={styles.startPage}>
         <View style={styles.launcherSection}>
-          <View style={styles.identity}>
-            <View style={[styles.identityIconFrame, { borderColor }]}>
-              <Image source={diffAppIconSource} style={styles.identityIcon} />
-            </View>
-            <View style={styles.identityText}>
-              <Text style={[styles.identityTitle, { color: foregroundColor }]}>Legend Diff</Text>
-            </View>
-          </View>
           <View style={styles.launcherControls}>
             <View style={styles.launcherRow}>
               <Pressable
@@ -245,6 +237,7 @@ export function DiffStartScreen({
             ) : null}
           </View>
         </View>
+        <View style={[styles.sectionDivider, { backgroundColor: borderColor }]} />
         <View style={styles.recentSection}>
           {recentSources.length > 0 ? (
             <>
@@ -287,34 +280,6 @@ export function DiffStartScreen({
 }
 
 const styles = StyleSheet.create({
-  identity: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 2,
-  },
-  identityIconFrame: {
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 52,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: 52,
-  },
-  identityIcon: {
-    height: 52,
-    width: 52,
-  },
-  identityText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  identityTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    lineHeight: 32,
-  },
   launcherRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -339,12 +304,11 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 42,
     justifyContent: "center",
-    paddingHorizontal: 14,
-    width: 220,
+    paddingHorizontal: 16,
   },
   openFolderText: {
     color: "#ffffff",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
   },
@@ -415,8 +379,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    paddingHorizontal: 72,
-    paddingTop: 64,
+    paddingHorizontal: 24,
+    paddingTop: diffStartScreenTitlebarOffset + diffStartScreenSectionGap,
     position: "relative",
   },
   segmentedControl: {
@@ -424,11 +388,15 @@ const styles = StyleSheet.create({
     marginTop: 18,
     width: 312,
   },
+  sectionDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: "100%",
+  },
   recentSection: {
     minWidth: 0,
   },
   startPage: {
-    gap: 42,
+    gap: diffStartScreenSectionGap,
     maxWidth: diffStartScreenMaxContentWidth,
     width: "100%",
   },

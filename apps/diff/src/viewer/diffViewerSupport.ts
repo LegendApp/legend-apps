@@ -144,9 +144,7 @@ export function getDiffWindowToolbarModel({
   const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? state.source : null);
   const showViewModeToolbar = toolbarSource !== null;
   const source = toolbarSource ?? state.source;
-  const title = state.status === "empty" && toolbarSource === null
-    ? ""
-    : diffViewerWindowTitle({ hasUnsavedMergeDrafts, source });
+  const title = diffViewerWindowTitle({ hasUnsavedMergeDrafts, source });
 
   return {
     hasUnsavedMergeDrafts,

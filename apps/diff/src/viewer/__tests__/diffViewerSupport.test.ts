@@ -143,7 +143,7 @@ describe("diffViewerSupport", () => {
     expect(diffToolbarModelsEqual(model, { ...model, viewMode: "blocks" })).toBe(false);
   });
 
-  it("uses an empty window title for the empty start screen", () => {
+  it("uses the app window title for the empty start screen", () => {
     const emptyState: DiffViewerState = { folderPath: null, source: null, status: "empty" };
     expect(getDiffWindowToolbarModel({
       hasUnsavedMergeDrafts: false,
@@ -153,7 +153,7 @@ describe("diffViewerSupport", () => {
       viewMode: "unified",
     })).toMatchObject({
       source: null,
-      title: "",
+      title: "Legend Diff  ",
       toolbarSource: null,
     });
 
