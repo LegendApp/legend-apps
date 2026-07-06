@@ -110,8 +110,14 @@ import {
   diffOverscanRequestDelayMs,
   diffProgressiveInitialPaintMaxDelayMs,
   diffProgressiveInitialPaintRowCount,
+  diffProgressiveItemCountExpandChunkRowCount,
+  diffProgressiveItemCountExpandThresholdRows,
+  diffProgressiveItemCountPrewarmDelayMs,
+  diffProgressiveItemCountPrewarmRowCount,
   diffProgressiveLoadedStatePublishMs,
   diffProgressiveLoadPollMs,
+  diffProgressivePostInitialLoadPollMs,
+  diffProgressivePostInitialLoadResumeMs,
   diffRowKindFileHeader,
   diffSidebarFileRowHeight,
   diffSidebarTopInset,
@@ -206,6 +212,11 @@ type DiffLoadedCacheEntry = {
   loadComplete: boolean;
 };
 
+type DiffItemCountLimitState = {
+  documentId: number;
+  limit: number;
+};
+
 type DiffMergeDraftFile = {
   content: string;
   file: DiffMergeConflictFile;
@@ -257,9 +268,9 @@ function createGitDiffCommandError(commandResult: DiffCommandResult) {
   return new Error(message);
 }
 
-function waitForDiffProgressPoll() {
+function waitForDiffProgressPoll(delayMs = diffProgressiveLoadPollMs) {
   return new Promise<void>((resolve) => {
-    setTimeout(resolve, diffProgressiveLoadPollMs);
+    setTimeout(resolve, delayMs);
   });
 }
 
@@ -1125,6 +1136,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
+          debugName="diff-unified-list"
           estimatedItemSize={rowHeight}
           key="unified"
           extraData={listExtraData}
@@ -1153,6 +1165,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
+          debugName="diff-side-by-side-list"
           estimatedItemSize={rowHeight}
           key={viewMode}
           extraData={listExtraData}
@@ -2228,9 +2241,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const sidebarConflictBadgeTextColor = diffPalette.sidebarConflictBadgeText;
   const loadedDocument = state.status === "loaded" ? state.document : null;
   const loadedDocumentId = loadedDocument?.documentId ?? 0;
-  const [uncappedInitialPaintDocumentId, setUncappedInitialPaintDocumentId] = useState<number | null>(null);
-  const initialItemCountLimit = loadedDocument !== null && uncappedInitialPaintDocumentId !== loadedDocumentId
-    ? diffProgressiveInitialPaintRowCount
+  const loadedDocumentRowCount = loadedDocument ? Math.max(0, Math.floor(loadedDocument.rowCount)) : 0;
+  const [itemCountLimitState, setItemCountLimitState] = useState<DiffItemCountLimitState | null>(null);
+  const currentItemCountLimit = itemCountLimitState?.documentId === loadedDocumentId
+    ? itemCountLimitState.limit
+    : diffProgressiveInitialPaintRowCount;
+  const initialItemCountLimit = loadedDocument !== null && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
+    ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
     : null;
 
   useObserveEffect(() => {
@@ -2303,6 +2320,64 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     syntaxHighlightingEnabled,
     viewMode: renderViewMode,
   });
+
+  const expandItemCountLimit = useCallback((documentId: number, requestedMinimum: number, reason: string) => {
+    setItemCountLimitState((current) => {
+      let nextState = current;
+      if (loadedDocument !== null && loadedDocumentId === documentId && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount) {
+        const currentLimit = current?.documentId === documentId
+          ? current.limit
+          : diffProgressiveInitialPaintRowCount;
+        const nextLimit = Math.min(
+          loadedDocumentRowCount,
+          Math.max(
+            Math.ceil(requestedMinimum),
+            currentLimit + diffProgressiveItemCountExpandChunkRowCount,
+          ),
+        );
+
+        if (nextLimit > currentLimit) {
+          nextState = {
+            documentId,
+            limit: nextLimit,
+          };
+          logDiffOpenTiming("viewer.itemCountLimit.expand", () => ({
+            currentLimit,
+            documentId,
+            nextLimit,
+            reason,
+            rows: loadedDocumentRowCount,
+          }));
+        }
+      }
+      return nextState;
+    });
+  }, [loadedDocument, loadedDocumentId, loadedDocumentRowCount]);
+
+  const maybeExpandItemCountLimitForVisibleRange = useCallback((start: number, count: number, reason: string) => {
+    if (loadedDocument !== null && initialItemCountLimit !== null) {
+      const visibleEnd = Math.max(0, Math.floor(start)) + Math.max(0, Math.ceil(count));
+      const requestedMinimum = visibleEnd + diffProgressiveItemCountExpandThresholdRows;
+      if (requestedMinimum >= initialItemCountLimit) {
+        expandItemCountLimit(loadedDocumentId, requestedMinimum, reason);
+      }
+    }
+  }, [expandItemCountLimit, initialItemCountLimit, loadedDocument, loadedDocumentId]);
+
+  const prewarmItemCountLimit = useCallback((documentId: number, reason: "side-by-side-row-render" | "unified-row-render") => {
+    requestAnimationFrame(() => {
+      logDiffOpenTiming("viewer.itemCountLimit.firstPaint", () => ({
+        documentId,
+        limit: initialItemCountLimit,
+        reason,
+        rows: loadedDocumentRowCount,
+      }));
+      setTimeout(() => {
+        expandItemCountLimit(documentId, diffProgressiveItemCountPrewarmRowCount, `${reason}:prewarm`);
+      }, diffProgressiveItemCountPrewarmDelayMs);
+    });
+  }, [expandItemCountLimit, initialItemCountLimit, loadedDocumentRowCount]);
+
   useEffect(() => {
     if (state.status === "loaded" && state.loadComplete !== false) {
       const document = state.document;
@@ -2404,12 +2479,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [activeFileIndex$, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
   const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
+    maybeExpandItemCountLimitForVisibleRange(start, count, `unified:${info.reason}`);
     const currentState = state$.peek();
     if (syntaxHighlightingEnabled && currentState.status === "loaded") {
       const files = getFilesForSourceRowRange(currentState.files, start, count);
       scheduleVisibleFileTokenization(currentState.document, files, info);
     }
-  }, [scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
+  }, [maybeExpandItemCountLimitForVisibleRange, scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
+
+  const handleLimitedSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
+    maybeExpandItemCountLimitForVisibleRange(start, count, `side-by-side:${info.reason}`);
+    handleSideBySideVisibleRowsRequested(start, count, info);
+  }, [handleSideBySideVisibleRowsRequested, maybeExpandItemCountLimitForVisibleRange]);
 
   const handleTopItemChanged = useCallback((rowIndex: number) => {
     const currentState = state$.peek();
@@ -2782,8 +2863,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               let progress = loadedResult;
               setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
               while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
-                await waitForDiffProgressPoll();
-                progress = progressiveSession.consumeChanges(initialRowCount);
+                await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
+                progress = progressiveSession.consumeChanges(0);
                 setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
               }
               if (loadRequestIdRef.current !== requestId) {
@@ -2801,9 +2882,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                 let lastRowVersion = loadedResult.rowVersion;
                 let lastStatePublishedAt = nowMs();
                 let progress = loadedResult;
+                await waitForDiffProgressPoll(diffProgressivePostInitialLoadResumeMs);
                 while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
-                  await waitForDiffProgressPoll();
-                  progress = progressiveSession.consumeChanges(initialRowCount);
+                  await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
+                  progress = progressiveSession.consumeChanges(0);
                   const hasChanges =
                     progress.rowVersion !== lastRowVersion ||
                     progress.fileVersion !== lastFileVersion ||
@@ -3695,16 +3777,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return rowHeight + (isDiffUnifiedHunkStart(loadedDocument, index, row) ? diffHunkHeaderHeight : 0);
   }, [getItemType, loadedDocument, rowHeight, showOnlyHunks]);
 
-  const releaseInitialItemCountLimit = useCallback((documentId: number, reason: "side-by-side-row-render" | "unified-row-render") => {
-    requestAnimationFrame(() => {
-      setUncappedInitialPaintDocumentId(documentId);
-      logDiffOpenTiming("viewer.initialItemCountLimit.release", () => ({
-        documentId,
-        reason,
-      }));
-    });
-  }, []);
-
   const renderRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
       if (!loggedFirstUnifiedRowRenderRef.current) {
@@ -3714,7 +3786,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index,
           rowKind: row?.kind,
         }));
-        releaseInitialItemCountLimit(loadedDocumentId, "unified-row-render");
+        prewarmItemCountLimit(loadedDocumentId, "unified-row-render");
       }
       return (
         <DiffUnifiedRow
@@ -3726,7 +3798,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, releaseInitialItemCountLimit, renderFields],
+    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -3751,7 +3823,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index,
           rowKind: row?.kind,
         }));
-        releaseInitialItemCountLimit(loadedDocumentId, "side-by-side-row-render");
+        prewarmItemCountLimit(loadedDocumentId, "side-by-side-row-render");
       }
       return (
         <DiffSideBySideRow
@@ -3763,7 +3835,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, releaseInitialItemCountLimit, renderFields],
+    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields],
   );
 
   const documentErrorHeight = documentError
@@ -3847,7 +3919,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         handleDiffPaneLayout={handleDiffPaneLayout}
         handleSidebarListLayout={handleSidebarListLayout}
         handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
-        handleSideBySideVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
+        handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested}
         handleSplitViewResize={handleSplitViewResize}
         handleTopItemChanged={handleTopItemChanged}
         handleVisibleRowsRequested={handleVisibleRowsRequested}

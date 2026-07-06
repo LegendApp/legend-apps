@@ -122,6 +122,23 @@ function getDiffFileIndexes(files: readonly DiffFileSummary[]) {
   return indexes;
 }
 
+function createInitialSideBySideFileHeaders(files: readonly DiffFileSummary[], rowCount: number) {
+  const safeRowCount = Math.max(0, Math.floor(rowCount));
+  const headers: DiffSideBySideFileHeader[] = [];
+  for (const file of files) {
+    const rowStart = Math.max(0, Math.floor(file.rowStart));
+    if (rowStart >= safeRowCount) {
+      break;
+    }
+    headers.push({
+      fileIndex: file.index,
+      listIndex: rowStart,
+      sourceStart: rowStart,
+    });
+  }
+  return headers;
+}
+
 function requestTokenizedFilesAfterGrammarLoad({
   document,
   files,
@@ -489,13 +506,20 @@ export function useDiffLoadedModel({
   const sideBySideRowCount = useMemo(
     () => {
       const startedAt = nowMs();
+      const isInitialCountLimited = initialItemCountLimit !== null && initialItemCountLimit !== undefined;
       const count = state.status === "loaded" && viewMode !== "unified"
-        ? Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
+        ? isInitialCountLimited
+          ? Math.min(
+            Math.max(0, Math.floor(state.document.rowCount)),
+            Math.max(0, Math.floor(initialItemCountLimit)),
+          )
+          : Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
         : 0;
       if (state.status === "loaded") {
         logDiffOpenTiming("viewer.derive.sideBySideRowCount", () => ({
           collapsedFiles: collapsedFileIndexList.length,
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
+          initialItemCountLimit,
           rows: state.document.rowCount,
           sideBySideRows: count,
           viewMode,
@@ -503,7 +527,7 @@ export function useDiffLoadedModel({
       }
       return count;
     },
-    [collapsedFileIndexList, state, viewMode],
+    [collapsedFileIndexList, initialItemCountLimit, state, viewMode],
   );
   const sideBySideItemIndexes = useMemo(
     () => {
@@ -523,21 +547,25 @@ export function useDiffLoadedModel({
   const sideBySideFileHeaders = useMemo(
     () => {
       const startedAt = nowMs();
+      const isInitialCountLimited = initialItemCountLimit !== null && initialItemCountLimit !== undefined;
       const headers = state.status === "loaded" && viewMode !== "unified"
-        ? state.document.getSideBySideFileHeaders(collapsedFileIndexList)
+        ? isInitialCountLimited
+          ? createInitialSideBySideFileHeaders(state.files, sideBySideRowCount)
+          : state.document.getSideBySideFileHeaders(collapsedFileIndexList)
         : [];
       if (state.status === "loaded") {
         logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", () => ({
           collapsedFiles: collapsedFileIndexList.length,
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
           files: headers.length,
+          initialItemCountLimit,
           rows: state.document.rowCount,
           viewMode,
         }));
       }
       return headers;
     },
-    [collapsedFileIndexList, state, viewMode],
+    [collapsedFileIndexList, initialItemCountLimit, sideBySideRowCount, state, viewMode],
   );
   const sideBySideFileHeaderIndexes = useMemo(
     () => {

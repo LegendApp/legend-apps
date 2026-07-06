@@ -1,7 +1,13 @@
 export const diffInitialRowCount = 160;
 export const diffProgressiveLoadPollMs = 16;
+export const diffProgressivePostInitialLoadPollMs = 500;
+export const diffProgressivePostInitialLoadResumeMs = 250;
 export const diffProgressiveLoadedStatePublishMs = 120;
 export const diffProgressiveInitialPaintRowCount = 1_000;
+export const diffProgressiveItemCountExpandChunkRowCount = 5_000;
+export const diffProgressiveItemCountExpandThresholdRows = 240;
+export const diffProgressiveItemCountPrewarmDelayMs = 320;
+export const diffProgressiveItemCountPrewarmRowCount = 5_000;
 export const diffProgressiveInitialPaintMaxDelayMs = 160;
 export const diffLoadedCacheMaxRows = 100_000;
 export const diffInitialHighlightChunkRowCount = 40;

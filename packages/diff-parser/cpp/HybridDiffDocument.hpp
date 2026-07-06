@@ -162,7 +162,7 @@ private:
   void appendStoredRowLocked(DiffRenderRow row);
   DiffRenderRow renderRowLocked(size_t index) const;
   std::vector<DiffRenderRow> renderRowsLocked(size_t start, size_t end) const;
-  void ensureSideBySideLinesLocked();
+  void ensureSideBySideLinesLocked(size_t minLineCount = std::numeric_limits<size_t>::max());
   void enqueueTokenizationRangeLocked(
       size_t start,
       size_t end,
@@ -216,6 +216,7 @@ private:
   std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
   bool sideBySideLinesReady_ = false;
+  size_t sideBySideSourceRowCount_ = 0;
   std::vector<DiffFileSources> fileSources_;
   std::string repositoryPath_;
   std::string workdirPath_;
