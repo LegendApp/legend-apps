@@ -14,7 +14,6 @@ import {
   type DiffRecentSourceGroup,
 } from "./diffStartScreenModel";
 
-const diffStartScreenSidebarWidth = 312;
 const diffStartScreenMaxContentWidth = 1080;
 const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
@@ -169,7 +168,6 @@ export function DiffStartScreen({
   recentFilter,
   recentSources,
   setRecentFilter,
-  sidebarBackgroundColor,
   urlInput,
   urlInputError,
   urlInputRef,
@@ -177,8 +175,8 @@ export function DiffStartScreen({
   const recentGroups = getGroupedRecentDiffSources(recentSources, recentFilter);
   return (
     <View style={[styles.root, { backgroundColor }]}>
-      <View style={[styles.sidebar, { backgroundColor: sidebarBackgroundColor, borderColor }]}>
-        <View style={styles.sidebarLaunchCluster}>
+      <View style={styles.startPage}>
+        <View style={styles.launcherSection}>
           <View style={styles.identity}>
             <View style={[styles.identityIconFrame, { borderColor }]}>
               <Image source={diffAppIconSource} style={styles.identityIcon} />
@@ -187,54 +185,58 @@ export function DiffStartScreen({
               <Text style={[styles.identityTitle, { color: foregroundColor }]}>Legend Diff</Text>
             </View>
           </View>
-          <View style={styles.launcher}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isLoading}
-              onPress={onChooseFolder}
-              style={({ pressed }) => [
-                styles.openFolderButton,
-                {
-                  backgroundColor: diffStartScreenAccentColor,
-                  opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
-                },
-              ]}
-            >
-              <SFSymbol color="#ffffff" name="folder" size={17} />
-              <Text style={styles.openFolderText}>Open Folder</Text>
-            </Pressable>
-            <View style={[styles.urlField, { borderColor }]}>
-              <SFSymbol color={mutedColor} name="link" size={15} />
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={onChangeUrlInput}
-                onSubmitEditing={onOpenUrl}
-                placeholder="Paste GitHub URL"
-                placeholderTextColor={mutedColor}
-                ref={urlInputRef}
-                returnKeyType="go"
-                style={[styles.urlInput, { color: foregroundColor }]}
-                value={urlInput}
-              />
+          <View style={styles.launcherControls}>
+            <View style={styles.launcherRow}>
               <Pressable
                 accessibilityRole="button"
-                disabled={isLoading || !urlInput.trim()}
-                onPress={onOpenUrl}
+                disabled={isLoading}
+                onPress={onChooseFolder}
                 style={({ pressed }) => [
-                  styles.urlOpenButton,
+                  styles.openFolderButton,
                   {
-                    borderColor,
-                    opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                    backgroundColor: diffStartScreenAccentColor,
+                    opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
                   },
                 ]}
               >
-                {isLoadingGithub ? (
-                  <ActivityIndicator color={foregroundColor} size="small" />
-                ) : (
-                  <Text style={[styles.urlOpenButtonText, { color: foregroundColor }]}>Open</Text>
-                )}
+                <SFSymbol color="#ffffff" name="folder" size={17} />
+                <Text style={styles.openFolderText}>Open Folder</Text>
               </Pressable>
+              <View style={[styles.urlField, { borderColor }]}>
+                <SFSymbol color={mutedColor} name="link" size={15} />
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={onChangeUrlInput}
+                  onSubmitEditing={onOpenUrl}
+                  placeholder="Paste GitHub URL"
+                  placeholderTextColor={mutedColor}
+                  multiline={false}
+                  numberOfLines={1}
+                  ref={urlInputRef}
+                  returnKeyType="go"
+                  style={[styles.urlInput, { color: foregroundColor }]}
+                  value={urlInput}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isLoading || !urlInput.trim()}
+                  onPress={onOpenUrl}
+                  style={({ pressed }) => [
+                    styles.urlOpenButton,
+                    {
+                      borderColor,
+                      opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                    },
+                  ]}
+                >
+                  {isLoadingGithub ? (
+                    <ActivityIndicator color={foregroundColor} size="small" />
+                  ) : (
+                    <Text style={[styles.urlOpenButtonText, { color: foregroundColor }]}>Open</Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
             {urlInputError ? (
               <Text style={[styles.validationText, { color: dangerColor }]}>
@@ -243,9 +245,7 @@ export function DiffStartScreen({
             ) : null}
           </View>
         </View>
-      </View>
-      <View style={styles.content}>
-        <View style={styles.contentInner}>
+        <View style={styles.recentSection}>
           {recentSources.length > 0 ? (
             <>
               <View style={styles.recentHeader}>
@@ -276,29 +276,17 @@ export function DiffStartScreen({
             </>
           ) : null}
         </View>
-        {openErrorBody ? (
-          <View style={styles.openError}>
-            {openErrorBody}
-          </View>
-        ) : null}
       </View>
+      {openErrorBody ? (
+        <View style={styles.openError}>
+          {openErrorBody}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    flex: 1,
-    minWidth: 0,
-    position: "relative",
-  },
-  contentInner: {
-    alignSelf: "center",
-    maxWidth: diffStartScreenMaxContentWidth,
-    paddingHorizontal: 48,
-    paddingTop: 32,
-    width: "100%",
-  },
   identity: {
     alignItems: "center",
     flexDirection: "row",
@@ -323,12 +311,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   identityTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "700",
-    lineHeight: 26,
+    lineHeight: 32,
   },
-  launcher: {
+  launcherRow: {
+    alignItems: "center",
+    flexDirection: "row",
     gap: 12,
+  },
+  launcherSection: {
+    gap: 28,
+  },
+  launcherControls: {
+    gap: 8,
   },
   openError: {
     bottom: 28,
@@ -344,6 +340,7 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: "center",
     paddingHorizontal: 14,
+    width: 220,
   },
   openFolderText: {
     color: "#ffffff",
@@ -361,7 +358,7 @@ const styles = StyleSheet.create({
   },
   recentGroups: {
     gap: 26,
-    paddingTop: 28,
+    paddingTop: 24,
   },
   recentGroupTitle: {
     fontSize: 13,
@@ -414,32 +411,36 @@ const styles = StyleSheet.create({
     lineHeight: 30,
   },
   root: {
+    alignItems: "center",
     flex: 1,
-    flexDirection: "row",
     minHeight: 0,
     minWidth: 0,
+    paddingHorizontal: 72,
+    paddingTop: 64,
+    position: "relative",
   },
   segmentedControl: {
     height: 28,
     marginTop: 18,
     width: 312,
   },
-  sidebar: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    justifyContent: "center",
-    paddingHorizontal: 28,
-    width: diffStartScreenSidebarWidth,
+  recentSection: {
+    minWidth: 0,
   },
-  sidebarLaunchCluster: {
-    gap: 28,
+  startPage: {
+    gap: 42,
+    maxWidth: diffStartScreenMaxContentWidth,
+    width: "100%",
   },
   urlField: {
     alignItems: "center",
     borderRadius: 7,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
+    flex: 1,
     gap: 8,
     height: 42,
+    minWidth: 0,
     paddingLeft: 12,
   },
   urlInput: {
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
     height: 40,
     lineHeight: 18,
     minWidth: 0,
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
     paddingVertical: 9,
   },
   urlOpenButton: {
