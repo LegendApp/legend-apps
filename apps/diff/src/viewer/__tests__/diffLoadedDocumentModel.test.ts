@@ -6,7 +6,7 @@ import {
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
-} from "../diffLoadedDocumentModel";
+} from "../diffLoadedDocumentIndexes";
 
 function createFile(overrides: Partial<DiffFileSummary>): DiffFileSummary {
   return {
@@ -61,9 +61,10 @@ describe("diffLoadedDocumentModel", () => {
   it("creates stable side-by-side identity indexes", () => {
     const indexes = createIdentityDiffRowIndexes(3.8);
     expect(indexes).toHaveLength(3);
-    expect(indexes[0]).toBeUndefined();
-    expect(indexes[1]).toBeUndefined();
-    expect(indexes[2]).toBeUndefined();
+    expect(indexes[0]).toBe(0);
+    expect(indexes[1]).toBe(1);
+    expect(indexes[2]).toBe(2);
+    expect(indexes[3]).toBeUndefined();
     expect(createIdentityDiffRowIndexes(-1)).toEqual([]);
   });
 

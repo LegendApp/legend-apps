@@ -2,10 +2,10 @@ import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
 import { SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
 import {
   ensureSyntaxTheme,
+  getAvailableSyntaxGrammars,
   getAvailableSyntaxThemes,
   getSyntaxAssetDirectoryUri,
   getSyntaxLanguageForPath,
-  isSyntaxGrammarInstalled,
   warmSyntaxHighlighters,
   type SyntaxHighlighterWarmupResult,
   type SyntaxThemeAssetEntry,
@@ -82,18 +82,23 @@ export function getSyntaxLanguageLabel(language: string) {
 }
 
 export function getInstalledSyntaxLanguages(languages: readonly string[]) {
-  return languages.filter((language) => isSyntaxGrammarInstalled(language));
+  const installedLanguages = new Set(
+    getAvailableSyntaxGrammars()
+      .filter((grammar) => grammar.status !== "available")
+      .map((grammar) => grammar.name),
+  );
+  return languages.filter((language) => installedLanguages.has(language));
 }
 
 export function getWarmupLanguagesForPaths(paths: readonly string[]) {
   const languages = new Set<string>();
   for (const path of paths) {
     const language = getSyntaxLanguageForPath(path);
-    if (language && isSyntaxGrammarInstalled(language)) {
+    if (language) {
       languages.add(language);
     }
   }
-  return [...languages];
+  return getInstalledSyntaxLanguages([...languages]);
 }
 
 export function warmInstalledSyntaxHighlighters({

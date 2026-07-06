@@ -58,6 +58,39 @@ function createSideBySideHeader(overrides: Partial<DiffSideBySideFileHeader>): D
 }
 
 describe("diffInlineMergeModel", () => {
+  it("does not materialize per-row merge indexes when no merge files exist", () => {
+    const unifiedItemIndexes = new Array<number | undefined>(1_000);
+    const sideBySideItemIndexes = new Array<number | undefined>(500);
+
+    const unifiedModel = createDiffInlineMergeList({
+      collapsedFileIndexes: new Set(),
+      files: [createFile({ rowCount: unifiedItemIndexes.length, rowStart: 0 })],
+      mergeDisplayModelByPath: new Map(),
+      mergeFileByPath: new Map(),
+      sideBySideFileHeaderByListIndex: new Map(),
+      sideBySideItemIndexes: [],
+      unifiedItemIndexes,
+      viewMode: "unified",
+    });
+    const sideBySideModel = createDiffInlineMergeList({
+      collapsedFileIndexes: new Set(),
+      files: [createFile({ rowCount: sideBySideItemIndexes.length, rowStart: 0 })],
+      mergeDisplayModelByPath: new Map(),
+      mergeFileByPath: new Map(),
+      sideBySideFileHeaderByListIndex: new Map(),
+      sideBySideItemIndexes,
+      unifiedItemIndexes: [],
+      viewMode: "blocks",
+    });
+
+    expect(unifiedModel.itemIndexes).toBe(unifiedItemIndexes);
+    expect(unifiedModel.rowByItemIndex.size).toBe(0);
+    expect(unifiedModel.sourceRowByItemIndex.size).toBe(0);
+    expect(sideBySideModel.itemIndexes).toBe(sideBySideItemIndexes);
+    expect(sideBySideModel.rowByItemIndex.size).toBe(0);
+    expect(sideBySideModel.sourceRowByItemIndex.size).toBe(0);
+  });
+
   it("replaces unified conflict bodies with inline merge rows mapped to the source file", () => {
     const files = [
       createFile({ index: 0, path: "src/App.tsx", rowCount: 3, rowStart: 0 }),

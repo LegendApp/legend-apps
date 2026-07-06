@@ -1,5 +1,14 @@
 import type { DiffFileSummary, DiffSideBySideFileHeader } from "@legend-desktop/diff-parser";
 
+function isArrayIndexProperty(property: string | symbol) {
+  if (typeof property !== "string" || property.length === 0) {
+    return false;
+  }
+
+  const index = Number(property);
+  return Number.isInteger(index) && index >= 0 && String(index) === property;
+}
+
 export function createVisibleDiffRowIndexes(
   files: readonly DiffFileSummary[],
   collapsedFileIndexes: ReadonlySet<number>,
@@ -35,7 +44,17 @@ export function createVisibleDiffRowIndexes(
 
 export function createIdentityDiffRowIndexes(length: number) {
   const count = Math.max(0, Math.floor(length));
-  return new Array<number | undefined>(count);
+  const target = new Array<number | undefined>(count);
+
+  return new Proxy(target, {
+    get(array, property, receiver) {
+      if (isArrayIndexProperty(property)) {
+        const index = Number(property);
+        return index < count ? index : undefined;
+      }
+      return Reflect.get(array, property, receiver);
+    },
+  });
 }
 
 export function createCollapsedFileIndexList(collapsedFileIndexes: ReadonlySet<number>) {

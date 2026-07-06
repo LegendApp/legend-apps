@@ -12,7 +12,7 @@ export type DiffInlineMergeRow = {
 };
 
 export type DiffInlineMergeList = {
-  itemIndexes: number[];
+  itemIndexes: Array<number | undefined>;
   rowByItemIndex: Map<number, DiffInlineMergeRow>;
   sourceRowByItemIndex: Map<number, number>;
 };
@@ -84,9 +84,17 @@ export function createDiffInlineMergeList({
 }: CreateDiffInlineMergeListOptions): DiffInlineMergeList {
   const rowByItemIndex = new Map<number, DiffInlineMergeRow>();
   const sourceRowByItemIndex = new Map<number, number>();
+  if (mergeFileByPath.size === 0) {
+    return {
+      itemIndexes: viewMode === "unified" ? unifiedItemIndexes : sideBySideItemIndexes,
+      rowByItemIndex,
+      sourceRowByItemIndex,
+    };
+  }
+
   const nextItemIndex = { current: -1 };
   const fileByIndex = new Map(files.map((file) => [file.index, file]));
-  let itemIndexes: number[];
+  let itemIndexes: Array<number | undefined>;
 
   if (viewMode === "unified") {
     itemIndexes = [];
