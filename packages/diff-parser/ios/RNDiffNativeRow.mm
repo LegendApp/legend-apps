@@ -454,10 +454,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   }
 
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
-  const double tokenizedMaxRow = document->getTokenizedMaxRow();
   if (!lightRender
       && config.syntaxHighlightingEnabled
-      && self.rowIndex < tokenizedMaxRow
       && row.tokens.has_value()
       && std::holds_alternative<std::vector<DiffSyntaxTokenRun>>(*row.tokens)) {
     tokens = &std::get<std::vector<DiffSyntaxTokenRun>>(*row.tokens);
@@ -477,7 +475,6 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                     columnRect:(NSRect)columnRect
                       document:(HybridDiffDocument *)document
                          config:(RNDiffNativeRowRenderConfig *)config
-                tokenizedMaxRow:(double)tokenizedMaxRow
 {
   if (!rowVisible || plain.kind != diffRowKindLine) {
     return;
@@ -516,7 +513,6 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   const std::vector<DiffSyntaxTokenRun> *tokens = nullptr;
   if (!lightRender
       && config.syntaxHighlightingEnabled
-      && plain.index < tokenizedMaxRow
       && !plain.tokens.empty()) {
     tokens = &plain.tokens;
   }
@@ -546,23 +542,20 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   const CGFloat rightWidth = MAX(0, width - leftWidth);
   NSRect leftRect = NSMakeRect(0, 0, leftWidth, self.bounds.size.height);
   NSRect rightRect = NSMakeRect(leftWidth, 0, rightWidth, self.bounds.size.height);
-  const double tokenizedMaxRow = document->getTokenizedMaxRow();
 
   [self drawSideBySidePlainRow:row.oldRow
                     rowVisible:row.oldRowVisible
                        oldSide:YES
                     columnRect:leftRect
                       document:document
-                         config:config
-                tokenizedMaxRow:tokenizedMaxRow];
+                         config:config];
   const DiffRenderRow &newRow = row.newRowEqualsOldRow ? row.oldRow : row.newRow;
   [self drawSideBySidePlainRow:newRow
                     rowVisible:row.newRowVisible
                        oldSide:NO
                     columnRect:rightRect
                       document:document
-                         config:config
-                tokenizedMaxRow:tokenizedMaxRow];
+                         config:config];
 
   [config.dividerColor setFill];
   NSRectFill(NSMakeRect(leftWidth, 0, 1, self.bounds.size.height));
