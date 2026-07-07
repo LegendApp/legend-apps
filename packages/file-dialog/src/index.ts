@@ -7,6 +7,9 @@ export type FileDialogOpenOptions = {
   allowsMultipleSelection?: boolean;
   directoryURL?: string | null;
   allowedFileTypes?: string[];
+  message?: string;
+  prompt?: string;
+  title?: string;
 };
 
 export type FileDialogSaveOptions = {

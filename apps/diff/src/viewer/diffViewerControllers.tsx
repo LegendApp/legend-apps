@@ -56,6 +56,16 @@ function nativeMenuPatchesEqual(
     });
 }
 
+function getCopySourceMenuTitle(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "github") {
+    return "Copy Source URL";
+  }
+  if (source?.kind === "filePair") {
+    return "Copy Compared File Paths";
+  }
+  return "Copy Folder Path";
+}
+
 export function DiffNativeMenuController({
   hasUnsavedMergeDrafts,
   isSavingMergeDrafts,
@@ -100,7 +110,7 @@ export function DiffNativeMenuController({
       {
         enabled: currentVisibleSource !== null,
         id: "copySource",
-        title: currentVisibleSource?.kind === "github" ? "Copy Source URL" : "Copy Folder Path",
+        title: getCopySourceMenuTitle(currentVisibleSource),
       },
       {
         enabled: currentVisibleFolderPath !== null && hasLoadedFiles,

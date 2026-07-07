@@ -1,19 +1,20 @@
 import type { RecentDiffSource } from "../../diffAppMetadata";
-import { normalizeDiffOpenSource } from "../../diffFiles";
+import { createDiffFilePairSource, normalizeDiffOpenSource, type DiffOpenSource } from "../../diffFiles";
 import {
   formatRecentDiffSourceOpenedAt,
   getGroupedRecentDiffSources,
+  getRecentDiffSourceDetail,
   getRecentDiffSourceKind,
   getRecentDiffSourceTypeLabel,
 } from "../diffStartScreenModel";
 
-function recentSource(value: string, lastOpenedAt: number): RecentDiffSource {
-  const source = normalizeDiffOpenSource(value, "/tmp/repo");
+function recentSource(value: string | DiffOpenSource, lastOpenedAt: number): RecentDiffSource {
+  const source = typeof value === "string" ? normalizeDiffOpenSource(value, "/tmp/repo") : value;
   if (!source) {
     throw new Error(`Unable to normalize ${value}`);
   }
   return {
-    id: value,
+    id: typeof value === "string" ? value : value.value,
     lastOpenedAt,
     source,
   };
@@ -22,6 +23,7 @@ function recentSource(value: string, lastOpenedAt: number): RecentDiffSource {
 describe("diffStartScreenModel", () => {
   it("classifies folders, GitHub pull requests, GitHub commits, and git args", () => {
     expect(getRecentDiffSourceKind(recentSource("/tmp/repo", 1).source)).toBe("folder");
+    expect(getRecentDiffSourceKind(recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 1).source)).toBe("filePair");
     expect(getRecentDiffSourceKind(recentSource("github.com/owner/repo/pull/7", 1).source)).toBe("pullRequest");
     expect(getRecentDiffSourceKind(recentSource("github.com/owner/repo/commit/abcdef123456", 1).source)).toBe("commit");
     expect(getRecentDiffSourceKind(recentSource("main...HEAD", 1).source)).toBe("git");
@@ -29,6 +31,7 @@ describe("diffStartScreenModel", () => {
 
   it("returns compact type labels", () => {
     expect(getRecentDiffSourceTypeLabel(recentSource("/tmp/repo", 1).source)).toBe("Folder");
+    expect(getRecentDiffSourceTypeLabel(recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 1).source)).toBe("Files");
     expect(getRecentDiffSourceTypeLabel(recentSource("github.com/owner/repo/pull/7", 1).source)).toBe("PR");
     expect(getRecentDiffSourceTypeLabel(recentSource("github.com/owner/repo/commit/abcdef123456", 1).source)).toBe("Commit");
     expect(getRecentDiffSourceTypeLabel(recentSource("main...HEAD", 1).source)).toBe("Git diff");
@@ -37,6 +40,7 @@ describe("diffStartScreenModel", () => {
   it("groups recent sources by start-screen section", () => {
     const recentSources = [
       recentSource("/tmp/repo", 100),
+      recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 95),
       recentSource("github.com/owner/repo/pull/7", 90),
       recentSource("github.com/owner/repo/commit/abcdef123456", 80),
       recentSource("main...HEAD", 70),
@@ -44,6 +48,7 @@ describe("diffStartScreenModel", () => {
 
     expect(getGroupedRecentDiffSources(recentSources, "all").map((group) => group.title)).toEqual([
       "Folders",
+      "File compares",
       "Pull requests",
       "Commits",
       "Git diffs",
@@ -51,17 +56,29 @@ describe("diffStartScreenModel", () => {
     expect(getGroupedRecentDiffSources(recentSources, "prs")).toEqual([
       {
         key: "pullRequests",
-        recentSources: [recentSources[1]],
+        recentSources: [recentSources[2]],
         title: "Pull requests",
+      },
+    ]);
+    expect(getGroupedRecentDiffSources(recentSources, "files")).toEqual([
+      {
+        key: "filePairs",
+        recentSources: [recentSources[1]],
+        title: "File compares",
       },
     ]);
     expect(getGroupedRecentDiffSources(recentSources, "commits")).toEqual([
       {
         key: "commits",
-        recentSources: [recentSources[2]],
+        recentSources: [recentSources[3]],
         title: "Commits",
       },
     ]);
+  });
+
+  it("formats file pair details", () => {
+    const source = createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts");
+    expect(getRecentDiffSourceDetail(source)).toBe("/tmp/old.ts vs /tmp/new.ts");
   });
 
   it("formats last-opened times", () => {

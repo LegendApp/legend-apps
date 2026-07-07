@@ -47,7 +47,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElem
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
-import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
+import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
+import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "./filePairDiff";
 import { getDiffPalette } from "./diffPalette";
 import {
   createDiffMergeDraftFileWithResolvedBlock,
@@ -312,6 +313,9 @@ function getDiffSourceCacheKey(source: DiffOpenSource) {
   }
   if (source.kind === "git") {
     return `${source.kind}:${source.cwd}:${source.args.join("\u0000")}`;
+  }
+  if (source.kind === "filePair") {
+    return `${source.kind}:${source.oldPath}\u0000${source.newPath}`;
   }
   return `${source.kind}:${source.value}`;
 }
@@ -2993,6 +2997,38 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             scopes: loadedResult.document.scopeCount,
           }));
         }
+      } else if (nextSource.kind === "filePair") {
+        const diffCommand = createFilePairDiffCommand(nextSource);
+        logDiffOpenTiming("viewer.filePair.start", () => ({
+          args: diffCommand.args,
+          requestId,
+          sourceKind: nextSource.kind,
+        }));
+        const commandResult = await commandRunner.runCommand(diffCommand);
+        if (commandResult.timedOut) {
+          loadError = new Error("File comparison timed out. The files may be too large to compare.");
+        } else if (commandResult.exitCode !== 0 && commandResult.exitCode !== 1) {
+          loadError = new Error(commandResult.stderr || `diff exited with code ${commandResult.exitCode}.`);
+        } else {
+          logDiffOpenTiming("viewer.filePair.finish", () => ({
+            requestId,
+            stderrLength: commandResult.stderr.length,
+            stdoutLength: commandResult.stdout.length,
+            timedOut: commandResult.timedOut,
+          }));
+          result = await loadUnifiedDiff(createFilePairUnifiedDiff(nextSource, commandResult), nextSource.label, initialRowCount);
+          const loadedResult = result;
+          logDiffOpenTiming("viewer.native.finish", () => ({
+            files: loadedResult.files.length,
+            initialRows: loadedResult.initialRows.length,
+            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
+            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
+            requestId,
+            rows: loadedResult.document.rowCount,
+            sourceKind: nextSource.kind,
+            scopes: loadedResult.document.scopeCount,
+          }));
+        }
       } else {
         logDiffOpenTiming("viewer.native.start", () => ({
           folderPath: nextSource.value,
@@ -3429,6 +3465,39 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           message: getErrorMessage(error),
           source: currentState.source,
           title: "Couldn't choose folder",
+        };
+        if (currentState.status === "loaded") {
+          setDocumentErrorValue(nextError);
+        } else {
+          setOpenErrorValue(nextError);
+        }
+      }
+    }
+  }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
+
+  const compareFiles = useCallback(async () => {
+    if (!loadingSource$.peek()) {
+      const currentState = state$.peek();
+      try {
+        setOpenErrorValue(null);
+        setDocumentErrorValue(null);
+        const dialogStartedAt = nowMs();
+        logDiffOpenTiming("viewer.filePairDialog.start", () => ({
+          currentSource: currentState.source,
+        }));
+        const nextSource = await openDiffFilePairDialog();
+        logDiffOpenTiming("viewer.filePairDialog.finish", () => ({
+          dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
+          source: nextSource,
+        }));
+        if (nextSource) {
+          await loadSource(nextSource);
+        }
+      } catch (error) {
+        const nextError = {
+          message: getErrorMessage(error),
+          source: currentState.source,
+          title: "Couldn't choose files",
         };
         if (currentState.status === "loaded") {
           setDocumentErrorValue(nextError);
@@ -4190,6 +4259,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         mutedColor={mutedColor}
         onChangeUrlInput={startScreenController.onChangeUrlInput}
         onChooseFolder={openFolder}
+        onCompareFiles={compareFiles}
         onOpenRecentSource={startScreenController.onOpenRecentSource}
         onOpenUrl={startScreenController.onOpenUrl}
         openErrorBody={startScreenOpenErrorBody}

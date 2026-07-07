@@ -48,6 +48,21 @@ RCT_EXPORT_MODULE(NativeFileDialog)
     panel.resolvesAliases = YES;
     panel.treatsFilePackagesAsDirectories = YES;
 
+    NSString *title = [options[@"title"] isKindOfClass:[NSString class]] ? options[@"title"] : nil;
+    if (title.length > 0) {
+      panel.title = title;
+    }
+
+    NSString *message = [options[@"message"] isKindOfClass:[NSString class]] ? options[@"message"] : nil;
+    if (message.length > 0) {
+      panel.message = message;
+    }
+
+    NSString *prompt = [options[@"prompt"] isKindOfClass:[NSString class]] ? options[@"prompt"] : nil;
+    if (prompt.length > 0) {
+      panel.prompt = prompt;
+    }
+
     NSArray *allowedFileTypes = [options[@"allowedFileTypes"] isKindOfClass:[NSArray class]] ? options[@"allowedFileTypes"] : nil;
     if (allowedFileTypes.count > 0 && panel.canChooseFiles) {
       panel.allowedFileTypes = allowedFileTypes;

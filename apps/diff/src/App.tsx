@@ -6,7 +6,7 @@ import { initializeSyntaxAssetsSync } from "@legend-desktop/syntax-parser";
 import { useEffect, useRef } from "react";
 import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
-import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFolderDialog } from "./diffFiles";
+import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
 import { logDiffMemoryMark, logDiffOpenTiming } from "./diffInstrumentation";
 import { diffMenuConfig } from "./diffMenus";
 import {
@@ -95,6 +95,27 @@ async function openDiffViewerForUrl(controller: DocumentAppController) {
   }));
 }
 
+async function openDiffViewerForSelectedFiles(controller: DocumentAppController) {
+  const dialogStartedAt = nowMs();
+  logDiffOpenTiming("menu.filePairDialog.start", () => ({}));
+  const source = await openDiffFilePairDialog();
+  const dialogFinishedAt = nowMs();
+  logDiffOpenTiming("menu.filePairDialog.finish", () => ({
+    dialogMs: Number((dialogFinishedAt - dialogStartedAt).toFixed(1)),
+    source,
+  }));
+
+  if (source) {
+    const windowStartedAt = nowMs();
+    await openDiffViewerWindow(source);
+    controller.setDocumentWindowOpen(true);
+    logDiffOpenTiming("menu.filePair.window.opened", () => ({
+      source,
+      windowOpenMs: elapsedMs(windowStartedAt),
+    }));
+  }
+}
+
 async function openDiffStartWindow(controller: DocumentAppController) {
   const windowStartedAt = nowMs();
   await openDiffViewerWindow(null, { freshWindow: true });
@@ -145,6 +166,14 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
       openDiffViewerForSelectedFolder(controller)
         .then(() => {
           logDiffOpenTiming("menu.openFolder.finish", () => ({}));
+        })
+        .catch(reportDiffAppControllerError);
+    },
+    compareFiles: () => {
+      logDiffOpenTiming("menu.compareFiles", () => ({}));
+      openDiffViewerForSelectedFiles(controller)
+        .then(() => {
+          logDiffOpenTiming("menu.compareFiles.finish", () => ({}));
         })
         .catch(reportDiffAppControllerError);
     },

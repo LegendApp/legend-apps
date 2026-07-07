@@ -38,6 +38,9 @@ export function getDiffSourceRecentId(source: DiffOpenSource) {
   if (source.kind === "git") {
     return `${source.kind}:${source.cwd}:${source.args.join("\u0000")}`;
   }
+  if (source.kind === "filePair") {
+    return `${source.kind}:${source.oldPath}\u0000${source.newPath}`;
+  }
   return `${source.kind}:${source.value}`;
 }
 

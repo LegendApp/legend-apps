@@ -25,11 +25,37 @@ export type DiffOpenSource =
       kind: "git";
       label: string;
       value: string;
+    }
+  | {
+      kind: "filePair";
+      label: string;
+      newPath: string;
+      oldPath: string;
+      value: string;
     };
+
+export type DiffFilePairOpenSource = Extract<DiffOpenSource, { kind: "filePair" }>;
 
 export function getFilename(path: string) {
   const separatorIndex = path.lastIndexOf("/");
   return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+}
+
+function getParentDirectory(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex > 0 ? path.slice(0, separatorIndex) : null;
+}
+
+export function createDiffFilePairSource(oldPath: string, newPath: string): DiffFilePairOpenSource {
+  const oldFilename = getFilename(oldPath);
+  const newFilename = getFilename(newPath);
+  return {
+    kind: "filePair",
+    label: oldFilename === newFilename ? oldFilename : `${oldFilename} vs ${newFilename}`,
+    newPath,
+    oldPath,
+    value: `${oldPath}\n${newPath}`,
+  };
 }
 
 function getLaunchArgumentValue(args: string[], name: string) {
@@ -213,6 +239,33 @@ export async function openDiffFolderDialog() {
   });
 
   return paths?.[0] ?? null;
+}
+
+export async function openDiffFilePairDialog() {
+  const oldPaths = await openFileDialog({
+    allowsMultipleSelection: false,
+    canChooseDirectories: false,
+    canChooseFiles: true,
+    message: "Select the earlier version to show on the left side of the comparison.",
+    prompt: "Choose Original",
+    title: "Choose Original File",
+  });
+  const oldPath = oldPaths?.[0] ?? null;
+  let source: DiffOpenSource | null = null;
+  if (oldPath) {
+    const newPaths = await openFileDialog({
+      allowsMultipleSelection: false,
+      canChooseDirectories: false,
+      canChooseFiles: true,
+      directoryURL: getParentDirectory(oldPath),
+      message: "Select the modified version to show on the right side of the comparison.",
+      prompt: "Choose Modified",
+      title: "Choose Modified File",
+    });
+    const newPath = newPaths?.[0] ?? null;
+    source = newPath ? createDiffFilePairSource(oldPath, newPath) : null;
+  }
+  return source;
 }
 
 function getFirstPositionalLaunchArgument(args: string[]) {

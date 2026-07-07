@@ -48,6 +48,13 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         shortcut: { key: "o", modifiers: commandModifier },
       },
       {
+        id: "compareFiles",
+        title: "Compare Files...",
+        enabled: true,
+        placement: { before: "Open Recent" },
+        shortcut: { key: "o", modifiers: commandModifier | optionModifier },
+      },
+      {
         id: "openUrl",
         title: "Open URL...",
         enabled: true,

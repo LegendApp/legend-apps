@@ -20,6 +20,7 @@ const diffStartScreenSectionGap = 42;
 const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
+const filePairAccentColor = "#d08c3f";
 const diffAppIcon = require("../../macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset/icon_128x128.png");
 export type DiffStartScreenProps = {
   backgroundColor: string;
@@ -31,6 +32,7 @@ export type DiffStartScreenProps = {
   mutedColor: string;
   onChangeUrlInput: (text: string) => void;
   onChooseFolder: () => void;
+  onCompareFiles: () => void;
   onOpenRecentSource: (source: DiffOpenSource) => void;
   onOpenUrl: () => void | Promise<void>;
   openErrorBody: ReactNode;
@@ -51,6 +53,9 @@ function getSourceIconName(source: DiffOpenSource) {
   if (kind === "commit") {
     return "smallcircle.filled.circle";
   }
+  if (kind === "filePair") {
+    return "doc.on.doc";
+  }
   return "point.3.connected.trianglepath.dotted";
 }
 
@@ -64,6 +69,9 @@ function getSourceAccentColor(source: DiffOpenSource, mutedColor: string) {
   }
   if (kind === "commit") {
     return commitAccentColor;
+  }
+  if (kind === "filePair") {
+    return filePairAccentColor;
   }
   return mutedColor;
 }
@@ -178,6 +186,7 @@ export function DiffStartScreen({
   mutedColor,
   onChangeUrlInput,
   onChooseFolder,
+  onCompareFiles,
   onOpenRecentSource,
   onOpenUrl,
   openErrorBody,
@@ -221,6 +230,21 @@ export function DiffStartScreen({
               >
                 <SFSymbol color="#ffffff" name="folder" size={17} />
                 <Text style={styles.openFolderText}>Open Folder</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isLoading}
+                onPress={onCompareFiles}
+                style={({ pressed }) => [
+                  styles.compareFilesButton,
+                  {
+                    borderColor,
+                    opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
+                  },
+                ]}
+              >
+                <SFSymbol color={foregroundColor} name="doc.on.doc" size={16} />
+                <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Compare Files</Text>
               </Pressable>
               <View style={[styles.urlField, { borderColor }]}>
                 <SFSymbol color={mutedColor} name="link" size={15} />
@@ -334,6 +358,21 @@ const styles = StyleSheet.create({
     gap: 10,
     transform: [{ translateY: 3 }],
   },
+  compareFilesButton: {
+    alignItems: "center",
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    height: 42,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  compareFilesText: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
   launcherRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -445,7 +484,7 @@ const styles = StyleSheet.create({
   segmentedControl: {
     height: 28,
     marginTop: 18,
-    width: 312,
+    width: 390,
   },
   sectionDivider: {
     height: StyleSheet.hairlineWidth,

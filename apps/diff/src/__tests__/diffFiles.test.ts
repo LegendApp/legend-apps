@@ -1,4 +1,5 @@
 import {
+  createDiffFilePairSource,
   getDiffRecentDocumentPath,
   getDiffSourceLabel,
   getFilename,
@@ -68,6 +69,17 @@ describe("diffFiles", () => {
     expect(normalizeDiffOpenSource(source)).toBe(source);
   });
 
+  it("creates file pair sources", () => {
+    expect(createDiffFilePairSource("/tmp/old/App.tsx", "/tmp/new/App.tsx")).toEqual({
+      kind: "filePair",
+      label: "App.tsx",
+      newPath: "/tmp/new/App.tsx",
+      oldPath: "/tmp/old/App.tsx",
+      value: "/tmp/old/App.tsx\n/tmp/new/App.tsx",
+    });
+    expect(createDiffFilePairSource("/tmp/App.old.tsx", "/tmp/App.new.tsx").label).toBe("App.old.tsx vs App.new.tsx");
+  });
+
   it("reads explicit launch source arguments before scanning positional URLs", () => {
     expect(getLaunchDiffSource(["--diff-folder", "/tmp/repo", "github.com/owner/repo/pull/7"])).toEqual({
       kind: "folder",
@@ -129,8 +141,10 @@ describe("diffFiles", () => {
   it("returns recent document paths only for folders", () => {
     const folderSource = normalizeDiffOpenSource("/tmp/repo");
     const githubSource = normalizeDiffOpenSource("github.com/owner/repo/pull/1");
+    const filePairSource = createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts");
     expect(folderSource && getDiffRecentDocumentPath(folderSource)).toBe("/tmp/repo");
     expect(githubSource && getDiffRecentDocumentPath(githubSource)).toBeNull();
+    expect(getDiffRecentDocumentPath(filePairSource)).toBeNull();
     expect(getDiffSourceLabel(null)).toBe("Legend Diff");
     expect(getLaunchDiffFolder(["--diff-folder=/tmp/repo"])).toBe("/tmp/repo");
   });
