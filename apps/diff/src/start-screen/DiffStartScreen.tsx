@@ -14,14 +14,16 @@ import {
   type DiffRecentSourceGroup,
 } from "./diffStartScreenModel";
 
-const diffStartScreenMaxContentWidth = 900;
-const diffStartScreenBrandTitlebarHeight = 42;
-const diffStartScreenSectionGap = 42;
+const diffStartScreenMaxContentWidth = 1460;
+const diffStartScreenBrandTitlebarHeight = 76;
+const diffStartScreenSectionGap = 30;
 const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
 const filePairAccentColor = "#d08c3f";
 const diffAppIcon = require("../../macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset/icon_128x128.png");
+const diffStartHeroImage = require("./diff-start-hero.png");
+const diffStartHeroAspectRatio = 1458 / 304;
 export type DiffStartScreenProps = {
   backgroundColor: string;
   borderColor: string;
@@ -74,6 +76,23 @@ function getSourceAccentColor(source: DiffOpenSource, mutedColor: string) {
     return filePairAccentColor;
   }
   return mutedColor;
+}
+
+function DiffStartScreenHero({ borderColor }: { borderColor: string }) {
+  return (
+    <View
+      accessibilityLabel="Drag or Paste to Compare. Drop or paste folders, GitHub URLs, .diff files, or two files."
+      accessibilityRole="image"
+      style={[styles.heroBanner, { borderColor }]}
+    >
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="stretch"
+        source={diffStartHeroImage}
+        style={styles.heroImage}
+      />
+    </View>
+  );
 }
 
 function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource | null) {
@@ -214,6 +233,9 @@ export function DiffStartScreen({
       </View>
       <View style={styles.startPage}>
         <View style={styles.launcherSection}>
+          <DiffStartScreenHero
+            borderColor={borderColor}
+          />
           <View style={styles.launcherControls}>
             <View style={styles.launcherRow}>
               <Pressable
@@ -253,7 +275,7 @@ export function DiffStartScreen({
                   autoCorrect={false}
                   onChangeText={onChangeUrlInput}
                   onSubmitEditing={onOpenUrl}
-                  placeholder="Paste GitHub URL"
+                  placeholder="Paste GitHub URL or path"
                   placeholderTextColor={mutedColor}
                   multiline={false}
                   numberOfLines={1}
@@ -334,14 +356,14 @@ export function DiffStartScreen({
 
 const styles = StyleSheet.create({
   brandIcon: {
-    borderRadius: 8,
-    height: 30,
-    width: 30,
+    borderRadius: 11,
+    height: 46,
+    width: 46,
   },
   brandTitle: {
-    fontSize: 22,
+    fontSize: 34,
     fontWeight: "600",
-    lineHeight: 30,
+    lineHeight: 42,
   },
   brandTitlebar: {
     alignItems: "center",
@@ -355,8 +377,7 @@ const styles = StyleSheet.create({
   brandTitlebarContent: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    transform: [{ translateY: 3 }],
+    gap: 14,
   },
   compareFilesButton: {
     alignItems: "center",
@@ -364,25 +385,36 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
-    height: 42,
+    height: 60,
     justifyContent: "center",
-    paddingHorizontal: 14,
+    minWidth: 292,
+    paddingHorizontal: 22,
   },
   compareFilesText: {
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: "700",
-    lineHeight: 18,
+    lineHeight: 22,
+  },
+  heroBanner: {
+    aspectRatio: diffStartHeroAspectRatio,
+    borderRadius: 16,
+    overflow: "hidden",
+    width: "100%",
+  },
+  heroImage: {
+    height: "100%",
+    width: "100%",
   },
   launcherRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
+    gap: 18,
   },
   launcherSection: {
-    gap: 28,
+    gap: 22,
   },
   launcherControls: {
-    gap: 8,
+    gap: 10,
   },
   openError: {
     bottom: 28,
@@ -395,15 +427,16 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     flexDirection: "row",
     gap: 8,
-    height: 42,
+    height: 60,
     justifyContent: "center",
-    paddingHorizontal: 16,
+    minWidth: 278,
+    paddingHorizontal: 22,
   },
   openFolderText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: "700",
-    lineHeight: 18,
+    lineHeight: 22,
   },
   recentGroup: {
     gap: 8,
@@ -476,9 +509,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    paddingTop: diffStartScreenBrandTitlebarHeight + 28,
+    paddingBottom: 34,
+    paddingHorizontal: 48,
+    paddingTop: diffStartScreenBrandTitlebarHeight + 16,
     position: "relative",
   },
   segmentedControl: {
@@ -505,31 +538,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flex: 1,
     gap: 8,
-    height: 42,
+    height: 60,
     minWidth: 0,
-    paddingLeft: 12,
+    paddingLeft: 18,
   },
   urlInput: {
     flex: 1,
-    fontSize: 13,
-    height: 40,
-    lineHeight: 18,
+    fontSize: 16,
+    height: 58,
+    lineHeight: 22,
     minWidth: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 16,
   },
   urlOpenButton: {
     alignItems: "center",
     alignSelf: "stretch",
     borderLeftWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
-    minWidth: 56,
-    paddingHorizontal: 10,
+    minWidth: 150,
+    paddingHorizontal: 18,
   },
   urlOpenButtonText: {
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: "700",
-    lineHeight: 18,
+    lineHeight: 22,
   },
   validationText: {
     fontSize: 12,
