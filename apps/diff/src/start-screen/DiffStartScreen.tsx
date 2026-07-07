@@ -14,7 +14,7 @@ import {
   type DiffRecentSourceGroup,
 } from "./diffStartScreenModel";
 
-const diffStartScreenMaxContentWidth = 1460;
+const diffStartScreenMaxContentWidth = 1080;
 const diffStartScreenBrandTitlebarHeight = 76;
 const diffStartScreenSectionGap = 30;
 const diffStartScreenAccentColor = "#426c9f";
