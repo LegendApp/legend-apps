@@ -17,6 +17,7 @@ import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
 export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
+let diffViewerUntitledWindowId = 0;
 let diffViewerUrlFocusRequestId = 0;
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
   blocks: "rectangle.split.2x1",
@@ -141,6 +142,7 @@ type DiffWindow = keyof typeof diffWindowsConfig;
 
 type DiffViewerWindowOpenOptions = {
   focusUrlInput?: boolean;
+  freshWindow?: boolean;
 };
 
 export function registerDiffWindows() {
@@ -163,16 +165,24 @@ export function getDiffViewerWindowIdentifier(source: DiffOpenSource | null | un
   return source ? `${diffViewerWindowIdentifier}-${source.kind}-${hashString(source.value)}` : diffViewerWindowIdentifier;
 }
 
+function getFreshDiffViewerWindowIdentifier() {
+  diffViewerUntitledWindowId += 1;
+  return `${diffViewerWindowIdentifier}-untitled-${diffViewerUntitledWindowId}`;
+}
+
 export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null, options: DiffViewerWindowOpenOptions = {}) {
   const source = normalizeDiffOpenSource(sourceInput);
-  const windowIdentifier = getDiffViewerWindowIdentifier(source);
+  const windowIdentifier = options.freshWindow && source === null
+    ? getFreshDiffViewerWindowIdentifier()
+    : getDiffViewerWindowIdentifier(source);
   const shouldShowSourceToolbar = source !== null;
   const focusUrlInputRequestId = options.focusUrlInput ? ++diffViewerUrlFocusRequestId : undefined;
-  const initialProperties = source || options.focusUrlInput
+  const shouldPassWindowIdentifier = windowIdentifier !== diffViewerWindowIdentifier;
+  const initialProperties = source || options.focusUrlInput || shouldPassWindowIdentifier
       ? {
         ...(source ? { source } : {}),
         ...(focusUrlInputRequestId ? { focusUrlInputRequestId } : {}),
-        windowIdentifier,
+        ...(shouldPassWindowIdentifier ? { windowIdentifier } : {}),
       }
     : undefined;
   const startedAt = nowMs();

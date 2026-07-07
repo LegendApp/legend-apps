@@ -86,7 +86,7 @@ async function openDiffViewerForSelectedFolder(controller: DocumentAppController
 
 async function openDiffViewerForUrl(controller: DocumentAppController) {
   const windowStartedAt = nowMs();
-  await openDiffViewerWindow(null, { focusUrlInput: true });
+  await openDiffViewerWindow(null, { focusUrlInput: true, freshWindow: true });
   controller.setDocumentWindowOpen(true);
   logDiffOpenTiming("menu.url.window.opened", () => ({
     windowOpenMs: elapsedMs(windowStartedAt),
@@ -95,7 +95,7 @@ async function openDiffViewerForUrl(controller: DocumentAppController) {
 
 async function openDiffStartWindow(controller: DocumentAppController) {
   const windowStartedAt = nowMs();
-  await openDiffViewerWindow(null);
+  await openDiffViewerWindow(null, { freshWindow: true });
   controller.setDocumentWindowOpen(true);
   logDiffOpenTiming("start.window.opened", () => ({
     windowOpenMs: elapsedMs(windowStartedAt),
