@@ -22,6 +22,7 @@ export type DiffCompareRepoState = {
   defaultBranch: string | null;
   localBranches: string[];
   remoteBranches: string[];
+  remoteNames: string[];
   repoPath: string;
   upstreamBranch: string | null;
 };
@@ -48,8 +49,8 @@ function uniqueValues(values: readonly string[]) {
   return result;
 }
 
-function stripOriginHead(value: string) {
-  return value === "origin/HEAD" ? null : value;
+function stripRemoteHead(value: string) {
+  return value.endsWith("/HEAD") ? null : value;
 }
 
 function refSelection(ref: string) {
@@ -141,15 +142,33 @@ function getLocalRefForRemoteRef(ref: string | null | undefined) {
   return separatorIndex >= 0 ? ref.slice(separatorIndex + 1) : null;
 }
 
+function getRemoteNameForRemoteRef(ref: string) {
+  const separatorIndex = ref.indexOf("/");
+  return separatorIndex >= 0 ? ref.slice(0, separatorIndex) : null;
+}
+
+function getConfiguredRemoteBranches(repoState: DiffCompareRepoState | null) {
+  if (!repoState) {
+    return [];
+  }
+
+  const remoteNameSet = new Set(repoState.remoteNames);
+  return uniqueValues(repoState.remoteBranches)
+    .map(stripRemoteHead)
+    .filter((branch): branch is string => branch !== null)
+    .filter((branch) => {
+      const remoteName = getRemoteNameForRemoteRef(branch);
+      return remoteName !== null && remoteNameSet.has(remoteName);
+    });
+}
+
 function getPriorityRefs(repoState: DiffCompareRepoState | null) {
   if (!repoState) {
     return [];
   }
 
   const localBranchSet = new Set(repoState.localBranches);
-  const remoteBranches = uniqueValues(repoState.remoteBranches)
-    .map(stripOriginHead)
-    .filter((branch): branch is string => branch !== null);
+  const remoteBranches = getConfiguredRemoteBranches(repoState);
   const remoteBranchSet = new Set(remoteBranches);
   const getRemoteRefsForLocalBranch = (localBranch: string) => remoteBranches.filter((remoteBranch) => (
     getLocalRefForRemoteRef(remoteBranch) === localBranch
@@ -184,10 +203,7 @@ export function getDiffCompareToolbarModel(
   const priorityRefs = getPriorityRefs(repoState);
   const priorityRefSet = new Set(priorityRefs);
   const localBranches = uniqueValues(repoState?.localBranches ?? []).filter((branch) => !priorityRefSet.has(branch));
-  const remoteBranches = uniqueValues(repoState?.remoteBranches ?? [])
-    .map(stripOriginHead)
-    .filter((branch): branch is string => branch !== null)
-    .filter((branch) => !priorityRefSet.has(branch));
+  const remoteBranches = getConfiguredRemoteBranches(repoState).filter((branch) => !priorityRefSet.has(branch));
   const menuItems: DiffCompareToolbarMenuItem[] = [
     ...(priorityRefs.length > 0 ? [
       ...createRefMenuItems(activeSelection, priorityRefs, "arrow.triangle.branch"),
@@ -247,20 +263,23 @@ export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCo
     defaultBranchRaw,
     localBranchRefs,
     remoteBranchRefs,
+    remoteNames,
   ] = await Promise.all([
     runGitValue(repoPath, ["branch", "--show-current"]),
     runGitValue(repoPath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]),
     runGitValue(repoPath, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]),
     runGitLines(repoPath, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]),
     runGitLines(repoPath, ["for-each-ref", "--format=%(refname:short)", "refs/remotes"]),
+    runGitLines(repoPath, ["remote"]),
   ]);
 
-  const defaultBranch = defaultBranchRaw?.replace(/^origin\/HEAD$/, "") || stripOriginHead(defaultBranchRaw ?? "");
+  const defaultBranch = defaultBranchRaw?.replace(/^origin\/HEAD$/, "") || stripRemoteHead(defaultBranchRaw ?? "");
   return {
     currentBranch,
     defaultBranch,
     localBranches: uniqueValues(localBranchRefs),
     remoteBranches: uniqueValues(remoteBranchRefs),
+    remoteNames: uniqueValues(remoteNames),
     repoPath,
     upstreamBranch,
   };

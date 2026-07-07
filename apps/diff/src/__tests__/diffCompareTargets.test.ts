@@ -13,6 +13,7 @@ const repoState: DiffCompareRepoState = {
   defaultBranch: "origin/main",
   localBranches: ["feature/sidebar", "main", "release/next"],
   remoteBranches: ["origin/HEAD", "origin/feature/sidebar", "origin/main", "origin/release"],
+  remoteNames: ["origin"],
   repoPath: "/tmp/repo",
   upstreamBranch: "origin/feature/sidebar",
 };
@@ -145,6 +146,42 @@ describe("diffCompareTargets", () => {
         label: "origin/topic",
         systemImageName: "cloud",
       }),
+    ]));
+  });
+
+  it("ignores stale remote refs from unconfigured remotes", () => {
+    const source: DiffOpenSource = {
+      kind: "folder",
+      label: "repo",
+      value: "/tmp/repo",
+    };
+    const model = getDiffCompareToolbarModel(source, {
+      ...repoState,
+      remoteBranches: [
+        "origin/HEAD",
+        "origin/main",
+        "upstream/develop",
+        "stale-remote/main",
+      ],
+      remoteNames: ["origin", "upstream"],
+    });
+
+    expect(model?.menuItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: "origin/main",
+        systemImageName: "arrow.triangle.branch",
+      }),
+      expect.objectContaining({
+        label: "main",
+        systemImageName: "arrow.triangle.branch",
+      }),
+      expect.objectContaining({
+        label: "upstream/develop",
+        systemImageName: "arrow.triangle.branch",
+      }),
+    ]));
+    expect(model?.menuItems).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "stale-remote/main" }),
     ]));
   });
 

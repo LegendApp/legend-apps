@@ -2498,6 +2498,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               defaultBranch: null,
               localBranches: [],
               remoteBranches: [],
+              remoteNames: [],
               repoPath: compareRepoPath,
               upstreamBranch: null,
             });
