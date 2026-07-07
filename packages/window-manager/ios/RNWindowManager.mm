@@ -929,7 +929,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
         button.imagePosition = NSImageLeft;
       }
       NSFont *font = button.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
-      CGFloat buttonWidth = MAX(132, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 48 : 36));
+      CGFloat buttonWidth = MAX(148, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
       button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
       objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       toolbarItem.view = button;
