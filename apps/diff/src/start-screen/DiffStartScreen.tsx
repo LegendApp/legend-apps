@@ -1,26 +1,26 @@
 import { NativeSegmentedControl } from "@legend-desktop/native-select";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
 import { getDiffFolderCompareBaseKey, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   diffRecentFilters,
   formatRecentDiffSourceOpenedAt,
-  getGroupedRecentDiffSources,
+  getFilteredRecentDiffSources,
   getRecentDiffSourceDetail,
   getRecentDiffSourceKind,
   type DiffRecentFilter,
-  type DiffRecentSourceGroup,
 } from "./diffStartScreenModel";
 
 const diffStartScreenMaxContentWidth = 1080;
 const diffStartScreenBrandTitlebarHeight = 76;
-const diffStartScreenSectionGap = 30;
+const diffStartScreenSectionGap = 48;
 const diffStartScreenAccentColor = "#1f396f";
 const diffStartScreenControlBackgroundColor = "rgba(26, 27, 30, 0.72)";
 const diffStartScreenControlBorderColor = "rgba(255, 255, 255, 0.10)";
 const diffStartScreenShortcutBackgroundColor = "rgba(255, 255, 255, 0.10)";
+const folderAccentColor = "#2f93ff";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
 const filePairAccentColor = "#d08c3f";
@@ -71,7 +71,7 @@ function getSourceIconName(source: DiffOpenSource) {
 function getSourceAccentColor(source: DiffOpenSource, mutedColor: string) {
   const kind = getRecentDiffSourceKind(source);
   if (kind === "folder") {
-    return diffStartScreenAccentColor;
+    return folderAccentColor;
   }
   if (kind === "pullRequest") {
     return pullRequestAccentColor;
@@ -136,6 +136,7 @@ function DiffStartScreenRecentRow({
   foregroundColor,
   isLoading,
   isRowLoading,
+  isLastRow,
   mutedColor,
   onOpenSource,
   recentSource,
@@ -144,6 +145,7 @@ function DiffStartScreenRecentRow({
   foregroundColor: string;
   isLoading: boolean;
   isRowLoading: boolean;
+  isLastRow: boolean;
   mutedColor: string;
   onOpenSource: (source: DiffOpenSource) => void;
   recentSource: RecentDiffSource;
@@ -158,13 +160,14 @@ function DiffStartScreenRecentRow({
       style={({ pressed }) => [
         styles.recentRow,
         {
-          borderColor,
+          borderBottomColor: borderColor,
+          borderBottomWidth: isLastRow ? 0 : StyleSheet.hairlineWidth,
           opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
         },
       ]}
     >
       <View style={styles.recentRowIcon}>
-        <SFSymbol color={accentColor} name={getSourceIconName(source)} size={18} />
+        <SFSymbol color={accentColor} name={getSourceIconName(source)} size={22} />
       </View>
       <View style={styles.recentRowText}>
         <Text style={[styles.recentRowTitle, { color: foregroundColor }]} numberOfLines={1}>
@@ -183,46 +186,43 @@ function DiffStartScreenRecentRow({
           </Text>
         )}
       </View>
+      <SFSymbol color={mutedColor} name="chevron.right" size={14} />
     </Pressable>
   );
 }
 
-function DiffStartScreenRecentGroup({
+function DiffStartScreenRecentList({
   borderColor,
   foregroundColor,
-  group,
   isLoading,
   loadingSource,
   mutedColor,
   onOpenSource,
+  recentSources,
 }: {
   borderColor: string;
   foregroundColor: string;
-  group: DiffRecentSourceGroup;
   isLoading: boolean;
   loadingSource: DiffOpenSource | null;
   mutedColor: string;
   onOpenSource: (source: DiffOpenSource) => void;
+  recentSources: RecentDiffSource[];
 }) {
   return (
-    <View style={styles.recentGroup}>
-      <Text style={[styles.recentGroupTitle, { color: mutedColor }]}>
-        {group.title} ({group.recentSources.length})
-      </Text>
-      <View style={[styles.recentGroupList, { borderColor }]}>
-        {group.recentSources.map((recentSource) => (
-          <DiffStartScreenRecentRow
-            borderColor={borderColor}
-            foregroundColor={foregroundColor}
-            isLoading={isLoading}
-            isRowLoading={sourcesMatch(loadingSource, recentSource.source)}
-            key={recentSource.id}
-            mutedColor={mutedColor}
-            onOpenSource={onOpenSource}
-            recentSource={recentSource}
-          />
-        ))}
-      </View>
+    <View style={[styles.recentList, { borderColor }]}>
+      {recentSources.map((recentSource, index) => (
+        <DiffStartScreenRecentRow
+          borderColor={borderColor}
+          foregroundColor={foregroundColor}
+          isLastRow={index === recentSources.length - 1}
+          isLoading={isLoading}
+          isRowLoading={sourcesMatch(loadingSource, recentSource.source)}
+          key={recentSource.id}
+          mutedColor={mutedColor}
+          onOpenSource={onOpenSource}
+          recentSource={recentSource}
+        />
+      ))}
     </View>
   );
 }
@@ -248,7 +248,7 @@ export function DiffStartScreen({
   urlInputError,
   urlInputRef,
 }: DiffStartScreenProps) {
-  const recentGroups = getGroupedRecentDiffSources(recentSources, recentFilter);
+  const filteredRecentSources = getFilteredRecentDiffSources(recentSources, recentFilter);
   const urlInputSource = urlInput.trim() ? normalizeDiffOpenSource(urlInput) : null;
   const isUrlLoading = sourcesMatch(loadingSource, urlInputSource);
   return (
@@ -263,131 +263,133 @@ export function DiffStartScreen({
           <Text style={[styles.brandTitle, { color: foregroundColor }]}>Legend Diff</Text>
         </View>
       </View>
-      <View style={styles.startPage}>
-        <View style={styles.launcherSection}>
-          <DiffStartScreenHero
-            borderColor={borderColor}
-          />
-          <View style={styles.launcherControls}>
-            <View style={styles.launcherRow}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={isLoading}
-                onPress={onChooseFolder}
-                style={({ pressed }) => [
-                  styles.openFolderButton,
-                  {
-                    backgroundColor: diffStartScreenAccentColor,
-                    opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
-                  },
-                ]}
-              >
-                <View
-                  className="absolute inset-0 bg-gradient-to-r from-[#1f396f] via-[#24437b] to-[#365487]"
-                  pointerEvents="none"
-                  style={styles.openFolderButtonGradient}
-                />
-                <View style={styles.controlLabel}>
-                  <SFSymbol color="#ffffff" name="folder" size={20} />
-                  <Text style={styles.openFolderText}>Open Folder</Text>
-                </View>
-                <ShortcutPill color="rgba(255, 255, 255, 0.88)">⌘O</ShortcutPill>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={isLoading}
-                onPress={onCompareFiles}
-                style={({ pressed }) => [
-                  styles.compareFilesButton,
-                  {
-                    borderColor: diffStartScreenControlBorderColor,
-                    opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
-                  },
-                ]}
-              >
-                <View style={styles.controlLabel}>
-                  <SFSymbol color={foregroundColor} name="doc.on.doc" size={20} />
-                  <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Compare Files</Text>
-                </View>
-                <ShortcutPill color={mutedColor}>⌥⌘O</ShortcutPill>
-              </Pressable>
-              <View style={[styles.urlField, { borderColor: diffStartScreenControlBorderColor }]}>
-                <SFSymbol color={mutedColor} name="link" size={20} style={styles.urlFieldIcon} />
-                <TextInput
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onChangeText={onChangeUrlInput}
-                  onSubmitEditing={onOpenUrl}
-                  placeholder="Paste GitHub URL or path"
-                  placeholderTextColor={mutedColor}
-                  multiline={false}
-                  numberOfLines={1}
-                  ref={urlInputRef}
-                  returnKeyType="go"
-                  style={[styles.urlInput, { color: foregroundColor }]}
-                  value={urlInput}
-                />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        style={styles.scroller}
+      >
+        <View style={styles.startPage}>
+          <View style={styles.launcherSection}>
+            <DiffStartScreenHero
+              borderColor={borderColor}
+            />
+            <View style={styles.launcherControls}>
+              <View style={styles.launcherRow}>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={isLoading || !urlInput.trim()}
-                  onPress={onOpenUrl}
+                  disabled={isLoading}
+                  onPress={onChooseFolder}
                   style={({ pressed }) => [
-                    styles.urlOpenButton,
+                    styles.openFolderButton,
                     {
-                      borderColor: diffStartScreenControlBorderColor,
-                      opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                      backgroundColor: diffStartScreenAccentColor,
+                      opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
                     },
                   ]}
                 >
-                  {isUrlLoading ? (
-                    <ActivityIndicator color={foregroundColor} size="small" />
-                  ) : (
-                    <ShortcutPill color={mutedColor}>⌘↵</ShortcutPill>
-                  )}
+                  <View
+                    className="absolute inset-0 bg-gradient-to-r from-[#1f396f] via-[#24437b] to-[#365487]"
+                    pointerEvents="none"
+                    style={styles.openFolderButtonGradient}
+                  />
+                  <View style={styles.controlLabel}>
+                    <SFSymbol color="#ffffff" name="folder" size={20} />
+                    <Text style={styles.openFolderText}>Open Folder</Text>
+                  </View>
+                  <ShortcutPill color="rgba(255, 255, 255, 0.88)">⌘O</ShortcutPill>
                 </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isLoading}
+                  onPress={onCompareFiles}
+                  style={({ pressed }) => [
+                    styles.compareFilesButton,
+                    {
+                      borderColor: diffStartScreenControlBorderColor,
+                      opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.controlLabel}>
+                    <SFSymbol color={foregroundColor} name="doc.on.doc" size={20} />
+                    <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Compare Files</Text>
+                  </View>
+                  <ShortcutPill color={mutedColor}>⌥⌘O</ShortcutPill>
+                </Pressable>
+                <View style={[styles.urlField, { borderColor: diffStartScreenControlBorderColor }]}>
+                  <SFSymbol color={mutedColor} name="link" size={20} style={styles.urlFieldIcon} />
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onChangeText={onChangeUrlInput}
+                    onSubmitEditing={onOpenUrl}
+                    placeholder="Paste GitHub URL or path"
+                    placeholderTextColor={mutedColor}
+                    multiline={false}
+                    numberOfLines={1}
+                    ref={urlInputRef}
+                    returnKeyType="go"
+                    style={[styles.urlInput, { color: foregroundColor }]}
+                    value={urlInput}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isLoading || !urlInput.trim()}
+                    onPress={onOpenUrl}
+                    style={({ pressed }) => [
+                      styles.urlOpenButton,
+                      {
+                        borderColor: diffStartScreenControlBorderColor,
+                        opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
+                      },
+                    ]}
+                  >
+                    {isUrlLoading ? (
+                      <ActivityIndicator color={foregroundColor} size="small" />
+                    ) : (
+                      <ShortcutPill color={mutedColor}>⌘↵</ShortcutPill>
+                    )}
+                  </Pressable>
+                </View>
               </View>
+              {urlInputError ? (
+                <Text style={[styles.validationText, { color: dangerColor }]}>
+                  {urlInputError}
+                </Text>
+              ) : null}
             </View>
-            {urlInputError ? (
-              <Text style={[styles.validationText, { color: dangerColor }]}>
-                {urlInputError}
-              </Text>
-            ) : null}
           </View>
-        </View>
-        <View style={[styles.sectionDivider, { backgroundColor: borderColor }]} />
-        <View style={styles.recentSection}>
-          {recentSources.length > 0 ? (
-            <>
-              <View style={styles.recentHeader}>
-                <Text style={[styles.recentTitle, { color: foregroundColor }]}>Recent</Text>
-              </View>
-              <NativeSegmentedControl
-                onChange={(nextFilter) => setRecentFilter(nextFilter as typeof recentFilter)}
-                segments={diffRecentFilters.map((filter) => ({
-                  label: filter.title,
-                  value: filter.key,
-                }))}
-                style={styles.segmentedControl}
-                value={recentFilter}
-              />
-              <View style={styles.recentGroups}>
-                {recentGroups.map((group) => (
-                  <DiffStartScreenRecentGroup
+          <View style={styles.recentSection}>
+            {recentSources.length > 0 ? (
+              <>
+                <View style={styles.recentToolbar}>
+                  <Text style={[styles.recentTitle, { color: foregroundColor }]}>Recents</Text>
+                  <NativeSegmentedControl
+                    onChange={(nextFilter) => setRecentFilter(nextFilter as typeof recentFilter)}
+                    segments={diffRecentFilters.map((filter) => ({
+                      label: filter.title,
+                      value: filter.key,
+                    }))}
+                    style={styles.segmentedControl}
+                    value={recentFilter}
+                  />
+                </View>
+                {filteredRecentSources.length > 0 ? (
+                  <DiffStartScreenRecentList
                     borderColor={borderColor}
                     foregroundColor={foregroundColor}
-                    group={group}
                     isLoading={isLoading}
-                    key={group.key}
                     loadingSource={loadingSource}
                     mutedColor={mutedColor}
                     onOpenSource={onOpenRecentSource}
+                    recentSources={filteredRecentSources}
                   />
-                ))}
-              </View>
-            </>
-          ) : null}
+                ) : null}
+              </>
+            ) : null}
+          </View>
         </View>
-      </View>
+      </ScrollView>
       {openErrorBody ? (
         <View style={styles.openError}>
           {openErrorBody}
@@ -492,36 +494,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 20,
   },
-  recentGroup: {
-    gap: 8,
-  },
-  recentGroupList: {
+  recentList: {
+    backgroundColor: diffStartScreenControlBackgroundColor,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 14,
     overflow: "hidden",
-  },
-  recentGroups: {
-    gap: 26,
-    paddingTop: 24,
-  },
-  recentGroupTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-  },
-  recentHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
   },
   recentRow: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 12,
-    minHeight: 74,
+    minHeight: 60,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   recentRowDetail: {
     fontSize: 13,
@@ -529,14 +515,14 @@ const styles = StyleSheet.create({
   },
   recentRowIcon: {
     alignItems: "center",
-    height: 26,
+    height: 28,
     justifyContent: "center",
-    width: 26,
+    width: 28,
   },
   recentRowStatus: {
     alignItems: "flex-end",
     justifyContent: "center",
-    minWidth: 70,
+    minWidth: 82,
   },
   recentRowText: {
     flex: 1,
@@ -553,25 +539,25 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 20,
   },
-  recentTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    lineHeight: 30,
-  },
   root: {
-    alignItems: "center",
     flex: 1,
     minHeight: 0,
     minWidth: 0,
+    position: "relative",
+  },
+  scroller: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollContent: {
+    alignItems: "center",
     paddingBottom: 34,
     paddingHorizontal: 48,
     paddingTop: diffStartScreenBrandTitlebarHeight + 16,
-    position: "relative",
   },
   segmentedControl: {
     height: 28,
-    marginTop: 18,
-    width: 390,
+    width: 360,
   },
   shortcutPill: {
     alignItems: "center",
@@ -592,12 +578,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 16,
   },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    width: "100%",
-  },
   recentSection: {
     minWidth: 0,
+  },
+  recentTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 24,
+  },
+  recentToolbar: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16,
   },
   startPage: {
     gap: diffStartScreenSectionGap,

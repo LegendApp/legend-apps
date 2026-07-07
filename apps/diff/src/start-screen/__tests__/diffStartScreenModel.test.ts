@@ -2,7 +2,7 @@ import type { RecentDiffSource } from "../../diffAppMetadata";
 import { createDiffFilePairSource, createDiffFileSource, normalizeDiffOpenSource, type DiffOpenSource } from "../../diffFiles";
 import {
   formatRecentDiffSourceOpenedAt,
-  getGroupedRecentDiffSources,
+  getFilteredRecentDiffSources,
   getRecentDiffSourceDetail,
   getRecentDiffSourceKind,
   getRecentDiffSourceTypeLabel,
@@ -39,50 +39,27 @@ describe("diffStartScreenModel", () => {
     expect(getRecentDiffSourceTypeLabel(recentSource("main...HEAD", 1).source)).toBe("Git diff");
   });
 
-  it("groups recent sources by start-screen section", () => {
+  it("filters recent sources by selected segment and sorts by recency", () => {
     const recentSources = [
       recentSource("/tmp/repo", 100),
       recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 95),
       recentSource(createDiffFileSource("/tmp/change.diff"), 92),
       recentSource("github.com/owner/repo/pull/7", 90),
       recentSource("github.com/owner/repo/commit/abcdef123456", 80),
-      recentSource("main...HEAD", 70),
+      recentSource("main...HEAD", 110),
     ];
 
-    expect(getGroupedRecentDiffSources(recentSources, "all").map((group) => group.title)).toEqual([
-      "Folders",
-      "File compares",
-      "Diff files",
-      "Pull requests",
-      "Commits",
-      "Git diffs",
+    expect(getFilteredRecentDiffSources(recentSources, "all")).toEqual([
+      recentSources[5],
+      recentSources[0],
+      recentSources[1],
+      recentSources[2],
+      recentSources[3],
+      recentSources[4],
     ]);
-    expect(getGroupedRecentDiffSources(recentSources, "prs")).toEqual([
-      {
-        key: "pullRequests",
-        recentSources: [recentSources[3]],
-        title: "Pull requests",
-      },
-    ]);
-    expect(getGroupedRecentDiffSources(recentSources, "files")).toEqual([
-      {
-        key: "filePairs",
-        recentSources: [recentSources[1]],
-        title: "File compares",
-      },
-      {
-        key: "diffFiles",
-        recentSources: [recentSources[2]],
-        title: "Diff files",
-      },
-    ]);
-    expect(getGroupedRecentDiffSources(recentSources, "commits")).toEqual([
-      {
-        key: "commits",
-        recentSources: [recentSources[4]],
-        title: "Commits",
-      },
-    ]);
+    expect(getFilteredRecentDiffSources(recentSources, "prs")).toEqual([recentSources[3]]);
+    expect(getFilteredRecentDiffSources(recentSources, "files")).toEqual([recentSources[1], recentSources[2]]);
+    expect(getFilteredRecentDiffSources(recentSources, "commits")).toEqual([recentSources[4]]);
   });
 
   it("formats file pair details", () => {

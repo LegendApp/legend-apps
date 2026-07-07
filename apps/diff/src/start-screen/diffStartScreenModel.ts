@@ -5,14 +5,6 @@ export type DiffRecentFilter = "all" | "folders" | "files" | "prs" | "commits";
 
 export type DiffRecentSourceKind = "commit" | "diffFile" | "filePair" | "folder" | "git" | "pullRequest";
 
-export type DiffRecentSourceGroupKey = "commits" | "diffFiles" | "filePairs" | "folders" | "gitDiffs" | "pullRequests";
-
-export type DiffRecentSourceGroup = {
-  key: DiffRecentSourceGroupKey;
-  recentSources: RecentDiffSource[];
-  title: string;
-};
-
 export const diffRecentFilters: { key: DiffRecentFilter; title: string }[] = [
   { key: "all", title: "All" },
   { key: "folders", title: "Folders" },
@@ -107,44 +99,6 @@ export function formatRecentDiffSourceOpenedAt(lastOpenedAt: number, now = Date.
   return `${days}d ago`;
 }
 
-function getGroupKeyForKind(kind: DiffRecentSourceKind): DiffRecentSourceGroupKey {
-  if (kind === "folder") {
-    return "folders";
-  }
-  if (kind === "filePair") {
-    return "filePairs";
-  }
-  if (kind === "diffFile") {
-    return "diffFiles";
-  }
-  if (kind === "pullRequest") {
-    return "pullRequests";
-  }
-  if (kind === "commit") {
-    return "commits";
-  }
-  return "gitDiffs";
-}
-
-function getGroupTitle(key: DiffRecentSourceGroupKey) {
-  if (key === "folders") {
-    return "Folders";
-  }
-  if (key === "pullRequests") {
-    return "Pull requests";
-  }
-  if (key === "commits") {
-    return "Commits";
-  }
-  if (key === "filePairs") {
-    return "File compares";
-  }
-  if (key === "diffFiles") {
-    return "Diff files";
-  }
-  return "Git diffs";
-}
-
 function matchesFilter(kind: DiffRecentSourceKind, filter: DiffRecentFilter) {
   return filter === "all" ||
     (filter === "folders" && kind === "folder") ||
@@ -153,26 +107,11 @@ function matchesFilter(kind: DiffRecentSourceKind, filter: DiffRecentFilter) {
     (filter === "commits" && kind === "commit");
 }
 
-export function getGroupedRecentDiffSources(
+export function getFilteredRecentDiffSources(
   recentSources: RecentDiffSource[],
   filter: DiffRecentFilter,
-): DiffRecentSourceGroup[] {
-  const groupOrder: DiffRecentSourceGroupKey[] = ["folders", "filePairs", "diffFiles", "pullRequests", "commits", "gitDiffs"];
-  const groups = new Map<DiffRecentSourceGroupKey, RecentDiffSource[]>();
-
-  for (const recentSource of recentSources) {
-    const kind = getRecentDiffSourceKind(recentSource.source);
-    if (matchesFilter(kind, filter)) {
-      const groupKey = getGroupKeyForKind(kind);
-      groups.set(groupKey, [...(groups.get(groupKey) ?? []), recentSource]);
-    }
-  }
-
-  return groupOrder
-    .map((groupKey) => ({
-      key: groupKey,
-      recentSources: groups.get(groupKey) ?? [],
-      title: getGroupTitle(groupKey),
-    }))
-    .filter((group) => group.recentSources.length > 0);
+): RecentDiffSource[] {
+  return recentSources
+    .filter((recentSource) => matchesFilter(getRecentDiffSourceKind(recentSource.source), filter))
+    .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt);
 }
