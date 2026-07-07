@@ -17,7 +17,10 @@ import {
 const diffStartScreenMaxContentWidth = 1080;
 const diffStartScreenBrandTitlebarHeight = 76;
 const diffStartScreenSectionGap = 30;
-const diffStartScreenAccentColor = "#426c9f";
+const diffStartScreenAccentColor = "#1f396f";
+const diffStartScreenControlBackgroundColor = "rgba(26, 27, 30, 0.72)";
+const diffStartScreenControlBorderColor = "rgba(255, 255, 255, 0.10)";
+const diffStartScreenShortcutBackgroundColor = "rgba(255, 255, 255, 0.10)";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
 const filePairAccentColor = "#d08c3f";
@@ -98,6 +101,20 @@ function DiffStartScreenHero({ borderColor }: { borderColor: string }) {
         source={diffStartHeroImage}
         style={styles.heroImage}
       />
+    </View>
+  );
+}
+
+function ShortcutPill({
+  children,
+  color,
+}: {
+  children: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.shortcutPill}>
+      <Text style={[styles.shortcutPillText, { color }]}>{children}</Text>
     </View>
   );
 }
@@ -265,8 +282,16 @@ export function DiffStartScreen({
                   },
                 ]}
               >
-                <SFSymbol color="#ffffff" name="folder" size={17} />
-                <Text style={styles.openFolderText}>Open Folder</Text>
+                <View
+                  className="absolute inset-0 bg-gradient-to-r from-[#1f396f] via-[#24437b] to-[#365487]"
+                  pointerEvents="none"
+                  style={styles.openFolderButtonGradient}
+                />
+                <View style={styles.controlLabel}>
+                  <SFSymbol color="#ffffff" name="folder" size={20} />
+                  <Text style={styles.openFolderText}>Open Folder</Text>
+                </View>
+                <ShortcutPill color="rgba(255, 255, 255, 0.88)">⌘O</ShortcutPill>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -275,16 +300,19 @@ export function DiffStartScreen({
                 style={({ pressed }) => [
                   styles.compareFilesButton,
                   {
-                    borderColor,
+                    borderColor: diffStartScreenControlBorderColor,
                     opacity: isLoading ? 0.45 : pressed ? 0.72 : 1,
                   },
                 ]}
               >
-                <SFSymbol color={foregroundColor} name="doc.on.doc" size={16} />
-                <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Compare Files</Text>
+                <View style={styles.controlLabel}>
+                  <SFSymbol color={foregroundColor} name="doc.on.doc" size={20} />
+                  <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Compare Files</Text>
+                </View>
+                <ShortcutPill color={mutedColor}>⌥⌘O</ShortcutPill>
               </Pressable>
-              <View style={[styles.urlField, { borderColor }]}>
-                <SFSymbol color={mutedColor} name="link" size={15} />
+              <View style={[styles.urlField, { borderColor: diffStartScreenControlBorderColor }]}>
+                <SFSymbol color={mutedColor} name="link" size={20} style={styles.urlFieldIcon} />
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -306,7 +334,7 @@ export function DiffStartScreen({
                   style={({ pressed }) => [
                     styles.urlOpenButton,
                     {
-                      borderColor,
+                      borderColor: diffStartScreenControlBorderColor,
                       opacity: isLoading || !urlInput.trim() ? 0.45 : pressed ? 0.72 : 1,
                     },
                   ]}
@@ -314,7 +342,7 @@ export function DiffStartScreen({
                   {isUrlLoading ? (
                     <ActivityIndicator color={foregroundColor} size="small" />
                   ) : (
-                    <Text style={[styles.urlOpenButtonText, { color: foregroundColor }]}>Open</Text>
+                    <ShortcutPill color={mutedColor}>⌘↵</ShortcutPill>
                   )}
                 </Pressable>
               </View>
@@ -396,19 +424,19 @@ const styles = StyleSheet.create({
   },
   compareFilesButton: {
     alignItems: "center",
+    backgroundColor: diffStartScreenControlBackgroundColor,
     borderRadius: 7,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: 8,
-    height: 60,
+    gap: 16,
+    height: 48,
     justifyContent: "center",
-    minWidth: 292,
-    paddingHorizontal: 22,
+    paddingHorizontal: 14,
   },
   compareFilesText: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "700",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   heroBanner: {
     aspectRatio: diffStartHeroAspectRatio,
@@ -420,13 +448,20 @@ const styles = StyleSheet.create({
     height: "100%",
     width: "100%",
   },
+  controlLabel: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    minWidth: 0,
+    zIndex: 1,
+  },
   launcherRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 18,
+    gap: 14,
   },
   launcherSection: {
-    gap: 22,
+    gap: 14,
   },
   launcherControls: {
     gap: 10,
@@ -441,17 +476,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 7,
     flexDirection: "row",
-    gap: 8,
-    height: 60,
+    gap: 16,
+    height: 48,
     justifyContent: "center",
-    minWidth: 278,
-    paddingHorizontal: 22,
+    paddingHorizontal: 14,
+    position: "relative",
+  },
+  openFolderButtonGradient: {
+    borderRadius: 7,
+    zIndex: 0,
   },
   openFolderText: {
     color: "#ffffff",
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "700",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   recentGroup: {
     gap: 8,
@@ -534,6 +573,25 @@ const styles = StyleSheet.create({
     marginTop: 18,
     width: 390,
   },
+  shortcutPill: {
+    alignItems: "center",
+    backgroundColor: diffStartScreenShortcutBackgroundColor,
+    borderRadius: 4,
+    height: 22,
+    justifyContent: "center",
+    minWidth: 35,
+    paddingHorizontal: 7,
+    shadowColor: "#000000",
+    shadowOffset: { height: 1, width: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 5,
+    zIndex: 1,
+  },
+  shortcutPillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
   sectionDivider: {
     height: StyleSheet.hairlineWidth,
     width: "100%",
@@ -548,36 +606,34 @@ const styles = StyleSheet.create({
   },
   urlField: {
     alignItems: "center",
+    backgroundColor: diffStartScreenControlBackgroundColor,
     borderRadius: 7,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     flex: 1,
-    gap: 8,
-    height: 60,
+    height: 48,
     minWidth: 0,
-    paddingLeft: 18,
+    paddingLeft: 14,
+  },
+  urlFieldIcon: {
+    marginRight: 14,
   },
   urlInput: {
     flex: 1,
-    fontSize: 16,
-    height: 58,
-    lineHeight: 22,
+    fontSize: 15,
+    height: 46,
+    lineHeight: 20,
     minWidth: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
   },
   urlOpenButton: {
     alignItems: "center",
     alignSelf: "stretch",
     borderLeftWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
     justifyContent: "center",
-    minWidth: 150,
-    paddingHorizontal: 18,
-  },
-  urlOpenButtonText: {
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 22,
+    paddingHorizontal: 10,
   },
   validationText: {
     fontSize: 12,
