@@ -1,12 +1,16 @@
 #!/usr/bin/env bun
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, shellDir } from "./lib/apps";
 import {
   ensureMacOSReleaseWorkspace,
   getMacOSReleaseAppRootDir,
+  getMacOSReleaseDerivedDataPath,
   getMacOSEnv,
   installMacOSPods,
 } from "./lib/macosWorkspaces";
-import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
+import { getMacOSAppWrapperName, macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -31,6 +35,48 @@ function getXcodeArch(arch: MacOSBuildArch) {
   return arch === "arm" ? "arm64" : "x86_64";
 }
 
+function getExistingCodeSignIdentity(appPath: string) {
+  const result = spawnSync("codesign", ["-dvv", appPath], {
+    encoding: "utf8",
+  });
+  const output = `${result.stdout}${result.stderr}`;
+
+  if (result.status !== 0) {
+    throw new Error(`Failed to inspect code signature for ${appPath}:\n${output}`);
+  }
+
+  return output.includes("Signature=adhoc")
+    ? "-"
+    : output.match(/^Authority=(.+)$/m)?.[1] ?? "-";
+}
+
+function stripMacOSHermesSymbols(appPath: string) {
+  const hermesFrameworkPath = path.join(appPath, "Contents", "Frameworks", "hermes.framework");
+  const hermesBinaryPath = path.join(hermesFrameworkPath, "Versions", "Current", "hermes");
+
+  if (fs.existsSync(hermesBinaryPath)) {
+    const signIdentity = getExistingCodeSignIdentity(appPath);
+    const preserveMetadata = "identifier,entitlements,flags,runtime";
+
+    console.log(`Stripping Hermes symbols at ${hermesBinaryPath}`);
+    runCommand("strip", ["-S", "-x", hermesBinaryPath]);
+    runCommand("codesign", [
+      "--force",
+      "--sign",
+      signIdentity,
+      `--preserve-metadata=${preserveMetadata}`,
+      hermesFrameworkPath,
+    ]);
+    runCommand("codesign", [
+      "--force",
+      "--sign",
+      signIdentity,
+      `--preserve-metadata=${preserveMetadata}`,
+      appPath,
+    ]);
+  }
+}
+
 async function buildOne(appId: string, platform: Platform, args: string[] = []) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
@@ -40,6 +86,9 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
     const arch = parseMacOSBuildArch(args);
     const appRoot = getMacOSReleaseAppRootDir(appId);
     const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
+    const derivedDataPath = getMacOSReleaseDerivedDataPath(workspaceDir, arch);
+    const appPath = path.join(derivedDataPath, "Build", "Products", "Release", getMacOSAppWrapperName(manifest.displayName));
+
     installMacOSPods(workspaceDir, generated.configPath, appId, appRoot);
     runCommand(
       "xcodebuild",
@@ -51,7 +100,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         "-configuration",
         "Release",
         "-derivedDataPath",
-        `${workspaceDir}/build/xcodebuild-release-${arch}`,
+        derivedDataPath,
         `ARCHS=${getXcodeArch(arch)}`,
         "ONLY_ACTIVE_ARCH=NO",
         "DEPLOYMENT_POSTPROCESSING=YES",
@@ -64,6 +113,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         },
       },
     );
+    stripMacOSHermesSymbols(appPath);
     return;
   }
 
