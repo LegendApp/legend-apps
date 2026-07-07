@@ -85,18 +85,75 @@ describe("diffViewerSupport", () => {
     });
   });
 
-  it("uses generic open titles for repository and URL failures", () => {
+  it("uses a generic open title for repository failures", () => {
     expect(createOpenError(folderSource, "not a repository")).toMatchObject({
       kind: "generic",
       title: "Couldn't open repository",
     });
-    expect(createOpenError(githubSource, "404")).toMatchObject({
-      kind: "generic",
-      title: "Couldn't open URL",
+  });
+
+  it("turns GitHub auth failures into actionable access errors", () => {
+    expect(createOpenError(githubSource, "Failed to fetch diff URL (403)")).toMatchObject({
+      externalUrl: githubSource.value,
+      externalUrlLabel: "Open in Browser",
+      kind: "github-auth",
+      message: "GitHub did not allow Legend Diff to download owner/repo#1. Private repository authentication is not available in Legend Diff yet.",
+      recoverySteps: [
+        "Open the PR or commit in your browser and confirm you have access.",
+        "Use a public GitHub PR or commit URL, or compare a local checkout instead.",
+        "Try opening the URL again.",
+      ],
+      title: "GitHub access is required",
     });
-    expect(createRefreshError(githubSource, "network")).toMatchObject({
-      kind: "generic",
-      title: "Couldn't refresh changes",
+  });
+
+  it("turns missing GitHub diffs into private-or-missing errors", () => {
+    expect(createOpenError(githubSource, "Failed to fetch diff URL (404)")).toMatchObject({
+      kind: "github-unavailable",
+      message: "GitHub could not find a downloadable diff for owner/repo#1. The PR or commit may be private, deleted, or mistyped.",
+      recoverySteps: [
+        "Open the URL in your browser to check whether GitHub can load it.",
+        "Confirm the URL points to a GitHub pull request or commit.",
+        "For private repositories, compare a local checkout for now.",
+      ],
+      title: "GitHub diff isn't available",
+    });
+  });
+
+  it("turns unavailable networks into connection errors", () => {
+    expect(createOpenError(githubSource, "Failed to fetch diff URL: The Internet connection appears to be offline.")).toMatchObject({
+      kind: "github-network",
+      message: "Legend Diff couldn't reach GitHub while opening owner/repo#1.",
+      recoverySteps: [
+        "Check your internet connection.",
+        "Open github.com in your browser to confirm it is reachable.",
+        "Try opening the URL again.",
+      ],
+      title: "GitHub is unreachable",
+    });
+  });
+
+  it("turns timeout failures into large-download guidance", () => {
+    expect(createOpenError(githubSource, "Failed to fetch diff URL: The request timed out.")).toMatchObject({
+      kind: "github-timeout",
+      message: "Downloading owner/repo#1 took too long. This can happen with very large diffs or a slow connection.",
+      recoverySteps: [
+        "Try opening the URL again.",
+        "Open the PR in your browser to check whether the diff is unusually large.",
+        "For very large changes, compare a local checkout instead.",
+      ],
+      title: "GitHub diff download timed out",
+    });
+  });
+
+  it("uses refresh wording for GitHub refresh failures", () => {
+    expect(createRefreshError(githubSource, "Failed to fetch diff URL (500)")).toMatchObject({
+      kind: "github-unavailable",
+      recoverySteps: [
+        "Open the URL in your browser to check the current GitHub response.",
+        "Try refreshing the diff again.",
+      ],
+      title: "GitHub couldn't provide the diff",
     });
   });
 

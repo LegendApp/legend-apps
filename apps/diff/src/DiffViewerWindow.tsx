@@ -665,6 +665,7 @@ function DiffErrorPanel({
   onChooseFolder,
   chooseFolderLabel = "Choose Folder",
   onDismiss,
+  onOpenExternalUrl,
   onOpenSystemSettings,
   onRetry,
 }: {
@@ -676,10 +677,14 @@ function DiffErrorPanel({
   mutedColor: string;
   onChooseFolder?: () => void;
   onDismiss?: () => void;
+  onOpenExternalUrl?: (url: string) => void;
   onOpenSystemSettings?: () => void;
   onRetry?: () => void;
 }) {
   const recoverySteps = "recoverySteps" in error ? error.recoverySteps : undefined;
+  const externalUrl = "externalUrl" in error ? error.externalUrl : undefined;
+  const externalUrlLabel = ("externalUrlLabel" in error ? error.externalUrlLabel : undefined) ?? "Open in Browser";
+  const canOpenExternalUrl = Boolean(onOpenExternalUrl && externalUrl);
   return (
     <View style={[styles.errorPanel, { borderColor }]}>
       <View style={[styles.errorPanelAccent, { backgroundColor: dangerColor }]} />
@@ -699,11 +704,16 @@ function DiffErrorPanel({
             ))}
           </View>
         ) : null}
-        {onRetry || onOpenSystemSettings || onChooseFolder || onDismiss ? (
+        {onRetry || canOpenExternalUrl || onOpenSystemSettings || onChooseFolder || onDismiss ? (
           <View style={styles.errorPanelActions}>
             {onRetry ? (
               <Pressable accessibilityRole="button" onPress={onRetry} style={styles.errorPanelButton}>
                 <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>Retry</Text>
+              </Pressable>
+            ) : null}
+            {onOpenExternalUrl && externalUrl ? (
+              <Pressable accessibilityRole="button" onPress={() => onOpenExternalUrl(externalUrl)} style={styles.errorPanelButton}>
+                <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>{externalUrlLabel}</Text>
               </Pressable>
             ) : null}
             {onOpenSystemSettings ? (
@@ -735,6 +745,7 @@ function DiffDocumentErrorBody({
   foregroundColor,
   mutedColor,
   onDismiss,
+  onOpenExternalUrl,
   onOpenSystemSettings,
   onRetry,
 }: {
@@ -744,6 +755,7 @@ function DiffDocumentErrorBody({
   foregroundColor: string;
   mutedColor: string;
   onDismiss: () => void;
+  onOpenExternalUrl: (url: string) => void;
   onOpenSystemSettings: () => void;
   onRetry: () => boolean;
 }) {
@@ -757,6 +769,7 @@ function DiffDocumentErrorBody({
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         onDismiss={onDismiss}
+        onOpenExternalUrl={onOpenExternalUrl}
         onOpenSystemSettings={documentError.kind === "permission" ? onOpenSystemSettings : undefined}
         onRetry={documentError.kind !== "permission" && documentError.source ? onRetry : undefined}
       />
@@ -3435,6 +3448,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       console.error(`Unable to open System Settings: ${getErrorMessage(error)}`);
     });
   }, []);
+  const openExternalErrorUrl = useCallback((url: string) => {
+    Linking.openURL(url).catch((error: unknown) => {
+      console.error(`Unable to open URL: ${getErrorMessage(error)}`);
+    });
+  }, []);
 
   const startScreenController = useDiffStartScreenController({
     loadSource,
@@ -4037,6 +4055,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor={foregroundColor}
       mutedColor={mutedColor}
       onDismiss={dismissDocumentError}
+      onOpenExternalUrl={openExternalErrorUrl}
       onOpenSystemSettings={openPermissionSettings}
       onRetry={reloadCurrentSource}
     />
@@ -4061,6 +4080,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       mutedColor={mutedColor}
       onChooseFolder={openFolder}
       onDismiss={startScreenController.dismissOpenError}
+      onOpenExternalUrl={openExternalErrorUrl}
       onOpenSystemSettings={startScreenController.openError.kind === "permission" ? openPermissionSettings : undefined}
       onRetry={startScreenController.openError.kind !== "permission" && startScreenController.openError.source ? startScreenController.retryOpenError : undefined}
     />

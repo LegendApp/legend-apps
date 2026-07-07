@@ -86,26 +86,154 @@ function createPermissionDeniedError(source: DiffOpenSource | null, message: str
   };
 }
 
-export function createOpenError(source: DiffOpenSource | null, message: string): DiffRecoverableError {
-  return source?.kind === "folder" && isPermissionDeniedMessage(message)
-    ? createPermissionDeniedError(source, message)
-    : {
-      kind: "generic",
-      message,
+function getDiffUrlStatusCode(message: string) {
+  const match = message.match(/Failed to fetch diff URL \((\d+)\)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function isNetworkUnavailableMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+  return normalizedMessage.includes("not connected to the internet") ||
+    normalizedMessage.includes("internet connection appears to be offline") ||
+    normalizedMessage.includes("cannot find host") ||
+    normalizedMessage.includes("could not connect") ||
+    normalizedMessage.includes("network connection was lost") ||
+    normalizedMessage.includes("server with the specified hostname could not be found");
+}
+
+function isTimeoutMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+  return normalizedMessage.includes("timed out") ||
+    normalizedMessage.includes("timeout");
+}
+
+function createGithubDiffError(source: DiffOpenSource, message: string, refresh: boolean): DiffRecoverableError {
+  const statusCode = getDiffUrlStatusCode(message);
+  const externalUrl = source.value;
+  const sourceLabel = getDiffSourceLabel(source);
+  const retryStep = refresh ? "Try refreshing the diff again." : "Try opening the URL again.";
+
+  if (statusCode === 401 || statusCode === 403) {
+    return {
+      externalUrl,
+      externalUrlLabel: "Open in Browser",
+      kind: "github-auth",
+      message: `GitHub did not allow Legend Diff to download ${sourceLabel}. Private repository authentication is not available in Legend Diff yet.`,
+      recoverySteps: [
+        "Open the PR or commit in your browser and confirm you have access.",
+        "Use a public GitHub PR or commit URL, or compare a local checkout instead.",
+        retryStep,
+      ],
       source,
-      title: source?.kind === "github" ? "Couldn't open URL" : "Couldn't open repository",
+      title: "GitHub access is required",
     };
+  }
+
+  if (statusCode === 404) {
+    return {
+      externalUrl,
+      externalUrlLabel: "Open in Browser",
+      kind: "github-unavailable",
+      message: `GitHub could not find a downloadable diff for ${sourceLabel}. The PR or commit may be private, deleted, or mistyped.`,
+      recoverySteps: [
+        "Open the URL in your browser to check whether GitHub can load it.",
+        "Confirm the URL points to a GitHub pull request or commit.",
+        "For private repositories, compare a local checkout for now.",
+      ],
+      source,
+      title: "GitHub diff isn't available",
+    };
+  }
+
+  if (statusCode !== null) {
+    return {
+      externalUrl,
+      externalUrlLabel: "Open in Browser",
+      kind: "github-unavailable",
+      message: `GitHub returned HTTP ${statusCode} while Legend Diff was downloading ${sourceLabel}.`,
+      recoverySteps: [
+        "Open the URL in your browser to check the current GitHub response.",
+        retryStep,
+      ],
+      source,
+      title: "GitHub couldn't provide the diff",
+    };
+  }
+
+  if (isTimeoutMessage(message)) {
+    return {
+      externalUrl,
+      externalUrlLabel: "Open in Browser",
+      kind: "github-timeout",
+      message: `Downloading ${sourceLabel} took too long. This can happen with very large diffs or a slow connection.`,
+      recoverySteps: [
+        retryStep,
+        "Open the PR in your browser to check whether the diff is unusually large.",
+        "For very large changes, compare a local checkout instead.",
+      ],
+      source,
+      title: "GitHub diff download timed out",
+    };
+  }
+
+  if (isNetworkUnavailableMessage(message)) {
+    return {
+      externalUrl,
+      externalUrlLabel: "Open in Browser",
+      kind: "github-network",
+      message: `Legend Diff couldn't reach GitHub while opening ${sourceLabel}.`,
+      recoverySteps: [
+        "Check your internet connection.",
+        "Open github.com in your browser to confirm it is reachable.",
+        retryStep,
+      ],
+      source,
+      title: "GitHub is unreachable",
+    };
+  }
+
+  return {
+    externalUrl,
+    externalUrlLabel: "Open in Browser",
+    kind: "generic",
+    message,
+    recoverySteps: [
+      "Open the URL in your browser to check whether GitHub can load the diff.",
+      retryStep,
+    ],
+    source,
+    title: refresh ? "Couldn't refresh GitHub diff" : "Couldn't open GitHub diff",
+  };
+}
+
+export function createOpenError(source: DiffOpenSource | null, message: string): DiffRecoverableError {
+  if (source?.kind === "folder" && isPermissionDeniedMessage(message)) {
+    return createPermissionDeniedError(source, message);
+  }
+  if (source?.kind === "github") {
+    return createGithubDiffError(source, message, false);
+  }
+  return {
+    kind: "generic",
+    message,
+    source,
+    title: "Couldn't open repository",
+  };
 }
 
 export function createRefreshError(source: DiffOpenSource | null, message: string): DiffRecoverableError {
-  return source?.kind === "folder" && isPermissionDeniedMessage(message)
-    ? createPermissionDeniedError(source, message)
-    : {
-      kind: "generic",
-      message,
-      source,
-      title: "Couldn't refresh changes",
-    };
+  if (source?.kind === "folder" && isPermissionDeniedMessage(message)) {
+    return createPermissionDeniedError(source, message);
+  }
+  if (source?.kind === "github") {
+    return createGithubDiffError(source, message, true);
+  }
+  return {
+    kind: "generic",
+    message,
+    source,
+    title: "Couldn't refresh changes",
+  };
 }
 
 export function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource: DiffOpenSource | null): DiffVisibleSourceModel {

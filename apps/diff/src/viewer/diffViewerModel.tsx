@@ -65,7 +65,9 @@ export type DiffFatalError = {
 };
 
 export type DiffRecoverableError = {
-  kind?: "generic" | "permission";
+  externalUrl?: string;
+  externalUrlLabel?: string;
+  kind?: "generic" | "github-auth" | "github-network" | "github-timeout" | "github-unavailable" | "permission";
   message: string;
   recoverySteps?: string[];
   source: DiffOpenSource | null;
