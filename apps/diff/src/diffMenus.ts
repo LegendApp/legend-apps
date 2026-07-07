@@ -106,10 +106,13 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         placement: { before: "Close" },
         shortcut: { key: "c", modifiers: commandModifier | optionModifier | shiftModifier },
       },
+      { separator: true, id: "separator-file-close", placement: { before: "Close" } },
       {
         id: "save",
         targetTitles: saveTargetTitles,
         enabled: false,
+        hidden: true,
+        placement: { before: "Close" },
       },
       {
         id: "hideSaveAs",
@@ -124,6 +127,11 @@ export const diffMenuConfig: NativeMenuConfig[] = [
     placement: { before: "Window" },
     items: [
       {
+        id: "hideCustomizeToolbar",
+        targetTitles: ["Customize Toolbar...", "Customize Toolbar…"],
+        hidden: true,
+      },
+      {
         id: "toggleSidebar",
         title: "Show Sidebar",
         targetTitles: ["Show Sidebar", "Hide Sidebar"],
@@ -137,12 +145,13 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         placement: { after: "Show Sidebar" },
         shortcut: { key: "f", modifiers: commandModifier },
       },
-      { separator: true, id: "separator-view-mode" },
+      { separator: true, id: "separator-view-mode", placement: { before: "Enter Full Screen" } },
       {
         id: "viewUnified",
         title: "Unified",
         checked: true,
         enabled: false,
+        placement: { before: "Enter Full Screen" },
         shortcut: { key: "1", modifiers: commandModifier },
       },
       {
@@ -150,15 +159,18 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         title: "Blocks",
         checked: false,
         enabled: false,
+        placement: { before: "Enter Full Screen" },
         shortcut: { key: "2", modifiers: commandModifier },
       },
-      { separator: true, id: "separator-view-hunks" },
+      { separator: true, id: "separator-view-hunks", placement: { before: "Enter Full Screen" } },
       {
         id: "showOnlyHunks",
         title: "Show Only Hunks",
         checked: true,
         enabled: false,
+        placement: { before: "Enter Full Screen" },
       },
+      { separator: true, id: "separator-view-fullscreen", placement: { before: "Enter Full Screen" } },
     ],
   },
 ];

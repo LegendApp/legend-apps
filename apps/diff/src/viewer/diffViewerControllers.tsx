@@ -90,6 +90,7 @@ export function DiffNativeMenuController({
       },
       {
         enabled: hasUnsavedMergeDrafts && !isSavingMergeDrafts,
+        hidden: !hasUnsavedMergeDrafts,
         id: "save",
       },
       {

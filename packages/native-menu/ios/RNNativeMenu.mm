@@ -45,6 +45,8 @@ static void RNNativeMenuInstallCommandBridge(void);
                  ownerId:(NSString *)ownerId
                   menuId:(NSString *)menuId
             boundRecords:(NSMutableArray *)boundRecords;
+- (void)moveExistingItem:(NSMenuItem *)item config:(NSDictionary *)config inMenu:(NSMenu *)menu;
+- (void)normalizeMenuItemLayout:(NSMenu *)menu;
 - (void)restoreBoundItem:(NSDictionary *)record;
 #endif
 @end
@@ -206,6 +208,8 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
         }
       }
 
+      [self normalizeMenuItemLayout:submenu];
+
       if (!isMergedMenu) {
         NSInteger insertIndex = [self insertionIndexForMenuConfig:menuConfig mainMenu:mainMenu];
         [mainMenu insertItem:rootItem atIndex:insertIndex];
@@ -244,12 +248,6 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
 {
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
-    NSArray<NSDictionary *> *boundItems = self.ownerBoundMenuItems[ownerId] ?: @[];
-    for (NSDictionary *record in boundItems) {
-      [self restoreBoundItem:record];
-    }
-    [self.ownerBoundMenuItems removeObjectForKey:ownerId];
-
     NSArray<NSMenuItem *> *mergedItems = self.ownerMergedMenuItems[ownerId] ?: @[];
     for (NSMenuItem *item in mergedItems) {
       if (item.menu) {
@@ -257,6 +255,12 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
       }
     }
     [self.ownerMergedMenuItems removeObjectForKey:ownerId];
+
+    NSArray<NSDictionary *> *boundItems = self.ownerBoundMenuItems[ownerId] ?: @[];
+    for (NSDictionary *record in boundItems) {
+      [self restoreBoundItem:record];
+    }
+    [self.ownerBoundMenuItems removeObjectForKey:ownerId];
 
     NSArray<NSMenuItem *> *rootItems = self.ownerMenus[ownerId] ?: @[];
     for (NSMenuItem *item in rootItems) {
@@ -399,7 +403,11 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
     @"keyEquivalent": item.keyEquivalent ?: @"",
     @"keyEquivalentModifierMask": @(item.keyEquivalentModifierMask),
     @"submenu": item.submenu ?: (id)kCFNull,
+    @"menu": item.menu ?: (id)kCFNull,
+    @"index": @(item.menu ? [item.menu indexOfItem:item] : -1),
   }];
+
+  [self moveExistingItem:item config:config inMenu:item.menu];
 
   if (shouldPreserveNativeAction) {
     [RNNativeMenuBoundMenuItems() setObject:payload forKey:item];
@@ -438,6 +446,18 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
 
   id submenu = record[@"submenu"];
   item.submenu = submenu == (id)kCFNull ? nil : submenu;
+
+  id menu = record[@"menu"];
+  NSInteger index = [record[@"index"] integerValue];
+  if (menu != (id)kCFNull && [menu isKindOfClass:[NSMenu class]] && item.menu == menu && index >= 0) {
+    NSMenu *originalMenu = (NSMenu *)menu;
+    NSInteger currentIndex = [originalMenu indexOfItem:item];
+    if (currentIndex >= 0 && currentIndex != index) {
+      [originalMenu removeItem:item];
+      NSInteger restoredIndex = MIN(index, originalMenu.numberOfItems);
+      [originalMenu insertItem:item atIndex:restoredIndex];
+    }
+  }
 }
 
 - (NSInteger)insertionIndexForMenuConfig:(NSDictionary *)menuConfig mainMenu:(NSMenu *)mainMenu
@@ -502,6 +522,39 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
   }
 
   return menu.numberOfItems;
+}
+
+- (void)moveExistingItem:(NSMenuItem *)item config:(NSDictionary *)config inMenu:(NSMenu *)menu
+{
+  NSDictionary *placement = [config[@"placement"] isKindOfClass:[NSDictionary class]] ? config[@"placement"] : nil;
+  NSString *before = [placement[@"before"] isKindOfClass:[NSString class]] ? placement[@"before"] : nil;
+  NSString *after = [placement[@"after"] isKindOfClass:[NSString class]] ? placement[@"after"] : nil;
+  if (!menu || (before.length == 0 && after.length == 0)) {
+    return;
+  }
+
+  NSInteger currentIndex = [menu indexOfItem:item];
+  NSInteger insertionIndex = [self insertionIndexForItemConfig:config inMenu:menu];
+  if (currentIndex < 0 || insertionIndex < 0 || currentIndex == insertionIndex) {
+    return;
+  }
+
+  [menu removeItem:item];
+  if (currentIndex < insertionIndex) {
+    insertionIndex -= 1;
+  }
+  insertionIndex = MAX(0, MIN(insertionIndex, menu.numberOfItems));
+  [menu insertItem:item atIndex:insertionIndex];
+}
+
+- (void)normalizeMenuItemLayout:(NSMenu *)menu
+{
+  for (NSMenuItem *item in menu.itemArray) {
+    if (!item.separatorItem) {
+      item.image = nil;
+      item.indentationLevel = 0;
+    }
+  }
 }
 
 - (NSMenuItem *)appendItem:(NSDictionary *)config ownerId:(NSString *)ownerId menuId:(NSString *)menuId toMenu:(NSMenu *)menu
