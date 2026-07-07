@@ -294,7 +294,7 @@ export function DiffStartScreen({
                   />
                   <View style={styles.controlLabel}>
                     <SFSymbol color="#ffffff" name="folder" size={20} />
-                    <Text style={styles.openFolderText}>Open Folder</Text>
+                    <Text style={styles.openFolderText}>Folder</Text>
                   </View>
                   <ShortcutPill color="rgba(255, 255, 255, 0.88)">⌘O</ShortcutPill>
                 </Pressable>
@@ -312,7 +312,7 @@ export function DiffStartScreen({
                 >
                   <View style={styles.controlLabel}>
                     <SFSymbol color={foregroundColor} name="doc.on.doc" size={20} />
-                    <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Compare Files</Text>
+                    <Text style={[styles.compareFilesText, { color: foregroundColor }]}>Files</Text>
                   </View>
                   <ShortcutPill color={mutedColor}>⌥⌘O</ShortcutPill>
                 </Pressable>
@@ -442,7 +442,6 @@ const styles = StyleSheet.create({
   },
   heroBanner: {
     aspectRatio: diffStartHeroAspectRatio,
-    borderRadius: 16,
     overflow: "hidden",
     width: "100%",
   },
