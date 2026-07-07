@@ -139,7 +139,7 @@ async function openDiffViewerFromClipboard(controller: DocumentAppController) {
 
   const source = normalizeDiffOpenSource(result.stdout);
   if (!source) {
-    throw new Error("Clipboard does not contain a local path or GitHub PR or commit URL.");
+    throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
   }
 
   const windowStartedAt = nowMs();

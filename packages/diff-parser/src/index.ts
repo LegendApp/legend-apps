@@ -10,18 +10,34 @@ function getDiffParser() {
 
 function normalizeGitFolderLoadOptions(options?: Partial<DiffGitFolderLoadOptions>): DiffGitFolderLoadOptions {
   return {
+    compareBaseKind: options?.compareBaseKind ?? "head",
+    compareBaseRef: options?.compareBaseRef ?? "",
+    compareUseMergeBase: options?.compareUseMergeBase ?? true,
     showOnlyHunks: options?.showOnlyHunks ?? true,
   };
 }
 
 export function loadGitFolderDiff(folderPath: string, initialRowCount = 200, options?: Partial<DiffGitFolderLoadOptions>) {
   const normalizedOptions = normalizeGitFolderLoadOptions(options);
-  return getDiffParser().loadGitFolderDiff(folderPath, initialRowCount, normalizedOptions.showOnlyHunks);
+  return getDiffParser().loadGitFolderDiff(
+    folderPath,
+    initialRowCount,
+    normalizedOptions.showOnlyHunks,
+    normalizedOptions.compareBaseKind,
+    normalizedOptions.compareBaseRef,
+    normalizedOptions.compareUseMergeBase,
+  );
 }
 
 export function startGitFolderDiff(folderPath: string, options?: Partial<DiffGitFolderLoadOptions>) {
   const normalizedOptions = normalizeGitFolderLoadOptions(options);
-  return getDiffParser().startGitFolderDiff(folderPath, normalizedOptions.showOnlyHunks);
+  return getDiffParser().startGitFolderDiff(
+    folderPath,
+    normalizedOptions.showOnlyHunks,
+    normalizedOptions.compareBaseKind,
+    normalizedOptions.compareBaseRef,
+    normalizedOptions.compareUseMergeBase,
+  );
 }
 
 export function startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string) {

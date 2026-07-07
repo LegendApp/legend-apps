@@ -9,6 +9,7 @@ const diffUrlScheme = "legend-diff:";
 
 export type DiffOpenSource =
   | {
+      compareBase?: DiffFolderCompareBase;
       kind: "folder";
       label: string;
       value: string;
@@ -32,9 +33,31 @@ export type DiffOpenSource =
       newPath: string;
       oldPath: string;
       value: string;
+    }
+  | {
+      kind: "diffFile";
+      label: string;
+      value: string;
     };
 
 export type DiffFilePairOpenSource = Extract<DiffOpenSource, { kind: "filePair" }>;
+export type DiffFileOpenSource = Extract<DiffOpenSource, { kind: "diffFile" }>;
+export type DiffFolderCompareBase =
+  | {
+      kind: "head";
+    }
+  | {
+      kind: "ref";
+      ref: string;
+      useMergeBase?: boolean;
+    };
+
+export function getDiffFolderCompareBaseKey(compareBase: DiffFolderCompareBase | undefined) {
+  if (!compareBase || compareBase.kind === "head") {
+    return "head";
+  }
+  return `${compareBase.kind}:${compareBase.ref}:${compareBase.useMergeBase === false ? "direct" : "merge-base"}`;
+}
 
 export function getFilename(path: string) {
   const separatorIndex = path.lastIndexOf("/");
@@ -55,6 +78,18 @@ export function createDiffFilePairSource(oldPath: string, newPath: string): Diff
     newPath,
     oldPath,
     value: `${oldPath}\n${newPath}`,
+  };
+}
+
+export function isDiffFilePath(path: string) {
+  return /\.(diff|patch)$/i.test(path);
+}
+
+export function createDiffFileSource(path: string): DiffFileOpenSource {
+  return {
+    kind: "diffFile",
+    label: getFilename(path),
+    value: path,
   };
 }
 
@@ -131,6 +166,37 @@ function getFileUrlPath(value: string) {
   return path;
 }
 
+function stripPathInputQuotes(value: string) {
+  const trimmedValue = value.trim();
+  if (
+    (trimmedValue.startsWith("\"") && trimmedValue.endsWith("\"")) ||
+    (trimmedValue.startsWith("'") && trimmedValue.endsWith("'"))
+  ) {
+    return trimmedValue.slice(1, -1);
+  }
+  return trimmedValue;
+}
+
+function getLocalInputPath(value: string, cwd: string | null | undefined) {
+  const trimmedValue = stripPathInputQuotes(value);
+  const fileUrlPath = getFileUrlPath(trimmedValue);
+  return fileUrlPath ?? (!hasUrlScheme(trimmedValue) ? resolvePath(trimmedValue, cwd) : null);
+}
+
+function getFilePairSourceFromText(value: string, cwd: string | null | undefined) {
+  const lines = value
+    .split(/\r?\n/)
+    .map(stripPathInputQuotes)
+    .filter(Boolean);
+  let source: DiffFilePairOpenSource | null = null;
+  if (lines.length === 2) {
+    const oldPath = getLocalInputPath(lines[0], cwd);
+    const newPath = getLocalInputPath(lines[1], cwd);
+    source = oldPath && newPath ? createDiffFilePairSource(oldPath, newPath) : null;
+  }
+  return source;
+}
+
 function getGithubDiffSource(value: string): DiffOpenSource | null {
   const url = parseUrl(value);
 
@@ -172,12 +238,14 @@ function createGitDiffSource(value: string, cwd: string | null | undefined): Dif
 
 function normalizeDiffOpenSourceString(value: string, cwd?: string | null) {
   const trimmedValue = value.trim();
-  const fileUrlPath = getFileUrlPath(trimmedValue);
-  const folderPath = fileUrlPath ?? (!hasUrlScheme(trimmedValue) && !isGitDiffArgument(trimmedValue)
-    ? resolvePath(trimmedValue, cwd)
-    : null);
-  return getGithubDiffSource(trimmedValue)
+  const resolvedFilePath = getLocalInputPath(trimmedValue, cwd);
+  const folderPath = !isGitDiffArgument(trimmedValue)
+    ? resolvedFilePath
+    : null;
+  return getFilePairSourceFromText(trimmedValue, cwd)
+    ?? getGithubDiffSource(trimmedValue)
     ?? (isGitDiffArgument(trimmedValue) ? createGitDiffSource(trimmedValue, cwd) : null)
+    ?? (resolvedFilePath && isDiffFilePath(resolvedFilePath) ? createDiffFileSource(resolvedFilePath) : null)
     ?? (folderPath ? {
       kind: "folder" as const,
       label: getFilename(folderPath),

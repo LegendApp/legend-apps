@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../nitrogen/generated/shared/c++/HybridDiffLoadSessionSpec.hpp"
+#include "DiffParserCore.hpp"
 #include "HybridDiffDocument.hpp"
 
 #include <atomic>
@@ -13,11 +14,14 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
 class HybridDiffLoadSession final : public HybridDiffLoadSessionSpec {
 public:
-  static std::shared_ptr<HybridDiffLoadSession> create(const std::string& folderPath, bool showOnlyHunks);
+  static std::shared_ptr<HybridDiffLoadSession> create(
+      const std::string& folderPath,
+      bool showOnlyHunks,
+      DiffGitCompareOptions compareOptions);
   static std::shared_ptr<HybridDiffLoadSession> createUnifiedDiffUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel);
-  HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks);
+  HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks, DiffGitCompareOptions compareOptions);
   HybridDiffLoadSession(std::string diffUrl, std::string sourceLabel);
   ~HybridDiffLoadSession() override;
 
@@ -47,6 +51,7 @@ private:
   std::string diffUrl_;
   std::string sourceLabel_;
   bool showOnlyHunks_;
+  DiffGitCompareOptions compareOptions_;
   std::shared_ptr<HybridDiffDocument> document_;
   std::thread workerThread_;
   std::atomic<bool> cancelled_{false};

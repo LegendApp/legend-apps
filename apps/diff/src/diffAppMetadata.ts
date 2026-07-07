@@ -1,6 +1,6 @@
 import { createObservableFile } from "@legend-desktop/storage";
 import type { WindowFrame } from "@legend-desktop/window-manager";
-import type { DiffOpenSource } from "./diffFiles";
+import { getDiffFolderCompareBaseKey, type DiffOpenSource } from "./diffFiles";
 
 const maxRecentSources = 12;
 const maxSavedWindows = 20;
@@ -41,7 +41,10 @@ export function getDiffSourceRecentId(source: DiffOpenSource) {
   if (source.kind === "filePair") {
     return `${source.kind}:${source.oldPath}\u0000${source.newPath}`;
   }
-  return `${source.kind}:${source.value}`;
+  if (source.kind === "diffFile") {
+    return `${source.kind}:${source.value}`;
+  }
+  return `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`;
 }
 
 export function getRecentDiffSources() {

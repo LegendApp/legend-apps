@@ -8,6 +8,7 @@ import {
   diffViewerWindowIdentifier,
   diffViewerWindowModuleName,
 } from "./appConstants";
+import { getDiffCompareToolbarModel, type DiffCompareRepoState } from "./diffCompareTargets";
 import { upsertSavedDiffWindow } from "./diffAppMetadata";
 import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
@@ -18,6 +19,7 @@ import { SettingsWindow } from "./SettingsWindow";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
 export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
+export const diffCompareToolbarItemId = "diff-compare-target";
 let diffViewerUntitledWindowId = 0;
 let diffViewerUrlFocusRequestId = 0;
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
@@ -51,19 +53,39 @@ function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffView
   };
 }
 
+function createDiffCompareToolbarItem(source: DiffOpenSource | null | undefined, repoState: DiffCompareRepoState | null) {
+  const compareModel = getDiffCompareToolbarModel(source, repoState);
+  return compareModel ? {
+    bordered: true,
+    id: diffCompareToolbarItemId,
+    label: compareModel.label,
+    menuItems: compareModel.menuItems,
+    systemImageName: "arrow.triangle.branch",
+    tooltip: compareModel.tooltip,
+    type: "menuButton" as const,
+    value: compareModel.activeSelection,
+  } : null;
+}
+
 function createDiffViewerToolbarItems({
   showSidebarControl,
   showViewModeToolbar,
+  compareRepoState,
   sidebarCollapsed,
+  source,
   viewMode,
 }: {
   showSidebarControl?: boolean;
   showViewModeToolbar?: boolean;
+  compareRepoState?: DiffCompareRepoState | null;
   sidebarCollapsed?: boolean;
+  source?: DiffOpenSource | null;
   viewMode?: DiffViewMode;
 }) {
+  const compareToolbarItem = showViewModeToolbar ? createDiffCompareToolbarItem(source, compareRepoState ?? null) : null;
   return [
     ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
+    ...(compareToolbarItem ? [compareToolbarItem] : []),
     ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
   ];
 }
@@ -74,7 +96,9 @@ function createDiffViewerWindowStyle({
   includeToolbarItems = true,
   showSidebarControl,
   showViewModeToolbar,
+  compareRepoState,
   sidebarCollapsed,
+  source,
   viewMode,
 }: {
   appearance?: "dark" | "light";
@@ -82,7 +106,9 @@ function createDiffViewerWindowStyle({
   includeToolbarItems?: boolean;
   showSidebarControl?: boolean;
   showViewModeToolbar?: boolean;
+  compareRepoState?: DiffCompareRepoState | null;
   sidebarCollapsed?: boolean;
+  source?: DiffOpenSource | null;
   viewMode?: DiffViewMode;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
@@ -112,7 +138,9 @@ function createDiffViewerWindowStyle({
           toolbarItems: createDiffViewerToolbarItems({
             showSidebarControl,
             showViewModeToolbar,
+            compareRepoState,
             sidebarCollapsed,
+            source,
             viewMode,
           }),
         }
@@ -199,6 +227,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     includeFrame: true,
     showSidebarControl: shouldShowSourceToolbar,
     showViewModeToolbar: shouldShowSourceToolbar,
+    source,
   });
   if (options.frame) {
     windowStyle.width = options.frame.width;
@@ -254,6 +283,7 @@ export function setDiffViewerWindowAppearance({
 
 export function setDiffViewerWindowToolbarOptions({
   source,
+  compareRepoState,
   hasUnsavedMergeDrafts,
   showSidebarControl,
   showViewModeToolbar,
@@ -263,6 +293,7 @@ export function setDiffViewerWindowToolbarOptions({
   windowIdentifier,
 }: {
   source: DiffOpenSource | null;
+  compareRepoState: DiffCompareRepoState | null;
   hasUnsavedMergeDrafts: boolean;
   showSidebarControl: boolean;
   showViewModeToolbar: boolean;
@@ -278,7 +309,9 @@ export function setDiffViewerWindowToolbarOptions({
       includeFrame: false,
       showSidebarControl,
       showViewModeToolbar,
+      compareRepoState,
       sidebarCollapsed,
+      source,
       viewMode,
     }),
   });

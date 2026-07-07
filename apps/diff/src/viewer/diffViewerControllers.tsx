@@ -8,6 +8,7 @@ import { useObserveEffect } from "@legendapp/state/react";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
+import { diffCompareToolbarTargetChooseRef, type DiffCompareRepoState } from "../diffCompareTargets";
 import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   getDiffShowOnlyHunksSetting,
@@ -18,6 +19,7 @@ import {
 } from "../diffSettings";
 import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
+  diffCompareToolbarItemId,
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
@@ -63,7 +65,23 @@ function getCopySourceMenuTitle(source: DiffOpenSource | null | undefined) {
   if (source?.kind === "filePair") {
     return "Copy Compared File Paths";
   }
+  if (source?.kind === "diffFile") {
+    return "Copy Diff File Path";
+  }
   return "Copy Folder Path";
+}
+
+function getCompareRepoStateKey(compareRepoState: DiffCompareRepoState | null) {
+  return compareRepoState
+    ? [
+      compareRepoState.repoPath,
+      compareRepoState.currentBranch ?? "",
+      compareRepoState.defaultBranch ?? "",
+      compareRepoState.upstreamBranch ?? "",
+      compareRepoState.localBranches.join("\u0000"),
+      compareRepoState.remoteBranches.join("\u0000"),
+    ].join("\u0001")
+    : "";
 }
 
 export function DiffNativeMenuController({
@@ -164,8 +182,12 @@ export function DiffNativeMenuController({
 }
 
 export function DiffWindowToolbarItemController({
+  compareCurrentSource,
+  openCompareRefPrompt,
   toggleSidebar,
 }: {
+  compareCurrentSource: (selection: string) => boolean;
+  openCompareRefPrompt: () => boolean;
   toggleSidebar: () => boolean;
 }) {
   const windowIdentifier = useWindowId();
@@ -175,20 +197,26 @@ export function DiffWindowToolbarItemController({
       if (event.identifier === windowIdentifier) {
         if (event.itemId === diffSidebarToolbarItemId) {
           toggleSidebar();
+        } else if (event.itemId === diffCompareToolbarItemId && event.value === diffCompareToolbarTargetChooseRef) {
+          openCompareRefPrompt();
+        } else if (event.itemId === diffCompareToolbarItemId && event.value) {
+          compareCurrentSource(event.value);
         } else if (event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) {
           setDiffViewModeSetting(event.value);
         }
       }
     });
     return () => subscription.remove();
-  }, [toggleSidebar, windowIdentifier]);
+  }, [compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier]);
 
   return null;
 }
 
 export function DiffWindowChromeController({
+  compareRepoState,
   hasUnsavedMergeDrafts,
 }: {
+  compareRepoState: DiffCompareRepoState | null;
   hasUnsavedMergeDrafts: boolean;
 }) {
   const {
@@ -198,6 +226,7 @@ export function DiffWindowChromeController({
   } = useDiffViewerModel();
   const windowIdentifier = useWindowId();
   const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
+  const lastCompareRepoStateKeyRef = useRef("");
 
   const updateDiffWindowToolbar = useCallback((observe: boolean) => {
     const toolbarModel = getDiffWindowToolbarModel({
@@ -207,11 +236,14 @@ export function DiffWindowChromeController({
       state: observe ? state$.get() : state$.peek(),
       viewMode: getDiffViewModeSetting(),
     });
+    const compareRepoStateKey = getCompareRepoStateKey(compareRepoState);
 
-    if (!diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel)) {
+    if (!diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel) || lastCompareRepoStateKeyRef.current !== compareRepoStateKey) {
       lastToolbarModelRef.current = toolbarModel;
+      lastCompareRepoStateKeyRef.current = compareRepoStateKey;
       const startedAt = nowMs();
       setDiffViewerWindowToolbarOptions({
+        compareRepoState,
         hasUnsavedMergeDrafts: toolbarModel.hasUnsavedMergeDrafts,
         source: toolbarModel.source,
         showSidebarControl: toolbarModel.showSidebarControl,
@@ -231,7 +263,7 @@ export function DiffWindowChromeController({
           console.error(error instanceof Error ? error.message : String(error));
         });
     }
-  }, [hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
+  }, [compareRepoState, hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
 
   useObserveEffect(() => {
     const syntaxTheme = getDiffSyntaxTheme();
@@ -483,13 +515,13 @@ export function DiffFileWatcherController({
   useObserveEffect(() => {
     const currentState = state$.get();
     const currentVisibleSource = currentState.source;
-    const currentVisibleFolderPath = currentVisibleSource?.kind === "folder" ? currentVisibleSource.value : null;
-    if (!currentVisibleFolderPath) {
+    const currentVisibleFolderSource = currentVisibleSource?.kind === "folder" ? currentVisibleSource : null;
+    if (!currentVisibleFolderSource) {
       return undefined;
     }
 
     let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = watchDirectories([currentVisibleFolderPath], () => {
+    const subscription = watchDirectories([currentVisibleFolderSource.value], () => {
       if (reloadTimeout) {
         clearTimeout(reloadTimeout);
       }
@@ -498,8 +530,13 @@ export function DiffFileWatcherController({
       }
       reloadTimeout = setTimeout(() => {
         if ((suppressReloadUntilRef?.current ?? 0) <= Date.now()) {
-          loadSource({ kind: "folder", label: getDiffSourceLabel(currentVisibleSource), value: currentVisibleFolderPath }, { force: true, reason: "watch" }).catch((error: unknown) => {
-            setDocumentErrorValue(createRefreshError(currentVisibleSource, getErrorMessage(error)));
+          loadSource({
+            ...(currentVisibleFolderSource.compareBase ? { compareBase: currentVisibleFolderSource.compareBase } : {}),
+            kind: "folder",
+            label: getDiffSourceLabel(currentVisibleFolderSource),
+            value: currentVisibleFolderSource.value,
+          }, { force: true, reason: "watch" }).catch((error: unknown) => {
+            setDocumentErrorValue(createRefreshError(currentVisibleFolderSource, getErrorMessage(error)));
           });
         }
       }, 250);

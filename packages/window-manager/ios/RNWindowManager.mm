@@ -886,7 +886,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
 
   NSString *type = [config[@"type"] isKindOfClass:NSString.class] ? config[@"type"] : nil;
-  if ([type isEqualToString:@"button"]) {
+  if ([type isEqualToString:@"button"] || [type isEqualToString:@"menuButton"]) {
     NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
     NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
     NSString *tooltip = [config[@"tooltip"] isKindOfClass:NSString.class] ? config[@"tooltip"] : label;
@@ -897,14 +897,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
         image = [NSImage imageWithSystemSymbolName:systemImageName accessibilityDescription:label];
       }
     }
+    NSArray *menuItems = [config[@"menuItems"] isKindOfClass:NSArray.class] ? config[@"menuItems"] : @[];
+    BOOL isMenuButton = [type isEqualToString:@"menuButton"] || menuItems.count > 0;
 
     NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
     toolbarItem.label = label;
     toolbarItem.paletteLabel = label;
     toolbarItem.toolTip = tooltip;
-    toolbarItem.image = image;
-    toolbarItem.target = self;
-    toolbarItem.action = @selector(toolbarButtonItemPressed:);
     toolbarItem.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
     NSString *placement = [config[@"placement"] isKindOfClass:NSString.class] ? config[@"placement"] : @"trailing";
     if (@available(macOS 10.15, *)) {
@@ -913,11 +912,33 @@ willBeInsertedIntoToolbar:(BOOL)flag
     if (@available(macOS 11.0, *)) {
       toolbarItem.navigational = [placement isEqualToString:@"leading"];
     }
-    objc_setAssociatedObject(toolbarItem, &LegendToolbarControlMetadataKey, @{
+    NSDictionary *metadata = @{
       @"itemId": itemId,
+      @"menuItems": menuItems,
       @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
       @"windowIdentifier": toolbar.identifier ?: @"",
-    }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    };
+    if (isMenuButton) {
+      NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(toolbarButtonItemPressed:)];
+      button.bezelStyle = NSBezelStyleRounded;
+      button.controlSize = NSControlSizeRegular;
+      button.enabled = toolbarItem.enabled;
+      button.toolTip = tooltip;
+      if (image) {
+        button.image = image;
+        button.imagePosition = NSImageLeft;
+      }
+      NSFont *font = button.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
+      CGFloat buttonWidth = MAX(132, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 48 : 36));
+      button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
+      objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      toolbarItem.view = button;
+    } else {
+      toolbarItem.image = image;
+      toolbarItem.target = self;
+      toolbarItem.action = @selector(toolbarButtonItemPressed:);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
     return toolbarItem;
   }
 
@@ -1001,7 +1022,26 @@ willBeInsertedIntoToolbar:(BOOL)flag
   return toolbarItem;
 }
 
-- (void)toolbarButtonItemPressed:(NSToolbarItem *)sender
+- (void)toolbarMenuItemSelected:(NSMenuItem *)sender
+{
+  NSDictionary *representedObject = [sender.representedObject isKindOfClass:NSDictionary.class]
+    ? sender.representedObject
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+  NSString *value = [representedObject[@"value"] isKindOfClass:NSString.class]
+    ? representedObject[@"value"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarItemSelected"
+                           body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+
+- (void)toolbarButtonItemPressed:(id)sender
 {
   id metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
   NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
@@ -1016,6 +1056,61 @@ willBeInsertedIntoToolbar:(BOOL)flag
   NSString *value = [representedObject[@"value"] isKindOfClass:NSString.class]
     ? representedObject[@"value"]
     : @"";
+  NSArray *menuItems = [representedObject[@"menuItems"] isKindOfClass:NSArray.class]
+    ? representedObject[@"menuItems"]
+    : @[];
+
+  if (menuItems.count > 0) {
+    NSMenu *menu = [NSMenu new];
+    menu.autoenablesItems = NO;
+    for (id itemCandidate in menuItems) {
+      if (![itemCandidate isKindOfClass:NSDictionary.class]) {
+        continue;
+      }
+      NSDictionary *itemConfig = (NSDictionary *)itemCandidate;
+      if (LegendDictionaryHasKey(itemConfig, @"separator") && [itemConfig[@"separator"] boolValue]) {
+        [menu addItem:NSMenuItem.separatorItem];
+        continue;
+      }
+      NSString *itemLabel = [itemConfig[@"label"] isKindOfClass:NSString.class] ? itemConfig[@"label"] : @"";
+      NSString *itemValue = [itemConfig[@"value"] isKindOfClass:NSString.class] ? itemConfig[@"value"] : @"";
+      if (itemLabel.length == 0 || itemValue.length == 0) {
+        continue;
+      }
+      NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemLabel action:@selector(toolbarMenuItemSelected:) keyEquivalent:@""];
+      item.target = self;
+      item.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
+      item.state = LegendDictionaryHasKey(itemConfig, @"selected") && [itemConfig[@"selected"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+      NSString *itemSystemImageName = [itemConfig[@"systemImageName"] isKindOfClass:NSString.class] ? itemConfig[@"systemImageName"] : nil;
+      if (itemSystemImageName.length > 0) {
+        if (@available(macOS 11.0, *)) {
+          item.image = [NSImage imageWithSystemSymbolName:itemSystemImageName accessibilityDescription:itemLabel];
+        }
+      }
+      item.representedObject = @{
+        @"itemId": itemId,
+        @"value": itemValue,
+        @"windowIdentifier": identifier,
+      };
+      [menu addItem:item];
+    }
+
+    if (menu.numberOfItems > 0) {
+      if ([sender isKindOfClass:NSView.class]) {
+        NSView *senderView = (NSView *)sender;
+        [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, NSHeight(senderView.bounds) + 4) inView:senderView];
+      } else {
+        NSEvent *event = NSApp.currentEvent;
+        NSWindow *window = (NSWindow *)self.windows[identifier];
+        if (event && window.contentView) {
+          [NSMenu popUpContextMenu:menu withEvent:event forView:window.contentView];
+        } else {
+          [menu popUpMenuPositioningItem:nil atLocation:NSZeroPoint inView:nil];
+        }
+      }
+      return;
+    }
+  }
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
                            body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];

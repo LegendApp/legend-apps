@@ -1,11 +1,11 @@
 import type { RecentDiffSource } from "../diffAppMetadata";
-import type { DiffOpenSource } from "../diffFiles";
+import { getDiffFolderCompareBaseKey, type DiffOpenSource } from "../diffFiles";
 
 export type DiffRecentFilter = "all" | "folders" | "files" | "prs" | "commits";
 
-export type DiffRecentSourceKind = "commit" | "filePair" | "folder" | "git" | "pullRequest";
+export type DiffRecentSourceKind = "commit" | "diffFile" | "filePair" | "folder" | "git" | "pullRequest";
 
-export type DiffRecentSourceGroupKey = "commits" | "filePairs" | "folders" | "gitDiffs" | "pullRequests";
+export type DiffRecentSourceGroupKey = "commits" | "diffFiles" | "filePairs" | "folders" | "gitDiffs" | "pullRequests";
 
 export type DiffRecentSourceGroup = {
   key: DiffRecentSourceGroupKey;
@@ -41,6 +41,9 @@ export function getRecentDiffSourceKind(source: DiffOpenSource): DiffRecentSourc
   if (source.kind === "filePair") {
     return "filePair";
   }
+  if (source.kind === "diffFile") {
+    return "diffFile";
+  }
 
   const pathname = getGithubPathname(source);
   return pathname.includes("/commit/") ? "commit" : "pullRequest";
@@ -60,10 +63,16 @@ export function getRecentDiffSourceTypeLabel(source: DiffOpenSource) {
   if (kind === "filePair") {
     return "Files";
   }
+  if (kind === "diffFile") {
+    return "Diff file";
+  }
   return "PR";
 }
 
 export function getRecentDiffSourceDetail(source: DiffOpenSource) {
+  if (source.kind === "folder" && getDiffFolderCompareBaseKey(source.compareBase) !== "head") {
+    return `${source.value} -> ${source.compareBase?.kind === "ref" ? source.compareBase.ref : "HEAD"}`;
+  }
   if (source.kind === "git") {
     return `${source.cwd} ${source.args.join(" ")}`;
   }
@@ -105,6 +114,9 @@ function getGroupKeyForKind(kind: DiffRecentSourceKind): DiffRecentSourceGroupKe
   if (kind === "filePair") {
     return "filePairs";
   }
+  if (kind === "diffFile") {
+    return "diffFiles";
+  }
   if (kind === "pullRequest") {
     return "pullRequests";
   }
@@ -127,13 +139,16 @@ function getGroupTitle(key: DiffRecentSourceGroupKey) {
   if (key === "filePairs") {
     return "File compares";
   }
+  if (key === "diffFiles") {
+    return "Diff files";
+  }
   return "Git diffs";
 }
 
 function matchesFilter(kind: DiffRecentSourceKind, filter: DiffRecentFilter) {
   return filter === "all" ||
     (filter === "folders" && kind === "folder") ||
-    (filter === "files" && kind === "filePair") ||
+    (filter === "files" && (kind === "filePair" || kind === "diffFile")) ||
     (filter === "prs" && kind === "pullRequest") ||
     (filter === "commits" && kind === "commit");
 }
@@ -142,7 +157,7 @@ export function getGroupedRecentDiffSources(
   recentSources: RecentDiffSource[],
   filter: DiffRecentFilter,
 ): DiffRecentSourceGroup[] {
-  const groupOrder: DiffRecentSourceGroupKey[] = ["folders", "filePairs", "pullRequests", "commits", "gitDiffs"];
+  const groupOrder: DiffRecentSourceGroupKey[] = ["folders", "filePairs", "diffFiles", "pullRequests", "commits", "gitDiffs"];
   const groups = new Map<DiffRecentSourceGroupKey, RecentDiffSource[]>();
 
   for (const recentSource of recentSources) {

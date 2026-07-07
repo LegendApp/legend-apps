@@ -37,4 +37,4 @@ export const diffAdaptiveRender = {
   exitDelay: 150,
   exitVelocity: 3,
 };
-export const diffDropAllowedFileTypes = ["diff", "patch"];
+export const diffDropAllowedFileTypes = ["*"];

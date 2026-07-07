@@ -109,10 +109,19 @@ export type WindowTitlebarControl = {
 export type WindowToolbarSegment = {
   label: string;
   systemImageName?: string;
-  value: string;
+  value?: string;
 };
 
 export type WindowToolbarItemPlacement = "leading" | "trailing";
+
+export type WindowToolbarMenuItem = {
+  enabled?: boolean;
+  label?: string;
+  selected?: boolean;
+  separator?: boolean;
+  systemImageName?: string;
+  value?: string;
+};
 
 export type WindowToolbarSegmentedItem = {
   id: string;
@@ -128,6 +137,7 @@ export type WindowToolbarButtonItem = {
   enabled?: boolean;
   id: string;
   label?: string;
+  menuItems?: WindowToolbarMenuItem[];
   placement?: WindowToolbarItemPlacement;
   systemImageName?: string;
   tooltip?: string;
@@ -135,7 +145,12 @@ export type WindowToolbarButtonItem = {
   value?: string;
 };
 
-export type WindowToolbarItem = WindowToolbarButtonItem | WindowToolbarSegmentedItem;
+export type WindowToolbarMenuButtonItem = Omit<WindowToolbarButtonItem, "menuItems" | "type"> & {
+  menuItems: WindowToolbarMenuItem[];
+  type: "menuButton";
+};
+
+export type WindowToolbarItem = WindowToolbarButtonItem | WindowToolbarMenuButtonItem | WindowToolbarSegmentedItem;
 
 export type WindowOptions = {
   identifier?: string;

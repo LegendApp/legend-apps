@@ -59,8 +59,22 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
       parsed.timing);
 }
 
-std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(const std::string& folderPath, bool showOnlyHunks) {
-  auto parsed = parseGitRepositoryDiff(folderPath, showOnlyHunks);
+DiffGitCompareOptions createCompareOptions(
+    const std::string& compareBaseKind,
+    const std::string& compareBaseRef,
+    bool compareUseMergeBase) {
+  return DiffGitCompareOptions{
+      .baseKind = compareBaseKind,
+      .baseRef = compareBaseRef,
+      .useMergeBase = compareUseMergeBase,
+  };
+}
+
+std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(
+    const std::string& folderPath,
+    bool showOnlyHunks,
+    DiffGitCompareOptions compareOptions) {
+  auto parsed = parseGitRepositoryDiff(folderPath, showOnlyHunks, std::move(compareOptions));
   auto backingStore = createLocalRepoDiffBackingStore(parsed.repositoryPath, parsed.workdirPath, parsed.headTreeOid);
 
   return std::make_shared<HybridDiffDocument>(
@@ -85,8 +99,14 @@ double HybridDiffParser::logTimingMark(const std::string& message) {
 
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
     const std::string& folderPath,
-    bool showOnlyHunks) {
-  return HybridDiffLoadSession::create(folderPath, showOnlyHunks);
+    bool showOnlyHunks,
+    const std::string& compareBaseKind,
+    const std::string& compareBaseRef,
+    bool compareUseMergeBase) {
+  return HybridDiffLoadSession::create(
+      folderPath,
+      showOnlyHunks,
+      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase));
 }
 
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFromUrl(
@@ -102,10 +122,16 @@ std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFro
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& folderPath,
     double initialRowCount,
-    bool showOnlyHunks) {
-  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks]() -> DiffLoadResult {
+    bool showOnlyHunks,
+    const std::string& compareBaseKind,
+    const std::string& compareBaseRef,
+    bool compareUseMergeBase) {
+  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareBaseKind, compareBaseRef, compareUseMergeBase]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadGitDiffDocument(folderPath, showOnlyHunks);
+    auto document = loadGitDiffDocument(
+        folderPath,
+        showOnlyHunks,
+        createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase));
     document->logMemorySnapshot("loadGitFolderDiff.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;

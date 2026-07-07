@@ -1,5 +1,5 @@
 import type { RecentDiffSource } from "../../diffAppMetadata";
-import { createDiffFilePairSource, normalizeDiffOpenSource, type DiffOpenSource } from "../../diffFiles";
+import { createDiffFilePairSource, createDiffFileSource, normalizeDiffOpenSource, type DiffOpenSource } from "../../diffFiles";
 import {
   formatRecentDiffSourceOpenedAt,
   getGroupedRecentDiffSources,
@@ -24,6 +24,7 @@ describe("diffStartScreenModel", () => {
   it("classifies folders, GitHub pull requests, GitHub commits, and git args", () => {
     expect(getRecentDiffSourceKind(recentSource("/tmp/repo", 1).source)).toBe("folder");
     expect(getRecentDiffSourceKind(recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 1).source)).toBe("filePair");
+    expect(getRecentDiffSourceKind(recentSource(createDiffFileSource("/tmp/change.diff"), 1).source)).toBe("diffFile");
     expect(getRecentDiffSourceKind(recentSource("github.com/owner/repo/pull/7", 1).source)).toBe("pullRequest");
     expect(getRecentDiffSourceKind(recentSource("github.com/owner/repo/commit/abcdef123456", 1).source)).toBe("commit");
     expect(getRecentDiffSourceKind(recentSource("main...HEAD", 1).source)).toBe("git");
@@ -32,6 +33,7 @@ describe("diffStartScreenModel", () => {
   it("returns compact type labels", () => {
     expect(getRecentDiffSourceTypeLabel(recentSource("/tmp/repo", 1).source)).toBe("Folder");
     expect(getRecentDiffSourceTypeLabel(recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 1).source)).toBe("Files");
+    expect(getRecentDiffSourceTypeLabel(recentSource(createDiffFileSource("/tmp/change.diff"), 1).source)).toBe("Diff file");
     expect(getRecentDiffSourceTypeLabel(recentSource("github.com/owner/repo/pull/7", 1).source)).toBe("PR");
     expect(getRecentDiffSourceTypeLabel(recentSource("github.com/owner/repo/commit/abcdef123456", 1).source)).toBe("Commit");
     expect(getRecentDiffSourceTypeLabel(recentSource("main...HEAD", 1).source)).toBe("Git diff");
@@ -41,6 +43,7 @@ describe("diffStartScreenModel", () => {
     const recentSources = [
       recentSource("/tmp/repo", 100),
       recentSource(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"), 95),
+      recentSource(createDiffFileSource("/tmp/change.diff"), 92),
       recentSource("github.com/owner/repo/pull/7", 90),
       recentSource("github.com/owner/repo/commit/abcdef123456", 80),
       recentSource("main...HEAD", 70),
@@ -49,6 +52,7 @@ describe("diffStartScreenModel", () => {
     expect(getGroupedRecentDiffSources(recentSources, "all").map((group) => group.title)).toEqual([
       "Folders",
       "File compares",
+      "Diff files",
       "Pull requests",
       "Commits",
       "Git diffs",
@@ -56,7 +60,7 @@ describe("diffStartScreenModel", () => {
     expect(getGroupedRecentDiffSources(recentSources, "prs")).toEqual([
       {
         key: "pullRequests",
-        recentSources: [recentSources[2]],
+        recentSources: [recentSources[3]],
         title: "Pull requests",
       },
     ]);
@@ -66,11 +70,16 @@ describe("diffStartScreenModel", () => {
         recentSources: [recentSources[1]],
         title: "File compares",
       },
+      {
+        key: "diffFiles",
+        recentSources: [recentSources[2]],
+        title: "Diff files",
+      },
     ]);
     expect(getGroupedRecentDiffSources(recentSources, "commits")).toEqual([
       {
         key: "commits",
-        recentSources: [recentSources[3]],
+        recentSources: [recentSources[4]],
         title: "Commits",
       },
     ]);

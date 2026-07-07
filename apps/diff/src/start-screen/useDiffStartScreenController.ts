@@ -63,12 +63,12 @@ export function useDiffStartScreenController({
   const onOpenUrl = useCallback(async () => {
     if (!loadingSource$.peek()) {
       const nextSource = normalizeDiffOpenSource(urlInput$.peek());
-      if (nextSource?.kind === "github") {
+      if (nextSource) {
         setOpenErrorValue(null);
         setUrlInputErrorValue(null);
         await loadSource(nextSource);
       } else {
-        setUrlInputErrorValue("Enter a GitHub PR or commit URL.");
+        setUrlInputErrorValue("Paste a folder path, GitHub URL, .diff file, or two file paths.");
       }
     }
   }, [loadSource, loadingSource$, setOpenErrorValue, setUrlInputErrorValue, urlInput$]);

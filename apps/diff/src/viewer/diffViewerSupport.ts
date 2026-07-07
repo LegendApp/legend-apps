@@ -1,5 +1,5 @@
 import type { DiffLoadTiming } from "@legend-desktop/diff-parser";
-import { getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
+import { getDiffFolderCompareBaseKey, getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
 import { logDiffMemoryMark, logDiffOpenTiming } from "../diffInstrumentation";
 import { getDiffViewModeSetting } from "../diffSettings";
 import { diffViewerWindowTitle } from "../diffWindowTitle";
@@ -27,7 +27,13 @@ export type DiffWindowToolbarModel = {
 };
 
 export function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource) {
-  return left?.kind === right.kind && left.value === right.value;
+  return left?.kind === right.kind &&
+    left.value === right.value &&
+    (
+      left.kind !== "folder" ||
+      right.kind !== "folder" ||
+      getDiffFolderCompareBaseKey(left.compareBase) === getDiffFolderCompareBaseKey(right.compareBase)
+    );
 }
 
 export function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {

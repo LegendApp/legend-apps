@@ -468,6 +468,30 @@ void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
   expect(rowTextExistsForFile(fullParsed, fullModified, "export const outsideFullFileContext = \"base\";"), "git by-file full mode should include distant context");
 }
 
+void assertGitRepositoryDiffAgainstCompareBase(const std::string& fixturePath) {
+  const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath, true, diffparser::DiffGitCompareOptions{
+      .baseKind = "ref",
+      .baseRef = "compare-base",
+      .useMergeBase = true,
+  });
+
+  expect(!parsed.headTreeOid.empty(), "git compare-base tree oid should be set");
+
+  const auto& conflict = findFile(parsed, "src/Conflict.ts");
+  expectEqual(conflict.status, "modified", "git compare-base conflict status");
+  const auto& baseConflictRow = findRowTextForFile(parsed, conflict, "export const side = \"base\";");
+  expectEqual(baseConflictRow.changeType, diffChangeTypeRemove, "git compare-base conflict removed row type");
+  const auto& branchConflictRow = findRowTextForFile(parsed, conflict, "export const side = \"branch\";");
+  expectEqual(branchConflictRow.changeType, diffChangeTypeAdd, "git compare-base conflict branch row type");
+
+  const auto& modified = findFile(parsed, "src/App.tsx");
+  const auto& changedReturnRow = findRowTextForFile(parsed, modified, "  return \"changed\";");
+  expectEqual(changedReturnRow.changeType, diffChangeTypeAdd, "git compare-base modified added row type");
+
+  const auto& added = findFile(parsed, "src/NewFile.ts");
+  expectEqual(added.status, "untracked", "git compare-base untracked status");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -482,6 +506,7 @@ int main(int argc, char** argv) {
     if (argc > 1) {
       assertGitRepositoryDiff(argv[1]);
       assertGitRepositoryDiffByFile(argv[1]);
+      assertGitRepositoryDiffAgainstCompareBase(argv[1]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

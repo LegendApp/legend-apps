@@ -45,7 +45,7 @@ describe("@legend-desktop/diff-parser", () => {
 
     await expect(diffParser.loadGitFolderDiff("/tmp/repo")).resolves.toEqual({ ok: "git" });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true, "head", "", true);
   });
 
   it("passes explicit git folder diff row count", async () => {
@@ -53,7 +53,7 @@ describe("@legend-desktop/diff-parser", () => {
 
     await diffParser.loadGitFolderDiff("/tmp/repo", 25);
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "head", "", true);
   });
 
   it("passes git folder diff load options", async () => {
@@ -61,7 +61,19 @@ describe("@legend-desktop/diff-parser", () => {
 
     await diffParser.loadGitFolderDiff("/tmp/repo", 25, { showOnlyHunks: false });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false, "head", "", true);
+  });
+
+  it("passes git folder compare base options", async () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    await diffParser.loadGitFolderDiff("/tmp/repo", 25, {
+      compareBaseKind: "ref",
+      compareBaseRef: "origin/main",
+      compareUseMergeBase: false,
+    });
+
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "ref", "origin/main", false);
   });
 
   it("starts progressive git folder diff sessions", () => {
@@ -69,7 +81,7 @@ describe("@legend-desktop/diff-parser", () => {
 
     expect(diffParser.startGitFolderDiff("/tmp/repo")).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "head", "", true);
   });
 
   it("starts progressive git folder diff sessions with options", () => {
@@ -77,7 +89,19 @@ describe("@legend-desktop/diff-parser", () => {
 
     expect(diffParser.startGitFolderDiff("/tmp/repo", { showOnlyHunks: false })).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false, "head", "", true);
+  });
+
+  it("passes progressive git folder compare base options", () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    expect(diffParser.startGitFolderDiff("/tmp/repo", {
+      compareBaseKind: "ref",
+      compareBaseRef: "origin/main",
+      compareUseMergeBase: false,
+    })).toEqual({ ok: "session" });
+
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "ref", "origin/main", false);
   });
 
   it("starts progressive unified diff URL sessions", () => {

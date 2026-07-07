@@ -49,7 +49,7 @@ namespace margelo::nitro::legenddesktop::diffparser {
 
     public:
       // Properties
-
+      
 
     public:
       // Methods

@@ -47,7 +47,14 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElem
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
-import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
+import {
+  createDiffCompareSource,
+  createDiffCompareSourceForRef,
+  loadDiffCompareRepoState,
+  type DiffCompareRepoState,
+} from "./diffCompareTargets";
+import { getDroppedDiffSource, getUnsupportedDropMessage } from "./diffDrop";
+import { getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "./filePairDiff";
 import { getDiffPalette } from "./diffPalette";
 import {
@@ -317,12 +324,30 @@ function getDiffSourceCacheKey(source: DiffOpenSource) {
   if (source.kind === "filePair") {
     return `${source.kind}:${source.oldPath}\u0000${source.newPath}`;
   }
-  return `${source.kind}:${source.value}`;
+  if (source.kind === "diffFile") {
+    return `${source.kind}:${source.value}`;
+  }
+  return `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`;
 }
 
 function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean) {
   const mode = showOnlyHunks ? "hunks" : "full";
   return `${getDiffSourceCacheKey(source)}:${mode}`;
+}
+
+function getDiffGitFolderLoadCompareOptions(source: DiffOpenSource) {
+  if (source.kind === "folder" && source.compareBase?.kind === "ref") {
+    return {
+      compareBaseKind: "ref",
+      compareBaseRef: source.compareBase.ref,
+      compareUseMergeBase: source.compareBase.useMergeBase !== false,
+    };
+  }
+  return {
+    compareBaseKind: "head",
+    compareBaseRef: "",
+    compareUseMergeBase: true,
+  };
 }
 
 function shouldCacheLoadedDiff(loaded: DiffLoadedPayload) {
@@ -364,6 +389,16 @@ function isSaveKeyEvent(event: { keyCode: number; modifiers: number }) {
     KeyCodes.MODIFIER_CONTROL |
     KeyCodes.MODIFIER_SHIFT;
   return event.keyCode === KeyCodes.KEY_S && (event.modifiers & relevantModifiers) === saveModifiers;
+}
+
+function isPasteKeyEvent(event: { keyCode: number; modifiers: number }) {
+  const pasteModifiers = KeyCodes.MODIFIER_COMMAND;
+  const relevantModifiers =
+    KeyCodes.MODIFIER_COMMAND |
+    KeyCodes.MODIFIER_OPTION |
+    KeyCodes.MODIFIER_CONTROL |
+    KeyCodes.MODIFIER_SHIFT;
+  return event.keyCode === KeyCodes.KEY_V && (event.modifiers & relevantModifiers) === pasteModifiers;
 }
 
 type DiffSidebarFileRowProps = {
@@ -637,27 +672,6 @@ const DiffSidebarFileRow = memo(function DiffSidebarFileRow({
 
 function getDiffLineRowHeight(fontSize: number) {
   return Math.max(20, fontSize + 9);
-}
-
-function getDroppedDiffSource(drop: DragDropFileEvent): DiffOpenSource | null {
-  const directory = drop.directories[0];
-  let source = directory ? normalizeDiffOpenSource(directory) : null;
-  if (!source) {
-    const githubUrl = drop.urls.find((url) => normalizeDiffOpenSource(url)?.kind === "github");
-    const githubSource = githubUrl ? normalizeDiffOpenSource(githubUrl) : null;
-    source = githubSource?.kind === "github" ? githubSource : null;
-  }
-  return source;
-}
-
-function getUnsupportedDropMessage(drop: DragDropFileEvent) {
-  let message = "Drop a Git folder or GitHub PR or commit URL.";
-  if (drop.files.length > 0) {
-    message = "File compare is not available yet. Drop a Git folder or GitHub PR or commit URL.";
-  } else if (drop.urls.length > 0) {
-    message = "Drop a GitHub PR or commit URL.";
-  }
-  return message;
 }
 
 function DiffErrorPanel({
@@ -2196,7 +2210,7 @@ function DiffDropSurface({
             Open Diff
           </Text>
           <Text style={[styles.dropOverlayText, { color: mutedColor }]}>
-            Drop a Git folder or GitHub PR or commit URL
+            Drop a folder, .diff file, or two files
           </Text>
         </View>
       ) : null}
@@ -2280,6 +2294,54 @@ function DiffStatisticsPanel({
         <View style={styles.statisticsRow}>
           <Text style={[styles.statisticsLabel, { color: mutedColor }]}>State</Text>
           <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{loadComplete ? "Complete" : "Loading"}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function DiffCompareRefPrompt({
+  backgroundColor,
+  borderColor,
+  foregroundColor,
+  mutedColor,
+  onCancel,
+  onChangeValue,
+  onSubmit,
+  value,
+}: {
+  backgroundColor: string;
+  borderColor: string;
+  foregroundColor: string;
+  mutedColor: string;
+  onCancel: () => void;
+  onChangeValue: (value: string) => void;
+  onSubmit: () => void;
+  value: string;
+}) {
+  return (
+    <View style={styles.compareRefPromptOverlay}>
+      <Pressable accessibilityLabel="Cancel compare ref" onPress={onCancel} style={StyleSheet.absoluteFill} />
+      <View style={[styles.compareRefPrompt, { backgroundColor, borderColor }]}>
+        <Text style={[styles.compareRefPromptTitle, { color: foregroundColor }]}>Compare Against</Text>
+        <TextInput
+          autoFocus
+          onChangeText={onChangeValue}
+          onSubmitEditing={onSubmit}
+          placeholder="Branch, tag, commit, or ref"
+          placeholderTextColor={mutedColor}
+          returnKeyType="go"
+          selectionColor={foregroundColor}
+          style={[styles.compareRefPromptInput, { borderColor, color: foregroundColor }]}
+          value={value}
+        />
+        <View style={styles.compareRefPromptActions}>
+          <Pressable accessibilityRole="button" onPress={onCancel} style={[styles.compareRefPromptButton, { borderColor }]}>
+            <Text style={[styles.compareRefPromptButtonText, { color: foregroundColor }]}>Cancel</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onSubmit} style={[styles.compareRefPromptButton, { borderColor }]}>
+            <Text style={[styles.compareRefPromptButtonText, { color: foregroundColor }]}>Compare</Text>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -2370,6 +2432,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const resolvingMergeConflictKeys$ = useObservable<ReadonlySet<string>>(new Set());
   const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
   const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
+  const [compareRepoState, setCompareRepoState] = useState<DiffCompareRepoState | null>(null);
+  const [compareRefPromptVisible, setCompareRefPromptVisible] = useState(false);
+  const [compareRefInput, setCompareRefInput] = useState("");
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
     const currentKeys = resolvingMergeConflictKeysRef.current;
@@ -2399,6 +2464,43 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
+  const compareRepoPath = toolbarSource?.kind === "folder"
+    ? toolbarSource.value
+    : toolbarSource?.kind === "git"
+      ? toolbarSource.cwd
+      : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!compareRepoPath) {
+      setCompareRepoState(null);
+    } else {
+      loadDiffCompareRepoState(compareRepoPath)
+        .then((nextState) => {
+          if (!cancelled) {
+            setCompareRepoState(nextState);
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            console.error(`Unable to load diff compare targets: ${getErrorMessage(error)}`);
+            setCompareRepoState({
+              currentBranch: null,
+              defaultBranch: null,
+              localBranches: [],
+              remoteBranches: [],
+              repoPath: compareRepoPath,
+              upstreamBranch: null,
+            });
+          }
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [compareRepoPath]);
+
   const diffPalette = useMemo(
     () => getDiffPalette(syntaxTheme, displayTheme.colors),
     [
@@ -3029,6 +3131,41 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             scopes: loadedResult.document.scopeCount,
           }));
         }
+      } else if (nextSource.kind === "diffFile") {
+        logDiffOpenTiming("viewer.diffFile.start", () => ({
+          path: nextSource.value,
+          requestId,
+          sourceKind: nextSource.kind,
+        }));
+        const commandResult = await commandRunner.runCommand({
+          args: [nextSource.value],
+          command: "/bin/cat",
+          timeoutMs: 60_000,
+        });
+        if (commandResult.timedOut) {
+          loadError = new Error("Reading the diff file timed out. The file may be too large to open.");
+        } else if (commandResult.exitCode !== 0) {
+          loadError = new Error(commandResult.stderr || `cat exited with code ${commandResult.exitCode}.`);
+        } else {
+          logDiffOpenTiming("viewer.diffFile.finish", () => ({
+            requestId,
+            stderrLength: commandResult.stderr.length,
+            stdoutLength: commandResult.stdout.length,
+            timedOut: commandResult.timedOut,
+          }));
+          result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
+          const loadedResult = result;
+          logDiffOpenTiming("viewer.native.finish", () => ({
+            files: loadedResult.files.length,
+            initialRows: loadedResult.initialRows.length,
+            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
+            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
+            requestId,
+            rows: loadedResult.document.rowCount,
+            sourceKind: nextSource.kind,
+            scopes: loadedResult.document.scopeCount,
+          }));
+        }
       } else {
         logDiffOpenTiming("viewer.native.start", () => ({
           folderPath: nextSource.value,
@@ -3037,7 +3174,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           showOnlyHunks: loadShowOnlyHunks,
           sourceKind: nextSource.kind,
         }));
-        progressiveSession = startGitFolderDiff(nextSource.value, { showOnlyHunks: loadShowOnlyHunks });
+        progressiveSession = startGitFolderDiff(nextSource.value, {
+          ...getDiffGitFolderLoadCompareOptions(nextSource),
+          showOnlyHunks: loadShowOnlyHunks,
+        });
         let progress = progressiveSession.consumeChanges(initialRowCount);
         setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
         while (
@@ -3257,13 +3397,44 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return false;
   }, [saveMergeDrafts, setDocumentErrorValue, state$]);
 
+  const openClipboardSourceFromStartScreen = useCallback(() => {
+    const currentState = state$.peek();
+    const focusedUrlInput = urlInputRef.current && "isFocused" in urlInputRef.current && typeof urlInputRef.current.isFocused === "function"
+      ? urlInputRef.current.isFocused()
+      : false;
+    const canOpenClipboardSource = currentState.status === "empty" && !focusedUrlInput && !loadingSource$.peek();
+    if (canOpenClipboardSource) {
+      commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 })
+        .then((result) => {
+          if (result.exitCode !== 0) {
+            throw new Error(result.stderr || "Unable to read the clipboard.");
+          }
+          const nextSource = normalizeDiffOpenSource(result.stdout);
+          if (!nextSource) {
+            throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
+          }
+          return loadSource(nextSource);
+        })
+        .catch((error: unknown) => {
+          setOpenErrorValue({
+            message: getErrorMessage(error),
+            source: currentState.source,
+            title: "Couldn't open clipboard",
+          });
+        });
+    }
+    return canOpenClipboardSource;
+  }, [loadSource, loadingSource$, setOpenErrorValue, state$, urlInputRef]);
+
   useEffect(() => addKeyDownListener((event) => {
     let handled = false;
     if (isSaveKeyEvent(event)) {
       handled = saveMergeDraftsFromCommand();
+    } else if (isPasteKeyEvent(event)) {
+      handled = openClipboardSourceFromStartScreen();
     }
     return handled;
-  }), [saveMergeDraftsFromCommand]);
+  }), [openClipboardSourceFromStartScreen, saveMergeDraftsFromCommand]);
 
   const getCurrentMergeFileForResolve = useCallback((path: string) => {
     const existingDraft = mergeDraftsRef.current.get(path);
@@ -3566,6 +3737,62 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
     return true;
   }, [loadSource, setDocumentErrorValue, state$]);
+
+  const compareCurrentSource = useCallback((selection: string) => {
+    const currentSource = loadingSource$.peek() ?? state$.peek().source;
+    const repoPath = currentSource?.kind === "folder"
+      ? currentSource.value
+      : currentSource?.kind === "git"
+        ? currentSource.cwd
+        : null;
+    const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState) : null;
+    if (!nextSource || loadingSource$.peek()) {
+      return false;
+    }
+
+    loadSource(nextSource).catch((error: unknown) => {
+      setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
+    });
+    return true;
+  }, [compareRepoState, loadSource, loadingSource$, setDocumentErrorValue, state$]);
+
+  const openCompareRefPrompt = useCallback(() => {
+    const currentSource = loadingSource$.peek() ?? state$.peek().source;
+    const repoPath = currentSource?.kind === "folder"
+      ? currentSource.value
+      : currentSource?.kind === "git"
+        ? currentSource.cwd
+        : null;
+    if (!repoPath || loadingSource$.peek()) {
+      return false;
+    }
+
+    setCompareRefInput("");
+    setCompareRefPromptVisible(true);
+    return true;
+  }, [loadingSource$, state$]);
+
+  const closeCompareRefPrompt = useCallback(() => {
+    setCompareRefPromptVisible(false);
+    setCompareRefInput("");
+  }, []);
+
+  const submitCompareRefPrompt = useCallback(() => {
+    const ref = compareRefInput.trim();
+    const currentSource = loadingSource$.peek() ?? state$.peek().source;
+    const repoPath = currentSource?.kind === "folder"
+      ? currentSource.value
+      : currentSource?.kind === "git"
+        ? currentSource.cwd
+        : null;
+    if (ref && repoPath && !loadingSource$.peek()) {
+      const nextSource = createDiffCompareSourceForRef(repoPath, ref);
+      closeCompareRefPrompt();
+      loadSource(nextSource).catch((error: unknown) => {
+        setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
+      });
+    }
+  }, [closeCompareRefPrompt, compareRefInput, loadSource, loadingSource$, setDocumentErrorValue, state$]);
 
   const toggleShowOnlyHunks = useCallback(() => {
     const currentState = state$.peek();
@@ -4276,12 +4503,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   return (
     <>
-      <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
+      <DiffWindowChromeController compareRepoState={compareRepoState} hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
       <DiffNativeMenuSavingStateController
         hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}
         resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
       />
-      <DiffWindowToolbarItemController toggleSidebar={toggleSidebar} />
+      <DiffWindowToolbarItemController
+        compareCurrentSource={compareCurrentSource}
+        openCompareRefPrompt={openCompareRefPrompt}
+        toggleSidebar={toggleSidebar}
+      />
       <DiffLaunchController
         focusUrlInputRequestId={focusUrlInputRequestId}
         folderPath={folderPath}
@@ -4322,6 +4553,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           mutedColor={mutedColor}
           syntaxAppearance={syntaxTheme.appearance}
         />
+        {compareRefPromptVisible ? (
+          <DiffCompareRefPrompt
+            backgroundColor={diffPalette.surface}
+            borderColor={diffPalette.border}
+            foregroundColor={foregroundColor}
+            mutedColor={mutedColor}
+            onCancel={closeCompareRefPrompt}
+            onChangeValue={setCompareRefInput}
+            onSubmit={submitCompareRefPrompt}
+            value={compareRefInput}
+          />
+        ) : null}
       </DiffDropSurface>
     </>
   );
@@ -4357,6 +4600,58 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     minHeight: 0,
+  },
+  compareRefPrompt: {
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: 360,
+  },
+  compareRefPromptActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+  },
+  compareRefPromptButton: {
+    alignItems: "center",
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 26,
+    justifyContent: "center",
+    minWidth: 74,
+    paddingHorizontal: 10,
+  },
+  compareRefPromptButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  compareRefPromptInput: {
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontSize: 13,
+    height: 30,
+    lineHeight: 18,
+    paddingHorizontal: 9,
+  },
+  compareRefPromptOverlay: {
+    alignItems: "center",
+    bottom: 0,
+    justifyContent: "flex-start",
+    left: 0,
+    paddingTop: diffTitlebarTopInset + 54,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 60,
+  },
+  compareRefPromptTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   loadedRoot: {
     flex: 1,

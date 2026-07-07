@@ -1,5 +1,6 @@
 import {
   createDiffFilePairSource,
+  createDiffFileSource,
   getDiffRecentDocumentPath,
   getDiffSourceLabel,
   getFilename,
@@ -36,6 +37,19 @@ describe("diffFiles", () => {
       kind: "folder",
       label: "diff-parser",
       value: "/Users/jay/code/legend-desktop/packages/diff-parser",
+    });
+  });
+
+  it("normalizes local diff files", () => {
+    expect(normalizeDiffOpenSource("/Users/jay/code/change.diff")).toEqual({
+      kind: "diffFile",
+      label: "change.diff",
+      value: "/Users/jay/code/change.diff",
+    });
+    expect(normalizeDiffOpenSource("file:///Users/jay/My%20Patch.patch")).toEqual({
+      kind: "diffFile",
+      label: "My Patch.patch",
+      value: "/Users/jay/My Patch.patch",
     });
   });
 
@@ -78,6 +92,23 @@ describe("diffFiles", () => {
       value: "/tmp/old/App.tsx\n/tmp/new/App.tsx",
     });
     expect(createDiffFilePairSource("/tmp/App.old.tsx", "/tmp/App.new.tsx").label).toBe("App.old.tsx vs App.new.tsx");
+  });
+
+  it("normalizes two pasted file paths as a file pair", () => {
+    expect(normalizeDiffOpenSource("/tmp/old App.tsx\n'/tmp/new App.tsx'")).toEqual({
+      kind: "filePair",
+      label: "old App.tsx vs new App.tsx",
+      newPath: "/tmp/new App.tsx",
+      oldPath: "/tmp/old App.tsx",
+      value: "/tmp/old App.tsx\n/tmp/new App.tsx",
+    });
+    expect(normalizeDiffOpenSource("file:///tmp/old.ts\nfile:///tmp/new.ts")).toEqual({
+      kind: "filePair",
+      label: "old.ts vs new.ts",
+      newPath: "/tmp/new.ts",
+      oldPath: "/tmp/old.ts",
+      value: "/tmp/old.ts\n/tmp/new.ts",
+    });
   });
 
   it("reads explicit launch source arguments before scanning positional URLs", () => {
@@ -142,9 +173,11 @@ describe("diffFiles", () => {
     const folderSource = normalizeDiffOpenSource("/tmp/repo");
     const githubSource = normalizeDiffOpenSource("github.com/owner/repo/pull/1");
     const filePairSource = createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts");
+    const diffFileSource = createDiffFileSource("/tmp/change.diff");
     expect(folderSource && getDiffRecentDocumentPath(folderSource)).toBe("/tmp/repo");
     expect(githubSource && getDiffRecentDocumentPath(githubSource)).toBeNull();
     expect(getDiffRecentDocumentPath(filePairSource)).toBeNull();
+    expect(getDiffRecentDocumentPath(diffFileSource)).toBeNull();
     expect(getDiffSourceLabel(null)).toBe("Legend Diff");
     expect(getLaunchDiffFolder(["--diff-folder=/tmp/repo"])).toBe("/tmp/repo");
   });

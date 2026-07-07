@@ -26,6 +26,12 @@ struct DiffRepositoryMetadata {
   std::string headTreeOid;
 };
 
+struct DiffGitCompareOptions {
+  std::string baseKind = "head";
+  std::string baseRef;
+  bool useMergeBase = true;
+};
+
 struct DiffProgressiveCallbacks {
   std::function<bool()> shouldCancel;
   std::function<void(const std::string& phase)> onPhase;
@@ -51,15 +57,20 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath, bool showOnlyHunks = true);
+DiffParsedDocument parseGitRepositoryDiff(
+    const std::string& folderPath,
+    bool showOnlyHunks = true,
+    DiffGitCompareOptions compareOptions = {});
 DiffLoadTiming parseGitRepositoryDiffProgressive(
     const std::string& folderPath,
     const DiffProgressiveCallbacks& callbacks,
-    bool showOnlyHunks = true);
+    bool showOnlyHunks = true,
+    DiffGitCompareOptions compareOptions = {});
 DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     const std::string& folderPath,
     const DiffProgressiveCallbacks& callbacks,
-    bool showOnlyHunks = true);
+    bool showOnlyHunks = true,
+    DiffGitCompareOptions compareOptions = {});
 std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<DiffRenderRow>& rows);
 
 } // namespace margelo::nitro::legenddesktop::diffparser

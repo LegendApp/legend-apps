@@ -36,8 +36,11 @@ DiffLoadTiming createEmptyTiming() {
 
 } // namespace
 
-std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::create(const std::string& folderPath, bool showOnlyHunks) {
-  auto session = std::make_shared<HybridDiffLoadSession>(folderPath, showOnlyHunks);
+std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::create(
+    const std::string& folderPath,
+    bool showOnlyHunks,
+    DiffGitCompareOptions compareOptions) {
+  auto session = std::make_shared<HybridDiffLoadSession>(folderPath, showOnlyHunks, std::move(compareOptions));
   session->start();
   return session;
 }
@@ -50,11 +53,12 @@ std::shared_ptr<HybridDiffLoadSession> HybridDiffLoadSession::createUnifiedDiffU
   return session;
 }
 
-HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks)
+HybridDiffLoadSession::HybridDiffLoadSession(std::string folderPath, bool showOnlyHunks, DiffGitCompareOptions compareOptions)
     : HybridObject(TAG),
       kind_(Kind::GitFolder),
       folderPath_(std::move(folderPath)),
       showOnlyHunks_(showOnlyHunks),
+      compareOptions_(std::move(compareOptions)),
       document_(std::make_shared<HybridDiffDocument>(
           std::vector<DiffFileSummary>(),
           std::vector<DiffRenderRow>(),
@@ -162,9 +166,12 @@ void HybridDiffLoadSession::runGitFolder() {
           }
         },
         .onFile = [this](const DiffFileSummary& file, const DiffFileSources& fileSources, const DiffRenderRow& headerRow) {
-          (void)fileSources;
-          document_->updateProgressFile(file);
-          document_->appendProgressRow(headerRow);
+          if (file.index < document_->getFileCount()) {
+            document_->updateProgressFile(file);
+            document_->appendProgressRow(headerRow);
+          } else {
+            document_->appendProgressFile(file, fileSources, headerRow);
+          }
           rowVersion_.fetch_add(1);
           fileVersion_.fetch_add(1);
           noteRowsAvailable();
@@ -178,7 +185,7 @@ void HybridDiffLoadSession::runGitFolder() {
           document_->updateProgressFile(file);
           fileVersion_.fetch_add(1);
         },
-    }, showOnlyHunks_);
+    }, showOnlyHunks_, compareOptions_);
     timing.documentMs = elapsedSessionMs(startedAt, DiffClock::now());
     timing.nativeTotalMs = timing.documentMs;
     document_->setProgressTiming(timing);

@@ -129,7 +129,7 @@ struct RNDragDropFilePayload {
       [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
       if (isDirectory.boolValue) {
         [payload.directories addObject:url.path];
-      } else if ([extensions containsObject:url.pathExtension.lowercaseString]) {
+      } else if ([extensions containsObject:@"*"] || [extensions containsObject:url.pathExtension.lowercaseString]) {
         [payload.files addObject:url.path];
       }
     } else {

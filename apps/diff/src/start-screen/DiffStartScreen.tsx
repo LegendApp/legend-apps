@@ -3,7 +3,7 @@ import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
-import { normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
+import { getDiffFolderCompareBaseKey, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   diffRecentFilters,
   formatRecentDiffSourceOpenedAt,
@@ -21,6 +21,7 @@ const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
 const filePairAccentColor = "#d08c3f";
+const diffFileAccentColor = "#4fb8a8";
 const diffAppIcon = require("../../macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset/icon_128x128.png");
 const diffStartHeroImage = require("./diff-start-hero.png");
 const diffStartHeroAspectRatio = 1458 / 304;
@@ -58,6 +59,9 @@ function getSourceIconName(source: DiffOpenSource) {
   if (kind === "filePair") {
     return "doc.on.doc";
   }
+  if (kind === "diffFile") {
+    return "doc.text";
+  }
   return "point.3.connected.trianglepath.dotted";
 }
 
@@ -74,6 +78,9 @@ function getSourceAccentColor(source: DiffOpenSource, mutedColor: string) {
   }
   if (kind === "filePair") {
     return filePairAccentColor;
+  }
+  if (kind === "diffFile") {
+    return diffFileAccentColor;
   }
   return mutedColor;
 }
@@ -96,7 +103,15 @@ function DiffStartScreenHero({ borderColor }: { borderColor: string }) {
 }
 
 function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource | null) {
-  return left !== null && right !== null && left.kind === right.kind && left.value === right.value;
+  return left !== null &&
+    right !== null &&
+    left.kind === right.kind &&
+    left.value === right.value &&
+    (
+      left.kind !== "folder" ||
+      right.kind !== "folder" ||
+      getDiffFolderCompareBaseKey(left.compareBase) === getDiffFolderCompareBaseKey(right.compareBase)
+    );
 }
 
 function DiffStartScreenRecentRow({

@@ -47,6 +47,7 @@ git -C "$GIT_FIXTURE" config user.email "diff-parser-native@example.com"
 git -C "$GIT_FIXTURE" config user.name "Diff Parser Native"
 git -C "$GIT_FIXTURE" add .
 git -C "$GIT_FIXTURE" commit --quiet -m "initial fixture"
+git -C "$GIT_FIXTURE" branch compare-base
 INITIAL_BRANCH="$(git -C "$GIT_FIXTURE" branch --show-current)"
 
 git -C "$GIT_FIXTURE" checkout --quiet -b conflict-branch

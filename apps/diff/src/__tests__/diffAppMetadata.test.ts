@@ -9,7 +9,7 @@ import {
   updateSavedDiffWindowSource,
   upsertSavedDiffWindow,
 } from "../diffAppMetadata";
-import { createDiffFilePairSource, normalizeDiffOpenSource } from "../diffFiles";
+import { createDiffFilePairSource, createDiffFileSource, normalizeDiffOpenSource } from "../diffFiles";
 
 describe("diffAppMetadata", () => {
   beforeEach(() => {
@@ -57,6 +57,15 @@ describe("diffAppMetadata", () => {
 
     expect(getDiffSourceRecentId(source)).toBe(getDiffSourceRecentId(sameSource));
     expect(getDiffSourceRecentId(source)).not.toBe(getDiffSourceRecentId(reversedSource));
+  });
+
+  it("uses the diff file path for diff file recent IDs", () => {
+    const source = createDiffFileSource("/tmp/change.diff");
+    const sameSource = createDiffFileSource("/tmp/change.diff");
+    const otherSource = createDiffFileSource("/tmp/other.diff");
+
+    expect(getDiffSourceRecentId(source)).toBe(getDiffSourceRecentId(sameSource));
+    expect(getDiffSourceRecentId(source)).not.toBe(getDiffSourceRecentId(otherSource));
   });
 
   it("keeps the recent source list bounded", () => {

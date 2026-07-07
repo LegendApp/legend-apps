@@ -11,7 +11,9 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace margelo::nitro::legenddesktop::diffparser {
 
@@ -80,6 +82,12 @@ struct GitDiffDeleter {
 struct GitReferenceDeleter {
   void operator()(git_reference* reference) const {
     git_reference_free(reference);
+  }
+};
+
+struct GitObjectDeleter {
+  void operator()(git_object* object) const {
+    git_object_free(object);
   }
 };
 
@@ -227,6 +235,93 @@ struct StatusPathSummary {
   std::string oldPath;
   std::string status;
 };
+
+struct GitCompareBase {
+  std::unique_ptr<git_commit, GitCommitDeleter> headCommit;
+  std::unique_ptr<git_commit, GitCommitDeleter> refCommit;
+  std::unique_ptr<git_commit, GitCommitDeleter> mergeBaseCommit;
+  std::unique_ptr<git_tree, GitTreeDeleter> tree;
+  std::string treeOid;
+};
+
+bool isHeadCompare(const DiffGitCompareOptions& compareOptions) {
+  return compareOptions.baseKind != "ref" || compareOptions.baseRef.empty();
+}
+
+std::unique_ptr<git_commit, GitCommitDeleter> lookupCommit(
+    git_repository* repo,
+    const git_oid* oid,
+    const std::string& errorMessage) {
+  git_commit* rawCommit = nullptr;
+  if (git_commit_lookup(&rawCommit, repo, oid) != 0) {
+    throw std::runtime_error(gitErrorMessage(errorMessage));
+  }
+  return std::unique_ptr<git_commit, GitCommitDeleter>(rawCommit);
+}
+
+std::unique_ptr<git_commit, GitCommitDeleter> resolveHeadCommit(git_repository* repo) {
+  git_reference* rawHead = nullptr;
+  if (git_repository_head(&rawHead, repo) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to resolve repository HEAD"));
+  }
+  std::unique_ptr<git_reference, GitReferenceDeleter> head(rawHead);
+  const git_oid* headTarget = git_reference_target(head.get());
+  if (headTarget == nullptr) {
+    throw std::runtime_error("Failed to read repository HEAD target");
+  }
+  return lookupCommit(repo, headTarget, "Failed to read repository HEAD commit");
+}
+
+std::unique_ptr<git_commit, GitCommitDeleter> resolveRefCommit(git_repository* repo, const std::string& ref) {
+  git_object* rawObject = nullptr;
+  if (git_revparse_single(&rawObject, repo, ref.c_str()) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to resolve git compare ref"));
+  }
+  std::unique_ptr<git_object, GitObjectDeleter> object(rawObject);
+
+  git_object* rawCommitObject = nullptr;
+  if (git_object_peel(&rawCommitObject, object.get(), GIT_OBJECT_COMMIT) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to peel git compare ref to a commit"));
+  }
+  std::unique_ptr<git_object, GitObjectDeleter> commitObject(rawCommitObject);
+  const git_oid* commitOid = git_object_id(commitObject.get());
+  if (commitOid == nullptr) {
+    throw std::runtime_error("Failed to read git compare ref commit id");
+  }
+  return lookupCommit(repo, commitOid, "Failed to read git compare ref commit");
+}
+
+GitCompareBase resolveCompareBase(git_repository* repo, const DiffGitCompareOptions& compareOptions) {
+  GitCompareBase result;
+  result.headCommit = resolveHeadCommit(repo);
+  git_commit* selectedCommit = result.headCommit.get();
+
+  if (!isHeadCompare(compareOptions)) {
+    result.refCommit = resolveRefCommit(repo, compareOptions.baseRef);
+    selectedCommit = result.refCommit.get();
+
+    if (compareOptions.useMergeBase) {
+      git_oid mergeBaseOid;
+      if (git_merge_base(
+              &mergeBaseOid,
+              repo,
+              git_commit_id(result.headCommit.get()),
+              git_commit_id(result.refCommit.get())) != 0) {
+        throw std::runtime_error(gitErrorMessage("Failed to find merge base for git compare ref"));
+      }
+      result.mergeBaseCommit = lookupCommit(repo, &mergeBaseOid, "Failed to read git compare merge-base commit");
+      selectedCommit = result.mergeBaseCommit.get();
+    }
+  }
+
+  git_tree* rawTree = nullptr;
+  if (git_commit_tree(&rawTree, selectedCommit) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to read git compare base tree"));
+  }
+  result.tree = std::unique_ptr<git_tree, GitTreeDeleter>(rawTree);
+  result.treeOid = git_oid_tostr_s(git_tree_id(result.tree.get()));
+  return result;
+}
 
 std::string statusFlagsStatus(unsigned int status) {
   if ((status & GIT_STATUS_CONFLICTED) != 0) {
@@ -1134,7 +1229,8 @@ DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {
 DiffLoadTiming parseGitRepositoryDiffProgressive(
     const std::string& folderPath,
     const DiffProgressiveCallbacks& callbacks,
-    bool showOnlyHunks) {
+    bool showOnlyHunks,
+    DiffGitCompareOptions compareOptions) {
   const auto loadStartedAt = DiffClock::now();
   if (callbacks.onPhase) {
     callbacks.onPhase("beforeLibGitInit");
@@ -1163,27 +1259,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
     options.context_lines = fullFileDiffContextLines;
   }
 
-  git_reference* rawHead = nullptr;
-  if (git_repository_head(&rawHead, repo.get()) != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to resolve repository HEAD"));
-  }
-  std::unique_ptr<git_reference, GitReferenceDeleter> head(rawHead);
-  const git_oid* headTarget = git_reference_target(head.get());
-  if (headTarget == nullptr) {
-    throw std::runtime_error("Failed to read repository HEAD target");
-  }
-
-  git_commit* rawHeadCommit = nullptr;
-  if (git_commit_lookup(&rawHeadCommit, repo.get(), headTarget) != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD commit"));
-  }
-  std::unique_ptr<git_commit, GitCommitDeleter> headCommit(rawHeadCommit);
-
-  git_tree* rawHeadTree = nullptr;
-  if (git_commit_tree(&rawHeadTree, headCommit.get()) != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD tree"));
-  }
-  std::unique_ptr<git_tree, GitTreeDeleter> headTree(rawHeadTree);
+  const auto compareBase = resolveCompareBase(repo.get(), compareOptions);
   if (callbacks.onPhase) {
     callbacks.onPhase("afterHeadTree");
   }
@@ -1191,7 +1267,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
   const char* rawWorkdirPath = git_repository_workdir(repo.get());
   std::string repositoryPath = rawRepositoryPath != nullptr ? std::string(rawRepositoryPath) : std::string();
   std::string workdirPath = rawWorkdirPath != nullptr ? std::string(rawWorkdirPath) : std::string();
-  std::string headTreeOid = git_oid_tostr_s(git_tree_id(headTree.get()));
+  std::string headTreeOid = compareBase.treeOid;
   if (callbacks.onRepositoryMetadata) {
     callbacks.onRepositoryMetadata(DiffRepositoryMetadata{
         .repositoryPath = repositoryPath,
@@ -1208,13 +1284,15 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
   statusOptions.flags = GIT_STATUS_OPT_NO_REFRESH;
 
   StatusPathCollectState statusState{ .callbacks = callbacks };
-  const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
-  if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
-    throw std::runtime_error(gitErrorMessage("Failed to read git status"));
+  if (isHeadCompare(compareOptions)) {
+    const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
+    if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
+      throw std::runtime_error(gitErrorMessage("Failed to read git status"));
+    }
   }
 
   git_diff* rawDiff = nullptr;
-  if (git_diff_tree_to_workdir(&rawDiff, repo.get(), headTree.get(), &options) != 0) {
+  if (git_diff_tree_to_workdir(&rawDiff, repo.get(), compareBase.tree.get(), &options) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to create git diff"));
   }
   const auto diffCreatedAt = DiffClock::now();
@@ -1247,7 +1325,12 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
 DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     const std::string& folderPath,
     const DiffProgressiveCallbacks& callbacks,
-    bool showOnlyHunks) {
+    bool showOnlyHunks,
+    DiffGitCompareOptions compareOptions) {
+  if (!isHeadCompare(compareOptions)) {
+    return parseGitRepositoryDiffProgressive(folderPath, callbacks, showOnlyHunks, std::move(compareOptions));
+  }
+
   const auto loadStartedAt = DiffClock::now();
   if (callbacks.onPhase) {
     callbacks.onPhase("beforeLibGitInit");
@@ -1267,27 +1350,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   }
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
 
-  git_reference* rawHead = nullptr;
-  if (git_repository_head(&rawHead, repo.get()) != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to resolve repository HEAD"));
-  }
-  std::unique_ptr<git_reference, GitReferenceDeleter> head(rawHead);
-  const git_oid* headTarget = git_reference_target(head.get());
-  if (headTarget == nullptr) {
-    throw std::runtime_error("Failed to read repository HEAD target");
-  }
-
-  git_commit* rawHeadCommit = nullptr;
-  if (git_commit_lookup(&rawHeadCommit, repo.get(), headTarget) != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD commit"));
-  }
-  std::unique_ptr<git_commit, GitCommitDeleter> headCommit(rawHeadCommit);
-
-  git_tree* rawHeadTree = nullptr;
-  if (git_commit_tree(&rawHeadTree, headCommit.get()) != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to read repository HEAD tree"));
-  }
-  std::unique_ptr<git_tree, GitTreeDeleter> headTree(rawHeadTree);
+  const auto compareBase = resolveCompareBase(repo.get(), compareOptions);
   if (callbacks.onPhase) {
     callbacks.onPhase("afterHeadTree");
   }
@@ -1295,7 +1358,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   const char* rawWorkdirPath = git_repository_workdir(repo.get());
   std::string repositoryPath = rawRepositoryPath != nullptr ? std::string(rawRepositoryPath) : std::string();
   std::string workdirPath = rawWorkdirPath != nullptr ? std::string(rawWorkdirPath) : std::string();
-  std::string headTreeOid = git_oid_tostr_s(git_tree_id(headTree.get()));
+  std::string headTreeOid = compareBase.treeOid;
   if (callbacks.onRepositoryMetadata) {
     callbacks.onRepositoryMetadata(DiffRepositoryMetadata{
         .repositoryPath = repositoryPath,
@@ -1346,8 +1409,8 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
 
     git_diff* rawDiff = nullptr;
     const auto diffResult = file.status == "conflicted"
-      ? git_diff_tree_to_workdir(&rawDiff, repo.get(), headTree.get(), &diffOptions)
-      : git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), headTree.get(), &diffOptions);
+      ? git_diff_tree_to_workdir(&rawDiff, repo.get(), compareBase.tree.get(), &diffOptions)
+      : git_diff_tree_to_workdir_with_index(&rawDiff, repo.get(), compareBase.tree.get(), &diffOptions);
     if (diffResult != 0) {
       throw std::runtime_error(gitErrorMessage("Failed to create path diff"));
     }
@@ -1436,7 +1499,10 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   return timing;
 }
 
-DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath, bool showOnlyHunks) {
+DiffParsedDocument parseGitRepositoryDiff(
+    const std::string& folderPath,
+    bool showOnlyHunks,
+    DiffGitCompareOptions compareOptions) {
   std::vector<DiffFileSummary> files;
   std::vector<DiffRenderRow> rows;
   std::vector<DiffFileSources> fileSources;
@@ -1473,7 +1539,7 @@ DiffParsedDocument parseGitRepositoryDiff(const std::string& folderPath, bool sh
           }
         }
       },
-  }, showOnlyHunks);
+  }, showOnlyHunks, std::move(compareOptions));
 
   return {
     .files = std::move(files),
