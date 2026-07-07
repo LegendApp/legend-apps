@@ -1,5 +1,5 @@
 import type { DiffOpenSource } from "../../diffFiles";
-import type { DiffViewerState } from "../diffViewerModel";
+import type { DiffLoadedState, DiffViewerState } from "../diffViewerModel";
 import {
   createOpenError,
   createRefreshError,
@@ -23,7 +23,7 @@ const githubSource: DiffOpenSource = {
   value: "https://github.com/owner/repo/pull/1",
 };
 
-function createLoadedState(source: DiffOpenSource = folderSource): DiffViewerState {
+function createLoadedState(source: DiffOpenSource = folderSource): DiffLoadedState {
   return {
     document: {} as never,
     files: [{
@@ -53,6 +53,19 @@ function createLoadedState(source: DiffOpenSource = folderSource): DiffViewerSta
       openRepoMs: 0,
       rowCount: 3,
       walkDiffMs: 0,
+    },
+  };
+}
+
+function createNoChangesLoadedState(source: DiffOpenSource = folderSource): DiffLoadedState {
+  const state = createLoadedState(source);
+  return {
+    ...state,
+    files: [],
+    timing: {
+      ...state.timing,
+      fileCount: 0,
+      rowCount: 0,
     },
   };
 }
@@ -157,7 +170,7 @@ describe("diffViewerSupport", () => {
     });
   });
 
-  it("shows toolbar controls only while loading or when loaded files exist", () => {
+  it("shows toolbar controls while loading or while a source is loaded", () => {
     const emptyState: DiffViewerState = { folderPath: null, source: null, status: "empty" };
     expect(getDiffVisibleSourceModel(emptyState, null)).toMatchObject({
       loadedFileCount: 0,
@@ -176,6 +189,15 @@ describe("diffViewerSupport", () => {
     expect(getDiffVisibleSourceModel(createLoadedState(), null)).toMatchObject({
       loadedFileCount: 1,
       showSidebarControl: true,
+      toolbarSource: folderSource,
+      visibleFolderPath: folderSource.value,
+      visibleSourceLabel: "repo",
+    });
+
+    expect(getDiffVisibleSourceModel(createNoChangesLoadedState(), null)).toMatchObject({
+      loadedFileCount: 0,
+      showSidebarControl: true,
+      showViewModeToolbar: true,
       toolbarSource: folderSource,
       visibleFolderPath: folderSource.value,
       visibleSourceLabel: "repo",
@@ -223,6 +245,23 @@ describe("diffViewerSupport", () => {
     })).toMatchObject({
       source: folderSource,
       title: "repo  ",
+      toolbarSource: folderSource,
+    });
+  });
+
+  it("keeps toolbar models available for loaded sources with no files", () => {
+    const model = getDiffWindowToolbarModel({
+      hasUnsavedMergeDrafts: false,
+      loadingSource: null,
+      sidebarCollapsed: false,
+      state: createNoChangesLoadedState(),
+      viewMode: "unified",
+    });
+
+    expect(model).toMatchObject({
+      showSidebarControl: true,
+      showViewModeToolbar: true,
+      source: folderSource,
       toolbarSource: folderSource,
     });
   });

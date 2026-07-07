@@ -68,6 +68,30 @@ describe("diffAppMetadata", () => {
     expect(getDiffSourceRecentId(source)).not.toBe(getDiffSourceRecentId(otherSource));
   });
 
+  it("uses only the folder path for folder recent IDs", () => {
+    const source = normalizeDiffOpenSource("/tmp/repo");
+    expect(source?.kind).toBe("folder");
+
+    if (source?.kind === "folder") {
+      const branchSource = {
+        ...source,
+        compareBase: {
+          kind: "ref" as const,
+          ref: "origin/main",
+          useMergeBase: true,
+        },
+      };
+
+      expect(getDiffSourceRecentId(source)).toBe(getDiffSourceRecentId(branchSource));
+
+      addRecentDiffSource(source);
+      addRecentDiffSource(branchSource);
+
+      expect(getRecentDiffSources()).toHaveLength(1);
+      expect(getRecentDiffSources()[0]?.id).toBe(getDiffSourceRecentId(source));
+    }
+  });
+
   it("keeps the recent source list bounded", () => {
     for (let index = 0; index < 14; index += 1) {
       const source = normalizeDiffOpenSource(`/tmp/repo-${index}`);

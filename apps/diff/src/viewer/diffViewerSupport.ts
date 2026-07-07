@@ -247,7 +247,7 @@ export function getDiffVisibleSourceModel(state: DiffViewerState, loadingSource:
   const visibleFolderPath = visibleSource?.kind === "folder" ? visibleSource.value : null;
   const visibleSourceLabel = getDiffSourceLabel(visibleSource);
   const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
-  const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? visibleSource : null);
+  const toolbarSource = loadingSource ?? (state.status === "loaded" ? visibleSource : null);
   const showViewModeToolbar = toolbarSource !== null;
   const showSidebarControl = showViewModeToolbar;
   return {
@@ -275,7 +275,7 @@ export function getDiffWindowToolbarModel({
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }): DiffWindowToolbarModel {
   const loadedFileCount = state.status === "loaded" ? state.files.length : 0;
-  const toolbarSource = loadingSource ?? (loadedFileCount > 0 ? state.source : null);
+  const toolbarSource = loadingSource ?? (state.status === "loaded" ? state.source : null);
   const showViewModeToolbar = toolbarSource !== null;
   const source = toolbarSource ?? state.source;
   const title = diffViewerWindowTitle({ hasUnsavedMergeDrafts, source });

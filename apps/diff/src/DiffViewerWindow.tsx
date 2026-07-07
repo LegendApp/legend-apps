@@ -463,6 +463,7 @@ type DiffLoadedBodyProps = {
   nativeUnifiedRowConfig: DiffNativeRowConfigProps;
   adaptiveLightModeEnabled: boolean;
   mutedColor: string;
+  noChangesBody: ReactElement;
   primaryColor: string;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
   renderSidebarEntry: (props: LegendListRenderItemProps<DiffSidebarEntry>) => ReactElement;
@@ -482,10 +483,6 @@ type DiffLoadedBodyProps = {
   syntaxTokenizationVersion$: Observable<number>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
   visibleItemIndexes: Array<number | undefined>;
-};
-
-type DiffLoadedBodyGateProps = DiffLoadedBodyProps & {
-  noChangesBody: ReactElement;
 };
 
 type DiffLoadingSplitBodyProps = {
@@ -898,36 +895,22 @@ function DiffFatalBody({
 }
 
 function DiffNoChangesBody({
-  documentErrorBody,
-  floatingDocumentBanner,
-  hasDocumentChrome,
   foregroundColor,
   mutedColor,
   visibleSourceLabel,
 }: {
-  documentErrorBody: ReactNode;
-  floatingDocumentBanner: ReactNode;
-  hasDocumentChrome: boolean;
   foregroundColor: string;
   mutedColor: string;
   visibleSourceLabel: string;
 }) {
   return (
-    <View style={styles.noChangesRoot}>
-      {hasDocumentChrome ? (
-        <View style={styles.noChangesTopChrome}>
-          {documentErrorBody}
-        </View>
-      ) : null}
-      <View style={styles.empty}>
-        <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-          No changes
-        </Text>
-        <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
-          {visibleSourceLabel}
-        </Text>
-      </View>
-      {floatingDocumentBanner}
+    <View style={styles.empty}>
+      <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
+        No changes
+      </Text>
+      <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
+        {visibleSourceLabel}
+      </Text>
     </View>
   );
 }
@@ -952,22 +935,6 @@ function DiffLoadingBody({
       </Text>
     </View>
   );
-}
-
-function DiffLoadedBodyGate({
-  noChangesBody,
-  ...loadedBodyProps
-}: DiffLoadedBodyGateProps) {
-  const activeFileIndex = useValue(loadedBodyProps.activeFileIndex$);
-  const activeMergeFile = getActiveMergeFile({
-    activeFileIndex,
-    files: loadedBodyProps.state.files,
-    mergeState: loadedBodyProps.mergeState,
-  });
-
-  return loadedBodyProps.activeItemIndexes.length === 0 && !activeMergeFile
-    ? noChangesBody
-    : <DiffLoadedBody {...loadedBodyProps} />;
 }
 
 const DiffLoadingSplitBody = memo(function DiffLoadingSplitBody({
@@ -1050,6 +1017,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   nativeSideBySideRowConfig,
   nativeUnifiedRowConfig,
   mutedColor,
+  noChangesBody,
   primaryColor,
   renderRow,
   renderSidebarEntry,
@@ -1073,6 +1041,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
 }: DiffLoadedBodyProps) {
   const [fileFilter, setFileFilter] = useState("");
   const bodyStartedAt = nowMs();
+  const activeFileIndex = useValue(activeFileIndex$);
   const diffPaneHeight = useValue(diffPaneHeight$);
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const diffContentHeight = diffPaneHeight;
@@ -1124,6 +1093,12 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
   const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode !== "unified";
   const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
+  const activeMergeFile = getActiveMergeFile({
+    activeFileIndex,
+    files: state.files,
+    mergeState,
+  });
+  const shouldShowNoChanges = activeItemIndexes.length === 0 && !activeMergeFile;
   const requestUnifiedRange = nativeUnifiedRows ? noopVirtualizedDocumentRequestRange : diffRows.requestRange;
   const requestBlocksRange = nativeSideBySideRows ? noopVirtualizedDocumentRequestRange : requestSideBySideRange;
   const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
@@ -1244,9 +1219,11 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
       rows: state.document.rowCount,
       viewMode,
     }));
-    let list: ReactElement;
-    if (viewMode === "unified") {
-      list = (
+    let contentBody: ReactElement;
+    if (shouldShowNoChanges) {
+      contentBody = noChangesBody;
+    } else if (viewMode === "unified") {
+      contentBody = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
@@ -1275,7 +1252,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         />
       );
     } else {
-      list = (
+      contentBody = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
@@ -1320,13 +1297,13 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
             {documentErrorBody}
           </View>
         ) : null}
-        {nativeRowConfig ? (
+        {nativeRowConfig && !shouldShowNoChanges ? (
           <DiffNativeRowConfigView
             nativeRowConfig={nativeRowConfig}
             syntaxTokenizationVersion$={syntaxTokenizationVersion$}
           />
         ) : null}
-        {list}
+        {contentBody}
       </View>
     );
   }
@@ -4398,7 +4375,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     );
   } else if (state.status === "loaded") {
     body = (
-      <DiffLoadedBodyGate
+      <DiffLoadedBody
         activeFileIndex$={activeFileIndex$}
         activeItemIndexes={activeItemIndexes}
         adaptiveLightModeEnabled={adaptiveLightModeEnabled}
@@ -4432,9 +4409,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         mutedColor={mutedColor}
         noChangesBody={(
           <DiffNoChangesBody
-            documentErrorBody={documentErrorBody}
-            floatingDocumentBanner={unsavedMergeDraftBanner}
-            hasDocumentChrome={diffTopChromeContentHeight > 0}
             foregroundColor={foregroundColor}
             mutedColor={mutedColor}
             visibleSourceLabel={visibleSourceLabel}
@@ -4729,13 +4703,6 @@ const styles = StyleSheet.create({
     height: 0,
     overflow: "hidden",
     width: 0,
-  },
-  noChangesRoot: {
-    flex: 1,
-    minHeight: 0,
-  },
-  noChangesTopChrome: {
-    paddingTop: diffTitlebarTopInset,
   },
   diffTitlebarSpacer: {
     height: diffTitlebarTopInset,
