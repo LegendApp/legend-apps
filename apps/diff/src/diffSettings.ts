@@ -26,6 +26,7 @@ export type DiffSettingsFile = {
   syntaxPrewarmKnownLanguages?: string[];
   syntaxTheme: string;
   rowRenderer?: DiffRowRendererSetting;
+  restoreWindowsOnStartup?: boolean;
   showOnlyHunks?: boolean;
   showStatisticsPanel?: boolean;
   sidebarWidth?: number;
@@ -41,6 +42,7 @@ export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
 export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
+export const defaultDiffRestoreWindowsOnStartup = true;
 export const defaultDiffSidebarWidth = 180;
 export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffShowStatisticsPanel = false;
@@ -125,6 +127,10 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffRowRenderer,
       normalize: normalizeDiffRowRenderer,
     },
+    restoreWindowsOnStartup: {
+      defaultValue: defaultDiffRestoreWindowsOnStartup,
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffRestoreWindowsOnStartup),
+    },
     showOnlyHunks: {
       defaultValue: defaultDiffShowOnlyHunks,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffShowOnlyHunks),
@@ -153,6 +159,7 @@ const syntaxPrewarmLanguagesSetting = diffSettings.field("syntaxPrewarmLanguages
 const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnownLanguages");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const rowRendererSetting = diffSettings.field("rowRenderer");
+const restoreWindowsOnStartupSetting = diffSettings.field("restoreWindowsOnStartup");
 const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
 const showStatisticsPanelSetting = diffSettings.field("showStatisticsPanel");
 const sidebarWidthSetting = diffSettings.field("sidebarWidth");
@@ -185,6 +192,10 @@ export function getDiffViewModeSetting(): DiffViewMode {
 
 export function getDiffRowRendererSetting(): DiffRowRendererSetting {
   return rowRendererSetting.get();
+}
+
+export function getDiffRestoreWindowsOnStartupSetting(): boolean {
+  return restoreWindowsOnStartupSetting.get();
 }
 
 export function getDiffShowOnlyHunksSetting(): boolean {
@@ -244,6 +255,10 @@ export function useDiffRowRendererSetting(): DiffRowRendererSetting {
   return normalizeDiffRowRenderer(useValue(diffSettings$.rowRenderer));
 }
 
+export function useDiffRestoreWindowsOnStartupSetting(): boolean {
+  return normalizeBooleanSetting(useValue(diffSettings$.restoreWindowsOnStartup), defaultDiffRestoreWindowsOnStartup);
+}
+
 export function useDiffShowOnlyHunksSetting(): boolean {
   return normalizeBooleanSetting(useValue(diffSettings$.showOnlyHunks), defaultDiffShowOnlyHunks);
 }
@@ -294,6 +309,10 @@ export function setDiffViewModeSetting(viewMode: DiffViewMode) {
 
 export function setDiffRowRendererSetting(rowRenderer: DiffRowRendererSetting) {
   rowRendererSetting.set(rowRenderer);
+}
+
+export function setDiffRestoreWindowsOnStartupSetting(enabled: boolean) {
+  restoreWindowsOnStartupSetting.set(enabled);
 }
 
 export function setDiffShowOnlyHunksSetting(enabled: boolean) {

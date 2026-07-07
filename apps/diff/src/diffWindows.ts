@@ -1,13 +1,14 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { setWindowOptions } from "@legend-desktop/window-manager";
+import { setWindowOptions, type WindowFrame } from "@legend-desktop/window-manager";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,
   diffViewerWindowIdentifier,
   diffViewerWindowModuleName,
 } from "./appConstants";
+import { upsertSavedDiffWindow } from "./diffAppMetadata";
 import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
@@ -142,7 +143,9 @@ type DiffWindow = keyof typeof diffWindowsConfig;
 
 type DiffViewerWindowOpenOptions = {
   focusUrlInput?: boolean;
+  frame?: WindowFrame;
   freshWindow?: boolean;
+  windowIdentifier?: string;
 };
 
 export function registerDiffWindows() {
@@ -172,9 +175,10 @@ function getFreshDiffViewerWindowIdentifier() {
 
 export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | null, options: DiffViewerWindowOpenOptions = {}) {
   const source = normalizeDiffOpenSource(sourceInput);
-  const windowIdentifier = options.freshWindow && source === null
+  const windowIdentifier = options.windowIdentifier ??
+    (options.freshWindow && source === null
     ? getFreshDiffViewerWindowIdentifier()
-    : getDiffViewerWindowIdentifier(source);
+    : getDiffViewerWindowIdentifier(source));
   const shouldShowSourceToolbar = source !== null;
   const focusUrlInputRequestId = options.focusUrlInput ? ++diffViewerUrlFocusRequestId : undefined;
   const shouldPassWindowIdentifier = windowIdentifier !== diffViewerWindowIdentifier;
@@ -191,6 +195,15 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     source,
     windowIdentifier,
   }));
+  const windowStyle = createDiffViewerWindowStyle({
+    includeFrame: true,
+    showSidebarControl: shouldShowSourceToolbar,
+    showViewModeToolbar: shouldShowSourceToolbar,
+  });
+  if (options.frame) {
+    windowStyle.width = options.frame.width;
+    windowStyle.height = options.frame.height;
+  }
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     identifier: windowIdentifier,
@@ -199,12 +212,14 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     representedURL: source?.value,
     title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
     transparentBackground: true,
-    windowStyle: createDiffViewerWindowStyle({
-      includeFrame: true,
-      showSidebarControl: shouldShowSourceToolbar,
-      showViewModeToolbar: shouldShowSourceToolbar,
-    }),
+    ...(options.frame ? { x: options.frame.x, y: options.frame.y } : {}),
+    windowStyle,
   }).then((result) => {
+    upsertSavedDiffWindow({
+      ...(options.frame ? { frame: options.frame } : {}),
+      id: windowIdentifier,
+      ...(source ? { source } : {}),
+    });
     logDiffOpenTiming("window.open.finish", () => ({
       focusUrlInput: options.focusUrlInput === true,
       source,

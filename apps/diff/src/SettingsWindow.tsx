@@ -23,6 +23,7 @@ import {
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffRowRendererSetting,
+  setDiffRestoreWindowsOnStartupSetting,
   setDiffShowOnlyHunksSetting,
   setDiffShowStatisticsPanelSetting,
   setDiffSyntaxHighlightingEnabledSetting,
@@ -33,6 +34,7 @@ import {
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
+  useDiffRestoreWindowsOnStartupSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
   useDiffSyntaxHighlightingEnabledSetting,
@@ -57,6 +59,7 @@ function AppearanceSettingsContent() {
   const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
+  const restoreWindowsOnStartup = useDiffRestoreWindowsOnStartupSetting();
   const rowRenderer = useDiffRowRendererSetting();
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
@@ -82,6 +85,18 @@ function AppearanceSettingsContent() {
           rowDescription={null}
           selectedTheme={selectedSyntaxTheme}
           title={null}
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SwitchControl
+              accessibilityLabel="Restore windows on startup"
+              checked={restoreWindowsOnStartup}
+              onChange={setDiffRestoreWindowsOnStartupSetting}
+            />
+          )}
+          description="Reopen previous Diff windows with their saved size and position."
+          title="Restore Windows on Startup"
         />
         <SettingsRow
           align="center"

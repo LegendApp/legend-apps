@@ -551,6 +551,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     @"onWindowCloseRequested",
     @"onMainWindowMoved",
     @"onMainWindowResized",
+    @"onWindowMoved",
+    @"onWindowResized",
     @"onApplicationReopenRequested",
     @"onWindowFocused",
     @"onTitlebarControlPressed",
@@ -1793,6 +1795,40 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
   [self sendWindowEventWithName:@"onWindowFocused"
                            body:@{@"identifier": identifier, @"moduleName": self.moduleNames[identifier] ?: @""}];
+}
+
+- (void)windowDidMove:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  NSString *identifier = [self identifierForWindow:window];
+  if (!identifier) {
+    return;
+  }
+  [self sendWindowEventWithName:@"onWindowMoved"
+                           body:@{
+                             @"identifier": identifier,
+                             @"moduleName": self.moduleNames[identifier] ?: @"",
+                             @"frame": [self frameDictionary:window.frame],
+                           }];
+}
+
+- (void)windowDidResize:(NSNotification *)notification
+{
+  NSWindow *window = notification.object;
+  NSString *identifier = [self identifierForWindow:window];
+  if (!identifier) {
+    return;
+  }
+  RCTUIView *rootView = LegendManagedRootView(window);
+  if (rootView) {
+    LegendSizeRootViewToWindow(rootView, window);
+  }
+  [self sendWindowEventWithName:@"onWindowResized"
+                           body:@{
+                             @"identifier": identifier,
+                             @"moduleName": self.moduleNames[identifier] ?: @"",
+                             @"frame": [self frameDictionary:window.frame],
+                           }];
 }
 
 - (void)windowWillClose:(NSNotification *)notification

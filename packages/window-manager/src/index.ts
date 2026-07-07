@@ -201,6 +201,12 @@ export type WindowFocusedEvent = {
   moduleName?: string;
 };
 
+export type WindowFrameEvent = {
+  frame: WindowFrame;
+  identifier: string;
+  moduleName?: string;
+};
+
 export type WindowToolbarItemSelectedEvent = {
   identifier: string;
   itemId: string;
@@ -388,6 +394,20 @@ export function addWindowFocusedListener(listener: (event: WindowFocusedEvent) =
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowFocused", listener);
 }
 
+export function addWindowMovedListener(listener: (event: WindowFrameEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowMoved", listener);
+}
+
+export function addWindowResizedListener(listener: (event: WindowFrameEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onWindowResized", listener);
+}
+
 export function addApplicationReopenRequestedListener(listener: (event: ApplicationReopenRequestedEvent) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -438,6 +458,8 @@ export function useWindowManager() {
     onWindowClosed: addWindowClosedListener,
     onWindowCloseRequested: addWindowCloseRequestedListener,
     onWindowFocused: addWindowFocusedListener,
+    onWindowMoved: addWindowMovedListener,
+    onWindowResized: addWindowResizedListener,
     onApplicationReopenRequested: addApplicationReopenRequestedListener,
     onWindowTitlebarControlPressed: addWindowTitlebarControlPressedListener,
     onWindowToolbarItemSelected: addWindowToolbarItemSelectedListener,

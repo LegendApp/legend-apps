@@ -46,7 +46,7 @@ import { useObservable, useObserveEffect, useValue } from "@legendapp/state/reac
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
-import { addRecentDiffSource } from "./diffAppMetadata";
+import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import { getDiffPalette } from "./diffPalette";
 import {
@@ -2600,6 +2600,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
+    updateSavedDiffWindowSource(windowIdentifier, nextSource);
     const loadStartedAt = nowMs();
     const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
     const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
@@ -3050,7 +3051,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         requestId,
       }));
     }
-  }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$]);
+  }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$, windowIdentifier]);
 
   const saveMergeDrafts = useCallback(async () => {
     if (savingMergeDraftsRef.current) {

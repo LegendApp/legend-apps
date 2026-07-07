@@ -3,12 +3,18 @@ import {
   diffAppMetadata$,
   getDiffSourceRecentId,
   getRecentDiffSources,
+  getSavedDiffWindows,
+  removeSavedDiffWindow,
+  updateSavedDiffWindowFrame,
+  updateSavedDiffWindowSource,
+  upsertSavedDiffWindow,
 } from "../diffAppMetadata";
 import { normalizeDiffOpenSource } from "../diffFiles";
 
 describe("diffAppMetadata", () => {
   beforeEach(() => {
     diffAppMetadata$.recentSources.set([]);
+    diffAppMetadata$.savedWindows.set([]);
   });
 
   it("stores recent folders and remote sources with newest first", () => {
@@ -56,5 +62,30 @@ describe("diffAppMetadata", () => {
     expect(recentSources).toHaveLength(12);
     expect(recentSources[0]?.source.value).toBe("/tmp/repo-13");
     expect(recentSources.at(-1)?.source.value).toBe("/tmp/repo-2");
+  });
+
+  it("updates and removes saved diff windows", () => {
+    const source = normalizeDiffOpenSource("/tmp/repo");
+    expect(source).not.toBeNull();
+
+    if (source) {
+      upsertSavedDiffWindow({
+        frame: { height: 600, width: 800, x: 10, y: 20 },
+        id: "diff-viewer-folder",
+      });
+      updateSavedDiffWindowSource("diff-viewer-folder", source);
+      updateSavedDiffWindowFrame("diff-viewer-folder", { height: 700, width: 900, x: 30, y: 40 });
+
+      expect(getSavedDiffWindows()).toMatchObject([
+        {
+          frame: { height: 700, width: 900, x: 30, y: 40 },
+          id: "diff-viewer-folder",
+          source,
+        },
+      ]);
+
+      removeSavedDiffWindow("diff-viewer-folder");
+      expect(getSavedDiffWindows()).toEqual([]);
+    }
   });
 });

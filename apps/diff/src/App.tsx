@@ -11,11 +11,13 @@ import { logDiffMemoryMark, logDiffOpenTiming } from "./diffInstrumentation";
 import { diffMenuConfig } from "./diffMenus";
 import {
   getDiffShowOnlyHunksSetting,
+  getDiffRestoreWindowsOnStartupSetting,
   setDiffShowOnlyHunksSetting,
   setDiffViewModeSetting,
 } from "./diffSettings";
 import { warmDiffSyntaxHighlightersForStartup } from "./diffSyntaxWarmup";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
+import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 LogBox.ignoreLogs([
@@ -205,9 +207,19 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
     source,
     launchArgumentCount: launchArguments?.length ?? 0,
   }));
-  await openDiffViewerWindow(source);
-  controller.setDocumentWindowOpen(true);
-  if (!source) {
+
+  let restoredWindowCount = 0;
+  if (source) {
+    await openDiffViewerWindow(source);
+    controller.setDocumentWindowOpen(true);
+  } else {
+    if (getDiffRestoreWindowsOnStartupSetting()) {
+      restoredWindowCount = await restoreSavedDiffWindows();
+    }
+    if (restoredWindowCount === 0) {
+      await openDiffViewerWindow(null);
+    }
+    controller.setDocumentWindowOpen(true);
     logDiffMemoryMark("startup.syntaxWarmup.start", () => ({}));
     warmDiffSyntaxHighlightersForStartup()
       .then((warmupResults) => {
@@ -218,6 +230,7 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
       .catch(reportDiffAppControllerError);
   }
   logDiffOpenTiming("launch.open.finish", () => ({
+    restoredWindows: restoredWindowCount,
     source,
     windowOpenMs: elapsedMs(startedAt),
   }));
@@ -241,6 +254,13 @@ export function App({ launchArguments }: DiffAppProps) {
   useEffect(() => {
     controllerRef.current = controller;
   }, [controller]);
+
+  useEffect(() => {
+    const subscription = installDiffWindowRestoration();
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const openUrl = (url: string | null | undefined) => {
