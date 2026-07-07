@@ -449,6 +449,17 @@ type DiffLoadedBodyGateProps = DiffLoadedBodyProps & {
   noChangesBody: ReactElement;
 };
 
+type DiffLoadingSplitBodyProps = {
+  backgroundColor: string;
+  foregroundColor: string;
+  handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
+  mutedColor: string;
+  sidebarCollapsed: boolean;
+  sidebarWidth: number;
+  source: DiffOpenSource;
+  syntaxAppearance: "dark" | "light";
+};
+
 type DiffListExtraData = {
   adaptiveLightModeEnabled: boolean;
   borderColor: string;
@@ -927,6 +938,55 @@ function DiffLoadedBodyGate({
     ? noChangesBody
     : <DiffLoadedBody {...loadedBodyProps} />;
 }
+
+const DiffLoadingSplitBody = memo(function DiffLoadingSplitBody({
+  backgroundColor,
+  foregroundColor,
+  handleSplitViewResize,
+  mutedColor,
+  sidebarCollapsed,
+  sidebarWidth,
+  source,
+  syntaxAppearance,
+}: DiffLoadingSplitBodyProps) {
+  const sidebar = (
+    <View style={styles.sidebar}>
+      <View style={styles.sidebarList} />
+    </View>
+  );
+
+  return (
+    <View style={styles.loadedRoot}>
+      <SidebarSplitView
+        appearance={syntaxAppearance}
+        contentMinWidth={diffContentMinWidth}
+        contentTitlebarHeight={diffTitlebarTopInset}
+        contentTitlebarMaterial="glass"
+        contentTitlebarOverlayColor={backgroundColor}
+        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
+        onSplitViewDidResize={handleSplitViewResize}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarMinWidth={defaultDiffSidebarWidth}
+        sidebarWidth={sidebarWidth}
+        style={styles.content}
+      >
+        {sidebar}
+        <View style={styles.diffWorkspace}>
+          <View style={styles.diffPane}>
+            <View style={styles.diffPaneContent}>
+              <View style={styles.diffTitlebarSpacer} />
+              <DiffLoadingBody
+                foregroundColor={foregroundColor}
+                mutedColor={mutedColor}
+                source={source}
+              />
+            </View>
+          </View>
+        </View>
+      </SidebarSplitView>
+    </View>
+  );
+});
 
 const DiffLoadedBody = memo(function DiffLoadedBody({
   activeFileIndex$,
@@ -4087,10 +4147,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     );
   } else if (emptyLoadingSource) {
     body = (
-      <DiffLoadingBody
+      <DiffLoadingSplitBody
+        backgroundColor={backgroundColor}
         foregroundColor={foregroundColor}
+        handleSplitViewResize={handleSplitViewResize}
         mutedColor={mutedColor}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarWidth={sidebarWidth}
         source={emptyLoadingSource}
+        syntaxAppearance={syntaxTheme.appearance}
       />
     );
   } else {
