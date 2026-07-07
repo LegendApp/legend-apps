@@ -23,6 +23,7 @@ import {
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffRowRendererSetting,
+  setDiffShowOnlyHunksSetting,
   setDiffShowStatisticsPanelSetting,
   setDiffSyntaxHighlightingEnabledSetting,
   setDiffSyntaxPrewarmEnabledSetting,
@@ -32,6 +33,7 @@ import {
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffRowRendererSetting,
+  useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxPrewarmEnabledSetting,
@@ -56,6 +58,7 @@ function AppearanceSettingsContent() {
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const rowRenderer = useDiffRowRendererSetting();
+  const showOnlyHunks = useDiffShowOnlyHunksSetting();
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
 
   return (
@@ -79,6 +82,18 @@ function AppearanceSettingsContent() {
           rowDescription={null}
           selectedTheme={selectedSyntaxTheme}
           title={null}
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <SwitchControl
+              accessibilityLabel="Show only changed hunks by default"
+              checked={showOnlyHunks}
+              onChange={setDiffShowOnlyHunksSetting}
+            />
+          )}
+          description="Load local repository diffs with unchanged sections collapsed."
+          title="Show only changed hunks by default"
         />
         <SettingsRow
           align="center"
