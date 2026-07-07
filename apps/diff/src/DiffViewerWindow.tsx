@@ -415,13 +415,16 @@ type DiffSidebarFileRowProps = {
 };
 
 type DiffSidebarFolderRowProps = {
+  collapsed: boolean;
   color: string;
+  onToggleFolder: (title: string) => void;
   title: string;
 };
 
 type DiffSidebarEntry =
   | {
       id: string;
+      collapsed: boolean;
       title: string;
       type: "folder";
     }
@@ -435,6 +438,7 @@ type DiffLoadedBodyProps = {
   activeFileIndex$: Observable<number | null>;
   activeItemIndexes: readonly (number | undefined)[];
   backgroundColor: string;
+  collapsedSidebarFolders: ReadonlySet<string>;
   diffPaneHeight$: Observable<number>;
   diffTopChromeHeight: number;
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
@@ -559,34 +563,60 @@ function getDiffSidebarFolderTitle(file: DiffFileSummary) {
   return getDirectoryPath(file.path) || "Files";
 }
 
-function createDiffSidebarEntries(files: readonly DiffFileSummary[]) {
+function createDiffSidebarEntries(files: readonly DiffFileSummary[], collapsedFolders: ReadonlySet<string>) {
   const entries: DiffSidebarEntry[] = [];
   let currentFolder = "";
+  let currentFolderCollapsed = false;
   for (const file of files) {
     const folder = getDiffSidebarFolderTitle(file);
     if (folder !== currentFolder) {
+      currentFolderCollapsed = collapsedFolders.has(folder);
       entries.push({
+        collapsed: currentFolderCollapsed,
         id: `folder:${folder}:${entries.length}`,
         title: folder,
         type: "folder",
       });
       currentFolder = folder;
     }
-    entries.push({
-      file,
-      id: `file:${file.index}:${file.path}`,
-      type: "file",
-    });
+    if (!currentFolderCollapsed) {
+      entries.push({
+        file,
+        id: `file:${file.index}:${file.path}`,
+        type: "file",
+      });
+    }
   }
   return entries;
 }
 
-const DiffSidebarFolderRow = memo(function DiffSidebarFolderRow({ color, title }: DiffSidebarFolderRowProps) {
+const DiffSidebarFolderRow = memo(function DiffSidebarFolderRow({
+  collapsed,
+  color,
+  onToggleFolder,
+  title,
+}: DiffSidebarFolderRowProps) {
+  const handleToggle = useCallback(() => {
+    onToggleFolder(title);
+  }, [onToggleFolder, title]);
+
   return (
-    <View className="justify-center px-3 pb-1 pt-3" style={styles.sidebarFolder}>
-      <Text className="text-xs font-medium leading-4" numberOfLines={1} style={{ color }}>
+    <View className="flex-row items-center gap-2 px-3 pb-1 pt-3" style={styles.sidebarFolder}>
+      <Text className="min-w-0 flex-1 text-xs font-medium leading-4" numberOfLines={1} style={{ color }}>
         {title}
       </Text>
+      <Pressable
+        accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}`}
+        accessibilityRole="button"
+        hitSlop={6}
+        onPress={handleToggle}
+        style={({ pressed }) => [
+          styles.sidebarFolderCollapseButton,
+          { opacity: pressed ? 0.6 : 1 },
+        ]}
+      >
+        <SFSymbol color={color} name={collapsed ? "chevron.right" : "chevron.down"} size={10} />
+      </Pressable>
     </View>
   );
 });
@@ -990,6 +1020,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   activeFileIndex$,
   activeItemIndexes,
   backgroundColor,
+  collapsedSidebarFolders,
   diffPaneHeight$,
   diffTopChromeHeight,
   diffRows,
@@ -1087,8 +1118,8 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     [normalizedFileFilter, shouldRenderSidebarList, state.files],
   );
   const sidebarEntries = useMemo(
-    () => shouldRenderSidebarList ? createDiffSidebarEntries(filteredSidebarFiles) : [],
-    [filteredSidebarFiles, shouldRenderSidebarList],
+    () => shouldRenderSidebarList ? createDiffSidebarEntries(filteredSidebarFiles, collapsedSidebarFolders) : [],
+    [collapsedSidebarFolders, filteredSidebarFiles, shouldRenderSidebarList],
   );
   const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
   const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode !== "unified";
@@ -2412,6 +2443,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const [compareRepoState, setCompareRepoState] = useState<DiffCompareRepoState | null>(null);
   const [compareRefPromptVisible, setCompareRefPromptVisible] = useState(false);
   const [compareRefInput, setCompareRefInput] = useState("");
+  const [collapsedSidebarFolders, setCollapsedSidebarFolders] = useState<ReadonlySet<string>>(() => new Set());
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
     const currentKeys = resolvingMergeConflictKeysRef.current;
@@ -2511,6 +2543,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const initialItemCountLimit = loadedDocument !== null && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
     ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
     : null;
+
+  useEffect(() => {
+    setCollapsedSidebarFolders(new Set());
+  }, [loadedDocumentId]);
 
   useObserveEffect(() => {
     const currentState = state$.get();
@@ -2839,6 +2875,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         rows: cachedEntry.loaded.document.rowCount,
         showOnlyHunks: loadShowOnlyHunks,
         source: nextSource,
+      }));
+      addRecentDiffSource(nextSource);
+      logDiffOpenTiming("viewer.recentSource.noted", () => ({
+        cacheHit: true,
+        requestId,
+        sourceKind: nextSource.kind,
       }));
       return;
     }
@@ -4126,10 +4168,29 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   }, [activeFileIndex$, scrollToFile]);
 
+  const toggleSidebarFolder = useCallback((title: string) => {
+    setCollapsedSidebarFolders((currentFolders) => {
+      const nextFolders = new Set(currentFolders);
+      if (nextFolders.has(title)) {
+        nextFolders.delete(title);
+      } else {
+        nextFolders.add(title);
+      }
+      return nextFolders;
+    });
+  }, []);
+
   const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
     let row: ReactElement;
     if (item.type === "folder") {
-      row = <DiffSidebarFolderRow color={sidebarFolderColor} title={item.title} />;
+      row = (
+        <DiffSidebarFolderRow
+          collapsed={item.collapsed}
+          color={sidebarFolderColor}
+          onToggleFolder={toggleSidebarFolder}
+          title={item.title}
+        />
+      );
     } else {
       const file = item.file;
       const mergeFile = getMergeConflictFileForDiffFile(mergeState, file);
@@ -4171,6 +4232,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     sidebarFolderColor,
     sidebarConflictBadgeBackgroundColor,
     sidebarConflictBadgeTextColor,
+    toggleSidebarFolder,
   ]);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
@@ -4380,6 +4442,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         activeItemIndexes={activeItemIndexes}
         adaptiveLightModeEnabled={adaptiveLightModeEnabled}
         backgroundColor={backgroundColor}
+        collapsedSidebarFolders={collapsedSidebarFolders}
         diffPaneHeight$={diffPaneHeight$}
         diffTopChromeHeight={diffTopChromeHeight}
         diffRows={diffRows}
@@ -4748,6 +4811,12 @@ const styles = StyleSheet.create({
   },
   sidebarFolder: {
     height: diffSidebarFileRowHeight,
+  },
+  sidebarFolderCollapseButton: {
+    alignItems: "center",
+    height: 20,
+    justifyContent: "center",
+    width: 20,
   },
   sidebarFilter: {
     marginHorizontal: 12,

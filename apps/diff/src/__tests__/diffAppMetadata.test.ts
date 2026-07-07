@@ -89,6 +89,7 @@ describe("diffAppMetadata", () => {
 
       expect(getRecentDiffSources()).toHaveLength(1);
       expect(getRecentDiffSources()[0]?.id).toBe(getDiffSourceRecentId(source));
+      expect(getRecentDiffSources()[0]?.source).toEqual(branchSource);
     }
   });
 
