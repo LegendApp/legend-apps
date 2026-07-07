@@ -262,6 +262,8 @@ static void LegendApplyTitlebarBackgroundColor(NSView *view, NSColor *background
   }
 }
 
+static BOOL LegendUsesFullSizeContentLayout(NSWindow *window);
+
 static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
 {
   NSColor *backgroundColor = LegendColorFromHexString(value);
@@ -279,17 +281,19 @@ static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
 
   NSView *frameView = contentView.superview;
   if (frameView) {
-    LegendApplyTitlebarBackgroundColor(frameView, backgroundColor);
+    NSColor *titlebarBackgroundColor = LegendUsesFullSizeContentLayout(window) ? NSColor.clearColor : backgroundColor;
+    LegendApplyTitlebarBackgroundColor(frameView, titlebarBackgroundColor);
     dispatch_async(dispatch_get_main_queue(), ^{
       NSView *currentFrameView = window.contentView.superview;
       if (currentFrameView) {
-        LegendApplyTitlebarBackgroundColor(currentFrameView, backgroundColor);
+        LegendApplyTitlebarBackgroundColor(currentFrameView, titlebarBackgroundColor);
       }
     });
   }
 }
 
 static char LegendManagedRootViewKey;
+static char LegendContentLayoutModeKey;
 static char LegendTitlebarControlMetadataKey;
 static char LegendToolbarControlMetadataKey;
 
@@ -320,6 +324,21 @@ static void LegendEnsureRootViewContainer(NSWindow *window, RCTUIView *rootView)
   window.contentView = containerView;
   [containerView addSubview:rootView];
   objc_setAssociatedObject(window, &LegendManagedRootViewKey, rootView, OBJC_ASSOCIATION_ASSIGN);
+}
+
+static void LegendApplyContentLayoutModeOption(NSWindow *window, NSString *contentLayoutMode)
+{
+  if (!window || ![contentLayoutMode isKindOfClass:NSString.class]) {
+    return;
+  }
+
+  objc_setAssociatedObject(window, &LegendContentLayoutModeKey, contentLayoutMode, OBJC_ASSOCIATION_COPY_NONATOMIC);
+}
+
+static BOOL LegendUsesFullSizeContentLayout(NSWindow *window)
+{
+  id contentLayoutMode = objc_getAssociatedObject(window, &LegendContentLayoutModeKey);
+  return [contentLayoutMode isKindOfClass:NSString.class] && [(NSString *)contentLayoutMode isEqualToString:@"fullSize"];
 }
 
 static void LegendPrepareWindowForDisplay(NSWindow *window, NSString *backgroundColor)
@@ -413,6 +432,9 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
     ? windowStyle[@"titleVisibility"]
     : nil;
   NSString *toolbarStyle = [windowStyle[@"toolbarStyle"] isKindOfClass:NSString.class] ? windowStyle[@"toolbarStyle"] : nil;
+  NSString *contentLayoutMode = [windowStyle[@"contentLayoutMode"] isKindOfClass:NSString.class]
+    ? windowStyle[@"contentLayoutMode"]
+    : nil;
   NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
     ? windowStyle[@"titlebarSeparatorStyle"]
     : nil;
@@ -429,6 +451,7 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   if (maskNumber) {
     window.styleMask = maskNumber.unsignedIntegerValue;
   }
+  LegendApplyContentLayoutModeOption(window, contentLayoutMode);
   LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
   if (transparentTitlebar != nil) {
     window.titlebarAppearsTransparent = transparentTitlebar.boolValue;
@@ -464,7 +487,9 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 
   NSView *contentView = window.contentView;
   if (contentView && contentView != rootView && (window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0) {
-    rootView.frame = [contentView convertRect:window.contentLayoutRect fromView:nil];
+    rootView.frame = LegendUsesFullSizeContentLayout(window)
+      ? contentView.bounds
+      : [contentView convertRect:window.contentLayoutRect fromView:nil];
   } else {
     rootView.frame = contentView ? contentView.bounds : NSMakeRect(0, 0, window.frame.size.width, window.frame.size.height);
   }
@@ -1124,6 +1149,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
       ? windowStyle[@"titleVisibility"]
       : nil;
     NSString *toolbarStyle = [windowStyle[@"toolbarStyle"] isKindOfClass:NSString.class] ? windowStyle[@"toolbarStyle"] : nil;
+    NSString *contentLayoutMode = [windowStyle[@"contentLayoutMode"] isKindOfClass:NSString.class]
+      ? windowStyle[@"contentLayoutMode"]
+      : nil;
     NSString *titlebarSeparatorStyle = [windowStyle[@"titlebarSeparatorStyle"] isKindOfClass:NSString.class]
       ? windowStyle[@"titlebarSeparatorStyle"]
       : nil;
@@ -1235,6 +1263,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       if (maskNumber) {
         existingWindow.styleMask = maskNumber.unsignedIntegerValue;
       }
+      LegendApplyContentLayoutModeOption(existingWindow, contentLayoutMode);
       LegendApplyContentLayoutMode(existingWindow, maskNumber, usesTitlebarBackground);
       if (transparentTitlebar != nil) {
         existingWindow.titlebarAppearsTransparent = transparentTitlebar.boolValue;
@@ -1327,6 +1356,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
+    LegendApplyContentLayoutModeOption(window, contentLayoutMode);
     LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
 
     if (appearance) {

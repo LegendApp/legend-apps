@@ -1,4 +1,5 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
+import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
 import { setWindowOptions } from "@legend-desktop/window-manager";
 import {
@@ -9,6 +10,7 @@ import {
 } from "./appConstants";
 import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
+import { getDiffPalette } from "./diffPalette";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
@@ -82,9 +84,12 @@ function createDiffViewerWindowStyle({
   viewMode?: DiffViewMode;
 }) {
   const syntaxTheme = getDiffSyntaxTheme();
+  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
+  const diffPalette = getDiffPalette(syntaxTheme, displayTheme.colors);
 
   const windowStyle = createUnifiedToolbarWindowStyle({
     appearance: appearance ?? syntaxTheme.appearance,
+    backgroundColor: diffPalette.background,
     frame: {
       width: 1180,
       height: 780,
@@ -97,6 +102,8 @@ function createDiffViewerWindowStyle({
 
   return {
     ...windowStyle,
+    contentLayoutMode: "fullSize" as const,
+    titleVisibility: "hidden" as const,
     titlebarControls: [],
     ...(includeToolbarItems
       ? {

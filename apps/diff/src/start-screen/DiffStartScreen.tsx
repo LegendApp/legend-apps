@@ -1,7 +1,7 @@
 import { NativeSegmentedControl } from "@legend-desktop/native-select";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { RefObject, ReactNode } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
 import { normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
@@ -15,11 +15,12 @@ import {
 } from "./diffStartScreenModel";
 
 const diffStartScreenMaxContentWidth = 900;
-const diffStartScreenTitlebarOffset = 34;
+const diffStartScreenBrandTitlebarHeight = 42;
 const diffStartScreenSectionGap = 42;
 const diffStartScreenAccentColor = "#426c9f";
 const pullRequestAccentColor = "#a970ff";
 const commitAccentColor = "#62d66f";
+const diffAppIcon = require("../../macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset/icon_128x128.png");
 export type DiffStartScreenProps = {
   backgroundColor: string;
   borderColor: string;
@@ -192,6 +193,16 @@ export function DiffStartScreen({
   const isUrlLoading = sourcesMatch(loadingSource, urlInputSource);
   return (
     <View style={[styles.root, { backgroundColor }]}>
+      <View style={styles.brandTitlebar}>
+        <View style={styles.brandTitlebarContent}>
+          <Image
+            accessibilityIgnoresInvertColors
+            source={diffAppIcon}
+            style={styles.brandIcon}
+          />
+          <Text style={[styles.brandTitle, { color: foregroundColor }]}>Legend Diff</Text>
+        </View>
+      </View>
       <View style={styles.startPage}>
         <View style={styles.launcherSection}>
           <View style={styles.launcherControls}>
@@ -298,6 +309,31 @@ export function DiffStartScreen({
 }
 
 const styles = StyleSheet.create({
+  brandIcon: {
+    borderRadius: 8,
+    height: 30,
+    width: 30,
+  },
+  brandTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    lineHeight: 30,
+  },
+  brandTitlebar: {
+    alignItems: "center",
+    height: diffStartScreenBrandTitlebarHeight,
+    justifyContent: "center",
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  brandTitlebarContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    transform: [{ translateY: 3 }],
+  },
   launcherRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -401,8 +437,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     minWidth: 0,
+    paddingBottom: 32,
     paddingHorizontal: 24,
-    paddingTop: diffStartScreenTitlebarOffset + diffStartScreenSectionGap,
+    paddingTop: diffStartScreenBrandTitlebarHeight + 28,
     position: "relative",
   },
   segmentedControl: {

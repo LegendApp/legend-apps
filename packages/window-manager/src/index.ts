@@ -74,6 +74,7 @@ const windowLevelMap: Partial<Record<WindowLevel, number>> = {
 
 export type WindowStyleOptions = {
   appearance?: "system" | "light" | "dark";
+  contentLayoutMode?: "contentLayoutGuide" | "fullSize";
   mask?: WindowStyleMask[];
   width?: number;
   height?: number;
