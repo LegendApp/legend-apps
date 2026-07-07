@@ -54,6 +54,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         `${workspaceDir}/build/xcodebuild-release-${arch}`,
         `ARCHS=${getXcodeArch(arch)}`,
         "ONLY_ACTIVE_ARCH=NO",
+        "DEPLOYMENT_POSTPROCESSING=YES",
       ],
       {
         cwd: shellDir,
