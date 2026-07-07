@@ -2,9 +2,9 @@ import { commandRunner } from "@legend-desktop/command-runner";
 import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";
-export const diffCompareToolbarTargetAutoBase = "auto-base";
 export const diffCompareToolbarTargetChooseRef = "choose-ref";
 const refValuePrefix = "ref:";
+const commonPriorityBranches = ["main", "master", "dev", "develop"];
 
 export type DiffCompareToolbarSelection = string;
 
@@ -133,6 +133,43 @@ function createSeparator(): DiffCompareToolbarMenuItem {
   };
 }
 
+function getLocalRefForRemoteRef(ref: string | null | undefined) {
+  if (!ref) {
+    return null;
+  }
+  const separatorIndex = ref.indexOf("/");
+  return separatorIndex >= 0 ? ref.slice(separatorIndex + 1) : null;
+}
+
+function getPriorityRefs(repoState: DiffCompareRepoState | null) {
+  if (!repoState) {
+    return [];
+  }
+
+  const localBranchSet = new Set(repoState.localBranches);
+  const remoteBranches = uniqueValues(repoState.remoteBranches)
+    .map(stripOriginHead)
+    .filter((branch): branch is string => branch !== null);
+  const remoteBranchSet = new Set(remoteBranches);
+  const getRemoteRefsForLocalBranch = (localBranch: string) => remoteBranches.filter((remoteBranch) => (
+    getLocalRefForRemoteRef(remoteBranch) === localBranch
+  ));
+  const priorityCandidates = [
+    repoState.defaultBranch ?? "",
+    getLocalRefForRemoteRef(repoState.defaultBranch) ?? "",
+    repoState.upstreamBranch ?? "",
+    getLocalRefForRemoteRef(repoState.upstreamBranch) ?? "",
+    ...commonPriorityBranches.flatMap((branch) => [
+      localBranchSet.has(branch) ? branch : "",
+      ...getRemoteRefsForLocalBranch(branch),
+    ]),
+  ];
+
+  return uniqueValues(priorityCandidates).filter((ref) => (
+    localBranchSet.has(ref) || remoteBranchSet.has(ref)
+  ));
+}
+
 export function getDiffCompareToolbarModel(
   source: DiffOpenSource | null | undefined,
   repoState: DiffCompareRepoState | null,
@@ -144,10 +181,7 @@ export function getDiffCompareToolbarModel(
 
   const activeLabel = getActiveLabel(source);
   const activeSelection = getActiveSelection(source);
-  const priorityRefs = uniqueValues([
-    repoState?.upstreamBranch ?? "",
-    repoState?.defaultBranch ?? "",
-  ]);
+  const priorityRefs = getPriorityRefs(repoState);
   const priorityRefSet = new Set(priorityRefs);
   const localBranches = uniqueValues(repoState?.localBranches ?? []).filter((branch) => !priorityRefSet.has(branch));
   const remoteBranches = uniqueValues(repoState?.remoteBranches ?? [])
@@ -155,22 +189,16 @@ export function getDiffCompareToolbarModel(
     .filter((branch): branch is string => branch !== null)
     .filter((branch) => !priorityRefSet.has(branch));
   const menuItems: DiffCompareToolbarMenuItem[] = [
-    ...(repoState?.defaultBranch ? [createMenuItem({
-      activeSelection,
-      label: `Auto Base (${repoState.defaultBranch})`,
-      selection: diffCompareToolbarTargetAutoBase,
-      systemImageName: "wand.and.stars",
-    })] : []),
+    ...(priorityRefs.length > 0 ? [
+      ...createRefMenuItems(activeSelection, priorityRefs, "arrow.triangle.branch"),
+      createSeparator(),
+    ] : []),
     createMenuItem({
       activeSelection,
       label: "HEAD",
       selection: diffCompareToolbarTargetHead,
       systemImageName: "clock.arrow.circlepath",
     }),
-    ...(priorityRefs.length > 0 ? [
-      createSeparator(),
-      ...createRefMenuItems(activeSelection, priorityRefs, "arrow.triangle.branch"),
-    ] : []),
     ...(localBranches.length > 0 ? [
       createSeparator(),
       ...createRefMenuItems(activeSelection, localBranches, "point.3.connected.trianglepath.dotted"),
@@ -241,21 +269,13 @@ export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCo
 export function createDiffCompareSource(
   repoPath: string,
   selection: DiffCompareToolbarSelection,
-  repoState: DiffCompareRepoState | null,
+  _repoState: DiffCompareRepoState | null,
 ): DiffOpenSource | null {
   let compareBase: DiffFolderCompareBase | undefined;
   if (selection === diffCompareToolbarTargetChooseRef) {
     return null;
   } else if (selection === diffCompareToolbarTargetHead) {
     compareBase = undefined;
-  } else if (selection === diffCompareToolbarTargetAutoBase) {
-    compareBase = repoState?.defaultBranch
-      ? {
-        kind: "ref",
-        ref: repoState.defaultBranch,
-        useMergeBase: true,
-      }
-      : undefined;
   } else {
     const ref = refFromSelection(selection) ?? selection;
     compareBase = {

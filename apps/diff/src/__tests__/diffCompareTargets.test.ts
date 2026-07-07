@@ -1,7 +1,6 @@
 import {
   createDiffCompareSource,
   createDiffCompareSourceForRef,
-  diffCompareToolbarTargetAutoBase,
   diffCompareToolbarTargetChooseRef,
   diffCompareToolbarTargetHead,
   getDiffCompareToolbarModel,
@@ -12,8 +11,8 @@ import type { DiffOpenSource } from "../diffFiles";
 const repoState: DiffCompareRepoState = {
   currentBranch: "feature/sidebar",
   defaultBranch: "origin/main",
-  localBranches: ["feature/sidebar", "release/next"],
-  remoteBranches: ["origin/HEAD", "origin/main", "origin/release"],
+  localBranches: ["feature/sidebar", "main", "release/next"],
+  remoteBranches: ["origin/HEAD", "origin/feature/sidebar", "origin/main", "origin/release"],
   repoPath: "/tmp/repo",
   upstreamBranch: "origin/feature/sidebar",
 };
@@ -54,7 +53,7 @@ describe("diffCompareTargets", () => {
     });
   });
 
-  it("builds a menu from real repo branches without hard-coded branches", () => {
+  it("builds a menu from real repo branches with priority branches first", () => {
     const source: DiffOpenSource = {
       kind: "folder",
       label: "repo",
@@ -64,11 +63,6 @@ describe("diffCompareTargets", () => {
     const model = getDiffCompareToolbarModel(source, repoState);
 
     expect(model?.menuItems).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        label: "Auto Base (origin/main)",
-        systemImageName: "wand.and.stars",
-        value: diffCompareToolbarTargetAutoBase,
-      }),
       expect.objectContaining({
         label: "HEAD",
         selected: true,
@@ -81,9 +75,19 @@ describe("diffCompareTargets", () => {
         value: "ref:origin/feature/sidebar",
       }),
       expect.objectContaining({
-        label: "release/next",
-        systemImageName: "point.3.connected.trianglepath.dotted",
-        value: "ref:release/next",
+        label: "feature/sidebar",
+        systemImageName: "arrow.triangle.branch",
+        value: "ref:feature/sidebar",
+      }),
+      expect.objectContaining({
+        label: "origin/main",
+        systemImageName: "arrow.triangle.branch",
+        value: "ref:origin/main",
+      }),
+      expect.objectContaining({
+        label: "main",
+        systemImageName: "arrow.triangle.branch",
+        value: "ref:main",
       }),
       expect.objectContaining({
         label: "origin/release",
@@ -96,8 +100,51 @@ describe("diffCompareTargets", () => {
         value: diffCompareToolbarTargetChooseRef,
       }),
     ]));
+    expect(model?.menuItems.slice(0, 4)).toEqual([
+      expect.objectContaining({ label: "origin/main" }),
+      expect.objectContaining({ label: "main" }),
+      expect.objectContaining({ label: "origin/feature/sidebar" }),
+      expect.objectContaining({ label: "feature/sidebar" }),
+    ]);
+    expect(model?.menuItems).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: expect.stringContaining("Auto Base") }),
+    ]));
     expect(model?.menuItems).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ label: "develop" }),
+    ]));
+  });
+
+  it("promotes existing master dev and develop branches", () => {
+    const source: DiffOpenSource = {
+      kind: "folder",
+      label: "repo",
+      value: "/tmp/repo",
+    };
+    const model = getDiffCompareToolbarModel(source, {
+      ...repoState,
+      defaultBranch: "origin/master",
+      localBranches: ["develop", "dev", "master", "topic"],
+      remoteBranches: ["origin/HEAD", "origin/develop", "origin/dev", "origin/master", "origin/topic"],
+      upstreamBranch: null,
+    });
+
+    expect(model?.menuItems.slice(0, 6)).toEqual([
+      expect.objectContaining({ label: "origin/master" }),
+      expect.objectContaining({ label: "master" }),
+      expect.objectContaining({ label: "dev" }),
+      expect.objectContaining({ label: "origin/dev" }),
+      expect.objectContaining({ label: "develop" }),
+      expect.objectContaining({ label: "origin/develop" }),
+    ]);
+    expect(model?.menuItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: "topic",
+        systemImageName: "point.3.connected.trianglepath.dotted",
+      }),
+      expect.objectContaining({
+        label: "origin/topic",
+        systemImageName: "cloud",
+      }),
     ]));
   });
 
@@ -114,19 +161,6 @@ describe("diffCompareTargets", () => {
       compareBase: {
         kind: "ref",
         ref: "origin/release",
-        useMergeBase: true,
-      },
-      kind: "folder",
-      label: "repo",
-      value: "/tmp/repo",
-    });
-  });
-
-  it("resolves auto base from the repo default branch", () => {
-    expect(createDiffCompareSource("/tmp/repo", diffCompareToolbarTargetAutoBase, repoState)).toEqual({
-      compareBase: {
-        kind: "ref",
-        ref: "origin/main",
         useMergeBase: true,
       },
       kind: "folder",
