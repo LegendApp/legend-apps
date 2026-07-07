@@ -44,7 +44,7 @@ import {
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
 import { getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
@@ -886,6 +886,28 @@ function DiffNoChangesBody({
         </Text>
       </View>
       {floatingDocumentBanner}
+    </View>
+  );
+}
+
+function DiffLoadingBody({
+  foregroundColor,
+  mutedColor,
+  source,
+}: {
+  foregroundColor: string;
+  mutedColor: string;
+  source: DiffOpenSource;
+}) {
+  return (
+    <View style={styles.empty}>
+      <ActivityIndicator color={mutedColor} size="small" />
+      <Text style={[styles.loadingTitle, { color: foregroundColor }]}>
+        {source.kind === "github" ? "Downloading..." : "Loading..."}
+      </Text>
+      <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
+        {getDiffSourceLabel(source)}
+      </Text>
     </View>
   );
 }
@@ -3984,6 +4006,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     />
   ) : null;
   let body: ReactNode;
+  const initialLoadingSource = startScreenController.openError ? null : source ?? null;
+  const emptyLoadingSource = state.status === "empty" ? loadingSource ?? initialLoadingSource : null;
 
   if (state.status === "fatal") {
     body = (
@@ -4059,6 +4083,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         syntaxTokenizationVersion$={syntaxTokenizationVersion$}
         viewMode={renderViewMode}
         visibleItemIndexes={visibleItemIndexes}
+      />
+    );
+  } else if (emptyLoadingSource) {
+    body = (
+      <DiffLoadingBody
+        foregroundColor={foregroundColor}
+        mutedColor={mutedColor}
+        source={emptyLoadingSource}
       />
     );
   } else {
@@ -4161,6 +4193,11 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: "700",
     lineHeight: 44,
+  },
+  loadingTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    lineHeight: 28,
   },
   content: {
     flex: 1,
