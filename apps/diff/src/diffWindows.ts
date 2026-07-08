@@ -15,6 +15,7 @@ import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { DiffViewerWindowShell } from "./DiffViewerWindowShell";
+import { getDiffViewerWindowTitleVisibility } from "./diffWindowChrome";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 
@@ -146,7 +147,7 @@ function createDiffViewerWindowStyle({
   return {
     ...windowStyle,
     contentLayoutMode: "fullSize" as const,
-    titleVisibility: "hidden" as const,
+    titleVisibility: getDiffViewerWindowTitleVisibility(showViewModeToolbar),
     titlebarControls: [],
     ...(includeToolbarItems
       ? {
