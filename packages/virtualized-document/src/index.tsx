@@ -102,6 +102,7 @@ type VirtualizedFixedDocumentListDocumentIndexMapper = (index: number, listIndex
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
+  dataKey?: string | number;
   dataVersion?: string | number;
   debugName?: string;
   estimatedItemSize?: number;
@@ -233,6 +234,12 @@ function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
   } else if (ref) {
     ref.current = value;
   }
+}
+
+function useLatestValueRef<T>(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
 }
 
 type RenderItemDebugBatch = {
@@ -496,6 +503,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 
 export function VirtualizedFixedDocumentList<TRow>({
   adaptiveRender,
+  dataKey,
   dataVersion,
   debugName,
   estimatedItemSize,
@@ -540,6 +548,30 @@ export function VirtualizedFixedDocumentList<TRow>({
   const internalListRef = useRef<LegendListRef | null>(null);
   const lastScrollSampleRef = useRef<{ offsetY: number; timestamp: number } | null>(null);
   const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
+  const latestPropsRef = useLatestValueRef({
+    adaptiveRenderEnabled: adaptiveRender !== undefined,
+    dataVersion,
+    debugName,
+    getDocumentIndex,
+    getItemSize,
+    getItemType,
+    getRow,
+    initialRequestRowCount,
+    itemCount: itemIndexes.length,
+    itemIndexes,
+    itemKeyVersion,
+    lineOverscan,
+    listHeaderHeight,
+    listRef,
+    onInitialRowsRequested,
+    onTopItemChanged,
+    onVisibleRowsRequested,
+    overscanRequestDelayMs,
+    requestRange,
+    requestRangesOnScroll,
+    renderRow,
+    rowHeight,
+  });
   useEffect(() => {
     renderCountRef.current += 1;
     debugLog(debugName, "list.renderCommitted", {
@@ -576,24 +608,26 @@ export function VirtualizedFixedDocumentList<TRow>({
   }, []);
 
   const setListRef = useCallback((list: LegendListRef | null) => {
+    const { debugName, itemCount, listRef } = latestPropsRef.current;
     if (list && !hasLoggedFirstLegendListRef.current) {
       hasLoggedFirstLegendListRef.current = true;
       debugLog(debugName, "list.legendRef.first", {
         elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
-        itemCount: itemIndexes.length,
+        itemCount,
       });
     } else {
       debugLog(debugName, "list.legendRef", {
         elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
         hasRef: list !== null,
-        itemCount: itemIndexes.length,
+        itemCount,
       });
     }
     internalListRef.current = list;
     assignRef(listRef, list);
-  }, [debugName, itemIndexes.length, listRef]);
+  }, [latestPropsRef]);
 
   const emitTopItemChanged = useCallback((listIndex: number, itemIndex: number | undefined) => {
+    const { itemIndexes, onTopItemChanged } = latestPropsRef.current;
     if (onTopItemChanged && listIndex >= 0) {
       const topItemIndex = itemIndex ?? itemIndexes[listIndex] ?? listIndex;
       const lastTopItem = lastTopItemRef.current;
@@ -608,9 +642,20 @@ export function VirtualizedFixedDocumentList<TRow>({
         onTopItemChanged(topItemIndex, listIndex);
       }
     }
-  }, [itemIndexes, onTopItemChanged]);
+  }, [latestPropsRef]);
 
   const requestVisibleRange = useCallback((offsetY: number, height: number, includeOverscan: boolean, reason: VirtualizedDocumentRequestReason, scrollVelocity = 0) => {
+    const {
+      debugName,
+      getDocumentIndex,
+      initialRequestRowCount,
+      itemIndexes,
+      lineOverscan,
+      listHeaderHeight,
+      onVisibleRowsRequested,
+      requestRange,
+      rowHeight,
+    } = latestPropsRef.current;
     const rowOffsetY = Math.max(0, offsetY - listHeaderHeight);
     const visibleStart = Math.floor(rowOffsetY / rowHeight);
     const visibleCount = Math.ceil(height / rowHeight);
@@ -639,9 +684,16 @@ export function VirtualizedFixedDocumentList<TRow>({
       onVisibleRowsRequested?.(visibleDocumentRange.start, visibleDocumentRange.count, { reason, scrollVelocity });
     }
     return documentRange;
-  }, [debugName, getDocumentIndex, initialRequestRowCount, itemIndexes, lineOverscan, listHeaderHeight, onVisibleRowsRequested, requestRange, rowHeight]);
+  }, [latestPropsRef]);
 
   const requestLegendListRange = useCallback((reason: VirtualizedDocumentRequestReason, scrollVelocity = 0) => {
+    const {
+      debugName,
+      getDocumentIndex,
+      itemIndexes,
+      onVisibleRowsRequested,
+      requestRange,
+    } = latestPropsRef.current;
     const listState = internalListRef.current?.getState();
     if (listState && listState.start >= 0 && listState.end >= listState.start) {
       const requestListStart = listState.startBuffered >= 0 ? listState.startBuffered : listState.start;
@@ -669,9 +721,18 @@ export function VirtualizedFixedDocumentList<TRow>({
     }
 
     return false;
-  }, [debugName, getDocumentIndex, itemIndexes, onVisibleRowsRequested, requestRange]);
+  }, [latestPropsRef]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    const {
+      dataVersion,
+      debugName,
+      itemCount,
+      lineOverscan,
+      onInitialRowsRequested,
+      overscanRequestDelayMs,
+      requestRangesOnScroll,
+    } = latestPropsRef.current;
     const height = event.nativeEvent.layout.height;
     const eventName = hasLoggedFirstLayoutRef.current ? "list.layout" : "list.layout.first";
     hasLoggedFirstLayoutRef.current = true;
@@ -680,14 +741,14 @@ export function VirtualizedFixedDocumentList<TRow>({
       elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
-      itemCount: itemIndexes.length,
+      itemCount,
     });
     debugLog(debugName, eventName, {
       dataVersion,
       elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
-      itemCount: itemIndexes.length,
+      itemCount,
     });
 
     if (!hasRequestedInitialRangeRef.current) {
@@ -713,9 +774,10 @@ export function VirtualizedFixedDocumentList<TRow>({
         requestVisibleRange(0, height, true, "overscan");
       }
     }
-  }, [dataVersion, debugName, itemIndexes.length, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestLegendListRange, requestRangesOnScroll, requestVisibleRange]);
+  }, [latestPropsRef, requestLegendListRange, requestVisibleRange]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { debugName, requestRangesOnScroll } = latestPropsRef.current;
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
     const timestamp = debugNowMs();
     const previousSample = lastScrollSampleRef.current;
@@ -735,7 +797,7 @@ export function VirtualizedFixedDocumentList<TRow>({
         requestVisibleRange(contentOffset.y, layoutMeasurement.height, true, "scroll", scrollVelocity);
       }
     }
-  }, [debugName, requestLegendListRange, requestRangesOnScroll, requestVisibleRange]);
+  }, [latestPropsRef, requestLegendListRange, requestVisibleRange]);
 
   const handleFirstVisibleItemChanged = useCallback((info: { index: number; item: number | undefined }) => {
     emitTopItemChanged(info.index, info.item);
@@ -743,6 +805,12 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const renderItem = useCallback(
     ({ index: listIndex, item }: LegendListRenderItemProps<number | undefined>) => {
+      const {
+        adaptiveRenderEnabled,
+        debugName,
+        getRow,
+        renderRow,
+      } = latestPropsRef.current;
       const renderItemStartedAt = debugNowMs();
       const index = item ?? listIndex;
       if (!hasLoggedFirstRenderItemRef.current) {
@@ -754,7 +822,7 @@ export function VirtualizedFixedDocumentList<TRow>({
         });
       }
       const rowProps = {
-        adaptiveRenderEnabled: adaptiveRender !== undefined,
+        adaptiveRenderEnabled,
         debugName,
         getRow,
         index,
@@ -767,10 +835,11 @@ export function VirtualizedFixedDocumentList<TRow>({
       recordCallbackDebug(debugName, "list.renderItemCallbackFrame", renderItemCallbackBatchRef, index, renderItemStartedAt);
       return renderedItem;
     },
-    [adaptiveRender, debugName, getRow, renderRow],
+    [latestPropsRef],
   );
 
   const getFixedItemSize = useCallback((item: number | undefined, listIndex: number) => {
+    const { debugName, getItemSize, rowHeight } = latestPropsRef.current;
     const startedAt = debugNowMs();
     const index = item ?? listIndex;
     if (!hasLoggedFirstGetItemSizeRef.current) {
@@ -784,9 +853,10 @@ export function VirtualizedFixedDocumentList<TRow>({
     const size = getItemSize?.(index) ?? rowHeight;
     recordCallbackDebug(debugName, "list.getFixedItemSizeFrame", getItemSizeBatchRef, index, startedAt);
     return size;
-  }, [debugName, getItemSize, rowHeight]);
+  }, [latestPropsRef]);
 
   const getLegendItemType = useCallback((item: number | undefined, listIndex: number) => {
+    const { debugName, getItemType } = latestPropsRef.current;
     const startedAt = debugNowMs();
     const index = item ?? listIndex;
     if (!hasLoggedFirstGetItemTypeRef.current) {
@@ -800,10 +870,11 @@ export function VirtualizedFixedDocumentList<TRow>({
     const itemType = getItemType?.(index);
     recordCallbackDebug(debugName, "list.getItemTypeFrame", getItemTypeBatchRef, index, startedAt);
     return itemType;
-  }, [debugName, getItemType]);
+  }, [latestPropsRef]);
 
-  const keyVersion = itemKeyVersion ?? dataVersion;
   const keyExtractor = useCallback((item: number | undefined, index: number) => {
+    const { dataVersion, debugName, itemKeyVersion } = latestPropsRef.current;
+    const keyVersion = itemKeyVersion ?? dataVersion;
     const startedAt = debugNowMs();
     const rowIndex = item ?? index;
     const key = keyVersion === undefined
@@ -819,11 +890,12 @@ export function VirtualizedFixedDocumentList<TRow>({
     }
     recordCallbackDebug(debugName, "list.keyExtractorFrame", keyExtractorBatchRef, rowIndex, startedAt);
     return key;
-  }, [debugName, keyVersion]);
+  }, [latestPropsRef]);
 
   return (
     <LegendList
       data={itemIndexes}
+      dataKey={dataKey}
       dataVersion={dataVersion}
       estimatedItemSize={estimatedItemSize ?? rowHeight}
       experimental_adaptiveRender={adaptiveRender}
