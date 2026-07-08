@@ -73,6 +73,22 @@ function renderUrlSchemes(schemes: string[]) {
   ].join("\n");
 }
 
+function renderDevAppTransportSecurity() {
+  return [
+    "\t<key>NSAppTransportSecurity</key>",
+    "\t<dict>",
+    "\t\t<key>NSExceptionDomains</key>",
+    "\t\t<dict>",
+    "\t\t\t<key>localhost</key>",
+    "\t\t\t<dict>",
+    "\t\t\t\t<key>NSExceptionAllowsInsecureHTTPLoads</key>",
+    "\t\t\t\t<true/>",
+    "\t\t\t</dict>",
+    "\t\t</dict>",
+    "\t</dict>",
+  ].join("\n");
+}
+
 function getMacOSReleaseVersion(version: string) {
   const releaseVersion = version.split(/[+-]/)[0];
   if (/^\d+(?:\.\d+){0,2}$/.test(releaseVersion)) {
@@ -91,7 +107,12 @@ function replacePlistString(plist: string, key: string, value: string) {
   return nextPlist;
 }
 
-export function writeMacOSInfoPlist(manifest: AppManifest, appPackage: AppPackageMetadata, outputDir: string) {
+export function writeMacOSInfoPlist(
+  manifest: AppManifest,
+  appPackage: AppPackageMetadata,
+  outputDir: string,
+  mode: "dev" | "release",
+) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
   const urlSchemes = manifest.urlSchemes?.macos?.filter(Boolean) ?? [];
   const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
@@ -114,7 +135,7 @@ export function writeMacOSInfoPlist(manifest: AppManifest, appPackage: AppPackag
   ].join("\n");
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",
-    `\n${appMetadata}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,
+    `\n${appMetadata}${mode === "dev" ? `\n${renderDevAppTransportSecurity()}` : ""}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,
   );
   const outputPath = path.join(outputDir, "Info.plist");
 

@@ -225,7 +225,9 @@ export function writeGeneratedConfig(
     `${JSON.stringify(activeNativePackages, null, 2)}\n`,
   );
 
-  const macosInfoPlistPath = platform === "macos" ? writeMacOSInfoPlist(manifest, appPackage, dir) : undefined;
+  const macosInfoPlistPath = platform === "macos"
+    ? writeMacOSInfoPlist(manifest, appPackage, dir, mode)
+    : undefined;
 
   return {
     config: appConfig,

@@ -14,6 +14,8 @@ import {
 } from "./lib/apps";
 import {
   getMacOSAppWrapperName,
+  macOSAppTemplateDir,
+  macOSProjectName,
   macOSSchemeFileName,
   macOSXcodeProjectName,
 } from "./lib/macosShell";
@@ -90,7 +92,9 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
   }
 
   const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
+  const entitlementsPath = path.join(workspaceDir, macOSAppTemplateDir, `${macOSProjectName}.entitlements`);
   const infoPlist = fs.readFileSync(infoPlistPath, "utf8");
+  const entitlements = fs.existsSync(entitlementsPath) ? fs.readFileSync(entitlementsPath, "utf8") : "";
   const project = fs.readFileSync(path.join(workspaceDir, macOSXcodeProjectName, "project.pbxproj"), "utf8");
   const scheme = fs.readFileSync(
     path.join(workspaceDir, macOSXcodeProjectName, "xcshareddata", "xcschemes", macOSSchemeFileName),
@@ -112,6 +116,26 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
     infoPlist,
     `<key>CFBundleVersion</key>\n\t<string>${appVersion}</string>`,
     `${manifest.id}/macos Info.plist has wrong bundle version`,
+  );
+  assertNotContains(
+    infoPlist,
+    "<key>NSAllowsArbitraryLoads</key>",
+    `${manifest.id}/macos release Info.plist should not disable ATS globally`,
+  );
+  assertNotContains(
+    infoPlist,
+    "<key>NSAppTransportSecurity</key>",
+    `${manifest.id}/macos release Info.plist should not include dev ATS exceptions`,
+  );
+  assertNotContains(
+    entitlements,
+    "com.apple.security.app-sandbox",
+    `${manifest.id}/macos release entitlements should not enable App Sandbox`,
+  );
+  assertNotContains(
+    entitlements,
+    "com.apple.security.files.user-selected.read-only",
+    `${manifest.id}/macos release entitlements should not be read-only sandboxed`,
   );
   assertContains(infoPlist, "<key>LegendHostWindowHidden</key>", `${manifest.id}/macos Info.plist has no host window metadata`);
   assertContains(
