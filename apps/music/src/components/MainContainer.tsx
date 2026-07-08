@@ -1,14 +1,14 @@
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import { initializeLocalAudioPlayer, localAudioControls } from "@/components/LocalAudioPlayer";
-import { Unregistered } from "@/components/Unregistered";
-import { MusicLayoutRenderer } from "@/layout/MusicLayoutRenderer";
-import { mainLayout$, normalizeMusicLayoutFile } from "@/layout/MusicLayoutState";
-import { SUPPORT_ACCOUNTS } from "@/systems/constants";
-import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
+import { initializeLocalAudioPlayer, localAudioControls } from "./LocalAudioPlayer";
+import { Unregistered } from "./Unregistered";
+import { MusicLayoutRenderer } from "../layout/MusicLayoutRenderer";
+import { mainLayout$, normalizeMusicLayoutFile } from "../layout/MusicLayoutState";
+import { SUPPORT_ACCOUNTS } from "../systems/constants";
+import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
-import { preloadPersistence } from "@/utils/preloadPersistence";
+import { preloadPersistence } from "../utils/preloadPersistence";
 
 preloadPersistence();
 initializeLocalAudioPlayer();

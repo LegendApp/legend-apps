@@ -1,6 +1,6 @@
 import { createMockCommandRunner } from "@legend-desktop/command-runner";
 import { generatePlaylistExtension } from "../playlistGeneration";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalPlaylist, LocalTrack } from "../../LocalMusicState";
 
 const track = (overrides: Partial<LocalTrack>): LocalTrack => ({
     id: overrides.filePath ?? "track",

@@ -1,8 +1,8 @@
 import type { RefObject } from "react";
 import { View } from "react-native";
 
-import { TextInputSearch, type TextInputSearchRef } from "@/components/TextInputSearch";
-import { libraryUI$ } from "@/systems/LibraryState";
+import { TextInputSearch, type TextInputSearchRef } from "../TextInputSearch";
+import { libraryUI$ } from "../../systems/LibraryState";
 
 interface MediaLibrarySearchBarProps {
     searchInputRef: RefObject<TextInputSearchRef | null>;

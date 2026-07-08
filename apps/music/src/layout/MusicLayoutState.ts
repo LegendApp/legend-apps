@@ -1,5 +1,5 @@
 import { createObservableFile } from "@legend-desktop/storage";
-import type { PlaybackControlId } from "@/systems/Settings";
+import type { PlaybackControlId } from "../systems/Settings";
 
 export type MusicLayoutDirection = "horizontal" | "vertical";
 export type MusicLayoutContainerType = "stack" | "split";

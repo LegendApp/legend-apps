@@ -3,10 +3,10 @@ import { useCallback } from "react";
 import { Dimensions } from "react-native";
 
 import { useWindowManager } from "@legend-desktop/window-manager";
-import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
-import { stateSaved$ } from "@/systems/State";
+import { useOnHotkeys } from "../systems/keyboard/Keyboard";
+import { stateSaved$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
-import { WindowsNavigator } from "@/windows";
+import { WindowsNavigator } from "../windows";
 
 const MEDIA_LIBRARY_WINDOW_KEY = "MediaLibraryWindow" as const;
 const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getIdentifier(MEDIA_LIBRARY_WINDOW_KEY);

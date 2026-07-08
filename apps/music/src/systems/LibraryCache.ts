@@ -1,5 +1,5 @@
 import { createObservableFile } from "@legend-desktop/storage";
-import { deriveThumbnailKey } from "@/utils/thumbnails";
+import { deriveThumbnailKey } from "../utils/thumbnails";
 
 export interface PersistedLibraryTrack {
     root: number;

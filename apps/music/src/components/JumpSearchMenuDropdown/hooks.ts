@@ -2,11 +2,11 @@ import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { playlistNavigationState$ } from "@/state/playlistNavigationState";
-import KeyboardManager, { type KeyboardEvent, KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import type { LibraryItem } from "@/systems/LibraryState";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
-import { getQueueAction, type QueueAction } from "@/utils/queueActions";
+import { playlistNavigationState$ } from "../../state/playlistNavigationState";
+import KeyboardManager, { type KeyboardEvent, KeyCodes } from "../../systems/keyboard/KeyboardManager";
+import type { LibraryItem } from "../../systems/LibraryState";
+import type { LocalPlaylist, LocalTrack } from "../../systems/LocalMusicState";
+import { getQueueAction, type QueueAction } from "../../utils/queueActions";
 
 export type SearchResult =
     | { type: "track"; item: LocalTrack }

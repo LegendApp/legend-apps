@@ -2,14 +2,14 @@ import { isNumber, linked } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { $TextInput } from "@legendapp/state/react-native";
 import { View } from "react-native";
-import { Checkbox } from "@/components/Checkbox";
-import { Select } from "@/components/Select";
-import { SettingsPage, SettingsRow, SettingsSection } from "@/settings/components";
+import { Checkbox } from "../components/Checkbox";
+import { Select } from "../components/Select";
+import { SettingsPage, SettingsRow, SettingsSection } from "./components";
 import {
     OVERLAY_MAX_DISPLAY_DURATION_SECONDS,
     OVERLAY_MIN_DISPLAY_DURATION_SECONDS,
     settings$,
-} from "@/systems/Settings";
+} from "../systems/Settings";
 
 const verticalOptions = [
     { value: "top", label: "Top" },

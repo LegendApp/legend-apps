@@ -343,7 +343,7 @@ jest.mock("@shopify/react-native-skia", () => ({
     },
 }), { virtual: true });
 
-jest.mock("@/utils/cacheDirectories", () => {
+jest.mock("./src/utils/cacheDirectories", () => {
     const FileSystem = require("expo-file-system/next");
 
     return {

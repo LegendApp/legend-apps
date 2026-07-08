@@ -2,11 +2,11 @@ import { useValue } from "@legendapp/state/react";
 import { useCallback, useMemo } from "react";
 import { Alert } from "react-native";
 
-import { localAudioControls } from "@/components/LocalAudioPlayer";
-import { showToast } from "@/components/Toast";
-import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
-import type { LibraryItem, LibraryTrack } from "@/systems/LibraryState";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import { localAudioControls } from "../LocalAudioPlayer";
+import { showToast } from "../Toast";
+import { useOnHotkeys } from "../../systems/keyboard/Keyboard";
+import type { LibraryItem, LibraryTrack } from "../../systems/LibraryState";
+import type { LocalPlaylist, LocalTrack } from "../../systems/LocalMusicState";
 import {
     createLocalPlaylist,
     DEFAULT_LOCAL_PLAYLIST_ID,
@@ -15,12 +15,12 @@ import {
     localMusicState$,
     saveLocalPlaylistTracks,
     setCurrentPlaylist,
-} from "@/systems/LocalMusicState";
-import { stateSaved$ } from "@/systems/State";
+} from "../../systems/LocalMusicState";
+import { stateSaved$ } from "../../systems/State";
 
 import { perfLog } from "@legend-desktop/runtime-utils";
-import type { QueueAction } from "@/utils/queueActions";
-import { buildTrackLookup, getTracksForLibraryItem, resolvePlaylistTracks } from "@/utils/trackResolution";
+import type { QueueAction } from "../../utils/queueActions";
+import { buildTrackLookup, getTracksForLibraryItem, resolvePlaylistTracks } from "../../utils/trackResolution";
 
 interface PlaylistOption {
     id: string;

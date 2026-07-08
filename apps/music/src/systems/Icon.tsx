@@ -1,5 +1,5 @@
 import { SFSymbol } from "@legend-desktop/sf-symbol";
-import type { SFSymbols } from "@/types/SFSymbols";
+import type { SFSymbols } from "../types/SFSymbols";
 
 interface IconProps {
     name: SFSymbols;

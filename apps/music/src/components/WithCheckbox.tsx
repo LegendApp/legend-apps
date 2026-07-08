@@ -2,7 +2,7 @@ import type { Observable } from "@legendapp/state";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
-import { Checkbox } from "@/components/Checkbox";
+import { Checkbox } from "./Checkbox";
 import { cn } from "@legend-desktop/classnames";
 
 interface WithCheckboxProps {

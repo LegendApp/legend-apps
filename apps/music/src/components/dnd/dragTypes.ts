@@ -1,4 +1,4 @@
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "../../systems/LocalMusicState";
 
 export type PlaylistDragData = {
     type: "playlist-track";

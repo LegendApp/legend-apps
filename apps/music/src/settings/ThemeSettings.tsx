@@ -1,17 +1,17 @@
 import { useValue } from "@legendapp/state/react";
 import { useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
-import { Button } from "@/components/Button";
-import { Checkbox } from "@/components/Checkbox";
-import { SettingsPage, SettingsRow, SettingsSection } from "@/settings/components";
+import { Button } from "../components/Button";
+import { Checkbox } from "../components/Checkbox";
+import { SettingsPage, SettingsRow, SettingsSection } from "./components";
 import {
     defaultMusicAppearance,
     ensureMusicAppearanceSettings,
     normalizeMusicAppearanceSettings,
     settings$,
-} from "@/systems/Settings";
-import { themeState$, useTheme } from "@/theme/ThemeProvider";
-import { getMusicTheme, musicThemeOptions, type MusicThemeName } from "@/theme/musicThemes";
+} from "../systems/Settings";
+import { themeState$, useTheme } from "../theme/ThemeProvider";
+import { getMusicTheme, musicThemeOptions, type MusicThemeName } from "../theme/musicThemes";
 import { cn } from "@legend-desktop/classnames";
 
 function applyMusicTheme(themeName: MusicThemeName) {

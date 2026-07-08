@@ -5,8 +5,8 @@ import {
     ensureMusicAppearanceSettings,
     normalizeMusicAppearanceSettings,
     settings$,
-} from "@/systems/Settings";
-import { getMusicTheme } from "@/theme/musicThemes";
+} from "../systems/Settings";
+import { getMusicTheme } from "../theme/musicThemes";
 
 type MusicBackgroundProps = {
     children: ReactNode;

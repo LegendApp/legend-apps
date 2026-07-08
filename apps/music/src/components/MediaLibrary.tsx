@@ -1,8 +1,8 @@
 import { useValue } from "@legendapp/state/react";
 import { Text, View } from "react-native";
 
-import { Panel, PanelGroup, ResizeHandle } from "@/components/ResizablePanels";
-import { settings$ } from "@/systems/Settings";
+import { Panel, PanelGroup, ResizeHandle } from "./ResizablePanels";
+import { settings$ } from "../systems/Settings";
 import { perfCount } from "@legend-desktop/runtime-utils";
 import { MediaLibrarySidebar } from "./MediaLibrary/Sidebar";
 import { TrackList } from "./MediaLibrary/TrackList";

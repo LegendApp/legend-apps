@@ -1,8 +1,8 @@
 import type { Observable } from "@legendapp/state";
 import { type Animated, ScrollView, View } from "react-native";
 
-import { EffectView } from "@/components/EffectView";
-import { SidebarButton } from "@/components/SidebarButton";
+import { EffectView } from "./EffectView";
+import { SidebarButton } from "./SidebarButton";
 import { cn } from "@legend-desktop/classnames";
 
 export interface SidebarHeadingT {

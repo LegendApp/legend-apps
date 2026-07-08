@@ -1,13 +1,13 @@
 import {
     defaultMusicBackground,
     normalizeMusicAppearanceSettings,
-} from "@/systems/Settings";
+} from "../src/systems/Settings";
 import {
     getMusicTheme,
     getMusicThemeAppearance,
     isMusicThemeName,
     musicThemeOptions,
-} from "@/theme/musicThemes";
+} from "../src/theme/musicThemes";
 
 describe("music appearance themes", () => {
     it("uses local light and dark theme options", () => {

@@ -1,5 +1,5 @@
 import { buildPlaylistExtensionPrompt } from "../playlistPrompts";
-import type { LocalPlaylist } from "@/systems/LocalMusicState";
+import type { LocalPlaylist } from "../../LocalMusicState";
 
 const playlist: LocalPlaylist = {
     id: "playlist",

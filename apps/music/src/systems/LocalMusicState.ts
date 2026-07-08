@@ -10,22 +10,22 @@ import {
     type NativeScannedPlaylist,
 } from "@legend-desktop/media-library-scanner";
 import { readMediaTags } from "@legend-desktop/media-tags";
-import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS, stripSupportedAudioExtension } from "@/systems/audioFormats";
-import { DEBUG_LOCAL_MUSIC_LOGS } from "@/systems/constants";
+import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS, stripSupportedAudioExtension } from "./audioFormats";
+import { DEBUG_LOCAL_MUSIC_LOGS } from "./constants";
 import {
     clearLibraryCache,
     getLibrarySnapshot,
     hasCachedLibraryData,
     type PersistedLibraryTrack,
-} from "@/systems/LibraryCache";
-import { settings$ } from "@/systems/Settings";
-import { stateSaved$ } from "@/systems/State";
-import { ensureCacheDirectory, getCacheDirectory, getPlaylistsDirectory } from "@/utils/cacheDirectories";
-import { type M3UTrack, parseM3U, writeM3U } from "@/utils/m3u";
-import { loadQueueFromM3U } from "@/utils/m3uManager";
+} from "./LibraryCache";
+import { settings$ } from "./Settings";
+import { stateSaved$ } from "./State";
+import { ensureCacheDirectory, getCacheDirectory, getPlaylistsDirectory } from "../utils/cacheDirectories";
+import { type M3UTrack, parseM3U, writeM3U } from "../utils/m3u";
+import { loadQueueFromM3U } from "../utils/m3uManager";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 import { runAfterInteractions, runAfterInteractionsWithLabel } from "@legend-desktop/runtime-utils";
-import { buildThumbnailUri } from "@/utils/thumbnails";
+import { buildThumbnailUri } from "../utils/thumbnails";
 import { DEFAULT_LOCAL_PLAYLIST_ID } from "./localMusicConstants";
 
 export interface LocalTrack {

@@ -2,17 +2,17 @@ import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 
-import { Button } from "@/components/Button";
-import { SkiaSpinner } from "@/components/SkiaSpinner";
+import { Button } from "../components/Button";
+import { SkiaSpinner } from "../components/SkiaSpinner";
 import { openFileDialog } from "@legend-desktop/file-dialog";
-import { SettingsPage, SettingsSection } from "@/settings/components";
+import { SettingsPage, SettingsSection } from "./components";
 import {
     librarySettings$,
     localMusicState$,
     markLibraryChangeUserInitiated,
     scanLocalMusic,
-} from "@/systems/LocalMusicState";
-import type { SFSymbols } from "@/types/SFSymbols";
+} from "../systems/LocalMusicState";
+import type { SFSymbols } from "../types/SFSymbols";
 
 const normalizeLibraryPath = (path: string): string => {
     // TODO: This might not be necessary? These paths should be normalized at a higher level?

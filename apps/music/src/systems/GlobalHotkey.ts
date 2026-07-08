@@ -5,9 +5,9 @@ import { Platform } from "react-native";
 import { addGlobalHotkeyListener, registerGlobalHotkey, unregisterGlobalHotkey } from "@legend-desktop/global-hotkey";
 import { parseHotkey as parseHotkeyValue } from "@legend-desktop/hotkeys";
 import { useWindowManager } from "@legend-desktop/window-manager";
-import { settings$ } from "@/systems/Settings";
-import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
-import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
+import { settings$ } from "./Settings";
+import type { KeyboardEventCodeHotkey } from "./keyboard/Keyboard";
+import { KeyCodes } from "./keyboard/KeyboardManager";
 
 export const globalHotkeyStatus$ = observable({
     error: null as string | null,

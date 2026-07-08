@@ -2,10 +2,10 @@ import { isString } from "@legendapp/state";
 import { useMount } from "@legendapp/state/react";
 import { type PropsWithChildren, useRef } from "react";
 import { type GestureResponderEvent, Pressable, type PressableProps, Text } from "react-native";
-import { Icon } from "@/systems/Icon";
-import { startNavMeasurement } from "@/systems/NavTime";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
-import type { SFSymbols } from "@/types/SFSymbols";
+import { Icon } from "../systems/Icon";
+import { startNavMeasurement } from "../systems/NavTime";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
+import type { SFSymbols } from "../types/SFSymbols";
 import { cn } from "@legend-desktop/classnames";
 import { useTooltip } from "./TooltipProvider";
 

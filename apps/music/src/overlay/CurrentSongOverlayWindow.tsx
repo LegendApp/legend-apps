@@ -3,12 +3,12 @@ import { GlassEffectView } from "@legend-desktop/glass-effect-view";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import { PlaybackArea } from "@/components/PlaybackArea";
-import { TooltipProvider } from "@/components/TooltipProvider";
+import { PlaybackArea } from "../components/PlaybackArea";
+import { TooltipProvider } from "../components/TooltipProvider";
 import { setWindowBlur } from "@legend-desktop/window-manager";
-import { IS_TAHOE } from "@/systems/constants";
-import { ThemeProvider } from "@/theme/ThemeProvider";
-import { withWindowProvider } from "@/windows";
+import { IS_TAHOE } from "../systems/constants";
+import { ThemeProvider } from "../theme/ThemeProvider";
+import { withWindowProvider } from "../windows";
 import {
     currentSongOverlay$,
     finalizeCurrentSongOverlayDismissal,

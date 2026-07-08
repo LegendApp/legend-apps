@@ -1,5 +1,5 @@
 import { buildPlaylistAICatalog, normalizeTrackPath } from "../libraryCatalog";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "../../LocalMusicState";
 
 const track = (overrides: Partial<LocalTrack>): LocalTrack => ({
     id: overrides.filePath ?? "track",

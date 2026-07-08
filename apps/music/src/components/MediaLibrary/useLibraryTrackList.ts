@@ -1,13 +1,13 @@
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import type { NativeMouseEvent } from "../../types/NativeMouseEvent";
 
-import type { MediaLibraryDragData } from "@/components/dnd";
-import { localAudioControls } from "@/components/LocalAudioPlayer";
-import { showToast } from "@/components/Toast";
-import type { TrackData } from "@/components/TrackItem";
-import { usePlaylistSelection } from "@/hooks/usePlaylistSelection";
+import type { MediaLibraryDragData } from "../dnd";
+import { localAudioControls } from "../LocalAudioPlayer";
+import { showToast } from "../Toast";
+import type { TrackData } from "../TrackItem";
+import { usePlaylistSelection } from "../../hooks/usePlaylistSelection";
 import { type ContextMenuItem, showContextMenu } from "@legend-desktop/context-menu";
 import {
     getArtistKey,
@@ -18,12 +18,12 @@ import {
     normalizeArtistName,
     type PlaylistSortDirection,
     type PlaylistSortMode,
-} from "@/systems/LibraryState";
-import { type LocalPlaylist, localMusicState$, saveLocalPlaylistTracks } from "@/systems/LocalMusicState";
-import { addTracksToPlaylist } from "@/systems/LocalPlaylists";
-import { getQueueAction, type QueueAction } from "@/utils/queueActions";
-import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "@/utils/trackContextMenu";
-import { buildTrackLookup } from "@/utils/trackResolution";
+} from "../../systems/LibraryState";
+import { type LocalPlaylist, localMusicState$, saveLocalPlaylistTracks } from "../../systems/LocalMusicState";
+import { addTracksToPlaylist } from "../../systems/LocalPlaylists";
+import { getQueueAction, type QueueAction } from "../../utils/queueActions";
+import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "../../utils/trackContextMenu";
+import { buildTrackLookup } from "../../utils/trackResolution";
 
 type LibraryTrackListItem = TrackData & { sourceTrack?: LibraryTrack };
 

@@ -8,7 +8,6 @@ module.exports = {
         "<rootDir>/apps/music/src/**/*.test.tsx",
     ],
     moduleNameMapper: {
-        "^@/(.*)$": "<rootDir>/apps/music/src/$1",
         "^@legend-desktop/markdown-document$": "<rootDir>/apps/music/jest/mocks/markdownDocumentMock.cjs",
         "^expo-file-system$": "<rootDir>/apps/music/jest/mocks/expoFileSystemMock.cjs",
         "^expo-file-system/next$": "<rootDir>/apps/music/jest/mocks/expoFileSystemNextMock.cjs",

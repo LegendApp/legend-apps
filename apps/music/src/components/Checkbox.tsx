@@ -2,7 +2,7 @@ import { observable, type Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Text, View } from "react-native";
 
-import { Icon } from "@/systems/Icon";
+import { Icon } from "../systems/Icon";
 import { cn } from "@legend-desktop/classnames";
 import { Button } from "./Button";
 

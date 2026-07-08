@@ -1,7 +1,7 @@
 import { Linking, Text, View } from "react-native";
 
-import { Button } from "@/components/Button";
-import { SettingsPage, SettingsSection } from "@/settings/components";
+import { Button } from "../components/Button";
+import { SettingsPage, SettingsSection } from "./components";
 
 interface Library {
     name: string;

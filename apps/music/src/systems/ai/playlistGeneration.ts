@@ -4,7 +4,7 @@ import {
     type AIToolRunResult,
 } from "@legend-desktop/ai";
 import { commandRunner, type CommandRunner } from "@legend-desktop/command-runner";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "../LocalMusicState";
 import { buildPlaylistAICatalog } from "./libraryCatalog";
 import { parsePlaylistAISuggestions } from "./parser";
 import type { PlaylistAIContext } from "./playlistContext";

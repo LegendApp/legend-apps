@@ -1,11 +1,11 @@
 import { batch, event, observable } from "@legendapp/state";
 import { useMount, useObserveEffect } from "@legendapp/state/react";
 import { formatHotkey, parseHotkey, type HotkeyValue } from "@legend-desktop/hotkeys";
-import { DEBUG_HOTKEY_LOGS } from "@/systems/constants";
-import { getHotkey, getHotkeyMetadata, type HotkeyName } from "@/systems/hotkeys";
-import KeyboardManager, { type KeyboardEvent, KeyCodes, KeyText } from "@/systems/keyboard/KeyboardManager";
-import { state$ } from "@/systems/State";
-import { ax } from "@/utils/ax";
+import { DEBUG_HOTKEY_LOGS } from "../constants";
+import { getHotkey, getHotkeyMetadata, type HotkeyName } from "../hotkeys";
+import KeyboardManager, { type KeyboardEvent, KeyCodes, KeyText } from "./KeyboardManager";
+import { state$ } from "../State";
+import { ax } from "../../utils/ax";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 
 export type KeyboardEventCodeHotkey = HotkeyValue;

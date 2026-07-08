@@ -8,12 +8,12 @@ import {
     updateMenuItems,
     useNativeMenu,
 } from "@legend-desktop/native-menu";
-import { localAudioControls, localPlayerState$, queue$ } from "@/components/LocalAudioPlayer";
-import { savePlaylistUI$ } from "@/state/savePlaylistUIState";
-import { type RepeatMode, settings$ } from "@/systems/Settings";
-import { state$, stateSaved$ } from "@/systems/State";
-import { hotkeys$ } from "@/systems/hotkeys";
-import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
+import { localAudioControls, localPlayerState$, queue$ } from "../components/LocalAudioPlayer";
+import { savePlaylistUI$ } from "../state/savePlaylistUIState";
+import { type RepeatMode, settings$ } from "./Settings";
+import { state$, stateSaved$ } from "./State";
+import { hotkeys$ } from "./hotkeys";
+import { KeyCodes } from "./keyboard/KeyboardManager";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 
 const MENU_OWNER_ID = "music";

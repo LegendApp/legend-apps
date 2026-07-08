@@ -1,10 +1,10 @@
 import { observable } from "@legendapp/state";
-import type { LibrarySnapshot, PersistedLibraryTrack } from "@/systems/LibraryCache";
-import { getLibrarySnapshot, persistLibrarySnapshot } from "@/systems/LibraryCache";
-import { type LocalTrack, librarySettings$, localMusicState$ } from "@/systems/LocalMusicState";
+import type { LibrarySnapshot, PersistedLibraryTrack } from "./LibraryCache";
+import { getLibrarySnapshot, persistLibrarySnapshot } from "./LibraryCache";
+import { type LocalTrack, librarySettings$, localMusicState$ } from "./LocalMusicState";
 import { perfCount, perfLog, perfTime } from "@legend-desktop/runtime-utils";
 import { runAfterInteractions } from "@legend-desktop/runtime-utils";
-import { resolveThumbnailFromFields } from "@/utils/thumbnails";
+import { resolveThumbnailFromFields } from "../utils/thumbnails";
 
 export interface LibraryItem {
     id: string;

@@ -8,36 +8,36 @@ import {
     TextInput,
     View,
 } from "react-native";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import type { NativeMouseEvent } from "../../types/NativeMouseEvent";
 
-import { Button } from "@/components/Button";
+import { Button } from "../Button";
 import {
     type DraggedItem,
     DroppableZone,
     MEDIA_LIBRARY_DRAG_ZONE_ID,
     type MediaLibraryDragData,
-} from "@/components/dnd";
-import { localAudioControls } from "@/components/LocalAudioPlayer";
-import type { TextInputSearchRef } from "@/components/TextInputSearch";
-import { showToast } from "@/components/Toast";
-import { useListItemStyles } from "@/hooks/useListItemStyles";
+} from "../dnd";
+import { localAudioControls } from "../LocalAudioPlayer";
+import type { TextInputSearchRef } from "../TextInputSearch";
+import { showToast } from "../Toast";
+import { useListItemStyles } from "../../hooks/useListItemStyles";
 import { type ContextMenuItem, showContextMenu } from "@legend-desktop/context-menu";
 import { DragDropView } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
-import { SUPPORT_PLAYLISTS } from "@/systems/constants";
-import { type LibraryView, libraryUI$, selectLibraryPlaylist, selectLibraryView } from "@/systems/LibraryState";
-import { createLocalPlaylist, type LocalPlaylist, localMusicState$ } from "@/systems/LocalMusicState";
+import { SUPPORT_PLAYLISTS } from "../../systems/constants";
+import { type LibraryView, libraryUI$, selectLibraryPlaylist, selectLibraryView } from "../../systems/LibraryState";
+import { createLocalPlaylist, type LocalPlaylist, localMusicState$ } from "../../systems/LocalMusicState";
 import {
     addTracksToPlaylist,
     deletePlaylist,
     duplicatePlaylistToCache,
     exportPlaylistToFile,
     renamePlaylist,
-} from "@/systems/LocalPlaylists";
+} from "../../systems/LocalPlaylists";
 import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@legend-desktop/runtime-utils";
-import { getQueueAction } from "@/utils/queueActions";
-import { buildTrackLookup, resolvePlaylistTracks } from "@/utils/trackResolution";
+import { getQueueAction } from "../../utils/queueActions";
+import { buildTrackLookup, resolvePlaylistTracks } from "../../utils/trackResolution";
 import { MediaLibrarySearchBar } from "./SearchBar";
 
 const LIBRARY_VIEWS: { id: LibraryView; label: string; disabled?: boolean }[] = [

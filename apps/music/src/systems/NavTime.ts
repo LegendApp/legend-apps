@@ -1,4 +1,4 @@
-import { state$ } from "@/systems/State";
+import { state$ } from "./State";
 
 export const startNavMeasurement = () => {
     state$.lastNavStart.set(Date.now());

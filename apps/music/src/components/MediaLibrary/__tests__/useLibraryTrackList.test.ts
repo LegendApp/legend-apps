@@ -1,5 +1,5 @@
-import type { LibraryTrack } from "@/systems/LibraryState";
-import type { LocalPlaylist } from "@/systems/LocalMusicState";
+import type { LibraryTrack } from "../../../systems/LibraryState";
+import type { LocalPlaylist } from "../../../systems/LocalMusicState";
 import { buildTrackItems } from "../useLibraryTrackList";
 
 const mockTracks: LibraryTrack[] = [

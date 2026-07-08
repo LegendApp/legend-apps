@@ -3,7 +3,7 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useMemo, useRef } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
-import { Button } from "@/components/Button";
+import { Button } from "./Button";
 import { cn } from "@legend-desktop/classnames";
 
 type ToastType = "info" | "error";

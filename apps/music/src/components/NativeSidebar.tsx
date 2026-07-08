@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo } from "react";
 import { Platform, type StyleProp, View, type ViewStyle } from "react-native";
 import { Sidebar as NativeSidebarView, type SidebarItemData } from "@legend-desktop/sidebar";
-import { Sidebar } from "@/components/Sidebar";
+import { Sidebar } from "./Sidebar";
 
 export type NativeSidebarItem = {
     id: string;
@@ -119,4 +119,4 @@ export function NativeSidebar({
 }
 
 // Re-export SidebarItem for convenience
-export { SidebarItem } from "@/components/SidebarItem";
+export { SidebarItem } from "./SidebarItem";

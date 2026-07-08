@@ -1,11 +1,11 @@
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { useStableCallback } from "@legend-desktop/runtime-utils";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
-import { playlistNavigationState$ } from "@/state/playlistNavigationState";
-import { keysPressed$, useOnHotkeys } from "@/systems/keyboard/Keyboard";
-import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import { state$ } from "@/systems/State";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
+import { playlistNavigationState$ } from "../state/playlistNavigationState";
+import { keysPressed$, useOnHotkeys } from "../systems/keyboard/Keyboard";
+import { KeyCodes } from "../systems/keyboard/KeyboardManager";
+import { state$ } from "../systems/State";
 
 interface UsePlaylistSelectionOptions<T extends { isSeparator?: boolean }> {
     items: T[];

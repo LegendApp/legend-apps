@@ -1,7 +1,7 @@
 import { useObserveEffect } from "@legendapp/state/react";
 import { useRef } from "react";
-import { localPlayerState$ } from "@/components/LocalAudioPlayer";
-import { settings$ } from "@/systems/Settings";
+import { localPlayerState$ } from "../components/LocalAudioPlayer";
+import { settings$ } from "../systems/Settings";
 
 import {
     currentSongOverlay$,

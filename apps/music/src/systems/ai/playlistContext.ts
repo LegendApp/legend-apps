@@ -1,4 +1,4 @@
-import type { M3UTrack } from "@/utils/m3u";
+import type { M3UTrack } from "../../utils/m3u";
 
 export type PlaylistAIContext = {
     name: string;

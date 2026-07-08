@@ -1,8 +1,8 @@
 import { currentTime as currentTime$ } from "@legendapp/state/helpers/time";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { Pressable, Text } from "react-native";
-import { settings$ } from "@/systems/Settings";
-import { state$ } from "@/systems/State";
+import { settings$ } from "../systems/Settings";
+import { state$ } from "../systems/State";
 
 export function Unregistered() {
     const isRegistered = useValue(settings$.registration.isRegistered);

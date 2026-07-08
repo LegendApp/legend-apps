@@ -14,9 +14,9 @@ import {
     useState,
 } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Icon } from "@/systems/Icon";
-import { state$ } from "@/systems/State";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import { Icon } from "../systems/Icon";
+import { state$ } from "../systems/State";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { cn } from "@legend-desktop/classnames";
 import { Button } from "./Button";
 

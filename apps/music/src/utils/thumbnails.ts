@@ -1,4 +1,4 @@
-import { ensureCacheDirectory, getCacheDirectory } from "@/utils/cacheDirectories";
+import { ensureCacheDirectory, getCacheDirectory } from "./cacheDirectories";
 
 const thumbnailsDir = getCacheDirectory("thumbnails");
 ensureCacheDirectory(thumbnailsDir);

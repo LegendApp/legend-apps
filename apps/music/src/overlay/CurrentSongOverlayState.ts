@@ -4,7 +4,7 @@ import {
     OVERLAY_MAX_DISPLAY_DURATION_SECONDS,
     OVERLAY_MIN_DISPLAY_DURATION_SECONDS,
     settings$,
-} from "@/systems/Settings";
+} from "../systems/Settings";
 
 import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "./OverlayConstants";
 

@@ -3,10 +3,10 @@ import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useMemo } from "react";
 import { Platform, Text, View } from "react-native";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import type { NativeMouseEvent } from "../../types/NativeMouseEvent";
 
-import { AIButtons, type AIButtonsAddResult } from "@/components/AIButtons";
-import { Button } from "@/components/Button";
+import { AIButtons, type AIButtonsAddResult } from "../AIButtons";
+import { Button } from "../Button";
 import {
     type DragData,
     DraggableItem,
@@ -16,20 +16,20 @@ import {
     type LocalPlaylistDragData,
     MEDIA_LIBRARY_DRAG_ZONE_ID,
     type MediaLibraryDragData,
-} from "@/components/dnd";
-import { localPlayerState$ } from "@/components/LocalAudioPlayer";
-import { Table, TableCell, type TableColumnSpec, TableHeader, TableRow } from "@/components/Table";
-import type { TrackData } from "@/components/TrackItem";
-import { useListItemStyles } from "@/hooks/useListItemStyles";
+} from "../dnd";
+import { localPlayerState$ } from "../LocalAudioPlayer";
+import { Table, TableCell, type TableColumnSpec, TableHeader, TableRow } from "../Table";
+import type { TrackData } from "../TrackItem";
+import { useListItemStyles } from "../../hooks/useListItemStyles";
 import { type ContextMenuItem, showContextMenu } from "@legend-desktop/context-menu";
 import { type NativeDragTrack, TrackDragSource } from "@legend-desktop/drag-drop";
-import { Icon } from "@/systems/Icon";
-import { libraryUI$ } from "@/systems/LibraryState";
-import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "@/systems/LocalMusicState";
-import { addTracksToPlaylist } from "@/systems/LocalPlaylists";
-import { themeState$ } from "@/theme/ThemeProvider";
+import { Icon } from "../../systems/Icon";
+import { libraryUI$ } from "../../systems/LibraryState";
+import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "../../systems/LocalMusicState";
+import { addTracksToPlaylist } from "../../systems/LocalPlaylists";
+import { themeState$ } from "../../theme/ThemeProvider";
 import { cn } from "@legend-desktop/classnames";
-import type { QueueAction } from "@/utils/queueActions";
+import type { QueueAction } from "../../utils/queueActions";
 import { useLibraryTrackList } from "./useLibraryTrackList";
 
 type TrackListProps = {};

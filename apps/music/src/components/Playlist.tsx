@@ -2,12 +2,12 @@ import { LegendList } from "@legendapp/list/react-native";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { type ElementRef, useCallback, useMemo, useRef, useState } from "react";
 import { findNodeHandle, type GestureResponderEvent, Platform, StyleSheet, Text, UIManager, View } from "react-native";
-import { AIButtons, type AIButtonsAddResult } from "@/components/AIButtons";
-import { Button } from "@/components/Button";
-import { localAudioControls, localPlayerState$, type QueuedTrack, queue$ } from "@/components/LocalAudioPlayer";
-import { showToast } from "@/components/Toast";
-import { type TrackData, TrackItem } from "@/components/TrackItem";
-import { usePlaylistSelection } from "@/hooks/usePlaylistSelection";
+import { AIButtons, type AIButtonsAddResult } from "./AIButtons";
+import { Button } from "./Button";
+import { localAudioControls, localPlayerState$, type QueuedTrack, queue$ } from "./LocalAudioPlayer";
+import { showToast } from "./Toast";
+import { type TrackData, TrackItem } from "./TrackItem";
+import { usePlaylistSelection } from "../hooks/usePlaylistSelection";
 import { showContextMenu } from "@legend-desktop/context-menu";
 import {
     DragDropView,
@@ -16,10 +16,10 @@ import {
     type TrackDragEvent,
     TrackDragSource,
 } from "@legend-desktop/drag-drop";
-import type { PlaylistAIContext } from "@/systems/ai/playlistContext";
-import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "@/systems/audioFormats";
-import { DEBUG_PLAYLIST_LOGS } from "@/systems/constants";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { PlaylistAIContext } from "../systems/ai/playlistContext";
+import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "../systems/audioFormats";
+import { DEBUG_PLAYLIST_LOGS } from "../systems/constants";
+import type { LocalTrack } from "../systems/LocalMusicState";
 import {
     createLocalTrackFromFile,
     DEFAULT_LOCAL_PLAYLIST_ID,
@@ -29,13 +29,13 @@ import {
     localMusicState$,
     scanLocalMusic,
     setCurrentPlaylist,
-} from "@/systems/LocalMusicState";
-import { settings$ } from "@/systems/Settings";
-import { state$, stateSaved$ } from "@/systems/State";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+} from "../systems/LocalMusicState";
+import { settings$ } from "../systems/Settings";
+import { state$, stateSaved$ } from "../systems/State";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { cn } from "@legend-desktop/classnames";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
-import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "@/utils/trackContextMenu";
+import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "../utils/trackContextMenu";
 import {
     type DragData,
     DraggableItem,

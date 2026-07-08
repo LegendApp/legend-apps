@@ -2,7 +2,7 @@ import type { ObservableParam } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { Text } from "react-native";
 
-import { DropdownMenu } from "@/components/DropdownMenu";
+import { DropdownMenu } from "./DropdownMenu";
 import { cn } from "@legend-desktop/classnames";
 
 export interface SelectOption {

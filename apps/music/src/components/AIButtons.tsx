@@ -2,11 +2,11 @@ import { getAICommandAvailability } from "@legend-desktop/ai";
 import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
-import { Button } from "@/components/Button";
-import { showToast } from "@/components/Toast";
-import { generatePlaylistExtension } from "@/systems/ai/playlistGeneration";
-import type { PlaylistAIContext } from "@/systems/ai/playlistContext";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import { Button } from "./Button";
+import { showToast } from "./Toast";
+import { generatePlaylistExtension } from "../systems/ai/playlistGeneration";
+import type { PlaylistAIContext } from "../systems/ai/playlistContext";
+import type { LocalTrack } from "../systems/LocalMusicState";
 
 export type AIButtonsAddResult = {
     addedCount: number;

@@ -3,11 +3,11 @@ import { observe } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import type { JSX } from "react";
 import { Pressable } from "react-native";
-import { EffectView } from "@/components/EffectView";
+import { EffectView } from "./EffectView";
 import { hideWindowControls, showWindowControls } from "@legend-desktop/window-controls";
-import { IS_TAHOE } from "@/systems/constants";
-import { settings$ } from "@/systems/Settings";
-import { state$ } from "@/systems/State";
+import { IS_TAHOE } from "../systems/constants";
+import { settings$ } from "../systems/Settings";
+import { state$ } from "../systems/State";
 import { cn } from "@legend-desktop/classnames";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
 

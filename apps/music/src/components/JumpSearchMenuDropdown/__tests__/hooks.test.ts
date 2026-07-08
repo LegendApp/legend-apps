@@ -1,5 +1,5 @@
-import type { LibraryItem } from "@/systems/LibraryState";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
+import type { LibraryItem } from "../../../systems/LibraryState";
+import type { LocalPlaylist, LocalTrack } from "../../../systems/LocalMusicState";
 import { buildSearchResults } from "../hooks";
 
 const tracks: LocalTrack[] = [

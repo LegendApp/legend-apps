@@ -1,11 +1,11 @@
 import type { PropsWithChildren } from "react";
 import { Text, View, type ViewStyle } from "react-native";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 
-import { Button } from "@/components/Button";
-import { PlaybackIndicator } from "@/components/PlaybackIndicator";
-import { useListItemStyles } from "@/hooks/useListItemStyles";
-import { Icon } from "@/systems/Icon";
+import { Button } from "./Button";
+import { PlaybackIndicator } from "./PlaybackIndicator";
+import { useListItemStyles } from "../hooks/useListItemStyles";
+import { Icon } from "../systems/Icon";
 import { cn } from "@legend-desktop/classnames";
 
 export type TableColumnAlign = "left" | "center" | "right";

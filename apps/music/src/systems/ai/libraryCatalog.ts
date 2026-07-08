@@ -1,4 +1,4 @@
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "../LocalMusicState";
 
 export type PlaylistAICatalogEntry = {
     filePath: string;

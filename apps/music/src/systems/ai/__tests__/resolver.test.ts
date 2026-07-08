@@ -1,5 +1,5 @@
 import { resolvePlaylistAISuggestions } from "../resolver";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "../../LocalMusicState";
 
 const track = (overrides: Partial<LocalTrack>): LocalTrack => ({
     id: overrides.filePath ?? "track",

@@ -1,13 +1,13 @@
-import { SUPPORTED_AUDIO_EXTENSIONS } from "@/systems/audioFormats";
-import { clearLibraryCache } from "@/systems/LibraryCache";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import { SUPPORTED_AUDIO_EXTENSIONS } from "../audioFormats";
+import { clearLibraryCache } from "../LibraryCache";
+import type { LocalTrack } from "../LocalMusicState";
 import {
     createLocalTrackFromFile,
     initializeLocalMusic,
     librarySettings$,
     localMusicState$,
     scanLocalMusic,
-} from "@/systems/LocalMusicState";
+} from "../LocalMusicState";
 
 jest.mock("expo-file-system", () => {
     const pathExists = new Map<string, boolean>();
@@ -172,7 +172,7 @@ jest.mock("expo-file-system/next", () => {
     return moduleExports;
 });
 
-jest.mock("@/utils/cacheDirectories", () => {
+jest.mock("../../utils/cacheDirectories", () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-var-requires
     const FileSystem = require("expo-file-system/next");
 
@@ -222,7 +222,7 @@ jest.mock("@legend-desktop/file-system-watcher", () => ({
     setWatchedDirectories: jest.fn(),
 }));
 
-jest.mock("@/systems/LibraryCache", () => ({
+jest.mock("../LibraryCache", () => ({
     __esModule: true,
     clearLibraryCache: jest.fn(),
     hasCachedLibraryData: jest.fn(() => false),

@@ -2,13 +2,13 @@ import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { Alert } from "react-native";
 
-import { showToast } from "@/components/Toast";
-import type { LocalTrack } from "@/systems/LocalMusicState";
-import { localMusicState$ } from "@/systems/LocalMusicState";
+import { showToast } from "../../Toast";
+import type { LocalTrack } from "../../../systems/LocalMusicState";
+import { localMusicState$ } from "../../../systems/LocalMusicState";
 
 import { generateM3UPlaylist, useQueueExporter } from "../hooks";
 
-jest.mock("@/components/Toast", () => ({
+jest.mock("../../Toast", () => ({
     __esModule: true,
     showToast: jest.fn(),
 }));

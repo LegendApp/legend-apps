@@ -3,17 +3,17 @@ import { useCallback, useRef, useState } from "react";
 import { type LayoutChangeEvent, useWindowDimensions, View } from "react-native";
 import type { SFSymbol } from "sf-symbols-typescript";
 
-import { Button } from "@/components/Button";
-import type { DropdownMenuRootRef } from "@/components/DropdownMenu";
-import { JumpSearchMenuDropdown } from "@/components/JumpSearchMenuDropdown";
-import { localAudioControls, localPlayerState$, queue$ } from "@/components/LocalAudioPlayer";
-import { SavePlaylistDropdown } from "@/components/SavePlaylistDropdown";
-import { usePlaybackControlLayout } from "@/hooks/useUIControls";
-import { SUPPORT_PLAYLISTS } from "@/systems/constants";
-import { useOnHotkeys } from "@/systems/keyboard/Keyboard";
-import { library$ } from "@/systems/LibraryState";
-import { localMusicState$ } from "@/systems/LocalMusicState";
-import { type PlaybackControlId, settings$ } from "@/systems/Settings";
+import { Button } from "./Button";
+import type { DropdownMenuRootRef } from "./DropdownMenu";
+import { JumpSearchMenuDropdown } from "./JumpSearchMenuDropdown";
+import { localAudioControls, localPlayerState$, queue$ } from "./LocalAudioPlayer";
+import { SavePlaylistDropdown } from "./SavePlaylistDropdown";
+import { usePlaybackControlLayout } from "../hooks/useUIControls";
+import { SUPPORT_PLAYLISTS } from "../systems/constants";
+import { useOnHotkeys } from "../systems/keyboard/Keyboard";
+import { library$ } from "../systems/LibraryState";
+import { localMusicState$ } from "../systems/LocalMusicState";
+import { type PlaybackControlId, settings$ } from "../systems/Settings";
 import { cn } from "@legend-desktop/classnames";
 import {
     useLibraryToggle,

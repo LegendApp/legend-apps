@@ -2,16 +2,16 @@ import { LegendList } from "@legendapp/list/react-native";
 import { useValue } from "@legendapp/state/react";
 import { forwardRef, useCallback, useEffect, useMemo, useRef } from "react";
 import { type GestureResponderEvent, Text, useWindowDimensions, View } from "react-native";
-import { Button } from "@/components/Button";
-import { DropdownMenu, type DropdownMenuRootRef } from "@/components/DropdownMenu";
-import { TextInputSearch, type TextInputSearchRef } from "@/components/TextInputSearch";
-import { TrackItem } from "@/components/TrackItem";
-import type { LibraryItem } from "@/systems/LibraryState";
-import { library$ } from "@/systems/LibraryState";
-import type { LocalPlaylist, LocalTrack } from "@/systems/LocalMusicState";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import { Button } from "./Button";
+import { DropdownMenu, type DropdownMenuRootRef } from "./DropdownMenu";
+import { TextInputSearch, type TextInputSearchRef } from "./TextInputSearch";
+import { TrackItem } from "./TrackItem";
+import type { LibraryItem } from "../systems/LibraryState";
+import { library$ } from "../systems/LibraryState";
+import type { LocalPlaylist, LocalTrack } from "../systems/LocalMusicState";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { cn } from "@legend-desktop/classnames";
-import { getQueueAction, type QueueAction } from "@/utils/queueActions";
+import { getQueueAction, type QueueAction } from "../utils/queueActions";
 
 import {
     type SearchResult,

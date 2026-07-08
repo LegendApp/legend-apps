@@ -5,19 +5,19 @@ import {
     type VirtualizedSettingsWindowPage,
 } from "@legend-desktop/settings-window";
 import { StyleSheet, View } from "react-native";
-import { TooltipProvider } from "@/components/TooltipProvider";
-import { AccountSettingsContent } from "@/settings/AccountSettings";
-import { CustomizeUISettingsContent } from "@/settings/CustomizeUISettings";
-import { GeneralSettingsContent } from "@/settings/GeneralSettings";
-import { LibrarySettingsContent } from "@/settings/LibrarySettings";
-import { OpenSourceSettingsContent } from "@/settings/OpenSourceSettings";
-import { OverlaySettingsContent } from "@/settings/OverlaySettings";
-import { ThemeSettingsContent } from "@/settings/ThemeSettings";
-import { SUPPORT_ACCOUNTS } from "@/systems/constants";
-import { normalizeMusicAppearanceSettings, settings$ } from "@/systems/Settings";
-import { ThemeProvider } from "@/theme/ThemeProvider";
-import { getMusicThemeAppearance } from "@/theme/musicThemes";
-import { ax } from "@/utils/ax";
+import { TooltipProvider } from "../components/TooltipProvider";
+import { AccountSettingsContent } from "./AccountSettings";
+import { CustomizeUISettingsContent } from "./CustomizeUISettings";
+import { GeneralSettingsContent } from "./GeneralSettings";
+import { LibrarySettingsContent } from "./LibrarySettings";
+import { OpenSourceSettingsContent } from "./OpenSourceSettings";
+import { OverlaySettingsContent } from "./OverlaySettings";
+import { ThemeSettingsContent } from "./ThemeSettings";
+import { SUPPORT_ACCOUNTS } from "../systems/constants";
+import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
+import { ThemeProvider } from "../theme/ThemeProvider";
+import { getMusicThemeAppearance } from "../theme/musicThemes";
+import { ax } from "../utils/ax";
 
 export type SettingsPage = "general" | "library" | "overlay" | "theme" | "ui-customize" | "account" | "open-source";
 

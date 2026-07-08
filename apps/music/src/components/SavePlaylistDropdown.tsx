@@ -2,11 +2,11 @@ import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
-import { Button } from "@/components/Button";
-import { DropdownMenu } from "@/components/DropdownMenu";
-import { TextInputSearch, type TextInputSearchRef } from "@/components/TextInputSearch";
-import { savePlaylistUI$ } from "@/state/savePlaylistUIState";
-import KeyboardManager, { KeyCodes } from "@/systems/keyboard/KeyboardManager";
+import { Button } from "./Button";
+import { DropdownMenu } from "./DropdownMenu";
+import { TextInputSearch, type TextInputSearchRef } from "./TextInputSearch";
+import { savePlaylistUI$ } from "../state/savePlaylistUIState";
+import KeyboardManager, { KeyCodes } from "../systems/keyboard/KeyboardManager";
 
 type SavePlaylistDropdownProps = {
     disabled?: boolean;

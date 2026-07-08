@@ -3,9 +3,9 @@ import { useRef } from "react";
 import { Dimensions } from "react-native";
 
 import { useWindowManager, WindowStyleMask } from "@legend-desktop/window-manager";
-import { settings$ } from "@/systems/Settings";
+import { settings$ } from "../systems/Settings";
 import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
-import { WindowsNavigator } from "@/windows";
+import { WindowsNavigator } from "../windows";
 
 import {
     cancelCurrentSongOverlay,

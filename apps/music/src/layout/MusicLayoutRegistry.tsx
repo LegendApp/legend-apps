@@ -2,18 +2,18 @@ import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useValue } from "@legendapp/state/react";
 
-import { MediaLibrarySidebar } from "@/components/MediaLibrary/Sidebar";
-import { TrackList } from "@/components/MediaLibrary/TrackList";
-import { PlaybackArea } from "@/components/PlaybackArea";
-import { PlaybackControls } from "@/components/PlaybackControls";
-import { Playlist } from "@/components/Playlist";
+import { MediaLibrarySidebar } from "../components/MediaLibrary/Sidebar";
+import { TrackList } from "../components/MediaLibrary/TrackList";
+import { PlaybackArea } from "../components/PlaybackArea";
+import { PlaybackControls } from "../components/PlaybackControls";
+import { Playlist } from "../components/Playlist";
 import {
     DEFAULT_LIBRARY_LAYOUT,
     type MusicLayoutLeafId,
     type MusicLayoutLeafNode,
     type MusicLayoutNode,
-} from "@/layout/MusicLayoutState";
-import { settings$ } from "@/systems/Settings";
+} from "./MusicLayoutState";
+import { settings$ } from "../systems/Settings";
 
 interface MusicLayoutLeafRenderParams {
     children: ReactNode;

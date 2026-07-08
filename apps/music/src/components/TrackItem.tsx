@@ -1,13 +1,13 @@
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Text, View, type DimensionValue } from "react-native";
-import { Button } from "@/components/Button";
-import { localPlayerState$ } from "@/components/LocalAudioPlayer";
-import { PlaybackIndicator } from "@/components/PlaybackIndicator";
-import { useListItemStyles } from "@/hooks/useListItemStyles";
-import { Icon } from "@/systems/Icon";
-import { themeState$ } from "@/theme/ThemeProvider";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import { Button } from "./Button";
+import { localPlayerState$ } from "./LocalAudioPlayer";
+import { PlaybackIndicator } from "./PlaybackIndicator";
+import { useListItemStyles } from "../hooks/useListItemStyles";
+import { Icon } from "../systems/Icon";
+import { themeState$ } from "../theme/ThemeProvider";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@legend-desktop/runtime-utils";
 

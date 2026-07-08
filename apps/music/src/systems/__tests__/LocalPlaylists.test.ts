@@ -1,4 +1,4 @@
-import { loadLocalPlaylists, localMusicState$ } from "@/systems/LocalMusicState";
+import { loadLocalPlaylists, localMusicState$ } from "../LocalMusicState";
 
 const FileSystem = require("expo-file-system/next") as {
     __resetMockFileSystem(): void;

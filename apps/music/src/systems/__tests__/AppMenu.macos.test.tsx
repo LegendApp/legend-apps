@@ -8,14 +8,14 @@ import {
     updateMenuItems,
 } from "@legend-desktop/native-menu";
 
-import { localAudioControls, localPlayerState$, queue$ } from "@/components/LocalAudioPlayer";
-import { savePlaylistUI$ } from "@/state/savePlaylistUIState";
-import { AppMenuController } from "@/systems/AppMenu.macos";
-import { settings$ } from "@/systems/Settings";
-import { state$, stateSaved$ } from "@/systems/State";
-import { hotkeys$ } from "@/systems/hotkeys";
-import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import { localAudioControls, localPlayerState$, queue$ } from "../../components/LocalAudioPlayer";
+import { savePlaylistUI$ } from "../../state/savePlaylistUIState";
+import { AppMenuController } from "../AppMenu.macos";
+import { settings$ } from "../Settings";
+import { state$, stateSaved$ } from "../State";
+import { hotkeys$ } from "../hotkeys";
+import { KeyCodes } from "../keyboard/KeyboardManager";
+import type { LocalTrack } from "../LocalMusicState";
 
 const menuOwnerId = "music";
 const { __emitNativeMenuAction } = require("@legend-desktop/native-menu") as {

@@ -1,14 +1,14 @@
 import { useValue } from "@legendapp/state/react";
 import { useCallback } from "react";
 import { Pressable, Text, View } from "react-native";
-import { AlbumArt } from "@/components/AlbumArt";
-import { localAudioControls, localPlayerState$ } from "@/components/LocalAudioPlayer";
-import { PlaybackControls } from "@/components/PlaybackControls";
-import { PlaybackTimeline } from "@/components/PlaybackTimeline";
-import { Icon } from "@/systems/Icon";
-import { localMusicState$ } from "@/systems/LocalMusicState";
-import { setIsScrubbing } from "@/systems/PlaybackInteractionState";
-import { type PlaybackControlId, settings$ } from "@/systems/Settings";
+import { AlbumArt } from "./AlbumArt";
+import { localAudioControls, localPlayerState$ } from "./LocalAudioPlayer";
+import { PlaybackControls } from "./PlaybackControls";
+import { PlaybackTimeline } from "./PlaybackTimeline";
+import { Icon } from "../systems/Icon";
+import { localMusicState$ } from "../systems/LocalMusicState";
+import { setIsScrubbing } from "../systems/PlaybackInteractionState";
+import { type PlaybackControlId, settings$ } from "../systems/Settings";
 import { cn } from "@legend-desktop/classnames";
 import { perfCount } from "@legend-desktop/runtime-utils";
 

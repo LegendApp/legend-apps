@@ -2,7 +2,7 @@ import { createObservableFile } from "@legend-desktop/storage";
 import { createAppTheme } from "@legend-desktop/theme";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, type ReactNode } from "react";
-import { normalizeMusicAppearanceSettings, settings$ } from "@/systems/Settings";
+import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { colors } from "./colors";
 import { getMusicTheme } from "./musicThemes";
 

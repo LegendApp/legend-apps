@@ -1,10 +1,10 @@
 import React from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 
-import { showToast } from "@/components/Toast";
-import { generatePlaylistExtension } from "@/systems/ai/playlistGeneration";
-import type { PlaylistAIContext } from "@/systems/ai/playlistContext";
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import { showToast } from "../Toast";
+import { generatePlaylistExtension } from "../../systems/ai/playlistGeneration";
+import type { PlaylistAIContext } from "../../systems/ai/playlistContext";
+import type { LocalTrack } from "../../systems/LocalMusicState";
 import { getAICommandAvailability } from "@legend-desktop/ai";
 
 jest.mock("@legend-desktop/ai", () => ({
@@ -12,12 +12,12 @@ jest.mock("@legend-desktop/ai", () => ({
     getAICommandAvailability: jest.fn(),
 }));
 
-jest.mock("@/components/Toast", () => ({
+jest.mock("../Toast", () => ({
     __esModule: true,
     showToast: jest.fn(),
 }));
 
-jest.mock("@/components/TooltipProvider", () => ({
+jest.mock("../TooltipProvider", () => ({
     __esModule: true,
     useTooltip: () => ({
         hideTooltip: jest.fn(),
@@ -25,7 +25,7 @@ jest.mock("@/components/TooltipProvider", () => ({
     }),
 }));
 
-jest.mock("@/systems/ai/playlistGeneration", () => ({
+jest.mock("../../systems/ai/playlistGeneration", () => ({
     __esModule: true,
     generatePlaylistExtension: jest.fn(),
 }));

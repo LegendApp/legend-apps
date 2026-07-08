@@ -5,7 +5,7 @@ import {
     mainLayout$,
     normalizeMusicLayoutFile,
     normalizeMusicLayoutNode,
-} from "@/layout/MusicLayoutState";
+} from "../MusicLayoutState";
 
 describe("MusicLayoutState", () => {
     it("persists the default layout file through storage", () => {

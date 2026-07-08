@@ -1,9 +1,9 @@
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Text, View } from "react-native";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 
-import { state$ } from "@/systems/State";
+import { state$ } from "../systems/State";
 import { cn } from "@legend-desktop/classnames";
 import { Button } from "./Button";
 

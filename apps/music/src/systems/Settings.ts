@@ -1,7 +1,7 @@
 import { createObservableFile } from "@legend-desktop/storage";
-import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
-import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
-import { isMusicThemeName, type MusicThemeName } from "@/theme/musicThemes";
+import type { KeyboardEventCodeHotkey } from "./keyboard/Keyboard";
+import { KeyCodes } from "./keyboard/KeyboardManager";
+import { isMusicThemeName, type MusicThemeName } from "../theme/musicThemes";
 
 export type PlaylistStyle = "compact";
 

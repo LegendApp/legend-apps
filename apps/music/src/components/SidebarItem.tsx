@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Platform, View, type ViewProps } from "react-native";
-import type { NativeMouseEvent } from "@/types/NativeMouseEvent";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { SidebarItem as NativeSidebarItemView } from "@legend-desktop/sidebar";
 import { cn } from "@legend-desktop/classnames";
 

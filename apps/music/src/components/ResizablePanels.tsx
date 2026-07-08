@@ -4,7 +4,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useR
 import { type GestureResponderEvent, PanResponder, type PanResponderGestureState, View } from "react-native";
 
 import { useRefValue } from "@legend-desktop/runtime-utils";
-import { settings$ } from "@/systems/Settings";
+import { settings$ } from "../systems/Settings";
 import { cn } from "@legend-desktop/classnames";
 
 interface PanelConfig {

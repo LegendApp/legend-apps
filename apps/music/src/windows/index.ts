@@ -5,16 +5,16 @@ import {
     createWindowsNavigator,
     type WindowsConfig,
 } from "@legend-desktop/windows";
-import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "@/overlay/OverlayConstants";
+import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "../overlay/OverlayConstants";
 
 const windowsConfig = {
     SettingsWindow: {
-        loadComponent: () => import("@/settings/SettingsContainer"),
+        loadComponent: () => import("../settings/SettingsContainer"),
         identifier: "settings",
         options: createSettingsWindowOptions(),
     },
     MediaLibraryWindow: {
-        loadComponent: () => import("@/media-library/MediaLibraryWindow"),
+        loadComponent: () => import("../media-library/MediaLibraryWindow"),
         identifier: "media-library",
         options: {
             title: "",
@@ -31,7 +31,7 @@ const windowsConfig = {
         },
     },
     CurrentSongOverlayWindow: {
-        loadComponent: () => import("@/overlay/CurrentSongOverlayWindow"),
+        loadComponent: () => import("../overlay/CurrentSongOverlayWindow"),
         identifier: "current-song-overlay",
         options: {
             title: "",

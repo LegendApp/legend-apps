@@ -1,4 +1,4 @@
-import type { LocalTrack } from "@/systems/LocalMusicState";
+import type { LocalTrack } from "../LocalMusicState";
 import { normalizeTrackPath } from "./libraryCatalog";
 import type { PlaylistAISuggestion } from "./parser";
 

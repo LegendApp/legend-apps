@@ -2,13 +2,13 @@ import { useValue } from "@legendapp/state/react";
 import { HotkeyCapture } from "@legend-desktop/hotkeys";
 import { Linking, Text, View } from "react-native";
 
-import { Button } from "@/components/Button";
-import { Checkbox } from "@/components/Checkbox";
-import { SettingsPage, SettingsRow, SettingsSection } from "@/settings/components";
-import { Icon } from "@/systems/Icon";
-import { globalHotkeyStatus$ } from "@/systems/GlobalHotkey";
-import { settings$ } from "@/systems/Settings";
-import { state$ } from "@/systems/State";
+import { Button } from "../components/Button";
+import { Checkbox } from "../components/Checkbox";
+import { SettingsPage, SettingsRow, SettingsSection } from "./components";
+import { Icon } from "../systems/Icon";
+import { globalHotkeyStatus$ } from "../systems/GlobalHotkey";
+import { settings$ } from "../systems/Settings";
+import { state$ } from "../systems/State";
 import packageJson from "../../package.json";
 
 export const GeneralSettings = function GeneralSettings() {

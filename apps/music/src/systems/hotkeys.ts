@@ -1,8 +1,8 @@
 import { observable, syncState } from "@legendapp/state";
 import { formatHotkey, parseHotkey, serializeHotkey } from "@legend-desktop/hotkeys";
 import { createObservableFile } from "@legend-desktop/storage";
-import type { KeyboardEventCodeHotkey } from "@/systems/keyboard/Keyboard";
-import { KeyCodes } from "@/systems/keyboard/KeyboardManager";
+import type { KeyboardEventCodeHotkey } from "./keyboard/Keyboard";
+import { KeyCodes } from "./keyboard/KeyboardManager";
 
 // Default hotkey settings
 const DEFAULT_HOTKEYS = {

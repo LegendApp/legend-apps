@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import { Fragment, useMemo } from "react";
 import { View } from "react-native";
 
-import { Panel, PanelGroup, ResizeHandle } from "@/components/ResizablePanels";
-import { getMusicLayoutLeafDefinition } from "@/layout/MusicLayoutRegistry";
-import type { MusicLayoutNode } from "@/layout/MusicLayoutState";
+import { Panel, PanelGroup, ResizeHandle } from "../components/ResizablePanels";
+import { getMusicLayoutLeafDefinition } from "./MusicLayoutRegistry";
+import type { MusicLayoutNode } from "./MusicLayoutState";
 
 export interface MusicLayoutRenderContext {
     benchmarkElapsedSeconds?: number;

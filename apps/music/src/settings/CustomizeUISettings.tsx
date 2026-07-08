@@ -2,14 +2,14 @@ import { useObserveEffect } from "@legendapp/state/react";
 import { Fragment, useMemo } from "react";
 import { Text, View } from "react-native";
 
-import { Checkbox } from "@/components/Checkbox";
-import { DragDropProvider, DraggableItem, DroppableZone } from "@/components/dnd";
-import { usePlaybackControlLayout } from "@/hooks/useUIControls";
-import { SettingsPage, SettingsRow, SettingsSection } from "@/settings/components";
-import { SUPPORT_PLAYLISTS } from "@/systems/constants";
-import { Icon } from "@/systems/Icon";
-import { type PlaybackControlId, settings$, type UIControlLayout } from "@/systems/Settings";
-import type { SFSymbols } from "@/types/SFSymbols";
+import { Checkbox } from "../components/Checkbox";
+import { DragDropProvider, DraggableItem, DroppableZone } from "../components/dnd";
+import { usePlaybackControlLayout } from "../hooks/useUIControls";
+import { SettingsPage, SettingsRow, SettingsSection } from "./components";
+import { SUPPORT_PLAYLISTS } from "../systems/constants";
+import { Icon } from "../systems/Icon";
+import { type PlaybackControlId, settings$, type UIControlLayout } from "../systems/Settings";
+import type { SFSymbols } from "../types/SFSymbols";
 import { cn } from "@legend-desktop/classnames";
 
 type ControlGroup = "shown" | "hidden";

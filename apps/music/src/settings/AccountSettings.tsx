@@ -1,9 +1,9 @@
 import { useValue } from "@legendapp/state/react";
 import { Linking, Text, View } from "react-native";
 
-import { Button } from "@/components/Button";
-import { SettingsCard, SettingsPage, SettingsSection } from "@/settings/components";
-import { settings$ } from "@/systems/Settings";
+import { Button } from "../components/Button";
+import { SettingsCard, SettingsPage, SettingsSection } from "./components";
+import { settings$ } from "../systems/Settings";
 
 export function AccountSettings() {
     return (
