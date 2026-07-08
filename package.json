@@ -73,7 +73,7 @@
     "react-native": "catalog:",
     "react-test-renderer": "19.1.4",
     "test-renderer": "1.1.0",
-    "typescript": "~5.9.2"
+    "typescript": "~7.0.2"
   },
   "patchedDependencies": {
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",

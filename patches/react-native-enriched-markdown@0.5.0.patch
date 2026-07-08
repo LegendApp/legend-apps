@@ -327,7 +327,7 @@ index f1fa74a..1f16614 100644
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
 @@ -20,6 +20,8 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
      const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
-
+ 
      markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
 +    nativeMarkdownBlockId(convertRawProp(context, rawProps, "nativeMarkdownBlockId", sourceProps.nativeMarkdownBlockId, {})),
 +    nativeMarkdownRevision(convertRawProp(context, rawProps, "nativeMarkdownRevision", sourceProps.nativeMarkdownRevision, {0.0})),
@@ -338,7 +338,7 @@ index f1fa74a..1f16614 100644
      streamingAnimation(convertRawProp(context, rawProps, "streamingAnimation", sourceProps.streamingAnimation, {false})),
      spoilerOverlay(convertRawProp(context, rawProps, "spoilerOverlay", sourceProps.spoilerOverlay, {std::string{"particles"}})),
      contextMenuItems(convertRawProp(context, rawProps, "contextMenuItems", sourceProps.contextMenuItems, {})) {}
--
+-    
 +
  #ifdef RN_SERIALIZABLE_STATE
  ComponentName EnrichedMarkdownProps::getDiffPropsImplementationTarget() const {
@@ -347,12 +347,12 @@ index f1fa74a..1f16614 100644
      return folly::dynamic::object();
    }
    folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
--
+-  
 +
    if (markdown != oldProps->markdown) {
      result["markdown"] = markdown;
    }
--
+-    
 +
 +  if (nativeMarkdownBlockId != oldProps->nativeMarkdownBlockId) {
 +    result["nativeMarkdownBlockId"] = nativeMarkdownBlockId;
@@ -365,47 +365,47 @@ index f1fa74a..1f16614 100644
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
    }
--
+-    
 +
    if (enableLinkPreview != oldProps->enableLinkPreview) {
      result["enableLinkPreview"] = enableLinkPreview;
    }
--
+-    
 +
    if (selectable != oldProps->selectable) {
      result["selectable"] = selectable;
    }
--
+-    
 +
    if (md4cFlags != oldProps->md4cFlags) {
      result["md4cFlags"] = toDynamic(md4cFlags);
    }
--
+-    
 +
    if (allowFontScaling != oldProps->allowFontScaling) {
      result["allowFontScaling"] = allowFontScaling;
    }
--
+-    
 +
    if ((maxFontSizeMultiplier != oldProps->maxFontSizeMultiplier) && !(std::isnan(maxFontSizeMultiplier) && std::isnan(oldProps->maxFontSizeMultiplier))) {
      result["maxFontSizeMultiplier"] = maxFontSizeMultiplier;
    }
--
+-    
 +
    if (allowTrailingMargin != oldProps->allowTrailingMargin) {
      result["allowTrailingMargin"] = allowTrailingMargin;
    }
--
+-    
 +
    if (streamingAnimation != oldProps->streamingAnimation) {
      result["streamingAnimation"] = streamingAnimation;
    }
--
+-    
 +
    if (spoilerOverlay != oldProps->spoilerOverlay) {
      result["spoilerOverlay"] = spoilerOverlay;
    }
--
+-    
 +
    if (contextMenuItems != oldProps->contextMenuItems) {
      result["contextMenuItems"] = toDynamic(contextMenuItems);
@@ -414,7 +414,7 @@ index f1fa74a..1f16614 100644
      isOnChangeMarkdownSet(convertRawProp(context, rawProps, "isOnChangeMarkdownSet", sourceProps.isOnChangeMarkdownSet, {false})),
      contextMenuItems(convertRawProp(context, rawProps, "contextMenuItems", sourceProps.contextMenuItems, {})),
      linkRegex(convertRawProp(context, rawProps, "linkRegex", sourceProps.linkRegex, {})) {}
--
+-    
 +
  #ifdef RN_SERIALIZABLE_STATE
  ComponentName EnrichedMarkdownTextInputProps::getDiffPropsImplementationTarget() const {
@@ -423,104 +423,104 @@ index f1fa74a..1f16614 100644
      return folly::dynamic::object();
    }
    folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
--
+-  
 +
    if (defaultValue != oldProps->defaultValue) {
      result["defaultValue"] = defaultValue;
    }
--
+-    
 +
    if (placeholder != oldProps->placeholder) {
      result["placeholder"] = placeholder;
    }
--
+-    
 +
    if (placeholderTextColor != oldProps->placeholderTextColor) {
      result["placeholderTextColor"] = *placeholderTextColor;
    }
--
+-    
 +
    if (editable != oldProps->editable) {
      result["editable"] = editable;
    }
--
+-    
 +
    if (autoFocus != oldProps->autoFocus) {
      result["autoFocus"] = autoFocus;
    }
--
+-    
 +
    if (scrollEnabled != oldProps->scrollEnabled) {
      result["scrollEnabled"] = scrollEnabled;
    }
--
+-    
 +
    if (autoCapitalize != oldProps->autoCapitalize) {
      result["autoCapitalize"] = autoCapitalize;
    }
--
+-    
 +
    if (multiline != oldProps->multiline) {
      result["multiline"] = multiline;
    }
--
+-    
 +
    if (cursorColor != oldProps->cursorColor) {
      result["cursorColor"] = *cursorColor;
    }
--
+-    
 +
    if (selectionColor != oldProps->selectionColor) {
      result["selectionColor"] = *selectionColor;
    }
--
+-    
 +
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
    }
--
+-    
 +
    if (color != oldProps->color) {
      result["color"] = *color;
    }
--
+-    
 +
    if ((fontSize != oldProps->fontSize) && !(std::isnan(fontSize) && std::isnan(oldProps->fontSize))) {
      result["fontSize"] = fontSize;
    }
--
+-    
 +
    if ((lineHeight != oldProps->lineHeight) && !(std::isnan(lineHeight) && std::isnan(oldProps->lineHeight))) {
      result["lineHeight"] = lineHeight;
    }
--
+-    
 +
    if (fontFamily != oldProps->fontFamily) {
      result["fontFamily"] = fontFamily;
    }
--
+-    
 +
    if (fontWeight != oldProps->fontWeight) {
      result["fontWeight"] = fontWeight;
    }
--
+-    
 +
    if (isOnChangeMarkdownSet != oldProps->isOnChangeMarkdownSet) {
      result["isOnChangeMarkdownSet"] = isOnChangeMarkdownSet;
    }
--
+-    
 +
    if (contextMenuItems != oldProps->contextMenuItems) {
      result["contextMenuItems"] = toDynamic(contextMenuItems);
    }
--
+-    
 +
    if (linkRegex != oldProps->linkRegex) {
      result["linkRegex"] = toDynamic(linkRegex);
    }
 @@ -218,6 +228,8 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
      const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
-
+ 
      markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
 +    nativeMarkdownBlockId(convertRawProp(context, rawProps, "nativeMarkdownBlockId", sourceProps.nativeMarkdownBlockId, {})),
 +    nativeMarkdownRevision(convertRawProp(context, rawProps, "nativeMarkdownRevision", sourceProps.nativeMarkdownRevision, {0.0})),
@@ -531,7 +531,7 @@ index f1fa74a..1f16614 100644
      streamingAnimation(convertRawProp(context, rawProps, "streamingAnimation", sourceProps.streamingAnimation, {false})),
      spoilerOverlay(convertRawProp(context, rawProps, "spoilerOverlay", sourceProps.spoilerOverlay, {std::string{"particles"}})),
      contextMenuItems(convertRawProp(context, rawProps, "contextMenuItems", sourceProps.contextMenuItems, {})) {}
--
+-    
 +
  #ifdef RN_SERIALIZABLE_STATE
  ComponentName EnrichedMarkdownTextProps::getDiffPropsImplementationTarget() const {
@@ -540,12 +540,12 @@ index f1fa74a..1f16614 100644
      return folly::dynamic::object();
    }
    folly::dynamic result = HostPlatformViewProps::getDiffProps(prevProps);
--
+-  
 +
    if (markdown != oldProps->markdown) {
      result["markdown"] = markdown;
    }
--
+-    
 +
 +  if (nativeMarkdownBlockId != oldProps->nativeMarkdownBlockId) {
 +    result["nativeMarkdownBlockId"] = nativeMarkdownBlockId;
@@ -558,47 +558,47 @@ index f1fa74a..1f16614 100644
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
    }
--
+-    
 +
    if (enableLinkPreview != oldProps->enableLinkPreview) {
      result["enableLinkPreview"] = enableLinkPreview;
    }
--
+-    
 +
    if (selectable != oldProps->selectable) {
      result["selectable"] = selectable;
    }
--
+-    
 +
    if (md4cFlags != oldProps->md4cFlags) {
      result["md4cFlags"] = toDynamic(md4cFlags);
    }
--
+-    
 +
    if (allowFontScaling != oldProps->allowFontScaling) {
      result["allowFontScaling"] = allowFontScaling;
    }
--
+-    
 +
    if ((maxFontSizeMultiplier != oldProps->maxFontSizeMultiplier) && !(std::isnan(maxFontSizeMultiplier) && std::isnan(oldProps->maxFontSizeMultiplier))) {
      result["maxFontSizeMultiplier"] = maxFontSizeMultiplier;
    }
--
+-    
 +
    if (allowTrailingMargin != oldProps->allowTrailingMargin) {
      result["allowTrailingMargin"] = allowTrailingMargin;
    }
--
+-    
 +
    if (streamingAnimation != oldProps->streamingAnimation) {
      result["streamingAnimation"] = streamingAnimation;
    }
--
+-    
 +
    if (spoilerOverlay != oldProps->spoilerOverlay) {
      result["spoilerOverlay"] = spoilerOverlay;
    }
--
+-    
 +
    if (contextMenuItems != oldProps->contextMenuItems) {
      result["contextMenuItems"] = toDynamic(contextMenuItems);
@@ -1008,7 +1008,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 index 96969e8..ec23be1 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -38,6 +38,14 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -38,6 +38,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  #endif
  - (void)setupTextView;
  - (void)applyFormatting;
@@ -1022,7 +1022,7 @@ index 96969e8..ec23be1 100644
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMFormattingRange *> *)ranges;
-@@ -70,7 +77,11 @@ @implementation EnrichedMarkdownTextInput {
+@@ -70,7 +77,10 @@ @implementation EnrichedMarkdownTextInput {
    std::optional<CGRect> _prevCaretRect;
 
  #if TARGET_OS_OSX
@@ -1053,7 +1053,7 @@ index 96969e8..ec23be1 100644
  #endif
 
    _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
-@@ -211,6 +226,122 @@ - (void)requestHeightUpdate
+@@ -211,6 +226,111 @@ - (void)requestHeightUpdate
 
  #pragma mark - Measurement
 
@@ -1165,7 +1165,7 @@ index 96969e8..ec23be1 100644
  - (CGSize)measureSize:(CGFloat)maxWidth
  {
    NSMutableAttributedString *measuredText =
-@@ -233,8 +364,14 @@ - (CGSize)measureSize:(CGFloat)maxWidth
+@@ -233,8 +364,10 @@ - (CGSize)measureSize:(CGFloat)maxWidth
      }
    }
 
@@ -1195,7 +1195,7 @@ index 96969e8..ec23be1 100644
  }
 
  - (void)_performRelayout
-@@ -355,20 +492,30 @@ - (void)_performRelayout
+@@ -355,20 +492,28 @@ - (void)_performRelayout
      return;
    }
 
@@ -1371,9 +1371,10 @@ index 96969e8..ec23be1 100644
 
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -565,5 +804,22 @@ - (void)setValue:(NSString *)markdown
+@@ -565,6 +804,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
+ 
 +- (void)setValuePreservingSelection:(NSString *)markdown
 +{
 +  NSRange selection = _textView.selectedRange;
@@ -1394,7 +1395,7 @@ index 96969e8..ec23be1 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -575,6 +831,90 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -575,6 +831,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [self emitOnChangeState];
  }
 
