@@ -65,14 +65,6 @@ function createRowRenderState(overrides: Partial<DiffRowRenderState> = {}): Diff
       showOnlyHunks: true,
       syntaxAppearance: "dark",
       syntaxHighlightingEnabled: true,
-      syntaxStyleStore: {
-        current: new Map(),
-        getSnapshot: () => 0,
-        refresh: () => {
-        },
-        subscribe: () => () => {
-        },
-      },
       syntaxThemeName: "dark-plus",
     },
     ...overrides,

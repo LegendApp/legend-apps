@@ -8,7 +8,6 @@ import type {
 import { DiffNativeRow } from "@legend-desktop/diff-parser";
 import {
   sourceViewerCodeFontFamily,
-  type SyntaxStyleMap,
 } from "@legend-desktop/source-viewer";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { Observable } from "@legendapp/state";
@@ -54,7 +53,6 @@ export type DiffRowRenderState = {
     showOnlyHunks: boolean;
     syntaxAppearance: "dark" | "light";
     syntaxHighlightingEnabled: boolean;
-    syntaxStyleStore: DiffSyntaxStyleStore;
     syntaxThemeName: string;
   };
 };
@@ -138,13 +136,6 @@ export function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
 export function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? "#ffffff14" : "#1118271a";
 }
-
-export type DiffSyntaxStyleStore = {
-  current: SyntaxStyleMap;
-  getSnapshot: () => number;
-  refresh: (document: DiffDocument) => void;
-  subscribe: (listener: () => void) => () => void;
-};
 
 function getPlainUnifiedRow(document: DiffDocument, index: number) {
   return document.getPlainRows(index, 1)[0];
