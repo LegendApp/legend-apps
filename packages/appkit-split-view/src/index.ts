@@ -3,11 +3,12 @@ import {
   NativeEventEmitter,
   Platform,
   StyleSheet,
+  TurboModuleRegistry,
   View,
   type NativeSyntheticEvent,
   type ViewProps,
 } from "react-native";
-import NativeAppKitSplitView, { type NativeMenuPackage, type NativeMenuTest } from "./NativeAppKitSplitView";
+import type { NativeMenuPackage, NativeMenuTest, Spec as NativeAppKitSplitViewSpec } from "./NativeAppKitSplitView";
 import SidebarSplitViewNativeComponent, {
   type SidebarSplitViewResizeEvent,
 } from "./SidebarSplitViewNativeComponent";
@@ -21,6 +22,15 @@ export type KitchenSinkTest = NativeMenuTest;
 export type { SidebarSplitViewResizeEvent };
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
+
+let nativeAppKitSplitView: NativeAppKitSplitViewSpec | null = null;
+
+function getNativeAppKitSplitView() {
+  if (!nativeAppKitSplitView) {
+    nativeAppKitSplitView = TurboModuleRegistry.getEnforcing<NativeAppKitSplitViewSpec>("NativeAppKitSplitView");
+  }
+  return nativeAppKitSplitView;
+}
 
 export interface SidebarSplitViewProps extends ViewProps {
   appearance?: SidebarSplitViewAppearance;
@@ -151,13 +161,13 @@ export function configureKitchenSinkMenus(
   tests: KitchenSinkTest[],
 ) {
   if (Platform.OS === "macos") {
-    NativeAppKitSplitView.configureKitchenSinkMenus(JSON.stringify(packages), JSON.stringify(tests));
+    getNativeAppKitSplitView().configureKitchenSinkMenus(JSON.stringify(packages), JSON.stringify(tests));
   }
 }
 
 export function clearKitchenSinkMenus() {
   if (Platform.OS === "macos") {
-    NativeAppKitSplitView.clearKitchenSinkMenus();
+    getNativeAppKitSplitView().clearKitchenSinkMenus();
   }
 }
 
@@ -166,6 +176,6 @@ export function addKitchenSinkMenuListener(listener: (action: AppKitSplitViewMen
     return { remove() {} };
   }
 
-  const emitter = new NativeEventEmitter(NativeAppKitSplitView as never);
+  const emitter = new NativeEventEmitter(getNativeAppKitSplitView() as never);
   return emitter.addListener("AppKitSplitViewMenuAction", listener);
 }

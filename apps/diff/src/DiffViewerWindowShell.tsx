@@ -2,7 +2,7 @@ import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desk
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { memo, useCallback, useEffect, useState, type ComponentType } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
-import { getDiffSourceLabel } from "./diffFiles";
+import { getDiffSourceLabel, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
 import {
@@ -11,7 +11,6 @@ import {
   useDiffSidebarWidthSetting,
   useDiffSyntaxTheme,
 } from "./diffSettings";
-import type { DiffViewerWindowProps } from "./DiffViewerWindow";
 import {
   diffSidebarTopInset,
   diffTitlebarTopInset,
@@ -19,8 +18,14 @@ import {
 
 const diffShellContentMinWidth = 420;
 
-let loadedDiffViewerWindow: ComponentType<DiffViewerWindowProps> | null = null;
-let diffViewerWindowPromise: Promise<ComponentType<DiffViewerWindowProps>> | null = null;
+type DiffViewerWindowShellProps = {
+  focusUrlInputRequestId?: number;
+  folderPath?: string;
+  source?: DiffOpenSource;
+};
+
+let loadedDiffViewerWindow: ComponentType<DiffViewerWindowShellProps> | null = null;
+let diffViewerWindowPromise: Promise<ComponentType<DiffViewerWindowShellProps>> | null = null;
 
 function loadDiffViewerWindow() {
   if (loadedDiffViewerWindow) {
@@ -42,8 +47,8 @@ function loadDiffViewerWindow() {
   return diffViewerWindowPromise;
 }
 
-export const DiffViewerWindowShell = memo(function DiffViewerWindowShell(props: DiffViewerWindowProps) {
-  const [DiffViewerWindow, setDiffViewerWindow] = useState<ComponentType<DiffViewerWindowProps> | null>(
+export function DiffViewerWindowShell(props: DiffViewerWindowShellProps) {
+  const [DiffViewerWindow, setDiffViewerWindow] = useState<ComponentType<DiffViewerWindowShellProps> | null>(
     loadedDiffViewerWindow,
   );
 
@@ -70,11 +75,11 @@ export const DiffViewerWindowShell = memo(function DiffViewerWindowShell(props: 
   }
 
   return <DiffViewerWindowShellFallback source={props.source} />;
-});
+}
 
 const DiffViewerWindowShellFallback = memo(function DiffViewerWindowShellFallback({
   source,
-}: Pick<DiffViewerWindowProps, "source">) {
+}: Pick<DiffViewerWindowShellProps, "source">) {
   const sidebarWidth = useDiffSidebarWidthSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
