@@ -56,7 +56,6 @@ function stripMacOSHermesSymbols(appPath: string) {
 
   if (fs.existsSync(hermesBinaryPath)) {
     const signIdentity = getExistingCodeSignIdentity(appPath);
-    const preserveMetadata = "identifier,entitlements,flags,runtime";
 
     console.log(`Stripping Hermes symbols at ${hermesBinaryPath}`);
     runCommand("strip", ["-S", "-x", hermesBinaryPath]);
@@ -64,17 +63,42 @@ function stripMacOSHermesSymbols(appPath: string) {
       "--force",
       "--sign",
       signIdentity,
-      `--preserve-metadata=${preserveMetadata}`,
+      "--preserve-metadata=identifier,entitlements,flags,runtime",
       hermesFrameworkPath,
     ]);
-    runCommand("codesign", [
-      "--force",
-      "--sign",
-      signIdentity,
-      `--preserve-metadata=${preserveMetadata}`,
-      appPath,
-    ]);
+    signMacOSApp(appPath, signIdentity);
   }
+}
+
+function signMacOSApp(appPath: string, signIdentity: string) {
+  runCommand("codesign", [
+    "--force",
+    "--sign",
+    signIdentity,
+    "--preserve-metadata=identifier,entitlements,flags,runtime",
+    appPath,
+  ]);
+}
+
+function copyMissingMacOSMetroAssets(appPath: string) {
+  const assetsDirName = "assets";
+  const sourceAssetsPath = path.join(appPath, "Contents", "Resources", assetsDirName);
+
+  if (!fs.existsSync(sourceAssetsPath)) {
+    return;
+  }
+
+  const productsDir = path.dirname(appPath);
+  const nestedAppPath = path.join(productsDir, path.basename(appPath, ".app"), path.basename(appPath));
+  const nestedAssetsPath = path.join(nestedAppPath, "Contents", "Resources", assetsDirName);
+
+  if (nestedAppPath === appPath || !fs.existsSync(nestedAppPath)) {
+    return;
+  }
+
+  console.log(`Copying Metro assets to ${nestedAssetsPath}`);
+  fs.cpSync(sourceAssetsPath, nestedAssetsPath, { force: true, recursive: true });
+  signMacOSApp(nestedAppPath, getExistingCodeSignIdentity(appPath));
 }
 
 async function buildOne(appId: string, platform: Platform, args: string[] = []) {
@@ -113,6 +137,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         },
       },
     );
+    copyMissingMacOSMetroAssets(appPath);
     stripMacOSHermesSymbols(appPath);
     return;
   }
