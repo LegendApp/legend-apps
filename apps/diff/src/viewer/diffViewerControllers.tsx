@@ -5,7 +5,7 @@ import { elapsedMs, measureAfterEffect, nowMs } from "@legend-desktop/source-vie
 import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-desktop/window-manager";
 import { useWindowId } from "@legend-desktop/windows";
 import { useObserveEffect } from "@legendapp/state/react";
-import { type RefObject, useCallback, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
 import { diffCompareToolbarTargetChooseRef, type DiffCompareRepoState } from "../diffCompareTargets";
@@ -452,11 +452,12 @@ export function DiffLaunchController({
     setViewerState,
   } = useDiffViewerModel();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
       logDiffOpenTiming("viewer.launchSource.effect", () => ({
         source: initialSource,
+        phase: "layout",
       }));
       logDiffOpenTiming("viewer.launchSource.loadImmediate", () => ({
         source: initialSource,
