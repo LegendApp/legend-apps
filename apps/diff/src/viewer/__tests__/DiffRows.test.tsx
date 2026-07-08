@@ -54,7 +54,6 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     nativeSideBySideRowConfigVersion: 1,
     nativeUnifiedRowConfigId: "test:unified",
     nativeUnifiedRowConfigVersion: 1,
-    rowRenderer: "react-native",
     rowHeight: 22,
     showOnlyHunks: true,
     sideBySideFileHeaderByListIndex: new Map(),
@@ -73,6 +72,22 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     toggleFileCollapsed: jest.fn(),
     ...overrides,
   };
+}
+
+function renderedTreeHasProps(node: unknown, expectedProps: Record<string, unknown>): boolean {
+  let found = false;
+  if (node && typeof node === "object") {
+    if (Array.isArray(node)) {
+      found = node.some((child) => renderedTreeHasProps(child, expectedProps));
+    } else {
+      const current = node as { children?: unknown; props?: Record<string, unknown> };
+      found = Boolean(current.props && Object.entries(expectedProps).every(([key, value]) => current.props?.[key] === value));
+      if (!found && current.children) {
+        found = renderedTreeHasProps(current.children, expectedProps);
+      }
+    }
+  }
+  return found;
 }
 
 describe("DiffRows", () => {
@@ -101,13 +116,17 @@ describe("DiffRows", () => {
     expect(view.getByText("-1")).toBeTruthy();
   });
 
-  it("renders unified changed rows with line numbers and markers", async () => {
+  it("renders unified changed rows with the native row component", async () => {
     const view = await render(
       <DiffUnifiedRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={1}
-        renderFields={createRenderFields({ fileHeaderRowIndexes: new Set() })}
+        renderFields={createRenderFields({
+          document: {} as never,
+          fileHeaderRowIndexes: new Set(),
+          showOnlyHunks: false,
+        })}
         row={createRow({
           changeType: diffChangeTypeAdd,
           newLineNumber: 11,
@@ -117,12 +136,15 @@ describe("DiffRows", () => {
       />,
     );
 
-    expect(view.getByText("11")).toBeTruthy();
-    expect(view.getByText("+")).toBeTruthy();
-    expect(view.getByText("const added = true;")).toBeTruthy();
+    expect(renderedTreeHasProps(view.toJSON(), {
+      adaptiveRender: "normal",
+      configId: "test:unified",
+      configVersion: 1,
+      rowIndex: 1,
+    })).toBe(true);
   });
 
-  it("renders side-by-side changed rows", async () => {
+  it("renders side-by-side changed rows with the native row component", async () => {
     const oldRow = createRow({
       changeType: diffChangeTypeRemove,
       index: 1,
@@ -156,14 +178,19 @@ describe("DiffRows", () => {
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={0}
-        renderFields={createRenderFields()}
+        renderFields={createRenderFields({
+          document: {} as never,
+          showOnlyHunks: false,
+        })}
         row={sideBySideRow}
       />,
     );
 
-    expect(view.getByText("const value = false;")).toBeTruthy();
-    expect(view.getByText("const value = true;")).toBeTruthy();
-    expect(view.getByText("-")).toBeTruthy();
-    expect(view.getByText("+")).toBeTruthy();
+    expect(renderedTreeHasProps(view.toJSON(), {
+      adaptiveRender: "normal",
+      configId: "test:blocks",
+      configVersion: 1,
+      rowIndex: 0,
+    })).toBe(true);
   });
 });

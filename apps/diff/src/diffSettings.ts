@@ -25,7 +25,6 @@ export type DiffSettingsFile = {
   syntaxPrewarmLanguages?: string[];
   syntaxPrewarmKnownLanguages?: string[];
   syntaxTheme: string;
-  rowRenderer?: DiffRowRendererSetting;
   restoreWindowsOnStartup?: boolean;
   showOnlyHunks?: boolean;
   showStatisticsPanel?: boolean;
@@ -34,14 +33,12 @@ export type DiffSettingsFile = {
 };
 
 export type DiffFontFamilySetting = SourceFontFamilySetting;
-export type DiffRowRendererSetting = typeof diffRowRendererOptions[number]["value"];
 export type DiffViewMode = typeof diffViewModeOptions[number]["value"];
 
 export const diffFontFamilyOptions = sourceFontFamilyOptions;
 export const defaultDiffFontSize = 12;
 export const defaultDiffFontFamily: DiffFontFamilySetting = "Menlo";
 export const defaultDiffViewMode: DiffViewMode = "unified";
-export const defaultDiffRowRenderer: DiffRowRendererSetting = "react-native";
 export const defaultDiffRestoreWindowsOnStartup = true;
 export const defaultDiffSidebarWidth = 180;
 export const defaultDiffShowOnlyHunks = true;
@@ -50,10 +47,6 @@ export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const defaultDiffSyntaxPrewarmEnabled = true;
 export const diffFontSizeOptions = sourceFontSizeOptions;
-export const diffRowRendererOptions = [
-  { label: "React Native", value: "react-native" },
-  { label: "Native (experimental)", value: "native" },
-] as const;
 export const diffViewModeOptions = [
   { label: "Unified", value: "unified" },
   { label: "Blocks", value: "blocks" },
@@ -77,12 +70,6 @@ function normalizeDiffViewMode(viewMode: unknown): DiffViewMode {
   return isDiffViewMode(viewMode)
     ? viewMode as DiffViewMode
     : defaultDiffViewMode;
-}
-
-function normalizeDiffRowRenderer(rowRenderer: unknown): DiffRowRendererSetting {
-  return typeof rowRenderer === "string" && diffRowRendererOptions.some((option) => option.value === rowRenderer)
-    ? rowRenderer as DiffRowRendererSetting
-    : defaultDiffRowRenderer;
 }
 
 export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
@@ -123,10 +110,6 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultSyntaxThemeName,
       normalize: normalizeSyntaxThemeName,
     },
-    rowRenderer: {
-      defaultValue: defaultDiffRowRenderer,
-      normalize: normalizeDiffRowRenderer,
-    },
     restoreWindowsOnStartup: {
       defaultValue: defaultDiffRestoreWindowsOnStartup,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffRestoreWindowsOnStartup),
@@ -158,7 +141,6 @@ const syntaxPrewarmEnabledSetting = diffSettings.field("syntaxPrewarmEnabled");
 const syntaxPrewarmLanguagesSetting = diffSettings.field("syntaxPrewarmLanguages");
 const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnownLanguages");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
-const rowRendererSetting = diffSettings.field("rowRenderer");
 const restoreWindowsOnStartupSetting = diffSettings.field("restoreWindowsOnStartup");
 const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
 const showStatisticsPanelSetting = diffSettings.field("showStatisticsPanel");
@@ -188,10 +170,6 @@ export function getDiffFontSizeSetting(): number {
 
 export function getDiffViewModeSetting(): DiffViewMode {
   return viewModeSetting.get();
-}
-
-export function getDiffRowRendererSetting(): DiffRowRendererSetting {
-  return rowRendererSetting.get();
 }
 
 export function getDiffRestoreWindowsOnStartupSetting(): boolean {
@@ -251,10 +229,6 @@ export function useDiffViewModeSetting(): DiffViewMode {
   return normalizeDiffViewMode(useValue(diffSettings$.viewMode));
 }
 
-export function useDiffRowRendererSetting(): DiffRowRendererSetting {
-  return normalizeDiffRowRenderer(useValue(diffSettings$.rowRenderer));
-}
-
 export function useDiffRestoreWindowsOnStartupSetting(): boolean {
   return normalizeBooleanSetting(useValue(diffSettings$.restoreWindowsOnStartup), defaultDiffRestoreWindowsOnStartup);
 }
@@ -305,10 +279,6 @@ export function setDiffFontSizeSetting(fontSize: number) {
 
 export function setDiffViewModeSetting(viewMode: DiffViewMode) {
   viewModeSetting.set(viewMode);
-}
-
-export function setDiffRowRendererSetting(rowRenderer: DiffRowRendererSetting) {
-  rowRendererSetting.set(rowRenderer);
 }
 
 export function setDiffRestoreWindowsOnStartupSetting(enabled: boolean) {

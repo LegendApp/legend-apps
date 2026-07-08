@@ -7,25 +7,18 @@ import type {
 } from "@legend-desktop/diff-parser";
 import { DiffNativeRow } from "@legend-desktop/diff-parser";
 import {
-  LightText,
   sourceViewerCodeFontFamily,
-  sourceViewerRowHeight,
-  TokenizedText,
   type SyntaxStyleMap,
 } from "@legend-desktop/source-viewer";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
-import { memo, useMemo, useSyncExternalStore } from "react";
+import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename } from "../diffFiles";
-import type { DiffRowRendererSetting } from "../diffSettings";
 import {
-  diffChangeTypeAdd,
-  diffChangeTypeRemove,
   diffFileHeaderRowHeight,
   diffRowKindFileHeader,
-  diffSideBySideHorizontalPadding,
 } from "./diffViewerConstants";
 import {
   getDirectoryPath,
@@ -50,7 +43,6 @@ export type DiffRenderFields = {
   nativeSideBySideRowConfigVersion: number;
   nativeUnifiedRowConfigId: string;
   nativeUnifiedRowConfigVersion: number;
-  rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
@@ -103,40 +95,12 @@ type DiffUnifiedRowProps = {
   row: DiffRenderRow | undefined;
 };
 
-type DiffReactNativeUnifiedLineRowProps = {
-  accentColor: string;
-  adaptiveRender: "normal";
-  isChanged: boolean;
-  lineNumberColor: string;
-  marker: string;
-  renderFields: DiffRenderFields;
-  row: DiffRenderRow | undefined;
-  rowBackgroundColor: string;
-};
-
 type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
   renderFields: DiffRenderFields;
   row: DiffSideBySideRenderRow | undefined;
-};
-
-type DiffSideBySideLineProps = {
-  adaptiveRender: "light" | "normal";
-  borderColor?: string;
-  document: DiffDocument | null;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  mutedColor: string;
-  row: DiffRenderRow;
-  rowHeight: number;
-  rowVisible: boolean;
-  side: "new" | "old";
-  syntaxAppearance: "dark" | "light";
-  syntaxStyleStore: DiffSyntaxStyleStore;
-  tokenStyleById: SyntaxStyleMap;
 };
 
 const diffDarkPalette = {
@@ -156,10 +120,8 @@ const diffLightPalette = {
 export const diffUnifiedChangeBarWidth = 3;
 export const diffUnifiedLineNumberWidth = 44;
 export const diffUnifiedMarkerWidth = 14;
-const diffUnifiedLightPaddingLeft = diffUnifiedChangeBarWidth + diffUnifiedLineNumberWidth * 2 + diffUnifiedMarkerWidth;
 export const diffSideBySideLineNumberWidth = 40;
 export const diffSideBySideMarkerWidth = 12;
-const diffSideBySideLightPaddingLeft = diffSideBySideLineNumberWidth + diffSideBySideMarkerWidth;
 export const diffHunkHeaderHeight = 32;
 
 export function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
@@ -170,48 +132,12 @@ export function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? "#ffffff14" : "#1118271a";
 }
 
-type TokenizedDiffRowState = {
-  row: DiffRenderRow;
-  tokenStyleById: SyntaxStyleMap;
-};
-
 export type DiffSyntaxStyleStore = {
   current: SyntaxStyleMap;
   getSnapshot: () => number;
   refresh: (document: DiffDocument) => void;
   subscribe: (listener: () => void) => () => void;
 };
-
-function useTokenizedDiffRow(
-  document: DiffDocument | null,
-  row: DiffRenderRow | undefined,
-  adaptiveRender: "light" | "normal",
-  syntaxStyleStore: DiffSyntaxStyleStore,
-) {
-  const tokenizedRowVersion = useSyncExternalStore(
-    syntaxStyleStore.subscribe,
-    syntaxStyleStore.getSnapshot,
-    syntaxStyleStore.getSnapshot,
-  );
-  const rowIndex = row?.index ?? -1;
-  const shouldTokenize = adaptiveRender === "normal" && document !== null && row !== undefined && row.kind !== diffRowKindFileHeader;
-
-  return useMemo<TokenizedDiffRowState | null>(() => {
-    if (shouldTokenize && document && rowIndex >= 0) {
-      const cachedRow = document.getRow(rowIndex);
-      if (cachedRow.tokens !== null) {
-        return {
-          row: {
-            ...cachedRow.plain,
-            tokens: cachedRow.tokens,
-          },
-          tokenStyleById: syntaxStyleStore.current,
-        };
-      }
-    }
-    return null;
-  }, [document, rowIndex, shouldTokenize, syntaxStyleStore, tokenizedRowVersion]);
-}
 
 function getPlainUnifiedRow(document: DiffDocument, index: number) {
   return document.getPlainRows(index, 1)[0];
@@ -398,108 +324,6 @@ function DiffNativeSideBySideLineRow({
   );
 }
 
-function areDiffSideBySideLinePropsEqual(previousProps: DiffSideBySideLineProps, nextProps: DiffSideBySideLineProps) {
-  const sharedPropsAreEqual = previousProps.adaptiveRender === nextProps.adaptiveRender
-    && previousProps.borderColor === nextProps.borderColor
-    && previousProps.fontFamily === nextProps.fontFamily
-    && previousProps.fontSize === nextProps.fontSize
-    && previousProps.foregroundColor === nextProps.foregroundColor
-    && previousProps.mutedColor === nextProps.mutedColor
-    && previousProps.rowHeight === nextProps.rowHeight
-    && previousProps.rowVisible === nextProps.rowVisible
-    && previousProps.side === nextProps.side
-    && previousProps.syntaxAppearance === nextProps.syntaxAppearance
-    && previousProps.tokenStyleById === nextProps.tokenStyleById;
-
-  return sharedPropsAreEqual
-    && (!nextProps.rowVisible || previousProps.row === nextProps.row);
-}
-
-const DiffSideBySideLine = memo(function DiffSideBySideLine({
-  adaptiveRender,
-  borderColor,
-  document,
-  fontFamily,
-  fontSize,
-  foregroundColor,
-  mutedColor,
-  row,
-  rowHeight,
-  rowVisible,
-  side,
-  syntaxAppearance,
-  syntaxStyleStore,
-  tokenStyleById,
-}: DiffSideBySideLineProps) {
-  const visibleRow = rowVisible ? row : undefined;
-  const isRemove = side === "old" && visibleRow?.changeType === diffChangeTypeRemove;
-  const isAdd = side === "new" && visibleRow?.changeType === diffChangeTypeAdd;
-  const isChanged = isRemove || isAdd;
-  const marker = isRemove ? "-" : isAdd ? "+" : " ";
-  const palette = getDiffRowPalette(syntaxAppearance);
-  const accentColor = isAdd ? palette.addAccent : isRemove ? palette.removeAccent : "transparent";
-  const rowBackgroundColor = isAdd
-    ? palette.addBackground
-    : isRemove
-      ? palette.removeBackground
-      : "transparent";
-  const lineNumber = side === "old" ? visibleRow?.oldLineNumber : visibleRow?.newLineNumber;
-  const tokenizedState = useTokenizedDiffRow(document, visibleRow, adaptiveRender, syntaxStyleStore);
-  const displayRow = tokenizedState?.row ?? visibleRow;
-  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? tokenStyleById;
-
-  if (adaptiveRender === "light") {
-    return (
-      <LightText
-        selectable={false}
-        style={[
-          styles.sideLightLine,
-          borderColor ? styles.sideLineDivider : null,
-          {
-            backgroundColor: rowBackgroundColor,
-            borderLeftColor: borderColor,
-            color: foregroundColor,
-            fontFamily,
-            fontSize,
-            height: rowHeight,
-            lineHeight: rowHeight,
-          },
-        ]}
-      >
-        {visibleRow?.text ?? ""}
-      </LightText>
-    );
-  }
-
-  return (
-    <View
-      style={[
-        styles.sideLine,
-        borderColor ? styles.sideLineDivider : null,
-        {
-          backgroundColor: rowBackgroundColor,
-          borderLeftColor: borderColor,
-          height: rowHeight,
-        },
-      ]}
-    >
-      <LightText selectable={false} style={[styles.sideLineNumber, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {lineNumber !== undefined && lineNumber >= 0 ? lineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.sideMarker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {visibleRow ? marker : ""}
-      </LightText>
-      <TokenizedText
-        adaptiveRender={adaptiveRender}
-        foregroundColor={foregroundColor}
-        line={displayRow}
-        style={[styles.sideDiffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={displayTokenStyleById}
-      />
-    </View>
-  );
-}, areDiffSideBySideLinePropsEqual);
-
 const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
   borderColor,
   fallbackFileIndex,
@@ -590,47 +414,6 @@ const DiffObservedFileHeaderRow = memo(function DiffObservedFileHeaderRow({
   );
 });
 
-const DiffReactNativeUnifiedLineRow = memo(function DiffReactNativeUnifiedLineRow({
-  accentColor,
-  adaptiveRender,
-  isChanged,
-  lineNumberColor,
-  marker,
-  renderFields,
-  row,
-  rowBackgroundColor,
-}: DiffReactNativeUnifiedLineRowProps) {
-  const fontFamily = renderFields.fontFamily;
-  const fontSize = renderFields.fontSize;
-  const foregroundColor = renderFields.foregroundColor;
-  const mutedColor = renderFields.mutedColor;
-  const rowHeight = renderFields.rowHeight;
-  const tokenizedState = useTokenizedDiffRow(renderFields.document, row, adaptiveRender, renderFields.syntaxStyleStore);
-  const displayRow = tokenizedState?.row ?? row;
-  const displayTokenStyleById = tokenizedState?.tokenStyleById ?? renderFields.syntaxStyleStore.current;
-
-  return (
-    <View style={[styles.diffRow, { backgroundColor: rowBackgroundColor, borderLeftColor: accentColor, height: rowHeight }]}>
-      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {row && row.oldLineNumber >= 0 ? row.oldLineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.lineNumber, { color: lineNumberColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {row && row.newLineNumber >= 0 ? row.newLineNumber : ""}
-      </LightText>
-      <LightText selectable={false} style={[styles.marker, { color: isChanged ? accentColor : mutedColor, fontFamily, fontSize, lineHeight: rowHeight }]}>
-        {marker}
-      </LightText>
-      <TokenizedText
-        adaptiveRender={adaptiveRender}
-        foregroundColor={foregroundColor}
-        line={displayRow}
-        style={[styles.diffText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={displayTokenStyleById}
-      />
-    </View>
-  );
-});
-
 export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   adaptiveRender,
   collapsedFileIndexes$,
@@ -651,13 +434,9 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   const rowHeight = renderFields.rowHeight;
   const syntaxAppearance = renderFields.syntaxAppearance;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
-  const changeType = row?.changeType ?? 0;
-  const isAdd = changeType === diffChangeTypeAdd;
-  const isRemove = changeType === diffChangeTypeRemove;
-  const isChanged = isAdd || isRemove;
   const isFileHeader = row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index);
   const displayRow = row ?? (
-    renderFields.rowRenderer === "native" && renderFields.document && !isFileHeader
+    renderFields.document && !isFileHeader
       ? getPlainUnifiedRow(renderFields.document, index)
       : undefined
   );
@@ -665,15 +444,6 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
     ? getDiffUnifiedHunkHeaderInfo(renderFields.document, index, displayRow)
     : null;
   const file = row ? fileByIndex.get(row.fileIndex) : fileByRowStart.get(index);
-  const palette = getDiffRowPalette(syntaxAppearance);
-  const accentColor = isAdd ? palette.addAccent : isRemove ? palette.removeAccent : "transparent";
-  const rowBackgroundColor = isAdd
-    ? palette.addBackground
-    : isRemove
-      ? palette.removeBackground
-      : "transparent";
-  const lineNumberColor = isChanged ? accentColor : mutedColor;
-  const marker = isAdd ? "+" : isRemove ? "-" : " ";
 
   if (isFileHeader) {
     const fileIndex = file?.index ?? row?.fileIndex ?? index;
@@ -695,61 +465,6 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
     );
   }
 
-  if (renderFields.rowRenderer === "native" && renderFields.document) {
-    return (
-      <>
-        {hunkHeaderInfo ? (
-          <DiffHunkHeader
-            borderColor={borderColor}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
-            info={hunkHeaderInfo}
-            mutedColor={mutedColor}
-          />
-        ) : null}
-        <DiffNativeUnifiedLineRow
-          adaptiveRender={adaptiveRender}
-          index={index}
-          renderFields={renderFields}
-        />
-      </>
-    );
-  }
-
-  if (adaptiveRender === "light") {
-    return (
-      <>
-        {hunkHeaderInfo ? (
-          <DiffHunkHeader
-            borderColor={borderColor}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
-            info={hunkHeaderInfo}
-            mutedColor={mutedColor}
-          />
-        ) : null}
-        <LightText
-          selectable={false}
-          style={[
-            styles.lightDiffRow,
-            {
-              backgroundColor: rowBackgroundColor,
-              color: foregroundColor,
-              fontFamily,
-              fontSize,
-              height: rowHeight,
-              lineHeight: rowHeight,
-            },
-          ]}
-        >
-          {row?.text ?? ""}
-        </LightText>
-      </>
-    );
-  }
-
   return (
     <>
       {hunkHeaderInfo ? (
@@ -762,16 +477,15 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
           mutedColor={mutedColor}
         />
       ) : null}
-      <DiffReactNativeUnifiedLineRow
-        accentColor={accentColor}
-        adaptiveRender="normal"
-        isChanged={isChanged}
-        lineNumberColor={lineNumberColor}
-        marker={marker}
-        renderFields={renderFields}
-        row={row}
-        rowBackgroundColor={rowBackgroundColor}
-      />
+      {renderFields.document ? (
+        <DiffNativeUnifiedLineRow
+          adaptiveRender={adaptiveRender}
+          index={index}
+          renderFields={renderFields}
+        />
+      ) : (
+        <View style={{ height: rowHeight }} />
+      )}
     </>
   );
 });
@@ -794,11 +508,9 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   const mutedColor = renderFields.mutedColor;
   const rowHeight = renderFields.rowHeight;
   const syntaxAppearance = renderFields.syntaxAppearance;
-  const syntaxStyleStore = renderFields.syntaxStyleStore;
   const toggleFileCollapsed = renderFields.toggleFileCollapsed;
-  const sideBySideDividerColor = getSideBySideDividerColor(syntaxAppearance);
   const displayRow = row ?? (
-    renderFields.rowRenderer === "native" && renderFields.document
+    renderFields.document
       ? renderFields.document.getPlainSideBySideRow(index, [...renderFields.collapsedFileIndexList])
       : undefined
   );
@@ -812,12 +524,8 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         renderFields.collapsedFileIndexList,
         renderFields.sideBySideRowCount,
         displayRow,
-      )
+    )
     : null;
-
-  if (!row && !fileHeader && renderFields.rowRenderer !== "native") {
-    return <View style={{ height: rowHeight }} />;
-  }
 
   if (fileHeader) {
     const file = fileByRowStart.get(fileHeader.sourceStart) ?? fileByIndex.get(fileHeader.fileIndex);
@@ -840,32 +548,6 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
     );
   }
 
-  if (renderFields.rowRenderer === "native" && renderFields.document) {
-    return (
-      <>
-        {hunkHeaderInfo ? (
-          <DiffHunkHeader
-            borderColor={borderColor}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
-            info={hunkHeaderInfo}
-            mutedColor={mutedColor}
-          />
-        ) : null}
-        <DiffNativeSideBySideLineRow
-          adaptiveRender={adaptiveRender}
-          index={index}
-          renderFields={renderFields}
-        />
-      </>
-    );
-  }
-
-  if (!row) {
-    return <View style={{ height: rowHeight }} />;
-  }
-
   return (
     <>
       {hunkHeaderInfo ? (
@@ -878,65 +560,20 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           mutedColor={mutedColor}
         />
       ) : null}
-      <View style={[styles.sideBySideRow, { height: rowHeight }]}>
-        <DiffSideBySideLine
+      {renderFields.document ? (
+        <DiffNativeSideBySideLineRow
           adaptiveRender={adaptiveRender}
-          document={renderFields.document}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          row={row.oldRow}
-          rowHeight={rowHeight}
-          rowVisible={row.oldRowVisible}
-          side="old"
-          syntaxAppearance={syntaxAppearance}
-          syntaxStyleStore={syntaxStyleStore}
-          tokenStyleById={syntaxStyleStore.current}
+          index={index}
+          renderFields={renderFields}
         />
-        <DiffSideBySideLine
-          adaptiveRender={adaptiveRender}
-          borderColor={sideBySideDividerColor}
-          document={renderFields.document}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          row={row.newRowEqualsOldRow ? row.oldRow : row.newRow}
-          rowHeight={rowHeight}
-          rowVisible={row.newRowVisible}
-          side="new"
-          syntaxAppearance={syntaxAppearance}
-          syntaxStyleStore={syntaxStyleStore}
-          tokenStyleById={syntaxStyleStore.current}
-        />
-      </View>
+      ) : (
+        <View style={{ height: rowHeight }} />
+      )}
     </>
   );
 });
 
 const styles = StyleSheet.create({
-  diffRow: {
-    borderLeftWidth: diffUnifiedChangeBarWidth,
-    flexDirection: "row",
-    height: sourceViewerRowHeight,
-  },
-  diffText: {
-    flex: 1,
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    overflow: "hidden",
-    paddingRight: 12,
-  },
-  lightDiffRow: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    overflow: "hidden",
-    paddingLeft: diffUnifiedLightPaddingLeft,
-    paddingRight: 12,
-  },
   hunkHeader: {
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1004,70 +641,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
   },
-  lineNumber: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
-    paddingLeft: 4,
-    paddingRight: 4,
-    textAlign: "right",
-    width: diffUnifiedLineNumberWidth,
-  },
-  marker: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    textAlign: "center",
-    width: diffUnifiedMarkerWidth,
-  },
   nativeDiffRow: {
     width: "100%",
-  },
-  sideBySideRow: {
-    flexDirection: "row",
-    minHeight: 0,
-  },
-  sideDiffText: {
-    flex: 1,
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    overflow: "hidden",
-    paddingRight: diffSideBySideHorizontalPadding,
-  },
-  sideLightLine: {
-    flex: 1,
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    minWidth: 0,
-    overflow: "hidden",
-    paddingLeft: diffSideBySideLightPaddingLeft,
-    paddingRight: diffSideBySideHorizontalPadding,
-  },
-  sideLine: {
-    flex: 1,
-    flexDirection: "row",
-    minWidth: 0,
-    overflow: "hidden",
-  },
-  sideLineDivider: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-  },
-  sideLineNumber: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 12,
-    lineHeight: sourceViewerRowHeight,
-    paddingLeft: 4,
-    paddingRight: 4,
-    textAlign: "right",
-    width: diffSideBySideLineNumberWidth,
-  },
-  sideMarker: {
-    fontFamily: sourceViewerCodeFontFamily,
-    fontSize: 13,
-    lineHeight: sourceViewerRowHeight,
-    textAlign: "center",
-    width: diffSideBySideMarkerWidth,
   },
 });

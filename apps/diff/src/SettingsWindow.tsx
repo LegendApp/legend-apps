@@ -1,4 +1,4 @@
-import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
+import { SwitchControl } from "@legend-desktop/design-system";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -18,11 +18,9 @@ import { diffSettingsWindowIdentifier } from "./appConstants";
 import { getDiffCliInstallStatus, installDiffCli, type DiffCliInstallStatus } from "./diffCli";
 import {
   diffFontFamilyOptions,
-  diffRowRendererOptions,
   setDiffAdaptiveLightModeEnabledSetting,
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
-  setDiffRowRendererSetting,
   setDiffRestoreWindowsOnStartupSetting,
   setDiffShowOnlyHunksSetting,
   setDiffShowStatisticsPanelSetting,
@@ -33,7 +31,6 @@ import {
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
-  useDiffRowRendererSetting,
   useDiffRestoreWindowsOnStartupSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
@@ -60,7 +57,6 @@ function AppearanceSettingsContent() {
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const restoreWindowsOnStartup = useDiffRestoreWindowsOnStartupSetting();
-  const rowRenderer = useDiffRowRendererSetting();
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
 
@@ -109,19 +105,6 @@ function AppearanceSettingsContent() {
           )}
           description="Load local repository diffs with unchanged sections collapsed."
           title="Show only changed hunks by default"
-        />
-        <SettingsRow
-          align="center"
-          control={(
-            <SelectControl
-              accessibilityLabel="Diff row renderer"
-              onChange={setDiffRowRendererSetting}
-              options={diffRowRendererOptions}
-              value={rowRenderer}
-            />
-          )}
-          description="Experimental. Restart the app before measuring memory."
-          title="Row renderer"
         />
         <SettingsRow
           align="center"

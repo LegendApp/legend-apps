@@ -20,7 +20,7 @@ import {
 import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
 import { revealInFinder } from "@legend-desktop/file-dialog";
 import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
-import { LightText, nowMs, TokenizedText, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
+import { nowMs, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-desktop/syntax-parser";
@@ -88,11 +88,9 @@ import {
   getDiffShowOnlyHunksSetting,
   setDiffShowOnlyHunksSetting,
   setDiffSidebarWidthSetting,
-  type DiffRowRendererSetting,
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
-  useDiffRowRendererSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
   useDiffSidebarWidthSetting,
@@ -510,7 +508,6 @@ type DiffListExtraData = {
   fontSize: number;
   foregroundColor: string;
   mutedColor: string;
-  rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   showOnlyHunks: boolean;
   sideBySideRowCount: number;
@@ -1091,7 +1088,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     primaryColor,
     resolvingMergeConflictKeys$,
     rowHeight,
-    rowRenderer: listExtraData.rowRenderer,
     showOnlyHunks: listExtraData.showOnlyHunks,
     sideBySideFileHeaderByListIndex,
     sideBySideItemIndexes,
@@ -1121,8 +1117,8 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     () => shouldRenderSidebarList ? createDiffSidebarEntries(filteredSidebarFiles, collapsedSidebarFolders) : [],
     [collapsedSidebarFolders, filteredSidebarFiles, shouldRenderSidebarList],
   );
-  const nativeUnifiedRows = listExtraData.rowRenderer === "native" && viewMode === "unified";
-  const nativeSideBySideRows = listExtraData.rowRenderer === "native" && viewMode !== "unified";
+  const nativeUnifiedRows = viewMode === "unified";
+  const nativeSideBySideRows = viewMode !== "unified";
   const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
   const activeMergeFile = getActiveMergeFile({
     activeFileIndex,
@@ -1683,11 +1679,8 @@ function DiffMergeCodePane({
   lineNumberWidth,
   mutedColor,
   nativeTokens,
-  renderer,
   rowHeight,
-  syntaxLine,
   text,
-  tokenStyleById,
 }: {
   backgroundColor: string;
   foregroundColor: string;
@@ -1699,57 +1692,37 @@ function DiffMergeCodePane({
   lineNumberWidth: number;
   mutedColor: string;
   nativeTokens: string;
-  renderer: DiffRowRendererSetting;
   rowHeight: number;
-  syntaxLine: SyntaxRenderLine;
   text: string;
-  tokenStyleById: SyntaxStyleMap;
 }) {
-  if (renderer === "native") {
-    return (
-      <DiffMergeNativePane
-        configVersion={hashDiffNativeRowConfigVersion([
-          fontFamily,
-          fontSize,
-          foregroundColor,
-          backgroundColor,
-          inlineHighlightColor,
-          inlineHighlights,
-          lineNumber,
-          mutedColor,
-          nativeTokens,
-          rowHeight,
-          text,
-        ])}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        foregroundColor={foregroundColor}
-        inlineHighlightColor={inlineHighlightColor}
-        inlineHighlights={inlineHighlights}
-        lineNumber={lineNumber ?? -1}
-        lineNumberWidth={lineNumberWidth}
-        mutedColor={mutedColor}
-        rowHeight={rowHeight}
-        style={[styles.mergeNativePane, { backgroundColor, height: rowHeight }]}
-        text={text}
-        tokens={nativeTokens}
-      />
-    );
-  }
-
   return (
-    <View style={[styles.mergeCodeLine, { backgroundColor, height: rowHeight }]}>
-      <LightText numberOfLines={1} selectable={false} style={[styles.mergeLineNumber, { color: mutedColor, fontFamily, fontSize, lineHeight: rowHeight, width: lineNumberWidth }]}>
-        {lineNumber ?? ""}
-      </LightText>
-      <TokenizedText
-        foregroundColor={foregroundColor}
-        line={syntaxLine}
-        selectable={false}
-        style={[styles.mergeCodeText, { fontFamily, fontSize, lineHeight: rowHeight }]}
-        tokenStyleById={tokenStyleById}
-      />
-    </View>
+    <DiffMergeNativePane
+      configVersion={hashDiffNativeRowConfigVersion([
+        fontFamily,
+        fontSize,
+        foregroundColor,
+        backgroundColor,
+        inlineHighlightColor,
+        inlineHighlights,
+        lineNumber,
+        mutedColor,
+        nativeTokens,
+        rowHeight,
+        text,
+      ])}
+      fontFamily={fontFamily}
+      fontSize={fontSize}
+      foregroundColor={foregroundColor}
+      inlineHighlightColor={inlineHighlightColor}
+      inlineHighlights={inlineHighlights}
+      lineNumber={lineNumber ?? -1}
+      lineNumberWidth={lineNumberWidth}
+      mutedColor={mutedColor}
+      rowHeight={rowHeight}
+      style={[styles.mergeNativePane, { backgroundColor, height: rowHeight }]}
+      text={text}
+      tokens={nativeTokens}
+    />
   );
 }
 
@@ -1835,7 +1808,6 @@ function DiffMergeLineRow({
   mutedColor,
   onResolveMergeConflict,
   primaryColor,
-  renderer,
   resolvingMergeConflictKeys$,
   row,
   rowIndex,
@@ -1853,7 +1825,6 @@ function DiffMergeLineRow({
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
-  renderer: DiffRowRendererSetting;
   resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
   row: DiffMergeDisplayRow | undefined;
   rowIndex: number;
@@ -1896,11 +1867,8 @@ function DiffMergeLineRow({
             lineNumberWidth={diffSideBySideLineNumberWidth}
             mutedColor={leftColors.lineNumberColor}
             nativeTokens={leftTokens}
-            renderer={renderer}
             rowHeight={rowHeight}
-            syntaxLine={leftSyntaxLine}
             text={row?.leftText ?? ""}
-            tokenStyleById={tokenStyleById}
           />
         </View>
         <DiffMergeCenterGutter
@@ -1924,11 +1892,8 @@ function DiffMergeLineRow({
             lineNumberWidth={diffSideBySideLineNumberWidth}
             mutedColor={rightColors.lineNumberColor}
             nativeTokens={rightTokens}
-            renderer={renderer}
             rowHeight={rowHeight}
-            syntaxLine={rightSyntaxLine}
             text={row?.rightText ?? ""}
-            tokenStyleById={tokenStyleById}
           />
         </View>
       </View>
@@ -1949,7 +1914,6 @@ function useDiffInlineMergeModel({
   onResolveMergeConflict,
   primaryColor,
   resolvingMergeConflictKeys$,
-  rowRenderer,
   rowHeight,
   showOnlyHunks,
   sideBySideFileHeaderByListIndex,
@@ -1972,7 +1936,6 @@ function useDiffInlineMergeModel({
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
   resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
-  rowRenderer: DiffRowRendererSetting;
   rowHeight: number;
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
@@ -2085,7 +2048,6 @@ function useDiffInlineMergeModel({
           mutedColor={mutedColor}
           onResolveMergeConflict={onResolveMergeConflict}
           primaryColor={primaryColor}
-          renderer={rowRenderer}
           resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
           row={displayRow}
           rowIndex={rowIndex}
@@ -2094,7 +2056,7 @@ function useDiffInlineMergeModel({
         />
       );
     },
-    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath$, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys$, rowHeight, rowRenderer, syntaxAppearance],
+    [borderColor, controlRowByFilePath, fileHeaderBackgroundColor, fontFamily, fontSize, foregroundColor, inlineList, mergeSyntaxByPath$, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys$, rowHeight, syntaxAppearance],
   );
 
   useEffect(() => {
@@ -2371,15 +2333,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const fontSize = useDiffFontSizeSetting();
   const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
-  const rowRenderer = useDiffRowRendererSetting();
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
   const sidebarWidth = useDiffSidebarWidthSetting();
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
-  const nativeUnifiedRows = rowRenderer === "native" && viewMode === "unified";
-  const nativeSideBySideRows = rowRenderer === "native" && viewMode !== "unified";
-  const nativeDiffRows = nativeUnifiedRows || nativeSideBySideRows;
+  const nativeUnifiedRows = viewMode === "unified";
+  const nativeSideBySideRows = viewMode !== "unified";
+  const nativeDiffRows = true;
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
   const {
@@ -3950,7 +3911,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       mutedColor,
-      rowRenderer,
       rowHeight,
       showOnlyHunks,
       sideBySideRowCount,
@@ -3969,7 +3929,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       listSyntaxTheme,
       mutedColor,
-      rowRenderer,
       rowHeight,
       showOnlyHunks,
       sideBySideRowCount,
@@ -4104,7 +4063,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeSideBySideRowConfigVersion: nativeSideBySideRowConfig.configVersion,
       nativeUnifiedRowConfigId: nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfigVersion: nativeUnifiedRowConfig.configVersion,
-      rowRenderer,
       rowHeight,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
@@ -4132,7 +4090,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeSideBySideRowConfig.configVersion,
       nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfig.configVersion,
-      rowRenderer,
       rowHeight,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
@@ -4902,16 +4859,6 @@ const styles = StyleSheet.create({
     top: -31,
     width: 82,
   },
-  mergeCodeLine: {
-    flexDirection: "row",
-    minWidth: 0,
-  },
-  mergeCodeText: {
-    flex: 1,
-    minWidth: 0,
-    overflow: "hidden",
-    paddingRight: 10,
-  },
   mergeCommonMiddle: {
     alignItems: "center",
     borderLeftWidth: StyleSheet.hairlineWidth,
@@ -4942,9 +4889,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "400",
     lineHeight: 14,
-  },
-  mergeLineNumber: {
-    textAlign: "right",
   },
   mergeNativePane: {
     flex: 1,
