@@ -61,6 +61,11 @@ public class WindowManagerModule extends NativeWindowManagerSpec {
   }
 
   @Override
+  public void focusToolbarSearchItem(String identifier, String itemId, String value, Promise promise) {
+    promise.resolve(unavailableJson());
+  }
+
+  @Override
   public void addListener(String eventName) {}
 
   @Override

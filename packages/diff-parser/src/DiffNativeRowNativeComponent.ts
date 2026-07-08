@@ -6,6 +6,10 @@ export interface NativeProps extends ViewProps {
   configId: string;
   configVersion: CodegenTypes.Double;
   rowIndex: CodegenTypes.Double;
+  searchHighlightColor: string;
+  searchHighlights: string;
+  searchNewHighlights: string;
+  searchOldHighlights: string;
 }
 
 export default codegenNativeComponent<NativeProps>("DiffNativeRow") as HostComponent<NativeProps>;

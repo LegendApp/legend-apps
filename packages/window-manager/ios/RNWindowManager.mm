@@ -500,7 +500,7 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 
 @interface RNWindowManager ()
 #if TARGET_OS_OSX
-<NSWindowDelegate, NSToolbarDelegate>
+<NSWindowDelegate, NSSearchFieldDelegate, NSToolbarDelegate>
 #endif
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *windows;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, RCTUIView *> *rootViews;
@@ -557,6 +557,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     @"onWindowFocused",
     @"onTitlebarControlPressed",
     @"onToolbarItemSelected",
+    @"onToolbarSearch",
   ];
 }
 
@@ -942,6 +943,48 @@ willBeInsertedIntoToolbar:(BOOL)flag
     return toolbarItem;
   }
 
+  if ([type isEqualToString:@"search"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSString *placeholder = [config[@"placeholder"] isKindOfClass:NSString.class] ? config[@"placeholder"] : @"Search";
+    NSString *value = [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"";
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    CGFloat width = widthNumber ? widthNumber.doubleValue : 240;
+    NSDictionary *metadata = @{
+      @"itemId": itemId,
+      @"windowIdentifier": toolbar.identifier ?: @"",
+    };
+
+    NSSearchField *searchField = nil;
+    NSToolbarItem *toolbarItem = nil;
+    if (@available(macOS 11.0, *)) {
+      NSSearchToolbarItem *searchToolbarItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+      searchField = searchToolbarItem.searchField;
+      toolbarItem = searchToolbarItem;
+    } else {
+      searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 0, width, 28)];
+      toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+      toolbarItem.view = searchField;
+    }
+
+    searchField.placeholderString = placeholder;
+    searchField.stringValue = value;
+    searchField.delegate = self;
+    searchField.target = self;
+    searchField.action = @selector(toolbarSearchSubmitted:);
+    searchField.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+    searchField.controlSize = NSControlSizeRegular;
+    objc_setAssociatedObject(searchField, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = placeholder;
+    toolbarItem.enabled = searchField.enabled;
+    toolbarItem.minSize = NSMakeSize(MIN(width, 120), 28);
+    toolbarItem.maxSize = NSMakeSize(width, 28);
+    return toolbarItem;
+  }
+
   if (![type isEqualToString:@"segmented"]) {
     return nil;
   }
@@ -1136,6 +1179,40 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
                            body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+
+- (void)sendToolbarSearchEventForField:(NSSearchField *)searchField submitted:(BOOL)submitted
+{
+  id metadata = objc_getAssociatedObject(searchField, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSString *itemId = [representedObject[@"itemId"] isKindOfClass:NSString.class]
+    ? representedObject[@"itemId"]
+    : @"";
+
+  [self sendWindowEventWithName:@"onToolbarSearch"
+                           body:@{
+                             @"identifier": identifier,
+                             @"itemId": itemId,
+                             @"submitted": @(submitted),
+                             @"value": searchField.stringValue ?: @"",
+                           }];
+}
+
+- (void)controlTextDidChange:(NSNotification *)notification
+{
+  if ([notification.object isKindOfClass:NSSearchField.class]) {
+    [self sendToolbarSearchEventForField:(NSSearchField *)notification.object submitted:NO];
+  }
+}
+
+- (void)toolbarSearchSubmitted:(NSSearchField *)sender
+{
+  [self sendToolbarSearchEventForField:sender submitted:YES];
 }
 #endif
 
@@ -1592,6 +1669,59 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
     window.title = title ?: @"";
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)focusToolbarSearchItem:(NSString *)identifier
+                        itemId:(NSString *)itemId
+                         value:(NSString *)value
+                       resolve:(RCTPromiseResolveBlock)resolve
+                        reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+
+    NSString *toolbarIdentifier = [NSString stringWithFormat:@"legend.toolbar.%@", itemId ?: @""];
+    NSToolbarItem *toolbarItem = nil;
+    for (NSToolbarItem *candidate in window.toolbar.items) {
+      if ([candidate.itemIdentifier isEqualToString:toolbarIdentifier]) {
+        toolbarItem = candidate;
+        break;
+      }
+    }
+    if (!toolbarItem) {
+      resolve([self failureJson:@"Toolbar search item not found"]);
+      return;
+    }
+
+    NSSearchField *searchField = nil;
+    if (@available(macOS 11.0, *)) {
+      if ([toolbarItem isKindOfClass:NSSearchToolbarItem.class]) {
+        searchField = ((NSSearchToolbarItem *)toolbarItem).searchField;
+      }
+    }
+    if (!searchField && [toolbarItem.view isKindOfClass:NSSearchField.class]) {
+      searchField = (NSSearchField *)toolbarItem.view;
+    }
+    if (!searchField) {
+      resolve([self failureJson:@"Toolbar search field not found"]);
+      return;
+    }
+
+    searchField.stringValue = value ?: @"";
+    [self sendToolbarSearchEventForField:searchField submitted:NO];
+    [window makeKeyAndOrderFront:nil];
+    [window makeFirstResponder:searchField];
     resolve([self successJson]);
   });
 #else

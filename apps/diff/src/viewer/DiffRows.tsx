@@ -44,6 +44,8 @@ export type DiffRenderFields = {
   nativeUnifiedRowConfigId: string;
   nativeUnifiedRowConfigVersion: number;
   rowHeight: number;
+  searchHighlightByRowIndex: ReadonlyMap<number, string>;
+  searchHighlightColor: string;
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
   sideBySideRowCount: number;
@@ -299,6 +301,10 @@ function DiffNativeUnifiedLineRow({
       configId={renderFields.nativeUnifiedRowConfigId}
       configVersion={renderFields.nativeUnifiedRowConfigVersion}
       rowIndex={index}
+      searchHighlightColor={renderFields.searchHighlightColor}
+      searchHighlights={renderFields.searchHighlightByRowIndex.get(index) ?? ""}
+      searchNewHighlights=""
+      searchOldHighlights=""
       style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
     />
   );
@@ -308,17 +314,29 @@ function DiffNativeSideBySideLineRow({
   adaptiveRender,
   index,
   renderFields,
+  row,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
   renderFields: DiffRenderFields;
+  row: DiffSideBySideRenderRow | undefined;
 }) {
+  const oldRowIndex = row?.oldRowVisible ? row.oldRow.index : -1;
+  const newRowIndex = row?.newRowVisible
+    ? row.newRowEqualsOldRow
+      ? row.oldRow.index
+      : row.newRow.index
+    : -1;
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
       configId={renderFields.nativeSideBySideRowConfigId}
       configVersion={renderFields.nativeSideBySideRowConfigVersion}
       rowIndex={index}
+      searchHighlightColor={renderFields.searchHighlightColor}
+      searchHighlights=""
+      searchNewHighlights={newRowIndex >= 0 ? renderFields.searchHighlightByRowIndex.get(newRowIndex) ?? "" : ""}
+      searchOldHighlights={oldRowIndex >= 0 ? renderFields.searchHighlightByRowIndex.get(oldRowIndex) ?? "" : ""}
       style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
     />
   );
@@ -565,6 +583,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           adaptiveRender={adaptiveRender}
           index={index}
           renderFields={renderFields}
+          row={displayRow}
         />
       ) : (
         <View style={{ height: rowHeight }} />

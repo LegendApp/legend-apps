@@ -147,7 +147,7 @@ export const diffMenuConfig: NativeMenuConfig[] = [
       },
       {
         id: "filterFiles",
-        title: "Filter Files",
+        title: "Search",
         enabled: false,
         placement: { after: "Show Sidebar" },
         shortcut: { key: "f", modifiers: commandModifier },

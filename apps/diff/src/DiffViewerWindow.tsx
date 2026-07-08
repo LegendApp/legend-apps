@@ -24,7 +24,6 @@ import { nowMs, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
 import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-desktop/syntax-parser";
-import { TextInputSearch, type TextInputSearchRef } from "@legend-desktop/text-input-search";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { addWindowCloseRequestedListener, closeWindow } from "@legend-desktop/window-manager";
 import { useWindowId } from "@legend-desktop/windows";
@@ -57,6 +56,7 @@ import { getDroppedDiffSource, getUnsupportedDropMessage } from "./diffDrop";
 import { getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "./filePairDiff";
 import { getDiffPalette } from "./diffPalette";
+import { focusDiffSearchToolbarItem } from "./diffWindows";
 import {
   createDiffMergeDraftFileWithResolvedBlock,
   createReadyMergeState,
@@ -142,7 +142,12 @@ import {
   type DiffInlineMergeRow,
 } from "./viewer/diffInlineMergeModel";
 import {
-  fileMatchesFilter,
+  createDiffSearchHighlightMap,
+  createDiffSearchResults,
+  parseDiffSearchQuery,
+  type DiffSearchResult,
+} from "./viewer/diffSearch";
+import {
   getActiveDiffFile,
   getConflictedFileStatusPresentation,
   getDirectoryPath,
@@ -204,12 +209,8 @@ import {
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
-const diffSidebarFilterHeight = 28;
-const diffSidebarFilterMarginTop = 4;
-const diffSidebarFilterReservedHeight =
-  diffSidebarFilterMarginTop +
-  diffSidebarFilterHeight;
 const diffUnsavedMergeBannerHeight = 48;
+const diffSearchHighlightColor = "#ffcc336b";
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
@@ -399,6 +400,46 @@ function isPasteKeyEvent(event: { keyCode: number; modifiers: number }) {
   return event.keyCode === KeyCodes.KEY_V && (event.modifiers & relevantModifiers) === pasteModifiers;
 }
 
+function isSearchKeyEvent(event: { keyCode: number; modifiers: number }) {
+  const searchModifiers = KeyCodes.MODIFIER_COMMAND;
+  const relevantModifiers =
+    KeyCodes.MODIFIER_COMMAND |
+    KeyCodes.MODIFIER_OPTION |
+    KeyCodes.MODIFIER_CONTROL |
+    KeyCodes.MODIFIER_SHIFT;
+  return event.keyCode === KeyCodes.KEY_F && (event.modifiers & relevantModifiers) === searchModifiers;
+}
+
+function isFileJumpKeyEvent(event: { keyCode: number; modifiers: number }) {
+  const jumpModifiers = KeyCodes.MODIFIER_COMMAND;
+  const relevantModifiers =
+    KeyCodes.MODIFIER_COMMAND |
+    KeyCodes.MODIFIER_OPTION |
+    KeyCodes.MODIFIER_CONTROL |
+    KeyCodes.MODIFIER_SHIFT;
+  return event.keyCode === KeyCodes.KEY_P && (event.modifiers & relevantModifiers) === jumpModifiers;
+}
+
+function isSearchNextKeyEvent(event: { keyCode: number; modifiers: number }) {
+  const nextModifiers = KeyCodes.MODIFIER_COMMAND;
+  const relevantModifiers =
+    KeyCodes.MODIFIER_COMMAND |
+    KeyCodes.MODIFIER_OPTION |
+    KeyCodes.MODIFIER_CONTROL |
+    KeyCodes.MODIFIER_SHIFT;
+  return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === nextModifiers;
+}
+
+function isSearchPreviousKeyEvent(event: { keyCode: number; modifiers: number }) {
+  const previousModifiers = KeyCodes.MODIFIER_COMMAND | KeyCodes.MODIFIER_SHIFT;
+  const relevantModifiers =
+    KeyCodes.MODIFIER_COMMAND |
+    KeyCodes.MODIFIER_OPTION |
+    KeyCodes.MODIFIER_CONTROL |
+    KeyCodes.MODIFIER_SHIFT;
+  return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === previousModifiers;
+}
+
 type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
   conflictBadgeBackgroundColor: string;
@@ -441,7 +482,6 @@ type DiffLoadedBodyProps = {
   diffTopChromeHeight: number;
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
   documentErrorBody: ReactNode;
-  fileFilterInputRef: RefObject<TextInputSearchRef | null>;
   floatingDocumentBanner: ReactNode;
   getItemSize: (index: number) => number;
   getItemType: (index: number) => string;
@@ -509,6 +549,7 @@ type DiffListExtraData = {
   foregroundColor: string;
   mutedColor: string;
   rowHeight: number;
+  searchQuery: string;
   showOnlyHunks: boolean;
   sideBySideRowCount: number;
   syntaxAppearance: "dark" | "light";
@@ -1022,7 +1063,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   diffTopChromeHeight,
   diffRows,
   documentErrorBody,
-  fileFilterInputRef,
   floatingDocumentBanner,
   getItemSize,
   getItemType,
@@ -1067,7 +1107,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedBodyProps) {
-  const [fileFilter, setFileFilter] = useState("");
   const bodyStartedAt = nowMs();
   const activeFileIndex = useValue(activeFileIndex$);
   const diffPaneHeight = useValue(diffPaneHeight$);
@@ -1098,24 +1137,11 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     viewMode,
   });
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset - diffSidebarFilterReservedHeight) : 0;
+  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset) : 0;
   const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
-  const normalizedFileFilter = fileFilter.trim().toLowerCase();
-  const filteredSidebarFiles = useMemo(
-    () => {
-      let files: readonly DiffFileSummary[] = [];
-      if (shouldRenderSidebarList) {
-        files = normalizedFileFilter
-          ? state.files.filter((file) => fileMatchesFilter(file, normalizedFileFilter))
-          : state.files;
-      }
-      return files;
-    },
-    [normalizedFileFilter, shouldRenderSidebarList, state.files],
-  );
   const sidebarEntries = useMemo(
-    () => shouldRenderSidebarList ? createDiffSidebarEntries(filteredSidebarFiles, collapsedSidebarFolders) : [],
-    [collapsedSidebarFolders, filteredSidebarFiles, shouldRenderSidebarList],
+    () => shouldRenderSidebarList ? createDiffSidebarEntries(state.files, collapsedSidebarFolders) : [],
+    [collapsedSidebarFolders, shouldRenderSidebarList, state.files],
   );
   const nativeUnifiedRows = viewMode === "unified";
   const nativeSideBySideRows = viewMode !== "unified";
@@ -1357,16 +1383,8 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         },
       ]}
     >
-      <TextInputSearch
-        appearance={syntaxAppearance}
-        defaultValue={fileFilter}
-        onChangeText={setFileFilter}
-        placeholder="Filter files"
-        ref={fileFilterInputRef}
-        style={styles.sidebarFilter}
-      />
       {shouldRenderSidebarList ? (
-        filteredSidebarFiles.length > 0 ? (
+        state.files.length > 0 ? (
           <LegendList
             data={sidebarEntries}
             estimatedItemSize={diffSidebarFileRowHeight}
@@ -2270,6 +2288,50 @@ function DiffStatisticsPanel({
   );
 }
 
+function DiffSearchStatusPanel({
+  activeResultIndex,
+  borderColor,
+  foregroundColor,
+  mutedColor,
+  query,
+  resultCount,
+  syntaxAppearance,
+}: {
+  activeResultIndex: number;
+  borderColor: string;
+  foregroundColor: string;
+  mutedColor: string;
+  query: ReturnType<typeof parseDiffSearchQuery>;
+  resultCount: number;
+  syntaxAppearance: "dark" | "light";
+}) {
+  if (!query.term) {
+    return null;
+  }
+
+  const panelBackgroundColor = syntaxAppearance === "dark" ? "rgba(16, 20, 26, 0.92)" : "rgba(255, 255, 255, 0.94)";
+  const label = query.mode === "file" ? "Files" : "Matches";
+  const summary = resultCount > 0
+    ? `${Math.min(activeResultIndex + 1, resultCount)} of ${resultCount}`
+    : "No results";
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.searchStatusPanel,
+        {
+          backgroundColor: panelBackgroundColor,
+          borderColor,
+        },
+      ]}
+    >
+      <Text style={[styles.searchStatusLabel, { color: mutedColor }]}>{label}</Text>
+      <Text style={[styles.searchStatusValue, { color: foregroundColor }]}>{summary}</Text>
+    </View>
+  );
+}
+
 function DiffCompareRefPrompt({
   backgroundColor,
   borderColor,
@@ -2383,7 +2445,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     [collapsedFileIndexes],
   );
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
-  const fileFilterInputRef = useRef<TextInputSearchRef | null>(null);
   const urlInputRef = useRef<TextInput | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
@@ -2405,6 +2466,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const [compareRefPromptVisible, setCompareRefPromptVisible] = useState(false);
   const [compareRefInput, setCompareRefInput] = useState("");
   const [collapsedSidebarFolders, setCollapsedSidebarFolders] = useState<ReadonlySet<string>>(() => new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
+  const searchQueryRef = useRef("");
+  const lastSubmittedSearchQueryRef = useRef("");
+  const searchResultsRef = useRef<readonly DiffSearchResult[]>([]);
+  const activeSearchResultIndexRef = useRef(0);
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
     const currentKeys = resolvingMergeConflictKeysRef.current;
@@ -2554,6 +2621,37 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     syntaxThemeName: syntaxTheme.name,
     viewMode: renderViewMode,
   });
+  const searchResults = useMemo(
+    () => state.status === "loaded"
+      ? createDiffSearchResults(state.document, state.files, searchQuery)
+      : [],
+    [searchQuery, state],
+  );
+  const parsedSearchQuery = useMemo(() => parseDiffSearchQuery(searchQuery), [searchQuery]);
+  const searchHighlightByRowIndex = useMemo(() => createDiffSearchHighlightMap(searchResults), [searchResults]);
+
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    searchResultsRef.current = searchResults;
+  }, [searchResults]);
+
+  useEffect(() => {
+    activeSearchResultIndexRef.current = activeSearchResultIndex;
+  }, [activeSearchResultIndex]);
+
+  useEffect(() => {
+    setActiveSearchResultIndex(0);
+  }, [loadedDocumentId, searchQuery]);
+
+  useEffect(() => {
+    setActiveSearchResultIndex((currentIndex) => (
+      searchResults.length === 0 ? 0 : Math.min(currentIndex, searchResults.length - 1)
+    ));
+  }, [searchResults.length]);
+
   const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
   useEffect(() => {
     if (loadedDocument) {
@@ -3868,7 +3966,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return true;
   }, [loadingSource$, setSidebarCollapsedValue, state$]);
 
-  const focusFileFilter = useCallback(() => {
+  const focusSearchWithValue = useCallback((value: string) => {
     const currentState = state$.peek();
     const currentLoadingSource = loadingSource$.peek();
     const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
@@ -3877,12 +3975,21 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return false;
     }
 
-    setSidebarCollapsedValue(false);
-    requestAnimationFrame(() => {
-      fileFilterInputRef.current?.focus();
+    searchQueryRef.current = value;
+    setSearchQuery(value);
+    focusDiffSearchToolbarItem(windowIdentifier, value).catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
     });
     return true;
-  }, [loadingSource$, setSidebarCollapsedValue, state$]);
+  }, [loadingSource$, state$, windowIdentifier]);
+
+  const focusSearch = useCallback(() => {
+    return focusSearchWithValue(searchQueryRef.current);
+  }, [focusSearchWithValue]);
+
+  const focusFileSearch = useCallback(() => {
+    return focusSearchWithValue("@");
+  }, [focusSearchWithValue]);
 
   const toggleFileCollapsed = useCallback((fileIndex: number) => {
     setCollapsedFileIndexesValue((current) => {
@@ -3912,6 +4019,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       foregroundColor,
       mutedColor,
       rowHeight,
+      searchQuery,
       showOnlyHunks,
       sideBySideRowCount,
       syntaxAppearance: syntaxTheme.appearance,
@@ -3930,6 +4038,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       listSyntaxTheme,
       mutedColor,
       rowHeight,
+      searchQuery,
       showOnlyHunks,
       sideBySideRowCount,
       syntaxHighlightingEnabled,
@@ -4064,6 +4173,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeUnifiedRowConfigId: nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfigVersion: nativeUnifiedRowConfig.configVersion,
       rowHeight,
+      searchHighlightByRowIndex,
+      searchHighlightColor: diffSearchHighlightColor,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
@@ -4091,6 +4202,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfig.configVersion,
       rowHeight,
+      searchHighlightByRowIndex,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
@@ -4118,6 +4230,110 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       });
     }
   }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
+
+  const scrollToSearchResult = useCallback((result: DiffSearchResult) => {
+    const currentState = state$.peek();
+    if (currentState.status !== "loaded") {
+      return;
+    }
+
+    const file = currentState.files.find((candidate) => candidate.index === result.fileIndex);
+    if (!file) {
+      return;
+    }
+
+    activeFileIndex$.set(result.fileIndex);
+    if (result.kind === "file") {
+      scrollToFile(file);
+      return;
+    }
+
+    setCollapsedFileIndexesValue((currentIndexes) => {
+      if (!currentIndexes.has(result.fileIndex)) {
+        return currentIndexes;
+      }
+      const nextIndexes = new Set(currentIndexes);
+      nextIndexes.delete(result.fileIndex);
+      return nextIndexes;
+    });
+
+    const listIndex = viewMode === "unified"
+      ? getVisibleListIndex(result.rowIndex)
+      : sideBySideListIndexByRowIndex.get(result.rowIndex);
+    if (listIndex !== undefined) {
+      listRef.current?.scrollToIndex({
+        animated: true,
+        index: listIndex,
+        viewOffset: diffTitlebarTopInset,
+        viewPosition: 0,
+      }).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    } else {
+      scrollToFile(file);
+    }
+  }, [
+    activeFileIndex$,
+    getVisibleListIndex,
+    scrollToFile,
+    setCollapsedFileIndexesValue,
+    sideBySideListIndexByRowIndex,
+    state$,
+    viewMode,
+  ]);
+
+  const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResultsRef.current) => {
+    const resultCount = results.length;
+    if (resultCount === 0) {
+      return false;
+    }
+
+    const nextIndex = ((index % resultCount) + resultCount) % resultCount;
+    setActiveSearchResultIndex(nextIndex);
+    const result = results[nextIndex];
+    if (result) {
+      requestAnimationFrame(() => {
+        scrollToSearchResult(result);
+      });
+    }
+    return true;
+  }, [scrollToSearchResult]);
+
+  const advanceSearchResult = useCallback((delta: number) => {
+    return activateSearchResult(activeSearchResultIndexRef.current + delta);
+  }, [activateSearchResult]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    searchQueryRef.current = value;
+    setSearchQuery(value);
+  }, []);
+
+  const handleSearchSubmit = useCallback((value: string) => {
+    const existingQuery = value === lastSubmittedSearchQueryRef.current;
+    lastSubmittedSearchQueryRef.current = value;
+    searchQueryRef.current = value;
+    setSearchQuery(value);
+    const currentState = state$.peek();
+    const results = currentState.status === "loaded"
+      ? createDiffSearchResults(currentState.document, currentState.files, value)
+      : [];
+    searchResultsRef.current = results;
+    return activateSearchResult(existingQuery ? activeSearchResultIndexRef.current : 0, results);
+  }, [activateSearchResult, state$]);
+
+  useEffect(() => addKeyDownListener((event) => {
+    let handled = false;
+    if (isSearchKeyEvent(event)) {
+      handled = focusSearch();
+    } else if (isFileJumpKeyEvent(event)) {
+      handled = focusFileSearch();
+    } else if (isSearchPreviousKeyEvent(event)) {
+      handled = advanceSearchResult(-1);
+    } else if (isSearchNextKeyEvent(event)) {
+      handled = advanceSearchResult(1);
+    }
+    return handled;
+  }), [advanceSearchResult, focusFileSearch, focusSearch]);
 
   const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
     activeFileIndex$.set(file.index);
@@ -4405,7 +4621,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         diffTopChromeHeight={diffTopChromeHeight}
         diffRows={diffRows}
         documentErrorBody={documentErrorBody}
-        fileFilterInputRef={fileFilterInputRef}
         floatingDocumentBanner={unsavedMergeDraftBanner}
         getItemSize={getItemSize}
         getItemType={getItemType}
@@ -4505,6 +4720,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       />
       <DiffWindowToolbarItemController
         compareCurrentSource={compareCurrentSource}
+        onSearchChange={handleSearchChange}
+        onSearchSubmit={handleSearchSubmit}
         openCompareRefPrompt={openCompareRefPrompt}
         toggleSidebar={toggleSidebar}
       />
@@ -4526,7 +4743,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         copyCurrentFilePath={copyCurrentFilePath}
         copyCurrentRelativePath={copyCurrentRelativePath}
         copyCurrentSource={copyCurrentSource}
-        focusFileFilter={focusFileFilter}
+        focusSearch={focusSearch}
         reloadCurrentSource={reloadCurrentSource}
         revealCurrentFolder={revealCurrentFolder}
         saveMergeDrafts={saveMergeDraftsFromCommand}
@@ -4546,6 +4763,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           borderColor={diffPalette.border}
           foregroundColor={foregroundColor}
           mutedColor={mutedColor}
+          syntaxAppearance={syntaxTheme.appearance}
+        />
+        <DiffSearchStatusPanel
+          activeResultIndex={activeSearchResultIndex}
+          borderColor={diffPalette.border}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          query={parsedSearchQuery}
+          resultCount={searchResults.length}
           syntaxAppearance={syntaxTheme.appearance}
         />
         {compareRefPromptVisible ? (
@@ -4776,11 +5002,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 20,
   },
-  sidebarFilter: {
-    marginHorizontal: 12,
-    marginTop: diffSidebarFilterMarginTop,
-    minHeight: diffSidebarFilterHeight,
-  },
   sidebarEmpty: {
     alignItems: "center",
     justifyContent: "center",
@@ -4794,6 +5015,29 @@ const styles = StyleSheet.create({
   },
   statisticsLabel: {
     fontSize: 11,
+    lineHeight: 15,
+  },
+  searchStatusLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  searchStatusPanel: {
+    alignItems: "center",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    position: "absolute",
+    right: 14,
+    top: diffTitlebarTopInset + 10,
+    zIndex: 40,
+  },
+  searchStatusValue: {
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "600",
     lineHeight: 15,
   },
   statisticsPanel: {

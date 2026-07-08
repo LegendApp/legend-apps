@@ -2,7 +2,7 @@ import type { DiffDocument } from "@legend-desktop/diff-parser";
 import { watchDirectories } from "@legend-desktop/file-system-watcher";
 import { updateMenuItems, type NativeMenuItemPatch } from "@legend-desktop/native-menu";
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-desktop/source-viewer";
-import { addWindowToolbarItemSelectedListener } from "@legend-desktop/window-manager";
+import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-desktop/window-manager";
 import { useWindowId } from "@legend-desktop/windows";
 import { useObserveEffect } from "@legendapp/state/react";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
@@ -20,6 +20,7 @@ import {
 import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
   diffCompareToolbarItemId,
+  diffSearchToolbarItemId,
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
@@ -183,10 +184,14 @@ export function DiffNativeMenuController({
 
 export function DiffWindowToolbarItemController({
   compareCurrentSource,
+  onSearchChange,
+  onSearchSubmit,
   openCompareRefPrompt,
   toggleSidebar,
 }: {
   compareCurrentSource: (selection: string) => boolean;
+  onSearchChange: (value: string) => void;
+  onSearchSubmit: (value: string) => void;
   openCompareRefPrompt: () => boolean;
   toggleSidebar: () => boolean;
 }) {
@@ -208,6 +213,18 @@ export function DiffWindowToolbarItemController({
     });
     return () => subscription.remove();
   }, [compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier]);
+
+  useEffect(() => {
+    const subscription = addWindowToolbarSearchListener((event) => {
+      if (event.identifier === windowIdentifier && event.itemId === diffSearchToolbarItemId) {
+        onSearchChange(event.value);
+        if (event.submitted) {
+          onSearchSubmit(event.value);
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [onSearchChange, onSearchSubmit, windowIdentifier]);
 
   return null;
 }
@@ -290,7 +307,7 @@ export function DiffActionHandlersController({
   copyCurrentFilePath,
   copyCurrentRelativePath,
   copyCurrentSource,
-  focusFileFilter,
+  focusSearch,
   reloadCurrentSource,
   revealCurrentFolder,
   saveMergeDrafts,
@@ -300,7 +317,7 @@ export function DiffActionHandlersController({
   copyCurrentFilePath: () => boolean;
   copyCurrentRelativePath: () => boolean;
   copyCurrentSource: () => boolean;
-  focusFileFilter: () => boolean;
+  focusSearch: () => boolean;
   reloadCurrentSource: () => boolean;
   revealCurrentFolder: () => boolean;
   saveMergeDrafts: () => boolean;
@@ -311,7 +328,7 @@ export function DiffActionHandlersController({
     copyFilePath: copyCurrentFilePath,
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
-    filterFiles: focusFileFilter,
+    filterFiles: focusSearch,
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
     save: saveMergeDrafts,
@@ -321,7 +338,7 @@ export function DiffActionHandlersController({
     copyCurrentFilePath,
     copyCurrentRelativePath,
     copyCurrentSource,
-    focusFileFilter,
+    focusSearch,
     reloadCurrentSource,
     revealCurrentFolder,
     saveMergeDrafts,

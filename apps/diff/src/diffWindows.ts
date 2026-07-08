@@ -1,7 +1,7 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { setWindowOptions, type WindowFrame } from "@legend-desktop/window-manager";
+import { focusToolbarSearchItem, setWindowOptions, type WindowFrame } from "@legend-desktop/window-manager";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,
@@ -20,6 +20,7 @@ import { SettingsWindow } from "./SettingsWindow";
 export const diffViewModeToolbarItemId = "diff-view-mode";
 export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
 export const diffCompareToolbarItemId = "diff-compare-target";
+export const diffSearchToolbarItemId = "diff-global-search";
 let diffViewerUntitledWindowId = 0;
 let diffViewerUrlFocusRequestId = 0;
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
@@ -67,6 +68,17 @@ function createDiffCompareToolbarItem(source: DiffOpenSource | null | undefined,
   } : null;
 }
 
+function createDiffSearchToolbarItem() {
+  return {
+    id: diffSearchToolbarItemId,
+    label: "Search",
+    placeholder: "Search diff or @files",
+    placement: "trailing" as const,
+    type: "search" as const,
+    width: 280,
+  };
+}
+
 function createDiffViewerToolbarItems({
   showSidebarControl,
   showViewModeToolbar,
@@ -87,6 +99,7 @@ function createDiffViewerToolbarItems({
     ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
     ...(compareToolbarItem ? [compareToolbarItem] : []),
     ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
+    ...(showViewModeToolbar ? [createDiffSearchToolbarItem()] : []),
   ];
 }
 
@@ -315,4 +328,8 @@ export function setDiffViewerWindowToolbarOptions({
       viewMode,
     }),
   });
+}
+
+export function focusDiffSearchToolbarItem(windowIdentifier: string, value = "") {
+  return focusToolbarSearchItem(windowIdentifier, diffSearchToolbarItemId, value);
 }

@@ -132,6 +132,17 @@ export type WindowToolbarSegmentedItem = {
   type: "segmented";
 };
 
+export type WindowToolbarSearchItem = {
+  enabled?: boolean;
+  id: string;
+  label?: string;
+  placement?: WindowToolbarItemPlacement;
+  placeholder?: string;
+  value?: string;
+  width?: number;
+  type: "search";
+};
+
 export type WindowToolbarButtonItem = {
   bordered?: boolean;
   enabled?: boolean;
@@ -150,7 +161,11 @@ export type WindowToolbarMenuButtonItem = Omit<WindowToolbarButtonItem, "menuIte
   type: "menuButton";
 };
 
-export type WindowToolbarItem = WindowToolbarButtonItem | WindowToolbarMenuButtonItem | WindowToolbarSegmentedItem;
+export type WindowToolbarItem =
+  | WindowToolbarButtonItem
+  | WindowToolbarMenuButtonItem
+  | WindowToolbarSearchItem
+  | WindowToolbarSegmentedItem;
 
 export type WindowOptions = {
   identifier?: string;
@@ -225,6 +240,13 @@ export type WindowFrameEvent = {
 export type WindowToolbarItemSelectedEvent = {
   identifier: string;
   itemId: string;
+  value: string;
+};
+
+export type WindowToolbarSearchEvent = {
+  identifier: string;
+  itemId: string;
+  submitted: boolean;
   value: string;
 };
 
@@ -388,6 +410,15 @@ export function setWindowTitle(identifier: string, title: string): Promise<Windo
   );
 }
 
+export function focusToolbarSearchItem(identifier: string, itemId: string, value = ""): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.focusToolbarSearchItem(identifier, itemId, value).then((resultValue) =>
+    parseJson(resultValue, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function addWindowClosedListener(listener: (event: WindowClosedEvent) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -437,6 +468,13 @@ export function addWindowToolbarItemSelectedListener(listener: (event: WindowToo
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onToolbarItemSelected", listener);
 }
 
+export function addWindowToolbarSearchListener(listener: (event: WindowToolbarSearchEvent) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onToolbarSearch", listener);
+}
+
 export function addWindowTitlebarControlPressedListener(listener: (event: WindowTitlebarControlPressedEvent) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -470,6 +508,7 @@ export function useWindowManager() {
     setMainWindowFrame,
     setWindowBlur,
     setWindowTitle,
+    focusToolbarSearchItem,
     onWindowClosed: addWindowClosedListener,
     onWindowCloseRequested: addWindowCloseRequestedListener,
     onWindowFocused: addWindowFocusedListener,
@@ -478,6 +517,7 @@ export function useWindowManager() {
     onApplicationReopenRequested: addApplicationReopenRequestedListener,
     onWindowTitlebarControlPressed: addWindowTitlebarControlPressedListener,
     onWindowToolbarItemSelected: addWindowToolbarItemSelectedListener,
+    onWindowToolbarSearch: addWindowToolbarSearchListener,
     onMainWindowMoved: addMainWindowMovedListener,
     onMainWindowResized: addMainWindowResizedListener,
   };

@@ -13,6 +13,7 @@ export interface Spec extends TurboModule {
   setMainWindowFrame(frameJson: string): Promise<string>;
   setWindowBlur(identifier: string, radius: number, durationMs: number): Promise<string>;
   setWindowTitle(identifier: string, title: string): Promise<string>;
+  focusToolbarSearchItem(identifier: string, itemId: string, value: string): Promise<string>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }
