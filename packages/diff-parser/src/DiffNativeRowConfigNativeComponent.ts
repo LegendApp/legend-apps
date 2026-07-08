@@ -4,6 +4,9 @@ import { codegenNativeComponent } from "react-native";
 export interface NativeProps extends ViewProps {
   addAccentColor: string;
   addBackgroundColor: string;
+  activeSearchHighlightByRowIndex: string;
+  activeSearchHighlightColor: string;
+  activeSearchRowHighlightColor: string;
   changeBarWidth: CodegenTypes.Double;
   collapsedFileIndexes: string;
   configId: string;
@@ -20,6 +23,8 @@ export interface NativeProps extends ViewProps {
   removeAccentColor: string;
   removeBackgroundColor: string;
   rowHeight: CodegenTypes.Double;
+  searchHighlightByRowIndex: string;
+  searchHighlightColor: string;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
   tokenizationVersion: CodegenTypes.Double;

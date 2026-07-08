@@ -38,9 +38,6 @@ function createRow(overrides: Partial<DiffRenderRow> = {}): DiffRenderRow {
 function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRenderFields {
   const file = createFile();
   return {
-    activeSearchHighlightByRowIndex: {},
-    activeSearchHighlightColor: "#ff7a00d9",
-    activeSearchRowHighlightColor: "#ff950038",
     borderColor: "#30363d",
     collapsedFileIndexList: [],
     document: null,
@@ -58,8 +55,6 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     nativeUnifiedRowConfigId: "test:unified",
     nativeUnifiedRowConfigVersion: 1,
     rowHeight: 22,
-    searchHighlightByRowIndex: {},
-    searchHighlightColor: "#ffcc336b",
     showOnlyHunks: true,
     sideBySideFileHeaderByListIndex: new Map(),
     sideBySideRowCount: 0,
@@ -147,14 +142,9 @@ describe("DiffRows", () => {
 
     expect(renderedTreeHasProps(view.toJSON(), {
       adaptiveRender: "normal",
-      activeSearchHighlightColor: "#ff7a00d9",
-      activeSearchHighlights: "",
-      activeSearchRowHighlightColor: "#ff950038",
       configId: "test:unified",
       configVersion: 1,
       rowIndex: 1,
-      searchHighlightColor: "#ffcc336b",
-      searchHighlights: "",
     })).toBe(true);
   });
 
@@ -202,73 +192,9 @@ describe("DiffRows", () => {
 
     expect(renderedTreeHasProps(view.toJSON(), {
       adaptiveRender: "normal",
-      activeSearchHighlightColor: "#ff7a00d9",
-      activeSearchNewHighlights: "",
-      activeSearchOldHighlights: "",
-      activeSearchRowHighlightColor: "#ff950038",
       configId: "test:blocks",
       configVersion: 1,
       rowIndex: 0,
-      searchHighlightColor: "#ffcc336b",
-      searchNewHighlights: "",
-      searchOldHighlights: "",
-    })).toBe(true);
-  });
-
-  it("passes search highlights to native row components", async () => {
-    const oldRow = createRow({
-      changeType: diffChangeTypeRemove,
-      index: 1,
-      newLineNumber: -1,
-      oldLineNumber: 4,
-      text: "const value = false;",
-    });
-    const newRow = createRow({
-      changeType: diffChangeTypeAdd,
-      index: 2,
-      newLineNumber: 4,
-      oldLineNumber: -1,
-      text: "const value = true;",
-    });
-    const sideBySideRow: DiffSideBySideRenderRow = {
-      fileIndex: 0,
-      hunkIndex: 0,
-      index: 0,
-      kind: "changed",
-      newRow,
-      newRowEqualsOldRow: false,
-      newRowVisible: true,
-      oldRow,
-      oldRowVisible: true,
-      sourceEnd: 3,
-      sourceStart: 1,
-    };
-
-    const view = await render(
-      <DiffSideBySideRow
-        adaptiveRender="normal"
-        collapsedFileIndexes$={observable(new Set<number>())}
-        index={0}
-        renderFields$={createRenderFields$({
-          document: {} as never,
-          activeSearchHighlightByRowIndex: {
-            2: "14,4",
-          },
-          searchHighlightByRowIndex: {
-            1: "6,5",
-            2: "6,5;14,4",
-          },
-          showOnlyHunks: false,
-        })}
-        row={sideBySideRow}
-      />,
-    );
-
-    expect(renderedTreeHasProps(view.toJSON(), {
-      activeSearchNewHighlights: "14,4",
-      activeSearchOldHighlights: "",
-      searchNewHighlights: "6,5;14,4",
-      searchOldHighlights: "6,5",
     })).toBe(true);
   });
 });

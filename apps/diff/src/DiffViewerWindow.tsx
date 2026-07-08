@@ -170,7 +170,6 @@ import {
   getDiffRowPalette,
   getSideBySideDividerColor,
   type DiffRenderFields,
-  type DiffSearchHighlightRecord,
 } from "./viewer/DiffRows";
 import {
   DiffActionHandlersController,
@@ -563,6 +562,9 @@ type DiffRowConfig = {
 type DiffNativeRowConfigProps = {
   addAccentColor: string;
   addBackgroundColor: string;
+  activeSearchHighlightByRowIndex: string;
+  activeSearchHighlightColor: string;
+  activeSearchRowHighlightColor: string;
   changeBarWidth: number;
   collapsedFileIndexes: string;
   configId: string;
@@ -579,6 +581,8 @@ type DiffNativeRowConfigProps = {
   removeAccentColor: string;
   removeBackgroundColor: string;
   rowHeight: number;
+  searchHighlightByRowIndex: string;
+  searchHighlightColor: string;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
 };
@@ -639,12 +643,12 @@ function hashDiffNativeRowConfigVersion(parts: readonly unknown[]) {
   return hash >>> 0;
 }
 
-function createDiffSearchHighlightRecord(highlights: ReadonlyMap<number, string>): DiffSearchHighlightRecord {
+function createDiffSearchHighlightPayload(highlights: ReadonlyMap<number, string>) {
   const record: Record<string, string> = {};
   highlights.forEach((value, key) => {
     record[String(key)] = value;
   });
-  return record;
+  return JSON.stringify(record);
 }
 
 function getDiffSidebarFolderTitle(file: DiffFileSummary) {
@@ -1513,6 +1517,9 @@ function DiffNativeRowConfigView({
     <DiffNativeRowConfig
       addAccentColor={nativeRowConfig.addAccentColor}
       addBackgroundColor={nativeRowConfig.addBackgroundColor}
+      activeSearchHighlightByRowIndex={nativeRowConfig.activeSearchHighlightByRowIndex}
+      activeSearchHighlightColor={nativeRowConfig.activeSearchHighlightColor}
+      activeSearchRowHighlightColor={nativeRowConfig.activeSearchRowHighlightColor}
       changeBarWidth={nativeRowConfig.changeBarWidth}
       collapsedFileIndexes={nativeRowConfig.collapsedFileIndexes}
       collapsable={false}
@@ -1530,6 +1537,8 @@ function DiffNativeRowConfigView({
       removeAccentColor={nativeRowConfig.removeAccentColor}
       removeBackgroundColor={nativeRowConfig.removeBackgroundColor}
       rowHeight={nativeRowConfig.rowHeight}
+      searchHighlightByRowIndex={nativeRowConfig.searchHighlightByRowIndex}
+      searchHighlightColor={nativeRowConfig.searchHighlightColor}
       style={styles.nativeDiffRowConfig}
       syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
       themeName={nativeRowConfig.themeName}
@@ -2697,8 +2706,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const parsedSearchQuery = useMemo(() => parseDiffSearchQuery(searchQuery), [searchQuery]);
   const searchHighlightByRowIndex = useMemo(() => createDiffSearchHighlightMap(searchResults), [searchResults]);
-  const searchHighlightByRowIndexRecord = useMemo(
-    () => createDiffSearchHighlightRecord(searchHighlightByRowIndex),
+  const searchHighlightByRowIndexPayload = useMemo(
+    () => createDiffSearchHighlightPayload(searchHighlightByRowIndex),
     [searchHighlightByRowIndex],
   );
   const effectiveActiveSearchResultIndex = searchResults.length > 0
@@ -2709,8 +2718,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     () => createActiveDiffSearchHighlightMap(activeSearchResult),
     [activeSearchResult],
   );
-  const activeSearchHighlightByRowIndexRecord = useMemo(
-    () => createDiffSearchHighlightRecord(activeSearchHighlightByRowIndex),
+  const activeSearchHighlightByRowIndexPayload = useMemo(
+    () => createDiffSearchHighlightPayload(activeSearchHighlightByRowIndex),
     [activeSearchHighlightByRowIndex],
   );
 
@@ -4150,6 +4159,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return {
       addAccentColor: palette.addAccent,
       addBackgroundColor: palette.addBackground,
+      activeSearchHighlightByRowIndex: activeSearchHighlightByRowIndexPayload,
+      activeSearchHighlightColor: diffActiveSearchHighlightColor,
+      activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       changeBarWidth: diffUnifiedChangeBarWidth,
       collapsedFileIndexes: "",
       configId,
@@ -4166,10 +4178,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       removeAccentColor: palette.removeAccent,
       removeBackgroundColor: palette.removeBackground,
       rowHeight,
+      searchHighlightByRowIndex: searchHighlightByRowIndexPayload,
+      searchHighlightColor: diffSearchHighlightColor,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
     };
   }, [
+    activeSearchHighlightByRowIndexPayload,
     fontFamily,
     fontSize,
     foregroundColor,
@@ -4177,6 +4192,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     loadedDocumentId,
     mutedColor,
     rowHeight,
+    searchHighlightByRowIndexPayload,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
@@ -4205,6 +4221,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return {
       addAccentColor: palette.addAccent,
       addBackgroundColor: palette.addBackground,
+      activeSearchHighlightByRowIndex: activeSearchHighlightByRowIndexPayload,
+      activeSearchHighlightColor: diffActiveSearchHighlightColor,
+      activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       changeBarWidth: 0,
       collapsedFileIndexes: collapsedFileIndexesKey,
       configId,
@@ -4221,10 +4240,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       removeAccentColor: palette.removeAccent,
       removeBackgroundColor: palette.removeBackground,
       rowHeight,
+      searchHighlightByRowIndex: searchHighlightByRowIndexPayload,
+      searchHighlightColor: diffSearchHighlightColor,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
     };
   }, [
+    activeSearchHighlightByRowIndexPayload,
     collapsedFileIndexesKey,
     fontFamily,
     fontSize,
@@ -4233,14 +4255,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     loadedDocumentId,
     mutedColor,
     rowHeight,
+    searchHighlightByRowIndexPayload,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
-      activeSearchHighlightByRowIndex: activeSearchHighlightByRowIndexRecord,
-      activeSearchHighlightColor: diffActiveSearchHighlightColor,
-      activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       borderColor: diffPalette.border,
       collapsedFileIndexList,
       document: loadedDocument,
@@ -4258,8 +4278,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeUnifiedRowConfigId: nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfigVersion: nativeUnifiedRowConfig.configVersion,
       rowHeight,
-      searchHighlightByRowIndex: searchHighlightByRowIndexRecord,
-      searchHighlightColor: diffSearchHighlightColor,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
@@ -4270,7 +4288,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       toggleFileCollapsed,
     }),
     [
-      activeSearchHighlightByRowIndexRecord,
       diffPalette.border,
       collapsedFileIndexList,
       fileHeaderBackgroundColor,
@@ -4288,7 +4305,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfig.configVersion,
       rowHeight,
-      searchHighlightByRowIndexRecord,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
