@@ -33,6 +33,16 @@ logDiffOpenTiming("app.module", () => ({
 logDiffMemoryMark("app.module", () => ({
   phase: "evaluated",
 }));
+const initialUrlLookupStartedAt = nowMs();
+logDiffOpenTiming("launch.initialUrl.start", () => ({}));
+const initialUrlPromise = Linking.getInitialURL().then((url) => {
+  logDiffOpenTiming("launch.initialUrl.finish", () => ({
+    elapsedMs: elapsedMs(initialUrlLookupStartedAt),
+    hasUrl: Boolean(url),
+  }));
+  return url;
+});
+void initialUrlPromise.catch(() => undefined);
 logDiffMemoryMark("viewer.prefetch.start", () => ({}));
 prefetchDiffViewerWindow()
   .then(() => {
@@ -227,7 +237,7 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
   let source = getLaunchDiffSource(launchArguments?.slice(1));
   let initialUrl: string | null = null;
   if (!source) {
-    initialUrl = await Linking.getInitialURL();
+    initialUrl = await initialUrlPromise;
     source = getDiffSourceFromOpenUrl(initialUrl ?? "");
   }
   const startedAt = nowMs();
