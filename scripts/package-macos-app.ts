@@ -22,9 +22,10 @@ import {
 } from "./lib/release";
 
 type MacOSBuildArch = "arm" | "x86";
+type MacOSPackageArch = MacOSBuildArch | "all";
 
 type PackageOptions = {
-  arch: MacOSBuildArch;
+  arch: MacOSPackageArch;
   skipAppcast: boolean;
   skipBuild: boolean;
   skipNotarize: boolean;
@@ -58,6 +59,8 @@ function parseOptions(args: string[]): PackageOptions {
       options.arch = "arm";
     } else if (arg === "--arch=x86" || arg === "x86") {
       options.arch = "x86";
+    } else if (arg === "--arch=all" || arg === "all") {
+      options.arch = "all";
     } else if (arg === "--skip-appcast") {
       options.skipAppcast = true;
     } else if (arg === "--skip-build") {
@@ -72,6 +75,10 @@ function parseOptions(args: string[]): PackageOptions {
   }
 
   return options;
+}
+
+function getPackageArchitectures(arch: MacOSPackageArch): MacOSBuildArch[] {
+  return arch === "all" ? ["arm", "x86"] : [arch];
 }
 
 function loadEnvFile(filePath: string) {
@@ -197,10 +204,55 @@ function getGenerateAppcastPath(appId: string) {
   throw new Error(`Could not find Sparkle generate_appcast at ${workspaceToolPath} or ${sharedToolPath}.`);
 }
 
+function packageArchitecture(
+  appId: string,
+  manifest: Awaited<ReturnType<typeof loadAppManifest>>,
+  appPackage: ReturnType<typeof loadAppPackageMetadata>,
+  options: PackageOptions,
+  arch: MacOSBuildArch,
+) {
+  if (!options.skipBuild) {
+    runCommand("bun", ["scripts/build-app.ts", appId, "macos", arch], { cwd: rootDir });
+  }
+
+  const workspaceDir = getMacOSReleaseWorkspaceDir(appId);
+  const derivedDataPath = getMacOSReleaseDerivedDataPath(workspaceDir, arch);
+  const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
+  const builtAppPath = path.join(derivedDataPath, "Build", "Products", "Release", appWrapperName);
+  if (!fs.existsSync(builtAppPath)) {
+    throw new Error(`Missing built app at ${builtAppPath}. Run bun scripts/build-app.ts ${appId} macos ${arch}.`);
+  }
+
+  const distDir = getMacOSReleaseDistDir(manifest);
+  const distAppPath = path.join(distDir, appWrapperName);
+  const archiveName = getMacOSReleaseArchiveName(manifest, appPackage, arch);
+  const archivePath = path.join(distDir, archiveName);
+  const entitlementsPath = path.join(workspaceDir, macOSAppTemplateDir, `${macOSProjectName}.entitlements`);
+
+  fs.mkdirSync(distDir, { recursive: true });
+  fs.rmSync(distAppPath, { recursive: true, force: true });
+  fs.cpSync(builtAppPath, distAppPath, { recursive: true });
+
+  signApp(distAppPath, entitlementsPath, options);
+  notarizeApp(distAppPath, `${manifest.id}-${arch}`, options);
+
+  fs.rmSync(archivePath, { force: true });
+  runCommand("ditto", [
+    "-ck",
+    "-rsrc",
+    "--sequesterRsrc",
+    "--keepParent",
+    distAppPath,
+    archivePath,
+  ]);
+
+  console.log(`Packaged ${manifest.displayName} ${arch} at ${archivePath}`);
+}
+
 async function main() {
   const [appId, ...args] = process.argv.slice(2);
   if (!appId) {
-    throw new Error("Usage: bun scripts/package-macos-app.ts <app> [arm|x86] [--skip-build] [--skip-sign] [--skip-notarize]");
+    throw new Error("Usage: bun scripts/package-macos-app.ts <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize]");
   }
 
   loadEnvFile(path.join(rootDir, ".env"));
@@ -215,42 +267,12 @@ async function main() {
   }
 
   const appPackage = loadAppPackageMetadata(appId);
-  if (!options.skipBuild) {
-    runCommand("bun", ["scripts/build-app.ts", appId, "macos", options.arch], { cwd: rootDir });
+  for (const arch of getPackageArchitectures(options.arch)) {
+    packageArchitecture(appId, manifest, appPackage, options, arch);
   }
-
-  const workspaceDir = getMacOSReleaseWorkspaceDir(appId);
-  const derivedDataPath = getMacOSReleaseDerivedDataPath(workspaceDir, options.arch);
-  const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
-  const builtAppPath = path.join(derivedDataPath, "Build", "Products", "Release", appWrapperName);
-  if (!fs.existsSync(builtAppPath)) {
-    throw new Error(`Missing built app at ${builtAppPath}. Run bun scripts/build-app.ts ${appId} macos ${options.arch}.`);
-  }
-
-  const distDir = getMacOSReleaseDistDir(manifest);
-  const distAppPath = path.join(distDir, appWrapperName);
-  const archiveName = getMacOSReleaseArchiveName(manifest, appPackage, options.arch);
-  const archivePath = path.join(distDir, archiveName);
-  const entitlementsPath = path.join(workspaceDir, macOSAppTemplateDir, `${macOSProjectName}.entitlements`);
-
-  fs.mkdirSync(distDir, { recursive: true });
-  fs.rmSync(distAppPath, { recursive: true, force: true });
-  fs.cpSync(builtAppPath, distAppPath, { recursive: true });
-
-  signApp(distAppPath, entitlementsPath, options);
-  notarizeApp(distAppPath, `${manifest.id}-${options.arch}`, options);
-
-  fs.rmSync(archivePath, { force: true });
-  runCommand("ditto", [
-    "-ck",
-    "-rsrc",
-    "--sequesterRsrc",
-    "--keepParent",
-    distAppPath,
-    archivePath,
-  ]);
 
   if (!options.skipAppcast) {
+    const distDir = getMacOSReleaseDistDir(manifest);
     const appcastPath = getMacOSSparkleAppcastPath(manifest);
     const distAppcastPath = path.join(distDir, "appcast.xml");
     if (fs.existsSync(appcastPath)) {
@@ -268,8 +290,6 @@ async function main() {
     fs.mkdirSync(path.dirname(appcastPath), { recursive: true });
     fs.copyFileSync(distAppcastPath, appcastPath);
   }
-
-  console.log(`Packaged ${manifest.displayName} at ${archivePath}`);
 }
 
 main().catch((error) => {

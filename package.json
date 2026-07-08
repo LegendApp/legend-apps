@@ -11,6 +11,10 @@
   "scripts": {
     "code": "bun scripts/run-app.ts code",
     "diff": "bun scripts/run-app.ts diff",
+    "diff:package:arm": "bun scripts/package-macos-app.ts diff arm",
+    "diff:package:x86": "bun scripts/package-macos-app.ts diff x86",
+    "diff:package:all": "bun scripts/package-macos-app.ts diff all",
+    "diff:release:github": "bun scripts/github-release-app.ts diff all",
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "test-kitchen-sink": "bun scripts/run-app.ts test-kitchen-sink",
@@ -19,6 +23,7 @@
     "metro": "bun scripts/start-app.ts",
     "open": "bun scripts/open-app.ts",
     "build": "bun scripts/build-app.ts",
+    "changelog": "bun scripts/prep-app-changelog.ts",
     "package:macos": "bun scripts/package-macos-app.ts",
     "githubrelease": "bun scripts/github-release-app.ts",
     "prebuild": "bun scripts/prebuild-app.ts",

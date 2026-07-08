@@ -9,19 +9,22 @@ import {
   loadAppPackageMetadata,
   rootDir,
 } from "./lib/apps";
+import { ensureAppChangelogEntry } from "./lib/changelog";
 import {
   getGitHubReleaseTag,
   getMacOSReleaseArchiveName,
   getMacOSReleaseDistDir,
+  getMacOSSparkleAppcastPath,
   getMacOSReleaseVersion,
   getReleaseAssetStem,
 } from "./lib/release";
 
 type MacOSBuildArch = "arm" | "x86";
+type MacOSReleaseArch = MacOSBuildArch | "all";
 
 type ReleaseOptions = {
   allowDirty: boolean;
-  arch: MacOSBuildArch;
+  arch: MacOSReleaseArch;
   notesFile?: string;
   skipPushTag: boolean;
 };
@@ -54,6 +57,8 @@ function parseOptions(args: string[]): ReleaseOptions {
       options.arch = "arm";
     } else if (arg === "--arch=x86" || arg === "x86") {
       options.arch = "x86";
+    } else if (arg === "--arch=all" || arg === "all") {
+      options.arch = "all";
     } else if (arg === "--allow-dirty") {
       options.allowDirty = true;
     } else if (arg === "--skip-push-tag") {
@@ -71,8 +76,16 @@ function parseOptions(args: string[]): ReleaseOptions {
   return options;
 }
 
+function getReleaseArchitectures(arch: MacOSReleaseArch): MacOSBuildArch[] {
+  return arch === "all" ? ["arm", "x86"] : [arch];
+}
+
 function assertGitHubCli() {
   runCommand("gh", ["--version"], { capture: true });
+}
+
+function assertGitHubAuth() {
+  runCommand("gh", ["auth", "status"], { capture: true });
 }
 
 function assertCleanGitStatus(options: ReleaseOptions) {
@@ -86,12 +99,93 @@ function assertCleanGitStatus(options: ReleaseOptions) {
   }
 }
 
+function fetchTags() {
+  runCommand("git", ["fetch", "--tags", "origin"], { cwd: rootDir, capture: true });
+}
+
 function tagExists(tagName: string) {
   const result = spawnSync("git", ["rev-parse", "-q", "--verify", `refs/tags/${tagName}`], {
     cwd: rootDir,
     stdio: "ignore",
   });
   return result.status === 0;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function compareVersions(a: string, b: string) {
+  const aParts = a.split(".").map(Number);
+  const bParts = b.split(".").map(Number);
+  const length = Math.max(aParts.length, bParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const diff = (aParts[index] ?? 0) - (bParts[index] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+
+  return 0;
+}
+
+function getReleasedVersions(appId: string) {
+  const output = runCommand("git", [
+    "for-each-ref",
+    "--format=%(refname:short)",
+    `refs/tags/${appId}-v*`,
+  ], { cwd: rootDir, capture: true }).trim();
+  const tagRegex = new RegExp(`^${escapeRegExp(appId)}-v(\\d+(?:\\.\\d+){0,2})$`);
+  return output
+    .split("\n")
+    .map((tag) => tag.match(tagRegex)?.[1])
+    .filter((version): version is string => Boolean(version))
+    .sort(compareVersions);
+}
+
+function getLatestReleasedVersion(appId: string) {
+  const versions = getReleasedVersions(appId);
+  return versions[versions.length - 1];
+}
+
+function assertStableReleaseVersion(appPackage: ReturnType<typeof loadAppPackageMetadata>) {
+  const releaseVersion = getMacOSReleaseVersion(appPackage);
+  if (appPackage.version !== releaseVersion) {
+    throw new Error(`App package version "${appPackage.version}" is not a stable release version.`);
+  }
+}
+
+function assertVersionIncremented(manifest: Awaited<ReturnType<typeof loadAppManifest>>, appPackage: ReturnType<typeof loadAppPackageMetadata>) {
+  const currentVersion = getMacOSReleaseVersion(appPackage);
+  const latestVersion = getLatestReleasedVersion(manifest.id);
+  if (latestVersion && compareVersions(currentVersion, latestVersion) <= 0) {
+    throw new Error(
+      `${manifest.id} version ${currentVersion} is not newer than the latest released version ${latestVersion}.`,
+    );
+  }
+}
+
+function assertTagIsNew(tagName: string) {
+  if (tagExists(tagName)) {
+    throw new Error(`Release tag ${tagName} already exists. Increment the app version before releasing.`);
+  }
+}
+
+function githubReleaseExists(tagName: string) {
+  const result = spawnSync("gh", ["release", "view", tagName], {
+    cwd: rootDir,
+    encoding: "utf8",
+    env: process.env,
+    stdio: "pipe",
+  });
+  return result.status === 0;
+}
+
+function assertGitHubReleaseIsNew(tagName: string) {
+  if (githubReleaseExists(tagName)) {
+    throw new Error(`GitHub release ${tagName} already exists. Increment the app version before releasing.`);
+  }
 }
 
 function readReleaseNotes(notesFile: string | undefined, fallback: string) {
@@ -107,6 +201,42 @@ function readReleaseNotes(notesFile: string | undefined, fallback: string) {
   return fs.readFileSync(resolvedPath, "utf8");
 }
 
+function assertReleaseArchives(archivePaths: string[]) {
+  const missingArchivePath = archivePaths.find((archivePath) => !fs.existsSync(archivePath));
+  if (missingArchivePath) {
+    throw new Error(`Missing release archive at ${missingArchivePath}.`);
+  }
+
+  const emptyArchivePath = archivePaths.find((archivePath) => fs.statSync(archivePath).size === 0);
+  if (emptyArchivePath) {
+    throw new Error(`Release archive is empty: ${emptyArchivePath}.`);
+  }
+}
+
+function assertAppcastReferencesArchives(
+  manifest: Awaited<ReturnType<typeof loadAppManifest>>,
+  appPackage: ReturnType<typeof loadAppPackageMetadata>,
+  archiveNames: string[],
+) {
+  const appcastPath = getMacOSSparkleAppcastPath(manifest);
+  if (!fs.existsSync(appcastPath)) {
+    throw new Error(`Missing Sparkle appcast at ${appcastPath}. Run bun scripts/package-macos-app.ts ${manifest.id} all first.`);
+  }
+
+  const appcast = fs.readFileSync(appcastPath, "utf8");
+  const missingArchiveName = archiveNames.find((archiveName) => !appcast.includes(archiveName));
+  if (missingArchiveName) {
+    throw new Error(
+      `Sparkle appcast ${path.relative(rootDir, appcastPath)} does not reference ${missingArchiveName}. Run bun scripts/package-macos-app.ts ${manifest.id} all again.`,
+    );
+  }
+
+  const version = getMacOSReleaseVersion(appPackage);
+  if (!appcast.includes(version)) {
+    throw new Error(`Sparkle appcast ${path.relative(rootDir, appcastPath)} does not reference version ${version}.`);
+  }
+}
+
 function findDeltaFiles(distDir: string, assetStem: string) {
   if (!fs.existsSync(distDir)) {
     return [];
@@ -120,7 +250,7 @@ function findDeltaFiles(distDir: string, assetStem: string) {
 async function main() {
   const [appId, ...args] = process.argv.slice(2);
   if (!appId) {
-    throw new Error("Usage: bun scripts/github-release-app.ts <app> [arm|x86] [--notes-file <path>] [--allow-dirty]");
+    throw new Error("Usage: bun scripts/github-release-app.ts <app> [arm|x86|all] [--notes-file <path>] [--allow-dirty]");
   }
 
   const options = parseOptions(args);
@@ -128,21 +258,38 @@ async function main() {
   assertSupportedPlatform(manifest, "macos");
 
   const appPackage = loadAppPackageMetadata(appId);
-  const distDir = getMacOSReleaseDistDir(manifest);
-  const archivePath = path.join(distDir, getMacOSReleaseArchiveName(manifest, appPackage, options.arch));
-  if (!fs.existsSync(archivePath)) {
-    throw new Error(`Missing release archive at ${archivePath}. Run bun scripts/package-macos-app.ts ${appId} ${options.arch} first.`);
+  assertStableReleaseVersion(appPackage);
+
+  const changelog = ensureAppChangelogEntry(manifest, appPackage);
+  if (changelog.updated && !options.allowDirty) {
+    throw new Error(
+      `Updated ${path.relative(rootDir, changelog.changelogPath)} for ${changelog.version}. Review and commit it, then rerun the release.`,
+    );
   }
+
+  const distDir = getMacOSReleaseDistDir(manifest);
+  const archivePaths = getReleaseArchitectures(options.arch).map((arch) =>
+    path.join(distDir, getMacOSReleaseArchiveName(manifest, appPackage, arch))
+  );
+  const archiveNames = getReleaseArchitectures(options.arch).map((arch) =>
+    getMacOSReleaseArchiveName(manifest, appPackage, arch)
+  );
+  assertReleaseArchives(archivePaths);
+  assertAppcastReferencesArchives(manifest, appPackage, archiveNames);
 
   assertGitHubCli();
+  assertGitHubAuth();
   assertCleanGitStatus(options);
+  fetchTags();
 
   const tagName = getGitHubReleaseTag(manifest, appPackage);
-  if (!tagExists(tagName)) {
-    runCommand("git", ["tag", "-a", tagName, "-m", `${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}`], {
-      cwd: rootDir,
-    });
-  }
+  assertVersionIncremented(manifest, appPackage);
+  assertTagIsNew(tagName);
+  assertGitHubReleaseIsNew(tagName);
+
+  runCommand("git", ["tag", "-a", tagName, "-m", `${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}`], {
+    cwd: rootDir,
+  });
 
   if (!options.skipPushTag) {
     runCommand("git", ["push", "origin", tagName], { cwd: rootDir });
@@ -150,8 +297,12 @@ async function main() {
 
   const releaseNotes = readReleaseNotes(
     options.notesFile,
-    `${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}`,
+    changelog.releaseNotes,
   );
+  if (!releaseNotes.trim()) {
+    throw new Error(`No release notes found for ${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}.`);
+  }
+
   const notesPath = path.join(os.tmpdir(), `${tagName}-notes.md`);
   fs.writeFileSync(notesPath, releaseNotes);
 
@@ -164,7 +315,7 @@ async function main() {
     `${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}`,
     "--notes-file",
     notesPath,
-    archivePath,
+    ...archivePaths,
     ...deltaFiles,
   ], { cwd: rootDir });
 
@@ -175,4 +326,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
-
