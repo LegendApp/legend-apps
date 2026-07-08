@@ -5,6 +5,7 @@ import { StyleSheet, View, type NativeSyntheticEvent } from "react-native";
 import type { DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
+import { getLastDiffViewerShellSplitMetrics, setLastDiffViewerShellSplitMetrics } from "./diffViewerShellMetrics";
 import {
   defaultDiffSidebarWidth,
   setDiffSidebarWidthSetting,
@@ -21,6 +22,7 @@ const diffShellContentMinWidth = 420;
 type DiffViewerWindowShellProps = {
   focusUrlInputRequestId?: number;
   folderPath?: string;
+  initialSplitPaneMetrics?: ReturnType<typeof getLastDiffViewerShellSplitMetrics>;
   source?: DiffOpenSource;
 };
 
@@ -47,15 +49,20 @@ function loadDiffViewerWindow() {
   return diffViewerWindowPromise;
 }
 
-export function DiffViewerWindowShell(props: DiffViewerWindowShellProps) {
+export function preloadDiffViewerWindow() {
+  void loadDiffViewerWindow();
+}
+
+export function DiffViewerWindowShell(props?: DiffViewerWindowShellProps | null) {
+  const safeProps = props ?? {};
   const [DiffViewerWindow, setDiffViewerWindow] = useState<ComponentType<DiffViewerWindowShellProps> | null>(
-    loadedDiffViewerWindow,
+    () => loadedDiffViewerWindow,
   );
 
   useEffect(() => {
     let mounted = true;
     logDiffOpenTiming("viewer.shell.effect.mount", () => ({
-      hasSource: Boolean(props.source),
+      hasSource: Boolean(safeProps.source),
     }));
     if (!DiffViewerWindow) {
       loadDiffViewerWindow().then((component) => {
@@ -68,13 +75,18 @@ export function DiffViewerWindowShell(props: DiffViewerWindowShellProps) {
     return () => {
       mounted = false;
     };
-  }, [DiffViewerWindow, props.source]);
+  }, [DiffViewerWindow, safeProps.source]);
 
   if (DiffViewerWindow) {
-    return <DiffViewerWindow {...props} />;
+    return (
+      <DiffViewerWindow
+        {...safeProps}
+        initialSplitPaneMetrics={safeProps.initialSplitPaneMetrics ?? getLastDiffViewerShellSplitMetrics()}
+      />
+    );
   }
 
-  return <DiffViewerWindowShellFallback source={props.source} />;
+  return <DiffViewerWindowShellFallback source={safeProps.source} />;
 }
 
 const DiffViewerWindowShellFallback = memo(function DiffViewerWindowShellFallback({
@@ -92,6 +104,13 @@ const DiffViewerWindowShellFallback = memo(function DiffViewerWindowShellFallbac
       sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
       sidebarWidth: nextSidebarWidth,
     }));
+    setLastDiffViewerShellSplitMetrics({
+      contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
+      contentWidth: Math.round(event.nativeEvent.contentWidth),
+      contentX: Math.round(event.nativeEvent.contentX),
+      sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
+      sidebarWidth: nextSidebarWidth,
+    });
     if (nextSidebarWidth >= defaultDiffSidebarWidth) {
       setDiffSidebarWidthSetting(nextSidebarWidth);
     }

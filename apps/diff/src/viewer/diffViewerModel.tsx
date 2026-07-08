@@ -159,7 +159,16 @@ function resolveSetStateAction<T>(currentValue: T, nextValue: SetStateAction<T>)
     : nextValue;
 }
 
-export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
+export function DiffViewerModelProvider({
+  children,
+  initialSplitPaneMetrics,
+}: {
+  children: ReactNode;
+  initialSplitPaneMetrics?: DiffSplitPaneMetrics | null;
+}) {
+  const initialDiffPaneHeight = initialSplitPaneMetrics?.contentHeight && initialSplitPaneMetrics.contentHeight > 0
+    ? initialSplitPaneMetrics.contentHeight
+    : 0;
   const state$ = useObservable<DiffViewerState>(emptyDiffViewerState);
   const urlInput$ = useObservable("");
   const urlInputError$ = useObservable<string | null>(null);
@@ -171,14 +180,14 @@ export function DiffViewerModelProvider({ children }: { children: ReactNode }) {
   const mergeState$ = useObservable<DiffMergeState>(unavailableDiffMergeState);
   const sidebarCollapsed$ = useObservable(false);
   const collapsedFileIndexes$ = useObservable<Set<number>>(new Set());
-  const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>({
+  const splitPaneMetrics$ = useObservable<DiffSplitPaneMetrics>(initialSplitPaneMetrics ?? {
     contentHeight: 0,
     contentWidth: 0,
     contentX: 0,
     sidebarHeight: 0,
     sidebarWidth: 0,
   });
-  const diffPaneHeight$ = useObservable(0);
+  const diffPaneHeight$ = useObservable(initialDiffPaneHeight);
   const activeFileIndex$ = useObservable<number | null>(null);
   const setViewerState = useCallback((nextState: DiffViewerState) => {
     state$.set(nextState);

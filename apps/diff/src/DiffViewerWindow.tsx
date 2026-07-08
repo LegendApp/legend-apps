@@ -251,6 +251,7 @@ type DiffMergeFileResolveQueue = {
 export type DiffViewerWindowProps = {
   focusUrlInputRequestId?: number;
   folderPath?: string;
+  initialSplitPaneMetrics?: DiffSplitPaneMetrics | null;
   source?: DiffOpenSource;
 };
 
@@ -2604,27 +2605,28 @@ function DiffCompareRefPrompt({
   );
 }
 
-export function DiffViewerWindow(props: DiffViewerWindowProps) {
+export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
+  const safeProps = props ?? {};
   if (!loggedFirstViewerWindowRender) {
     loggedFirstViewerWindowRender = true;
     logDiffOpenTiming("viewer.window.render.first", () => ({
-      focusUrlInput: typeof props.focusUrlInputRequestId === "number",
-      hasFolderPath: Boolean(props.folderPath),
-      hasSource: Boolean(props.source),
+      focusUrlInput: typeof safeProps.focusUrlInputRequestId === "number",
+      hasFolderPath: Boolean(safeProps.folderPath),
+      hasSource: Boolean(safeProps.source),
     }));
   }
 
   useEffect(() => {
     logDiffOpenTiming("viewer.window.effect.mount", () => ({
-      focusUrlInput: typeof props.focusUrlInputRequestId === "number",
-      hasFolderPath: Boolean(props.folderPath),
-      hasSource: Boolean(props.source),
+      focusUrlInput: typeof safeProps.focusUrlInputRequestId === "number",
+      hasFolderPath: Boolean(safeProps.folderPath),
+      hasSource: Boolean(safeProps.source),
     }));
   }, []);
 
   return (
-    <DiffViewerModelProvider>
-      <DiffViewerWindowContent {...props} />
+    <DiffViewerModelProvider initialSplitPaneMetrics={safeProps.initialSplitPaneMetrics}>
+      <DiffViewerWindowContent {...safeProps} />
     </DiffViewerModelProvider>
   );
 }
