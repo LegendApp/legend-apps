@@ -14,6 +14,7 @@ import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
+import { DiffViewerWindowShell } from "./DiffViewerWindowShell";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 
@@ -164,7 +165,7 @@ function createDiffViewerWindowStyle({
 
 const diffWindowsConfig = {
   [diffViewerWindowModuleName]: {
-    loadComponent: () => import("./DiffViewerWindow"),
+    component: DiffViewerWindowShell,
     identifier: diffViewerWindowIdentifier,
     options: {
       title: "Legend Diff",

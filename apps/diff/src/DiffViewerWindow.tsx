@@ -248,7 +248,7 @@ type DiffMergeFileResolveQueue = {
   completedOriginalBlockIndexes: number[];
 };
 
-type DiffViewerWindowProps = {
+export type DiffViewerWindowProps = {
   focusUrlInputRequestId?: number;
   folderPath?: string;
   source?: DiffOpenSource;
