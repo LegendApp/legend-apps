@@ -4,6 +4,7 @@ import {
   createDiffSearchResults,
   encodeDiffSearchRanges,
   findDiffSearchRanges,
+  getDiffSearchSubmitIndex,
   parseDiffSearchQuery,
 } from "../diffSearch";
 import { diffRowKindFileHeader } from "../diffViewerConstants";
@@ -121,5 +122,38 @@ describe("diffSearch", () => {
         rowIndex: 10,
       },
     ]);
+  });
+
+  it("chooses next submit result indexes for enter and shift-enter", () => {
+    expect(getDiffSearchSubmitIndex({
+      activeIndex: 0,
+      direction: 1,
+      repeatedQuery: false,
+      resultCount: 3,
+    })).toBe(0);
+    expect(getDiffSearchSubmitIndex({
+      activeIndex: 0,
+      direction: 1,
+      repeatedQuery: true,
+      resultCount: 3,
+    })).toBe(1);
+    expect(getDiffSearchSubmitIndex({
+      activeIndex: 2,
+      direction: 1,
+      repeatedQuery: true,
+      resultCount: 3,
+    })).toBe(0);
+    expect(getDiffSearchSubmitIndex({
+      activeIndex: 0,
+      direction: -1,
+      repeatedQuery: true,
+      resultCount: 3,
+    })).toBe(2);
+    expect(getDiffSearchSubmitIndex({
+      activeIndex: 0,
+      direction: -1,
+      repeatedQuery: false,
+      resultCount: 3,
+    })).toBe(2);
   });
 });

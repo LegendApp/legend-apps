@@ -1181,7 +1181,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
                            body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
 }
 
-- (void)sendToolbarSearchEventForField:(NSSearchField *)searchField submitted:(BOOL)submitted
+- (void)sendToolbarSearchEventForField:(NSSearchField *)searchField
+                             submitted:(BOOL)submitted
+                              shiftKey:(BOOL)shiftKey
 {
   id metadata = objc_getAssociatedObject(searchField, &LegendToolbarControlMetadataKey);
   NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
@@ -1198,6 +1200,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
                            body:@{
                              @"identifier": identifier,
                              @"itemId": itemId,
+                             @"shiftKey": @(shiftKey),
                              @"submitted": @(submitted),
                              @"value": searchField.stringValue ?: @"",
                            }];
@@ -1206,13 +1209,15 @@ willBeInsertedIntoToolbar:(BOOL)flag
 - (void)controlTextDidChange:(NSNotification *)notification
 {
   if ([notification.object isKindOfClass:NSSearchField.class]) {
-    [self sendToolbarSearchEventForField:(NSSearchField *)notification.object submitted:NO];
+    [self sendToolbarSearchEventForField:(NSSearchField *)notification.object submitted:NO shiftKey:NO];
   }
 }
 
 - (void)toolbarSearchSubmitted:(NSSearchField *)sender
 {
-  [self sendToolbarSearchEventForField:sender submitted:YES];
+  NSEvent *currentEvent = NSApp.currentEvent;
+  BOOL shiftKey = currentEvent && ((currentEvent.modifierFlags & NSEventModifierFlagShift) != 0);
+  [self sendToolbarSearchEventForField:sender submitted:YES shiftKey:shiftKey];
 }
 #endif
 
@@ -1719,7 +1724,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     searchField.stringValue = value ?: @"";
-    [self sendToolbarSearchEventForField:searchField submitted:NO];
+    [self sendToolbarSearchEventForField:searchField submitted:NO shiftKey:NO];
     [window makeKeyAndOrderFront:nil];
     [window makeFirstResponder:searchField];
     resolve([self successJson]);

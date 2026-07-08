@@ -191,7 +191,7 @@ export function DiffWindowToolbarItemController({
 }: {
   compareCurrentSource: (selection: string) => boolean;
   onSearchChange: (value: string) => void;
-  onSearchSubmit: (value: string) => void;
+  onSearchSubmit: (value: string, direction: 1 | -1) => void;
   openCompareRefPrompt: () => boolean;
   toggleSidebar: () => boolean;
 }) {
@@ -219,7 +219,7 @@ export function DiffWindowToolbarItemController({
       if (event.identifier === windowIdentifier && event.itemId === diffSearchToolbarItemId) {
         onSearchChange(event.value);
         if (event.submitted) {
-          onSearchSubmit(event.value);
+          onSearchSubmit(event.value, event.shiftKey ? -1 : 1);
         }
       }
     });

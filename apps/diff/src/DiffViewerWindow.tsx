@@ -144,6 +144,7 @@ import {
 import {
   createDiffSearchHighlightMap,
   createDiffSearchResults,
+  getDiffSearchSubmitIndex,
   parseDiffSearchQuery,
   type DiffSearchResult,
 } from "./viewer/diffSearch";
@@ -4304,11 +4305,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   }, [activateSearchResult]);
 
   const handleSearchChange = useCallback((value: string) => {
+    if (value !== searchQueryRef.current) {
+      lastSubmittedSearchQueryRef.current = "";
+    }
     searchQueryRef.current = value;
     setSearchQuery(value);
   }, []);
 
-  const handleSearchSubmit = useCallback((value: string) => {
+  const handleSearchSubmit = useCallback((value: string, direction: 1 | -1) => {
     const existingQuery = value === lastSubmittedSearchQueryRef.current;
     lastSubmittedSearchQueryRef.current = value;
     searchQueryRef.current = value;
@@ -4317,8 +4321,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const results = currentState.status === "loaded"
       ? createDiffSearchResults(currentState.document, currentState.files, value)
       : [];
+    const nextIndex = getDiffSearchSubmitIndex({
+      activeIndex: activeSearchResultIndexRef.current,
+      direction,
+      repeatedQuery: existingQuery,
+      resultCount: results.length,
+    });
     searchResultsRef.current = results;
-    return activateSearchResult(existingQuery ? activeSearchResultIndexRef.current : 0, results);
+    return activateSearchResult(nextIndex, results);
   }, [activateSearchResult, state$]);
 
   useEffect(() => addKeyDownListener((event) => {

@@ -94,6 +94,26 @@ export function createDiffSearchHighlightMap(results: readonly DiffSearchResult[
   return highlights;
 }
 
+export function getDiffSearchSubmitIndex({
+  activeIndex,
+  direction,
+  repeatedQuery,
+  resultCount,
+}: {
+  activeIndex: number;
+  direction: 1 | -1;
+  repeatedQuery: boolean;
+  resultCount: number;
+}) {
+  if (resultCount <= 0) {
+    return 0;
+  }
+  if (!repeatedQuery) {
+    return direction < 0 ? resultCount - 1 : 0;
+  }
+  return ((activeIndex + direction) % resultCount + resultCount) % resultCount;
+}
+
 function getDiffSearchLineLabel(file: DiffFileSummary | undefined, row: DiffRenderRow) {
   const lineNumber = row.newLineNumber >= 0 ? row.newLineNumber : row.oldLineNumber;
   const path = file?.path ?? "Diff";

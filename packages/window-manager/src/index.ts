@@ -246,6 +246,7 @@ export type WindowToolbarItemSelectedEvent = {
 export type WindowToolbarSearchEvent = {
   identifier: string;
   itemId: string;
+  shiftKey: boolean;
   submitted: boolean;
   value: string;
 };
