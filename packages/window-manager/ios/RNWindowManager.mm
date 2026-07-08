@@ -302,6 +302,7 @@ static char LegendToolbarSearchWidthKey;
 static char LegendToolbarSearchButtonKey;
 static char LegendToolbarSearchContainerKey;
 static char LegendToolbarSearchWidthConstraintKey;
+static const CGFloat LegendToolbarSearchCollapsedSize = 34;
 
 static RCTUIView *LegendManagedRootView(NSWindow *window)
 {
@@ -935,7 +936,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     : nil;
   NSNumber *widthNumber = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchWidthKey);
   CGFloat width = [widthNumber isKindOfClass:NSNumber.class] ? widthNumber.doubleValue : 240;
-  CGFloat targetWidth = expanded ? width : 32;
+  CGFloat targetWidth = expanded ? width : LegendToolbarSearchCollapsedSize;
 
   if (value) {
     searchField.stringValue = value;
@@ -1085,18 +1086,19 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSSearchField *searchField = nil;
     NSToolbarItem *toolbarItem = nil;
     if (collapses) {
-      CGFloat initialWidth = value.length > 0 ? width : 32;
-      NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, initialWidth, 28)];
+      CGFloat initialWidth = value.length > 0 ? width : LegendToolbarSearchCollapsedSize;
+      NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, initialWidth, LegendToolbarSearchCollapsedSize)];
       container.translatesAutoresizingMaskIntoConstraints = NO;
       NSLayoutConstraint *containerWidthConstraint = [container.widthAnchor constraintEqualToConstant:initialWidth];
       containerWidthConstraint.active = YES;
-      [container.heightAnchor constraintEqualToConstant:28].active = YES;
+      [container.heightAnchor constraintEqualToConstant:LegendToolbarSearchCollapsedSize].active = YES;
 
       NSButton *searchButton = [NSButton buttonWithImage:[self toolbarSearchImageWithLabel:label]
                                                   target:self
                                                   action:@selector(toolbarSearchButtonPressed:)];
       searchButton.translatesAutoresizingMaskIntoConstraints = NO;
-      searchButton.bordered = NO;
+      searchButton.bordered = YES;
+      searchButton.bezelStyle = NSBezelStyleCircular;
       searchButton.controlSize = NSControlSizeRegular;
       searchButton.imagePosition = NSImageOnly;
       searchButton.toolTip = placeholder;
@@ -1105,8 +1107,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
       [NSLayoutConstraint activateConstraints:@[
         [searchButton.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
         [searchButton.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
-        [searchButton.widthAnchor constraintEqualToConstant:32],
-        [searchButton.heightAnchor constraintEqualToConstant:28],
+        [searchButton.widthAnchor constraintEqualToConstant:LegendToolbarSearchCollapsedSize],
+        [searchButton.heightAnchor constraintEqualToConstant:LegendToolbarSearchCollapsedSize],
       ]];
 
       searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 0, width, 28)];
@@ -1404,6 +1406,15 @@ willBeInsertedIntoToolbar:(BOOL)flag
   if ([notification.object isKindOfClass:NSSearchField.class]) {
     [self sendToolbarSearchEventForField:(NSSearchField *)notification.object submitted:NO shiftKey:NO];
   }
+}
+
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector
+{
+  if ([control isKindOfClass:NSSearchField.class] && commandSelector == @selector(cancelOperation:)) {
+    [control.window makeFirstResponder:nil];
+    return YES;
+  }
+  return NO;
 }
 
 - (void)controlTextDidEndEditing:(NSNotification *)notification

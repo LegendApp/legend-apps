@@ -76,7 +76,7 @@ function createDiffSearchToolbarItem() {
     placeholder: "Search diff or @files",
     placement: "trailing" as const,
     type: "search" as const,
-    width: 280,
+    width: 220,
   };
 }
 
@@ -98,9 +98,9 @@ function createDiffViewerToolbarItems({
   const compareToolbarItem = showViewModeToolbar ? createDiffCompareToolbarItem(source, compareRepoState ?? null) : null;
   return [
     ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
+    ...(showViewModeToolbar ? [createDiffSearchToolbarItem()] : []),
     ...(compareToolbarItem ? [compareToolbarItem] : []),
     ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
-    ...(showViewModeToolbar ? [createDiffSearchToolbarItem()] : []),
   ];
 }
 
