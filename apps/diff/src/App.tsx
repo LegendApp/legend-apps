@@ -249,14 +249,16 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
       await openDiffViewerWindow(null);
     }
     controller.setDocumentWindowOpen(true);
-    logDiffMemoryMark("startup.syntaxWarmup.start", () => ({}));
-    warmDiffSyntaxHighlightersForStartup()
-      .then((warmupResults) => {
-        logDiffMemoryMark("startup.syntaxWarmup.finish", () => ({
-          languages: warmupResults.map((warmupResult) => warmupResult.language),
-        }));
-      })
-      .catch(reportDiffAppControllerError);
+    if (restoredWindowCount === 0) {
+      logDiffMemoryMark("startup.syntaxWarmup.start", () => ({}));
+      warmDiffSyntaxHighlightersForStartup()
+        .then((warmupResults) => {
+          logDiffMemoryMark("startup.syntaxWarmup.finish", () => ({
+            languages: warmupResults.map((warmupResult) => warmupResult.language),
+          }));
+        })
+        .catch(reportDiffAppControllerError);
+    }
   }
   logDiffOpenTiming("launch.open.finish", () => ({
     restoredWindows: restoredWindowCount,

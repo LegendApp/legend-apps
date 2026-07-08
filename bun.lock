@@ -26,7 +26,7 @@
     },
     "apps/code": {
       "name": "@legend-desktop/app-code",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@legend-desktop/app-exit": "0.0.0",
         "@legend-desktop/appkit-split-view": "0.0.0",
@@ -52,7 +52,7 @@
     },
     "apps/diff": {
       "name": "@legend-desktop/app-diff",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@legend-desktop/appkit-split-view": "0.0.0",
         "@legend-desktop/auto-updater": "0.0.0",
@@ -70,6 +70,7 @@
         "@legend-desktop/native-menu": "0.0.0",
         "@legend-desktop/native-select": "workspace:*",
         "@legend-desktop/recent-documents": "0.0.0",
+        "@legend-desktop/runtime-utils": "workspace:*",
         "@legend-desktop/settings-window": "0.0.0",
         "@legend-desktop/sf-symbol": "0.0.0",
         "@legend-desktop/source-viewer": "workspace:*",
@@ -87,7 +88,7 @@
     },
     "apps/markdown": {
       "name": "@legend-desktop/app-markdown",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/app-exit": "0.0.0",
@@ -121,7 +122,7 @@
     },
     "apps/music": {
       "name": "@legend-desktop/app-music",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
         "@legend-desktop/ai": "0.0.0",
@@ -162,7 +163,7 @@
     },
     "apps/test-kitchen-sink": {
       "name": "@legend-desktop/app-test-kitchen-sink",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@legend-desktop/ai": "0.0.0",
         "@legend-desktop/app-exit": "0.0.0",
