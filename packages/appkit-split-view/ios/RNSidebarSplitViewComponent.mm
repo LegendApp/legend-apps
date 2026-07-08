@@ -753,11 +753,8 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   [super viewDidMoveToWindow];
 
   if (self.window) {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_async(dispatch_get_main_queue(), ^{
       if (self.window) {
-        self->_lastSidebarWidth = -1;
-        self->_lastContentWidth = -1;
-        self->_lastHeight = -1;
         [self layoutSplitView];
       }
     });

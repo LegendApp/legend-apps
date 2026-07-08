@@ -1657,6 +1657,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
         contentTitlebarMaterial="glass"
         contentTitlebarOverlayColor={backgroundColor}
         contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
+        initialPaneMetrics={splitPaneMetrics}
         onSplitViewDidResize={handleSplitViewResize}
         sidebarCollapsed={sidebarCollapsed}
         sidebarMinWidth={defaultDiffSidebarWidth}

@@ -23,6 +23,13 @@ export type { SidebarSplitViewResizeEvent };
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
 
+export type SidebarSplitViewPaneMetrics = {
+  contentHeight: number;
+  contentWidth: number;
+  sidebarHeight: number;
+  sidebarWidth: number;
+};
+
 let nativeAppKitSplitView: NativeAppKitSplitViewSpec | null = null;
 
 function getNativeAppKitSplitView() {
@@ -41,6 +48,7 @@ export interface SidebarSplitViewProps extends ViewProps {
   contentTitlebarMaterial?: SidebarSplitViewTitlebarMaterial;
   contentTitlebarOverlayColor?: string;
   contentTitlebarOverlayOpacity?: number;
+  initialPaneMetrics?: SidebarSplitViewPaneMetrics | null;
   onSplitViewDidResize?: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void | Promise<void>;
   sidebarCollapsed?: boolean;
   sidebarMinWidth?: number;
@@ -55,6 +63,7 @@ export function SidebarSplitView({
   contentTitlebarMaterial = "none",
   contentTitlebarOverlayColor,
   contentTitlebarOverlayOpacity = 0,
+  initialPaneMetrics,
   onSplitViewDidResize,
   sidebarCollapsed = false,
   sidebarMinWidth = 180,
@@ -63,10 +72,10 @@ export function SidebarSplitView({
   ...props
 }: SidebarSplitViewProps) {
   const [paneMetrics, setPaneMetrics] = useState({
-    contentHeight: 0,
-    contentWidth: 0,
-    sidebarHeight: 0,
-    sidebarWidth: 0,
+    contentHeight: initialPaneMetrics?.contentHeight ?? 0,
+    contentWidth: initialPaneMetrics?.contentWidth ?? 0,
+    sidebarHeight: initialPaneMetrics?.sidebarHeight ?? 0,
+    sidebarWidth: initialPaneMetrics?.sidebarWidth ?? 0,
   });
   const panes = Children.toArray(children);
 
