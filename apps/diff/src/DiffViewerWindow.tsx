@@ -2957,8 +2957,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
-    updateSavedDiffWindowSource(windowIdentifier, nextSource);
     const loadStartedAt = nowMs();
+    logDiffOpenTiming("viewer.load.invoke", () => ({
+      reason: options?.reason ?? "manual",
+      requestId,
+      source: nextSource,
+    }));
+    const savedWindowUpdateStartedAt = nowMs();
+    updateSavedDiffWindowSource(windowIdentifier, nextSource);
+    logDiffOpenTiming("viewer.load.savedWindowSource.finish", () => ({
+      elapsedSinceInvokeMs: Number((nowMs() - loadStartedAt).toFixed(1)),
+      requestId,
+      savedWindowSourceMs: Number((nowMs() - savedWindowUpdateStartedAt).toFixed(1)),
+    }));
     const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
     const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
     const sourceCacheKey = getDiffSourceCacheKey(nextSource);
@@ -3057,6 +3068,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       }
     }
     logDiffOpenTiming("viewer.load.start", () => ({
+      preNativeMs: Number((nowMs() - loadStartedAt).toFixed(1)),
       source: nextSource,
       requestId,
     }));

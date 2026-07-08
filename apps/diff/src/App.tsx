@@ -243,7 +243,13 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
     controller.setDocumentWindowOpen(true);
   } else {
     if (getDiffRestoreWindowsOnStartupSetting()) {
+      const restoreStartedAt = nowMs();
+      logDiffOpenTiming("launch.restore.start", () => ({}));
       restoredWindowCount = await restoreSavedDiffWindows();
+      logDiffOpenTiming("launch.restore.finish", () => ({
+        restoredWindows: restoredWindowCount,
+        restoreMs: elapsedMs(restoreStartedAt),
+      }));
     }
     if (restoredWindowCount === 0) {
       await openDiffViewerWindow(null);

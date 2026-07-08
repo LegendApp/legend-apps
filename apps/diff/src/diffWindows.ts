@@ -237,6 +237,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     source,
     windowIdentifier,
   }));
+  const prepareStartedAt = nowMs();
   const windowStyle = createDiffViewerWindowStyle({
     includeFrame: true,
     showSidebarControl: shouldShowSourceToolbar,
@@ -247,6 +248,12 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     windowStyle.width = options.frame.width;
     windowStyle.height = options.frame.height;
   }
+  logDiffOpenTiming("window.open.prepare.finish", () => ({
+    focusUrlInput: options.focusUrlInput === true,
+    prepareMs: Number((nowMs() - prepareStartedAt).toFixed(1)),
+    source,
+    windowIdentifier,
+  }));
 
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     identifier: windowIdentifier,

@@ -455,30 +455,18 @@ export function DiffLaunchController({
   useEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
-      let loadTimeout: ReturnType<typeof setTimeout> | undefined;
       logDiffOpenTiming("viewer.launchSource.effect", () => ({
         source: initialSource,
       }));
-      setLoadingSourceValue(initialSource);
-      const frameHandle = requestAnimationFrame(() => {
-        loadTimeout = setTimeout(() => {
-          logDiffOpenTiming("viewer.launchSource.deferredLoad", () => ({
-            source: initialSource,
-          }));
-          loadSource(initialSource, { reason: "launch" }).catch((error: unknown) => {
-            console.error(getErrorMessage(error));
-          });
-        }, 0);
+      logDiffOpenTiming("viewer.launchSource.loadImmediate", () => ({
+        source: initialSource,
+      }));
+      loadSource(initialSource, { reason: "launch" }).catch((error: unknown) => {
+        console.error(getErrorMessage(error));
       });
-      return () => {
-        cancelAnimationFrame(frameHandle);
-        if (loadTimeout) {
-          clearTimeout(loadTimeout);
-        }
-      };
     }
     return undefined;
-  }, [folderPath, loadSource, setLoadingSourceValue, source]);
+  }, [folderPath, loadSource, source]);
 
   useEffect(() => {
     const shouldFocusUrlInput = typeof focusUrlInputRequestId === "number" && !source && !folderPath;
