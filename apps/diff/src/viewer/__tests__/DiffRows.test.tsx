@@ -2,7 +2,7 @@ import type { DiffFileSummary, DiffRenderRow, DiffSideBySideRenderRow } from "@l
 import { observable } from "@legendapp/state";
 import { render } from "@testing-library/react-native";
 import React from "react";
-import { DiffSideBySideRow, DiffUnifiedRow, type DiffRenderFields } from "../DiffRows";
+import { DiffSideBySideRow, DiffUnifiedRow, type DiffRowRenderState } from "../DiffRows";
 import { diffChangeTypeAdd, diffChangeTypeRemove, diffRowKindFileHeader } from "../diffViewerConstants";
 
 function createFile(overrides: Partial<DiffFileSummary> = {}): DiffFileSummary {
@@ -35,47 +35,52 @@ function createRow(overrides: Partial<DiffRenderRow> = {}): DiffRenderRow {
   };
 }
 
-function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRenderFields {
+function createRowRenderState(overrides: Partial<DiffRowRenderState> = {}): DiffRowRenderState {
   const file = createFile();
   return {
-    borderColor: "#30363d",
-    collapsedFileIndexList: [],
-    document: null,
-    fileByIndex: new Map([[file.index, file]]),
-    fileByRowStart: new Map([[file.rowStart, file]]),
-    fileHeaderBackgroundColor: "#161b22",
-    fileHeaderRowIndexes: new Set([file.rowStart]),
-    fontFamily: "Menlo",
-    fontSize: 12,
-    foregroundColor: "#f0f6fc",
-    hunkHeaderBackgroundColor: "#0d1117",
-    mutedColor: "#8b949e",
-    nativeSideBySideRowConfigId: "test:blocks",
-    nativeSideBySideRowConfigVersion: 1,
-    nativeUnifiedRowConfigId: "test:unified",
-    nativeUnifiedRowConfigVersion: 1,
-    rowHeight: 22,
-    showOnlyHunks: true,
-    sideBySideFileHeaderByListIndex: new Map(),
-    sideBySideRowCount: 0,
-    syntaxAppearance: "dark",
-    syntaxHighlightingEnabled: true,
-    syntaxStyleStore: {
-      current: new Map(),
-      getSnapshot: () => 0,
-      refresh: () => {
-      },
-      subscribe: () => () => {
-      },
+    document: {
+      collapsedFileIndexList: [],
+      current: null,
+      fileByIndex: new Map([[file.index, file]]),
+      fileByRowStart: new Map([[file.rowStart, file]]),
+      fileHeaderRowIndexes: new Set([file.rowStart]),
+      sideBySideFileHeaderByListIndex: new Map(),
+      sideBySideRowCount: 0,
     },
-    syntaxThemeName: "dark-plus",
-    toggleFileCollapsed: jest.fn(),
+    nativeRows: {
+      sideBySideConfigId: "test:blocks",
+      sideBySideConfigVersion: 1,
+      unifiedConfigId: "test:unified",
+      unifiedConfigVersion: 1,
+    },
+    presentation: {
+      borderColor: "#30363d",
+      fileHeaderBackgroundColor: "#161b22",
+      fontFamily: "Menlo",
+      fontSize: 12,
+      foregroundColor: "#f0f6fc",
+      hunkHeaderBackgroundColor: "#0d1117",
+      mutedColor: "#8b949e",
+      rowHeight: 22,
+      showOnlyHunks: true,
+      syntaxAppearance: "dark",
+      syntaxHighlightingEnabled: true,
+      syntaxStyleStore: {
+        current: new Map(),
+        getSnapshot: () => 0,
+        refresh: () => {
+        },
+        subscribe: () => () => {
+        },
+      },
+      syntaxThemeName: "dark-plus",
+    },
     ...overrides,
   };
 }
 
-function createRenderFields$(overrides: Partial<DiffRenderFields> = {}) {
-  return observable(createRenderFields(overrides));
+function createRowRender$(overrides: Partial<DiffRowRenderState> = {}) {
+  return observable(createRowRenderState(overrides));
 }
 
 function renderedTreeHasProps(node: unknown, expectedProps: Record<string, unknown>): boolean {
@@ -96,13 +101,14 @@ function renderedTreeHasProps(node: unknown, expectedProps: Record<string, unkno
 
 describe("DiffRows", () => {
   it("renders unified file headers with status and counts", async () => {
-    const renderFields$ = createRenderFields$();
+    const rowRender$ = createRowRender$();
     const view = await render(
       <DiffUnifiedRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={0}
-        renderFields$={renderFields$}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={rowRender$}
         row={createRow({
           fileIndex: 0,
           index: 0,
@@ -126,10 +132,17 @@ describe("DiffRows", () => {
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={1}
-        renderFields$={createRenderFields$({
-          document: {} as never,
-          fileHeaderRowIndexes: new Set(),
-          showOnlyHunks: false,
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$({
+          document: {
+            ...createRowRenderState().document,
+            current: {} as never,
+            fileHeaderRowIndexes: new Set(),
+          },
+          presentation: {
+            ...createRowRenderState().presentation,
+            showOnlyHunks: false,
+          },
         })}
         row={createRow({
           changeType: diffChangeTypeAdd,
@@ -182,9 +195,16 @@ describe("DiffRows", () => {
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={0}
-        renderFields$={createRenderFields$({
-          document: {} as never,
-          showOnlyHunks: false,
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$({
+          document: {
+            ...createRowRenderState().document,
+            current: {} as never,
+          },
+          presentation: {
+            ...createRowRenderState().presentation,
+            showOnlyHunks: false,
+          },
         })}
         row={sideBySideRow}
       />,

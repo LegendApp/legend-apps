@@ -26,32 +26,37 @@ import {
   getFileStatusPresentation,
 } from "./diffFilePresentation";
 
-export type DiffRenderFields = {
-  borderColor: string;
-  collapsedFileIndexList: readonly number[];
-  document: DiffDocument | null;
-  fileHeaderBackgroundColor: string;
-  fileByIndex: ReadonlyMap<number, DiffFileSummary>;
-  fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
-  fileHeaderRowIndexes: ReadonlySet<number>;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  hunkHeaderBackgroundColor: string;
-  mutedColor: string;
-  nativeSideBySideRowConfigId: string;
-  nativeSideBySideRowConfigVersion: number;
-  nativeUnifiedRowConfigId: string;
-  nativeUnifiedRowConfigVersion: number;
-  rowHeight: number;
-  showOnlyHunks: boolean;
-  sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
-  sideBySideRowCount: number;
-  syntaxAppearance: "dark" | "light";
-  syntaxHighlightingEnabled: boolean;
-  syntaxStyleStore: DiffSyntaxStyleStore;
-  syntaxThemeName: string;
-  toggleFileCollapsed: (fileIndex: number) => void;
+export type DiffRowRenderState = {
+  document: {
+    collapsedFileIndexList: readonly number[];
+    current: DiffDocument | null;
+    fileByIndex: ReadonlyMap<number, DiffFileSummary>;
+    fileByRowStart: ReadonlyMap<number, DiffFileSummary>;
+    fileHeaderRowIndexes: ReadonlySet<number>;
+    sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
+    sideBySideRowCount: number;
+  };
+  nativeRows: {
+    sideBySideConfigId: string;
+    sideBySideConfigVersion: number;
+    unifiedConfigId: string;
+    unifiedConfigVersion: number;
+  };
+  presentation: {
+    borderColor: string;
+    fileHeaderBackgroundColor: string;
+    fontFamily: string;
+    fontSize: number;
+    foregroundColor: string;
+    hunkHeaderBackgroundColor: string;
+    mutedColor: string;
+    rowHeight: number;
+    showOnlyHunks: boolean;
+    syntaxAppearance: "dark" | "light";
+    syntaxHighlightingEnabled: boolean;
+    syntaxStyleStore: DiffSyntaxStyleStore;
+    syntaxThemeName: string;
+  };
 };
 
 type DiffHunkHeaderInfo = {
@@ -91,7 +96,8 @@ type DiffUnifiedRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
-  renderFields$: Observable<DiffRenderFields>;
+  onToggleFileCollapsed: (fileIndex: number) => void;
+  rowRender$: Observable<DiffRowRenderState>;
   row: DiffRenderRow | undefined;
 };
 
@@ -99,7 +105,8 @@ type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
-  renderFields$: Observable<DiffRenderFields>;
+  onToggleFileCollapsed: (fileIndex: number) => void;
+  rowRender$: Observable<DiffRowRenderState>;
   row: DiffSideBySideRenderRow | undefined;
 };
 
@@ -287,15 +294,15 @@ const DiffHunkHeader = memo(function DiffHunkHeader({
 function DiffNativeUnifiedLineRow({
   adaptiveRender,
   index,
-  renderFields$,
+  rowRender$,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
-  renderFields$: Observable<DiffRenderFields>;
+  rowRender$: Observable<DiffRowRenderState>;
 }) {
-  const nativeUnifiedRowConfigId = useValue(() => renderFields$.nativeUnifiedRowConfigId.get());
-  const nativeUnifiedRowConfigVersion = useValue(() => renderFields$.nativeUnifiedRowConfigVersion.get());
-  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const nativeUnifiedRowConfigId = useValue(() => rowRender$.nativeRows.unifiedConfigId.get());
+  const nativeUnifiedRowConfigVersion = useValue(() => rowRender$.nativeRows.unifiedConfigVersion.get());
+  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
 
   return (
     <DiffNativeRow
@@ -311,15 +318,15 @@ function DiffNativeUnifiedLineRow({
 function DiffNativeSideBySideLineRow({
   adaptiveRender,
   index,
-  renderFields$,
+  rowRender$,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
-  renderFields$: Observable<DiffRenderFields>;
+  rowRender$: Observable<DiffRowRenderState>;
 }) {
-  const nativeSideBySideRowConfigId = useValue(() => renderFields$.nativeSideBySideRowConfigId.get());
-  const nativeSideBySideRowConfigVersion = useValue(() => renderFields$.nativeSideBySideRowConfigVersion.get());
-  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const nativeSideBySideRowConfigId = useValue(() => rowRender$.nativeRows.sideBySideConfigId.get());
+  const nativeSideBySideRowConfigVersion = useValue(() => rowRender$.nativeRows.sideBySideConfigVersion.get());
+  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
 
   return (
     <DiffNativeRow
@@ -426,24 +433,24 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   adaptiveRender,
   collapsedFileIndexes$,
   index,
-  renderFields$,
+  onToggleFileCollapsed,
+  rowRender$,
   row,
 }: DiffUnifiedRowProps) {
-  const borderColor = useValue(() => renderFields$.borderColor.get());
-  const document = useValue(() => renderFields$.document.get()) as DiffDocument | null;
-  const fileHeaderBackgroundColor = useValue(() => renderFields$.fileHeaderBackgroundColor.get());
-  const fileByIndex = useValue(() => renderFields$.fileByIndex.get());
-  const fileByRowStart = useValue(() => renderFields$.fileByRowStart.get());
-  const fileHeaderRowIndexes = useValue(() => renderFields$.fileHeaderRowIndexes.get());
-  const fontFamily = useValue(() => renderFields$.fontFamily.get());
-  const fontSize = useValue(() => renderFields$.fontSize.get());
-  const foregroundColor = useValue(() => renderFields$.foregroundColor.get());
-  const hunkHeaderBackgroundColor = useValue(() => renderFields$.hunkHeaderBackgroundColor.get());
-  const mutedColor = useValue(() => renderFields$.mutedColor.get());
-  const rowHeight = useValue(() => renderFields$.rowHeight.get());
-  const showOnlyHunks = useValue(() => renderFields$.showOnlyHunks.get());
-  const syntaxAppearance = useValue(() => renderFields$.syntaxAppearance.get());
-  const toggleFileCollapsed = useValue(() => renderFields$.toggleFileCollapsed.get()) as unknown as (fileIndex: number) => void;
+  const borderColor = useValue(() => rowRender$.presentation.borderColor.get());
+  const document = useValue(() => rowRender$.document.current.get()) as DiffDocument | null;
+  const fileHeaderBackgroundColor = useValue(() => rowRender$.presentation.fileHeaderBackgroundColor.get());
+  const fileByIndex = useValue(() => rowRender$.document.fileByIndex.get());
+  const fileByRowStart = useValue(() => rowRender$.document.fileByRowStart.get());
+  const fileHeaderRowIndexes = useValue(() => rowRender$.document.fileHeaderRowIndexes.get());
+  const fontFamily = useValue(() => rowRender$.presentation.fontFamily.get());
+  const fontSize = useValue(() => rowRender$.presentation.fontSize.get());
+  const foregroundColor = useValue(() => rowRender$.presentation.foregroundColor.get());
+  const hunkHeaderBackgroundColor = useValue(() => rowRender$.presentation.hunkHeaderBackgroundColor.get());
+  const mutedColor = useValue(() => rowRender$.presentation.mutedColor.get());
+  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
+  const showOnlyHunks = useValue(() => rowRender$.presentation.showOnlyHunks.get());
+  const syntaxAppearance = useValue(() => rowRender$.presentation.syntaxAppearance.get());
   const isFileHeader = row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index);
   const displayRow = row ?? (
     document && !isFileHeader
@@ -469,7 +476,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
         fontSize={fontSize}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
-        onToggleFileCollapsed={toggleFileCollapsed}
+        onToggleFileCollapsed={onToggleFileCollapsed}
         syntaxAppearance={syntaxAppearance}
       />
     );
@@ -491,7 +498,7 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
         <DiffNativeUnifiedLineRow
           adaptiveRender={adaptiveRender}
           index={index}
-          renderFields$={renderFields$}
+          rowRender$={rowRender$}
         />
       ) : (
         <View style={{ height: rowHeight }} />
@@ -504,26 +511,26 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   adaptiveRender,
   collapsedFileIndexes$,
   index,
-  renderFields$,
+  onToggleFileCollapsed,
+  rowRender$,
   row,
 }: DiffSideBySideRowProps) {
-  const borderColor = useValue(() => renderFields$.borderColor.get());
-  const collapsedFileIndexList = useValue(() => renderFields$.collapsedFileIndexList.get());
-  const document = useValue(() => renderFields$.document.get()) as DiffDocument | null;
-  const fileHeaderBackgroundColor = useValue(() => renderFields$.fileHeaderBackgroundColor.get());
-  const fileByIndex = useValue(() => renderFields$.fileByIndex.get());
-  const fileByRowStart = useValue(() => renderFields$.fileByRowStart.get());
-  const fontFamily = useValue(() => renderFields$.fontFamily.get());
-  const fontSize = useValue(() => renderFields$.fontSize.get());
-  const foregroundColor = useValue(() => renderFields$.foregroundColor.get());
-  const hunkHeaderBackgroundColor = useValue(() => renderFields$.hunkHeaderBackgroundColor.get());
-  const mutedColor = useValue(() => renderFields$.mutedColor.get());
-  const rowHeight = useValue(() => renderFields$.rowHeight.get());
-  const showOnlyHunks = useValue(() => renderFields$.showOnlyHunks.get());
-  const sideBySideFileHeaderByListIndex = useValue(() => renderFields$.sideBySideFileHeaderByListIndex.get());
-  const sideBySideRowCount = useValue(() => renderFields$.sideBySideRowCount.get());
-  const syntaxAppearance = useValue(() => renderFields$.syntaxAppearance.get());
-  const toggleFileCollapsed = useValue(() => renderFields$.toggleFileCollapsed.get()) as unknown as (fileIndex: number) => void;
+  const borderColor = useValue(() => rowRender$.presentation.borderColor.get());
+  const collapsedFileIndexList = useValue(() => rowRender$.document.collapsedFileIndexList.get());
+  const document = useValue(() => rowRender$.document.current.get()) as DiffDocument | null;
+  const fileHeaderBackgroundColor = useValue(() => rowRender$.presentation.fileHeaderBackgroundColor.get());
+  const fileByIndex = useValue(() => rowRender$.document.fileByIndex.get());
+  const fileByRowStart = useValue(() => rowRender$.document.fileByRowStart.get());
+  const fontFamily = useValue(() => rowRender$.presentation.fontFamily.get());
+  const fontSize = useValue(() => rowRender$.presentation.fontSize.get());
+  const foregroundColor = useValue(() => rowRender$.presentation.foregroundColor.get());
+  const hunkHeaderBackgroundColor = useValue(() => rowRender$.presentation.hunkHeaderBackgroundColor.get());
+  const mutedColor = useValue(() => rowRender$.presentation.mutedColor.get());
+  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
+  const showOnlyHunks = useValue(() => rowRender$.presentation.showOnlyHunks.get());
+  const sideBySideFileHeaderByListIndex = useValue(() => rowRender$.document.sideBySideFileHeaderByListIndex.get());
+  const sideBySideRowCount = useValue(() => rowRender$.document.sideBySideRowCount.get());
+  const syntaxAppearance = useValue(() => rowRender$.presentation.syntaxAppearance.get());
   const displayRow = showOnlyHunks
     ? row ?? (
         document
@@ -559,7 +566,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         fontSize={fontSize}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
-        onToggleFileCollapsed={toggleFileCollapsed}
+        onToggleFileCollapsed={onToggleFileCollapsed}
         syntaxAppearance={syntaxAppearance}
       />
     );
@@ -581,7 +588,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
         <DiffNativeSideBySideLineRow
           adaptiveRender={adaptiveRender}
           index={index}
-          renderFields$={renderFields$}
+          rowRender$={rowRender$}
         />
       ) : (
         <View style={{ height: rowHeight }} />

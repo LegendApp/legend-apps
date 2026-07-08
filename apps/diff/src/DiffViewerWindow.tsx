@@ -169,7 +169,7 @@ import {
   isDiffUnifiedHunkStart,
   getDiffRowPalette,
   getSideBySideDividerColor,
-  type DiffRenderFields,
+  type DiffRowRenderState,
 } from "./viewer/DiffRows";
 import {
   DiffActionHandlersController,
@@ -448,21 +448,21 @@ type DiffSidebarFileRowProps = {
   activeFileIndex$: Observable<number | null>;
   file: DiffFileSummary;
   mergeState$: Observable<DiffMergeState>;
-  renderFields$: Observable<DiffSidebarRenderFields>;
+  onPressFile: (file: DiffFileSummary) => void;
+  sidebarRender$: Observable<DiffSidebarRenderState>;
 };
 
 type DiffSidebarFolderRowProps = {
   collapsed: boolean;
-  renderFields$: Observable<DiffSidebarRenderFields>;
+  onToggleFolder: (title: string) => void;
+  sidebarRender$: Observable<DiffSidebarRenderState>;
   title: string;
 };
 
-type DiffSidebarRenderFields = {
+type DiffSidebarRenderState = {
   conflictBadgeBackgroundColor: string;
   conflictBadgeTextColor: string;
   foregroundColor: string;
-  onPressFile: (file: DiffFileSummary) => void;
-  onToggleFolder: (title: string) => void;
   selectedBackgroundColor: string;
   selectedBorderColor: string;
   sidebarFolderColor: string;
@@ -587,14 +587,13 @@ type DiffNativeRowConfigProps = {
   themeName: string;
 };
 
-type DiffMergeRenderFields = {
+type DiffMergeRenderState = {
   borderColor: string;
   fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
   mutedColor: string;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
   rowHeight: number;
   syntaxAppearance: "dark" | "light";
@@ -607,14 +606,6 @@ function useRenderLatestRef<T>(value: T) {
   const ref = useRef(value);
   ref.current = value;
   return ref;
-}
-
-function useObservableLatest<T>(value: T): Observable<T> {
-  const value$ = useObservable(value as never);
-  useEffect(() => {
-    value$.set(value as never);
-  }, [value$, value]);
-  return value$ as unknown as Observable<T>;
 }
 
 function getDiffSidebarItemSize() {
@@ -684,11 +675,11 @@ function createDiffSidebarEntries(files: readonly DiffFileSummary[], collapsedFo
 
 const DiffSidebarFolderRow = memo(function DiffSidebarFolderRow({
   collapsed,
-  renderFields$,
+  onToggleFolder,
+  sidebarRender$,
   title,
 }: DiffSidebarFolderRowProps) {
-  const color = useValue(() => renderFields$.sidebarFolderColor.get());
-  const onToggleFolder = useValue(() => renderFields$.onToggleFolder.get()) as unknown as (title: string) => void;
+  const color = useValue(() => sidebarRender$.sidebarFolderColor.get());
   const handleToggle = useCallback(() => {
     onToggleFolder(title);
   }, [onToggleFolder, title]);
@@ -718,22 +709,23 @@ function diffSidebarFileRowPropsEqual(previous: DiffSidebarFileRowProps, next: D
   return previous.activeFileIndex$ === next.activeFileIndex$
     && previous.file === next.file
     && previous.mergeState$ === next.mergeState$
-    && previous.renderFields$ === next.renderFields$;
+    && previous.onPressFile === next.onPressFile
+    && previous.sidebarRender$ === next.sidebarRender$;
 }
 
 const DiffSidebarFileRow = memo(function DiffSidebarFileRow({
   activeFileIndex$,
   file,
   mergeState$,
-  renderFields$,
+  onPressFile,
+  sidebarRender$,
 }: DiffSidebarFileRowProps) {
   const isActive = useValue(() => activeFileIndex$.get() === file.index);
-  const conflictBadgeBackgroundColor = useValue(() => renderFields$.conflictBadgeBackgroundColor.get());
-  const conflictBadgeTextColor = useValue(() => renderFields$.conflictBadgeTextColor.get());
-  const foregroundColor = useValue(() => renderFields$.foregroundColor.get());
-  const onPressFile = useValue(() => renderFields$.onPressFile.get()) as unknown as (file: DiffFileSummary) => void;
-  const selectedBackgroundColor = useValue(() => renderFields$.selectedBackgroundColor.get());
-  const selectedBorderColor = useValue(() => renderFields$.selectedBorderColor.get());
+  const conflictBadgeBackgroundColor = useValue(() => sidebarRender$.conflictBadgeBackgroundColor.get());
+  const conflictBadgeTextColor = useValue(() => sidebarRender$.conflictBadgeTextColor.get());
+  const foregroundColor = useValue(() => sidebarRender$.foregroundColor.get());
+  const selectedBackgroundColor = useValue(() => sidebarRender$.selectedBackgroundColor.get());
+  const selectedBorderColor = useValue(() => sidebarRender$.selectedBorderColor.get());
   const mergeFile = useValue(() => getMergeConflictFileForDiffFile(mergeState$.get(), file));
   const statusPresentation = mergeFile?.markerBlocks.length
     ? getConflictedFileStatusPresentation()
@@ -1891,7 +1883,8 @@ function DiffMergeLineRow({
   controlBlock,
   file,
   mergeSyntaxByPath$,
-  renderFields$,
+  mergeRender$,
+  onResolveMergeConflict,
   resolvingMergeConflictKeys$,
   row,
   rowIndex,
@@ -1899,21 +1892,21 @@ function DiffMergeLineRow({
   controlBlock: DiffMergeConflictBlock | null;
   file: DiffMergeConflictFile;
   mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
-  renderFields$: Observable<DiffMergeRenderFields>;
+  mergeRender$: Observable<DiffMergeRenderState>;
+  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
   row: DiffMergeDisplayRow | undefined;
   rowIndex: number;
 }) {
-  const borderColor = useValue(() => renderFields$.borderColor.get());
-  const fileHeaderBackgroundColor = useValue(() => renderFields$.fileHeaderBackgroundColor.get());
-  const fontFamily = useValue(() => renderFields$.fontFamily.get());
-  const fontSize = useValue(() => renderFields$.fontSize.get());
-  const foregroundColor = useValue(() => renderFields$.foregroundColor.get());
-  const mutedColor = useValue(() => renderFields$.mutedColor.get());
-  const onResolveMergeConflict = useValue(() => renderFields$.onResolveMergeConflict.get()) as unknown as DiffMergeRenderFields["onResolveMergeConflict"];
-  const primaryColor = useValue(() => renderFields$.primaryColor.get());
-  const rowHeight = useValue(() => renderFields$.rowHeight.get());
-  const syntaxAppearance = useValue(() => renderFields$.syntaxAppearance.get());
+  const borderColor = useValue(() => mergeRender$.borderColor.get());
+  const fileHeaderBackgroundColor = useValue(() => mergeRender$.fileHeaderBackgroundColor.get());
+  const fontFamily = useValue(() => mergeRender$.fontFamily.get());
+  const fontSize = useValue(() => mergeRender$.fontSize.get());
+  const foregroundColor = useValue(() => mergeRender$.foregroundColor.get());
+  const mutedColor = useValue(() => mergeRender$.mutedColor.get());
+  const primaryColor = useValue(() => mergeRender$.primaryColor.get());
+  const rowHeight = useValue(() => mergeRender$.rowHeight.get());
+  const syntaxAppearance = useValue(() => mergeRender$.syntaxAppearance.get());
   const mergeSyntax = useValue(() => mergeSyntaxByPath$[file.path].get());
   const tokenStyleById = mergeSyntax?.tokenStyleById ?? new Map<number, SyntaxStyle>();
   const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, rowIndex, row?.leftText ?? "");
@@ -1985,11 +1978,11 @@ function DiffMergeLineRow({
 }
 
 function DiffMergePlaceholderRow({
-  renderFields$,
+  mergeRender$,
 }: {
-  renderFields$: Observable<DiffMergeRenderFields>;
+  mergeRender$: Observable<DiffMergeRenderState>;
 }) {
-  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const rowHeight = useValue(() => mergeRender$.rowHeight.get());
   return <View style={{ height: rowHeight }} />;
 }
 
@@ -2039,18 +2032,27 @@ function useDiffInlineMergeModel({
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }) {
   const mergeSyntaxByPath$ = useObservable<DiffMergeSyntaxByPath>({});
-  const mergeRenderFields$ = useObservableLatest<DiffMergeRenderFields>({
+  const mergeRender$ = useObservable<DiffMergeRenderState>(() => ({
     borderColor,
     fileHeaderBackgroundColor,
     fontFamily,
     fontSize,
     foregroundColor,
     mutedColor,
-    onResolveMergeConflict,
     primaryColor,
     rowHeight,
     syntaxAppearance,
-  });
+  }), [
+    borderColor,
+    fileHeaderBackgroundColor,
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    mutedColor,
+    primaryColor,
+    rowHeight,
+    syntaxAppearance,
+  ]);
   const mergeDisplayModelByPath = useMemo(() => {
     const map = new Map<string, DiffMergeDisplayModel>();
     if (mergeState.status === "ready") {
@@ -2131,7 +2133,7 @@ function useDiffInlineMergeModel({
     ({ index }: VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>) => {
       const mergeRow = inlineList.rowByItemIndex.get(index);
       if (!mergeRow) {
-        return <DiffMergePlaceholderRow renderFields$={mergeRenderFields$} />;
+        return <DiffMergePlaceholderRow mergeRender$={mergeRender$} />;
       }
       const { file, row: displayRow, rowIndex } = mergeRow;
       const controlRowByBlockKey = controlRowByFilePath.get(file.path) ?? new Map<string, number>();
@@ -2143,15 +2145,16 @@ function useDiffInlineMergeModel({
         <DiffMergeLineRow
           controlBlock={controlBlock}
           file={file}
+          mergeRender$={mergeRender$}
           mergeSyntaxByPath$={mergeSyntaxByPath$}
-          renderFields$={mergeRenderFields$}
+          onResolveMergeConflict={onResolveMergeConflict}
           resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
           row={displayRow}
           rowIndex={rowIndex}
         />
       );
     },
-    [controlRowByFilePath, inlineList, mergeRenderFields$, mergeSyntaxByPath$, resolvingMergeConflictKeys$],
+    [controlRowByFilePath, inlineList, mergeRender$, mergeSyntaxByPath$, onResolveMergeConflict, resolvingMergeConflictKeys$],
   );
 
   useEffect(() => {
@@ -4277,66 +4280,63 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
-  const renderFields = useMemo<DiffRenderFields>(
-    () => ({
-      borderColor: diffPalette.border,
+  const rowRender$ = useObservable<DiffRowRenderState>(() => ({
+    document: {
       collapsedFileIndexList,
-      document: loadedDocument,
-      fileHeaderBackgroundColor,
+      current: loadedDocument,
       fileByIndex,
       fileByRowStart,
       fileHeaderRowIndexes,
+      sideBySideFileHeaderByListIndex,
+      sideBySideRowCount,
+    },
+    nativeRows: {
+      sideBySideConfigId: nativeSideBySideRowConfig.configId,
+      sideBySideConfigVersion: nativeSideBySideRowConfig.configVersion,
+      unifiedConfigId: nativeUnifiedRowConfig.configId,
+      unifiedConfigVersion: nativeUnifiedRowConfig.configVersion,
+    },
+    presentation: {
+      borderColor: diffPalette.border,
+      fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
       foregroundColor,
       hunkHeaderBackgroundColor,
       mutedColor,
-      nativeSideBySideRowConfigId: nativeSideBySideRowConfig.configId,
-      nativeSideBySideRowConfigVersion: nativeSideBySideRowConfig.configVersion,
-      nativeUnifiedRowConfigId: nativeUnifiedRowConfig.configId,
-      nativeUnifiedRowConfigVersion: nativeUnifiedRowConfig.configVersion,
       rowHeight,
       showOnlyHunks,
-      sideBySideFileHeaderByListIndex,
-      sideBySideRowCount,
       syntaxAppearance: syntaxTheme.appearance,
       syntaxHighlightingEnabled,
       syntaxStyleStore,
       syntaxThemeName: listSyntaxTheme,
-      toggleFileCollapsed,
-    }),
-    [
-      diffPalette.border,
-      collapsedFileIndexList,
-      fileHeaderBackgroundColor,
-      fileByIndex,
-      fileByRowStart,
-      fileHeaderRowIndexes,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      hunkHeaderBackgroundColor,
-      loadedDocument,
-      mutedColor,
-      nativeSideBySideRowConfig.configId,
-      nativeSideBySideRowConfig.configVersion,
-      nativeUnifiedRowConfig.configId,
-      nativeUnifiedRowConfig.configVersion,
-      rowHeight,
-      showOnlyHunks,
-      sideBySideFileHeaderByListIndex,
-      sideBySideRowCount,
-      syntaxHighlightingEnabled,
-      syntaxStyleStore,
-      syntaxTheme.appearance,
-      listSyntaxTheme,
-      toggleFileCollapsed,
-    ],
-  );
-  const renderFields$ = useObservable<DiffRenderFields>(renderFields);
-  useEffect(() => {
-    renderFields$.assign(renderFields);
-  }, [renderFields$, renderFields]);
+    },
+  }), [
+    collapsedFileIndexList,
+    diffPalette.border,
+    fileByIndex,
+    fileByRowStart,
+    fileHeaderBackgroundColor,
+    fileHeaderRowIndexes,
+    fontFamily,
+    fontSize,
+    foregroundColor,
+    hunkHeaderBackgroundColor,
+    listSyntaxTheme,
+    loadedDocument,
+    mutedColor,
+    nativeSideBySideRowConfig.configId,
+    nativeSideBySideRowConfig.configVersion,
+    nativeUnifiedRowConfig.configId,
+    nativeUnifiedRowConfig.configVersion,
+    rowHeight,
+    showOnlyHunks,
+    sideBySideFileHeaderByListIndex,
+    sideBySideRowCount,
+    syntaxHighlightingEnabled,
+    syntaxStyleStore,
+    syntaxTheme.appearance,
+  ]);
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
@@ -4509,16 +4509,21 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return nextFolders;
     });
   }, []);
-  const sidebarRenderFields$ = useObservableLatest<DiffSidebarRenderFields>({
+  const sidebarRender$ = useObservable<DiffSidebarRenderState>(() => ({
     conflictBadgeBackgroundColor: sidebarConflictBadgeBackgroundColor,
     conflictBadgeTextColor: sidebarConflictBadgeTextColor,
     foregroundColor,
-    onPressFile: handleSidebarFilePress,
-    onToggleFolder: toggleSidebarFolder,
     selectedBackgroundColor: selectedSidebarFileBackgroundColor,
     selectedBorderColor: diffPalette.sidebarSelectedBorder,
     sidebarFolderColor,
-  });
+  }), [
+    diffPalette.sidebarSelectedBorder,
+    foregroundColor,
+    selectedSidebarFileBackgroundColor,
+    sidebarConflictBadgeBackgroundColor,
+    sidebarConflictBadgeTextColor,
+    sidebarFolderColor,
+  ]);
 
   const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
     let row: ReactElement;
@@ -4526,7 +4531,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       row = (
         <DiffSidebarFolderRow
           collapsed={item.collapsed}
-          renderFields$={sidebarRenderFields$}
+          onToggleFolder={toggleSidebarFolder}
+          sidebarRender$={sidebarRender$}
           title={item.title}
         />
       );
@@ -4545,13 +4551,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           activeFileIndex$={activeFileIndex$}
           file={file}
           mergeState$={mergeState$}
-          renderFields$={sidebarRenderFields$}
+          onPressFile={handleSidebarFilePress}
+          sidebarRender$={sidebarRender$}
         />
       );
     }
 
     return row;
-  }, [activeFileIndex$, mergeState$, sidebarRenderFields$]);
+  }, [activeFileIndex$, handleSidebarFilePress, mergeState$, sidebarRender$, toggleSidebarFolder]);
 
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     const nextMetrics = {
@@ -4645,12 +4652,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           adaptiveRender={adaptiveRender}
           collapsedFileIndexes$={collapsedFileIndexes$}
           index={index}
-          renderFields$={renderFields$}
+          onToggleFileCollapsed={toggleFileCollapsed}
+          rowRender$={rowRender$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields$],
+    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, rowRender$, toggleFileCollapsed],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -4682,12 +4690,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           adaptiveRender={adaptiveRender}
           collapsedFileIndexes$={collapsedFileIndexes$}
           index={index}
-          renderFields$={renderFields$}
+          onToggleFileCollapsed={toggleFileCollapsed}
+          rowRender$={rowRender$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields$],
+    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, rowRender$, toggleFileCollapsed],
   );
 
   const documentErrorHeight = documentError
