@@ -1147,7 +1147,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   visibleItemIndexes,
 }: DiffLoadedBodyProps) {
   const bodyStartedAt = nowMs();
-  const activeFileIndex = useValue(activeFileIndex$);
   const diffPaneHeight = useValue(diffPaneHeight$);
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const diffContentHeight = diffPaneHeight;
@@ -1203,12 +1202,14 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     [collapsedSidebarFolders, shouldRenderSidebarList, state.files],
   );
   const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
-  const activeMergeFile = getActiveMergeFile({
-    activeFileIndex,
-    files: state.files,
-    mergeState,
-  });
-  const shouldShowNoChanges = activeItemIndexes.length === 0 && !activeMergeFile;
+  const shouldShowNoChanges = useValue(() => (
+    activeItemIndexes.length === 0 &&
+    !getActiveMergeFile({
+      activeFileIndex: activeFileIndex$.get(),
+      files: state.files,
+      mergeState,
+    })
+  ));
   const requestUnifiedRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     if (!nativeRowsRef.current.nativeUnifiedRows) {
       diffRowsRequestRangeRef.current(start, count, options);
