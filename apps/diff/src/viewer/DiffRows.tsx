@@ -27,6 +27,9 @@ import {
 } from "./diffFilePresentation";
 
 export type DiffRenderFields = {
+  activeSearchHighlightByRowIndex: ReadonlyMap<number, string>;
+  activeSearchHighlightColor: string;
+  activeSearchRowHighlightColor: string;
   borderColor: string;
   collapsedFileIndexList: readonly number[];
   document: DiffDocument | null;
@@ -298,6 +301,11 @@ function DiffNativeUnifiedLineRow({
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
+      activeSearchHighlightColor={renderFields.activeSearchHighlightColor}
+      activeSearchHighlights={renderFields.activeSearchHighlightByRowIndex.get(index) ?? ""}
+      activeSearchNewHighlights=""
+      activeSearchOldHighlights=""
+      activeSearchRowHighlightColor={renderFields.activeSearchRowHighlightColor}
       configId={renderFields.nativeUnifiedRowConfigId}
       configVersion={renderFields.nativeUnifiedRowConfigVersion}
       rowIndex={index}
@@ -330,6 +338,11 @@ function DiffNativeSideBySideLineRow({
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
+      activeSearchHighlightColor={renderFields.activeSearchHighlightColor}
+      activeSearchHighlights=""
+      activeSearchNewHighlights={newRowIndex >= 0 ? renderFields.activeSearchHighlightByRowIndex.get(newRowIndex) ?? "" : ""}
+      activeSearchOldHighlights={oldRowIndex >= 0 ? renderFields.activeSearchHighlightByRowIndex.get(oldRowIndex) ?? "" : ""}
+      activeSearchRowHighlightColor={renderFields.activeSearchRowHighlightColor}
       configId={renderFields.nativeSideBySideRowConfigId}
       configVersion={renderFields.nativeSideBySideRowConfigVersion}
       rowIndex={index}

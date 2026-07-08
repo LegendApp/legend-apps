@@ -1,5 +1,6 @@
 import type { DiffDocument, DiffFileSummary, DiffRenderRow } from "@legend-desktop/diff-parser";
 import {
+  createActiveDiffSearchHighlightMap,
   createDiffSearchHighlightMap,
   createDiffSearchResults,
   encodeDiffSearchRanges,
@@ -95,14 +96,23 @@ describe("diffSearch", () => {
       createFile({ index: 1, path: "src/Other.ts", rowStart: 2 }),
     ], "app");
 
-    expect(results).toHaveLength(1);
+    expect(results).toHaveLength(2);
     expect(results[0]).toMatchObject({
       fileIndex: 0,
       kind: "line",
       label: "src/App.tsx:4",
+      range: { length: 3, startColumn: 6 },
+      rowIndex: 1,
+    });
+    expect(results[1]).toMatchObject({
+      fileIndex: 0,
+      kind: "line",
+      label: "src/App.tsx:4",
+      range: { length: 3, startColumn: 18 },
       rowIndex: 1,
     });
     expect(createDiffSearchHighlightMap(results).get(1)).toBe("6,3;18,3");
+    expect(createActiveDiffSearchHighlightMap(results[1]).get(1)).toBe("18,3");
   });
 
   it("uses @ queries for file paths", () => {

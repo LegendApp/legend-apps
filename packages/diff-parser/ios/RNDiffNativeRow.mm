@@ -345,6 +345,11 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 @property(nonatomic, assign) double configVersion;
 @property(nonatomic, assign) double rowIndex;
 @property(nonatomic, copy) NSString *adaptiveRender;
+@property(nonatomic, strong) NSColor *activeSearchHighlightColor;
+@property(nonatomic, copy) NSString *activeSearchHighlights;
+@property(nonatomic, copy) NSString *activeSearchNewHighlights;
+@property(nonatomic, copy) NSString *activeSearchOldHighlights;
+@property(nonatomic, strong) NSColor *activeSearchRowHighlightColor;
 @property(nonatomic, strong) NSColor *searchHighlightColor;
 @property(nonatomic, copy) NSString *searchHighlights;
 @property(nonatomic, copy) NSString *searchNewHighlights;
@@ -359,6 +364,11 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   if (self = [super initWithFrame:NSZeroRect]) {
     _configId = @"";
     _adaptiveRender = @"normal";
+    _activeSearchHighlightColor = [NSColor colorWithRed:1 green:0.48 blue:0 alpha:0.74];
+    _activeSearchHighlights = @"";
+    _activeSearchNewHighlights = @"";
+    _activeSearchOldHighlights = @"";
+    _activeSearchRowHighlightColor = [NSColor colorWithRed:1 green:0.58 blue:0 alpha:0.22];
     _searchHighlightColor = [NSColor colorWithRed:1 green:0.78 blue:0.2 alpha:0.42];
     _searchHighlights = @"";
     _searchNewHighlights = @"";
@@ -390,7 +400,9 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   RNDiffNativeRowUnregisterView(_configId, self);
 }
 
-- (void)applyEncodedHighlights:(NSString *)encodedHighlights toAttributedText:(NSMutableAttributedString *)attributedText
+- (void)applyEncodedHighlights:(NSString *)encodedHighlights
+              toAttributedText:(NSMutableAttributedString *)attributedText
+                          color:(NSColor *)color
 {
   if (encodedHighlights.length == 0 || attributedText.length == 0) {
     return;
@@ -412,7 +424,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
     const NSUInteger location = static_cast<NSUInteger>(locationValue);
     const NSUInteger length = MIN(static_cast<NSUInteger>(lengthValue), attributedText.length - location);
     [attributedText addAttribute:NSBackgroundColorAttributeName
-                           value:self.searchHighlightColor
+                           value:color
                            range:NSMakeRange(location, length)];
   }
 }
@@ -422,13 +434,15 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                            document:(HybridDiffDocument *)document
                                              config:(RNDiffNativeRowRenderConfig *)config
                                          highlights:(NSString *)highlights
+                                   activeHighlights:(NSString *)activeHighlights
 {
   NSString *text = RNDiffStringFromStdString(plain.text);
   NSMutableAttributedString *attributedText = self.attributedTextScratch;
   [[attributedText mutableString] setString:text];
   if (attributedText.length > 0) {
     [attributedText setAttributes:config.baseTextAttributes range:NSMakeRange(0, attributedText.length)];
-    [self applyEncodedHighlights:highlights toAttributedText:attributedText];
+    [self applyEncodedHighlights:highlights toAttributedText:attributedText color:self.searchHighlightColor];
+    [self applyEncodedHighlights:activeHighlights toAttributedText:attributedText color:self.activeSearchHighlightColor];
   }
 
   if (tokens != nullptr) {
@@ -466,6 +480,10 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
   [backgroundColor setFill];
   NSRectFill(self.bounds);
+  if (self.activeSearchHighlights.length > 0) {
+    [self.activeSearchRowHighlightColor setFill];
+    NSRectFillUsingOperation(self.bounds, NSCompositingOperationSourceOver);
+  }
   [accentColor setFill];
   NSRectFill(NSMakeRect(0, 0, config.changeBarWidth, self.bounds.size.height));
 
@@ -501,7 +519,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                                                   tokens:tokens
                                                                 document:document
                                                                   config:config
-                                                              highlights:self.searchHighlights];
+                                                              highlights:self.searchHighlights
+                                                        activeHighlights:self.activeSearchHighlights];
 
   const CGFloat textX = config.changeBarWidth + config.lineNumberWidth * 2 + config.markerWidth;
   [attributedText drawInRect:NSMakeRect(textX, textY, MAX(0, self.bounds.size.width - textX - 12), config.rowHeight)];
@@ -514,6 +533,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                       document:(HybridDiffDocument *)document
                          config:(RNDiffNativeRowRenderConfig *)config
                      highlights:(NSString *)highlights
+               activeHighlights:(NSString *)activeHighlights
 {
   if (!rowVisible || plain.kind != diffRowKindLine) {
     return;
@@ -526,6 +546,10 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
   [backgroundColor setFill];
   NSRectFill(columnRect);
+  if (activeHighlights.length > 0) {
+    [self.activeSearchRowHighlightColor setFill];
+    NSRectFillUsingOperation(columnRect, NSCompositingOperationSourceOver);
+  }
 
   const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
   if (!lightRender) {
@@ -559,7 +583,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                                                   tokens:tokens
                                                                 document:document
                                                                   config:config
-                                                              highlights:highlights];
+                                                              highlights:highlights
+                                                        activeHighlights:activeHighlights];
   const CGFloat textX = columnRect.origin.x + config.lineNumberWidth + config.markerWidth;
   [attributedText drawInRect:NSMakeRect(
     textX,
@@ -589,7 +614,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                     columnRect:leftRect
                       document:document
                          config:config
-                     highlights:self.searchOldHighlights];
+                     highlights:self.searchOldHighlights
+               activeHighlights:self.activeSearchOldHighlights];
   const DiffRenderRow &newRow = row.newRowEqualsOldRow ? row.oldRow : row.newRow;
   [self drawSideBySidePlainRow:newRow
                     rowVisible:row.newRowVisible
@@ -597,7 +623,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                     columnRect:rightRect
                       document:document
                          config:config
-                     highlights:self.searchNewHighlights];
+                     highlights:self.searchNewHighlights
+               activeHighlights:self.activeSearchNewHighlights];
 
   [config.dividerColor setFill];
   NSRectFill(NSMakeRect(leftWidth, 0, 1, self.bounds.size.height));
@@ -972,6 +999,17 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.configVersion = newProps.configVersion;
   _contentView.rowIndex = newProps.rowIndex;
   _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
+  _contentView.activeSearchHighlightColor = RNDiffColorFromString(
+    [NSString stringWithUTF8String:newProps.activeSearchHighlightColor.c_str()] ?: @"",
+    [NSColor colorWithRed:1 green:0.48 blue:0 alpha:0.74]
+  );
+  _contentView.activeSearchHighlights = [NSString stringWithUTF8String:newProps.activeSearchHighlights.c_str()] ?: @"";
+  _contentView.activeSearchNewHighlights = [NSString stringWithUTF8String:newProps.activeSearchNewHighlights.c_str()] ?: @"";
+  _contentView.activeSearchOldHighlights = [NSString stringWithUTF8String:newProps.activeSearchOldHighlights.c_str()] ?: @"";
+  _contentView.activeSearchRowHighlightColor = RNDiffColorFromString(
+    [NSString stringWithUTF8String:newProps.activeSearchRowHighlightColor.c_str()] ?: @"",
+    [NSColor colorWithRed:1 green:0.58 blue:0 alpha:0.22]
+  );
   _contentView.searchHighlightColor = RNDiffColorFromString(
     [NSString stringWithUTF8String:newProps.searchHighlightColor.c_str()] ?: @"",
     [NSColor colorWithRed:1 green:0.78 blue:0.2 alpha:0.42]
@@ -992,6 +1030,9 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.configVersion = 0;
   _contentView.rowIndex = -1;
   _contentView.adaptiveRender = @"normal";
+  _contentView.activeSearchHighlights = @"";
+  _contentView.activeSearchNewHighlights = @"";
+  _contentView.activeSearchOldHighlights = @"";
   _contentView.searchHighlights = @"";
   _contentView.searchNewHighlights = @"";
   _contentView.searchOldHighlights = @"";

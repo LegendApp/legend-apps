@@ -29,6 +29,7 @@ export type DiffSearchResult =
       id: string;
       kind: "line";
       label: string;
+      range: DiffSearchRange;
       ranges: readonly DiffSearchRange[];
       rowIndex: number;
       text: string;
@@ -85,11 +86,29 @@ export function encodeDiffSearchRanges(ranges: readonly DiffSearchRange[]) {
 }
 
 export function createDiffSearchHighlightMap(results: readonly DiffSearchResult[]) {
-  const highlights = new Map<number, string>();
+  const rangesByRowIndex = new Map<number, DiffSearchRange[]>();
   for (const result of results) {
     if (result.kind === "line") {
-      highlights.set(result.rowIndex, encodeDiffSearchRanges(result.ranges));
+      const ranges = rangesByRowIndex.get(result.rowIndex);
+      if (ranges) {
+        ranges.push(...result.ranges);
+      } else {
+        rangesByRowIndex.set(result.rowIndex, [...result.ranges]);
+      }
     }
+  }
+
+  const highlights = new Map<number, string>();
+  for (const [rowIndex, ranges] of rangesByRowIndex) {
+    highlights.set(rowIndex, encodeDiffSearchRanges(ranges));
+  }
+  return highlights;
+}
+
+export function createActiveDiffSearchHighlightMap(result: DiffSearchResult | null | undefined) {
+  const highlights = new Map<number, string>();
+  if (result?.kind === "line") {
+    highlights.set(result.rowIndex, encodeDiffSearchRanges([result.range]));
   }
   return highlights;
 }
@@ -139,25 +158,26 @@ function createFileSearchResult(file: DiffFileSummary, term: string): DiffSearch
   };
 }
 
-function createLineSearchResult(row: DiffRenderRow, file: DiffFileSummary | undefined, term: string): DiffSearchResult | null {
+function createLineSearchResults(row: DiffRenderRow, file: DiffFileSummary | undefined, term: string): DiffSearchResult[] {
   if (row.kind === diffRowKindFileHeader) {
-    return null;
+    return [];
   }
 
   const ranges = findDiffSearchRanges(row.text, term);
   if (ranges.length === 0) {
-    return null;
+    return [];
   }
 
-  return {
+  return ranges.map((range, rangeIndex) => ({
     fileIndex: row.fileIndex,
-    id: `line:${row.index}`,
+    id: `line:${row.index}:${range.startColumn}:${range.length}:${rangeIndex}`,
     kind: "line",
     label: getDiffSearchLineLabel(file, row),
-    ranges,
+    range,
+    ranges: [range],
     rowIndex: row.index,
     text: row.text,
-  };
+  }));
 }
 
 export function createDiffSearchResults(
@@ -189,10 +209,8 @@ export function createDiffSearchResults(
   for (let rowStart = 0; rowStart < document.rowCount && results.length < limit; rowStart += searchRowChunkSize) {
     const rows = document.getPlainRows(rowStart, Math.min(searchRowChunkSize, document.rowCount - rowStart));
     for (const row of rows) {
-      const result = createLineSearchResult(row, fileByIndex.get(row.fileIndex), query.term);
-      if (result) {
-        results.push(result);
-      }
+      const rowResults = createLineSearchResults(row, fileByIndex.get(row.fileIndex), query.term);
+      results.push(...rowResults.slice(0, limit - results.length));
       if (results.length >= limit) {
         break;
       }

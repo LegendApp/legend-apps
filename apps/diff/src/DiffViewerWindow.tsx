@@ -142,6 +142,7 @@ import {
   type DiffInlineMergeRow,
 } from "./viewer/diffInlineMergeModel";
 import {
+  createActiveDiffSearchHighlightMap,
   createDiffSearchHighlightMap,
   createDiffSearchResults,
   getDiffSearchSubmitIndex,
@@ -211,6 +212,8 @@ const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.pre
 const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
 const diffUnsavedMergeBannerHeight = 48;
+const diffActiveSearchHighlightColor = "#ff7a00d9";
+const diffActiveSearchRowHighlightColor = "#ff950038";
 const diffSearchHighlightColor = "#ffcc336b";
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
@@ -541,6 +544,7 @@ type DiffLoadingSplitBodyProps = {
 
 type DiffListExtraData = {
   adaptiveLightModeEnabled: boolean;
+  activeSearchResultId: string;
   borderColor: string;
   collapsedFileIndexes: ReadonlySet<number>;
   collapsedFileIndexesKey: string;
@@ -2630,6 +2634,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const parsedSearchQuery = useMemo(() => parseDiffSearchQuery(searchQuery), [searchQuery]);
   const searchHighlightByRowIndex = useMemo(() => createDiffSearchHighlightMap(searchResults), [searchResults]);
+  const effectiveActiveSearchResultIndex = searchResults.length > 0
+    ? Math.min(activeSearchResultIndex, searchResults.length - 1)
+    : 0;
+  const activeSearchResult = searchResults[effectiveActiveSearchResultIndex] ?? null;
+  const activeSearchHighlightByRowIndex = useMemo(
+    () => createActiveDiffSearchHighlightMap(activeSearchResult),
+    [activeSearchResult],
+  );
 
   useEffect(() => {
     searchQueryRef.current = searchQuery;
@@ -4011,6 +4023,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const listExtraData = useMemo<DiffListExtraData>(
     () => ({
       adaptiveLightModeEnabled,
+      activeSearchResultId: activeSearchResult?.id ?? "",
       borderColor: diffPalette.border,
       collapsedFileIndexes,
       collapsedFileIndexesKey,
@@ -4029,6 +4042,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }),
     [
       adaptiveLightModeEnabled,
+      activeSearchResult,
       collapsedFileIndexes,
       collapsedFileIndexesKey,
       diffPalette.border,
@@ -4157,6 +4171,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   ]);
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
+      activeSearchHighlightByRowIndex,
+      activeSearchHighlightColor: diffActiveSearchHighlightColor,
+      activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       borderColor: diffPalette.border,
       collapsedFileIndexList,
       document: loadedDocument,
@@ -4186,6 +4203,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       toggleFileCollapsed,
     }),
     [
+      activeSearchHighlightByRowIndex,
       diffPalette.border,
       collapsedFileIndexList,
       fileHeaderBackgroundColor,
@@ -4232,6 +4250,41 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
 
+  const scrollToSearchListIndex = useCallback((listIndex: number) => {
+    listRef.current?.scrollToIndex({
+      animated: true,
+      index: listIndex,
+      viewOffset: diffTitlebarTopInset,
+      viewPosition: 0.5,
+    }).catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+    });
+  }, []);
+
+  const getSearchResultListIndex = useCallback((result: DiffSearchResult) => {
+    if (viewMode === "unified") {
+      return getVisibleListIndex(result.rowIndex);
+    }
+
+    if (!loadedDocument) {
+      return undefined;
+    }
+
+    const collapsedIndexes = [...collapsedFileIndexList];
+    const startIndex = sideBySideListIndexByRowIndex.get(result.rowIndex) ?? 0;
+    for (let listIndex = startIndex; listIndex < sideBySideRowCount; listIndex += 1) {
+      const row = loadedDocument.getPlainSideBySideRow(listIndex, collapsedIndexes);
+      if (row.kind === "file-header") {
+        if (row.sourceStart > result.rowIndex) {
+          break;
+        }
+      } else if (row.sourceStart <= result.rowIndex && result.rowIndex < row.sourceEnd) {
+        return listIndex;
+      }
+    }
+    return undefined;
+  }, [collapsedFileIndexList, getVisibleListIndex, loadedDocument, sideBySideListIndexByRowIndex, sideBySideRowCount, viewMode]);
+
   const scrollToSearchResult = useCallback((result: DiffSearchResult) => {
     const currentState = state$.peek();
     if (currentState.status !== "loaded") {
@@ -4258,29 +4311,17 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return nextIndexes;
     });
 
-    const listIndex = viewMode === "unified"
-      ? getVisibleListIndex(result.rowIndex)
-      : sideBySideListIndexByRowIndex.get(result.rowIndex);
+    const listIndex = getSearchResultListIndex(result);
     if (listIndex !== undefined) {
-      listRef.current?.scrollToIndex({
-        animated: true,
-        index: listIndex,
-        viewOffset: diffTitlebarTopInset,
-        viewPosition: 0,
-      }).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-    } else {
-      scrollToFile(file);
+      scrollToSearchListIndex(listIndex);
     }
   }, [
     activeFileIndex$,
-    getVisibleListIndex,
+    getSearchResultListIndex,
     scrollToFile,
+    scrollToSearchListIndex,
     setCollapsedFileIndexesValue,
-    sideBySideListIndexByRowIndex,
     state$,
-    viewMode,
   ]);
 
   const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResultsRef.current) => {
@@ -4290,12 +4331,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     const nextIndex = ((index % resultCount) + resultCount) % resultCount;
+    activeSearchResultIndexRef.current = nextIndex;
     setActiveSearchResultIndex(nextIndex);
     const result = results[nextIndex];
     if (result) {
-      requestAnimationFrame(() => {
-        scrollToSearchResult(result);
-      });
+      scrollToSearchResult(result);
     }
     return true;
   }, [scrollToSearchResult]);
@@ -4776,7 +4816,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           syntaxAppearance={syntaxTheme.appearance}
         />
         <DiffSearchStatusPanel
-          activeResultIndex={activeSearchResultIndex}
+          activeResultIndex={effectiveActiveSearchResultIndex}
           borderColor={diffPalette.border}
           foregroundColor={foregroundColor}
           mutedColor={mutedColor}

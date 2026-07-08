@@ -38,6 +38,9 @@ function createRow(overrides: Partial<DiffRenderRow> = {}): DiffRenderRow {
 function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRenderFields {
   const file = createFile();
   return {
+    activeSearchHighlightByRowIndex: new Map(),
+    activeSearchHighlightColor: "#ff7a00d9",
+    activeSearchRowHighlightColor: "#ff950038",
     borderColor: "#30363d",
     collapsedFileIndexList: [],
     document: null,
@@ -140,6 +143,9 @@ describe("DiffRows", () => {
 
     expect(renderedTreeHasProps(view.toJSON(), {
       adaptiveRender: "normal",
+      activeSearchHighlightColor: "#ff7a00d9",
+      activeSearchHighlights: "",
+      activeSearchRowHighlightColor: "#ff950038",
       configId: "test:unified",
       configVersion: 1,
       rowIndex: 1,
@@ -192,6 +198,10 @@ describe("DiffRows", () => {
 
     expect(renderedTreeHasProps(view.toJSON(), {
       adaptiveRender: "normal",
+      activeSearchHighlightColor: "#ff7a00d9",
+      activeSearchNewHighlights: "",
+      activeSearchOldHighlights: "",
+      activeSearchRowHighlightColor: "#ff950038",
       configId: "test:blocks",
       configVersion: 1,
       rowIndex: 0,
@@ -237,6 +247,9 @@ describe("DiffRows", () => {
         index={0}
         renderFields={createRenderFields({
           document: {} as never,
+          activeSearchHighlightByRowIndex: new Map([
+            [2, "14,4"],
+          ]),
           searchHighlightByRowIndex: new Map([
             [1, "6,5"],
             [2, "6,5;14,4"],
@@ -248,6 +261,8 @@ describe("DiffRows", () => {
     );
 
     expect(renderedTreeHasProps(view.toJSON(), {
+      activeSearchNewHighlights: "14,4",
+      activeSearchOldHighlights: "",
       searchNewHighlights: "6,5;14,4",
       searchOldHighlights: "6,5",
     })).toBe(true);
