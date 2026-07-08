@@ -259,6 +259,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     identifier: windowIdentifier,
     initialProperties,
     interceptClose: true,
+    loadComponentBeforeNativeOpen: false,
     representedURL: source?.value,
     title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
     transparentBackground: true,

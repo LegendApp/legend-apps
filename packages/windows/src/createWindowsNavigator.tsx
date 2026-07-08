@@ -9,7 +9,9 @@ import {
 import type { WindowConfigEntry, WindowsConfig } from "./types";
 import { withWindowProvider } from "./WindowProvider";
 
-type WindowOpenOverrides = Omit<WindowOptions, "moduleName">;
+type WindowOpenOverrides = Omit<WindowOptions, "moduleName"> & {
+  loadComponentBeforeNativeOpen?: boolean;
+};
 
 type RegisteredWindow = {
   identifier: string;
@@ -229,19 +231,28 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
   const open = async (windowKey: keyof TConfig, overrides?: WindowOpenOverrides) => {
     const registration = ensureRegistration(windowKey);
     const openStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    const {
+      loadComponentBeforeNativeOpen = true,
+      ...windowOverrides
+    } = overrides ?? {};
     logWindowOpenTiming("navigator.open.start", {
       identifier: registration.identifier,
       initialPropertyKeys: initialPropertyKeys(overrides?.initialProperties),
+      loadComponentBeforeNativeOpen,
       window: String(windowKey),
     });
-    await registration.ensureComponent();
-    logWindowOpenTiming("navigator.open.ensureComponent.finish", {
-      elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
-      identifier: registration.identifier,
-      window: String(windowKey),
-    });
+    const componentReadyPromise = registration.ensureComponent();
+    if (loadComponentBeforeNativeOpen) {
+      await componentReadyPromise;
+      logWindowOpenTiming("navigator.open.ensureComponent.finish", {
+        elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
+        identifier: registration.identifier,
+        phase: "beforeNativeOpen",
+        window: String(windowKey),
+      });
+    }
     const { options } = registration;
-    const mergedOptions = mergeWindowOptions(options, overrides);
+    const mergedOptions = mergeWindowOptions(options, windowOverrides);
 
     logWindowOpenTiming("navigator.open.native.start", {
       identifier: registration.identifier,
@@ -250,6 +261,15 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
       window: String(windowKey),
     });
     const result = await nativeOpenWindow(mergedOptions);
+    if (!loadComponentBeforeNativeOpen) {
+      await componentReadyPromise;
+      logWindowOpenTiming("navigator.open.ensureComponent.finish", {
+        elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
+        identifier: registration.identifier,
+        phase: "afterNativeOpen",
+        window: String(windowKey),
+      });
+    }
     logWindowOpenTiming("navigator.open.native.finish", {
       elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
       identifier: registration.identifier,
