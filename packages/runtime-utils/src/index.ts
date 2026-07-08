@@ -1,5 +1,4 @@
-import { isString, type Observable } from "@legendapp/state";
-import { useObservable } from "@legendapp/state/react";
+import { isString } from "@legendapp/state";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { InteractionManager } from "react-native";
 
@@ -36,16 +35,6 @@ export function useRefValue<T>(value: T) {
     ref.current = value;
   }, [value]);
   return ref;
-}
-
-export function useObservableLatest<T>(value: T): Observable<T> {
-  const obs$ = useObservable(value as any);
-
-  useLayoutEffect(() => {
-    obs$.set(value);
-  }, [value, obs$]);
-
-  return obs$ as unknown as Observable<T>;
 }
 
 export const isPerfLoggingEnabled = (): boolean =>

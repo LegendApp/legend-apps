@@ -3,7 +3,7 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GestureResponderEvent, LayoutChangeEvent } from "react-native";
 import { PanResponder, Pressable, View } from "react-native";
-import { useObservableLatest } from "@legend-desktop/runtime-utils";
+import { useRefValue } from "@legend-desktop/runtime-utils";
 
 interface PlaybackTimelineSliderProps {
     $value: Observable<number>;
@@ -37,8 +37,8 @@ export function PlaybackTimelineSlider({
     const [sliderWidth, setSliderWidth] = useState(0);
     const [progress, setProgress] = useState(0);
     const [panResponder, setPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
-    const isDisabled$ = useObservableLatest(disabledProp);
-    const isDisabled = useValue(isDisabled$);
+    const isDisabledRef = useRefValue(disabledProp);
+    const isDisabled = disabledProp;
     const lastCommittedValueRef = useRef<number | null>(null);
 
     const updateProgress = useCallback(() => {
@@ -76,12 +76,12 @@ export function PlaybackTimelineSlider({
     useEffect(() => {
         setPanResponder(
             PanResponder.create({
-                onStartShouldSetPanResponder: () => !isDisabled$.get(),
-                onStartShouldSetPanResponderCapture: () => !isDisabled$.get(),
-                onMoveShouldSetPanResponder: () => !isDisabled$.get(),
-                onMoveShouldSetPanResponderCapture: () => !isDisabled$.get(),
+                onStartShouldSetPanResponder: () => !isDisabledRef.current,
+                onStartShouldSetPanResponderCapture: () => !isDisabledRef.current,
+                onMoveShouldSetPanResponder: () => !isDisabledRef.current,
+                onMoveShouldSetPanResponderCapture: () => !isDisabledRef.current,
                 onPanResponderGrant: (event: GestureResponderEvent) => {
-                    if (!isDisabled$.get()) {
+                    if (!isDisabledRef.current) {
                         lastCommittedValueRef.current = null;
                         setIsDragging(true);
                         onSlidingStart?.();
@@ -89,12 +89,12 @@ export function PlaybackTimelineSlider({
                     }
                 },
                 onPanResponderMove: (event: GestureResponderEvent) => {
-                    if (!isDisabled$.get()) {
+                    if (!isDisabledRef.current) {
                         updateValueFromLocation(event.nativeEvent.locationX);
                     }
                 },
                 onPanResponderRelease: (event: GestureResponderEvent) => {
-                    if (!isDisabled$.get()) {
+                    if (!isDisabledRef.current) {
                         updateValueFromLocation(event.nativeEvent.locationX);
                         setIsDragging(false);
                         onSlidingEnd?.();
@@ -102,7 +102,7 @@ export function PlaybackTimelineSlider({
                 },
                 onPanResponderTerminationRequest: () => false,
                 onPanResponderTerminate: (event: GestureResponderEvent) => {
-                    if (!isDisabled$.get()) {
+                    if (!isDisabledRef.current) {
                         updateValueFromLocation(event.nativeEvent.locationX);
                         setIsDragging(false);
                         onSlidingEnd?.();
@@ -110,10 +110,10 @@ export function PlaybackTimelineSlider({
                 },
             }),
         );
-    }, [isDisabled$, onSlidingEnd, onSlidingStart, updateValueFromLocation]);
+    }, [isDisabledRef, onSlidingEnd, onSlidingStart, updateValueFromLocation]);
 
     const handleHoverIn = () => {
-        if (!isDisabled$.get()) {
+        if (!isDisabledRef.current) {
             setIsHovered(true);
             onHoverChange?.(true);
         }
