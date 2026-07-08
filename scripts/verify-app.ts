@@ -21,6 +21,12 @@ import {
 } from "./lib/macosShell";
 import { ensureMacOSReleaseWorkspace } from "./lib/macosWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages, writeGeneratedConfig } from "./lib/nativeModules";
+import {
+  getMacOSReleaseBuild,
+  getMacOSReleaseVersion,
+  getMacOSSparkleFeedUrl,
+  getMacOSSparklePublicEdKey,
+} from "./lib/release";
 import type { AppManifest, Platform } from "./lib/types";
 
 function runCapture(command: string, args: string[], env: Record<string, string>) {
@@ -84,7 +90,8 @@ async function verifyManifestUniqueness() {
 function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof writeGeneratedConfig>) {
   const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
   const appPackage = loadAppPackageMetadata(manifest.id);
-  const appVersion = appPackage.version.split(/[+-]/)[0];
+  const appVersion = getMacOSReleaseVersion(appPackage);
+  const appBuild = getMacOSReleaseBuild(manifest, appPackage);
   const infoPlistPath = generated.macosInfoPlistPath;
 
   if (!infoPlistPath) {
@@ -114,9 +121,21 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
   );
   assertContains(
     infoPlist,
-    `<key>CFBundleVersion</key>\n\t<string>${appVersion}</string>`,
-    `${manifest.id}/macos Info.plist has wrong bundle version`,
+    `<key>CFBundleVersion</key>\n\t<string>${appBuild}</string>`,
+    `${manifest.id}/macos Info.plist has wrong build number`,
   );
+  if (manifest.release?.macos) {
+    assertContains(
+      infoPlist,
+      `<key>SUFeedURL</key>\n\t<string>${getMacOSSparkleFeedUrl(manifest)}</string>`,
+      `${manifest.id}/macos Info.plist has wrong Sparkle feed URL`,
+    );
+    assertContains(
+      infoPlist,
+      `<key>SUPublicEDKey</key>\n\t<string>${getMacOSSparklePublicEdKey(manifest)}</string>`,
+      `${manifest.id}/macos Info.plist has wrong Sparkle public key`,
+    );
+  }
   assertNotContains(
     infoPlist,
     "<key>NSAllowsArbitraryLoads</key>",

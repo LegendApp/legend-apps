@@ -1,6 +1,7 @@
 node_modules/
 .expo/
 .artifacts/
+dist/
 .DS_Store
 
 shell/.legend/

@@ -109,6 +109,28 @@ async function main() {
     return;
   }
 
+  if (command.mode === "package") {
+    if (command.platform !== "macos") {
+      throw new Error("Release packaging currently only supports macos.");
+    }
+
+    runCommand("bun", ["scripts/package-macos-app.ts", command.appId, ...command.extraArgs], {
+      cwd: rootDir,
+    });
+    return;
+  }
+
+  if (command.mode === "githubrelease") {
+    if (command.platform !== "macos") {
+      throw new Error("GitHub release automation currently only supports macos.");
+    }
+
+    runCommand("bun", ["scripts/github-release-app.ts", command.appId, ...command.extraArgs], {
+      cwd: rootDir,
+    });
+    return;
+  }
+
   if (command.mode === "prebuild") {
     runCommand("bun", ["scripts/prebuild-app.ts", command.appId, command.platform, ...command.extraArgs], {
       cwd: rootDir,

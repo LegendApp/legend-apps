@@ -9,6 +9,14 @@ export type MacOSDocumentType = {
   handlerRank?: "Owner" | "Default" | "Alternate" | "None";
 };
 
+export type MacOSReleaseMetadata = {
+  build: string;
+  sparkle: {
+    publicEdKey: string;
+    feedPath?: string;
+  };
+};
+
 export type AppManifest = {
   id: string;
   displayName: string;
@@ -29,6 +37,9 @@ export type AppManifest = {
   };
   urlSchemes?: {
     macos?: string[];
+  };
+  release?: {
+    macos?: MacOSReleaseMetadata;
   };
 };
 

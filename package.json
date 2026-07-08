@@ -19,6 +19,8 @@
     "metro": "bun scripts/start-app.ts",
     "open": "bun scripts/open-app.ts",
     "build": "bun scripts/build-app.ts",
+    "package:macos": "bun scripts/package-macos-app.ts",
+    "githubrelease": "bun scripts/github-release-app.ts",
     "prebuild": "bun scripts/prebuild-app.ts",
     "verify": "bun scripts/verify-app.ts",
     "dev:all": "bun scripts/run-app.ts --all --dev-check",

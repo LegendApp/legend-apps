@@ -1,6 +1,6 @@
 {
   "name": "@legend-desktop/app-test-kitchen-sink",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "main": "src/index.ts",
   "dependencies": {

@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { shellDir } from "./apps";
 import { macOSDefaultInfoPlistPath } from "./macosShell";
+import {
+  getMacOSReleaseBuild,
+  getMacOSReleaseVersion,
+  getMacOSSparkleFeedUrl,
+  getMacOSSparklePublicEdKey,
+} from "./release";
 import type { AppManifest, AppPackageMetadata, MacOSDocumentType } from "./types";
 
 const baseInfoPlistPath = path.join(shellDir, "macos", macOSDefaultInfoPlistPath);
@@ -89,22 +95,28 @@ function renderDevAppTransportSecurity() {
   ].join("\n");
 }
 
-function getMacOSReleaseVersion(version: string) {
-  const releaseVersion = version.split(/[+-]/)[0];
-  if (/^\d+(?:\.\d+){0,2}$/.test(releaseVersion)) {
-    return releaseVersion;
-  }
-
-  throw new Error(`App version "${version}" must start with one to three dot-separated numeric segments.`);
-}
-
 function replacePlistString(plist: string, key: string, value: string) {
   const pattern = new RegExp(`(<key>${key}</key>\\s*<string>)[^<]*(</string>)`);
-  const nextPlist = plist.replace(pattern, `$1${escapePlistString(value)}$2`);
-  if (nextPlist === plist) {
+  if (!pattern.test(plist)) {
     throw new Error(`Could not set ${key} in ${baseInfoPlistPath}.`);
   }
-  return nextPlist;
+
+  return plist.replace(pattern, (_match, prefix: string, suffix: string) => {
+    return `${prefix}${escapePlistString(value)}${suffix}`;
+  });
+}
+
+function renderSparkleMetadata(manifest: AppManifest, mode: "dev" | "release") {
+  if (mode !== "release" || !manifest.release?.macos) {
+    return "";
+  }
+
+  return [
+    "\t<key>SUFeedURL</key>",
+    `\t<string>${escapePlistString(getMacOSSparkleFeedUrl(manifest))}</string>`,
+    "\t<key>SUPublicEDKey</key>",
+    `\t<string>${escapePlistString(getMacOSSparklePublicEdKey(manifest))}</string>`,
+  ].join("\n");
 }
 
 export function writeMacOSInfoPlist(
@@ -120,10 +132,10 @@ export function writeMacOSInfoPlist(
     replacePlistString(
       fs.readFileSync(baseInfoPlistPath, "utf8"),
       "CFBundleShortVersionString",
-      getMacOSReleaseVersion(appPackage.version),
+      getMacOSReleaseVersion(appPackage),
     ),
     "CFBundleVersion",
-    getMacOSReleaseVersion(appPackage.version),
+    getMacOSReleaseBuild(manifest, appPackage),
   );
   const appMetadata = [
     "\t<key>LegendAppId</key>",
@@ -133,9 +145,10 @@ export function writeMacOSInfoPlist(
     "\t<key>LegendHostWindowHidden</key>",
     hostWindowHidden ? "\t<true/>" : "\t<false/>",
   ].join("\n");
+  const sparkleMetadata = renderSparkleMetadata(manifest, mode);
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",
-    `\n${appMetadata}${mode === "dev" ? `\n${renderDevAppTransportSecurity()}` : ""}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,
+    `\n${appMetadata}${mode === "dev" ? `\n${renderDevAppTransportSecurity()}` : ""}${sparkleMetadata ? `\n${sparkleMetadata}` : ""}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,
   );
   const outputPath = path.join(outputDir, "Info.plist");
 

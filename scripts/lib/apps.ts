@@ -10,7 +10,7 @@ export const packagesDir = path.join(rootDir, "packages");
 
 export const appIds = ["music", "markdown", "code", "diff", "test-kitchen-sink"] as const;
 export const platforms = ["macos", "ios", "android"] as const;
-const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify", "pods"] as const;
+const commandModes = ["run", "dev", "start", "open", "build", "prebuild", "verify", "pods", "package", "githubrelease"] as const;
 const devServerPorts: Record<(typeof appIds)[number], number> = {
   music: 19091,
   markdown: 19092,
@@ -66,6 +66,8 @@ export function formatAppUsage(appId = "<app>") {
     "  open       Open the already built macOS app",
     "  run        Build and run the app",
     "  build      Build a release app",
+    "  package    Package, sign, notarize, and generate a Sparkle appcast for a macOS release",
+    "  githubrelease Create a GitHub release for a packaged macOS app",
     "  prebuild   Generate iOS/Android native projects",
     "  verify     Verify generated config and package linking",
     "  pods       Install CocoaPods for the app/platform",
@@ -79,6 +81,8 @@ export function formatAppUsage(appId = "<app>") {
     `  bun run ${appId} run`,
     `  bun run ${appId} pods`,
     `  bun run ${appId} build macos`,
+    `  bun run ${appId} package macos`,
+    `  bun run ${appId} githubrelease macos`,
     `  bun run ${appId} build macos x86`,
   ].join("\n");
 }
