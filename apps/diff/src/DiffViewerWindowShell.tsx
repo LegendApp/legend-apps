@@ -1,8 +1,8 @@
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { memo, useCallback, useEffect, useState, type ComponentType } from "react";
-import { ActivityIndicator, StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
-import { getDiffSourceLabel, type DiffOpenSource } from "./diffFiles";
+import { StyleSheet, View, type NativeSyntheticEvent } from "react-native";
+import type { DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
 import {
@@ -98,14 +98,7 @@ const DiffViewerWindowShellFallback = memo(function DiffViewerWindowShellFallbac
   }, []);
 
   if (!source) {
-    return (
-      <View style={[styles.root, { backgroundColor: diffPalette.background }]}>
-        <DiffShellLoadingBody
-          foregroundColor={diffPalette.foreground}
-          mutedColor={diffPalette.muted}
-        />
-      </View>
-    );
+    return <View style={[styles.root, { backgroundColor: diffPalette.background }]} />;
   }
 
   return (
@@ -129,12 +122,6 @@ const DiffViewerWindowShellFallback = memo(function DiffViewerWindowShellFallbac
           <View style={styles.diffPane}>
             <View style={styles.diffPaneContent}>
               <View style={styles.diffTitlebarSpacer} />
-              <DiffShellLoadingBody
-                foregroundColor={diffPalette.foreground}
-                mutedColor={diffPalette.muted}
-                sourceLabel={getDiffSourceLabel(source)}
-                title={source.kind === "github" ? "Downloading..." : "Loading..."}
-              />
             </View>
           </View>
         </View>
@@ -142,32 +129,6 @@ const DiffViewerWindowShellFallback = memo(function DiffViewerWindowShellFallbac
     </View>
   );
 });
-
-function DiffShellLoadingBody({
-  foregroundColor,
-  mutedColor,
-  sourceLabel,
-  title = "Loading...",
-}: {
-  foregroundColor: string;
-  mutedColor: string;
-  sourceLabel?: string;
-  title?: string;
-}) {
-  return (
-    <View style={styles.loadingBody}>
-      <ActivityIndicator color={mutedColor} size="small" />
-      <Text style={[styles.loadingTitle, { color: foregroundColor }]}>
-        {title}
-      </Text>
-      {sourceLabel ? (
-        <Text style={[styles.loadingText, { color: mutedColor }]} numberOfLines={2}>
-          {sourceLabel}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   content: {
@@ -189,25 +150,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: 0,
     minWidth: 0,
-  },
-  loadingBody: {
-    alignItems: "center",
-    flex: 1,
-    gap: 12,
-    justifyContent: "center",
-    paddingHorizontal: 40,
-    paddingVertical: 36,
-  },
-  loadingText: {
-    fontSize: 15,
-    lineHeight: 23,
-    maxWidth: 520,
-    textAlign: "center",
-  },
-  loadingTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    lineHeight: 28,
   },
   root: {
     flex: 1,
