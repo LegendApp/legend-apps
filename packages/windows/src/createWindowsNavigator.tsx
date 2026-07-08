@@ -118,6 +118,7 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
           identifier,
           moduleName,
         });
+        const loadStartedAt = globalThis.performance?.now?.() ?? Date.now();
         componentPromise = (async () => {
           const loaded = await entry.loadComponent!();
 
@@ -140,6 +141,7 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
 
           cachedComponent = withWindowProvider(resolved, identifier);
           logWindowOpenTiming("navigator.resolveComponent.load.finish", {
+            elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - loadStartedAt).toFixed(1)),
             identifier,
             moduleName,
           });

@@ -21,6 +21,7 @@ export type InstrumentationLogger = {
 };
 
 export type CreateInstrumentationLoggerOptions = {
+  debugId?: string;
   memoryLabel?: string;
   namespace: string;
   timingLabel?: string;
@@ -135,15 +136,23 @@ export function logInstrumentation(
 }
 
 export function createInstrumentationLogger({
+  debugId,
   memoryLabel,
   namespace,
   timingLabel,
 }: CreateInstrumentationLoggerOptions): InstrumentationLogger {
+  const instrumentationDebugId = debugId ?? namespace;
   const timingLogLabel = timingLabel ?? namespace;
   const memoryLogLabel = memoryLabel ?? namespace;
+  let seq = 0;
+  const withMetadata = (payload?: InstrumentationPayloadInput) => () => ({
+    ...resolvePayload(payload),
+    debugId: instrumentationDebugId,
+    seq: ++seq,
+  });
   return {
     isEnabled: () => isInstrumentationEnabled(namespace),
-    memory: (event, payload) => logInstrumentation("memory", namespace, memoryLogLabel, event, payload),
-    timing: (event, payload) => logInstrumentation("timing", namespace, timingLogLabel, event, payload),
+    memory: (event, payload) => logInstrumentation("memory", namespace, memoryLogLabel, event, withMetadata(payload)),
+    timing: (event, payload) => logInstrumentation("timing", namespace, timingLogLabel, event, withMetadata(payload)),
   };
 }

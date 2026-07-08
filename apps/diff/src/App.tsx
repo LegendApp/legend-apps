@@ -44,9 +44,14 @@ const initialUrlPromise = Linking.getInitialURL().then((url) => {
 });
 void initialUrlPromise.catch(() => undefined);
 logDiffMemoryMark("viewer.prefetch.start", () => ({}));
+const viewerPrefetchStartedAt = nowMs();
+logDiffOpenTiming("viewer.prefetch.start", () => ({}));
 prefetchDiffViewerWindow()
   .then(() => {
     logDiffMemoryMark("viewer.prefetch.finish", () => ({}));
+    logDiffOpenTiming("viewer.prefetch.finish", () => ({
+      elapsedMs: elapsedMs(viewerPrefetchStartedAt),
+    }));
   })
   .catch(reportDiffAppControllerError);
 configureDiffAutoUpdates().catch(reportDiffAppControllerError);
@@ -237,7 +242,13 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
   let source = getLaunchDiffSource(launchArguments?.slice(1));
   let initialUrl: string | null = null;
   if (!source) {
+    const initialUrlAwaitStartedAt = nowMs();
+    logDiffOpenTiming("launch.initialUrl.await.start", () => ({}));
     initialUrl = await initialUrlPromise;
+    logDiffOpenTiming("launch.initialUrl.await.finish", () => ({
+      awaitMs: elapsedMs(initialUrlAwaitStartedAt),
+      hasUrl: Boolean(initialUrl),
+    }));
     source = getDiffSourceFromOpenUrl(initialUrl ?? "");
   }
   const startedAt = nowMs();
@@ -283,7 +294,15 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
   }));
 }
 
+let loggedFirstAppRender = false;
+
 export function App({ launchArguments }: DiffAppProps) {
+  if (!loggedFirstAppRender) {
+    loggedFirstAppRender = true;
+    logDiffOpenTiming("app.render.first", () => ({
+      launchArgumentCount: launchArguments?.length ?? 0,
+    }));
+  }
   const handledOpenUrlRef = useRef<{ handledAt: number; url: string } | null>(null);
   const controller = useDocumentAppController({
     createMenuHandlers: createDiffMenuHandlers,
@@ -297,6 +316,12 @@ export function App({ launchArguments }: DiffAppProps) {
     windowIdentifier: diffViewerWindowIdentifier,
   });
   const controllerRef = useRef(controller);
+
+  useEffect(() => {
+    logDiffOpenTiming("app.effect.mount", () => ({
+      launchArgumentCount: launchArguments?.length ?? 0,
+    }));
+  }, [launchArguments]);
 
   useEffect(() => {
     controllerRef.current = controller;

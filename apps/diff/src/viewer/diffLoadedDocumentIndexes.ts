@@ -1,4 +1,4 @@
-import type { DiffDocument, DiffFileSummary, DiffSideBySideFileHeader } from "@legend-desktop/diff-parser";
+import type { DiffDocument, DiffFileSummary, DiffSideBySideFileHeader, DiffSideBySideRenderRow } from "@legend-desktop/diff-parser";
 
 function isArrayIndexProperty(property: string | symbol) {
   if (typeof property !== "string" || property.length === 0) {
@@ -69,6 +69,47 @@ export function createSideBySideFileHeaderIndexes(fileHeaders: readonly DiffSide
   return indexes;
 }
 
+type SideBySideLayoutMetadata = {
+  fileHeaders: DiffSideBySideFileHeader[];
+  hunkHeaderIndexes: Set<number>;
+};
+
+function isSideBySideRenderableHunkRow(row: DiffSideBySideRenderRow | undefined): row is DiffSideBySideRenderRow {
+  return row !== undefined && row.kind !== "file-header" && row.hunkIndex >= 0;
+}
+
+export function createSideBySideLayoutMetadata(rows: readonly DiffSideBySideRenderRow[]): SideBySideLayoutMetadata {
+  const fileHeaders: DiffSideBySideFileHeader[] = [];
+  const hunkHeaderIndexes = new Set<number>();
+
+  rows.forEach((row, listIndex) => {
+    if (row.kind === "file-header") {
+      fileHeaders.push({
+        fileIndex: row.fileIndex,
+        listIndex,
+        sourceStart: row.sourceStart,
+      });
+      return;
+    }
+
+    if (isSideBySideRenderableHunkRow(row)) {
+      const previousRow = listIndex > 0 ? rows[listIndex - 1] : undefined;
+      if (
+        !isSideBySideRenderableHunkRow(previousRow) ||
+        previousRow.fileIndex !== row.fileIndex ||
+        previousRow.hunkIndex !== row.hunkIndex
+      ) {
+        hunkHeaderIndexes.add(listIndex);
+      }
+    }
+  });
+
+  return {
+    fileHeaders,
+    hunkHeaderIndexes,
+  };
+}
+
 export function createSideBySideListIndexByRowIndex(fileHeaders: readonly DiffSideBySideFileHeader[]) {
   const indexes = new Map<number, number>();
   fileHeaders.forEach((header) => {
@@ -118,23 +159,19 @@ export function getBoundedSideBySideFileHeaders(
   rowCount: number,
   collapsedFileIndexes: readonly number[],
 ) {
+  return getBoundedSideBySideLayoutMetadata(document, rowCount, collapsedFileIndexes).fileHeaders;
+}
+
+export function getBoundedSideBySideLayoutMetadata(
+  document: Pick<DiffDocument, "getPlainSideBySideRows">,
+  rowCount: number,
+  collapsedFileIndexes: readonly number[],
+): SideBySideLayoutMetadata {
   const safeRowCount = Math.max(0, Math.floor(rowCount));
   const rows = safeRowCount > 0
     ? document.getPlainSideBySideRows(0, safeRowCount, [...collapsedFileIndexes])
     : [];
-  const headers: DiffSideBySideFileHeader[] = [];
-
-  rows.forEach((row, listIndex) => {
-    if (row.kind === "file-header") {
-      headers.push({
-        fileIndex: row.fileIndex,
-        listIndex,
-        sourceStart: row.sourceStart,
-      });
-    }
-  });
-
-  return headers;
+  return createSideBySideLayoutMetadata(rows);
 }
 
 export function findFileIndexForRow(files: readonly DiffFileSummary[], rowIndex: number) {

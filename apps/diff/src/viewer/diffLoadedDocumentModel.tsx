@@ -37,7 +37,7 @@ import {
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
-  getBoundedSideBySideFileHeaders,
+  getBoundedSideBySideLayoutMetadata,
   getBoundedSideBySideRowCount,
 } from "./diffLoadedDocumentIndexes";
 import type { DiffViewerState } from "./diffViewerModel";
@@ -51,6 +51,7 @@ export {
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
   getBoundedSideBySideFileHeaders,
+  getBoundedSideBySideLayoutMetadata,
   getBoundedSideBySideRowCount,
 } from "./diffLoadedDocumentIndexes";
 
@@ -237,6 +238,7 @@ export function useDiffLoadedModel({
   syntaxThemeName: string;
   viewMode: DiffSettingsFile["viewMode"];
 }) {
+  const modelStartedAt = nowMs();
   const fileByIndex = useMemo(() => {
     const startedAt = nowMs();
     if (state.status !== "loaded") {
@@ -528,29 +530,32 @@ export function useDiffLoadedModel({
     },
     [sideBySideRowCount, state],
   );
-  const sideBySideFileHeaders = useMemo(
+  const sideBySideLayoutMetadata = useMemo(
     () => {
       const startedAt = nowMs();
-      const isInitialCountLimited = initialItemCountLimit !== null && initialItemCountLimit !== undefined;
-      const headers = state.status === "loaded" && viewMode !== "unified"
-        ? isInitialCountLimited
-          ? getBoundedSideBySideFileHeaders(state.document, sideBySideRowCount, collapsedFileIndexList)
-          : state.document.getSideBySideFileHeaders(collapsedFileIndexList)
-        : [];
+      const metadata = state.status === "loaded" && viewMode !== "unified"
+        ? getBoundedSideBySideLayoutMetadata(state.document, sideBySideRowCount, collapsedFileIndexList)
+        : {
+            fileHeaders: [],
+            hunkHeaderIndexes: new Set<number>(),
+          };
       if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideFileHeaders", () => ({
+        logDiffOpenTiming("viewer.derive.sideBySideLayoutMetadata", () => ({
           collapsedFiles: collapsedFileIndexList.length,
           durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          files: headers.length,
+          files: metadata.fileHeaders.length,
+          hunkHeaders: metadata.hunkHeaderIndexes.size,
           initialItemCountLimit,
           rows: state.document.rowCount,
           viewMode,
         }));
       }
-      return headers;
+      return metadata;
     },
     [collapsedFileIndexList, initialItemCountLimit, sideBySideRowCount, state, viewMode],
   );
+  const sideBySideFileHeaders = sideBySideLayoutMetadata.fileHeaders;
+  const sideBySideHunkHeaderIndexes = sideBySideLayoutMetadata.hunkHeaderIndexes;
   const sideBySideFileHeaderIndexes = useMemo(
     () => {
       const startedAt = nowMs();
@@ -592,6 +597,19 @@ export function useDiffLoadedModel({
     [sideBySideFileHeaders, state],
   );
 
+  if (state.status === "loaded") {
+    logDiffOpenTiming("viewer.derive.model.finish", () => ({
+      collapsedFiles: collapsedFileIndexList.length,
+      durationMs: Number((nowMs() - modelStartedAt).toFixed(1)),
+      initialItemCountLimit,
+      itemCount: diffRows.itemIndexes.length,
+      rows: state.document.rowCount,
+      sideBySideRows: sideBySideRowCount,
+      visibleItemCount: visibleItemIndexes.length,
+      viewMode,
+    }));
+  }
+
   return {
     collapsedFileIndexList,
     diffRows,
@@ -602,6 +620,7 @@ export function useDiffLoadedModel({
     getVisibleListIndex,
     sideBySideFileHeaderIndexes,
     sideBySideFileHeaderByListIndex,
+    sideBySideHunkHeaderIndexes,
     sideBySideItemIndexes,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,

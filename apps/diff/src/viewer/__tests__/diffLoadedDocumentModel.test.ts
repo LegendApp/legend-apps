@@ -3,6 +3,7 @@ import {
   createCollapsedFileIndexList,
   createIdentityDiffRowIndexes,
   createSideBySideFileHeaderIndexes,
+  createSideBySideLayoutMetadata,
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
@@ -51,13 +52,14 @@ function createRenderRow(overrides: Partial<DiffRenderRow> = {}): DiffRenderRow 
 
 function createSideBySideRow(overrides: {
   fileIndex?: number;
+  hunkIndex?: number;
   index: number;
   kind?: string;
   sourceStart?: number;
 }): DiffSideBySideRenderRow {
   return {
     fileIndex: overrides.fileIndex ?? 0,
-    hunkIndex: -1,
+    hunkIndex: overrides.hunkIndex ?? -1,
     index: overrides.index,
     kind: overrides.kind ?? "line",
     newRow: createRenderRow(),
@@ -149,6 +151,25 @@ describe("diffLoadedDocumentModel", () => {
       { fileIndex: 0, listIndex: 0, sourceStart: 0 },
       { fileIndex: 1, listIndex: 2, sourceStart: 8 },
     ]);
+  });
+
+  it("creates side-by-side hunk header indexes from list rows", () => {
+    const rows = [
+      createSideBySideRow({ fileIndex: 0, index: 0, kind: "file-header", sourceStart: 0 }),
+      createSideBySideRow({ fileIndex: 0, hunkIndex: 0, index: 1, sourceStart: 1 }),
+      createSideBySideRow({ fileIndex: 0, hunkIndex: 0, index: 2, sourceStart: 2 }),
+      createSideBySideRow({ fileIndex: 0, hunkIndex: 1, index: 3, sourceStart: 3 }),
+      createSideBySideRow({ fileIndex: 1, index: 4, kind: "file-header", sourceStart: 8 }),
+      createSideBySideRow({ fileIndex: 1, hunkIndex: 0, index: 5, sourceStart: 9 }),
+    ];
+
+    const metadata = createSideBySideLayoutMetadata(rows);
+
+    expect(metadata.fileHeaders).toEqual([
+      { fileIndex: 0, listIndex: 0, sourceStart: 0 },
+      { fileIndex: 1, listIndex: 4, sourceStart: 8 },
+    ]);
+    expect(metadata.hunkHeaderIndexes).toEqual(new Set([1, 3, 5]));
   });
 
   it("maps source rows to the active file at boundaries and out-of-range edges", () => {

@@ -23,7 +23,7 @@ import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
 import { nowMs, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
 import { noteRecentDocument } from "@legend-desktop/recent-documents";
 import { SFSymbol } from "@legend-desktop/sf-symbol";
-import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-desktop/syntax-parser";
+import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, getSyntaxTheme, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-desktop/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { addWindowCloseRequestedListener, closeWindow } from "@legend-desktop/window-manager";
 import { useWindowId } from "@legend-desktop/windows";
@@ -40,7 +40,7 @@ import {
   LegendList,
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
-import type { Observable } from "@legendapp/state";
+import type { Observable, RecursiveValueOrFunction } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
@@ -84,6 +84,7 @@ import {
 } from "./diffMergeControls";
 import {
   defaultDiffSidebarWidth,
+  diffSettings$,
   getDiffViewModeSetting,
   getDiffShowOnlyHunksSetting,
   setDiffShowOnlyHunksSetting,
@@ -131,8 +132,10 @@ import {
   diffTitlebarTopInset,
 } from "./viewer/diffViewerConstants";
 import {
+  createCollapsedFileIndexList,
   findFileIndexForRow,
   getFilesForSourceRowRange,
+  getBoundedSideBySideLayoutMetadata,
   useDiffLoadedModel,
   useVisibleDiffFileTokenizationScheduler,
   useDiffSideBySideRuntime,
@@ -165,10 +168,10 @@ import {
   diffUnifiedChangeBarWidth,
   diffUnifiedLineNumberWidth,
   diffUnifiedMarkerWidth,
-  isDiffSideBySideHunkStart,
   isDiffUnifiedHunkStart,
   getDiffRowPalette,
   getSideBySideDividerColor,
+  type DiffSyntaxStyleStore,
   type DiffRowRenderState,
 } from "./viewer/DiffRows";
 import {
@@ -202,6 +205,7 @@ import {
   createRefreshError,
   getDiffVisibleSourceModel,
   getErrorMessage,
+  getDiffLoadTimingPayload,
   logDiffMemoryMark,
   logDiffLoadTiming,
   logDiffOpenTiming,
@@ -215,6 +219,43 @@ const diffUnsavedMergeBannerHeight = 48;
 const diffActiveSearchHighlightColor = "#ff7a00d9";
 const diffActiveSearchRowHighlightColor = "#ff950038";
 const diffSearchHighlightColor = "#ffcc336b";
+const emptyDiffSyntaxStyleStore: DiffSyntaxStyleStore = {
+  current: new Map(),
+  getSnapshot: () => 0,
+  refresh: () => {
+  },
+  subscribe: () => () => {
+  },
+};
+
+logDiffOpenTiming("viewer.module.evaluated", () => ({
+  nativeRows: true,
+}));
+
+let loggedFirstViewerWindowRender = false;
+
+type DiffObservableInitializerLeaf =
+  | Date
+  | DiffSyntaxStyleStore
+  | Function
+  | Map<unknown, unknown>
+  | Promise<unknown>
+  | readonly unknown[]
+  | ReadonlyMap<unknown, unknown>
+  | ReadonlySet<unknown>
+  | Set<unknown>
+  | WeakMap<object, unknown>
+  | WeakSet<object>;
+
+type DiffObservableInitializer<T> = [T] extends [DiffObservableInitializerLeaf]
+  ? T | (() => T)
+  : [T] extends [object]
+  ? { [K in keyof T]: DiffObservableInitializer<T[K]> }
+  : T | (() => T);
+
+function createDiffObservableInitializer<T>(value: DiffObservableInitializer<T>): RecursiveValueOrFunction<T> {
+  return value as RecursiveValueOrFunction<T>;
+}
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
@@ -527,6 +568,7 @@ type DiffLoadedBodyProps = {
   sidebarWidth: number;
   sideBySideDataVersion: number;
   sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
+  sideBySideHunkHeaderIndexes: Set<number>;
   sideBySideItemIndexes: Array<number | undefined>;
   splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   state: DiffLoadedState;
@@ -640,6 +682,218 @@ function createDiffSearchHighlightPayload(highlights: ReadonlyMap<number, string
     record[String(key)] = value;
   });
   return JSON.stringify(record);
+}
+
+function getCurrentDiffSettingsSnapshot() {
+  const fontFamily = diffSettings$.fontFamily.get();
+  const fontSize = diffSettings$.fontSize.get();
+  const syntaxHighlightingEnabled = diffSettings$.syntaxHighlightingEnabled.get();
+  const syntaxThemeName = diffSettings$.syntaxTheme.get();
+  const showOnlyHunks = diffSettings$.showOnlyHunks.get();
+  const syntaxTheme = getSyntaxTheme(syntaxThemeName);
+  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
+  const diffPalette = getDiffPalette(syntaxTheme, displayTheme.colors);
+  const rowHeight = getDiffLineRowHeight(fontSize);
+
+  return {
+    diffPalette,
+    fontFamily,
+    fontSize,
+    rowHeight,
+    showOnlyHunks,
+    syntaxHighlightingEnabled,
+    syntaxTheme,
+    syntaxThemeName,
+  };
+}
+
+function getCurrentLoadedDiffState(state$: Observable<DiffViewerState>) {
+  const currentState = state$.get();
+  return currentState.status === "loaded" ? currentState : null;
+}
+
+function getCurrentLoadedDiffDocument(state$: Observable<DiffViewerState>) {
+  return getCurrentLoadedDiffState(state$)?.document ?? null;
+}
+
+function getCurrentLoadedDiffDocumentId(state$: Observable<DiffViewerState>) {
+  return getCurrentLoadedDiffDocument(state$)?.documentId ?? 0;
+}
+
+function createFileByIndex(files: readonly DiffFileSummary[]) {
+  const map = new Map<number, DiffFileSummary>();
+  for (const file of files) {
+    map.set(file.index, file);
+  }
+  return map;
+}
+
+function createFileByRowStart(files: readonly DiffFileSummary[]) {
+  const map = new Map<number, DiffFileSummary>();
+  for (const file of files) {
+    map.set(Math.max(0, Math.floor(file.rowStart)), file);
+  }
+  return map;
+}
+
+function createFileHeaderRowIndexes(files: readonly DiffFileSummary[]) {
+  const indexes = new Set<number>();
+  for (const file of files) {
+    indexes.add(Math.max(0, Math.floor(file.rowStart)));
+  }
+  return indexes;
+}
+
+function createSideBySideFileHeaderByListIndex(fileHeaders: readonly DiffSideBySideFileHeader[]) {
+  const map = new Map<number, DiffSideBySideFileHeader>();
+  for (const header of fileHeaders) {
+    map.set(header.listIndex, header);
+  }
+  return map;
+}
+
+function getCurrentCollapsedFileIndexList(collapsedFileIndexes$: Observable<Set<number>>) {
+  return createCollapsedFileIndexList(collapsedFileIndexes$.get());
+}
+
+function getCurrentCollapsedFileIndexesKey(collapsedFileIndexes$: Observable<Set<number>>) {
+  return getCurrentCollapsedFileIndexList(collapsedFileIndexes$).join(",");
+}
+
+function getCurrentSideBySideRowCount(state$: Observable<DiffViewerState>, collapsedFileIndexes$: Observable<Set<number>>) {
+  const document = getCurrentLoadedDiffDocument(state$);
+  if (!document) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(document.getSideBySideRowCount(getCurrentCollapsedFileIndexList(collapsedFileIndexes$))));
+}
+
+function getCurrentSideBySideLayoutMetadata(state$: Observable<DiffViewerState>, collapsedFileIndexes$: Observable<Set<number>>) {
+  const document = getCurrentLoadedDiffDocument(state$);
+  const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
+  const rowCount = document ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList))) : 0;
+  return document
+    ? getBoundedSideBySideLayoutMetadata(document, rowCount, collapsedFileIndexList)
+    : {
+        fileHeaders: [],
+        hunkHeaderIndexes: new Set<number>(),
+      };
+}
+
+function createDiffRowRenderState(
+  state$: Observable<DiffViewerState>,
+  collapsedFileIndexes$: Observable<Set<number>>,
+): RecursiveValueOrFunction<DiffRowRenderState> {
+  return createDiffObservableInitializer<DiffRowRenderState>({
+    document: {
+      collapsedFileIndexList: () => getCurrentCollapsedFileIndexList(collapsedFileIndexes$),
+      current: () => getCurrentLoadedDiffDocument(state$),
+      fileByIndex: () => {
+        const currentState = getCurrentLoadedDiffState(state$);
+        return currentState ? createFileByIndex(currentState.files) : new Map<number, DiffFileSummary>();
+      },
+      fileByRowStart: () => {
+        const currentState = getCurrentLoadedDiffState(state$);
+        return currentState ? createFileByRowStart(currentState.files) : new Map<number, DiffFileSummary>();
+      },
+      fileHeaderRowIndexes: () => {
+        const currentState = getCurrentLoadedDiffState(state$);
+        return currentState ? createFileHeaderRowIndexes(currentState.files) : new Set<number>();
+      },
+      sideBySideFileHeaderByListIndex: () => (
+        createSideBySideFileHeaderByListIndex(getCurrentSideBySideLayoutMetadata(state$, collapsedFileIndexes$).fileHeaders)
+      ),
+      sideBySideRowCount: () => getCurrentSideBySideRowCount(state$, collapsedFileIndexes$),
+    },
+    nativeRows: {
+      sideBySideConfigId: () => `diff:${getCurrentLoadedDiffDocumentId(state$)}:blocks`,
+      sideBySideConfigVersion: () => {
+        const settings = getCurrentDiffSettingsSnapshot();
+        const palette = getDiffRowPalette(settings.syntaxTheme.appearance);
+        const dividerColor = getSideBySideDividerColor(settings.syntaxTheme.appearance);
+        return hashDiffNativeRowConfigVersion([
+          `diff:${getCurrentLoadedDiffDocumentId(state$)}:blocks`,
+          getCurrentCollapsedFileIndexesKey(collapsedFileIndexes$),
+          dividerColor,
+          diffSideBySideLineNumberWidth,
+          diffSideBySideMarkerWidth,
+          settings.fontFamily,
+          settings.fontSize,
+          settings.diffPalette.foreground,
+          settings.diffPalette.muted,
+          palette.addAccent,
+          palette.addBackground,
+          palette.removeAccent,
+          palette.removeBackground,
+          settings.rowHeight,
+          settings.syntaxHighlightingEnabled,
+          settings.syntaxThemeName,
+        ]);
+      },
+      unifiedConfigId: () => `diff:${getCurrentLoadedDiffDocumentId(state$)}:unified`,
+      unifiedConfigVersion: () => {
+        const settings = getCurrentDiffSettingsSnapshot();
+        const palette = getDiffRowPalette(settings.syntaxTheme.appearance);
+        return hashDiffNativeRowConfigVersion([
+          `diff:${getCurrentLoadedDiffDocumentId(state$)}:unified`,
+          diffUnifiedChangeBarWidth,
+          diffUnifiedLineNumberWidth,
+          diffUnifiedMarkerWidth,
+          settings.fontFamily,
+          settings.fontSize,
+          settings.diffPalette.foreground,
+          settings.diffPalette.muted,
+          palette.addAccent,
+          palette.addBackground,
+          palette.removeAccent,
+          palette.removeBackground,
+          settings.rowHeight,
+          settings.syntaxHighlightingEnabled,
+          settings.syntaxThemeName,
+        ]);
+      },
+    },
+    presentation: {
+      borderColor: () => getCurrentDiffSettingsSnapshot().diffPalette.border,
+      fileHeaderBackgroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.fileHeaderBackground,
+      fontFamily: () => getCurrentDiffSettingsSnapshot().fontFamily,
+      fontSize: () => getCurrentDiffSettingsSnapshot().fontSize,
+      foregroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.foreground,
+      hunkHeaderBackgroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.hunkHeaderBackground,
+      mutedColor: () => getCurrentDiffSettingsSnapshot().diffPalette.muted,
+      rowHeight: () => getCurrentDiffSettingsSnapshot().rowHeight,
+      showOnlyHunks: () => getCurrentDiffSettingsSnapshot().showOnlyHunks,
+      syntaxAppearance: () => getCurrentDiffSettingsSnapshot().syntaxTheme.appearance,
+      syntaxHighlightingEnabled: () => getCurrentDiffSettingsSnapshot().syntaxHighlightingEnabled,
+      syntaxStyleStore: () => emptyDiffSyntaxStyleStore,
+      syntaxThemeName: () => getCurrentDiffSettingsSnapshot().syntaxThemeName,
+    },
+  });
+}
+
+function createDiffSidebarRenderState(): RecursiveValueOrFunction<DiffSidebarRenderState> {
+  return createDiffObservableInitializer<DiffSidebarRenderState>({
+    conflictBadgeBackgroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.sidebarConflictBadgeBackground,
+    conflictBadgeTextColor: () => getCurrentDiffSettingsSnapshot().diffPalette.sidebarConflictBadgeText,
+    foregroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.foreground,
+    selectedBackgroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.sidebarSelectedBackground,
+    selectedBorderColor: () => getCurrentDiffSettingsSnapshot().diffPalette.sidebarSelectedBorder,
+    sidebarFolderColor: () => getCurrentDiffSettingsSnapshot().diffPalette.sidebarFolder,
+  });
+}
+
+function createDiffMergeRenderState(): RecursiveValueOrFunction<DiffMergeRenderState> {
+  return createDiffObservableInitializer<DiffMergeRenderState>({
+    borderColor: () => getCurrentDiffSettingsSnapshot().diffPalette.border,
+    fileHeaderBackgroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.fileHeaderBackground,
+    fontFamily: () => getCurrentDiffSettingsSnapshot().fontFamily,
+    fontSize: () => getCurrentDiffSettingsSnapshot().fontSize,
+    foregroundColor: () => getCurrentDiffSettingsSnapshot().diffPalette.foreground,
+    mutedColor: () => getCurrentDiffSettingsSnapshot().diffPalette.muted,
+    primaryColor: () => getCurrentDiffSettingsSnapshot().diffPalette.primary,
+    rowHeight: () => getCurrentDiffSettingsSnapshot().rowHeight,
+    syntaxAppearance: () => getCurrentDiffSettingsSnapshot().syntaxTheme.appearance,
+  });
 }
 
 function getDiffSidebarFolderTitle(file: DiffFileSummary) {
@@ -1133,6 +1387,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   sidebarWidth,
   sideBySideDataVersion,
   sideBySideFileHeaderByListIndex,
+  sideBySideHunkHeaderIndexes,
   sideBySideItemIndexes,
   splitPaneMetrics$,
   state,
@@ -1150,23 +1405,15 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   const nativeUnifiedRows = viewMode === "unified";
   const nativeSideBySideRows = viewMode !== "unified";
   const inlineMergeModel = useDiffInlineMergeModel({
-    borderColor: rowConfig.borderColor,
     collapsedFileIndexes: rowConfig.collapsedFileIndexes,
-    fileHeaderBackgroundColor: rowConfig.fileHeaderBackgroundColor,
     files: state.files,
-    foregroundColor: rowConfig.foregroundColor,
-    fontFamily: rowConfig.fontFamily,
-    fontSize: rowConfig.fontSize,
     mergeState,
-    mutedColor,
     onResolveMergeConflict,
-    primaryColor,
     resolvingMergeConflictKeys$,
     rowHeight,
     showOnlyHunks: rowConfig.showOnlyHunks,
     sideBySideFileHeaderByListIndex,
     sideBySideItemIndexes,
-    syntaxAppearance,
     syntaxHighlightingEnabled: rowConfig.syntaxHighlightingEnabled,
     syntaxThemeName: rowConfig.syntaxTheme,
     unifiedItemIndexes: visibleItemIndexes,
@@ -1987,72 +2234,37 @@ function DiffMergePlaceholderRow({
 }
 
 function useDiffInlineMergeModel({
-  borderColor,
   collapsedFileIndexes,
-  fileHeaderBackgroundColor,
   files,
-  foregroundColor,
-  fontFamily,
-  fontSize,
   mergeState,
-  mutedColor,
   onResolveMergeConflict,
-  primaryColor,
   resolvingMergeConflictKeys$,
   rowHeight,
   showOnlyHunks,
   sideBySideFileHeaderByListIndex,
   sideBySideItemIndexes,
-  syntaxAppearance,
   syntaxHighlightingEnabled,
   syntaxThemeName,
   unifiedItemIndexes,
   viewMode,
 }: {
-  borderColor: string;
   collapsedFileIndexes: ReadonlySet<number>;
-  fileHeaderBackgroundColor: string;
   files: readonly DiffFileSummary[];
-  foregroundColor: string;
-  fontFamily: string;
-  fontSize: number;
   mergeState: DiffMergeState;
-  mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  primaryColor: string;
   resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
   rowHeight: number;
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
   sideBySideItemIndexes: Array<number | undefined>;
-  syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
   syntaxThemeName: string;
   unifiedItemIndexes: Array<number | undefined>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }) {
   const mergeSyntaxByPath$ = useObservable<DiffMergeSyntaxByPath>({});
-  const mergeRender$ = useObservable<DiffMergeRenderState>(() => ({
-    borderColor,
-    fileHeaderBackgroundColor,
-    fontFamily,
-    fontSize,
-    foregroundColor,
-    mutedColor,
-    primaryColor,
-    rowHeight,
-    syntaxAppearance,
-  }), [
-    borderColor,
-    fileHeaderBackgroundColor,
-    fontFamily,
-    fontSize,
-    foregroundColor,
-    mutedColor,
-    primaryColor,
-    rowHeight,
-    syntaxAppearance,
-  ]);
+  const mergeRenderInitialState = useMemo(createDiffMergeRenderState, []);
+  const mergeRender$ = useObservable<DiffMergeRenderState>(mergeRenderInitialState);
   const mergeDisplayModelByPath = useMemo(() => {
     const map = new Map<string, DiffMergeDisplayModel>();
     if (mergeState.status === "ready") {
@@ -2461,6 +2673,23 @@ function DiffCompareRefPrompt({
 }
 
 export function DiffViewerWindow(props: DiffViewerWindowProps) {
+  if (!loggedFirstViewerWindowRender) {
+    loggedFirstViewerWindowRender = true;
+    logDiffOpenTiming("viewer.window.render.first", () => ({
+      focusUrlInput: typeof props.focusUrlInputRequestId === "number",
+      hasFolderPath: Boolean(props.folderPath),
+      hasSource: Boolean(props.source),
+    }));
+  }
+
+  useEffect(() => {
+    logDiffOpenTiming("viewer.window.effect.mount", () => ({
+      focusUrlInput: typeof props.focusUrlInputRequestId === "number",
+      hasFolderPath: Boolean(props.folderPath),
+      hasSource: Boolean(props.source),
+    }));
+  }, []);
+
   return (
     <DiffViewerModelProvider>
       <DiffViewerWindowContent {...props} />
@@ -2471,6 +2700,7 @@ export function DiffViewerWindow(props: DiffViewerWindowProps) {
 function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
   const windowIdentifier = useWindowId();
   const renderCountRef = useRef(0);
+  const loggedFirstContentRenderRef = useRef(false);
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
@@ -2485,6 +2715,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const nativeDiffRows = true;
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
+  if (!loggedFirstContentRenderRef.current) {
+    loggedFirstContentRenderRef.current = true;
+    logDiffOpenTiming("viewer.content.render.first", () => ({
+      focusUrlInput: typeof focusUrlInputRequestId === "number",
+      hasFolderPath: Boolean(folderPath),
+      hasSource: Boolean(source),
+      windowIdentifier,
+    }));
+  }
   const {
     activeFileIndex$,
     collapsedFileIndexes$,
@@ -2512,6 +2751,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     urlInput$,
     urlInputError$,
   } = model;
+
+  useEffect(() => {
+    logDiffOpenTiming("viewer.content.effect.mount", () => ({
+      focusUrlInput: typeof focusUrlInputRequestId === "number",
+      hasFolderPath: Boolean(folderPath),
+      hasSource: Boolean(source),
+      windowIdentifier,
+    }));
+  }, [focusUrlInputRequestId, folderPath, source, windowIdentifier]);
   const state = useValue(state$);
   const documentError = useValue(documentError$);
   const loadingSource = useValue(loadingSource$);
@@ -2684,6 +2932,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     getVisibleListIndex,
     sideBySideFileHeaderIndexes,
     sideBySideFileHeaderByListIndex,
+    sideBySideHunkHeaderIndexes,
     sideBySideItemIndexes,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
@@ -3256,6 +3505,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         } else {
           result = progress;
           logDiffOpenTiming("viewer.native.initialProgress", () => ({
+            ...getDiffLoadTimingPayload(progress.timing),
             complete: progress.complete,
             files: progress.files.length,
             initialRows: progress.initialRows.length,
@@ -3291,6 +3541,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
           const loadedResult = result;
           logDiffOpenTiming("viewer.native.finish", () => ({
+            ...getDiffLoadTimingPayload(loadedResult.timing),
             files: loadedResult.files.length,
             initialRows: loadedResult.initialRows.length,
             nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
@@ -3323,6 +3574,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           result = await loadUnifiedDiff(createFilePairUnifiedDiff(nextSource, commandResult), nextSource.label, initialRowCount);
           const loadedResult = result;
           logDiffOpenTiming("viewer.native.finish", () => ({
+            ...getDiffLoadTimingPayload(loadedResult.timing),
             files: loadedResult.files.length,
             initialRows: loadedResult.initialRows.length,
             nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
@@ -3358,6 +3610,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
           const loadedResult = result;
           logDiffOpenTiming("viewer.native.finish", () => ({
+            ...getDiffLoadTimingPayload(loadedResult.timing),
             files: loadedResult.files.length,
             initialRows: loadedResult.initialRows.length,
             nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
@@ -3400,6 +3653,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         } else {
           result = progress;
           logDiffOpenTiming("viewer.native.initialProgress", () => ({
+            ...getDiffLoadTimingPayload(progress.timing),
             complete: progress.complete,
             files: progress.files.length,
             initialRows: progress.initialRows.length,
@@ -3420,6 +3674,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           const nativeResolvedAt = nowMs();
           trace.nativeResolvedAt = nativeResolvedAt;
           logDiffOpenTiming("viewer.load.nativeResolved", () => ({
+            ...getDiffLoadTimingPayload(loadedResult.timing),
             files: loadedResult.files.length,
             grammarEnsureMs: 0,
             initialRows: loadedResult.initialRows.length,
@@ -4280,63 +4535,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
-  const rowRender$ = useObservable<DiffRowRenderState>(() => ({
-    document: {
-      collapsedFileIndexList,
-      current: loadedDocument,
-      fileByIndex,
-      fileByRowStart,
-      fileHeaderRowIndexes,
-      sideBySideFileHeaderByListIndex,
-      sideBySideRowCount,
-    },
-    nativeRows: {
-      sideBySideConfigId: nativeSideBySideRowConfig.configId,
-      sideBySideConfigVersion: nativeSideBySideRowConfig.configVersion,
-      unifiedConfigId: nativeUnifiedRowConfig.configId,
-      unifiedConfigVersion: nativeUnifiedRowConfig.configVersion,
-    },
-    presentation: {
-      borderColor: diffPalette.border,
-      fileHeaderBackgroundColor,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      hunkHeaderBackgroundColor,
-      mutedColor,
-      rowHeight,
-      showOnlyHunks,
-      syntaxAppearance: syntaxTheme.appearance,
-      syntaxHighlightingEnabled,
-      syntaxStyleStore,
-      syntaxThemeName: listSyntaxTheme,
-    },
-  }), [
-    collapsedFileIndexList,
-    diffPalette.border,
-    fileByIndex,
-    fileByRowStart,
-    fileHeaderBackgroundColor,
-    fileHeaderRowIndexes,
-    fontFamily,
-    fontSize,
-    foregroundColor,
-    hunkHeaderBackgroundColor,
-    listSyntaxTheme,
-    loadedDocument,
-    mutedColor,
-    nativeSideBySideRowConfig.configId,
-    nativeSideBySideRowConfig.configVersion,
-    nativeUnifiedRowConfig.configId,
-    nativeUnifiedRowConfig.configVersion,
-    rowHeight,
-    showOnlyHunks,
-    sideBySideFileHeaderByListIndex,
-    sideBySideRowCount,
-    syntaxHighlightingEnabled,
-    syntaxStyleStore,
-    syntaxTheme.appearance,
-  ]);
+  const rowRenderInitialState = useMemo(
+    () => createDiffRowRenderState(state$, collapsedFileIndexes$),
+    [collapsedFileIndexes$, state$],
+  );
+  const rowRender$ = useObservable<DiffRowRenderState>(rowRenderInitialState);
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
@@ -4509,21 +4712,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return nextFolders;
     });
   }, []);
-  const sidebarRender$ = useObservable<DiffSidebarRenderState>(() => ({
-    conflictBadgeBackgroundColor: sidebarConflictBadgeBackgroundColor,
-    conflictBadgeTextColor: sidebarConflictBadgeTextColor,
-    foregroundColor,
-    selectedBackgroundColor: selectedSidebarFileBackgroundColor,
-    selectedBorderColor: diffPalette.sidebarSelectedBorder,
-    sidebarFolderColor,
-  }), [
-    diffPalette.sidebarSelectedBorder,
-    foregroundColor,
-    selectedSidebarFileBackgroundColor,
-    sidebarConflictBadgeBackgroundColor,
-    sidebarConflictBadgeTextColor,
-    sidebarFolderColor,
-  ]);
+  const sidebarRenderInitialState = useMemo(createDiffSidebarRenderState, []);
+  const sidebarRender$ = useObservable<DiffSidebarRenderState>(sidebarRenderInitialState);
 
   const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
     let row: ReactElement;
@@ -4670,9 +4860,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return diffFileHeaderRowHeight;
     }
 
-    const row = loadedDocument?.getPlainSideBySideRow(index, collapsedFileIndexList);
-    return rowHeight + (showOnlyHunks && isDiffSideBySideHunkStart(loadedDocument, index, collapsedFileIndexList, row) ? diffHunkHeaderHeight : 0);
-  }, [collapsedFileIndexList, loadedDocument, rowHeight, showOnlyHunks, sideBySideFileHeaderIndexes]);
+    return rowHeight + (showOnlyHunks && sideBySideHunkHeaderIndexes.has(index) ? diffHunkHeaderHeight : 0);
+  }, [rowHeight, showOnlyHunks, sideBySideFileHeaderIndexes, sideBySideHunkHeaderIndexes]);
 
   const renderSideBySideRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
@@ -4816,6 +5005,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         sidebarWidth={sidebarWidth}
         sideBySideDataVersion={sideBySideDataVersion}
         sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
+        sideBySideHunkHeaderIndexes={sideBySideHunkHeaderIndexes}
         sideBySideItemIndexes={sideBySideItemIndexes}
         splitPaneMetrics$={splitPaneMetrics$}
         state={state}
