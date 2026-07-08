@@ -296,6 +296,12 @@ static char LegendManagedRootViewKey;
 static char LegendContentLayoutModeKey;
 static char LegendTitlebarControlMetadataKey;
 static char LegendToolbarControlMetadataKey;
+static char LegendToolbarSearchFieldKey;
+static char LegendToolbarSearchItemKey;
+static char LegendToolbarSearchWidthKey;
+static char LegendToolbarSearchButtonKey;
+static char LegendToolbarSearchContainerKey;
+static char LegendToolbarSearchWidthConstraintKey;
 
 static RCTUIView *LegendManagedRootView(NSWindow *window)
 {
@@ -512,6 +518,9 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
 @property (nonatomic, assign) BOOL hasListeners;
 @property (nonatomic, assign) BOOL mainWindowObserversInstalled;
+#if TARGET_OS_OSX
+- (void)sendToolbarSearchEventForField:(NSSearchField *)searchField submitted:(BOOL)submitted shiftKey:(BOOL)shiftKey;
+#endif
 @end
 
 @implementation RNWindowManager
@@ -877,6 +886,123 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   return @[];
 }
 
+- (NSImage *)toolbarSearchImageWithLabel:(NSString *)label
+{
+  if (@available(macOS 11.0, *)) {
+    return [NSImage imageWithSystemSymbolName:@"magnifyingglass" accessibilityDescription:label ?: @"Search"];
+  }
+  return [NSImage imageNamed:NSImageNameTouchBarSearchTemplate];
+}
+
+- (void)focusToolbarSearchField:(NSSearchField *)searchField
+{
+  id metadata = objc_getAssociatedObject(searchField, &LegendToolbarControlMetadataKey);
+  NSDictionary *representedObject = [metadata isKindOfClass:NSDictionary.class]
+    ? metadata
+    : @{};
+  NSString *identifier = [representedObject[@"windowIdentifier"] isKindOfClass:NSString.class]
+    ? representedObject[@"windowIdentifier"]
+    : @"";
+  NSWindow *window = (NSWindow *)self.windows[identifier];
+  [window makeKeyAndOrderFront:nil];
+  [window makeFirstResponder:searchField];
+}
+
+- (void)setToolbarSearchItem:(NSToolbarItem *)toolbarItem
+                    expanded:(BOOL)expanded
+                       value:(NSString *)value
+                       focus:(BOOL)focus
+                  sendChange:(BOOL)sendChange
+                    animated:(BOOL)animated
+{
+  if (!toolbarItem) {
+    return;
+  }
+
+  id associatedField = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchFieldKey);
+  id associatedButton = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchButtonKey);
+  id associatedContainer = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchContainerKey);
+  id associatedWidthConstraint = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchWidthConstraintKey);
+  if (![associatedField isKindOfClass:NSSearchField.class]) {
+    return;
+  }
+
+  NSSearchField *searchField = (NSSearchField *)associatedField;
+  NSButton *button = [associatedButton isKindOfClass:NSButton.class] ? (NSButton *)associatedButton : nil;
+  NSView *container = [associatedContainer isKindOfClass:NSView.class] ? (NSView *)associatedContainer : toolbarItem.view;
+  NSLayoutConstraint *widthConstraint = [associatedWidthConstraint isKindOfClass:NSLayoutConstraint.class]
+    ? (NSLayoutConstraint *)associatedWidthConstraint
+    : nil;
+  NSNumber *widthNumber = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchWidthKey);
+  CGFloat width = [widthNumber isKindOfClass:NSNumber.class] ? widthNumber.doubleValue : 240;
+  CGFloat targetWidth = expanded ? width : 32;
+
+  if (value) {
+    searchField.stringValue = value;
+  }
+  if (expanded) {
+    searchField.hidden = NO;
+    button.hidden = NO;
+  }
+  if (focus) {
+    [self focusToolbarSearchField:searchField];
+  }
+  if (container) {
+    NSRect frame = container.frame;
+    frame.size.width = targetWidth;
+    if (animated) {
+      [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.18;
+        context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        widthConstraint.animator.constant = targetWidth;
+        container.animator.frame = frame;
+        searchField.animator.alphaValue = expanded ? 1 : 0;
+        button.animator.alphaValue = expanded ? 0 : 1;
+        [container.superview.animator layoutSubtreeIfNeeded];
+        [container.animator layoutSubtreeIfNeeded];
+      } completionHandler:^{
+        button.hidden = expanded;
+        searchField.hidden = !expanded;
+      }];
+    } else {
+      widthConstraint.constant = targetWidth;
+      container.frame = frame;
+      searchField.alphaValue = expanded ? 1 : 0;
+      button.alphaValue = expanded ? 0 : 1;
+      button.hidden = expanded;
+      searchField.hidden = !expanded;
+      [container layoutSubtreeIfNeeded];
+    }
+  }
+  if (sendChange) {
+    [self sendToolbarSearchEventForField:searchField submitted:NO shiftKey:NO];
+  }
+}
+
+- (void)collapseToolbarSearchItem:(NSToolbarItem *)toolbarItem animated:(BOOL)animated
+{
+  [self setToolbarSearchItem:toolbarItem
+                    expanded:NO
+                       value:nil
+                       focus:NO
+                  sendChange:NO
+                    animated:animated];
+}
+
+- (void)expandToolbarSearchItem:(NSToolbarItem *)toolbarItem
+                          value:(NSString *)value
+                          focus:(BOOL)focus
+                     sendChange:(BOOL)sendChange
+                       animated:(BOOL)animated
+{
+  [self setToolbarSearchItem:toolbarItem
+                    expanded:YES
+                       value:value
+                       focus:focus
+                  sendChange:sendChange
+                    animated:animated];
+}
+
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar
     itemForItemIdentifier:(NSToolbarItemIdentifier)itemIdentifier
 willBeInsertedIntoToolbar:(BOOL)flag
@@ -950,6 +1076,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSString *value = [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"";
     NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
     CGFloat width = widthNumber ? widthNumber.doubleValue : 240;
+    BOOL collapses = LegendDictionaryHasKey(config, @"collapses") && [config[@"collapses"] boolValue];
     NSDictionary *metadata = @{
       @"itemId": itemId,
       @"windowIdentifier": toolbar.identifier ?: @"",
@@ -957,7 +1084,54 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
     NSSearchField *searchField = nil;
     NSToolbarItem *toolbarItem = nil;
-    if (@available(macOS 11.0, *)) {
+    if (collapses) {
+      CGFloat initialWidth = value.length > 0 ? width : 32;
+      NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, initialWidth, 28)];
+      container.translatesAutoresizingMaskIntoConstraints = NO;
+      NSLayoutConstraint *containerWidthConstraint = [container.widthAnchor constraintEqualToConstant:initialWidth];
+      containerWidthConstraint.active = YES;
+      [container.heightAnchor constraintEqualToConstant:28].active = YES;
+
+      NSButton *searchButton = [NSButton buttonWithImage:[self toolbarSearchImageWithLabel:label]
+                                                  target:self
+                                                  action:@selector(toolbarSearchButtonPressed:)];
+      searchButton.translatesAutoresizingMaskIntoConstraints = NO;
+      searchButton.bordered = NO;
+      searchButton.controlSize = NSControlSizeRegular;
+      searchButton.imagePosition = NSImageOnly;
+      searchButton.toolTip = placeholder;
+      searchButton.enabled = LegendDictionaryHasKey(config, @"enabled") ? [config[@"enabled"] boolValue] : YES;
+      [container addSubview:searchButton];
+      [NSLayoutConstraint activateConstraints:@[
+        [searchButton.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+        [searchButton.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [searchButton.widthAnchor constraintEqualToConstant:32],
+        [searchButton.heightAnchor constraintEqualToConstant:28],
+      ]];
+
+      searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 0, width, 28)];
+      searchField.translatesAutoresizingMaskIntoConstraints = NO;
+      searchField.hidden = value.length == 0;
+      searchField.alphaValue = value.length > 0 ? 1 : 0;
+      searchButton.hidden = value.length > 0;
+      searchButton.alphaValue = value.length > 0 ? 0 : 1;
+      [container addSubview:searchField];
+      [NSLayoutConstraint activateConstraints:@[
+        [searchField.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [searchField.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [searchField.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [searchField.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+      ]];
+      toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+      toolbarItem.view = container;
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchFieldKey, searchField, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchWidthKey, @(width), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchButtonKey, searchButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchContainerKey, container, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(toolbarItem, &LegendToolbarSearchWidthConstraintKey, containerWidthConstraint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      objc_setAssociatedObject(searchButton, &LegendToolbarSearchItemKey, toolbarItem, OBJC_ASSOCIATION_ASSIGN);
+      objc_setAssociatedObject(searchField, &LegendToolbarSearchItemKey, toolbarItem, OBJC_ASSOCIATION_ASSIGN);
+    } else if (@available(macOS 11.0, *)) {
       NSSearchToolbarItem *searchToolbarItem = [[NSSearchToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
       searchField = searchToolbarItem.searchField;
       toolbarItem = searchToolbarItem;
@@ -980,8 +1154,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
     toolbarItem.paletteLabel = label;
     toolbarItem.toolTip = placeholder;
     toolbarItem.enabled = searchField.enabled;
-    toolbarItem.minSize = NSMakeSize(MIN(width, 120), 28);
-    toolbarItem.maxSize = NSMakeSize(width, 28);
+    if (collapses) {
+      searchField.enabled = toolbarItem.enabled;
+    } else {
+      toolbarItem.minSize = NSMakeSize(MIN(width, 120), 28);
+      toolbarItem.maxSize = NSMakeSize(width, 28);
+    }
     return toolbarItem;
   }
 
@@ -1082,6 +1260,21 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
   [self sendWindowEventWithName:@"onToolbarItemSelected"
                            body:@{@"identifier": identifier, @"itemId": itemId, @"value": value}];
+}
+
+- (void)toolbarSearchButtonPressed:(id)sender
+{
+  NSToolbarItem *toolbarItem = [sender isKindOfClass:NSToolbarItem.class]
+    ? (NSToolbarItem *)sender
+    : nil;
+  if (!toolbarItem) {
+    id associatedItem = objc_getAssociatedObject(sender, &LegendToolbarSearchItemKey);
+    if ([associatedItem isKindOfClass:NSToolbarItem.class]) {
+      toolbarItem = (NSToolbarItem *)associatedItem;
+    }
+  }
+
+  [self expandToolbarSearchItem:toolbarItem value:nil focus:YES sendChange:YES animated:YES];
 }
 
 - (void)toolbarButtonItemPressed:(id)sender
@@ -1210,6 +1403,19 @@ willBeInsertedIntoToolbar:(BOOL)flag
 {
   if ([notification.object isKindOfClass:NSSearchField.class]) {
     [self sendToolbarSearchEventForField:(NSSearchField *)notification.object submitted:NO shiftKey:NO];
+  }
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)notification
+{
+  if ([notification.object isKindOfClass:NSSearchField.class]) {
+    NSSearchField *searchField = (NSSearchField *)notification.object;
+    if (searchField.stringValue.length == 0) {
+      id associatedItem = objc_getAssociatedObject(searchField, &LegendToolbarSearchItemKey);
+      if ([associatedItem isKindOfClass:NSToolbarItem.class]) {
+        [self collapseToolbarSearchItem:(NSToolbarItem *)associatedItem animated:YES];
+      }
+    }
   }
 }
 
@@ -1717,6 +1923,14 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     if (!searchField && [toolbarItem.view isKindOfClass:NSSearchField.class]) {
       searchField = (NSSearchField *)toolbarItem.view;
+    }
+    if (!searchField) {
+      id associatedField = objc_getAssociatedObject(toolbarItem, &LegendToolbarSearchFieldKey);
+      if ([associatedField isKindOfClass:NSSearchField.class]) {
+        [self expandToolbarSearchItem:toolbarItem value:value focus:YES sendChange:YES animated:YES];
+        resolve([self successJson]);
+        return;
+      }
     }
     if (!searchField) {
       resolve([self failureJson:@"Toolbar search field not found"]);

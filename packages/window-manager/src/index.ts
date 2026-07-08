@@ -133,6 +133,7 @@ export type WindowToolbarSegmentedItem = {
 };
 
 export type WindowToolbarSearchItem = {
+  collapses?: boolean;
   enabled?: boolean;
   id: string;
   label?: string;

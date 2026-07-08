@@ -70,6 +70,7 @@ function createDiffCompareToolbarItem(source: DiffOpenSource | null | undefined,
 
 function createDiffSearchToolbarItem() {
   return {
+    collapses: true,
     id: diffSearchToolbarItemId,
     label: "Search",
     placeholder: "Search diff or @files",
