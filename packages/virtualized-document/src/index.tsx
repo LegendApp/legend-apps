@@ -105,7 +105,6 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   dataVersion?: string | number;
   debugName?: string;
   estimatedItemSize?: number;
-  extraData?: unknown;
   getItemSize?: (index: number) => number;
   getItemType?: (index: number) => string | undefined;
   getDocumentIndex?: VirtualizedFixedDocumentListDocumentIndexMapper;
@@ -500,7 +499,6 @@ export function VirtualizedFixedDocumentList<TRow>({
   dataVersion,
   debugName,
   estimatedItemSize,
-  extraData,
   getRow,
   getDocumentIndex,
   getItemSize,
@@ -542,13 +540,6 @@ export function VirtualizedFixedDocumentList<TRow>({
   const internalListRef = useRef<LegendListRef | null>(null);
   const lastScrollSampleRef = useRef<{ offsetY: number; timestamp: number } | null>(null);
   const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
-  const listExtraData = useMemo(
-    () => ({
-      extraData,
-    }),
-    [extraData],
-  );
-
   useEffect(() => {
     renderCountRef.current += 1;
     debugLog(debugName, "list.renderCommitted", {
@@ -835,7 +826,6 @@ export function VirtualizedFixedDocumentList<TRow>({
       data={itemIndexes}
       dataVersion={dataVersion}
       estimatedItemSize={estimatedItemSize ?? rowHeight}
-      extraData={listExtraData}
       experimental_adaptiveRender={adaptiveRender}
       getFixedItemSize={getFixedItemSize}
       getItemType={getLegendItemType}

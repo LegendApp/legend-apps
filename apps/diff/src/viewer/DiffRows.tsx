@@ -26,8 +26,10 @@ import {
   getFileStatusPresentation,
 } from "./diffFilePresentation";
 
+export type DiffSearchHighlightRecord = Readonly<Record<string, string | undefined>>;
+
 export type DiffRenderFields = {
-  activeSearchHighlightByRowIndex: ReadonlyMap<number, string>;
+  activeSearchHighlightByRowIndex: DiffSearchHighlightRecord;
   activeSearchHighlightColor: string;
   activeSearchRowHighlightColor: string;
   borderColor: string;
@@ -47,7 +49,7 @@ export type DiffRenderFields = {
   nativeUnifiedRowConfigId: string;
   nativeUnifiedRowConfigVersion: number;
   rowHeight: number;
-  searchHighlightByRowIndex: ReadonlyMap<number, string>;
+  searchHighlightByRowIndex: DiffSearchHighlightRecord;
   searchHighlightColor: string;
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
@@ -96,7 +98,7 @@ type DiffUnifiedRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
-  renderFields: DiffRenderFields;
+  renderFields$: Observable<DiffRenderFields>;
   row: DiffRenderRow | undefined;
 };
 
@@ -104,7 +106,7 @@ type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
-  renderFields: DiffRenderFields;
+  renderFields$: Observable<DiffRenderFields>;
   row: DiffSideBySideRenderRow | undefined;
 };
 
@@ -292,28 +294,37 @@ const DiffHunkHeader = memo(function DiffHunkHeader({
 function DiffNativeUnifiedLineRow({
   adaptiveRender,
   index,
-  renderFields,
+  renderFields$,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
-  renderFields: DiffRenderFields;
+  renderFields$: Observable<DiffRenderFields>;
 }) {
+  const activeSearchHighlightColor = useValue(() => renderFields$.activeSearchHighlightColor.get());
+  const activeSearchHighlights = useValue(() => renderFields$.activeSearchHighlightByRowIndex[String(index)].get()) ?? "";
+  const activeSearchRowHighlightColor = useValue(() => renderFields$.activeSearchRowHighlightColor.get());
+  const nativeUnifiedRowConfigId = useValue(() => renderFields$.nativeUnifiedRowConfigId.get());
+  const nativeUnifiedRowConfigVersion = useValue(() => renderFields$.nativeUnifiedRowConfigVersion.get());
+  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const searchHighlightColor = useValue(() => renderFields$.searchHighlightColor.get());
+  const searchHighlights = useValue(() => renderFields$.searchHighlightByRowIndex[String(index)].get()) ?? "";
+
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
-      activeSearchHighlightColor={renderFields.activeSearchHighlightColor}
-      activeSearchHighlights={renderFields.activeSearchHighlightByRowIndex.get(index) ?? ""}
+      activeSearchHighlightColor={activeSearchHighlightColor}
+      activeSearchHighlights={activeSearchHighlights}
       activeSearchNewHighlights=""
       activeSearchOldHighlights=""
-      activeSearchRowHighlightColor={renderFields.activeSearchRowHighlightColor}
-      configId={renderFields.nativeUnifiedRowConfigId}
-      configVersion={renderFields.nativeUnifiedRowConfigVersion}
+      activeSearchRowHighlightColor={activeSearchRowHighlightColor}
+      configId={nativeUnifiedRowConfigId}
+      configVersion={nativeUnifiedRowConfigVersion}
       rowIndex={index}
-      searchHighlightColor={renderFields.searchHighlightColor}
-      searchHighlights={renderFields.searchHighlightByRowIndex.get(index) ?? ""}
+      searchHighlightColor={searchHighlightColor}
+      searchHighlights={searchHighlights}
       searchNewHighlights=""
       searchOldHighlights=""
-      style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
+      style={[styles.nativeDiffRow, { height: rowHeight }]}
     />
   );
 }
@@ -321,12 +332,12 @@ function DiffNativeUnifiedLineRow({
 function DiffNativeSideBySideLineRow({
   adaptiveRender,
   index,
-  renderFields,
+  renderFields$,
   row,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
-  renderFields: DiffRenderFields;
+  renderFields$: Observable<DiffRenderFields>;
   row: DiffSideBySideRenderRow | undefined;
 }) {
   const oldRowIndex = row?.oldRowVisible ? row.oldRow.index : -1;
@@ -335,22 +346,33 @@ function DiffNativeSideBySideLineRow({
       ? row.oldRow.index
       : row.newRow.index
     : -1;
+  const activeSearchHighlightColor = useValue(() => renderFields$.activeSearchHighlightColor.get());
+  const activeSearchNewHighlights = useValue(() => newRowIndex >= 0 ? renderFields$.activeSearchHighlightByRowIndex[String(newRowIndex)].get() : "") ?? "";
+  const activeSearchOldHighlights = useValue(() => oldRowIndex >= 0 ? renderFields$.activeSearchHighlightByRowIndex[String(oldRowIndex)].get() : "") ?? "";
+  const activeSearchRowHighlightColor = useValue(() => renderFields$.activeSearchRowHighlightColor.get());
+  const nativeSideBySideRowConfigId = useValue(() => renderFields$.nativeSideBySideRowConfigId.get());
+  const nativeSideBySideRowConfigVersion = useValue(() => renderFields$.nativeSideBySideRowConfigVersion.get());
+  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const searchHighlightColor = useValue(() => renderFields$.searchHighlightColor.get());
+  const searchNewHighlights = useValue(() => newRowIndex >= 0 ? renderFields$.searchHighlightByRowIndex[String(newRowIndex)].get() : "") ?? "";
+  const searchOldHighlights = useValue(() => oldRowIndex >= 0 ? renderFields$.searchHighlightByRowIndex[String(oldRowIndex)].get() : "") ?? "";
+
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
-      activeSearchHighlightColor={renderFields.activeSearchHighlightColor}
+      activeSearchHighlightColor={activeSearchHighlightColor}
       activeSearchHighlights=""
-      activeSearchNewHighlights={newRowIndex >= 0 ? renderFields.activeSearchHighlightByRowIndex.get(newRowIndex) ?? "" : ""}
-      activeSearchOldHighlights={oldRowIndex >= 0 ? renderFields.activeSearchHighlightByRowIndex.get(oldRowIndex) ?? "" : ""}
-      activeSearchRowHighlightColor={renderFields.activeSearchRowHighlightColor}
-      configId={renderFields.nativeSideBySideRowConfigId}
-      configVersion={renderFields.nativeSideBySideRowConfigVersion}
+      activeSearchNewHighlights={activeSearchNewHighlights}
+      activeSearchOldHighlights={activeSearchOldHighlights}
+      activeSearchRowHighlightColor={activeSearchRowHighlightColor}
+      configId={nativeSideBySideRowConfigId}
+      configVersion={nativeSideBySideRowConfigVersion}
       rowIndex={index}
-      searchHighlightColor={renderFields.searchHighlightColor}
+      searchHighlightColor={searchHighlightColor}
       searchHighlights=""
-      searchNewHighlights={newRowIndex >= 0 ? renderFields.searchHighlightByRowIndex.get(newRowIndex) ?? "" : ""}
-      searchOldHighlights={oldRowIndex >= 0 ? renderFields.searchHighlightByRowIndex.get(oldRowIndex) ?? "" : ""}
-      style={[styles.nativeDiffRow, { height: renderFields.rowHeight }]}
+      searchNewHighlights={searchNewHighlights}
+      searchOldHighlights={searchOldHighlights}
+      style={[styles.nativeDiffRow, { height: rowHeight }]}
     />
   );
 }
@@ -449,30 +471,32 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   adaptiveRender,
   collapsedFileIndexes$,
   index,
-  renderFields,
+  renderFields$,
   row,
 }: DiffUnifiedRowProps) {
-  const borderColor = renderFields.borderColor;
-  const fileHeaderBackgroundColor = renderFields.fileHeaderBackgroundColor;
-  const fileByIndex = renderFields.fileByIndex;
-  const fileByRowStart = renderFields.fileByRowStart;
-  const fileHeaderRowIndexes = renderFields.fileHeaderRowIndexes;
-  const fontFamily = renderFields.fontFamily;
-  const fontSize = renderFields.fontSize;
-  const foregroundColor = renderFields.foregroundColor;
-  const hunkHeaderBackgroundColor = renderFields.hunkHeaderBackgroundColor;
-  const mutedColor = renderFields.mutedColor;
-  const rowHeight = renderFields.rowHeight;
-  const syntaxAppearance = renderFields.syntaxAppearance;
-  const toggleFileCollapsed = renderFields.toggleFileCollapsed;
+  const borderColor = useValue(() => renderFields$.borderColor.get());
+  const document = useValue(() => renderFields$.document.get()) as DiffDocument | null;
+  const fileHeaderBackgroundColor = useValue(() => renderFields$.fileHeaderBackgroundColor.get());
+  const fileByIndex = useValue(() => renderFields$.fileByIndex.get());
+  const fileByRowStart = useValue(() => renderFields$.fileByRowStart.get());
+  const fileHeaderRowIndexes = useValue(() => renderFields$.fileHeaderRowIndexes.get());
+  const fontFamily = useValue(() => renderFields$.fontFamily.get());
+  const fontSize = useValue(() => renderFields$.fontSize.get());
+  const foregroundColor = useValue(() => renderFields$.foregroundColor.get());
+  const hunkHeaderBackgroundColor = useValue(() => renderFields$.hunkHeaderBackgroundColor.get());
+  const mutedColor = useValue(() => renderFields$.mutedColor.get());
+  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const showOnlyHunks = useValue(() => renderFields$.showOnlyHunks.get());
+  const syntaxAppearance = useValue(() => renderFields$.syntaxAppearance.get());
+  const toggleFileCollapsed = useValue(() => renderFields$.toggleFileCollapsed.get()) as unknown as (fileIndex: number) => void;
   const isFileHeader = row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index);
   const displayRow = row ?? (
-    renderFields.document && !isFileHeader
-      ? getPlainUnifiedRow(renderFields.document, index)
+    document && !isFileHeader
+      ? getPlainUnifiedRow(document, index)
       : undefined
   );
-  const hunkHeaderInfo = renderFields.showOnlyHunks
-    ? getDiffUnifiedHunkHeaderInfo(renderFields.document, index, displayRow)
+  const hunkHeaderInfo = showOnlyHunks
+    ? getDiffUnifiedHunkHeaderInfo(document, index, displayRow)
     : null;
   const file = row ? fileByIndex.get(row.fileIndex) : fileByRowStart.get(index);
 
@@ -508,11 +532,11 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
           mutedColor={mutedColor}
         />
       ) : null}
-      {renderFields.document ? (
+      {document ? (
         <DiffNativeUnifiedLineRow
           adaptiveRender={adaptiveRender}
           index={index}
-          renderFields={renderFields}
+          renderFields$={renderFields$}
         />
       ) : (
         <View style={{ height: rowHeight }} />
@@ -525,35 +549,40 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   adaptiveRender,
   collapsedFileIndexes$,
   index,
-  renderFields,
+  renderFields$,
   row,
 }: DiffSideBySideRowProps) {
-  const borderColor = renderFields.borderColor;
-  const fileHeaderBackgroundColor = renderFields.fileHeaderBackgroundColor;
-  const fileByIndex = renderFields.fileByIndex;
-  const fileByRowStart = renderFields.fileByRowStart;
-  const fontFamily = renderFields.fontFamily;
-  const fontSize = renderFields.fontSize;
-  const foregroundColor = renderFields.foregroundColor;
-  const hunkHeaderBackgroundColor = renderFields.hunkHeaderBackgroundColor;
-  const mutedColor = renderFields.mutedColor;
-  const rowHeight = renderFields.rowHeight;
-  const syntaxAppearance = renderFields.syntaxAppearance;
-  const toggleFileCollapsed = renderFields.toggleFileCollapsed;
+  const borderColor = useValue(() => renderFields$.borderColor.get());
+  const collapsedFileIndexList = useValue(() => renderFields$.collapsedFileIndexList.get());
+  const document = useValue(() => renderFields$.document.get()) as DiffDocument | null;
+  const fileHeaderBackgroundColor = useValue(() => renderFields$.fileHeaderBackgroundColor.get());
+  const fileByIndex = useValue(() => renderFields$.fileByIndex.get());
+  const fileByRowStart = useValue(() => renderFields$.fileByRowStart.get());
+  const fontFamily = useValue(() => renderFields$.fontFamily.get());
+  const fontSize = useValue(() => renderFields$.fontSize.get());
+  const foregroundColor = useValue(() => renderFields$.foregroundColor.get());
+  const hunkHeaderBackgroundColor = useValue(() => renderFields$.hunkHeaderBackgroundColor.get());
+  const mutedColor = useValue(() => renderFields$.mutedColor.get());
+  const rowHeight = useValue(() => renderFields$.rowHeight.get());
+  const showOnlyHunks = useValue(() => renderFields$.showOnlyHunks.get());
+  const sideBySideFileHeaderByListIndex = useValue(() => renderFields$.sideBySideFileHeaderByListIndex.get());
+  const sideBySideRowCount = useValue(() => renderFields$.sideBySideRowCount.get());
+  const syntaxAppearance = useValue(() => renderFields$.syntaxAppearance.get());
+  const toggleFileCollapsed = useValue(() => renderFields$.toggleFileCollapsed.get()) as unknown as (fileIndex: number) => void;
   const displayRow = row ?? (
-    renderFields.document
-      ? renderFields.document.getPlainSideBySideRow(index, [...renderFields.collapsedFileIndexList])
+    document
+      ? document.getPlainSideBySideRow(index, [...collapsedFileIndexList])
       : undefined
   );
   const fileHeader = row?.kind === "file-header"
     ? { fileIndex: row.fileIndex, sourceStart: row.sourceStart }
-    : renderFields.sideBySideFileHeaderByListIndex.get(index);
-  const hunkHeaderInfo = renderFields.showOnlyHunks
+    : sideBySideFileHeaderByListIndex.get(index);
+  const hunkHeaderInfo = showOnlyHunks
     ? getDiffSideBySideHunkHeaderInfo(
-        renderFields.document,
+        document,
         index,
-        renderFields.collapsedFileIndexList,
-        renderFields.sideBySideRowCount,
+        collapsedFileIndexList,
+        sideBySideRowCount,
         displayRow,
     )
     : null;
@@ -591,11 +620,11 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
           mutedColor={mutedColor}
         />
       ) : null}
-      {renderFields.document ? (
+      {document ? (
         <DiffNativeSideBySideLineRow
           adaptiveRender={adaptiveRender}
           index={index}
-          renderFields={renderFields}
+          renderFields$={renderFields$}
           row={displayRow}
         />
       ) : (

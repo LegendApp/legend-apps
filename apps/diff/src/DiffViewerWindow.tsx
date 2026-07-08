@@ -170,6 +170,7 @@ import {
   getDiffRowPalette,
   getSideBySideDividerColor,
   type DiffRenderFields,
+  type DiffSearchHighlightRecord,
 } from "./viewer/DiffRows";
 import {
   DiffActionHandlersController,
@@ -501,7 +502,7 @@ type DiffLoadedBodyProps = {
   handleTopItemChanged: (rowIndex: number) => void;
   handleVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
   isRenderingInitialLoadedFrame: boolean;
-  listExtraData: DiffListExtraData;
+  rowConfig: DiffRowConfig;
   listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
   loadingSource: DiffOpenSource | null;
   mergeState: DiffMergeState;
@@ -542,22 +543,14 @@ type DiffLoadingSplitBodyProps = {
   syntaxAppearance: "dark" | "light";
 };
 
-type DiffListExtraData = {
-  adaptiveLightModeEnabled: boolean;
-  activeSearchResultId: string;
+type DiffRowConfig = {
   borderColor: string;
   collapsedFileIndexes: ReadonlySet<number>;
-  collapsedFileIndexesKey: string;
   fileHeaderBackgroundColor: string;
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
-  mutedColor: string;
-  rowHeight: number;
-  searchQuery: string;
   showOnlyHunks: boolean;
-  sideBySideRowCount: number;
-  syntaxAppearance: "dark" | "light";
   syntaxHighlightingEnabled: boolean;
   syntaxTheme: DiffSettingsFile["syntaxTheme"];
 };
@@ -600,6 +593,14 @@ function hashDiffNativeRowConfigVersion(parts: readonly unknown[]) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+function createDiffSearchHighlightRecord(highlights: ReadonlyMap<number, string>): DiffSearchHighlightRecord {
+  const record: Record<string, string> = {};
+  highlights.forEach((value, key) => {
+    record[String(key)] = value;
+  });
+  return record;
 }
 
 function getDiffSidebarFolderTitle(file: DiffFileSummary) {
@@ -1083,7 +1084,7 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   handleTopItemChanged,
   handleVisibleRowsRequested,
   isRenderingInitialLoadedFrame,
-  listExtraData,
+  rowConfig,
   listRef,
   loadingSource,
   mergeState,
@@ -1119,25 +1120,25 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   const diffContentHeight = diffPaneHeight;
   const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const inlineMergeModel = useDiffInlineMergeModel({
-    borderColor: listExtraData.borderColor,
-    collapsedFileIndexes: listExtraData.collapsedFileIndexes,
-    fileHeaderBackgroundColor: listExtraData.fileHeaderBackgroundColor,
+    borderColor: rowConfig.borderColor,
+    collapsedFileIndexes: rowConfig.collapsedFileIndexes,
+    fileHeaderBackgroundColor: rowConfig.fileHeaderBackgroundColor,
     files: state.files,
-    foregroundColor: listExtraData.foregroundColor,
-    fontFamily: listExtraData.fontFamily,
-    fontSize: listExtraData.fontSize,
+    foregroundColor: rowConfig.foregroundColor,
+    fontFamily: rowConfig.fontFamily,
+    fontSize: rowConfig.fontSize,
     mergeState,
     mutedColor,
     onResolveMergeConflict,
     primaryColor,
     resolvingMergeConflictKeys$,
     rowHeight,
-    showOnlyHunks: listExtraData.showOnlyHunks,
+    showOnlyHunks: rowConfig.showOnlyHunks,
     sideBySideFileHeaderByListIndex,
     sideBySideItemIndexes,
     syntaxAppearance,
-    syntaxHighlightingEnabled: listExtraData.syntaxHighlightingEnabled,
-    syntaxThemeName: listExtraData.syntaxTheme,
+    syntaxHighlightingEnabled: rowConfig.syntaxHighlightingEnabled,
+    syntaxThemeName: rowConfig.syntaxTheme,
     unifiedItemIndexes: visibleItemIndexes,
     viewMode,
   });
@@ -1288,7 +1289,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           debugName="diff-unified-list"
           estimatedItemSize={rowHeight}
           key="unified"
-          extraData={listExtraData}
           itemIndexes={inlineMergeModel.itemIndexes}
           itemKeyVersion={state.document.documentId}
           ListHeaderComponent={listHeader}
@@ -1317,7 +1317,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
           debugName="diff-side-by-side-list"
           estimatedItemSize={rowHeight}
           key={viewMode}
-          extraData={listExtraData}
           itemIndexes={inlineMergeModel.itemIndexes}
           itemKeyVersion={state.document.documentId}
           ListHeaderComponent={listHeader}
@@ -2634,6 +2633,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const parsedSearchQuery = useMemo(() => parseDiffSearchQuery(searchQuery), [searchQuery]);
   const searchHighlightByRowIndex = useMemo(() => createDiffSearchHighlightMap(searchResults), [searchResults]);
+  const searchHighlightByRowIndexRecord = useMemo(
+    () => createDiffSearchHighlightRecord(searchHighlightByRowIndex),
+    [searchHighlightByRowIndex],
+  );
   const effectiveActiveSearchResultIndex = searchResults.length > 0
     ? Math.min(activeSearchResultIndex, searchResults.length - 1)
     : 0;
@@ -2641,6 +2644,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const activeSearchHighlightByRowIndex = useMemo(
     () => createActiveDiffSearchHighlightMap(activeSearchResult),
     [activeSearchResult],
+  );
+  const activeSearchHighlightByRowIndexRecord = useMemo(
+    () => createDiffSearchHighlightRecord(activeSearchHighlightByRowIndex),
+    [activeSearchHighlightByRowIndex],
   );
 
   useEffect(() => {
@@ -4020,44 +4027,28 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     () => hashDiffNativeRowConfigVersion([diffRows.dataVersion, collapsedFileIndexesKey, sideBySideRowCount]),
     [collapsedFileIndexesKey, diffRows.dataVersion, sideBySideRowCount],
   );
-  const listExtraData = useMemo<DiffListExtraData>(
+  const rowConfig = useMemo<DiffRowConfig>(
     () => ({
-      adaptiveLightModeEnabled,
-      activeSearchResultId: activeSearchResult?.id ?? "",
       borderColor: diffPalette.border,
       collapsedFileIndexes,
-      collapsedFileIndexesKey,
       fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
       foregroundColor,
-      mutedColor,
-      rowHeight,
-      searchQuery,
       showOnlyHunks,
-      sideBySideRowCount,
-      syntaxAppearance: syntaxTheme.appearance,
       syntaxHighlightingEnabled,
       syntaxTheme: listSyntaxTheme,
     }),
     [
-      adaptiveLightModeEnabled,
-      activeSearchResult,
       collapsedFileIndexes,
-      collapsedFileIndexesKey,
       diffPalette.border,
       fileHeaderBackgroundColor,
       fontFamily,
       fontSize,
       foregroundColor,
       listSyntaxTheme,
-      mutedColor,
-      rowHeight,
-      searchQuery,
       showOnlyHunks,
-      sideBySideRowCount,
       syntaxHighlightingEnabled,
-      syntaxTheme.appearance,
     ],
   );
   const nativeUnifiedRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
@@ -4171,7 +4162,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   ]);
   const renderFields = useMemo<DiffRenderFields>(
     () => ({
-      activeSearchHighlightByRowIndex,
+      activeSearchHighlightByRowIndex: activeSearchHighlightByRowIndexRecord,
       activeSearchHighlightColor: diffActiveSearchHighlightColor,
       activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       borderColor: diffPalette.border,
@@ -4191,7 +4182,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeUnifiedRowConfigId: nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfigVersion: nativeUnifiedRowConfig.configVersion,
       rowHeight,
-      searchHighlightByRowIndex,
+      searchHighlightByRowIndex: searchHighlightByRowIndexRecord,
       searchHighlightColor: diffSearchHighlightColor,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
@@ -4203,7 +4194,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       toggleFileCollapsed,
     }),
     [
-      activeSearchHighlightByRowIndex,
+      activeSearchHighlightByRowIndexRecord,
       diffPalette.border,
       collapsedFileIndexList,
       fileHeaderBackgroundColor,
@@ -4221,7 +4212,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nativeUnifiedRowConfig.configId,
       nativeUnifiedRowConfig.configVersion,
       rowHeight,
-      searchHighlightByRowIndex,
+      searchHighlightByRowIndexRecord,
       showOnlyHunks,
       sideBySideFileHeaderByListIndex,
       sideBySideRowCount,
@@ -4232,6 +4223,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       toggleFileCollapsed,
     ],
   );
+  const renderFields$ = useObservable<DiffRenderFields>(renderFields);
+  useEffect(() => {
+    renderFields$.assign(renderFields);
+  }, [renderFields$, renderFields]);
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
@@ -4551,12 +4546,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           adaptiveRender={adaptiveRender}
           collapsedFileIndexes$={collapsedFileIndexes$}
           index={index}
-          renderFields={renderFields}
+          renderFields$={renderFields$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields],
+    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields$],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -4588,12 +4583,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           adaptiveRender={adaptiveRender}
           collapsedFileIndexes$={collapsedFileIndexes$}
           index={index}
-          renderFields={renderFields}
+          renderFields$={renderFields$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields],
+    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, renderFields$],
   );
 
   const documentErrorHeight = documentError
@@ -4686,7 +4681,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         handleTopItemChanged={handleTopItemChanged}
         handleVisibleRowsRequested={handleVisibleRowsRequested}
         isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
-        listExtraData={listExtraData}
+        rowConfig={rowConfig}
         listRef={listRef}
         loadingSource={loadingSource}
         mergeState={mergeState}

@@ -38,7 +38,7 @@ function createRow(overrides: Partial<DiffRenderRow> = {}): DiffRenderRow {
 function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRenderFields {
   const file = createFile();
   return {
-    activeSearchHighlightByRowIndex: new Map(),
+    activeSearchHighlightByRowIndex: {},
     activeSearchHighlightColor: "#ff7a00d9",
     activeSearchRowHighlightColor: "#ff950038",
     borderColor: "#30363d",
@@ -58,7 +58,7 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
     nativeUnifiedRowConfigId: "test:unified",
     nativeUnifiedRowConfigVersion: 1,
     rowHeight: 22,
-    searchHighlightByRowIndex: new Map(),
+    searchHighlightByRowIndex: {},
     searchHighlightColor: "#ffcc336b",
     showOnlyHunks: true,
     sideBySideFileHeaderByListIndex: new Map(),
@@ -79,6 +79,10 @@ function createRenderFields(overrides: Partial<DiffRenderFields> = {}): DiffRend
   };
 }
 
+function createRenderFields$(overrides: Partial<DiffRenderFields> = {}) {
+  return observable(createRenderFields(overrides));
+}
+
 function renderedTreeHasProps(node: unknown, expectedProps: Record<string, unknown>): boolean {
   let found = false;
   if (node && typeof node === "object") {
@@ -97,13 +101,13 @@ function renderedTreeHasProps(node: unknown, expectedProps: Record<string, unkno
 
 describe("DiffRows", () => {
   it("renders unified file headers with status and counts", async () => {
-    const renderFields = createRenderFields();
+    const renderFields$ = createRenderFields$();
     const view = await render(
       <DiffUnifiedRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={0}
-        renderFields={renderFields}
+        renderFields$={renderFields$}
         row={createRow({
           fileIndex: 0,
           index: 0,
@@ -127,7 +131,7 @@ describe("DiffRows", () => {
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={1}
-        renderFields={createRenderFields({
+        renderFields$={createRenderFields$({
           document: {} as never,
           fileHeaderRowIndexes: new Set(),
           showOnlyHunks: false,
@@ -188,7 +192,7 @@ describe("DiffRows", () => {
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={0}
-        renderFields={createRenderFields({
+        renderFields$={createRenderFields$({
           document: {} as never,
           showOnlyHunks: false,
         })}
@@ -245,15 +249,15 @@ describe("DiffRows", () => {
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
         index={0}
-        renderFields={createRenderFields({
+        renderFields$={createRenderFields$({
           document: {} as never,
-          activeSearchHighlightByRowIndex: new Map([
-            [2, "14,4"],
-          ]),
-          searchHighlightByRowIndex: new Map([
-            [1, "6,5"],
-            [2, "6,5;14,4"],
-          ]),
+          activeSearchHighlightByRowIndex: {
+            2: "14,4",
+          },
+          searchHighlightByRowIndex: {
+            1: "6,5",
+            2: "6,5;14,4",
+          },
           showOnlyHunks: false,
         })}
         row={sideBySideRow}
