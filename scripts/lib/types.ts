@@ -32,6 +32,10 @@ export type AppManifest = {
   };
 };
 
+export type AppPackageMetadata = {
+  version: string;
+};
+
 export type NativePackage = {
   name: string;
   root: string;

@@ -6,6 +6,7 @@ import {
   appIds,
   assertSupportedPlatform,
   getDefaultDevServerPort,
+  loadAppPackageMetadata,
   loadAppManifest,
   parseAppCommand,
   rootDir,
@@ -80,6 +81,8 @@ async function verifyManifestUniqueness() {
 
 function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof writeGeneratedConfig>) {
   const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
+  const appPackage = loadAppPackageMetadata(manifest.id);
+  const appVersion = appPackage.version.split(/[+-]/)[0];
   const infoPlistPath = generated.macosInfoPlistPath;
 
   if (!infoPlistPath) {
@@ -100,6 +103,16 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
   assertContains(infoPlist, `<string>${manifest.id}</string>`, `${manifest.id}/macos Info.plist has wrong app id`);
   assertContains(infoPlist, "<key>LegendAppDisplayName</key>", `${manifest.id}/macos Info.plist has no app display name metadata`);
   assertContains(infoPlist, `<string>${manifest.displayName}</string>`, `${manifest.id}/macos Info.plist has wrong app display name metadata`);
+  assertContains(
+    infoPlist,
+    `<key>CFBundleShortVersionString</key>\n\t<string>${appVersion}</string>`,
+    `${manifest.id}/macos Info.plist has wrong short version`,
+  );
+  assertContains(
+    infoPlist,
+    `<key>CFBundleVersion</key>\n\t<string>${appVersion}</string>`,
+    `${manifest.id}/macos Info.plist has wrong bundle version`,
+  );
   assertContains(infoPlist, "<key>LegendHostWindowHidden</key>", `${manifest.id}/macos Info.plist has no host window metadata`);
   assertContains(
     infoPlist,

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { packagesDir, rootDir, shellDir } from "./apps";
+import { loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
 import { writeMacOSInfoPlist } from "./macosInfoPlist";
 import type { AppManifest, NativePackage, Platform } from "./types";
 
@@ -188,6 +188,7 @@ export function writeGeneratedConfig(
   mode: NativeGraphMode = "release",
 ) {
   const dir = generatedDir(manifest.id, platform, mode);
+  const appPackage = loadAppPackageMetadata(manifest.id);
   fs.mkdirSync(dir, { recursive: true });
 
   const activePackages =
@@ -212,6 +213,7 @@ export function writeGeneratedConfig(
   const appConfig = {
     ...manifest,
     activeNativePackages,
+    appPackage,
     excludedNativePackages,
     nativeGraphMode: mode,
     platform,
@@ -223,7 +225,7 @@ export function writeGeneratedConfig(
     `${JSON.stringify(activeNativePackages, null, 2)}\n`,
   );
 
-  const macosInfoPlistPath = platform === "macos" ? writeMacOSInfoPlist(manifest, dir) : undefined;
+  const macosInfoPlistPath = platform === "macos" ? writeMacOSInfoPlist(manifest, appPackage, dir) : undefined;
 
   return {
     config: appConfig,

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { shellDir } from "./apps";
 import { macOSDefaultInfoPlistPath } from "./macosShell";
-import type { AppManifest, MacOSDocumentType } from "./types";
+import type { AppManifest, AppPackageMetadata, MacOSDocumentType } from "./types";
 
 const baseInfoPlistPath = path.join(shellDir, "macos", macOSDefaultInfoPlistPath);
 
@@ -73,11 +73,37 @@ function renderUrlSchemes(schemes: string[]) {
   ].join("\n");
 }
 
-export function writeMacOSInfoPlist(manifest: AppManifest, outputDir: string) {
+function getMacOSReleaseVersion(version: string) {
+  const releaseVersion = version.split(/[+-]/)[0];
+  if (/^\d+(?:\.\d+){0,2}$/.test(releaseVersion)) {
+    return releaseVersion;
+  }
+
+  throw new Error(`App version "${version}" must start with one to three dot-separated numeric segments.`);
+}
+
+function replacePlistString(plist: string, key: string, value: string) {
+  const pattern = new RegExp(`(<key>${key}</key>\\s*<string>)[^<]*(</string>)`);
+  const nextPlist = plist.replace(pattern, `$1${escapePlistString(value)}$2`);
+  if (nextPlist === plist) {
+    throw new Error(`Could not set ${key} in ${baseInfoPlistPath}.`);
+  }
+  return nextPlist;
+}
+
+export function writeMacOSInfoPlist(manifest: AppManifest, appPackage: AppPackageMetadata, outputDir: string) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
   const urlSchemes = manifest.urlSchemes?.macos?.filter(Boolean) ?? [];
   const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
-  const basePlist = fs.readFileSync(baseInfoPlistPath, "utf8");
+  const basePlist = replacePlistString(
+    replacePlistString(
+      fs.readFileSync(baseInfoPlistPath, "utf8"),
+      "CFBundleShortVersionString",
+      getMacOSReleaseVersion(appPackage.version),
+    ),
+    "CFBundleVersion",
+    getMacOSReleaseVersion(appPackage.version),
+  );
   const appMetadata = [
     "\t<key>LegendAppId</key>",
     `\t<string>${escapePlistString(manifest.id)}</string>`,

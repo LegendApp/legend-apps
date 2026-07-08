@@ -1,6 +1,7 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppManifest, Platform } from "./types";
+import type { AppManifest, AppPackageMetadata, Platform } from "./types";
 
 export const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const shellDir = path.join(rootDir, "shell");
@@ -32,6 +33,20 @@ export async function loadAppManifest(appId: string): Promise<AppManifest> {
   const manifestPath = path.join(appsDir, appId, "app.manifest.ts");
   const mod = await import(manifestPath);
   return mod.default as AppManifest;
+}
+
+export function loadAppPackageMetadata(appId: string): AppPackageMetadata {
+  if (!appIds.includes(appId as (typeof appIds)[number])) {
+    throw new Error(`Unknown app "${appId}". Expected one of: ${appIds.join(", ")}`);
+  }
+
+  const packageJsonPath = path.join(appsDir, appId, "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+  const version = packageJson.version;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error(`${appId}/package.json must define a version.`);
+  }
+  return { version };
 }
 
 export function assertSupportedPlatform(manifest: AppManifest, platform: Platform) {
