@@ -120,8 +120,6 @@ import {
   diffProgressiveInitialPaintRowCount,
   diffProgressiveItemCountExpandChunkRowCount,
   diffProgressiveItemCountExpandThresholdRows,
-  diffProgressiveItemCountPrewarmDelayMs,
-  diffProgressiveItemCountPrewarmRowCount,
   diffProgressiveLoadedStatePublishMs,
   diffProgressiveLoadPollMs,
   diffProgressivePostInitialLoadPollMs,
@@ -2986,29 +2984,17 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   }, [loadedDocument, loadedDocumentId, loadedDocumentRowCount]);
 
-  const maybeExpandItemCountLimitForVisibleRange = useCallback((start: number, count: number, reason: string) => {
-    if (loadedDocument !== null && initialItemCountLimit !== null) {
+  const maybeExpandItemCountLimitForVisibleRange = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo, viewKind: string) => {
+    const isDemandRequest = info.reason === "scroll" || info.reason === "highlight";
+    if (isDemandRequest && loadedDocument !== null && initialItemCountLimit !== null) {
       const visibleEnd = Math.max(0, Math.floor(start)) + Math.max(0, Math.ceil(count));
       const requestedMinimum = visibleEnd + diffProgressiveItemCountExpandThresholdRows;
       if (requestedMinimum >= initialItemCountLimit) {
+        const reason = `${viewKind}:${info.reason}`;
         expandItemCountLimit(loadedDocumentId, requestedMinimum, reason);
       }
     }
   }, [expandItemCountLimit, initialItemCountLimit, loadedDocument, loadedDocumentId]);
-
-  const prewarmItemCountLimit = useCallback((documentId: number, reason: "side-by-side-row-render" | "unified-row-render") => {
-    requestAnimationFrame(() => {
-      logDiffOpenTiming("viewer.itemCountLimit.firstPaint", () => ({
-        documentId,
-        limit: initialItemCountLimit,
-        reason,
-        rows: loadedDocumentRowCount,
-      }));
-      setTimeout(() => {
-        expandItemCountLimit(documentId, diffProgressiveItemCountPrewarmRowCount, `${reason}:prewarm`);
-      }, diffProgressiveItemCountPrewarmDelayMs);
-    });
-  }, [expandItemCountLimit, initialItemCountLimit, loadedDocumentRowCount]);
 
   useEffect(() => {
     if (state.status === "loaded" && state.loadComplete !== false) {
@@ -3111,7 +3097,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [activeFileIndex$, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
   const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
-    maybeExpandItemCountLimitForVisibleRange(start, count, `unified:${info.reason}`);
+    maybeExpandItemCountLimitForVisibleRange(start, count, info, "unified");
     const currentState = state$.peek();
     if (syntaxHighlightingEnabled && currentState.status === "loaded") {
       const files = getFilesForSourceRowRange(currentState.files, start, count);
@@ -3120,7 +3106,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   }, [maybeExpandItemCountLimitForVisibleRange, scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
 
   const handleLimitedSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
-    maybeExpandItemCountLimitForVisibleRange(start, count, `side-by-side:${info.reason}`);
+    maybeExpandItemCountLimitForVisibleRange(start, count, info, "side-by-side");
     handleSideBySideVisibleRowsRequested(start, count, info);
   }, [handleSideBySideVisibleRowsRequested, maybeExpandItemCountLimitForVisibleRange]);
 
@@ -4764,7 +4750,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index,
           rowKind: row?.kind,
         }));
-        prewarmItemCountLimit(loadedDocumentId, "unified-row-render");
       }
       return (
         <DiffUnifiedRow
@@ -4777,7 +4762,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, rowRender$, toggleFileCollapsed],
+    [collapsedFileIndexes$, rowRender$, toggleFileCollapsed],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -4801,7 +4786,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index,
           rowKind: row?.kind,
         }));
-        prewarmItemCountLimit(loadedDocumentId, "side-by-side-row-render");
       }
       return (
         <DiffSideBySideRow
@@ -4814,7 +4798,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, loadedDocumentId, prewarmItemCountLimit, rowRender$, toggleFileCollapsed],
+    [collapsedFileIndexes$, rowRender$, toggleFileCollapsed],
   );
 
   const documentErrorHeight = documentError
