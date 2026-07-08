@@ -3059,7 +3059,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       setStateAt: loadStartedAt,
     };
     loadTraceRef.current = trace;
-    if (!isBackgroundWatchRefresh) {
+    const shouldStartNativeBeforeLoadingState =
+      options?.reason === "launch" &&
+      !isBackgroundWatchRefresh &&
+      (nextSource.kind === "folder" || nextSource.kind === "github");
+    const publishLoadingState = () => {
       setLoadProgressValue(nextSource.kind === "folder"
         ? {
             ...emptyDiffLoadProgressState,
@@ -3076,6 +3080,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       } else {
         setOpenErrorValue(null);
       }
+      logDiffOpenTiming("viewer.load.loadingState.finish", () => ({
+        deferredForNativeStart: shouldStartNativeBeforeLoadingState,
+        requestId,
+        sourceKind: nextSource.kind,
+      }));
+    };
+    if (!isBackgroundWatchRefresh && !shouldStartNativeBeforeLoadingState) {
+      publishLoadingState();
     }
     logDiffOpenTiming("viewer.load.start", () => ({
       preNativeMs: Number((nowMs() - loadStartedAt).toFixed(1)),
@@ -3221,6 +3233,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           sourceKind: nextSource.kind,
         }));
         progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
+        if (shouldStartNativeBeforeLoadingState) {
+          publishLoadingState();
+        }
         let progress = progressiveSession.consumeChanges(initialRowCount);
         setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
         while (
@@ -3362,6 +3377,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           ...getDiffGitFolderLoadCompareOptions(nextSource),
           showOnlyHunks: loadShowOnlyHunks,
         });
+        if (shouldStartNativeBeforeLoadingState) {
+          publishLoadingState();
+        }
         let progress = progressiveSession.consumeChanges(initialRowCount);
         setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
         while (
