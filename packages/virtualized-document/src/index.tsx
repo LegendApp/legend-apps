@@ -102,6 +102,7 @@ type VirtualizedFixedDocumentListDocumentIndexMapper = (index: number, listIndex
 
 export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
+  contentContainerStyle?: StyleProp<ViewStyle>;
   dataKey?: string | number;
   dataVersion?: string | number;
   debugName?: string;
@@ -507,6 +508,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   dataVersion,
   debugName,
   estimatedItemSize,
+  contentContainerStyle,
   getRow,
   getDocumentIndex,
   getItemSize,
@@ -894,6 +896,7 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   return (
     <LegendList
+      contentContainerStyle={contentContainerStyle}
       data={itemIndexes}
       dataKey={dataKey}
       dataVersion={dataVersion}

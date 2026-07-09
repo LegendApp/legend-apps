@@ -1413,9 +1413,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   }, [nativeRowsRef, requestSideBySideRangeRef]);
   const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
   const hasTopChrome = diffTopChromeHeight > 0;
-  const listHeader = useMemo(() => (
-    hasTopChrome ? undefined : <View style={styles.diffTitlebarSpacer} />
-  ), [hasTopChrome]);
+  const diffListContentContainerStyle = hasTopChrome ? undefined : styles.diffListContent;
   const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
   const sideBySideLineOverscan = Math.max(12, Math.floor(diffLineOverscan / 10));
   const diffListStyle = useMemo(
@@ -1536,13 +1534,13 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
       contentBody = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
+          contentContainerStyle={diffListContentContainerStyle}
           dataKey={`diff:${state.document.documentId}:unified`}
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-unified-list"
           estimatedItemSize={rowHeight}
           itemIndexes={inlineMergeModel.itemIndexes}
           itemKeyVersion={state.document.documentId}
-          ListHeaderComponent={listHeader}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
           getItemSize={getUnifiedItemSize}
           getItemType={getUnifiedItemType}
@@ -1564,13 +1562,13 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
       contentBody = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
+          contentContainerStyle={diffListContentContainerStyle}
           dataKey={`diff:${state.document.documentId}:${viewMode}`}
           dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-side-by-side-list"
           estimatedItemSize={rowHeight}
           itemIndexes={inlineMergeModel.itemIndexes}
           itemKeyVersion={state.document.documentId}
-          ListHeaderComponent={listHeader}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
           getItemSize={getSideBySideListItemSize}
           getItemType={getSideBySideListItemType}
@@ -5228,6 +5226,9 @@ const styles = StyleSheet.create({
   diffPaneContent: {
     flex: 1,
     minHeight: 0,
+  },
+  diffListContent: {
+    paddingTop: diffTitlebarTopInset,
   },
   diffPaneTopChrome: {
     paddingTop: diffTitlebarTopInset,
