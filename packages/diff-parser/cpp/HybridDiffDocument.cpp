@@ -18,6 +18,7 @@
 #include <utility>
 
 #ifdef __APPLE__
+#include <malloc/malloc.h>
 #include <os/log.h>
 #endif
 
@@ -53,11 +54,33 @@ std::atomic<uint64_t> nextDiffDocumentId{1};
 std::mutex diffDocumentRegistryMutex;
 std::map<uint64_t, std::weak_ptr<HybridDiffDocument>> diffDocumentRegistry;
 
+template <typename T>
+void clearVectorMemory(std::vector<T>& value) {
+  std::vector<T>().swap(value);
+}
+
+template <typename T>
+void clearDequeMemory(std::deque<T>& value) {
+  std::deque<T>().swap(value);
+}
+
+void clearStringMemory(std::string& value) {
+  std::string().swap(value);
+}
+
 #ifdef __APPLE__
 os_log_t diffMemoryLog() {
   static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
   return log;
 }
+
+void requestMallocPressureRelief() {
+#if DEBUG
+  malloc_zone_pressure_relief(nullptr, 0);
+#endif
+}
+#else
+void requestMallocPressureRelief() {}
 #endif
 
 void logDiffMemoryMessage(const std::string& message) {
@@ -518,7 +541,14 @@ double HybridDiffDocument::getScopeCount() {
 }
 
 double HybridDiffDocument::getDocumentId() {
-  std::lock_guard<std::mutex> lock(diffDocumentRegistryMutex);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (disposed_) {
+      return 0;
+    }
+  }
+
+  std::lock_guard<std::mutex> registryLock(diffDocumentRegistryMutex);
   diffDocumentRegistry[documentId_] = shared_cast<HybridDiffDocument>();
   return static_cast<double>(documentId_);
 }
@@ -1288,6 +1318,56 @@ double HybridDiffDocument::cancelTokenizationRequests(const std::string& reason)
   return getTokenizedRowVersion();
 }
 
+double HybridDiffDocument::releaseNativeResources() {
+  stopBackgroundTokenization();
+
+  bool didDispose = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!disposed_) {
+      disposed_ = true;
+      didDispose = true;
+      clearVectorMemory(files_);
+      clearVectorMemory(rows_);
+      clearStringMemory(rowText_);
+      clearVectorMemory(rowTokenized_);
+      clearVectorMemory(sideBySideLines_);
+      sideBySideLinesReady_ = false;
+      sideBySideSourceRowCount_ = 0;
+      clearVectorMemory(fileSources_);
+      clearStringMemory(repositoryPath_);
+      clearStringMemory(workdirPath_);
+      clearStringMemory(headTreeOid_);
+      backingStore_.reset();
+      timing_ = DiffLoadTiming();
+      backgroundTokenizeRowIndex_ = 0;
+      backgroundTokenizeNextRowIndex_ = 0;
+      clearDequeMemory(backgroundTokenizeRanges_);
+      clearVectorMemory(tokenizedRowRanges_);
+      retainedTokenizedRowWindowReady_ = false;
+      retainedTokenizedRowWindowStart_ = 0;
+      retainedTokenizedRowWindowEnd_ = 0;
+      tokenizedRowVersion_.fetch_add(1);
+    }
+  }
+
+  if (didDispose) {
+    {
+      std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
+      syntaxState_ = std::make_shared<DiffSyntaxState>();
+      nativeScopeStyleCache_.clear();
+    }
+    {
+      std::lock_guard<std::mutex> registryLock(diffDocumentRegistryMutex);
+      diffDocumentRegistry.erase(documentId_);
+    }
+    requestMallocPressureRelief();
+    logMemorySnapshot("document.disposed");
+  }
+
+  return getTokenizedRowVersion();
+}
+
 double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount, double maxSourceLineCount) {
   const auto safeChunkRowCount = static_cast<size_t>(std::max(1.0, chunkRowCount));
   const auto safeChunkBudget = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -1297,6 +1377,9 @@ double HybridDiffDocument::startBackgroundTokenization(double chunkRowCount, dou
       : unlimitedTokenizeSourceLineBudget;
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (disposed_) {
+      return getTokenizedRowVersion();
+    }
     const auto safeMaxRowCount = maxRowCount > 0
         ? static_cast<size_t>(std::floor(maxRowCount))
         : rows_.size();
@@ -1344,6 +1427,9 @@ void HybridDiffDocument::appendProgressFile(
     DiffFileSources fileSources,
     DiffRenderRow headerRow) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (disposed_) {
+    return;
+  }
   files_.push_back(std::move(file));
   fileSources_.push_back(std::move(fileSources));
   appendStoredRowLocked(std::move(headerRow));
@@ -1356,6 +1442,9 @@ void HybridDiffDocument::setProgressFiles(
     std::vector<DiffFileSummary> files,
     std::vector<DiffFileSources> fileSources) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (disposed_) {
+    return;
+  }
   files_ = std::move(files);
   fileSources_ = std::move(fileSources);
   timing_.fileCount = static_cast<double>(files_.size());
@@ -1363,6 +1452,9 @@ void HybridDiffDocument::setProgressFiles(
 
 void HybridDiffDocument::appendProgressRow(DiffRenderRow row) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (disposed_) {
+    return;
+  }
   appendStoredRowLocked(std::move(row));
   rowTokenized_.push_back(false);
   timing_.rowCount = static_cast<double>(rows_.size());
@@ -1371,6 +1463,9 @@ void HybridDiffDocument::appendProgressRow(DiffRenderRow row) {
 void HybridDiffDocument::updateProgressFile(const DiffFileSummary& file) {
   const auto fileIndex = static_cast<size_t>(std::max(0.0, std::floor(file.index)));
   std::lock_guard<std::mutex> lock(mutex_);
+  if (disposed_) {
+    return;
+  }
   if (fileIndex < files_.size()) {
     files_[fileIndex] = file;
     if (fileIndex < fileSources_.size()) {
@@ -1388,6 +1483,9 @@ void HybridDiffDocument::setProgressRepositoryMetadata(
     std::string workdirPath,
     std::string headTreeOid) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (disposed_) {
+    return;
+  }
   repositoryPath_ = std::move(repositoryPath);
   workdirPath_ = std::move(workdirPath);
   headTreeOid_ = std::move(headTreeOid);
@@ -1396,6 +1494,9 @@ void HybridDiffDocument::setProgressRepositoryMetadata(
 
 void HybridDiffDocument::setProgressTiming(const DiffLoadTiming& timing) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (disposed_) {
+    return;
+  }
   timing_ = timing;
   timing_.rowCount = static_cast<double>(rows_.size());
   timing_.fileCount = static_cast<double>(files_.size());

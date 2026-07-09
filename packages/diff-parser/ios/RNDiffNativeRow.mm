@@ -457,6 +457,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 
 - (void)dealloc
 {
+  [_attributedTextScratch.mutableString setString:@""];
   RNDiffNativeRowUnregisterView(_configId, self);
 }
 
@@ -758,6 +759,11 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   return self;
 }
 
+- (void)dealloc
+{
+  [_attributedTextScratch.mutableString setString:@""];
+}
+
 - (BOOL)isFlipped
 {
   return YES;
@@ -935,6 +941,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.lineNumber = -1;
   _contentView.text = @"";
   _contentView.tokens = @"";
+  [_contentView.attributedTextScratch.mutableString setString:@""];
   [_contentView setNeedsDisplay:YES];
 #endif
 }
@@ -1083,6 +1090,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.configVersion = 0;
   _contentView.rowIndex = -1;
   _contentView.adaptiveRender = @"normal";
+  [_contentView.attributedTextScratch.mutableString setString:@""];
   [_contentView setNeedsDisplay:YES];
 #endif
 }

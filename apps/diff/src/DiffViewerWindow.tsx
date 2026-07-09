@@ -230,6 +230,37 @@ type DiffLoadedCacheEntry = {
   loadComplete: boolean;
 };
 
+function disposeDiffDocument(document: DiffDocument, reason: string) {
+  document.cancelTokenizationRequests(reason);
+  document.releaseNativeResources();
+}
+
+function disposeLoadedCacheEntry(entry: DiffLoadedCacheEntry | undefined, reason: string) {
+  if (entry) {
+    disposeDiffDocument(entry.loaded.document, reason);
+  }
+}
+
+function deleteLoadedCacheEntry(cache: Map<string, DiffLoadedCacheEntry>, key: string, reason: string) {
+  disposeLoadedCacheEntry(cache.get(key), reason);
+  cache.delete(key);
+}
+
+function clearLoadedCache(cache: Map<string, DiffLoadedCacheEntry>, reason: string) {
+  for (const entry of cache.values()) {
+    disposeDiffDocument(entry.loaded.document, reason);
+  }
+  cache.clear();
+}
+
+function deleteLoadedCacheEntriesWithPrefix(cache: Map<string, DiffLoadedCacheEntry>, prefix: string, reason: string) {
+  for (const key of Array.from(cache.keys())) {
+    if (key.startsWith(prefix)) {
+      deleteLoadedCacheEntry(cache, key, reason);
+    }
+  }
+}
+
 type DiffItemCountLimitState = {
   documentId: number;
   limit: number;
@@ -2717,6 +2748,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
   const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
+  const activeProgressiveSessionRef = useRef<DiffLoadSession | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
   const preserveActiveFilePathRef = useRef<string | null>(null);
   const loggedFirstSidebarFileRenderRef = useRef(false);
@@ -2740,6 +2772,41 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const lastSubmittedSearchQueryRef = useRef("");
   const searchResultsRef = useRef<readonly DiffSearchResult[]>([]);
   const activeSearchResultIndexRef = useRef(0);
+
+  useEffect(() => () => {
+    loadRequestIdRef.current += 1;
+    activeProgressiveSessionRef.current?.cancel();
+    activeProgressiveSessionRef.current = null;
+
+    const currentState = state$.peek();
+    if (currentState.status === "loaded") {
+      disposeDiffDocument(currentState.document, "viewer.unmount");
+    }
+    clearLoadedCache(loadedCacheRef.current, "viewer.unmount.cache");
+    loadTraceRef.current = null;
+    loggedTraceDocumentRef.current = null;
+    mergeDraftsRef.current = new Map();
+    mergeDraftsSourceKeyRef.current = null;
+    mergeResolveQueuesRef.current = new Map();
+    resolvingMergeConflictKeysRef.current = new Set();
+
+    setDocumentErrorValue(null);
+    setLoadProgressValue(emptyDiffLoadProgressState);
+    setLoadStatisticsValue(null);
+    setLoadingSourceValue(null);
+    setMergeStateValue(unavailableDiffMergeState);
+    setOpenErrorValue(null);
+    setViewerState(emptyDiffViewerState);
+  }, [
+    setDocumentErrorValue,
+    setLoadProgressValue,
+    setLoadStatisticsValue,
+    setLoadingSourceValue,
+    setMergeStateValue,
+    setOpenErrorValue,
+    setViewerState,
+    state$,
+  ]);
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
     const currentKeys = resolvingMergeConflictKeysRef.current;
@@ -2936,11 +3003,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     if (loadedDocument) {
       return () => {
-        loadedDocument.cancelTokenizationRequests("viewer.cleanup");
+        const isCached = [...loadedCacheRef.current.values()].some((entry) => entry.loaded.document === loadedDocument);
+        const currentState = state$.peek();
+        const isCurrent = currentState.status === "loaded" && currentState.document === loadedDocument;
+        if (isCached || isCurrent) {
+          loadedDocument.cancelTokenizationRequests("viewer.cleanup");
+        } else {
+          disposeDiffDocument(loadedDocument, "viewer.cleanup");
+        }
       };
     }
     return undefined;
-  }, [loadedDocument]);
+  }, [loadedDocument, state$]);
   const {
     getSideBySideRow,
     handleSideBySideTopItemChanged,
@@ -3142,6 +3216,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
+    activeProgressiveSessionRef.current?.cancel();
+    activeProgressiveSessionRef.current = null;
     const loadStartedAt = nowMs();
     logDiffOpenTiming("viewer.load.invoke", () => ({
       reason: options?.reason ?? "manual",
@@ -3171,13 +3247,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     if (options?.force) {
-      for (const key of loadedCacheRef.current.keys()) {
-        if (key.startsWith(`${sourceCacheKey}:`)) {
-          loadedCacheRef.current.delete(key);
-        }
-      }
+      deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceCacheKey}:`, "viewer.load.force");
     } else if (stateBeforeLoad.status === "loaded" && !sourcesMatch(stateBeforeLoad.source, nextSource)) {
-      loadedCacheRef.current.clear();
+      clearLoadedCache(loadedCacheRef.current, "viewer.load.sourceChange");
     }
 
     const cachedEntry = !options?.force && options?.reason === "mode-toggle"
@@ -3358,12 +3430,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       }
       if (loadComplete) {
         if (shouldCacheLoadedDiff(loaded)) {
+          disposeLoadedCacheEntry(loadedCacheRef.current.get(loadedCacheKey), "viewer.cache.replace");
           loadedCacheRef.current.set(loadedCacheKey, {
             loaded,
             loadComplete,
           });
         } else {
-          loadedCacheRef.current.delete(loadedCacheKey);
+          deleteLoadedCacheEntry(loadedCacheRef.current, loadedCacheKey, "viewer.cache.skip");
         }
         setLoadProgressValue(emptyDiffLoadProgressState);
       }
@@ -3399,6 +3472,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           sourceKind: nextSource.kind,
         }));
         progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
+        activeProgressiveSessionRef.current = progressiveSession;
         if (shouldStartNativeBeforeLoadingState) {
           publishLoadingState();
         }
@@ -3547,6 +3621,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           ...getDiffGitFolderLoadCompareOptions(nextSource),
           showOnlyHunks: loadShowOnlyHunks,
         });
+        activeProgressiveSessionRef.current = progressiveSession;
         if (shouldStartNativeBeforeLoadingState) {
           publishLoadingState();
         }
@@ -3670,6 +3745,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       }
     } catch (error) {
       loadError = error;
+    } finally {
+      if (loadRequestIdRef.current !== requestId) {
+        progressiveSession?.cancel();
+      }
+      if (activeProgressiveSessionRef.current === progressiveSession) {
+        activeProgressiveSessionRef.current = null;
+      }
     }
 
     if (loadError && loadRequestIdRef.current === requestId) {
@@ -3732,11 +3814,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         });
       }
       suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
-      for (const key of loadedCacheRef.current.keys()) {
-        if (key.startsWith(`${sourceKey}:`)) {
-          loadedCacheRef.current.delete(key);
-        }
-      }
+      deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceKey}:`, "viewer.merge.save");
       mergeDraftsRef.current = new Map();
       mergeDraftsSourceKeyRef.current = null;
       const currentMergeState = mergeState$.peek();

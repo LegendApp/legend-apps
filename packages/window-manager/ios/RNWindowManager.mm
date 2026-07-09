@@ -11,6 +11,7 @@
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
 #import <CoreImage/CoreImage.h>
+#import <os/log.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #endif
@@ -35,6 +36,22 @@ static inline NSAppearance *LegendDarkAppearance()
 static void LegendWindowOpenTiming(NSString *event, NSDictionary *payload)
 {
   NSLog(@"[WindowOpenTiming] %@ %@", event, payload ?: @{});
+}
+
+static void LegendWindowMemoryLog(NSString *event, NSDictionary *payload)
+{
+#if DEBUG
+  static os_log_t log;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"app.legend.window-manager";
+    log = os_log_create(bundleIdentifier.UTF8String, "memory");
+  });
+  os_log_with_type(log, OS_LOG_TYPE_DEFAULT, "[WindowMemory] %{public}@ %{public}@", event, (payload ?: @{}).description);
+#else
+  (void)event;
+  (void)payload;
+#endif
 }
 
 static NSAppearance *LegendAppearanceForName(NSString *value)
@@ -1620,8 +1637,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
           @"existingModuleName": existingModuleName,
           @"nextModuleName": nextModuleName,
         });
-        [existingWindow orderOut:nil];
-        [self handleWindowClosedForIdentifier:identifier];
+        [self handleWindowClosedForIdentifier:identifier closeWindow:YES];
         existingWindow = nil;
       }
     }
@@ -1976,8 +1992,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       resolve([self failureJson:@"No window to close"]);
       return;
     }
-    [window orderOut:nil];
-    [self handleWindowClosedForIdentifier:targetIdentifier];
+    [self handleWindowClosedForIdentifier:targetIdentifier closeWindow:YES];
     resolve([self successJson]);
   });
 #else
@@ -1994,7 +2009,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
       resolve([self failureJson:@"No window to close"]);
       return;
     }
-    [window performClose:nil];
+    NSString *identifier = [self identifierForWindow:window];
+    if (identifier) {
+      [self handleWindowClosedForIdentifier:identifier closeWindow:YES];
+    } else {
+      [window performClose:nil];
+    }
     resolve([self successJson]);
   });
 #else
@@ -2317,7 +2337,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 {
   NSString *identifier = [self identifierForWindow:notification.object];
   if (identifier) {
-    [self handleWindowClosedForIdentifier:identifier];
+    [self handleWindowClosedForIdentifier:identifier closeWindow:NO];
   }
 }
 
@@ -2375,13 +2395,23 @@ willBeInsertedIntoToolbar:(BOOL)flag
   return nil;
 }
 
-- (void)handleWindowClosedForIdentifier:(NSString *)identifier
+- (void)handleWindowClosedForIdentifier:(NSString *)identifier closeWindow:(BOOL)shouldCloseWindow
 {
   NSString *moduleName = self.moduleNames[identifier] ?: @"";
   NSWindow *window = (NSWindow *)self.windows[identifier];
+  RCTUIView *rootView = self.rootViews[identifier];
+  LegendWindowMemoryLog(@"close.start", @{
+    @"identifier": identifier ?: @"",
+    @"moduleName": moduleName,
+    @"shouldCloseWindow": @(shouldCloseWindow),
+    @"hasWindow": @(window != nil),
+    @"hasRootView": @(rootView != nil),
+    @"windowCount": @(self.windows.count),
+    @"rootViewCount": @(self.rootViews.count),
+    @"moduleNameCount": @(self.moduleNames.count),
+  });
   CIFilter *blurFilter = self.windowBlurFilters[identifier];
   if (blurFilter) {
-    RCTUIView *rootView = self.rootViews[identifier];
     NSView *contentView = window.contentView ?: rootView;
     if (contentView.layer) {
       [contentView.layer removeAnimationForKey:@"legendOverlayBlurAnimation"];
@@ -2399,14 +2429,45 @@ willBeInsertedIntoToolbar:(BOOL)flag
   if (window) {
     [self removeTitlebarMaterialForIdentifier:identifier];
     [self removeTitlebarControlsForIdentifier:identifier fromWindow:window];
+    NSToolbar *toolbar = window.toolbar;
+    if (toolbar) {
+      if (toolbar.identifier) {
+        [self.toolbarItemConfigs removeObjectForKey:toolbar.identifier];
+      }
+      toolbar.delegate = nil;
+      while (toolbar.items.count > 0) {
+        [toolbar removeItemAtIndex:toolbar.items.count - 1];
+      }
+      window.toolbar = nil;
+    }
+    window.delegate = nil;
+    if (rootView) {
+      [rootView removeFromSuperview];
+      objc_setAssociatedObject(window, &LegendManagedRootViewKey, nil, OBJC_ASSOCIATION_ASSIGN);
+    }
+    NSView *emptyContentView = [[NSView alloc] initWithFrame:window.contentView ? window.contentView.frame : NSZeroRect];
+    emptyContentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    window.contentView = emptyContentView;
   } else {
     [self.titlebarMaterialViews removeObjectForKey:identifier];
     [self.titlebarAccessoryControllers removeObjectForKey:identifier];
   }
   [self.closeRequestIdentifiers removeObject:identifier];
+  [self.toolbarItemConfigs removeObjectForKey:identifier];
   [self.windows removeObjectForKey:identifier];
   [self.rootViews removeObjectForKey:identifier];
   [self.moduleNames removeObjectForKey:identifier];
+  if (shouldCloseWindow && window) {
+    [window close];
+  }
+  LegendWindowMemoryLog(@"close.finish", @{
+    @"identifier": identifier ?: @"",
+    @"moduleName": moduleName,
+    @"shouldCloseWindow": @(shouldCloseWindow),
+    @"windowCount": @(self.windows.count),
+    @"rootViewCount": @(self.rootViews.count),
+    @"moduleNameCount": @(self.moduleNames.count),
+  });
   [self sendWindowEventWithName:@"onWindowClosed" body:@{@"identifier": identifier ?: @"", @"moduleName": moduleName ?: @""}];
 }
 

@@ -135,6 +135,7 @@ public:
       const std::string& reason) override;
   double requestTokenizedFiles(const std::vector<double>& fileIndexes, const std::string& reason) override;
   double cancelTokenizationRequests(const std::string& reason) override;
+  double releaseNativeResources() override;
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount, double maxSourceLineCount) override;
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
@@ -232,6 +233,7 @@ private:
   bool retainedTokenizedRowWindowReady_ = false;
   size_t retainedTokenizedRowWindowStart_ = 0;
   size_t retainedTokenizedRowWindowEnd_ = 0;
+  bool disposed_ = false;
   std::atomic<uint64_t> backgroundGeneration_{0};
   std::atomic<uint64_t> tokenizedRowVersion_{0};
   std::atomic<bool> backgroundTokenizationRunning_{false};
