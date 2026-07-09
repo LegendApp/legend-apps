@@ -71,6 +71,11 @@ static BOOL LegendHostWindowHidden(void)
   return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
 }
 
+static BOOL LegendCanFocusManagedReopenWindow(NSWindow *window, NSWindow *hostWindow)
+{
+  return window != nil && window != hostWindow && window.isVisible && !window.sheet && ![window isKindOfClass:NSPanel.class];
+}
+
 static void LegendRetitleMenuItemsWithPrefix(NSMenu *menu, NSString *prefix, NSString *displayName)
 {
   for (NSMenuItem *item in menu.itemArray) {
@@ -150,6 +155,12 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   return hostView;
 }
 
+@interface AppDelegate ()
+
+@property (nonatomic, weak) NSWindow *lastFocusedManagedWindow;
+
+@end
+
 @implementation AppDelegate
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
@@ -175,12 +186,10 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   };
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
-  if ([LegendCurrentAppId() isEqualToString:@"music"]) {
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(windowDidBecomeKey:)
-                                                 name:NSWindowDidBecomeKeyNotification
-                                               object:nil];
-  }
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(windowDidBecomeKey:)
+                                               name:NSWindowDidBecomeKeyNotification
+                                             object:nil];
   
   [super applicationDidFinishLaunching:notification];
 
@@ -239,14 +248,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   } else if (hostWindowHidden) {
     [self.window orderOut:self];
 
-    NSWindow *targetWindow = nil;
-    for (NSWindow *window in NSApp.windows) {
-      BOOL canFocusWindow = window != self.window && window.isVisible && !window.sheet && ![window isKindOfClass:NSPanel.class];
-      if (canFocusWindow) {
-        targetWindow = window;
-        break;
-      }
-    }
+    NSWindow *targetWindow = [self reopenTargetWindow];
 
     if (targetWindow) {
       [targetWindow makeKeyAndOrderFront:self];
@@ -260,6 +262,30 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   }
 
   return shouldHandleReopen;
+}
+
+- (NSWindow *)reopenTargetWindow
+{
+  NSWindow *targetWindow = nil;
+  NSWindow *keyWindow = NSApp.keyWindow;
+  NSWindow *mainWindow = NSApp.mainWindow;
+
+  if (LegendCanFocusManagedReopenWindow(keyWindow, self.window)) {
+    targetWindow = keyWindow;
+  } else if (LegendCanFocusManagedReopenWindow(mainWindow, self.window)) {
+    targetWindow = mainWindow;
+  } else if (LegendCanFocusManagedReopenWindow(self.lastFocusedManagedWindow, self.window)) {
+    targetWindow = self.lastFocusedManagedWindow;
+  } else {
+    for (NSWindow *window in NSApp.windows) {
+      if (LegendCanFocusManagedReopenWindow(window, self.window)) {
+        targetWindow = window;
+        break;
+      }
+    }
+  }
+
+  return targetWindow;
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)sender
@@ -276,8 +302,12 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)windowDidBecomeKey:(NSNotification *)notification
 {
-  NSWindow *window = notification.object;
+  NSWindow *window = [notification.object isKindOfClass:NSWindow.class] ? notification.object : nil;
   BOOL isMusicMainWindow = [LegendCurrentAppId() isEqualToString:@"music"] && window == self.window;
+
+  if (LegendCanFocusManagedReopenWindow(window, self.window)) {
+    self.lastFocusedManagedWindow = window;
+  }
 
   if (isMusicMainWindow) {
     if (!self.mainWindowFrameAdjusted) {
