@@ -1,7 +1,7 @@
 import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
 import { getLegendDisplayTheme } from "@legend-desktop/theme";
 import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { focusToolbarSearchItem, setWindowOptions, type WindowFrame } from "@legend-desktop/window-manager";
+import { focusToolbarSearchItem, setWindowOptions, showWindow, type WindowFrame } from "@legend-desktop/window-manager";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,
@@ -261,6 +261,7 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     identifier: windowIdentifier,
     initialProperties,
     interceptClose: true,
+    deferOrderFront: shouldShowSourceToolbar,
     loadComponentBeforeNativeOpen: false,
     representedURL: source?.value,
     title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
@@ -281,6 +282,10 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     }));
     return result;
   });
+}
+
+export function showDiffViewerWindow(windowIdentifier: string) {
+  return showWindow(windowIdentifier);
 }
 
 export function prefetchDiffViewerWindow() {

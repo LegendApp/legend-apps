@@ -482,6 +482,13 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   [self syncReactSubview:_contentReactView
            nativeBounds:contentBounds
   previousLayoutMetrics:&_contentReactLayoutMetrics];
+  [self layoutContentTitlebarMaterial];
+  [self emitSplitViewDidResizeWithSidebarWidth:sidebarWidth
+                                  contentWidth:contentWidth
+                                      contentX:contentX
+                                 sidebarHeight:bounds.size.height
+                                 contentHeight:bounds.size.height
+                                        height:bounds.size.height];
 
   return YES;
 }
@@ -546,12 +553,12 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   CGRect bounds = [self currentLayoutBounds];
   _splitViewController.view.frame = bounds;
   _splitViewController.splitView.frame = bounds;
+  [self updateSidebarCollapsed];
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
     [self applyEstimatedSplitViewLayoutForBounds:bounds];
   }
-  [self updateSidebarCollapsed];
   [self applyDividerPositionForBounds:bounds];
   [_splitViewController.splitView adjustSubviews];
   [_splitViewController.view layoutSubtreeIfNeeded];

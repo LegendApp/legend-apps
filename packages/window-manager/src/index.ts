@@ -182,6 +182,7 @@ export type WindowOptions = {
   transparentBackground?: boolean;
   interceptClose?: boolean;
   animateFrameChange?: boolean;
+  deferOrderFront?: boolean;
   frameAnimationDurationMs?: number;
 };
 
@@ -358,6 +359,15 @@ export function showMainWindow(): Promise<WindowResult> {
   );
 }
 
+export function showWindow(identifier: string): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.showWindow(identifier).then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function setMainWindowOptions(options: MainWindowOptions = {}): Promise<WindowResult> {
   if (Platform.OS !== "macos") {
     return fallbackResult();
@@ -504,6 +514,7 @@ export function useWindowManager() {
     closeWindow,
     closeFrontmostWindow,
     showMainWindow,
+    showWindow,
     setMainWindowOptions,
     setWindowOptions,
     getMainWindowFrame,

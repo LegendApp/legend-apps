@@ -1561,6 +1561,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
     BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
     BOOL interceptClose = [options[@"interceptClose"] boolValue];
+    BOOL deferOrderFront = [options[@"deferOrderFront"] boolValue];
     NSNumber *hasShadowNumber = [options[@"hasShadow"] isKindOfClass:NSNumber.class] ? options[@"hasShadow"] : nil;
     BOOL shouldApplyHasShadow = hasShadowNumber != nil;
     BOOL hasShadow = shouldApplyHasShadow ? hasShadowNumber.boolValue : NO;
@@ -1600,28 +1601,28 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
     NSNumber *originX = [options[@"x"] isKindOfClass:NSNumber.class] ? options[@"x"] : nil;
     NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
-	    BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
-	    NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
-	    LegendWindowOpenTiming(@"native.open.start", @{
-	      @"identifier": identifier ?: @"",
-	      @"moduleName": moduleName ?: @"",
-	      @"existingWindow": existingWindow ? @"true" : @"false",
-	      @"existingWindowPointer": existingWindow ? [NSString stringWithFormat:@"%p", existingWindow] : @"",
-	      @"initialPropKeys": [self initialPropsFromOptions:options] ? [self initialPropsFromOptions:options].allKeys : @[],
-	    });
-	
-	    if (existingWindow) {
-	      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
-	      NSString *nextModuleName = moduleName ?: @"";
-	      if (![existingModuleName isEqualToString:nextModuleName]) {
-	        LegendWindowOpenTiming(@"native.open.moduleMismatch", @{
-	          @"identifier": identifier ?: @"",
-	          @"existingModuleName": existingModuleName,
-	          @"nextModuleName": nextModuleName,
-	        });
-	        [existingWindow orderOut:nil];
-	        [self handleWindowClosedForIdentifier:identifier];
-	        existingWindow = nil;
+    BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
+    NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
+    LegendWindowOpenTiming(@"native.open.start", @{
+      @"identifier": identifier ?: @"",
+      @"moduleName": moduleName ?: @"",
+      @"existingWindow": existingWindow ? @"true" : @"false",
+      @"existingWindowPointer": existingWindow ? [NSString stringWithFormat:@"%p", existingWindow] : @"",
+      @"initialPropKeys": [self initialPropsFromOptions:options] ? [self initialPropsFromOptions:options].allKeys : @[],
+    });
+
+    if (existingWindow) {
+      NSString *existingModuleName = self.moduleNames[identifier] ?: @"";
+      NSString *nextModuleName = moduleName ?: @"";
+      if (![existingModuleName isEqualToString:nextModuleName]) {
+        LegendWindowOpenTiming(@"native.open.moduleMismatch", @{
+          @"identifier": identifier ?: @"",
+          @"existingModuleName": existingModuleName,
+          @"nextModuleName": nextModuleName,
+        });
+        [existingWindow orderOut:nil];
+        [self handleWindowClosedForIdentifier:identifier];
+        existingWindow = nil;
       }
     }
 
@@ -1681,7 +1682,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
 
       if (levelNumber) {
         existingWindow.level = levelNumber.integerValue;
-        [existingWindow orderFrontRegardless];
+        if (!deferOrderFront || existingWindow.isVisible) {
+          [existingWindow orderFrontRegardless];
+        }
       }
       if (shouldApplyHasShadow) {
         existingWindow.hasShadow = hasShadow;
@@ -1712,16 +1715,16 @@ willBeInsertedIntoToolbar:(BOOL)flag
                                               hasMinHeight ? minHeight : currentMinSize.height)];
       }
 
-	      NSDictionary *initialProps = [self initialPropsFromOptions:options];
-	      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
-	        LegendWindowOpenTiming(@"native.open.reuse.setAppProperties", @{
-	          @"identifier": identifier ?: @"",
-	          @"moduleName": moduleName ?: @"",
-	          @"rootView": [NSString stringWithFormat:@"%p", existingRootView],
-	          @"initialPropKeys": initialProps.allKeys,
-	        });
-	        [existingRootView setValue:initialProps forKey:@"appProperties"];
-	      }
+      NSDictionary *initialProps = [self initialPropsFromOptions:options];
+      if (existingRootView && initialProps && [existingRootView respondsToSelector:@selector(setAppProperties:)]) {
+        LegendWindowOpenTiming(@"native.open.reuse.setAppProperties", @{
+          @"identifier": identifier ?: @"",
+          @"moduleName": moduleName ?: @"",
+          @"rootView": [NSString stringWithFormat:@"%p", existingRootView],
+          @"initialPropKeys": initialProps.allKeys,
+        });
+        [existingRootView setValue:initialProps forKey:@"appProperties"];
+      }
       if (usesTitlebarBackground && existingRootView) {
         LegendEnsureRootViewContainer(existingWindow, existingRootView);
         LegendApplyWindowBackgroundColor(existingWindow, backgroundColor);
@@ -1733,17 +1736,19 @@ willBeInsertedIntoToolbar:(BOOL)flag
       } else {
         [self.closeRequestIdentifiers removeObject:identifier];
       }
-	      self.moduleNames[identifier] = moduleName ?: @"";
-	      [existingWindow makeKeyAndOrderFront:nil];
-	      LegendWindowOpenTiming(@"native.open.reuse.finish", @{
-	        @"identifier": identifier ?: @"",
-	        @"moduleName": moduleName ?: @"",
-	        @"rootView": existingRootView ? [NSString stringWithFormat:@"%p", existingRootView] : @"",
-	        @"window": [NSString stringWithFormat:@"%p", existingWindow],
-	      });
-	      resolve([self successJson]);
-	      return;
-	    }
+      self.moduleNames[identifier] = moduleName ?: @"";
+      if (!deferOrderFront || existingWindow.isVisible) {
+        [existingWindow makeKeyAndOrderFront:nil];
+      }
+      LegendWindowOpenTiming(@"native.open.reuse.finish", @{
+        @"identifier": identifier ?: @"",
+        @"moduleName": moduleName ?: @"",
+        @"rootView": existingRootView ? [NSString stringWithFormat:@"%p", existingRootView] : @"",
+        @"window": [NSString stringWithFormat:@"%p", existingWindow],
+      });
+      resolve([self successJson]);
+      return;
+    }
 
     NSUInteger styleMask = maskNumber
       ? maskNumber.unsignedIntegerValue
@@ -1860,18 +1865,20 @@ willBeInsertedIntoToolbar:(BOOL)flag
       [self.closeRequestIdentifiers removeObject:identifier];
     }
 
-	    [window makeKeyAndOrderFront:nil];
-	    if (levelNumber) {
-	      [window orderFrontRegardless];
-	    }
-	    LegendWindowOpenTiming(@"native.open.createWindow.finish", @{
-	      @"identifier": identifier ?: @"",
-	      @"moduleName": moduleName ?: @"",
-	      @"rootView": [NSString stringWithFormat:@"%p", rootView],
-	      @"window": [NSString stringWithFormat:@"%p", window],
-	    });
-	    resolve([self successJson]);
-	  });
+    if (!deferOrderFront) {
+      [window makeKeyAndOrderFront:nil];
+      if (levelNumber) {
+        [window orderFrontRegardless];
+      }
+    }
+    LegendWindowOpenTiming(@"native.open.createWindow.finish", @{
+      @"identifier": identifier ?: @"",
+      @"moduleName": moduleName ?: @"",
+      @"rootView": [NSString stringWithFormat:@"%p", rootView],
+      @"window": [NSString stringWithFormat:@"%p", window],
+    });
+    resolve([self successJson]);
+  });
 #else
   resolve([self failureJson:@"WindowManager is only available on macOS"]);
 #endif
@@ -2006,6 +2013,26 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     [NSApp activateIgnoringOtherApps:YES];
     [mainWindow makeKeyAndOrderFront:nil];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)showWindow:(NSString *)identifier resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      reject(@"window_not_found", @"Window not found", nil);
+      return;
+    }
+
+    [NSApp activateIgnoringOtherApps:YES];
+    [window makeKeyAndOrderFront:nil];
     resolve([self successJson]);
   });
 #else
