@@ -1,5 +1,5 @@
 import { SwitchControl } from "@legend-desktop/design-system";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
   SettingsPage,
@@ -274,37 +274,52 @@ function CommandLineSettingsContent() {
   const [status, setStatus] = useState<DiffCliInstallStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInstalling, setIsInstalling] = useState(false);
+  const statusRequestIdRef = useRef(0);
   const sourceCommand = getProfileSourceCommand(status?.profilePath);
 
-  const refreshStatus = () => {
+  const refreshStatus = useCallback(() => {
+    const requestId = statusRequestIdRef.current + 1;
+    statusRequestIdRef.current = requestId;
     getDiffCliInstallStatus()
       .then((nextStatus) => {
-        setStatus(nextStatus);
-        setError(null);
+        if (statusRequestIdRef.current === requestId) {
+          setStatus(nextStatus);
+          setError(null);
+        }
       })
       .catch((nextError: unknown) => {
-        setError(nextError instanceof Error ? nextError.message : String(nextError));
+        if (statusRequestIdRef.current === requestId) {
+          setError(nextError instanceof Error ? nextError.message : String(nextError));
+        }
       });
-  };
+  }, []);
 
   useEffect(() => {
     refreshStatus();
-  }, []);
+  }, [refreshStatus]);
 
-  const handleInstall = () => {
+  const handleInstall = useCallback(() => {
+    const requestId = statusRequestIdRef.current + 1;
+    statusRequestIdRef.current = requestId;
     setIsInstalling(true);
     installDiffCli()
       .then((nextStatus) => {
-        setStatus(nextStatus);
-        setError(null);
+        if (statusRequestIdRef.current === requestId) {
+          setStatus(nextStatus);
+          setError(null);
+        }
       })
       .catch((nextError: unknown) => {
-        setError(nextError instanceof Error ? nextError.message : String(nextError));
+        if (statusRequestIdRef.current === requestId) {
+          setError(nextError instanceof Error ? nextError.message : String(nextError));
+        }
       })
       .finally(() => {
-        setIsInstalling(false);
+        if (statusRequestIdRef.current === requestId) {
+          setIsInstalling(false);
+        }
       });
-  };
+  }, []);
 
   return (
     <>
@@ -315,7 +330,7 @@ function CommandLineSettingsContent() {
         <SettingsRow
           align="center"
           control={<CliStatusText status={status} />}
-          title="ld"
+          title="ldiff"
         />
         <SettingsRow
           align="center"
@@ -326,25 +341,35 @@ function CommandLineSettingsContent() {
               onPress={handleInstall}
             />
           )}
-          description={status?.scriptPath ?? "Creates the command script in the app data folder."}
+          description={status?.scriptPath ?? "Creates the ldiff launcher in the app data folder."}
           title="Command"
+        />
+        <SettingsRow
+          align="center"
+          control={(
+            <Text className="max-w-64 text-xs text-text-secondary" numberOfLines={1}>
+              {status?.appInstalled ? "Found" : "Missing"}
+            </Text>
+          )}
+          description={status?.appPath ?? "Install Legend Diff.app in /Applications or ~/Applications."}
+          title="Application"
         />
         {status?.profilePath ? (
           <SettingsRow
             align="center"
             control={(
               <Text className="max-w-64 text-xs text-text-secondary" numberOfLines={1}>
-                {status.profileInstalled ? "Configured" : "Missing"}
+                {status.profileInstalled ? "Configured" : "Not configured"}
               </Text>
             )}
             description={status.profilePath}
-            title="Profile"
+            title="Shell profile"
           />
         ) : null}
         {sourceCommand ? (
           <View className="px-1 pt-1">
             <Text className="text-xs leading-relaxed text-text-secondary">
-              New terminal windows will pick up ld automatically. In an existing terminal, run {sourceCommand}.
+              New terminal windows will pick up ldiff automatically. In an existing terminal, run {sourceCommand}.
             </Text>
           </View>
         ) : null}

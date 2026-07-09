@@ -1,11 +1,17 @@
 import { commandRunner } from "@legend-desktop/command-runner";
 import { createStorage } from "@legend-desktop/storage";
 
-const cliScriptRelativePath = "bin/ld";
+const cliCommandName = "ldiff";
+const cliScriptRelativePath = "bin/legend-diff";
+const installedAppName = "Legend Diff.app";
+const installedAppPath = `/Applications/${installedAppName}`;
+const userInstalledAppRelativePath = `Applications/${installedAppName}`;
 const managedBlockStart = "# >>> Legend Diff CLI >>>";
 const managedBlockEnd = "# <<< Legend Diff CLI <<<";
 
 export type DiffCliInstallStatus = {
+  appInstalled: boolean;
+  appPath: string | null;
   installed: boolean;
   profileInstalled: boolean;
   profilePath: string | null;
@@ -39,24 +45,6 @@ function getShellName(shell: string | null | undefined) {
   return separatorIndex >= 0 ? value.slice(separatorIndex + 1) : value;
 }
 
-export function getLegendDiffCliScript() {
-  return `#!/bin/zsh
-emulate -L zsh
-set -e
-
-urlencode() {
-  /usr/bin/osascript -l JavaScript -e 'function run(argv) { return encodeURIComponent(argv[0]); }' "$1"
-}
-
-url="legend-diff://open?cwd=$(urlencode "$PWD")"
-for arg in "$@"; do
-  url="\${url}&arg=$(urlencode "$arg")"
-done
-
-/usr/bin/open "$url"
-`;
-}
-
 export function getProfilePathForShell(shell: string | null | undefined, home: string | null | undefined) {
   const normalizedHome = home ? normalizeHomePath(home) : null;
   const shellName = getShellName(shell);
@@ -76,9 +64,43 @@ function shellSingleQuote(value: string) {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+export function getLegendDiffCliScript() {
+  return `#!/bin/zsh
+emulate -L zsh
+set -e
+
+app_path=""
+for candidate in ${shellSingleQuote(installedAppPath)} "\${HOME:-}/${userInstalledAppRelativePath}"; do
+  if [ -d "$candidate" ]; then
+    app_path="$candidate"
+    break
+  fi
+done
+
+if [ -z "$app_path" ]; then
+  printf '%s\\n' "Legend Diff is not installed. Move ${installedAppName} to /Applications or ~/Applications." >&2
+  exit 1
+fi
+
+urlencode() {
+  /usr/bin/osascript -l JavaScript -e 'function run(argv) { return encodeURIComponent(argv[0]); }' "$1"
+}
+
+url="legend-diff://open?cwd=$(urlencode "$PWD")"
+for arg in "$@"; do
+  url="\${url}&arg=$(urlencode "$arg")"
+done
+
+/usr/bin/open -a "$app_path" "$url"
+`;
+}
+
 export function createLegendDiffCliProfileBlock(scriptPath: string) {
   return `${managedBlockStart}
-alias ld=${shellSingleQuote(scriptPath)}
+unalias ${cliCommandName} 2>/dev/null || true
+${cliCommandName}() {
+  ${shellSingleQuote(scriptPath)} "$@"
+}
 ${managedBlockEnd}`;
 }
 
@@ -116,6 +138,33 @@ async function readProfile(profilePath: string) {
   return result?.exitCode === 0 ? result.stdout : "";
 }
 
+async function directoryExists(path: string) {
+  const result = await commandRunner.runCommand({
+    args: ["-c", "test -d \"$1\"", "sh", path],
+    command: "/bin/sh",
+    timeoutMs: 1000,
+  }).catch(() => null);
+  return result?.exitCode === 0;
+}
+
+function getInstalledAppPathCandidates(home: string | null | undefined) {
+  const candidates = [installedAppPath];
+  if (home) {
+    candidates.push(`${normalizeHomePath(home)}/${userInstalledAppRelativePath}`);
+  }
+  return candidates;
+}
+
+async function getInstalledAppPath(home: string | null | undefined) {
+  let appPath: string | null = null;
+  for (const candidate of getInstalledAppPathCandidates(home)) {
+    if (!appPath && await directoryExists(candidate)) {
+      appPath = candidate;
+    }
+  }
+  return appPath;
+}
+
 async function isExecutable(path: string) {
   const result = await commandRunner.runCommand({
     args: ["-c", "test -x \"$1\"", "sh", path],
@@ -134,22 +183,21 @@ async function writeCliScript(scriptPath: string) {
     timeoutMs: 1000,
   });
   if (result.exitCode !== 0) {
-    throw new Error(result.stderr || "Unable to mark ld as executable.");
+    throw new Error(result.stderr || `Unable to mark ${cliCommandName} as executable.`);
   }
 }
 
 async function installProfileBlock(profilePath: string, scriptPath: string) {
   const result = await commandRunner.runCommand({
-    args: ["-s", profilePath, scriptPath],
+    args: ["-s", profilePath],
     command: "/bin/sh",
     input: `${managedBlockStart}
 ${managedBlockEnd}
 profile_path="$1"
-script_path="$2"
-quote_shell() {
-  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
-}
-block="$(printf '%s\\nalias ld=%s\\n%s\\n' '${managedBlockStart}' "$(quote_shell "$script_path")" '${managedBlockEnd}')"
+block=$(cat <<'LEGEND_DIFF_CLI_BLOCK'
+${createLegendDiffCliProfileBlock(scriptPath)}
+LEGEND_DIFF_CLI_BLOCK
+)
 mkdir -p "$(dirname "$profile_path")"
 touch "$profile_path"
 tmp_file="$(mktemp)"
@@ -171,13 +219,16 @@ rm -f "$tmp_file"
 export async function getDiffCliInstallStatus(): Promise<DiffCliInstallStatus> {
   const scriptPath = getLegendDiffCliScriptPath();
   const { home, shell } = await getShellEnvironment();
+  const appPath = await getInstalledAppPath(home);
   const profilePath = getProfilePathForShell(shell, home);
   const profileContent = profilePath ? await readProfile(profilePath) : "";
   const scriptInstalled = getCliStorage().read(cliScriptRelativePath, { format: "text" }) === getLegendDiffCliScript();
   const scriptExecutable = await isExecutable(scriptPath);
   const profileInstalled = profilePath ? profileIncludesLegendDiffCliBlock(profileContent, scriptPath) : false;
   return {
-    installed: scriptInstalled && scriptExecutable && profileInstalled,
+    appInstalled: Boolean(appPath),
+    appPath,
+    installed: Boolean(appPath) && scriptInstalled && scriptExecutable && profileInstalled,
     profileInstalled,
     profilePath,
     scriptExecutable,
