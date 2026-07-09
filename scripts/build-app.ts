@@ -80,12 +80,43 @@ function signMacOSApp(appPath: string, signIdentity: string) {
   ]);
 }
 
+function normalizeMacOSMetroAssetPaths(appPath: string) {
+  const resourcesPath = path.join(appPath, "Contents", "Resources");
+  const bundlePath = path.join(resourcesPath, "main.jsbundle");
+  const assetsPath = path.join(resourcesPath, "assets");
+  let didCopyAssets = false;
+
+  if (fs.existsSync(bundlePath) && fs.existsSync(assetsPath)) {
+    const bundle = fs.readFileSync(bundlePath, "utf8");
+    const escapedAssetRoots = new Set<string>();
+
+    for (const match of bundle.matchAll(/\/assets\/\.\.\/([^/"')?]+)/g)) {
+      if (match[1]) {
+        escapedAssetRoots.add(match[1]);
+      }
+    }
+
+    for (const assetRoot of escapedAssetRoots) {
+      const sourcePath = path.join(assetsPath, assetRoot);
+      const normalizedPath = path.join(assetsPath, `_${assetRoot}`);
+
+      if (fs.existsSync(sourcePath)) {
+        console.log(`Copying normalized Metro assets to ${normalizedPath}`);
+        fs.cpSync(sourcePath, normalizedPath, { force: true, recursive: true });
+        didCopyAssets = true;
+      }
+    }
+  }
+
+  return didCopyAssets;
+}
+
 function copyMissingMacOSMetroAssets(appPath: string) {
   const assetsDirName = "assets";
   const sourceAssetsPath = path.join(appPath, "Contents", "Resources", assetsDirName);
 
   if (!fs.existsSync(sourceAssetsPath)) {
-    return;
+    return false;
   }
 
   const productsDir = path.dirname(appPath);
@@ -93,12 +124,13 @@ function copyMissingMacOSMetroAssets(appPath: string) {
   const nestedAssetsPath = path.join(nestedAppPath, "Contents", "Resources", assetsDirName);
 
   if (nestedAppPath === appPath || !fs.existsSync(nestedAppPath)) {
-    return;
+    return false;
   }
 
   console.log(`Copying Metro assets to ${nestedAssetsPath}`);
   fs.cpSync(sourceAssetsPath, nestedAssetsPath, { force: true, recursive: true });
   signMacOSApp(nestedAppPath, getExistingCodeSignIdentity(appPath));
+  return true;
 }
 
 async function buildOne(appId: string, platform: Platform, args: string[] = []) {
@@ -137,6 +169,10 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         },
       },
     );
+    const didNormalizeAssets = normalizeMacOSMetroAssetPaths(appPath);
+    if (didNormalizeAssets) {
+      signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
+    }
     copyMissingMacOSMetroAssets(appPath);
     stripMacOSHermesSymbols(appPath);
     return;
