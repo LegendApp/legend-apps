@@ -552,6 +552,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
   const latestPropsRef = useLatestValueRef({
     adaptiveRenderEnabled: adaptiveRender !== undefined,
+    dataKey,
     dataVersion,
     debugName,
     getDocumentIndex,
@@ -875,13 +876,14 @@ export function VirtualizedFixedDocumentList<TRow>({
   }, [latestPropsRef]);
 
   const keyExtractor = useCallback((item: number | undefined, index: number) => {
-    const { dataVersion, debugName, itemKeyVersion } = latestPropsRef.current;
+    const { dataKey, dataVersion, debugName, itemKeyVersion } = latestPropsRef.current;
     const keyVersion = itemKeyVersion ?? dataVersion;
+    const dataKeyPrefix = dataKey === undefined ? "" : `${dataKey}:`;
     const startedAt = debugNowMs();
     const rowIndex = item ?? index;
     const key = keyVersion === undefined
-      ? String(rowIndex)
-      : `${keyVersion}:${rowIndex}`;
+      ? `${dataKeyPrefix}${rowIndex}`
+      : `${dataKeyPrefix}${keyVersion}:${rowIndex}`;
     if (!hasLoggedFirstKeyExtractorRef.current) {
       hasLoggedFirstKeyExtractorRef.current = true;
       debugLog(debugName, "list.keyExtractor.first", {
