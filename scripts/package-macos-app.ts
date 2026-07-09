@@ -20,6 +20,7 @@ import {
   getMacOSReleaseDistDir,
   getMacOSSparkleAppcastPath,
 } from "./lib/release";
+import { validateMacOSReleaseApp } from "./lib/macosReleaseValidation";
 
 type MacOSBuildArch = "arm" | "x86";
 type MacOSPackageArch = MacOSBuildArch | "all";
@@ -235,6 +236,14 @@ function packageArchitecture(
 
   signApp(distAppPath, entitlementsPath, options);
   notarizeApp(distAppPath, `${manifest.id}-${arch}`, options);
+  if (!options.skipSign && !options.skipNotarize) {
+    validateMacOSReleaseApp({
+      appPackage,
+      appPath: distAppPath,
+      arch,
+      manifest,
+    });
+  }
 
   fs.rmSync(archivePath, { force: true });
   runCommand("ditto", [

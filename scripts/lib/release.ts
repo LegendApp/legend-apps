@@ -2,9 +2,13 @@ import path from "node:path";
 import { rootDir } from "./apps";
 import type { AppManifest, AppPackageMetadata } from "./types";
 
-const githubOwner = "LegendApp";
-const githubRepo = "legend-apps";
-const githubBranch = "main";
+export const githubOwner = "LegendApp";
+export const githubRepo = "legend-apps";
+export const githubBranch = "main";
+
+export function getGitHubRepositorySlug() {
+  return `${githubOwner}/${githubRepo}`;
+}
 
 export function getMacOSReleaseVersion(appPackage: AppPackageMetadata) {
   const releaseVersion = appPackage.version.split(/[+-]/)[0];
@@ -64,4 +68,3 @@ export function getMacOSReleaseDistDir(manifest: AppManifest) {
 export function getMacOSSparkleAppcastPath(manifest: AppManifest) {
   return path.join(rootDir, getMacOSSparkleFeedPath(manifest));
 }
-

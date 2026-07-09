@@ -53,16 +53,25 @@ feed to `updates/<app>/appcast.xml`.
 
 ## Publish
 
-Commit the version and generated appcast changes before publishing. Then run:
+Commit and push the version and generated appcast changes to `main` before
+publishing. The release command verifies that `HEAD` and the appcast match
+`origin/main`, and that every archive is Developer ID signed, hardened,
+notarized, stapled, Gatekeeper-approved, and built for the expected
+architecture. Then run:
 
 ```sh
 bun run diff githubrelease macos
 ```
 
-This creates the app-prefixed tag, pushes it, and creates a GitHub release with
-the packaged archive and generated delta files.
+To run the complete publication preflight without creating a tag or release:
+
+```sh
+bun run diff githubrelease macos --verify-only
+```
+
+The publish command creates the app-prefixed tag and GitHub release at the
+verified `main` commit, with the packaged archive and generated delta files.
 
 Do not use GitHub's repository-wide `/releases/latest` URLs for Sparkle feeds.
 The appcasts point at fixed release asset URLs like
 `/releases/download/diff-v0.0.1/Legend-Diff-0.0.1-arm.zip`.
-
