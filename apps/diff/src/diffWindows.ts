@@ -14,7 +14,7 @@ import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffPalette } from "./diffPalette";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
-import { DiffViewerWindowShell, preloadDiffViewerWindow } from "./DiffViewerWindowShell";
+import { DiffViewerWindowShell } from "./DiffViewerWindowShell";
 import { getDiffViewerWindowTitleVisibility } from "./diffWindowChrome";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
@@ -239,9 +239,6 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     source,
     windowIdentifier,
   }));
-  if (source) {
-    preloadDiffViewerWindow();
-  }
   const prepareStartedAt = nowMs();
   const windowStyle = createDiffViewerWindowStyle({
     includeFrame: true,
