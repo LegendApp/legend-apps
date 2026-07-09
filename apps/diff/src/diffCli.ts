@@ -216,6 +216,32 @@ rm -f "$tmp_file"
   }
 }
 
+async function removeProfileBlock(profilePath: string) {
+  const result = await commandRunner.runCommand({
+    args: ["-s", profilePath],
+    command: "/bin/sh",
+    input: `${managedBlockStart}
+${managedBlockEnd}
+profile_path="$1"
+if [ ! -f "$profile_path" ]; then
+  exit 0
+fi
+tmp_file="$(mktemp)"
+sed '/^${managedBlockStart}$/,/^${managedBlockEnd}$/d' "$profile_path" > "$tmp_file"
+cat "$tmp_file" > "$profile_path"
+rm -f "$tmp_file"
+`,
+    timeoutMs: 3000,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr || `Unable to update ${profilePath}.`);
+  }
+}
+
+function deleteCliScript() {
+  getCliStorage().delete(cliScriptRelativePath);
+}
+
 export async function getDiffCliInstallStatus(): Promise<DiffCliInstallStatus> {
   const scriptPath = getLegendDiffCliScriptPath();
   const { home, shell } = await getShellEnvironment();
@@ -247,5 +273,16 @@ export async function installDiffCli() {
   }
   await writeCliScript(scriptPath);
   await installProfileBlock(profilePath, scriptPath);
+  return getDiffCliInstallStatus();
+}
+
+export async function uninstallDiffCli() {
+  const { home, shell } = await getShellEnvironment();
+  const profilePath = getProfilePathForShell(shell, home);
+  if (!profilePath) {
+    throw new Error("Could not find a supported shell profile for zsh or bash.");
+  }
+  deleteCliScript();
+  await removeProfileBlock(profilePath);
   return getDiffCliInstallStatus();
 }

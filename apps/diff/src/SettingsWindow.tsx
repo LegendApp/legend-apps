@@ -15,7 +15,7 @@ import {
   SyntaxThemeSelectorSection,
 } from "@legend-desktop/syntax-settings";
 import { diffSettingsWindowIdentifier } from "./appConstants";
-import { getDiffCliInstallStatus, installDiffCli, type DiffCliInstallStatus } from "./diffCli";
+import { getDiffCliInstallStatus, installDiffCli, uninstallDiffCli, type DiffCliInstallStatus } from "./diffCli";
 import {
   diffFontFamilyOptions,
   setDiffAdaptiveLightModeEnabledSetting,
@@ -242,16 +242,6 @@ function DebuggingSettingsContent() {
   );
 }
 
-function CliStatusText({ status }: { status: DiffCliInstallStatus | null }) {
-  return (
-    <Text
-      className={status?.installed ? "text-sm font-medium text-text-primary" : "text-sm font-medium text-text-secondary"}
-    >
-      {status?.installed ? "Installed" : "Not installed"}
-    </Text>
-  );
-}
-
 function getProfileSourceCommand(profilePath: string | null | undefined) {
   if (profilePath?.endsWith("/.zshrc")) {
     return "source ~/.zshrc";
@@ -260,6 +250,22 @@ function getProfileSourceCommand(profilePath: string | null | undefined) {
     return "source ~/.bash_profile";
   }
   return null;
+}
+
+function getCommandLineDescription(status: DiffCliInstallStatus | null, sourceCommand: string | null) {
+  let description = "Open Legend Diff from Terminal with ldiff.";
+  if (status?.installed) {
+    description = sourceCommand
+      ? `Installed. Run \`${sourceCommand}\` in existing terminals.`
+      : "Installed.";
+  } else if (status && !status.appInstalled) {
+    description = "Move Legend Diff.app to /Applications or ~/Applications.";
+  } else if (status && !status.profileInstalled) {
+    description = "Add ldiff to your shell profile.";
+  } else if (status && (!status.scriptInstalled || !status.scriptExecutable)) {
+    description = "Install the ldiff launcher.";
+  }
+  return description;
 }
 
 function CommandLineSettingsPage() {
@@ -274,8 +280,11 @@ function CommandLineSettingsContent() {
   const [status, setStatus] = useState<DiffCliInstallStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInstalling, setIsInstalling] = useState(false);
+  const [isUninstalling, setIsUninstalling] = useState(false);
   const statusRequestIdRef = useRef(0);
   const sourceCommand = getProfileSourceCommand(status?.profilePath);
+  const commandLineDescription = getCommandLineDescription(status, sourceCommand);
+  const canUninstall = Boolean(status?.scriptInstalled || status?.scriptExecutable || status?.profileInstalled);
 
   const refreshStatus = useCallback(() => {
     const requestId = statusRequestIdRef.current + 1;
@@ -321,6 +330,29 @@ function CommandLineSettingsContent() {
       });
   }, []);
 
+  const handleUninstall = useCallback(() => {
+    const requestId = statusRequestIdRef.current + 1;
+    statusRequestIdRef.current = requestId;
+    setIsUninstalling(true);
+    uninstallDiffCli()
+      .then((nextStatus) => {
+        if (statusRequestIdRef.current === requestId) {
+          setStatus(nextStatus);
+          setError(null);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (statusRequestIdRef.current === requestId) {
+          setError(nextError instanceof Error ? nextError.message : String(nextError));
+        }
+      })
+      .finally(() => {
+        if (statusRequestIdRef.current === requestId) {
+          setIsUninstalling(false);
+        }
+      });
+  }, []);
+
   return (
     <>
       <SettingsSection
@@ -329,50 +361,25 @@ function CommandLineSettingsContent() {
       >
         <SettingsRow
           align="center"
-          control={<CliStatusText status={status} />}
+          control={(
+            <View className="flex-row gap-2">
+              <CommandLineButton
+                disabled={isInstalling || isUninstalling}
+                label={isInstalling ? "Installing..." : status?.installed ? "Update" : "Install"}
+                onPress={handleInstall}
+              />
+              {canUninstall ? (
+                <CommandLineButton
+                  disabled={isInstalling || isUninstalling}
+                  label={isUninstalling ? "Uninstalling..." : "Uninstall"}
+                  onPress={handleUninstall}
+                />
+              ) : null}
+            </View>
+          )}
+          description={commandLineDescription}
           title="ldiff"
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <CommandLineButton
-              disabled={isInstalling}
-              label={status?.installed ? "Reinstall" : isInstalling ? "Installing..." : "Install"}
-              onPress={handleInstall}
-            />
-          )}
-          description={status?.scriptPath ?? "Creates the ldiff launcher in the app data folder."}
-          title="Command"
-        />
-        <SettingsRow
-          align="center"
-          control={(
-            <Text className="max-w-64 text-xs text-text-secondary" numberOfLines={1}>
-              {status?.appInstalled ? "Found" : "Missing"}
-            </Text>
-          )}
-          description={status?.appPath ?? "Install Legend Diff.app in /Applications or ~/Applications."}
-          title="Application"
-        />
-        {status?.profilePath ? (
-          <SettingsRow
-            align="center"
-            control={(
-              <Text className="max-w-64 text-xs text-text-secondary" numberOfLines={1}>
-                {status.profileInstalled ? "Configured" : "Not configured"}
-              </Text>
-            )}
-            description={status.profilePath}
-            title="Shell profile"
-          />
-        ) : null}
-        {sourceCommand ? (
-          <View className="px-1 pt-1">
-            <Text className="text-xs leading-relaxed text-text-secondary">
-              New terminal windows will pick up ldiff automatically. In an existing terminal, run {sourceCommand}.
-            </Text>
-          </View>
-        ) : null}
         {error ? (
           <View className="px-1 pt-1">
             <Text className="text-xs text-danger">{error}</Text>
