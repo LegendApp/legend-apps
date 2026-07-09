@@ -5,15 +5,10 @@ import {
   getAvailableSyntaxGrammars,
   getAvailableSyntaxThemes,
   getSyntaxAssetDirectoryUri,
-  getSyntaxLanguageForPath,
-  warmSyntaxHighlighters,
-  type SyntaxHighlighterWarmupResult,
   type SyntaxThemeAssetEntry,
 } from "@legend-desktop/syntax-parser";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
-
-export type { SyntaxHighlighterWarmupResult } from "@legend-desktop/syntax-parser";
 
 export type SourceFontFamilySetting = typeof sourceFontFamilyOptions[number]["value"];
 
@@ -49,77 +44,6 @@ export function normalizeSourceFontSize(fontSize: unknown, defaultFontSize: numb
 
 export function normalizeBooleanSetting(value: unknown, defaultValue: boolean): boolean {
   return typeof value === "boolean" ? value : defaultValue;
-}
-
-export function normalizeSyntaxLanguageList(value: unknown): string[] {
-  const values = Array.isArray(value) ? value : [];
-  const languages = new Set<string>();
-  for (const entry of values) {
-    if (typeof entry === "string") {
-      const language = entry.trim();
-      if (language) {
-        languages.add(language);
-      }
-    }
-  }
-  return [...languages].sort();
-}
-
-export function getSyntaxLanguageLabel(language: string) {
-  if (language === "tsx") {
-    return "TSX";
-  }
-  if (language === "typescript") {
-    return "TypeScript";
-  }
-  if (language === "javascript") {
-    return "JavaScript";
-  }
-  if (language === "json") {
-    return "JSON";
-  }
-  return language.slice(0, 1).toUpperCase() + language.slice(1);
-}
-
-export function getInstalledSyntaxLanguages(languages: readonly string[]) {
-  const installedLanguages = new Set(
-    getAvailableSyntaxGrammars()
-      .filter((grammar) => grammar.status !== "available")
-      .map((grammar) => grammar.name),
-  );
-  return languages.filter((language) => installedLanguages.has(language));
-}
-
-export function getWarmupLanguagesForPaths(paths: readonly string[]) {
-  const languages = new Set<string>();
-  for (const path of paths) {
-    const language = getSyntaxLanguageForPath(path);
-    if (language) {
-      languages.add(language);
-    }
-  }
-  return getInstalledSyntaxLanguages([...languages]);
-}
-
-export function warmInstalledSyntaxHighlighters({
-  label,
-  languages,
-  theme,
-}: {
-  label: string;
-  languages: readonly string[];
-  theme: string;
-}): Promise<SyntaxHighlighterWarmupResult[]> {
-  const installedLanguages = getInstalledSyntaxLanguages(languages);
-  if (installedLanguages.length === 0) {
-    return Promise.resolve([]);
-  }
-
-  return warmSyntaxHighlighters({
-    label,
-    languages: installedLanguages,
-    theme,
-  });
 }
 
 export type SourceTypographySettingsRowsProps<FontFamily extends string = SourceFontFamilySetting> = {
@@ -175,44 +99,25 @@ export function SourceTypographySettingsRows<FontFamily extends string = SourceF
 
 export type SourceSyntaxToggleSettingsRowsProps = {
   onSyntaxHighlightingChange: (enabled: boolean) => void;
-  onSyntaxPrewarmChange: (enabled: boolean) => void;
   syntaxHighlightingEnabled: boolean;
-  syntaxPrewarmEnabled: boolean;
 };
 
 export function SourceSyntaxToggleSettingsRows({
   onSyntaxHighlightingChange,
-  onSyntaxPrewarmChange,
   syntaxHighlightingEnabled,
-  syntaxPrewarmEnabled,
 }: SourceSyntaxToggleSettingsRowsProps) {
   return (
-    <>
-      <SettingsRow
-        align="center"
-        control={(
-          <SwitchControl
-            accessibilityLabel="Syntax highlighting"
-            checked={syntaxHighlightingEnabled}
-            onChange={onSyntaxHighlightingChange}
-          />
-        )}
-        title="Syntax highlighting"
-      />
-      <SettingsRow
-        align="center"
-        control={(
-          <SwitchControl
-            accessibilityLabel="Prewarm highlighters"
-            checked={syntaxPrewarmEnabled}
-            disabled={!syntaxHighlightingEnabled}
-            onChange={onSyntaxPrewarmChange}
-          />
-        )}
-        disabled={!syntaxHighlightingEnabled}
-        title="Prewarm highlighters"
-      />
-    </>
+    <SettingsRow
+      align="center"
+      control={(
+        <SwitchControl
+          accessibilityLabel="Syntax highlighting"
+          checked={syntaxHighlightingEnabled}
+          onChange={onSyntaxHighlightingChange}
+        />
+      )}
+      title="Syntax highlighting"
+    />
   );
 }
 

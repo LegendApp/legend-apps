@@ -19,7 +19,6 @@ export type CodeSettingsFile = {
   fontFamily?: CodeFontFamilySetting;
   fontSize?: number;
   syntaxHighlightingEnabled?: boolean;
-  syntaxPrewarmEnabled?: boolean;
   syntaxTheme: string;
 };
 
@@ -30,7 +29,6 @@ export const codeFontSizeOptions = sourceFontSizeOptions;
 export const defaultCodeFontFamily: CodeFontFamilySetting = "Menlo";
 export const defaultCodeFontSize = 13;
 export const defaultCodeSyntaxHighlightingEnabled = true;
-export const defaultCodeSyntaxPrewarmEnabled = true;
 
 function normalizeCodeFontFamily(fontFamily: unknown): CodeFontFamilySetting {
   return normalizeSourceFontFamily(fontFamily, defaultCodeFontFamily);
@@ -54,10 +52,6 @@ const codeSettings = createObservableSettings({
       defaultValue: defaultCodeSyntaxHighlightingEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultCodeSyntaxHighlightingEnabled),
     },
-    syntaxPrewarmEnabled: {
-      defaultValue: defaultCodeSyntaxPrewarmEnabled,
-      normalize: (value) => normalizeBooleanSetting(value, defaultCodeSyntaxPrewarmEnabled),
-    },
     syntaxTheme: {
       defaultValue: defaultSyntaxThemeName,
       normalize: normalizeSyntaxThemeName,
@@ -68,7 +62,6 @@ const codeSettings = createObservableSettings({
 const fontFamilySetting = codeSettings.field("fontFamily");
 const fontSizeSetting = codeSettings.field("fontSize");
 const syntaxHighlightingEnabledSetting = codeSettings.field("syntaxHighlightingEnabled");
-const syntaxPrewarmEnabledSetting = codeSettings.field("syntaxPrewarmEnabled");
 const syntaxThemeSetting = codeSettings.field("syntaxTheme");
 export const codeSettings$ = codeSettings.settings$;
 
@@ -82,10 +75,6 @@ export function getCodeFontSizeSetting(): number {
 
 export function getCodeSyntaxHighlightingEnabledSetting(): boolean {
   return syntaxHighlightingEnabledSetting.get();
-}
-
-export function getCodeSyntaxPrewarmEnabledSetting(): boolean {
-  return syntaxPrewarmEnabledSetting.get();
 }
 
 export function getCodeSyntaxThemeSetting(): string {
@@ -108,10 +97,6 @@ export function useCodeSyntaxHighlightingEnabledSetting(): boolean {
   return normalizeBooleanSetting(useValue(codeSettings$.syntaxHighlightingEnabled), defaultCodeSyntaxHighlightingEnabled);
 }
 
-export function useCodeSyntaxPrewarmEnabledSetting(): boolean {
-  return normalizeBooleanSetting(useValue(codeSettings$.syntaxPrewarmEnabled), defaultCodeSyntaxPrewarmEnabled);
-}
-
 export function useCodeSyntaxThemeSetting(): string {
   return normalizeSyntaxThemeName(useValue(codeSettings$.syntaxTheme));
 }
@@ -130,10 +115,6 @@ export function setCodeFontSizeSetting(fontSize: number) {
 
 export function setCodeSyntaxHighlightingEnabledSetting(enabled: boolean) {
   syntaxHighlightingEnabledSetting.set(enabled);
-}
-
-export function setCodeSyntaxPrewarmEnabledSetting(enabled: boolean) {
-  syntaxPrewarmEnabledSetting.set(enabled);
 }
 
 export function setCodeSyntaxThemeSetting(syntaxTheme: string) {

@@ -63,7 +63,6 @@ export interface SyntaxParser
     ios: "c++";
   }> {
   highlightString(source: string, language: string, theme: string): Promise<SyntaxHighlightResult>;
-  warmSyntaxHighlighter(language: string, theme: string): Promise<SyntaxHighlightTiming>;
   loadCodeFile(
     filePath: string,
     language: string,

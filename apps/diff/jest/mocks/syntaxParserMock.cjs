@@ -32,9 +32,6 @@ const getSyntaxLanguageForPath = jest.fn((path) => {
   return "";
 });
 
-const warmSyntaxHighlighters = jest.fn(async ({ languages }) => (
-  languages.map((language) => ({ language, ms: 1, ok: true }))
-));
 const highlightString = jest.fn(async (source) => ({
   lines: source.split("\n").map((text, index) => ({ index, text, tokens: [] })),
   styles: [],
@@ -58,7 +55,6 @@ function resetSyntaxParserMock() {
   isSyntaxGrammarInstalled.mockReset();
   isSyntaxGrammarInstalled.mockReturnValue(false);
   highlightString.mockClear();
-  warmSyntaxHighlighters.mockClear();
 }
 
 module.exports = {
@@ -70,6 +66,5 @@ module.exports = {
   highlightString,
   isSyntaxGrammarInstalled,
   normalizeSyntaxThemeName: (value) => themes.has(value) ? value : defaultSyntaxThemeName,
-  warmSyntaxHighlighters,
   __resetSyntaxParserMock: resetSyntaxParserMock,
 };

@@ -14,12 +14,9 @@ import {
   setDiffShowOnlyHunksSetting,
   setDiffViewModeSetting,
 } from "./diffSettings";
-import { warmDiffSyntaxHighlightersForStartup } from "./diffSyntaxWarmup";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
-
-const diffStartupSyntaxWarmupDelayMs = 1000;
 
 LogBox.ignoreLogs([
   "Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Text/TextNativeComponent')",
@@ -47,12 +44,6 @@ async function configureDiffAutoUpdates() {
     await AutoUpdater.setAutomaticallyChecksForUpdates(true);
     await AutoUpdater.setUpdateCheckInterval(60 * 60 * 24);
   }
-}
-
-function scheduleDiffSyntaxHighlightersForStartupAfterLaunch() {
-  setTimeout(() => {
-    warmDiffSyntaxHighlightersForStartup().catch(reportDiffAppControllerError);
-  }, diffStartupSyntaxWarmupDelayMs);
 }
 
 async function openDiffViewerForSelectedFolder(controller: DocumentAppController) {
@@ -166,9 +157,6 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
       await openDiffViewerWindow(null);
     }
     controller.setDocumentWindowOpen(true);
-    if (restoredWindowCount === 0) {
-      scheduleDiffSyntaxHighlightersForStartupAfterLaunch();
-    }
   }
 }
 

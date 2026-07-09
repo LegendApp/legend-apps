@@ -9,7 +9,6 @@ import {
   type VirtualizedSettingsWindowPage,
 } from "@legend-desktop/settings-window";
 import {
-  getSyntaxLanguageLabel,
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,
   SyntaxThemeSelectorSection,
@@ -25,8 +24,6 @@ import {
   setDiffShowOnlyHunksSetting,
   setDiffShowStatisticsPanelSetting,
   setDiffSyntaxHighlightingEnabledSetting,
-  setDiffSyntaxPrewarmEnabledSetting,
-  setDiffSyntaxPrewarmLanguagesSetting,
   setDiffSyntaxThemeSetting,
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
@@ -35,9 +32,6 @@ import {
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
   useDiffSyntaxHighlightingEnabledSetting,
-  useDiffSyntaxPrewarmEnabledSetting,
-  useDiffSyntaxPrewarmKnownLanguagesSetting,
-  useDiffSyntaxPrewarmLanguagesSetting,
   useDiffSyntaxTheme,
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
@@ -133,59 +127,17 @@ function SyntaxSettingsPage() {
 
 function SyntaxSettingsContent() {
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
-  const syntaxPrewarmEnabled = useDiffSyntaxPrewarmEnabledSetting();
-  const knownLanguages = useDiffSyntaxPrewarmKnownLanguagesSetting();
-  const prewarmLanguages = useDiffSyntaxPrewarmLanguagesSetting();
-  const prewarmLanguageSet = new Set(prewarmLanguages);
-
-  const handleLanguageToggle = (language: string, enabled: boolean) => {
-    const nextLanguages = new Set(prewarmLanguages);
-    if (enabled) {
-      nextLanguages.add(language);
-    } else {
-      nextLanguages.delete(language);
-    }
-    setDiffSyntaxPrewarmLanguagesSetting([...nextLanguages]);
-  };
 
   return (
-    <>
-      <SettingsSection
-        first
-        title={null}
-      >
-        <SourceSyntaxToggleSettingsRows
-          onSyntaxHighlightingChange={setDiffSyntaxHighlightingEnabledSetting}
-          onSyntaxPrewarmChange={setDiffSyntaxPrewarmEnabledSetting}
-          syntaxHighlightingEnabled={syntaxHighlightingEnabled}
-          syntaxPrewarmEnabled={syntaxPrewarmEnabled}
-        />
-      </SettingsSection>
-      <SettingsSection title="Prewarm languages">
-        {knownLanguages.length > 0 ? knownLanguages.map((language) => (
-          <SettingsRow
-            align="center"
-            control={(
-              <SwitchControl
-                accessibilityLabel={`Prewarm ${getSyntaxLanguageLabel(language)}`}
-                checked={prewarmLanguageSet.has(language)}
-                disabled={!syntaxHighlightingEnabled || !syntaxPrewarmEnabled}
-                onChange={(enabled) => handleLanguageToggle(language, enabled)}
-              />
-            )}
-            disabled={!syntaxHighlightingEnabled || !syntaxPrewarmEnabled}
-            key={language}
-            title={getSyntaxLanguageLabel(language)}
-          />
-        )) : (
-          <View className="px-1 py-2">
-            <Text className="text-xs text-text-secondary">
-              No languages recorded yet.
-            </Text>
-          </View>
-        )}
-      </SettingsSection>
-    </>
+    <SettingsSection
+      first
+      title={null}
+    >
+      <SourceSyntaxToggleSettingsRows
+        onSyntaxHighlightingChange={setDiffSyntaxHighlightingEnabledSetting}
+        syntaxHighlightingEnabled={syntaxHighlightingEnabled}
+      />
+    </SettingsSection>
   );
 }
 

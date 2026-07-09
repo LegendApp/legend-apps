@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../nitrogen/generated/shared/c++/SyntaxHighlightTiming.hpp"
 #include "../nitrogen/generated/shared/c++/SyntaxRenderLine.hpp"
 #include "../nitrogen/generated/shared/c++/SyntaxStyle.hpp"
 
@@ -47,11 +46,6 @@ struct SyntaxScopeState {
 
 class TextMateHighlighterContext;
 
-struct SyntaxHighlighterWarmupResult {
-  std::shared_ptr<TextMateHighlighterContext> context;
-  SyntaxHighlightTiming timing;
-};
-
 class TextMateHighlighterContext {
 public:
   TextMateHighlighterContext(TextMateOnigLib onig, TextMateRegistry registry, TextMateGrammar grammar, TextMateColorMap* colorMap);
@@ -75,7 +69,6 @@ double elapsedSyntaxMs(SyntaxClock::time_point start, SyntaxClock::time_point en
 double utf16Length(const std::string& text);
 std::vector<std::string> splitSyntaxLines(const std::string& source);
 std::string getSyntaxLanguageForPath(const std::string& path);
-SyntaxHighlighterWarmupResult warmHighlighterContext(const std::string& language, const std::string& theme);
 std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(const std::string& language, const std::string& theme);
 std::vector<SyntaxStyle> resolveSyntaxScopeStyles(
     const std::string& theme,

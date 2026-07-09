@@ -58,7 +58,6 @@ struct SyntaxAssetRoots {
 struct HighlighterCacheEntry {
   std::condition_variable cv;
   std::shared_ptr<TextMateHighlighterContext> context;
-  SyntaxHighlightTiming timing;
   std::string error;
   bool failed = false;
   bool ready = false;
@@ -467,347 +466,6 @@ std::string getThemeFileName(const std::string& theme) {
   return normalized + ".json";
 }
 
-std::vector<std::string> warmupLinesForLanguage(const std::string& language) {
-  const auto normalized = normalizeOption(language);
-
-  if (normalized == "yaml" || normalized == "yml") {
-    return {
-        "nodeLinker: node-modules",
-        "npmScopes:",
-        "  legend:",
-        "    npmRegistryServer: \"https://registry.npmjs.org\"",
-    };
-  }
-
-  if (normalized == "json" || normalized == "jsonc" || normalized == "json5" || normalized == "jsonl") {
-    return {
-        "{",
-        "  \"name\": \"legend\",",
-        "  \"private\": true,",
-        "  \"scripts\": {",
-        "    \"start\": \"bun start\"",
-        "  }",
-        "}",
-    };
-  }
-
-  if (normalized == "markdown" || normalized == "md" || normalized == "mdx") {
-    return {
-        "# Legend",
-        "",
-        "A short paragraph with `inline code`.",
-        "",
-        "```ts",
-        "const value = true;",
-        "```",
-    };
-  }
-
-  if (normalized == "css" || normalized == "scss") {
-    return {
-        ".root {",
-        "  display: flex;",
-        "  color: #c9d1d9;",
-        "}",
-    };
-  }
-
-  if (normalized == "html" || normalized == "xml") {
-    return {
-        "<section class=\"root\">",
-        "  <h1>Legend</h1>",
-        "</section>",
-    };
-  }
-
-  if (normalized == "shellscript" || normalized == "shell" || normalized == "bash" || normalized == "sh" || normalized == "zsh") {
-    return {
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-        "echo \"Legend\"",
-    };
-  }
-
-  if (normalized == "python" || normalized == "py") {
-    return {
-        "def main():",
-        "    value = \"Legend\"",
-        "    print(value)",
-    };
-  }
-
-  if (normalized == "ruby" || normalized == "rb") {
-    return {
-        "def main",
-        "  puts \"Legend\"",
-        "end",
-    };
-  }
-
-  if (normalized == "swift") {
-    return {
-        "import Foundation",
-        "",
-        "let value = \"Legend\"",
-        "print(value)",
-    };
-  }
-
-  if (normalized == "kotlin" || normalized == "kt" || normalized == "kts") {
-    return {
-        "fun main() {",
-        "  val value = \"Legend\"",
-        "  println(value)",
-        "}",
-    };
-  }
-
-  if (normalized == "java") {
-    return {
-        "public class Legend {",
-        "  public static void main(String[] args) {",
-        "    System.out.println(\"Legend\");",
-        "  }",
-        "}",
-    };
-  }
-
-  if (normalized == "cpp" || normalized == "c++" || normalized == "cc" || normalized == "cxx" || normalized == "hpp" || normalized == "h++") {
-    return {
-        "#include <string>",
-        "",
-        "auto value = std::string(\"Legend\");",
-    };
-  }
-
-  if (normalized == "c" || normalized == "h") {
-    return {
-        "#include <stdio.h>",
-        "",
-        "int main(void) {",
-        "  puts(\"Legend\");",
-        "}",
-    };
-  }
-
-  if (normalized == "objective-c" || normalized == "objc" || normalized == "m") {
-    return {
-        "#import <Foundation/Foundation.h>",
-        "",
-        "NSString *value = @\"Legend\";",
-    };
-  }
-
-  if (normalized == "objective-cpp" || normalized == "objcpp" || normalized == "mm") {
-    return {
-        "#import <Foundation/Foundation.h>",
-        "#include <string>",
-        "",
-        "auto value = std::string(\"Legend\");",
-    };
-  }
-
-  if (normalized == "go") {
-    return {
-        "package main",
-        "",
-        "func main() {",
-        "  println(\"Legend\")",
-        "}",
-    };
-  }
-
-  if (normalized == "rust" || normalized == "rs") {
-    return {
-        "fn main() {",
-        "  let value = \"Legend\";",
-        "  println!(\"{}\", value);",
-        "}",
-    };
-  }
-
-  if (normalized == "toml") {
-    return {
-        "name = \"legend\"",
-        "private = true",
-        "",
-        "[scripts]",
-        "start = \"bun start\"",
-    };
-  }
-
-  if (normalized == "dockerfile" || normalized == "docker") {
-    return {
-        "FROM node:24",
-        "WORKDIR /app",
-        "CMD [\"bun\", \"start\"]",
-    };
-  }
-
-  if (normalized == "javascript" || normalized == "js") {
-    return {
-        "const value = \"Legend\";",
-        "console.log(value);",
-    };
-  }
-
-  if (normalized == "javascriptreact" || normalized == "jsx") {
-    return {
-        "import React from \"react\";",
-        "",
-        "export function App() {",
-        "  return <Text>Legend</Text>;",
-        "}",
-    };
-  }
-
-  if (normalized == "tsx" || normalized == "typescriptreact") {
-    return {
-        "import React, { memo, useCallback, useMemo, useState } from \"react\";",
-        "import { Pressable, StyleSheet, Text, View } from \"react-native\";",
-        "",
-        "type Item = {",
-        "  id: string;",
-        "  label?: string;",
-        "  count: number;",
-        "  tags: string[];",
-        "  meta?: { selected?: boolean; tone: \"info\" | \"warning\" | \"danger\" };",
-        "};",
-        "",
-        "type Props<T extends Item = Item> = {",
-        "  value?: string | null;",
-        "  count?: number;",
-        "  items?: readonly T[];",
-        "  onSelect?: (item: T, index: number) => void;",
-        "};",
-        "",
-        "const titlePattern = /[A-Z][\\w-]+/g;",
-        "const fallbackItems: Item[] = Array.from({ length: 24 }, (_, index) => ({",
-        "  id: `row-${index}`;",
-        "  label: index % 3 === 0 ? undefined : `Item ${index}`;",
-        "  count: index * 2;",
-        "  tags: [`tag-${index % 4}`, index > 10 ? \"later\" : \"early\"],",
-        "  meta: { selected: index === 2, tone: index % 2 === 0 ? \"info\" : \"warning\" },",
-        "}));",
-        "",
-        "function formatLabel(item: Item, index: number) {",
-        "  const label = item.label?.trim() || `Untitled ${index}`;",
-        "  return titlePattern.test(label) ? label.replace(titlePattern, (match) => match.toLowerCase()) : label;",
-        "}",
-        "",
-        "export const WarmupRow = memo(function WarmupRow({ item, index, onSelect }: { item: Item; index: number; onSelect?: Props[\"onSelect\"] }) {",
-        "  const selected = item.meta?.selected === true;",
-        "  const handlePress = useCallback(() => {",
-        "    onSelect?.(item, index);",
-        "  }, [index, item, onSelect]);",
-        "",
-        "  return (",
-        "    <Pressable",
-        "      testID={`warmup-row-${item.id}`}",
-        "      accessibilityRole=\"button\"",
-        "      accessibilityState={{ selected }}",
-        "      onPress={handlePress}",
-        "      style={[styles.row, selected && styles.selectedRow]}",
-        "    >",
-        "      <View style={styles.content}>",
-        "        <Text numberOfLines={1} style={styles.title}>",
-        "          {formatLabel(item, index)}",
-        "        </Text>",
-        "        <Text style={styles.subtitle}>",
-        "          {item.tags.map((tag) => `#${tag}`).join(\" \")}",
-        "        </Text>",
-        "      </View>",
-        "      <Text style={styles.count}>{item.count ?? 0}</Text>",
-        "    </Pressable>",
-        "  );",
-        "});",
-        "",
-        "export function WarmupList<T extends Item>({ value, count = 0, items, onSelect }: Props<T>) {",
-        "  const [filter, setFilter] = useState(value ?? \"\");",
-        "  const rows = useMemo(() => {",
-        "    const source = items?.length ? items : fallbackItems;",
-        "    return source",
-        "      .filter((item) => !filter || item.label?.toLowerCase().includes(filter.toLowerCase()))",
-        "      .map((item, index) => ({ ...item, count: item.count + count + index }));",
-        "  }, [count, filter, items]);",
-        "",
-        "  return (",
-        "    <View style={styles.container}>",
-        "      <Text style={styles.heading}>{filter ? `Filtered: ${filter}` : \"All rows\"}</Text>",
-        "      {rows.length > 0 ? rows.map((item, index) => (",
-        "        <WarmupRow key={item.id} item={item} index={index} onSelect={onSelect} />",
-        "      )) : (",
-        "        <Text style={styles.empty}>No matches for {filter || \"current query\"}</Text>",
-        "      )}",
-        "      <Pressable onPress={() => setFilter((current) => current.slice(0, -1))}>",
-        "        <Text>{`Clear ${filter.length}`}</Text>",
-        "      </Pressable>",
-        "    </View>",
-        "  );",
-        "}",
-        "",
-        "const styles = StyleSheet.create({",
-        "  container: { flex: 1, padding: 12, gap: 8 },",
-        "  row: { flexDirection: \"row\", alignItems: \"center\", gap: 8, paddingVertical: 4 },",
-        "  selectedRow: { backgroundColor: \"#1f6feb22\" },",
-        "  content: { flex: 1, minWidth: 0 },",
-        "  heading: { fontWeight: \"700\" },",
-        "  title: { color: \"#c9d1d9\" },",
-        "  subtitle: { color: \"#8b949e\" },",
-        "  count: { fontVariant: [\"tabular-nums\"] },",
-        "  empty: { color: \"#f85149\" },",
-        "});",
-    };
-  }
-
-  return {
-      "type Item = {",
-      "  id: string;",
-      "  label?: string;",
-      "  count: number;",
-      "  tags: string[];",
-      "  meta?: { selected?: boolean; tone: \"info\" | \"warning\" | \"danger\" };",
-      "};",
-      "",
-      "type Props<T extends Item = Item> = {",
-      "  value?: string | null;",
-      "  count?: number;",
-      "  items?: readonly T[];",
-      "  onSelect?: (item: T, index: number) => void;",
-      "};",
-      "",
-      "const titlePattern = /[A-Z][\\w-]+/g;",
-      "const fallbackItems: Item[] = Array.from({ length: 24 }, (_, index) => ({",
-      "  id: `row-${index}`;",
-      "  label: index % 3 === 0 ? undefined : `Item ${index}`;",
-      "  count: index * 2;",
-      "  tags: [`tag-${index % 4}`, index > 10 ? \"later\" : \"early\"],",
-      "  meta: { selected: index === 2, tone: index % 2 === 0 ? \"info\" : \"warning\" },",
-      "}));",
-      "",
-      "function formatLabel(item: Item, index: number) {",
-      "  const label = item.label?.trim() || `Untitled ${index}`;",
-      "  return titlePattern.test(label) ? label.replace(titlePattern, (match) => match.toLowerCase()) : label;",
-      "}",
-      "",
-      "export function warmup<T extends Item>({ value, count = 0, items, onSelect }: Props<T>) {",
-      "  const filter = value ?? \"\";",
-      "  const source = items?.length ? items : fallbackItems;",
-      "  const rows = source",
-      "    .filter((item) => !filter || item.label?.toLowerCase().includes(filter.toLowerCase()))",
-      "    .map((item, index) => ({ ...item, count: item.count + count + index }));",
-      "",
-      "  for (const [index, item] of rows.entries()) {",
-      "    if (item.meta?.selected) {",
-      "      onSelect?.(item, index);",
-      "    }",
-      "  }",
-      "",
-      "  return rows.reduce((total, item, index) => total + formatLabel(item, index).length + item.count, 0);",
-      "}",
-  };
-}
-
 void addStyle(
     SyntaxStyleState& styleState,
     int foregroundId,
@@ -872,58 +530,6 @@ std::shared_ptr<TextMateHighlighterContext> createHighlighterContext(
   }
 
   return std::make_shared<TextMateHighlighterContext>(onig, registry, grammar, colorMap);
-}
-
-SyntaxHighlighterWarmupResult createWarmedHighlighterContext(
-    const std::string& language,
-    const std::string& theme) {
-  const auto startedAt = SyntaxClock::now();
-  const auto grammarsRoot = syntaxAssetRoots("RNSyntaxParserGrammars", "grammars");
-  const auto themesRoot = syntaxAssetRoots("RNSyntaxParserThemes", "themes");
-  auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
-  const auto contextReadyAt = SyntaxClock::now();
-
-  SyntaxStyleState styleState;
-  TextMateStateStack state = textmate_get_initial_state();
-  double tokenCount = 0;
-  const auto lines = warmupLinesForLanguage(language);
-
-  {
-    std::lock_guard<std::mutex> contextLock(context->mutex);
-    for (const auto& line : lines) {
-      auto tokenizedLine = tokenizeSyntaxLine(*context, line, state, styleState);
-      tokenCount += tokenizedLine.tokenCount;
-    }
-  }
-
-  const auto finishedAt = SyntaxClock::now();
-  {
-    std::ostringstream message;
-    message
-        << "[DiffMemory] syntax.warmed"
-        << " language=" << language
-        << " theme=" << theme
-        << " lines=" << lines.size()
-        << " tokens=" << tokenCount
-        << " styles=" << styleState.styles.size()
-        << " contextMs=" << elapsedSyntaxMs(startedAt, contextReadyAt)
-        << " tokenizeMs=" << elapsedSyntaxMs(contextReadyAt, finishedAt)
-        << " totalMs=" << elapsedSyntaxMs(startedAt, finishedAt);
-    logSyntaxMemoryMessage(message.str());
-  }
-  return SyntaxHighlighterWarmupResult{
-      context,
-      SyntaxHighlightTiming(
-          static_cast<double>(lines.size()),
-          tokenCount,
-          static_cast<double>(styleState.styles.size()),
-          0,
-          0,
-          elapsedSyntaxMs(startedAt, contextReadyAt),
-          elapsedSyntaxMs(contextReadyAt, finishedAt),
-          elapsedSyntaxMs(contextReadyAt, finishedAt),
-          elapsedSyntaxMs(startedAt, finishedAt)),
-  };
 }
 
 } // namespace
@@ -1058,7 +664,7 @@ std::string getSyntaxLanguageForPath(const std::string& path) {
   return match != languagesByExtension.end() ? match->second : "";
 }
 
-SyntaxHighlighterWarmupResult warmHighlighterContext(
+std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
     const std::string& language,
     const std::string& theme) {
   const auto normalizedLanguage = normalizeOption(language);
@@ -1067,7 +673,7 @@ SyntaxHighlighterWarmupResult warmHighlighterContext(
   static std::mutex cacheMutex;
   static std::map<std::string, std::shared_ptr<HighlighterCacheEntry>> contextCache;
   std::shared_ptr<HighlighterCacheEntry> entry;
-  bool shouldWarm = false;
+  bool shouldLoad = false;
 
   {
     std::unique_lock<std::mutex> lock(cacheMutex);
@@ -1088,32 +694,36 @@ SyntaxHighlighterWarmupResult warmHighlighterContext(
             << " contextCount=" << contextCache.size();
         logSyntaxMemoryMessage(message.str());
       }
-      return SyntaxHighlighterWarmupResult{entry->context, entry->timing};
+      return entry->context;
     }
 
     entry = std::make_shared<HighlighterCacheEntry>();
     contextCache[key] = entry;
-    shouldWarm = true;
+    shouldLoad = true;
   }
 
-  if (shouldWarm) {
+  if (shouldLoad) {
     try {
-      auto result = createWarmedHighlighterContext(language, theme);
+      const auto startedAt = SyntaxClock::now();
+      const auto grammarsRoot = syntaxAssetRoots("RNSyntaxParserGrammars", "grammars");
+      const auto themesRoot = syntaxAssetRoots("RNSyntaxParserThemes", "themes");
+      auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
+      const auto finishedAt = SyntaxClock::now();
 
       {
         std::lock_guard<std::mutex> lock(cacheMutex);
-        entry->context = result.context;
-        entry->timing = result.timing;
+        entry->context = context;
         entry->ready = true;
         std::ostringstream message;
         message
             << "[DiffMemory] syntax.cacheStore"
             << " key=" << key
+            << " contextMs=" << elapsedSyntaxMs(startedAt, finishedAt)
             << " contextCount=" << contextCache.size();
         logSyntaxMemoryMessage(message.str());
       }
       entry->cv.notify_all();
-      return result;
+      return context;
     } catch (const std::exception& error) {
       {
         std::lock_guard<std::mutex> lock(cacheMutex);
@@ -1126,13 +736,7 @@ SyntaxHighlighterWarmupResult warmHighlighterContext(
     }
   }
 
-  throw std::runtime_error("Failed to warm syntax highlighter.");
-}
-
-std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
-    const std::string& language,
-    const std::string& theme) {
-  return warmHighlighterContext(language, theme).context;
+  throw std::runtime_error("Failed to load syntax highlighter.");
 }
 
 std::string formatTextMateColor(uint32_t color) {

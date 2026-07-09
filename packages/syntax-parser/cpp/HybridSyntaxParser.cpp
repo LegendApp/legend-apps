@@ -50,14 +50,6 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightStr
   });
 }
 
-std::shared_ptr<Promise<SyntaxHighlightTiming>> HybridSyntaxParser::warmSyntaxHighlighter(
-    const std::string& language,
-    const std::string& theme) {
-  return Promise<SyntaxHighlightTiming>::async([language, theme]() -> SyntaxHighlightTiming {
-    return warmHighlighterContext(language, theme).timing;
-  });
-}
-
 std::shared_ptr<Promise<SyntaxFileLoadResult>> HybridSyntaxParser::loadCodeFile(
     const std::string& filePath,
     const std::string& language,

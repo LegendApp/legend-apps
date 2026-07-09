@@ -14,12 +14,10 @@ import {
   setCodeFontFamilySetting,
   setCodeFontSizeSetting,
   setCodeSyntaxHighlightingEnabledSetting,
-  setCodeSyntaxPrewarmEnabledSetting,
   setCodeSyntaxThemeSetting,
   useCodeFontFamilySetting,
   useCodeFontSizeSetting,
   useCodeSyntaxHighlightingEnabledSetting,
-  useCodeSyntaxPrewarmEnabledSetting,
   useCodeSyntaxTheme,
   useCodeSyntaxThemeSetting,
 } from "./codeSettings";
@@ -30,7 +28,6 @@ function AppearanceSettingsContent() {
   const fontFamily = useCodeFontFamilySetting();
   const fontSize = useCodeFontSizeSetting();
   const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
-  const syntaxPrewarmEnabled = useCodeSyntaxPrewarmEnabledSetting();
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
 
   return (
@@ -56,9 +53,7 @@ function AppearanceSettingsContent() {
       />
       <SourceSyntaxToggleSettingsRows
         onSyntaxHighlightingChange={setCodeSyntaxHighlightingEnabledSetting}
-        onSyntaxPrewarmChange={setCodeSyntaxPrewarmEnabledSetting}
         syntaxHighlightingEnabled={syntaxHighlightingEnabled}
-        syntaxPrewarmEnabled={syntaxPrewarmEnabled}
       />
     </SettingsSection>
   );

@@ -6,7 +6,6 @@ import {
 import { codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage } from "./codeFiles";
 import { getCodeSyntaxThemeSetting } from "./codeSettings";
-import { warmCodeSyntaxHighlighters } from "./codeSyntaxWarmup";
 
 export type CodeLoadBenchmarkResult = {
   filePath: string;
@@ -27,7 +26,6 @@ export type CodeStringBenchmarkResult = {
 declare global {
   var __legendCodeBenchmarkLoadFile: ((filePath: string, initialLineCount?: number) => Promise<CodeLoadBenchmarkResult>) | undefined;
   var __legendCodeBenchmarkHighlightString: ((source: string, language?: string) => Promise<CodeStringBenchmarkResult>) | undefined;
-  var __legendCodeBenchmarkWarmHighlighters: typeof warmCodeSyntaxHighlighters | undefined;
 }
 
 function nowMs() {
@@ -66,6 +64,5 @@ export function installCodeBenchmarkHook() {
   if (__DEV__) {
     globalThis.__legendCodeBenchmarkHighlightString = benchmarkHighlightString;
     globalThis.__legendCodeBenchmarkLoadFile = benchmarkLoadFile;
-    globalThis.__legendCodeBenchmarkWarmHighlighters = warmCodeSyntaxHighlighters;
   }
 }

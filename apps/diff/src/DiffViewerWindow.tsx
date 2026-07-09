@@ -75,7 +75,6 @@ import {
   type DiffMergeState,
   writeDiffMergeFileContent,
 } from "./diffMerge";
-import { recordDiffSyntaxLanguagesForPaths } from "./diffSyntaxWarmup";
 import { GlassToast } from "./GlassToast";
 import {
   diffMergeSaveConflictKey,
@@ -3280,15 +3279,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (loadRequestIdRef.current === requestId) {
-            const filePaths = loaded.files.map((file) => file.path);
-            const syntaxLanguages = recordDiffSyntaxLanguagesForPaths(filePaths);
-            logDiffMemoryMark("viewer.syntaxLanguagesRecorded", () => ({
-              files: loaded.files.length,
-              languages: syntaxLanguages,
-              requestId,
-              rows: loaded.document.rowCount,
-              scopes: loaded.document.scopeCount,
-            }));
             addRecentDiffSource(nextSource);
             logDiffOpenTiming("viewer.recentSource.noted", () => ({
               requestId,

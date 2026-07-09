@@ -11,14 +11,12 @@ import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./ap
 import { installCodeBenchmarkHook } from "./codeBenchmark";
 import { getLaunchCodeFile, isCodePath } from "./codeFiles";
 import { codeMenuConfig } from "./codeMenus";
-import { warmCodeSyntaxHighlighters } from "./codeSyntaxWarmup";
 import { focusCodeViewerWindow, openCodeSettingsWindow, openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
 import { requestCodeViewerFile } from "./codeViewerRequests";
 
 registerCodeWindows();
 initializeSyntaxAssetsSync();
 installCodeBenchmarkHook();
-warmCodeSyntaxHighlighters().catch(reportCodeAppControllerError);
 
 declare global {
   var __legendCodeBenchmarkOpenFile: ((filePath: string) => Promise<void>) | undefined;

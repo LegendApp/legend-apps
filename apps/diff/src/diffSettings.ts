@@ -3,7 +3,6 @@ import {
   normalizeBooleanSetting,
   normalizeSourceFontFamily,
   normalizeSourceFontSize,
-  normalizeSyntaxLanguageList,
   sourceFontFamilyOptions,
   sourceFontSizeOptions,
   type SourceFontFamilySetting,
@@ -21,9 +20,6 @@ export type DiffSettingsFile = {
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
   syntaxHighlightingEnabled?: boolean;
-  syntaxPrewarmEnabled?: boolean;
-  syntaxPrewarmLanguages?: string[];
-  syntaxPrewarmKnownLanguages?: string[];
   syntaxTheme: string;
   restoreWindowsOnStartup?: boolean;
   showOnlyHunks?: boolean;
@@ -45,7 +41,6 @@ export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffShowStatisticsPanel = false;
 export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
-export const defaultDiffSyntaxPrewarmEnabled = true;
 export const diffFontSizeOptions = sourceFontSizeOptions;
 export const diffViewModeOptions = [
   { label: "Unified", value: "unified" },
@@ -94,18 +89,6 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffSyntaxHighlightingEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffSyntaxHighlightingEnabled),
     },
-    syntaxPrewarmEnabled: {
-      defaultValue: defaultDiffSyntaxPrewarmEnabled,
-      normalize: (value) => normalizeBooleanSetting(value, defaultDiffSyntaxPrewarmEnabled),
-    },
-    syntaxPrewarmLanguages: {
-      defaultValue: [] as string[],
-      normalize: normalizeSyntaxLanguageList,
-    },
-    syntaxPrewarmKnownLanguages: {
-      defaultValue: [] as string[],
-      normalize: normalizeSyntaxLanguageList,
-    },
     syntaxTheme: {
       defaultValue: defaultSyntaxThemeName,
       normalize: normalizeSyntaxThemeName,
@@ -137,9 +120,6 @@ const adaptiveLightModeEnabledSetting = diffSettings.field("adaptiveLightModeEna
 const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
 const syntaxHighlightingEnabledSetting = diffSettings.field("syntaxHighlightingEnabled");
-const syntaxPrewarmEnabledSetting = diffSettings.field("syntaxPrewarmEnabled");
-const syntaxPrewarmLanguagesSetting = diffSettings.field("syntaxPrewarmLanguages");
-const syntaxPrewarmKnownLanguagesSetting = diffSettings.field("syntaxPrewarmKnownLanguages");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const restoreWindowsOnStartupSetting = diffSettings.field("restoreWindowsOnStartup");
 const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
@@ -192,18 +172,6 @@ export function getDiffSyntaxHighlightingEnabledSetting(): boolean {
   return syntaxHighlightingEnabledSetting.get();
 }
 
-export function getDiffSyntaxPrewarmEnabledSetting(): boolean {
-  return syntaxPrewarmEnabledSetting.get();
-}
-
-export function getDiffSyntaxPrewarmLanguagesSetting(): string[] {
-  return syntaxPrewarmLanguagesSetting.get();
-}
-
-export function getDiffSyntaxPrewarmKnownLanguagesSetting(): string[] {
-  return syntaxPrewarmKnownLanguagesSetting.get();
-}
-
 export function useDiffFontFamilySetting(): DiffFontFamilySetting {
   return normalizeDiffFontFamily(useValue(diffSettings$.fontFamily));
 }
@@ -249,18 +217,6 @@ export function useDiffSyntaxHighlightingEnabledSetting(): boolean {
   return normalizeBooleanSetting(useValue(diffSettings$.syntaxHighlightingEnabled), defaultDiffSyntaxHighlightingEnabled);
 }
 
-export function useDiffSyntaxPrewarmEnabledSetting(): boolean {
-  return normalizeBooleanSetting(useValue(diffSettings$.syntaxPrewarmEnabled), defaultDiffSyntaxPrewarmEnabled);
-}
-
-export function useDiffSyntaxPrewarmLanguagesSetting(): string[] {
-  return normalizeSyntaxLanguageList(useValue(diffSettings$.syntaxPrewarmLanguages));
-}
-
-export function useDiffSyntaxPrewarmKnownLanguagesSetting(): string[] {
-  return normalizeSyntaxLanguageList(useValue(diffSettings$.syntaxPrewarmKnownLanguages));
-}
-
 export function setDiffSyntaxThemeSetting(syntaxTheme: string) {
   syntaxThemeSetting.set(syntaxTheme);
 }
@@ -299,16 +255,4 @@ export function setDiffSidebarWidthSetting(sidebarWidth: number) {
 
 export function setDiffSyntaxHighlightingEnabledSetting(enabled: boolean) {
   syntaxHighlightingEnabledSetting.set(enabled);
-}
-
-export function setDiffSyntaxPrewarmEnabledSetting(enabled: boolean) {
-  syntaxPrewarmEnabledSetting.set(enabled);
-}
-
-export function setDiffSyntaxPrewarmLanguagesSetting(languages: readonly string[]) {
-  syntaxPrewarmLanguagesSetting.set(normalizeSyntaxLanguageList(languages));
-}
-
-export function setDiffSyntaxPrewarmKnownLanguagesSetting(languages: readonly string[]) {
-  syntaxPrewarmKnownLanguagesSetting.set(normalizeSyntaxLanguageList(languages));
 }
