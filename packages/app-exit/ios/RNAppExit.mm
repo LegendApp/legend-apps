@@ -103,8 +103,11 @@ RCT_EXPORT_MODULE(NativeAppExit)
 + (NSApplicationTerminateReply)applicationShouldTerminate
 {
   RNAppExit *module = RNAppExitSharedInstance;
-  if (!module || !module.hasAppExitListeners || module.isWaitingForExitCompletion) {
+  if (!module || !module.hasAppExitListeners) {
     return NSTerminateNow;
+  }
+  if (module.isWaitingForExitCompletion) {
+    return NSTerminateLater;
   }
 
   module.isWaitingForExitCompletion = YES;

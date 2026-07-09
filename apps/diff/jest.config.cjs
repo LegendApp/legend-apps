@@ -7,6 +7,7 @@ module.exports = {
   ],
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
+    "^@legend-apps/app-exit$": "<rootDir>/apps/diff/jest/mocks/appExitMock.cjs",
     "^@legend-apps/command-runner$": "<rootDir>/apps/diff/jest/mocks/commandRunnerMock.cjs",
     "^@legend-apps/diff-parser$": "<rootDir>/apps/diff/jest/mocks/diffParserMock.cjs",
     "^@legend-apps/file-dialog$": "<rootDir>/apps/diff/jest/mocks/fileDialogMock.cjs",

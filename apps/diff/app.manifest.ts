@@ -19,6 +19,7 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-apps/app-exit",
       "@legend-apps/appkit-split-view",
       "@legend-apps/auto-updater",
       "@legend-apps/command-runner",

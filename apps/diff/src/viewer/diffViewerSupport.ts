@@ -36,6 +36,14 @@ export function sourcesMatch(left: DiffOpenSource | null, right: DiffOpenSource)
     );
 }
 
+export function shouldPrepareMergeDraftsForSourceChange(
+  currentSource: DiffOpenSource | null,
+  nextSource: DiffOpenSource,
+  hasPendingMergeDraftWork: boolean,
+) {
+  return hasPendingMergeDraftWork && currentSource !== null && !sourcesMatch(currentSource, nextSource);
+}
+
 export function getDiffLoadTimingPayload(timing: DiffLoadTiming) {
   return {
     copyFilesMs: Number(timing.copyFilesMs.toFixed(1)),

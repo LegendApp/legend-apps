@@ -44,7 +44,8 @@ import { computed, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
-import { confirmUnsavedDiffMergeDrafts } from "./confirmUnsavedDiffMergeDrafts";
+import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
+import { registerDiffWindowExitPreparation } from "./diffAppExit";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
 import {
   createDiffCompareSource,
@@ -205,6 +206,7 @@ import {
   logDiffMemoryMark,
   logDiffLoadTiming,
   logDiffOpenTiming,
+  shouldPrepareMergeDraftsForSourceChange,
   sourcesMatch,
 } from "./viewer/diffViewerSupport";
 
@@ -2762,6 +2764,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const resolvingMergeConflictKeys$ = useObservable<ReadonlySet<string>>(new Set());
   const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
   const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
+  const prepareMergeDraftsForTransitionRef = useRef<(reason: UnsavedDiffMergeDraftReason) => Promise<boolean>>(async () => true);
+  const sourceTransitionInFlightRef = useRef(false);
   const [compareRepoState, setCompareRepoState] = useState<DiffCompareRepoState | null>(null);
   const [compareRefPromptVisible, setCompareRefPromptVisible] = useState(false);
   const [compareRefInput, setCompareRefInput] = useState("");
@@ -3214,6 +3218,29 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   });
 
   const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
+    const stateBeforeTransition = state$.peek();
+    const hasPendingMergeDraftWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
+    const shouldPrepareMergeDrafts = shouldPrepareMergeDraftsForSourceChange(
+      stateBeforeTransition.source,
+      nextSource,
+      hasPendingMergeDraftWork,
+    );
+    if (shouldPrepareMergeDrafts) {
+      if (sourceTransitionInFlightRef.current) {
+        return;
+      }
+      sourceTransitionInFlightRef.current = true;
+      let canChangeSource = false;
+      try {
+        canChangeSource = await prepareMergeDraftsForTransitionRef.current("source");
+      } finally {
+        sourceTransitionInFlightRef.current = false;
+      }
+      if (!canChangeSource) {
+        return;
+      }
+    }
+
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     activeProgressiveSessionRef.current?.cancel();
@@ -4009,7 +4036,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [discardMergeDrafts, hasUnsavedMergeDrafts, setDocumentErrorValue, state$]);
 
-  const prepareMergeDraftsForClose = useCallback(async () => {
+  const prepareMergeDraftsForTransition = useCallback(async (reason: UnsavedDiffMergeDraftReason) => {
     await waitForMergeResolveQueues();
     const currentState = state$.peek();
     const draftFiles = getUnsavedDiffMergeDraftFiles(mergeState$.peek());
@@ -4019,6 +4046,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
     const action = await confirmUnsavedDiffMergeDrafts({
       fileCount: draftFiles.length,
+      reason,
       sourceLabel: getDiffSourceLabel(currentState.source),
     });
 
@@ -4032,13 +4060,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
     return false;
   }, [mergeState$, saveMergeDrafts, state$, waitForMergeResolveQueues]);
+  prepareMergeDraftsForTransitionRef.current = prepareMergeDraftsForTransition;
+
+  useEffect(() => registerDiffWindowExitPreparation(
+    windowIdentifier,
+    prepareMergeDraftsForTransition,
+  ), [prepareMergeDraftsForTransition, windowIdentifier]);
 
   useEffect(() => {
     let isCloseInFlight = false;
     const subscription = addWindowCloseRequestedListener((event) => {
       if (event.identifier === windowIdentifier && !isCloseInFlight) {
         isCloseInFlight = true;
-        prepareMergeDraftsForClose()
+        prepareMergeDraftsForTransition("close")
           .then((canClose) => {
             if (canClose) {
               return closeWindow(windowIdentifier);
@@ -4060,7 +4094,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return () => {
       subscription.remove();
     };
-  }, [prepareMergeDraftsForClose, setDocumentErrorValue, state$, windowIdentifier]);
+  }, [prepareMergeDraftsForTransition, setDocumentErrorValue, state$, windowIdentifier]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {

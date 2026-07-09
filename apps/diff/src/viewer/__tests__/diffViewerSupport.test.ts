@@ -8,6 +8,7 @@ import {
   getDiffWindowToolbarModel,
   getErrorMessage,
   sourcesMatch,
+  shouldPrepareMergeDraftsForSourceChange,
 } from "../diffViewerSupport";
 
 const folderSource: DiffOpenSource = {
@@ -75,6 +76,19 @@ describe("diffViewerSupport", () => {
     expect(sourcesMatch(folderSource, { ...folderSource, label: "other" })).toBe(true);
     expect(sourcesMatch(folderSource, githubSource)).toBe(false);
     expect(sourcesMatch(null, folderSource)).toBe(false);
+  });
+
+  it("guards only source changes that have pending merge draft work", () => {
+    const branchSource: DiffOpenSource = {
+      ...folderSource,
+      compareBase: {
+        kind: "ref",
+        ref: "origin/main",
+      },
+    };
+    expect(shouldPrepareMergeDraftsForSourceChange(folderSource, branchSource, true)).toBe(true);
+    expect(shouldPrepareMergeDraftsForSourceChange(folderSource, folderSource, true)).toBe(false);
+    expect(shouldPrepareMergeDraftsForSourceChange(folderSource, githubSource, false)).toBe(false);
   });
 
   it("normalizes thrown values to messages", () => {

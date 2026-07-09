@@ -54,6 +54,7 @@
       "name": "@legend-apps/app-diff",
       "version": "0.0.1",
       "dependencies": {
+        "@legend-apps/app-exit": "0.0.0",
         "@legend-apps/appkit-split-view": "0.0.0",
         "@legend-apps/auto-updater": "0.0.0",
         "@legend-apps/command-runner": "0.0.0",

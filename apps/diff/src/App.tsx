@@ -6,6 +6,7 @@ import { initializeSyntaxAssetsSync } from "@legend-apps/syntax-parser";
 import { useEffect, useRef } from "react";
 import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
+import { installDiffAppExitHandler } from "./diffAppExit";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import {
@@ -178,6 +179,13 @@ export function App({ launchArguments }: DiffAppProps) {
   useEffect(() => {
     controllerRef.current = controller;
   }, [controller]);
+
+  useEffect(() => {
+    const subscription = installDiffAppExitHandler(reportDiffAppControllerError);
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const subscription = installDiffWindowRestoration();
