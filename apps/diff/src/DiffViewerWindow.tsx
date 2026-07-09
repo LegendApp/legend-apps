@@ -548,10 +548,42 @@ type DiffLoadedBodyProps = {
 type DiffLoadingSplitBodyProps = {
   backgroundColor: string;
   handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
+  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   syntaxAppearance: "dark" | "light";
 };
+
+type DiffSplitBodyProps = DiffLoadingSplitBodyProps & {
+  content: ReactElement;
+  debugPayload?: Record<string, unknown>;
+  sidebar: ReactElement;
+};
+
+type DiffLoadedSidebarPaneProps = Pick<
+  DiffLoadedBodyProps,
+  | "collapsedSidebarFolders"
+  | "handleSidebarListLayout"
+  | "mutedColor"
+  | "renderSidebarEntry"
+  | "sidebarCollapsed"
+  | "splitPaneMetrics$"
+  | "state"
+>;
+
+type DiffLoadedContentPaneProps = Omit<
+  DiffLoadedBodyProps,
+  | "backgroundColor"
+  | "collapsedSidebarFolders"
+  | "handleSidebarListLayout"
+  | "handleSplitViewResize"
+  | "mutedColor"
+  | "primaryColor"
+  | "renderSidebarEntry"
+  | "sidebarCollapsed"
+  | "sidebarWidth"
+  | "syntaxAppearance"
+>;
 
 type DiffRowConfig = {
   borderColor: string;
@@ -1232,18 +1264,25 @@ function DiffNoChangesBody({
   );
 }
 
-const DiffLoadingSplitBody = memo(function DiffLoadingSplitBody({
+const DiffSplitBody = memo(function DiffSplitBody({
   backgroundColor,
+  content,
+  debugPayload,
   handleSplitViewResize,
+  sidebar,
+  splitPaneMetrics$,
   sidebarCollapsed,
   sidebarWidth,
   syntaxAppearance,
-}: DiffLoadingSplitBodyProps) {
-  const sidebar = (
-    <View style={styles.sidebar}>
-      <View style={styles.sidebarList} />
-    </View>
-  );
+}: DiffSplitBodyProps) {
+  const splitPaneMetrics = useValue(splitPaneMetrics$);
+
+  logDiffOpenTiming("viewer.body.splitView.mount", () => ({
+    sidebarCollapsed,
+    sidebarHeight: splitPaneMetrics.sidebarHeight,
+    sidebarWidth: splitPaneMetrics.sidebarWidth,
+    ...debugPayload,
+  }));
 
   return (
     <View style={styles.loadedRoot}>
@@ -1254,6 +1293,7 @@ const DiffLoadingSplitBody = memo(function DiffLoadingSplitBody({
         contentTitlebarMaterial="glass"
         contentTitlebarOverlayColor={backgroundColor}
         contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
+        initialPaneMetrics={splitPaneMetrics}
         onSplitViewDidResize={handleSplitViewResize}
         sidebarCollapsed={sidebarCollapsed}
         sidebarMinWidth={defaultDiffSidebarWidth}
@@ -1262,22 +1302,16 @@ const DiffLoadingSplitBody = memo(function DiffLoadingSplitBody({
       >
         {sidebar}
         <View style={styles.diffWorkspace}>
-          <View style={styles.diffPane}>
-            <View style={styles.diffPaneContent}>
-              <View style={styles.diffTitlebarSpacer} />
-            </View>
-          </View>
+          {content}
         </View>
       </SidebarSplitView>
     </View>
   );
 });
 
-const DiffLoadedBody = memo(function DiffLoadedBody({
+const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   activeFileIndex$,
   activeItemIndexes,
-  backgroundColor,
-  collapsedSidebarFolders,
   diffPaneHeight$,
   diffTopChromeHeight,
   diffRows,
@@ -1290,10 +1324,8 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   getSideBySideItemType,
   getSideBySideRow,
   handleDiffPaneLayout,
-  handleSidebarListLayout,
   handleSideBySideTopItemChanged,
   handleSideBySideVisibleRowsRequested,
-  handleSplitViewResize,
   handleTopItemChanged,
   handleVisibleRowsRequested,
   isRenderingInitialLoadedFrame,
@@ -1304,18 +1336,13 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   mergeState$,
   nativeSideBySideRowConfig,
   nativeUnifiedRowConfig,
-  mutedColor,
   noChangesBody,
-  primaryColor,
   renderRow,
-  renderSidebarEntry,
   renderSideBySideRow,
   requestSideBySideRange,
   resolvingMergeConflictKeys$,
   onResolveMergeConflict,
   rowHeight,
-  sidebarCollapsed,
-  sidebarWidth,
   sideBySideDataVersion,
   sideBySideFileHeaderByListIndex,
   sideBySideHunkHeaderIndexes,
@@ -1323,11 +1350,10 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   splitPaneMetrics$,
   state,
   adaptiveLightModeEnabled,
-  syntaxAppearance,
   syntaxTokenizationVersion$,
   viewMode,
   visibleItemIndexes,
-}: DiffLoadedBodyProps) {
+}: DiffLoadedContentPaneProps) {
   const bodyStartedAt = nowMs();
   const diffPaneHeight = useValue(diffPaneHeight$);
   const splitPaneMetrics = useValue(splitPaneMetrics$);
@@ -1366,15 +1392,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
   const requestSideBySideRangeRef = useRenderLatestRef(requestSideBySideRange);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
   const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset) : 0;
-  const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
-  const sidebarListStyle = useMemo(
-    () => [styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }],
-    [sidebarListHeight],
-  );
-  const sidebarEntries = useMemo(
-    () => shouldRenderSidebarList ? createDiffSidebarEntries(state.files, collapsedSidebarFolders) : [],
-    [collapsedSidebarFolders, shouldRenderSidebarList, state.files],
-  );
   const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
   const shouldShowNoChanges = useValue(() => (
     activeItemIndexes.length === 0 &&
@@ -1599,18 +1616,38 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
     );
   }
 
-  logDiffOpenTiming("viewer.body.splitView.mount", () => ({
-    activeItemCount: activeItemIndexes.length,
-    diffPaneHeight,
-    rows: state.document.rowCount,
-    sidebarLayoutReady: isSidebarLayoutReady,
-    sidebarCollapsed,
-    sidebarHeight: splitPaneMetrics.sidebarHeight,
-    sidebarListHeight,
-    sidebarWidth: splitPaneMetrics.sidebarWidth,
-    viewMode,
-  }));
-  const sidebar = (
+  logBodyFinish("content");
+  return (
+    <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
+      {diffContent}
+      {floatingDocumentBanner}
+    </View>
+  );
+});
+
+const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
+  collapsedSidebarFolders,
+  handleSidebarListLayout,
+  mutedColor,
+  renderSidebarEntry,
+  sidebarCollapsed,
+  splitPaneMetrics$,
+  state,
+}: DiffLoadedSidebarPaneProps) {
+  const splitPaneMetrics = useValue(splitPaneMetrics$);
+  const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset) : 0;
+  const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
+  const sidebarListStyle = useMemo(
+    () => [styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }],
+    [sidebarListHeight],
+  );
+  const sidebarEntries = useMemo(
+    () => shouldRenderSidebarList ? createDiffSidebarEntries(state.files, collapsedSidebarFolders) : [],
+    [collapsedSidebarFolders, shouldRenderSidebarList, state.files],
+  );
+
+  return (
     <View
       style={[
         styles.sidebar,
@@ -1644,34 +1681,6 @@ const DiffLoadedBody = memo(function DiffLoadedBody({
       ) : (
         <View style={styles.sidebarList} />
       )}
-    </View>
-  );
-
-  logBodyFinish("split-view");
-  return (
-    <View style={styles.loadedRoot}>
-      <SidebarSplitView
-        appearance={syntaxAppearance}
-        contentMinWidth={diffContentMinWidth}
-        contentTitlebarHeight={diffTitlebarTopInset}
-        contentTitlebarMaterial="glass"
-        contentTitlebarOverlayColor={backgroundColor}
-        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
-        initialPaneMetrics={splitPaneMetrics}
-        onSplitViewDidResize={handleSplitViewResize}
-        sidebarCollapsed={sidebarCollapsed}
-        sidebarMinWidth={defaultDiffSidebarWidth}
-        sidebarWidth={sidebarWidth}
-        style={styles.content}
-      >
-        {sidebar}
-        <View style={styles.diffWorkspace}>
-          <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
-            {diffContent}
-            {floatingDocumentBanner}
-          </View>
-        </View>
-      </SidebarSplitView>
     </View>
   );
 });
@@ -4867,75 +4876,108 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     );
   } else if (state.status === "loaded") {
     body = (
-      <DiffLoadedBody
-        activeFileIndex$={activeFileIndex$}
-        activeItemIndexes={activeItemIndexes}
-        adaptiveLightModeEnabled={adaptiveLightModeEnabled}
+      <DiffSplitBody
         backgroundColor={backgroundColor}
-        collapsedSidebarFolders={collapsedSidebarFolders}
-        diffPaneHeight$={diffPaneHeight$}
-        diffTopChromeHeight={diffTopChromeHeight}
-        diffRows={diffRows}
-        documentErrorBody={documentErrorBody}
-        floatingDocumentBanner={unsavedMergeDraftBanner}
-        getItemSize={getItemSize}
-        getItemType={getItemType}
-        getRow={getRow}
-        getSideBySideItemSize={getSideBySideItemSize}
-        getSideBySideItemType={getSideBySideItemType}
-        getSideBySideRow={getSideBySideRow}
-        handleDiffPaneLayout={handleDiffPaneLayout}
-        handleSidebarListLayout={handleSidebarListLayout}
-        handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
-        handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested}
-        handleSplitViewResize={handleSplitViewResize}
-        handleTopItemChanged={handleTopItemChanged}
-        handleVisibleRowsRequested={handleVisibleRowsRequested}
-        isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
-        rowConfig={rowConfig}
-        listRef={listRef}
-        loadingSource={loadingSource}
-        mergeState={mergeState}
-        mergeState$={mergeState$}
-        nativeSideBySideRowConfig={nativeSideBySideRowConfig}
-        nativeUnifiedRowConfig={nativeUnifiedRowConfig}
-        mutedColor={mutedColor}
-        noChangesBody={(
-          <DiffNoChangesBody
-            foregroundColor={foregroundColor}
-            mutedColor={mutedColor}
-            visibleSourceLabel={visibleSourceLabel}
+        content={(
+          <DiffLoadedContentPane
+            activeFileIndex$={activeFileIndex$}
+            activeItemIndexes={activeItemIndexes}
+            adaptiveLightModeEnabled={adaptiveLightModeEnabled}
+            diffPaneHeight$={diffPaneHeight$}
+            diffTopChromeHeight={diffTopChromeHeight}
+            diffRows={diffRows}
+            documentErrorBody={documentErrorBody}
+            floatingDocumentBanner={unsavedMergeDraftBanner}
+            getItemSize={getItemSize}
+            getItemType={getItemType}
+            getRow={getRow}
+            getSideBySideItemSize={getSideBySideItemSize}
+            getSideBySideItemType={getSideBySideItemType}
+            getSideBySideRow={getSideBySideRow}
+            handleDiffPaneLayout={handleDiffPaneLayout}
+            handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
+            handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested}
+            handleTopItemChanged={handleTopItemChanged}
+            handleVisibleRowsRequested={handleVisibleRowsRequested}
+            isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
+            rowConfig={rowConfig}
+            listRef={listRef}
+            loadingSource={loadingSource}
+            mergeState={mergeState}
+            mergeState$={mergeState$}
+            nativeSideBySideRowConfig={nativeSideBySideRowConfig}
+            nativeUnifiedRowConfig={nativeUnifiedRowConfig}
+            noChangesBody={(
+              <DiffNoChangesBody
+                foregroundColor={foregroundColor}
+                mutedColor={mutedColor}
+                visibleSourceLabel={visibleSourceLabel}
+              />
+            )}
+            renderRow={renderRow}
+            renderSideBySideRow={renderSideBySideRow}
+            requestSideBySideRange={requestSideBySideRange}
+            resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
+            onResolveMergeConflict={resolveMergeConflict}
+            rowHeight={rowHeight}
+            sideBySideDataVersion={sideBySideDataVersion}
+            sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
+            sideBySideHunkHeaderIndexes={sideBySideHunkHeaderIndexes}
+            sideBySideItemIndexes={sideBySideItemIndexes}
+            splitPaneMetrics$={splitPaneMetrics$}
+            state={state}
+            syntaxTokenizationVersion$={syntaxTokenizationVersion$}
+            viewMode={renderViewMode}
+            visibleItemIndexes={visibleItemIndexes}
           />
         )}
-        primaryColor={diffPalette.primary}
-        renderRow={renderRow}
-        renderSidebarEntry={renderSidebarEntry}
-        renderSideBySideRow={renderSideBySideRow}
-        requestSideBySideRange={requestSideBySideRange}
-        resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-        onResolveMergeConflict={resolveMergeConflict}
-        rowHeight={rowHeight}
+        debugPayload={{
+          activeItemCount: activeItemIndexes.length,
+          rows: state.document.rowCount,
+          viewMode: renderViewMode,
+        }}
+        handleSplitViewResize={handleSplitViewResize}
+        sidebar={(
+          <DiffLoadedSidebarPane
+            collapsedSidebarFolders={collapsedSidebarFolders}
+            handleSidebarListLayout={handleSidebarListLayout}
+            mutedColor={mutedColor}
+            renderSidebarEntry={renderSidebarEntry}
+            sidebarCollapsed={sidebarCollapsed}
+            splitPaneMetrics$={splitPaneMetrics$}
+            state={state}
+          />
+        )}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
-        sideBySideDataVersion={sideBySideDataVersion}
-        sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
-        sideBySideHunkHeaderIndexes={sideBySideHunkHeaderIndexes}
-        sideBySideItemIndexes={sideBySideItemIndexes}
         splitPaneMetrics$={splitPaneMetrics$}
-        state={state}
         syntaxAppearance={syntaxTheme.appearance}
-        syntaxTokenizationVersion$={syntaxTokenizationVersion$}
-        viewMode={renderViewMode}
-        visibleItemIndexes={visibleItemIndexes}
       />
     );
   } else if (emptyLoadingSource) {
     body = (
-      <DiffLoadingSplitBody
+      <DiffSplitBody
         backgroundColor={backgroundColor}
+        content={(
+          <View style={styles.diffPane}>
+            <View style={styles.diffPaneContent}>
+              <View style={styles.diffTitlebarSpacer} />
+            </View>
+          </View>
+        )}
+        debugPayload={{
+          loadingSource: emptyLoadingSource,
+          viewMode: renderViewMode,
+        }}
         handleSplitViewResize={handleSplitViewResize}
+        sidebar={(
+          <View style={styles.sidebar}>
+            <View style={styles.sidebarList} />
+          </View>
+        )}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
+        splitPaneMetrics$={splitPaneMetrics$}
         syntaxAppearance={syntaxTheme.appearance}
       />
     );
