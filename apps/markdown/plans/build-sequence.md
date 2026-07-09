@@ -26,7 +26,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 2: Parser Snapshot Upgrade
 
-- [x] Extend `@legend-desktop/markdown-parser` TypeScript spec with richer document/block snapshots.
+- [x] Extend `@legend-apps/markdown-parser` TypeScript spec with richer document/block snapshots.
 - [x] Add native document session ID.
 - [x] Add opaque native block IDs.
 - [x] Add source UTF-8 byte ranges.
@@ -46,7 +46,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Add `package.json` following workspace conventions.
 - [x] Add `src/index.ts`.
 - [x] Add public types.
-- [x] Add native adapter wrapping `@legend-desktop/markdown-parser`.
+- [x] Add native adapter wrapping `@legend-apps/markdown-parser`.
 - [x] Add `MarkdownDocument.tsx`.
 - [x] Add default native-document-app styling.
 - [x] Export `defaultMarkdownStyle`.
@@ -59,7 +59,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 
 ## Phase 4: Read-Only Markdown App Shell
 
-- [x] Add `@legend-desktop/markdown-document` to `apps/markdown`.
+- [x] Add `@legend-apps/markdown-document` to `apps/markdown`.
 - [x] Replace placeholder app UI with `MarkdownDocument`.
 - [x] Wire selected/open filename into the component.
 - [x] Keep app shell chrome outside `MarkdownDocument`.
@@ -186,7 +186,7 @@ Do not let failures accumulate across phases. If validation fails, fix it before
 - [x] Review app shell to confirm chrome stays outside `MarkdownDocument`.
 - [x] Confirm markdown/document styles are externally configurable.
 - [x] Confirm no fixed toolbar/button layout is baked into `MarkdownDocument`.
-- [x] Confirm `@legend-desktop/markdown-document` has no `@legendapp/state` dependency.
+- [x] Confirm `@legend-apps/markdown-document` has no `@legendapp/state` dependency.
 - [x] Confirm DEV-only diagnostics are not visible in normal UI.
 - [x] Update README/API notes if implementation differs from plan.
 - [x] Run `bun run typecheck`.

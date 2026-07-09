@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.sfsymbol"
+  namespace "so.legend.apps.sfsymbol"
   compileSdkVersion 35
 
   defaultConfig {

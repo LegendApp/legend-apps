@@ -1,4 +1,4 @@
-import { addFileScannerListener, scanFiles } from "@legend-desktop/file-scanner";
+import { addFileScannerListener, scanFiles } from "@legend-apps/file-scanner";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, formatFirstPaths, styles } from "./shared";

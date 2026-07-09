@@ -7,7 +7,7 @@ const mockToolbarLayout = {
   shown: ["paragraph", "heading-1", "bold"],
 };
 
-jest.mock("@legend-desktop/reorder-controls", () => {
+jest.mock("@legend-apps/reorder-controls", () => {
   const React = require("react");
   const { View } = require("react-native");
 
@@ -34,7 +34,7 @@ jest.mock("@legend-desktop/reorder-controls", () => {
   };
 });
 
-jest.mock("@legend-desktop/sf-symbol", () => ({
+jest.mock("@legend-apps/sf-symbol", () => ({
   SFSymbol: () => null,
 }));
 

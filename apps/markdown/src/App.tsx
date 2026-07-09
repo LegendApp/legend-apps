@@ -2,8 +2,8 @@ import {
   openSelectedDocumentPath,
   useDocumentAppController,
   type DocumentAppController,
-} from "@legend-desktop/document-app";
-import type { NativeMenuAction, NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+} from "@legend-apps/document-app";
+import type { NativeMenuAction, NativeMenuActionHandlers } from "@legend-apps/native-menu";
 import { useEffect } from "react";
 import { editorWindowIdentifier, markdownFileTypes, markdownMenuOwnerId } from "./appConstants";
 import {

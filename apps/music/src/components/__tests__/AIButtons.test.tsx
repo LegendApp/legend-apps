@@ -5,9 +5,9 @@ import { showToast } from "../Toast";
 import { generatePlaylistExtension } from "../../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../../systems/ai/playlistContext";
 import type { LocalTrack } from "../../systems/LocalMusicState";
-import { getAICommandAvailability } from "@legend-desktop/ai";
+import { getAICommandAvailability } from "@legend-apps/ai";
 
-jest.mock("@legend-desktop/ai", () => ({
+jest.mock("@legend-apps/ai", () => ({
     __esModule: true,
     getAICommandAvailability: jest.fn(),
 }));

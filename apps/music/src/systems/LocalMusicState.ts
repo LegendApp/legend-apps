@@ -1,6 +1,6 @@
 import { batch, observable } from "@legendapp/state";
 import { Directory, File } from "expo-file-system/next";
-import { addDirectoryChangeListener, setWatchedDirectories } from "@legend-desktop/file-system-watcher";
+import { addDirectoryChangeListener, setWatchedDirectories } from "@legend-apps/file-system-watcher";
 import {
     addMediaLibraryScannerListener,
     scanMediaLibrary,
@@ -8,8 +8,8 @@ import {
     type MediaScanProgressEvent,
     type MediaScanResult,
     type NativeScannedPlaylist,
-} from "@legend-desktop/media-library-scanner";
-import { readMediaTags } from "@legend-desktop/media-tags";
+} from "@legend-apps/media-library-scanner";
+import { readMediaTags } from "@legend-apps/media-tags";
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS, stripSupportedAudioExtension } from "./audioFormats";
 import { DEBUG_LOCAL_MUSIC_LOGS } from "./constants";
 import {
@@ -23,8 +23,8 @@ import { stateSaved$ } from "./State";
 import { ensureCacheDirectory, getCacheDirectory, getPlaylistsDirectory } from "../utils/cacheDirectories";
 import { type M3UTrack, parseM3U, writeM3U } from "../utils/m3u";
 import { loadQueueFromM3U } from "../utils/m3uManager";
-import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
-import { runAfterInteractions, runAfterInteractionsWithLabel } from "@legend-desktop/runtime-utils";
+import { perfCount, perfLog } from "@legend-apps/runtime-utils";
+import { runAfterInteractions, runAfterInteractionsWithLabel } from "@legend-apps/runtime-utils";
 import { buildThumbnailUri } from "../utils/thumbnails";
 import { DEFAULT_LOCAL_PLAYLIST_ID } from "./localMusicConstants";
 

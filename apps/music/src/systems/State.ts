@@ -1,5 +1,5 @@
 import { observable } from "@legendapp/state";
-import { createObservableFile } from "@legend-desktop/storage";
+import { createObservableFile } from "@legend-apps/storage";
 
 type SettingsPage = "account" | "general" | "library" | "overlay" | "theme" | "ui-customize" | "open-source";
 

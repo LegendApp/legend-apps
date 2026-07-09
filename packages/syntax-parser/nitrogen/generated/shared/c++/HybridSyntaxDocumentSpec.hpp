@@ -14,18 +14,18 @@
 #endif
 
 // Forward declaration of `SyntaxRenderLine` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxRenderLine; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxRenderLine; }
 // Forward declaration of `SyntaxStyle` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxStyle; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxStyle; }
 // Forward declaration of `SyntaxHighlightTiming` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxHighlightTiming; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxHighlightTiming; }
 
 #include "SyntaxRenderLine.hpp"
 #include <vector>
 #include "SyntaxStyle.hpp"
 #include "SyntaxHighlightTiming.hpp"
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   using namespace margelo::nitro;
 
@@ -74,4 +74,4 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
       static constexpr auto TAG = "SyntaxDocument";
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

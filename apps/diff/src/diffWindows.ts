@@ -1,7 +1,7 @@
-import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
-import { getLegendDisplayTheme } from "@legend-desktop/theme";
-import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { focusToolbarSearchItem, setWindowOptions, showWindow, type WindowFrame } from "@legend-desktop/window-manager";
+import { createSettingsWindowOptions } from "@legend-apps/settings-window";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
+import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
+import { focusToolbarSearchItem, setWindowOptions, showWindow, type WindowFrame } from "@legend-apps/window-manager";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,

@@ -1,7 +1,7 @@
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { MarkdownBlockActivationView, MarkdownBlockRenderer } from "@legend-desktop/markdown-block-editor";
+import { MarkdownBlockActivationView, MarkdownBlockRenderer } from "@legend-apps/markdown-block-editor";
 import { memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,

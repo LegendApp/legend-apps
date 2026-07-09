@@ -1,4 +1,4 @@
-import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
+import { openFileDialog, saveFileDialog } from "@legend-apps/file-dialog";
 import { useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
@@ -20,7 +20,7 @@ export function FileDialogExample() {
       </ExampleButton>
       <ExampleButton
         onPress={() => {
-          void saveFileDialog({ defaultName: "legend-desktop.txt" }).then((path) => {
+          void saveFileDialog({ defaultName: "legend-apps.txt" }).then((path) => {
             setResult(path ?? "Save canceled.");
           });
         }}

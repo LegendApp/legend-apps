@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/virtualized-document",
+  "name": "@legend-apps/virtualized-document",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.tsx",

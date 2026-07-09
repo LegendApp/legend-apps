@@ -4,7 +4,7 @@
 #include <functional>
 #include <string_view>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 struct DiffUrlLoadResult {
   std::string text;
@@ -18,4 +18,4 @@ double loadDiffUrlChunks(
     const std::function<void(std::string_view)>& onChunk,
     const std::function<bool()>& shouldCancel);
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

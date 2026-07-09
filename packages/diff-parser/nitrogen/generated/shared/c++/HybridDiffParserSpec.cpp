@@ -7,7 +7,7 @@
 
 #include "HybridDiffParserSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   void HybridDiffParserSpec::loadHybridMethods() {
     // load base methods/properties
@@ -23,4 +23,4 @@ namespace margelo::nitro::legenddesktop::diffparser {
     });
   }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

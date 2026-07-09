@@ -2,7 +2,7 @@ import * as FileSystem from "expo-file-system/next";
 import { useEffect, useState } from "react";
 import { Image, type ImageProps, Text, View } from "react-native";
 import { ensureCacheDirectory, getCacheDirectory } from "../utils/cacheDirectories";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 interface AlbumArtProps extends Omit<ImageProps, "source"> {
     uri?: string;

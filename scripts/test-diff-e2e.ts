@@ -90,7 +90,7 @@ run("agent-device", [
   "--session-lock",
   "reject",
   "open",
-  "app.legend.diff.macos",
+  "so.legend.diff.macos",
   "--surface",
   "app",
   "--no-record",

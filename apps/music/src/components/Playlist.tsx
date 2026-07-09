@@ -8,14 +8,14 @@ import { localAudioControls, localPlayerState$, type QueuedTrack, queue$ } from 
 import { showToast } from "./Toast";
 import { type TrackData, TrackItem } from "./TrackItem";
 import { usePlaylistSelection } from "../hooks/usePlaylistSelection";
-import { showContextMenu } from "@legend-desktop/context-menu";
+import { showContextMenu } from "@legend-apps/context-menu";
 import {
     DragDropView,
     type NativeDragTrack,
     type TrackDragEnterEvent,
     type TrackDragEvent,
     TrackDragSource,
-} from "@legend-desktop/drag-drop";
+} from "@legend-apps/drag-drop";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "../systems/audioFormats";
 import { DEBUG_PLAYLIST_LOGS } from "../systems/constants";
@@ -33,8 +33,8 @@ import {
 import { settings$ } from "../systems/Settings";
 import { state$, stateSaved$ } from "../systems/State";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
-import { cn } from "@legend-desktop/classnames";
-import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
+import { cn } from "@legend-apps/classnames";
+import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "../utils/trackContextMenu";
 import {
     type DragData,

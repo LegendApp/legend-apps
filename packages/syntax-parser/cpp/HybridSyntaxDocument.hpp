@@ -12,7 +12,7 @@
 #include <thread>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
 class SyntaxSource {
 public:
@@ -88,4 +88,4 @@ private:
   mutable std::mutex mutex_;
 };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

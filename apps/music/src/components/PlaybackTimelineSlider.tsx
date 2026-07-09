@@ -3,7 +3,7 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GestureResponderEvent, LayoutChangeEvent } from "react-native";
 import { PanResponder, Pressable, View } from "react-native";
-import { useRefValue } from "@legend-desktop/runtime-utils";
+import { useRefValue } from "@legend-apps/runtime-utils";
 
 interface PlaybackTimelineSliderProps {
     $value: Observable<number>;

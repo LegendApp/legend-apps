@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.appexit"
+  namespace "so.legend.apps.appexit"
   compileSdkVersion 35
 
   defaultConfig {

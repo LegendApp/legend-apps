@@ -6,16 +6,16 @@ import {
   type DiffSideBySideFileHeader,
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
-} from "@legend-desktop/diff-parser";
-import { nowMs } from "@legend-desktop/source-viewer";
-import { ensureSyntaxGrammarsForPaths } from "@legend-desktop/syntax-parser";
+} from "@legend-apps/diff-parser";
+import { nowMs } from "@legend-apps/source-viewer";
+import { ensureSyntaxGrammarsForPaths } from "@legend-apps/syntax-parser";
 import {
   useVirtualizedDocumentRows,
   type VirtualizedDocumentRequestOptions,
   type VirtualizedDocumentRequestReason,
   type VirtualizedDocumentSnapshot,
   type VirtualizedDocumentVisibleRangeInfo,
-} from "@legend-desktop/virtualized-document";
+} from "@legend-apps/virtualized-document";
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.filedialog"
+  namespace "so.legend.apps.filedialog"
   compileSdkVersion 35
 
   defaultConfig {

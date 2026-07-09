@@ -1,3 +1,3 @@
-import { createStorage } from "@legend-desktop/storage";
+import { createStorage } from "@legend-apps/storage";
 
 export const markdownStorage = createStorage();

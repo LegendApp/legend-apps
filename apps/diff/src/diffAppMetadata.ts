@@ -1,5 +1,5 @@
-import { createObservableFile } from "@legend-desktop/storage";
-import type { WindowFrame } from "@legend-desktop/window-manager";
+import { createObservableFile } from "@legend-apps/storage";
+import type { WindowFrame } from "@legend-apps/window-manager";
 import type { DiffOpenSource } from "./diffFiles";
 
 const maxRecentSources = 12;

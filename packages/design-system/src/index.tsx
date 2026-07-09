@@ -1,6 +1,6 @@
-import { cn } from "@legend-desktop/classnames";
-import { showContextMenu } from "@legend-desktop/context-menu";
-import { NativeSegmentedControl, NativeSelect } from "@legend-desktop/native-select";
+import { cn } from "@legend-apps/classnames";
+import { showContextMenu } from "@legend-apps/context-menu";
+import { NativeSegmentedControl, NativeSelect } from "@legend-apps/native-select";
 import { useCallback, useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";

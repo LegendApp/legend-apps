@@ -1,9 +1,9 @@
 import { useMount } from "@legendapp/state/react";
 import { useRef } from "react";
 import { AppState, type AppStateStatus, TextInput } from "react-native";
-import { useWindowManager } from "@legend-desktop/window-manager";
+import { useWindowManager } from "@legend-apps/window-manager";
 import { activeWindowId$, useHookKeyboard } from "./Keyboard";
-import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
+import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 
 export function HookKeyboard() {
     perfCount("HookKeyboard.render");

@@ -2,7 +2,7 @@ import {
   highlightString,
   loadCodeFile,
   type SyntaxHighlightTiming,
-} from "@legend-desktop/syntax-parser";
+} from "@legend-apps/syntax-parser";
 import { codeInitialLineCount } from "./appConstants";
 import { getCodeLanguage } from "./codeFiles";
 import { getCodeSyntaxThemeSetting } from "./codeSettings";

@@ -1,10 +1,10 @@
-jest.mock("@legend-desktop/command-runner", () => ({
+jest.mock("@legend-apps/command-runner", () => ({
   commandRunner: {
     runCommand: jest.fn(),
   },
 }));
 
-jest.mock("@legend-desktop/storage", () => ({
+jest.mock("@legend-apps/storage", () => ({
   createStorage: jest.fn(),
 }));
 

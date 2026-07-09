@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/sf-symbol",
+  "name": "@legend-apps/sf-symbol",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "components",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.sfsymbol"
+      "javaPackageName": "so.legend.apps.sfsymbol"
     },
     "ios": {
       "componentProvider": {

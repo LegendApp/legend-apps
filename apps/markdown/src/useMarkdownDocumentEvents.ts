@@ -1,5 +1,5 @@
-import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
-import { addWindowCloseRequestedListener } from "@legend-desktop/window-manager";
+import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addWindowCloseRequestedListener } from "@legend-apps/window-manager";
 import { useEffect, useRef } from "react";
 import { editorWindowIdentifier } from "./appConstants";
 import { getRecentMarkdownFiles } from "./appMetadata";

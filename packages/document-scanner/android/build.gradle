@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.documentscanner"
+  namespace "so.legend.apps.documentscanner"
   compileSdkVersion 35
 
   defaultConfig {

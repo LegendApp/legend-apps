@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 struct DiffParsedDocument {
   std::vector<DiffFileSummary> files;
@@ -73,4 +73,4 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     DiffGitCompareOptions compareOptions = {});
 std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<DiffRenderRow>& rows);
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

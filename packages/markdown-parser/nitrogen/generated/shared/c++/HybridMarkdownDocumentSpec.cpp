@@ -7,7 +7,7 @@
 
 #include "HybridMarkdownDocumentSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   void HybridMarkdownDocumentSpec::loadHybridMethods() {
     // load base methods/properties
@@ -30,4 +30,4 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     });
   }
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

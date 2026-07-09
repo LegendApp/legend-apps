@@ -1,5 +1,5 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { addMediaLibraryScannerListener, scanMediaLibrary } from "@legend-desktop/media-library-scanner";
+import { openFileDialog } from "@legend-apps/file-dialog";
+import { addMediaLibraryScannerListener, scanMediaLibrary } from "@legend-apps/media-library-scanner";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, formatFirstPaths, styles } from "./shared";
@@ -43,7 +43,7 @@ export function MediaLibraryScannerExample() {
               return;
             }
             setStatus(`Scanning ${paths[0]}...`);
-            void scanMediaLibrary(paths, "/tmp/legend-desktop-media-tags", {
+            void scanMediaLibrary(paths, "/tmp/legend-apps-media-tags", {
               batchSize: 8,
               includeArtwork: false,
             }).then((result) => {

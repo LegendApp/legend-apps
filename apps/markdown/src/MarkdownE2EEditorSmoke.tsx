@@ -5,7 +5,7 @@ import {
   type MarkdownDocumentCommands,
   type MarkdownDocumentAdapter,
   type MarkdownSelectionAnchor,
-} from "@legend-desktop/markdown-document";
+} from "@legend-apps/markdown-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";

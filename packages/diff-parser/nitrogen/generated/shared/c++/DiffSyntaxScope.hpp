@@ -33,7 +33,7 @@
 #include <string>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffSyntaxScope).
@@ -51,21 +51,21 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffSyntaxScope& lhs, const DiffSyntaxScope& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffSyntaxScope <> JS DiffSyntaxScope (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffSyntaxScope> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffSyntaxScope fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope(
+      return margelo::nitro::legendapps::diffparser::DiffSyntaxScope(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "id"))),
         JSIConverter<std::vector<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopes")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffSyntaxScope& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "id"), JSIConverter<double>::toJSI(runtime, arg.id));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "scopes"), JSIConverter<std::vector<std::string>>::toJSI(runtime, arg.scopes));

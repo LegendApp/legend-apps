@@ -1,5 +1,5 @@
-import { SFSymbol } from "@legend-desktop/sf-symbol";
-import { getLegendDisplayTheme } from "@legend-desktop/theme";
+import { SFSymbol } from "@legend-apps/sf-symbol";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useEffect, useState } from "react";
 import {
   Pressable,

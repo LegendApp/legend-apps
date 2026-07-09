@@ -7,7 +7,7 @@
 
 #include "HybridSyntaxParserSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   void HybridSyntaxParserSpec::loadHybridMethods() {
     // load base methods/properties
@@ -19,4 +19,4 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     });
   }
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

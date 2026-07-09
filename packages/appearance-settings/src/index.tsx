@@ -3,9 +3,9 @@ import {
   SelectControl,
   SegmentedOptions,
   SwitchControl,
-} from "@legend-desktop/design-system";
-import { SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
-import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-desktop/theme";
+} from "@legend-apps/design-system";
+import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
+import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-apps/theme";
 import { Text, TextInput, Pressable, View } from "react-native";
 
 export type AppearanceThemeOption = {

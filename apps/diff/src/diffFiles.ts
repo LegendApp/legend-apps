@@ -1,4 +1,4 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
+import { openFileDialog } from "@legend-apps/file-dialog";
 
 const diffFolderLaunchArgument = "--diff-folder";
 const diffSourceLaunchArgument = "--diff-source";

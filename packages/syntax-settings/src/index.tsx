@@ -1,12 +1,12 @@
-import { SelectControl, SwitchControl } from "@legend-desktop/design-system";
-import { SettingsRow, SettingsSection } from "@legend-desktop/settings-window";
+import { SelectControl, SwitchControl } from "@legend-apps/design-system";
+import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
 import {
   ensureSyntaxTheme,
   getAvailableSyntaxGrammars,
   getAvailableSyntaxThemes,
   getSyntaxAssetDirectoryUri,
   type SyntaxThemeAssetEntry,
-} from "@legend-desktop/syntax-parser";
+} from "@legend-apps/syntax-parser";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 

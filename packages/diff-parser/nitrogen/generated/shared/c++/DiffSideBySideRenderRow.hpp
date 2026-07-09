@@ -29,12 +29,12 @@
 #endif
 
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffRenderRow; }
 
 #include <string>
 #include "DiffRenderRow.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffSideBySideRenderRow).
@@ -61,16 +61,16 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffSideBySideRenderRow& lhs, const DiffSideBySideRenderRow& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffSideBySideRenderRow <> JS DiffSideBySideRenderRow (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffSideBySideRenderRow> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffSideBySideRenderRow fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffSideBySideRenderRow> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffSideBySideRenderRow fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffSideBySideRenderRow(
+      return margelo::nitro::legendapps::diffparser::DiffSideBySideRenderRow(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "kind"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileIndex"))),
@@ -80,11 +80,11 @@ namespace margelo::nitro {
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRowVisible"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRowVisible"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRowEqualsOldRow"))),
-        JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRow"))),
-        JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRow")))
+        JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRow"))),
+        JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRow")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffSideBySideRenderRow& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffSideBySideRenderRow& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "kind"), JSIConverter<std::string>::toJSI(runtime, arg.kind));
@@ -95,8 +95,8 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "oldRowVisible"), JSIConverter<bool>::toJSI(runtime, arg.oldRowVisible));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "newRowVisible"), JSIConverter<bool>::toJSI(runtime, arg.newRowVisible));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "newRowEqualsOldRow"), JSIConverter<bool>::toJSI(runtime, arg.newRowEqualsOldRow));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "oldRow"), JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>::toJSI(runtime, arg.oldRow));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "newRow"), JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>::toJSI(runtime, arg.newRow));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "oldRow"), JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow>::toJSI(runtime, arg.oldRow));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "newRow"), JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow>::toJSI(runtime, arg.newRow));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -116,8 +116,8 @@ namespace margelo::nitro {
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRowVisible")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRowVisible")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRowEqualsOldRow")))) return false;
-      if (!JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRow")))) return false;
-      if (!JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRow")))) return false;
+      if (!JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldRow")))) return false;
+      if (!JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newRow")))) return false;
       return true;
     }
   };

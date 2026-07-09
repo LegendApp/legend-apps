@@ -46,7 +46,7 @@ Create a new macOS native package rather than expanding `window-manager`.
 Candidate name:
 
 ```text
-@legend-desktop/document-windows
+@legend-apps/document-windows
 ```
 
 Responsibilities:
@@ -187,7 +187,7 @@ Mitigation:
 
 ## Staged Implementation
 
-1. Add `@legend-desktop/document-windows` native package.
+1. Add `@legend-apps/document-windows` native package.
 2. Create document window shell with `NSDocument` and `NSWindowController`.
 3. Mount a `MarkdownDocumentWindow` React root per document.
 4. Keep existing React file loading/saving initially.

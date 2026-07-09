@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/command-runner",
+  "name": "@legend-apps/command-runner",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",

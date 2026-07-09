@@ -15,7 +15,7 @@
 #include <unistd.h>
 #endif
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
 namespace {
 
@@ -406,4 +406,4 @@ std::string HybridSyntaxDocument::lineText(size_t index) const {
   return std::string(source_->data() + range.start, range.end - range.start);
 }
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

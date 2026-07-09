@@ -3,7 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import {
     VirtualizedSettingsWindow,
     type VirtualizedSettingsWindowPage,
-} from "@legend-desktop/settings-window";
+} from "@legend-apps/settings-window";
 import { StyleSheet, View } from "react-native";
 import { TooltipProvider } from "../components/TooltipProvider";
 import { AccountSettingsContent } from "./AccountSettings";

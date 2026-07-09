@@ -2,7 +2,7 @@ import { useObservable, useObserveEffect } from "@legendapp/state/react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo } from "react";
 import { Platform, type StyleProp, View, type ViewStyle } from "react-native";
-import { Sidebar as NativeSidebarView, type SidebarItemData } from "@legend-desktop/sidebar";
+import { Sidebar as NativeSidebarView, type SidebarItemData } from "@legend-apps/sidebar";
 import { Sidebar } from "./Sidebar";
 
 export type NativeSidebarItem = {

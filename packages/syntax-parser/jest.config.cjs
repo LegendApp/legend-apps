@@ -5,7 +5,7 @@ module.exports = {
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
     "^\\./NativeStorage$": "<rootDir>/packages/syntax-parser/jest/nativeStorageMock.cjs",
-    "^@legend-desktop/storage$": "<rootDir>/packages/storage/src/index.ts",
+    "^@legend-apps/storage$": "<rootDir>/packages/storage/src/index.ts",
     "^expo-file-system/next$": "<rootDir>/apps/music/jest/mocks/expoFileSystemNextMock.cjs",
   },
   transform: {

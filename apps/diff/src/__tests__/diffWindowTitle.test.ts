@@ -6,10 +6,10 @@ describe("diffWindowTitle", () => {
       hasUnsavedMergeDrafts: true,
       source: {
         kind: "folder",
-        label: "legend-desktop",
-        value: "/Users/jay/code/legend-desktop",
+        label: "legend-apps",
+        value: "/Users/jay/code/legend-apps",
       },
-    })).toBe("legend-desktop •");
+    })).toBe("legend-apps •");
   });
 
   it("pads clean source titles to replace the dirty marker", () => {
@@ -17,9 +17,9 @@ describe("diffWindowTitle", () => {
       hasUnsavedMergeDrafts: false,
       source: {
         kind: "folder",
-        label: "legend-desktop",
-        value: "/Users/jay/code/legend-desktop",
+        label: "legend-apps",
+        value: "/Users/jay/code/legend-apps",
       },
-    })).toBe("legend-desktop  ");
+    })).toBe("legend-apps  ");
   });
 });

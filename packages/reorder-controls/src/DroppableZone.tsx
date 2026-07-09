@@ -2,7 +2,7 @@ import { useValue } from "@legendapp/state/react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { type LayoutChangeEvent, type LayoutRectangle, View } from "react-native";
 
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 import { type DraggedItem, type DropZoneHitSlop, useDragDrop } from "./DragDropContext";
 
 type DroppableZoneChildren = ReactNode | ((isActive: boolean) => ReactNode);

@@ -17,7 +17,7 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
 {
   self = [super init];
   if (self) {
-    _workQueue = dispatch_queue_create("com.legenddesktop.command-runner", DISPATCH_QUEUE_SERIAL);
+    _workQueue = dispatch_queue_create("so.legend.apps.command-runner", DISPATCH_QUEUE_SERIAL);
   }
   return self;
 }

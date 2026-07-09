@@ -1,5 +1,5 @@
-import { createObservableFile } from "@legend-desktop/storage";
-import { createAppTheme } from "@legend-desktop/theme";
+import { createObservableFile } from "@legend-apps/storage";
+import { createAppTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, type ReactNode } from "react";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";

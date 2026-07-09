@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffRenderRow, DiffSideBySideRenderRow } from "@legend-desktop/diff-parser";
+import type { DiffFileSummary, DiffRenderRow, DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
 import { observable } from "@legendapp/state";
 import { render } from "@testing-library/react-native";
 import React from "react";

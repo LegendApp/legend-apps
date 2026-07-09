@@ -1,11 +1,11 @@
-import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
-import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
+import { createSettingsWindowOptions } from "@legend-apps/settings-window";
+import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
 import {
   closeWindow,
   setWindowOptions,
-} from "@legend-desktop/window-manager";
-import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
-import type { MarkdownSaveState } from "@legend-desktop/markdown-document";
+} from "@legend-apps/window-manager";
+import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-apps/theme";
+import type { MarkdownSaveState } from "@legend-apps/markdown-document";
 import {
   editorWindowIdentifier,
   editorWindowModuleName,

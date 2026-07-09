@@ -1,11 +1,11 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
+import { openFileDialog } from "@legend-apps/file-dialog";
 import {
   loadMarkdownFile,
   type MarkdownDocument,
   type MarkdownDocumentTiming,
   type MarkdownRenderBlock,
   type MarkdownTransactionResult,
-} from "@legend-desktop/markdown-parser";
+} from "@legend-apps/markdown-parser";
 import { LegendList, type LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { useEffect, useRef, useState } from "react";
 import {

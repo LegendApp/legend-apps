@@ -1,5 +1,5 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { readMediaTags } from "@legend-desktop/media-tags";
+import { openFileDialog } from "@legend-apps/file-dialog";
+import { readMediaTags } from "@legend-apps/media-tags";
 import { useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
@@ -25,7 +25,7 @@ export function MediaTagsExample() {
             }
             setStatus(`Reading ${path}...`);
             void readMediaTags(path, {
-              cacheDir: "/tmp/legend-desktop-media-tags",
+              cacheDir: "/tmp/legend-apps-media-tags",
               includeArtwork: true,
             }).then((result) => {
               setStatus(`Read tags for ${path.split("/").pop() ?? path}`);

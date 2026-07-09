@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   /**
    * A struct which can be represented as a JavaScript object (SyntaxHighlightTiming).
@@ -57,16 +57,16 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     friend bool operator==(const SyntaxHighlightTiming& lhs, const SyntaxHighlightTiming& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser
 
 namespace margelo::nitro {
 
   // C++ SyntaxHighlightTiming <> JS SyntaxHighlightTiming (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming> final {
-    static inline margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming> final {
+    static inline margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming(
+      return margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lineCount"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokenCount"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "colorCount"))),
@@ -78,7 +78,7 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "totalMs")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "lineCount"), JSIConverter<double>::toJSI(runtime, arg.lineCount));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokenCount"), JSIConverter<double>::toJSI(runtime, arg.tokenCount));

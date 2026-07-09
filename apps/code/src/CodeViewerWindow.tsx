@@ -1,5 +1,5 @@
-import { openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-desktop/document-app";
-import { noteRecentDocument } from "@legend-desktop/recent-documents";
+import { openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-apps/document-app";
+import { noteRecentDocument } from "@legend-apps/recent-documents";
 import {
   createSyntaxStyleMap,
   formatMs,
@@ -13,17 +13,17 @@ import {
   sourceViewerOverscanRequestDelayMs,
   toSourceDocumentTiming,
   useSourceDocumentRows,
-} from "@legend-desktop/source-viewer";
+} from "@legend-apps/source-viewer";
 import {
   loadCodeFile,
   type SyntaxDocument,
   type SyntaxRenderLine,
   type SyntaxStyle,
-} from "@legend-desktop/syntax-parser";
-import { getLegendDisplayTheme } from "@legend-desktop/theme";
+} from "@legend-apps/syntax-parser";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import {
   type VirtualizedFixedDocumentListRenderRowProps,
-} from "@legend-desktop/virtualized-document";
+} from "@legend-apps/virtualized-document";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";

@@ -1,12 +1,12 @@
 {
-  "name": "@legend-desktop/source-viewer",
+  "name": "@legend-apps/source-viewer",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
-    "@legend-desktop/syntax-parser": "workspace:*",
-    "@legend-desktop/virtualized-document": "workspace:*"
+    "@legend-apps/syntax-parser": "workspace:*",
+    "@legend-apps/virtualized-document": "workspace:*"
   },
   "peerDependencies": {
     "react": "catalog:",

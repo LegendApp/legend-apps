@@ -15,7 +15,7 @@
 #include <os/log.h>
 #endif
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 namespace {
 
@@ -23,7 +23,7 @@ using DiffClock = std::chrono::steady_clock;
 
 #ifdef __APPLE__
 os_log_t diffTimingLog() {
-  static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
+  static os_log_t log = os_log_create("so.legend.diff.macos", "memory");
   return log;
 }
 #endif
@@ -211,4 +211,4 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
   });
 }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

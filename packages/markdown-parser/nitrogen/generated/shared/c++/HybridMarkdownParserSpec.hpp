@@ -14,13 +14,13 @@
 #endif
 
 // Forward declaration of `MarkdownFileLoadResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownFileLoadResult; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownFileLoadResult; }
 
 #include "MarkdownFileLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   using namespace margelo::nitro;
 
@@ -63,4 +63,4 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       static constexpr auto TAG = "MarkdownParser";
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

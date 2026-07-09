@@ -8,7 +8,7 @@
 using namespace facebook::react;
 
 #if TARGET_OS_OSX
-static NSPasteboardType const RNDragDropTrackPasteboardType = @"app.legend.desktop.tracks";
+static NSPasteboardType const RNDragDropTrackPasteboardType = @"so.legend.apps.tracks";
 
 static NSArray<NSString *> *RNDragDropDefaultAudioExtensions(void)
 {

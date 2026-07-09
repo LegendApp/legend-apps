@@ -15,7 +15,7 @@
 #include <thread>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 struct DiffSyntaxState;
 struct DiffTokenizedSourceState;
@@ -244,4 +244,4 @@ private:
 
 std::shared_ptr<HybridDiffDocument> getRegisteredDiffDocument(double documentId);
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

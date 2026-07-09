@@ -39,7 +39,7 @@ function loadModuleWithParser(parser = createParser()) {
   return { diffParser, nitroModules, parser };
 }
 
-describe("@legend-desktop/diff-parser", () => {
+describe("@legend-apps/diff-parser", () => {
   it("loads git folder diffs with default row count", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 

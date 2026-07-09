@@ -29,16 +29,16 @@
 #endif
 
 // Forward declaration of `HybridMarkdownDocumentSpec` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { class HybridMarkdownDocumentSpec; }
+namespace margelo::nitro::legendapps::markdownparser { class HybridMarkdownDocumentSpec; }
 // Forward declaration of `MarkdownBlockMetadata` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBlockMetadata; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownBlockMetadata; }
 
 #include <memory>
 #include "HybridMarkdownDocumentSpec.hpp"
 #include "MarkdownBlockMetadata.hpp"
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   /**
    * A struct which can be represented as a JavaScript object (MarkdownFileLoadResult).
@@ -56,24 +56,24 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     friend bool operator==(const MarkdownFileLoadResult& lhs, const MarkdownFileLoadResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser
 
 namespace margelo::nitro {
 
   // C++ MarkdownFileLoadResult <> JS MarkdownFileLoadResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownFileLoadResult> final {
-    static inline margelo::nitro::legenddesktop::markdownparser::MarkdownFileLoadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownFileLoadResult> final {
+    static inline margelo::nitro::legendapps::markdownparser::MarkdownFileLoadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::markdownparser::MarkdownFileLoadResult(
-        JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::markdownparser::HybridMarkdownDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownBlockMetadata>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))
+      return margelo::nitro::legendapps::markdownparser::MarkdownFileLoadResult(
+        JSIConverter<std::shared_ptr<margelo::nitro::legendapps::markdownparser::HybridMarkdownDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::markdownparser::MarkdownBlockMetadata>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownFileLoadResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::markdownparser::MarkdownFileLoadResult& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::markdownparser::HybridMarkdownDocumentSpec>>::toJSI(runtime, arg.document));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks"), JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownBlockMetadata>>::toJSI(runtime, arg.initialBlocks));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legendapps::markdownparser::HybridMarkdownDocumentSpec>>::toJSI(runtime, arg.document));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks"), JSIConverter<std::vector<margelo::nitro::legendapps::markdownparser::MarkdownBlockMetadata>>::toJSI(runtime, arg.initialBlocks));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -84,8 +84,8 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::markdownparser::HybridMarkdownDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownBlockMetadata>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))) return false;
+      if (!JSIConverter<std::shared_ptr<margelo::nitro::legendapps::markdownparser::HybridMarkdownDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::markdownparser::MarkdownBlockMetadata>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialBlocks")))) return false;
       return true;
     }
   };

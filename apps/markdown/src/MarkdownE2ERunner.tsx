@@ -2,7 +2,7 @@ import {
   runMarkdownDocumentE2EScenario,
   type MarkdownDocumentE2EResult,
   type MarkdownDocumentE2EScenarioName,
-} from "@legend-desktop/markdown-document";
+} from "@legend-apps/markdown-document";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 

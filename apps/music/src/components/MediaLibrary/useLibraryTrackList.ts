@@ -8,7 +8,7 @@ import { localAudioControls } from "../LocalAudioPlayer";
 import { showToast } from "../Toast";
 import type { TrackData } from "../TrackItem";
 import { usePlaylistSelection } from "../../hooks/usePlaylistSelection";
-import { type ContextMenuItem, showContextMenu } from "@legend-desktop/context-menu";
+import { type ContextMenuItem, showContextMenu } from "@legend-apps/context-menu";
 import {
     getArtistKey,
     type LibraryTrack,

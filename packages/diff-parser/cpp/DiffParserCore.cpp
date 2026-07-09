@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 namespace {
 
@@ -1552,4 +1552,4 @@ DiffParsedDocument parseGitRepositoryDiff(
   };
 }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

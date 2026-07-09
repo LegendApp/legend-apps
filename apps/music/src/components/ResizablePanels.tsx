@@ -3,9 +3,9 @@ import { useMount, useObservable, useValue } from "@legendapp/state/react";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { type GestureResponderEvent, PanResponder, type PanResponderGestureState, View } from "react-native";
 
-import { useRefValue } from "@legend-desktop/runtime-utils";
+import { useRefValue } from "@legend-apps/runtime-utils";
 import { settings$ } from "../systems/Settings";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 interface PanelConfig {
     id: string;

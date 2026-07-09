@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/file-dialog",
+  "name": "@legend-apps/file-dialog",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.filedialog"
+      "javaPackageName": "so.legend.apps.filedialog"
     },
     "ios": {
       "modulesProvider": {

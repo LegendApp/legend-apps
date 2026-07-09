@@ -1,4 +1,4 @@
-import type { DiffDocument, DiffFileSummary, DiffSideBySideFileHeader, DiffSideBySideRenderRow } from "@legend-desktop/diff-parser";
+import type { DiffDocument, DiffFileSummary, DiffSideBySideFileHeader, DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
 
 function isArrayIndexProperty(property: string | symbol) {
   if (typeof property !== "string" || property.length === 0) {

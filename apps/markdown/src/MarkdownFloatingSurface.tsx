@@ -1,4 +1,4 @@
-import type { MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
+import type { MarkdownSelectionAnchor } from "@legend-apps/markdown-document";
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import {

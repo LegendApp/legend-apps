@@ -5,9 +5,9 @@ import {
   hasModifier,
   KeyCodes,
   type KeyboardEvent,
-} from "@legend-desktop/keyboard-manager";
-import { cn } from "@legend-desktop/classnames";
-import type { NativeMenuShortcut } from "@legend-desktop/native-menu";
+} from "@legend-apps/keyboard-manager";
+import { cn } from "@legend-apps/classnames";
+import type { NativeMenuShortcut } from "@legend-apps/native-menu";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 

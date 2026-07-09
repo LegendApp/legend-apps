@@ -19,7 +19,7 @@
 #include <unistd.h>
 #endif
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
 namespace {
 
@@ -198,4 +198,4 @@ std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::loadMarkd
   });
 }
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

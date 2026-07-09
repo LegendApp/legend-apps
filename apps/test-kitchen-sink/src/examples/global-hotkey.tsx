@@ -1,4 +1,4 @@
-import { addGlobalHotkeyListener, registerGlobalHotkey, unregisterGlobalHotkey } from "@legend-desktop/global-hotkey";
+import { addGlobalHotkeyListener, registerGlobalHotkey, unregisterGlobalHotkey } from "@legend-apps/global-hotkey";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

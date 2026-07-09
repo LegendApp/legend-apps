@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.windowcontrols"
+  namespace "so.legend.apps.windowcontrols"
   compileSdkVersion 35
 
   defaultConfig {

@@ -1,4 +1,4 @@
-import { DragDropView, TrackDragSource, type NativeDragTrack } from "@legend-desktop/drag-drop";
+import { DragDropView, TrackDragSource, type NativeDragTrack } from "@legend-apps/drag-drop";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { ExamplePanel, styles } from "./shared";

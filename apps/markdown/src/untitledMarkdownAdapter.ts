@@ -1,7 +1,7 @@
 import type {
   MarkdownDocumentAdapter,
-} from "@legend-desktop/markdown-document";
-import { nativeMarkdownDocumentAdapter } from "@legend-desktop/markdown-document";
+} from "@legend-apps/markdown-document";
+import { nativeMarkdownDocumentAdapter } from "@legend-apps/markdown-document";
 
 const untitledFilename = "Untitled.md";
 

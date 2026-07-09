@@ -8,7 +8,7 @@ import { MediaLibraryView } from "../components/MediaLibrary";
 import { MediaLibrarySidebar } from "../components/MediaLibrary/Sidebar";
 import { TrackList } from "../components/MediaLibrary/TrackList";
 import { TooltipProvider } from "../components/TooltipProvider";
-import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
+import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-apps/appkit-split-view";
 import { HiddenTextInput } from "../systems/keyboard/HookKeyboard";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { stateSaved$ } from "../systems/State";

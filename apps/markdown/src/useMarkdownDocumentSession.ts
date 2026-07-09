@@ -1,10 +1,10 @@
-import { openFileDialog, saveFileDialog } from "@legend-desktop/file-dialog";
+import { openFileDialog, saveFileDialog } from "@legend-apps/file-dialog";
 import {
   type MarkdownDocumentCommandState,
   type MarkdownDocumentCommands,
   type MarkdownSaveState,
-} from "@legend-desktop/markdown-document";
-import { noteRecentDocument } from "@legend-desktop/recent-documents";
+} from "@legend-apps/markdown-document";
+import { noteRecentDocument } from "@legend-apps/recent-documents";
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { useCallback, useRef } from "react";

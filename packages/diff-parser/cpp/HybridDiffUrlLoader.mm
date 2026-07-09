@@ -5,7 +5,7 @@
 #include <chrono>
 #include <stdexcept>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 namespace {
 
@@ -47,7 +47,7 @@ NSMutableURLRequest* createDiffUrlRequest(const std::string& diffUrl) {
 
 } // namespace
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 @interface DiffUrlStreamDelegate : NSObject <NSURLSessionDataDelegate> {
 @public
@@ -124,7 +124,7 @@ didReceiveResponse:(NSURLResponse*)response
       return;
     }
     const NSUInteger length = MIN(
-        margelo::nitro::legenddesktop::diffparser::diffUrlParserChunkBytes,
+        margelo::nitro::legendapps::diffparser::diffUrlParserChunkBytes,
         data.length - offset);
     try {
       _onChunk(std::string_view(bytes + offset, length));
@@ -149,14 +149,14 @@ didCompleteWithError:(NSError*)error
   (void)task;
   if (_error.empty() && error != nil && error.code != NSURLErrorCancelled) {
     _error = "Failed to fetch diff URL: " +
-        margelo::nitro::legenddesktop::diffparser::nsStringToStdString(error.localizedDescription);
+        margelo::nitro::legendapps::diffparser::nsStringToStdString(error.localizedDescription);
   }
   dispatch_semaphore_signal(_semaphore);
 }
 
 @end
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 DiffUrlLoadResult loadDiffUrlText(const std::string& diffUrl) {
   const auto startedAt = UrlClock::now();
@@ -238,4 +238,4 @@ double loadDiffUrlChunks(
   return elapsedUrlMs(startedAt, finishedAt);
 }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

@@ -2,12 +2,12 @@ import {
   SettingsSection,
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-desktop/settings-window";
+} from "@legend-apps/settings-window";
 import {
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,
   SyntaxThemeSelectorSection,
-} from "@legend-desktop/syntax-settings";
+} from "@legend-apps/syntax-settings";
 import { codeSettingsWindowIdentifier } from "./appConstants";
 import {
   codeFontFamilyOptions,

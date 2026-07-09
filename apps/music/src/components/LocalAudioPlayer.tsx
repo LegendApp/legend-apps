@@ -1,7 +1,7 @@
 import { observable } from "@legendapp/state";
 import { File } from "expo-file-system/next";
-import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
-import { audioPlayer as audioPlayerApi, type NowPlayingInfoPayload } from "@legend-desktop/audio-player";
+import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { audioPlayer as audioPlayerApi, type NowPlayingInfoPayload } from "@legend-apps/audio-player";
 import { showToast } from "./Toast";
 import { appState$ } from "../observables/appState";
 import { DEBUG_AUDIO_LOGS } from "../systems/constants";
@@ -10,11 +10,11 @@ import { ensureLocalTrackThumbnail } from "../systems/LocalMusicState";
 import { playbackInteractionState$ } from "../systems/PlaybackInteractionState";
 import { type RepeatMode, settings$ } from "../systems/Settings";
 import { stateSaved$ } from "../systems/State";
-import { getPersistPlugin } from "@legend-desktop/storage";
+import { getPersistPlugin } from "@legend-apps/storage";
 import { parseDurationToSeconds } from "../utils/m3u";
 import { clearQueueM3U, loadQueueFromM3U, saveQueueToM3U } from "../utils/m3uManager";
-import { perfCount, perfDelta, perfLog, perfMark } from "@legend-desktop/runtime-utils";
-import { runAfterInteractionsWithLabel } from "@legend-desktop/runtime-utils";
+import { perfCount, perfDelta, perfLog, perfMark } from "@legend-apps/runtime-utils";
+import { runAfterInteractionsWithLabel } from "@legend-apps/runtime-utils";
 
 export interface LocalPlayerState {
     isPlaying: boolean;

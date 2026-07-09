@@ -3,7 +3,7 @@ import {
   addWindowMovedListener,
   addWindowResizedListener,
   type WindowFrameEvent,
-} from "@legend-desktop/window-manager";
+} from "@legend-apps/window-manager";
 import { diffViewerWindowIdentifier } from "./appConstants";
 import {
   getSavedDiffWindows,

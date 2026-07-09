@@ -1,12 +1,12 @@
 import {
   SegmentedOptions,
   SwitchControl,
-} from "@legend-desktop/design-system";
+} from "@legend-apps/design-system";
 import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
-} from "@legend-desktop/settings-window";
+} from "@legend-apps/settings-window";
 import {
   setMarkdownAutosaveSetting,
   setMarkdownStartupBehaviorSetting,

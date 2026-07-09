@@ -1,8 +1,8 @@
-import { AutoUpdater } from "@legend-desktop/auto-updater";
-import { commandRunner } from "@legend-desktop/command-runner";
-import { useDocumentAppController, type DocumentAppController } from "@legend-desktop/document-app";
-import type { NativeMenuActionHandlers } from "@legend-desktop/native-menu";
-import { initializeSyntaxAssetsSync } from "@legend-desktop/syntax-parser";
+import { AutoUpdater } from "@legend-apps/auto-updater";
+import { commandRunner } from "@legend-apps/command-runner";
+import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
+import type { NativeMenuActionHandlers } from "@legend-apps/native-menu";
+import { initializeSyntaxAssetsSync } from "@legend-apps/syntax-parser";
 import { useEffect, useRef } from "react";
 import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";

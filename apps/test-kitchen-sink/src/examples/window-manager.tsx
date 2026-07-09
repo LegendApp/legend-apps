@@ -13,7 +13,7 @@ import {
   WindowStyleMask,
   type WindowFrame,
   type WindowResult,
-} from "@legend-desktop/window-manager";
+} from "@legend-apps/window-manager";
 import { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ExampleButton, styles } from "./shared";

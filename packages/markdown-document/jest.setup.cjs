@@ -100,7 +100,7 @@ jest.mock("@legendapp/list/react-native", () => {
   };
 });
 
-jest.mock("@legend-desktop/markdown-block-editor", () => {
+jest.mock("@legend-apps/markdown-block-editor", () => {
   const React = require("react");
   const { View } = require("react-native");
   const { EnrichedMarkdownText } = require("react-native-enriched-markdown");

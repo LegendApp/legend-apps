@@ -1,7 +1,7 @@
 import {
   HotkeysSettingsContent as SharedHotkeysSettingsContent,
   HotkeysSettingsPage as SharedHotkeysSettingsPage,
-} from "@legend-desktop/hotkeys";
+} from "@legend-apps/hotkeys";
 import { markdownHotkeyDefinitions } from "../markdownHotkeys";
 import {
   setMarkdownHotkeySetting,

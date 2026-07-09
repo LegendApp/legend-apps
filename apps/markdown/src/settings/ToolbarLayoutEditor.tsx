@@ -1,7 +1,7 @@
-import { cn } from "@legend-desktop/classnames";
-import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-desktop/reorder-controls";
-import { SFSymbol } from "@legend-desktop/sf-symbol";
-import { getLegendDisplayTheme } from "@legend-desktop/theme";
+import { cn } from "@legend-apps/classnames";
+import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-apps/reorder-controls";
+import { SFSymbol } from "@legend-apps/sf-symbol";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { Fragment, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 

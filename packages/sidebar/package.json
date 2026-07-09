@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/sidebar",
+  "name": "@legend-apps/sidebar",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "components",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.sidebar"
+      "javaPackageName": "so.legend.apps.sidebar"
     },
     "ios": {
       "componentProvider": {

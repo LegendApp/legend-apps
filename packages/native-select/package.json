@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/native-select",
+  "name": "@legend-apps/native-select",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",

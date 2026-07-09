@@ -1,5 +1,5 @@
-import type { LegendDisplayTheme, MarkdownLayoutTheme } from "@legend-desktop/theme";
-import type { MarkdownDocumentLayout } from "@legend-desktop/markdown-document";
+import type { LegendDisplayTheme, MarkdownLayoutTheme } from "@legend-apps/theme";
+import type { MarkdownDocumentLayout } from "@legend-apps/markdown-document";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 import type {
   MarkdownAppearanceSettings,

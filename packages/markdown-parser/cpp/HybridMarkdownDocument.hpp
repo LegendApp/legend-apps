@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
 class HybridMarkdownDocument;
 
@@ -119,4 +119,4 @@ private:
   size_t revision_ = 0;
 };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

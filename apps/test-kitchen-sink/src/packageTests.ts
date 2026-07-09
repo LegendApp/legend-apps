@@ -1,5 +1,5 @@
-import type { KitchenSinkPackage, KitchenSinkTest } from "@legend-desktop/appkit-split-view";
-import { type WindowOptions } from "@legend-desktop/window-manager";
+import type { KitchenSinkPackage, KitchenSinkTest } from "@legend-apps/appkit-split-view";
+import { type WindowOptions } from "@legend-apps/window-manager";
 
 export type KitchenSinkTestConfig = KitchenSinkTest & {
   windowOptions?: WindowOptions;

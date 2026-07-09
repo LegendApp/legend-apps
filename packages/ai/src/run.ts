@@ -1,4 +1,4 @@
-import { commandRunner } from "@legend-desktop/command-runner";
+import { commandRunner } from "@legend-apps/command-runner";
 import { buildAIInvocation } from "./invocations";
 import type { AIToolRunResult, RunAIToolOptions } from "./types";
 

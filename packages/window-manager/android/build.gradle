@@ -8,7 +8,7 @@ buildscript {
 apply plugin: "com.android.library"
 
 android {
-  namespace "com.legenddesktop.windowmanager"
+  namespace "so.legend.apps.windowmanager"
   compileSdk 35
 
   defaultConfig {

@@ -1,4 +1,4 @@
-import { getDirectory, getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legend-desktop/document-app";
+import { getDirectory, getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legend-apps/document-app";
 import { markdownFileTypes } from "./appConstants";
 
 export const newMarkdownDocumentLaunchArgument = "--markdown-new-document";

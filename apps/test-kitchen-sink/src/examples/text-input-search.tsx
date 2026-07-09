@@ -1,4 +1,4 @@
-import { TextInputSearch, type TextInputSearchRef } from "@legend-desktop/text-input-search";
+import { TextInputSearch, type TextInputSearchRef } from "@legend-apps/text-input-search";
 import { useRef, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

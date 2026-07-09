@@ -1,13 +1,13 @@
 {
-  "name": "@legend-desktop/syntax-settings",
+  "name": "@legend-apps/syntax-settings",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
-    "@legend-desktop/design-system": "workspace:*",
-    "@legend-desktop/settings-window": "0.0.0",
-    "@legend-desktop/syntax-parser": "workspace:*"
+    "@legend-apps/design-system": "workspace:*",
+    "@legend-apps/settings-window": "0.0.0",
+    "@legend-apps/syntax-parser": "workspace:*"
   },
   "peerDependencies": {
     "react": "catalog:",

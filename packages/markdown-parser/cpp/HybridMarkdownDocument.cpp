@@ -14,7 +14,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
 namespace {
 
@@ -902,4 +902,4 @@ std::string HybridMarkdownDocument::nextBlockId() {
   return documentId_ + ":b" + std::to_string(blockNumber);
 }
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

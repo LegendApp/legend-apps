@@ -4,8 +4,8 @@ import { memo } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
 import type { OverlayPlaybackMode } from "./PlaybackArea";
 import { PlaybackTimelineSlider } from "./PlaybackTimelineSlider";
-import { cn } from "@legend-desktop/classnames";
-import { perfCount } from "@legend-desktop/runtime-utils";
+import { cn } from "@legend-apps/classnames";
+import { perfCount } from "@legend-apps/runtime-utils";
 
 type PlaybackTimelineProps = {
     currentLocalTime$: Observable<number>;

@@ -1,4 +1,4 @@
-import type { MarkdownSaveState } from "@legend-desktop/markdown-document";
+import type { MarkdownSaveState } from "@legend-apps/markdown-document";
 import { getMarkdownFileTitle } from "./appMetadata";
 
 const dirtyTitleIndicator = "•";

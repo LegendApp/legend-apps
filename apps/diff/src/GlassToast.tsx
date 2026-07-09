@@ -1,4 +1,4 @@
-import { GlassEffectView } from "@legend-desktop/glass-effect-view";
+import { GlassEffectView } from "@legend-apps/glass-effect-view";
 import { Pressable, StyleSheet, Text, View, type ColorValue, type StyleProp, type ViewStyle } from "react-native";
 
 export type GlassToastAction = {

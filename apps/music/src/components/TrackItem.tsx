@@ -8,8 +8,8 @@ import { useListItemStyles } from "../hooks/useListItemStyles";
 import { Icon } from "../systems/Icon";
 import { themeState$ } from "../theme/ThemeProvider";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
-import { cn } from "@legend-desktop/classnames";
-import { perfCount } from "@legend-desktop/runtime-utils";
+import { cn } from "@legend-apps/classnames";
+import { perfCount } from "@legend-apps/runtime-utils";
 
 export interface TrackData {
     id: string;

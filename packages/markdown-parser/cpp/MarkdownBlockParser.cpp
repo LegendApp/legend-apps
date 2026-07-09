@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
 namespace {
 
@@ -413,4 +413,4 @@ MarkdownParseResult streamMarkdownSource(std::shared_ptr<const MarkdownSource> s
   };
 }
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

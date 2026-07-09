@@ -1,4 +1,4 @@
-import { type WindowOptions, WindowStyleMask } from "@legend-desktop/window-manager";
+import { type WindowOptions, WindowStyleMask } from "@legend-apps/window-manager";
 
 type WindowStyle = NonNullable<WindowOptions["windowStyle"]>;
 

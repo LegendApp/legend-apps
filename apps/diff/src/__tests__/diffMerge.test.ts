@@ -1,4 +1,4 @@
-import { createMockCommandRunner } from "@legend-desktop/command-runner";
+import { createMockCommandRunner } from "@legend-apps/command-runner";
 import {
   createDiffMergeConflictFileFromContent,
   createDiffMergeDraftFileWithResolvedBlock,

@@ -1,4 +1,4 @@
-import { GlassEffectView } from "@legend-desktop/glass-effect-view";
+import { GlassEffectView } from "@legend-apps/glass-effect-view";
 import { Text, View } from "react-native";
 import { styles } from "./shared";
 

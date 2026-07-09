@@ -4,8 +4,8 @@ import {
   getAICommandAvailability,
   runAITool,
   type AIToolId,
-} from "@legend-desktop/ai";
-import { commandRunner, createMockCommandRunner } from "@legend-desktop/command-runner";
+} from "@legend-apps/ai";
+import { commandRunner, createMockCommandRunner } from "@legend-apps/command-runner";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

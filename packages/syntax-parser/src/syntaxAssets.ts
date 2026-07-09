@@ -1,4 +1,4 @@
-import { createStorage } from "@legend-desktop/storage";
+import { createStorage } from "@legend-apps/storage";
 import { File } from "expo-file-system/next";
 
 import darkPlusTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json";

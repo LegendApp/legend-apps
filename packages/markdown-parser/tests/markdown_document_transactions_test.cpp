@@ -14,7 +14,7 @@
 
 #include <unistd.h>
 
-using namespace margelo::nitro::legenddesktop::markdownparser;
+using namespace margelo::nitro::legendapps::markdownparser;
 
 namespace {
 

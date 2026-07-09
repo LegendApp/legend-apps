@@ -1,4 +1,4 @@
-import { createObservableSettings } from "@legend-desktop/storage";
+import { createObservableSettings } from "@legend-apps/storage";
 import {
   normalizeBooleanSetting,
   normalizeSourceFontFamily,
@@ -6,13 +6,13 @@ import {
   sourceFontFamilyOptions,
   sourceFontSizeOptions,
   type SourceFontFamilySetting,
-} from "@legend-desktop/syntax-settings";
+} from "@legend-apps/syntax-settings";
 import {
   defaultSyntaxThemeName,
   getSyntaxTheme,
   normalizeSyntaxThemeName,
   type SyntaxTheme,
-} from "@legend-desktop/syntax-parser";
+} from "@legend-apps/syntax-parser";
 import { useValue } from "@legendapp/state/react";
 
 export type CodeSettingsFile = {

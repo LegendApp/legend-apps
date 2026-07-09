@@ -33,7 +33,7 @@
 #include <string>
 #include <optional>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   /**
    * A struct which can be represented as a JavaScript object (MarkdownTransaction).
@@ -54,16 +54,16 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     friend bool operator==(const MarkdownTransaction& lhs, const MarkdownTransaction& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser
 
 namespace margelo::nitro {
 
   // C++ MarkdownTransaction <> JS MarkdownTransaction (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownTransaction> final {
-    static inline margelo::nitro::legenddesktop::markdownparser::MarkdownTransaction fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownTransaction> final {
+    static inline margelo::nitro::legendapps::markdownparser::MarkdownTransaction fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::markdownparser::MarkdownTransaction(
+      return margelo::nitro::legendapps::markdownparser::MarkdownTransaction(
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "type"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockId"))),
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "markdown"))),
@@ -71,7 +71,7 @@ namespace margelo::nitro {
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "afterMarkdown")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownTransaction& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::markdownparser::MarkdownTransaction& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "type"), JSIConverter<std::string>::toJSI(runtime, arg.type));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "blockId"), JSIConverter<std::string>::toJSI(runtime, arg.blockId));

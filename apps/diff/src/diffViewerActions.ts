@@ -1,4 +1,4 @@
-import type { NativeMenuAction } from "@legend-desktop/native-menu";
+import type { NativeMenuAction } from "@legend-apps/native-menu";
 
 type DiffViewerActionId =
   | "copyFilePath"

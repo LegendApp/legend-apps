@@ -1,4 +1,4 @@
-import type { DiffLoadTiming } from "@legend-desktop/diff-parser";
+import type { DiffLoadTiming } from "@legend-apps/diff-parser";
 import { getDiffFolderCompareBaseKey, getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
 import { logDiffMemoryMark, logDiffOpenTiming } from "../diffInstrumentation";
 import { getDiffViewModeSetting } from "../diffSettings";

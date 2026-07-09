@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffTokenizedRowRange).
@@ -50,21 +50,21 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffTokenizedRowRange& lhs, const DiffTokenizedRowRange& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffTokenizedRowRange <> JS DiffTokenizedRowRange (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffTokenizedRowRange> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffTokenizedRowRange fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffTokenizedRowRange> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffTokenizedRowRange fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffTokenizedRowRange(
+      return margelo::nitro::legendapps::diffparser::DiffTokenizedRowRange(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "start"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "end")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffTokenizedRowRange& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffTokenizedRowRange& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "start"), JSIConverter<double>::toJSI(runtime, arg.start));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "end"), JSIConverter<double>::toJSI(runtime, arg.end));

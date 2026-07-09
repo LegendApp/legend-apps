@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/window-manager",
+  "name": "@legend-apps/window-manager",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.windowmanager"
+      "javaPackageName": "so.legend.apps.windowmanager"
     },
     "ios": {
       "modulesProvider": {

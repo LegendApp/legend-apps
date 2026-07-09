@@ -188,7 +188,7 @@ jest.mock("../../utils/cacheDirectories", () => {
     };
 });
 
-jest.mock("@legend-desktop/media-library-scanner", () => ({
+jest.mock("@legend-apps/media-library-scanner", () => ({
     __esModule: true,
     ...(() => {
         const listeners: Record<string, Set<(payload: any) => void>> = {};
@@ -217,7 +217,7 @@ jest.mock("@legend-desktop/media-library-scanner", () => ({
     })(),
 }));
 
-jest.mock("@legend-desktop/file-system-watcher", () => ({
+jest.mock("@legend-apps/file-system-watcher", () => ({
     addDirectoryChangeListener: jest.fn(() => ({ remove: jest.fn() })),
     setWatchedDirectories: jest.fn(),
 }));
@@ -275,7 +275,7 @@ describe("scanLocalMusic", () => {
     };
 
     const getMediaLibraryScannerMock = () =>
-        require("@legend-desktop/media-library-scanner") as {
+        require("@legend-apps/media-library-scanner") as {
             scanMediaLibrary: jest.Mock;
             addMediaLibraryScannerListener: jest.Mock;
             __emit: (event: string, payload: any) => void;

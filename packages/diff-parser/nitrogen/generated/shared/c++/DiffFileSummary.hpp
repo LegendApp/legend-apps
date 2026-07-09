@@ -32,7 +32,7 @@
 
 #include <string>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffFileSummary).
@@ -57,16 +57,16 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffFileSummary& lhs, const DiffFileSummary& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffFileSummary <> JS DiffFileSummary (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffFileSummary> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffFileSummary fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffFileSummary> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffFileSummary fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffFileSummary(
+      return margelo::nitro::legendapps::diffparser::DiffFileSummary(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "path"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "oldPath"))),
@@ -78,7 +78,7 @@ namespace margelo::nitro {
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "isBinary")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffFileSummary& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffFileSummary& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "path"), JSIConverter<std::string>::toJSI(runtime, arg.path));

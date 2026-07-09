@@ -8,7 +8,7 @@
 #include <exception>
 #include <utility>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 namespace {
 
@@ -277,4 +277,4 @@ void HybridDiffLoadSession::setError(std::string error) {
   error_ = std::move(error);
 }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

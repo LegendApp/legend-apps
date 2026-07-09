@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import type { WindowOptions } from "@legend-desktop/window-manager";
+import type { WindowOptions } from "@legend-apps/window-manager";
 
 export type WindowComponentLoader<P = Record<string, unknown>> = () =>
   | Promise<{ default: ComponentType<P> } | ComponentType<P>>

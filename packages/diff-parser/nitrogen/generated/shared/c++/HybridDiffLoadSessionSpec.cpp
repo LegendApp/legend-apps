@@ -7,7 +7,7 @@
 
 #include "HybridDiffLoadSessionSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   void HybridDiffLoadSessionSpec::loadHybridMethods() {
     // load base methods/properties
@@ -20,4 +20,4 @@ namespace margelo::nitro::legenddesktop::diffparser {
     });
   }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

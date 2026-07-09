@@ -21,7 +21,7 @@
 #include <os/log.h>
 #endif
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
 namespace {
 
@@ -32,7 +32,7 @@ constexpr int foregroundOffset = 15;
 
 #ifdef __APPLE__
 os_log_t syntaxMemoryLog() {
-  static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
+  static os_log_t log = os_log_create("so.legend.diff.macos", "memory");
   return log;
 }
 #endif
@@ -899,4 +899,4 @@ SyntaxScopeTokenizedLine tokenizeSyntaxScopeLine(
   return tokenizedLine;
 }
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

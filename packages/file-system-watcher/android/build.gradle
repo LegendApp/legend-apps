@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.filesystemwatcher"
+  namespace "so.legend.apps.filesystemwatcher"
   compileSdkVersion 35
 
   defaultConfig {

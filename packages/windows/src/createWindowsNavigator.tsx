@@ -5,7 +5,7 @@ import {
   closeWindow as nativeCloseWindow,
   openWindow as nativeOpenWindow,
   type WindowOptions,
-} from "@legend-desktop/window-manager";
+} from "@legend-apps/window-manager";
 import type { WindowConfigEntry, WindowsConfig } from "./types";
 import { withWindowProvider } from "./WindowProvider";
 

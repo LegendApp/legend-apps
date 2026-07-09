@@ -1,4 +1,4 @@
-import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { SFSymbol } from "@legend-apps/sf-symbol";
 import { Text, View } from "react-native";
 import { ExamplePanel, styles } from "./shared";
 

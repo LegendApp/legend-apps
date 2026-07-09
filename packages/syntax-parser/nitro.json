@@ -1,11 +1,11 @@
 {
   "$schema": "https://nitro.margelo.com/nitro.schema.json",
-  "cxxNamespace": ["legenddesktop", "syntaxparser"],
+  "cxxNamespace": ["legendapps", "syntaxparser"],
   "ios": {
     "iosModuleName": "RNSyntaxParser"
   },
   "android": {
-    "androidNamespace": ["legenddesktop", "syntaxparser"],
+    "androidNamespace": ["legendapps", "syntaxparser"],
     "androidCxxLibName": "RNSyntaxParser"
   },
   "autolinking": {

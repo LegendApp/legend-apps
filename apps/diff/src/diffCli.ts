@@ -1,5 +1,5 @@
-import { commandRunner } from "@legend-desktop/command-runner";
-import { createStorage } from "@legend-desktop/storage";
+import { commandRunner } from "@legend-apps/command-runner";
+import { createStorage } from "@legend-apps/storage";
 
 const cliCommandName = "ldiff";
 const cliScriptRelativePath = "bin/legend-diff";

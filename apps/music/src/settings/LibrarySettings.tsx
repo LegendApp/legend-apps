@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 
 import { Button } from "../components/Button";
 import { SkiaSpinner } from "../components/SkiaSpinner";
-import { openFileDialog } from "@legend-desktop/file-dialog";
+import { openFileDialog } from "@legend-apps/file-dialog";
 import { SettingsPage, SettingsSection } from "./components";
 import {
     librarySettings$,

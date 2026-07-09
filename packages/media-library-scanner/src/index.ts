@@ -1,7 +1,7 @@
 import { NativeEventEmitter } from "react-native";
 import NativeMediaLibraryScanner from "./NativeMediaLibraryScanner";
-import type { FileScannerOptions } from "@legend-desktop/file-scanner";
-import type { MediaTags } from "@legend-desktop/media-tags";
+import type { FileScannerOptions } from "@legend-apps/file-scanner";
+import type { MediaTags } from "@legend-apps/media-tags";
 
 export type MediaScanOptions = FileScannerOptions &
   Readonly<{

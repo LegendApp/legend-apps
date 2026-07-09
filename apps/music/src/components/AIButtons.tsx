@@ -1,4 +1,4 @@
-import { getAICommandAvailability } from "@legend-desktop/ai";
+import { getAICommandAvailability } from "@legend-apps/ai";
 import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 

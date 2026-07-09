@@ -6,7 +6,7 @@ jest.mock("react-native", () => ({
   View: "View",
 }));
 
-jest.mock("@legend-desktop/markdown-document", () => ({
+jest.mock("@legend-apps/markdown-document", () => ({
   runMarkdownDocumentE2EScenario: jest.fn(),
 }));
 

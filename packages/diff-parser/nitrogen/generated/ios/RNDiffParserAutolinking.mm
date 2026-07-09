@@ -19,7 +19,7 @@
 
 + (void) load {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::legenddesktop::diffparser;
+  using namespace margelo::nitro::legendapps::diffparser;
 
   HybridObjectRegistry::registerHybridObjectConstructor(
     "DiffParser",

@@ -1,4 +1,4 @@
-import { commandModifier, openTargetTitles, settingsTargetTitles, type NativeMenuConfig } from "@legend-desktop/native-menu";
+import { commandModifier, openTargetTitles, settingsTargetTitles, type NativeMenuConfig } from "@legend-apps/native-menu";
 
 export const codeMenuConfig: NativeMenuConfig[] = [
   {

@@ -33,7 +33,7 @@
 #include <string>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   /**
    * A struct which can be represented as a JavaScript object (MarkdownChangedRange).
@@ -52,22 +52,22 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     friend bool operator==(const MarkdownChangedRange& lhs, const MarkdownChangedRange& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser
 
 namespace margelo::nitro {
 
   // C++ MarkdownChangedRange <> JS MarkdownChangedRange (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange> final {
-    static inline margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownChangedRange> final {
+    static inline margelo::nitro::legendapps::markdownparser::MarkdownChangedRange fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange(
+      return margelo::nitro::legendapps::markdownparser::MarkdownChangedRange(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "startBlockIndex"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "deleteCount"))),
         JSIConverter<std::vector<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockIds")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::markdownparser::MarkdownChangedRange& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "startBlockIndex"), JSIConverter<double>::toJSI(runtime, arg.startBlockIndex));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "deleteCount"), JSIConverter<double>::toJSI(runtime, arg.deleteCount));

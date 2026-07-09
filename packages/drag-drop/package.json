@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/drag-drop",
+  "name": "@legend-apps/drag-drop",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",

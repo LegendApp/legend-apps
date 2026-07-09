@@ -1,7 +1,7 @@
 import "./global.css";
 
 import { View } from "react-native";
-import { App } from "@legend-desktop/app";
+import { App } from "@legend-apps/app";
 
 export default function ShellApp(props: Record<string, unknown>) {
   return (

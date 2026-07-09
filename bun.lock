@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "legend-desktop",
+      "name": "legend-apps",
       "devDependencies": {
         "@babel/core": "^7.29.0",
         "@babel/runtime": "^7.29.7",
@@ -25,94 +25,94 @@
       },
     },
     "apps/code": {
-      "name": "@legend-desktop/app-code",
+      "name": "@legend-apps/app-code",
       "version": "0.0.1",
       "dependencies": {
-        "@legend-desktop/app-exit": "0.0.0",
-        "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/context-menu": "0.0.0",
-        "@legend-desktop/design-system": "0.0.0",
-        "@legend-desktop/document-app": "0.0.0",
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/recent-documents": "0.0.0",
-        "@legend-desktop/settings-window": "0.0.0",
-        "@legend-desktop/source-viewer": "workspace:*",
-        "@legend-desktop/storage": "0.0.0",
-        "@legend-desktop/syntax-parser": "workspace:*",
-        "@legend-desktop/syntax-settings": "workspace:*",
-        "@legend-desktop/theme": "workspace:*",
-        "@legend-desktop/virtualized-document": "workspace:*",
-        "@legend-desktop/window-manager": "0.0.0",
-        "@legend-desktop/windows": "0.0.0",
+        "@legend-apps/app-exit": "0.0.0",
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/context-menu": "0.0.0",
+        "@legend-apps/design-system": "0.0.0",
+        "@legend-apps/document-app": "0.0.0",
+        "@legend-apps/file-dialog": "0.0.0",
+        "@legend-apps/file-system-watcher": "0.0.0",
+        "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/recent-documents": "0.0.0",
+        "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/source-viewer": "workspace:*",
+        "@legend-apps/storage": "0.0.0",
+        "@legend-apps/syntax-parser": "workspace:*",
+        "@legend-apps/syntax-settings": "workspace:*",
+        "@legend-apps/theme": "workspace:*",
+        "@legend-apps/virtualized-document": "workspace:*",
+        "@legend-apps/window-manager": "0.0.0",
+        "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
       },
     },
     "apps/diff": {
-      "name": "@legend-desktop/app-diff",
+      "name": "@legend-apps/app-diff",
       "version": "0.0.1",
       "dependencies": {
-        "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/auto-updater": "0.0.0",
-        "@legend-desktop/command-runner": "0.0.0",
-        "@legend-desktop/context-menu": "0.0.0",
-        "@legend-desktop/design-system": "workspace:*",
-        "@legend-desktop/diff-parser": "workspace:*",
-        "@legend-desktop/document-app": "0.0.0",
-        "@legend-desktop/drag-drop": "0.0.0",
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/glass-effect-view": "0.0.0",
-        "@legend-desktop/instrumentation": "workspace:*",
-        "@legend-desktop/keyboard-manager": "0.0.0",
-        "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/native-select": "workspace:*",
-        "@legend-desktop/recent-documents": "0.0.0",
-        "@legend-desktop/settings-window": "0.0.0",
-        "@legend-desktop/sf-symbol": "0.0.0",
-        "@legend-desktop/source-viewer": "workspace:*",
-        "@legend-desktop/storage": "0.0.0",
-        "@legend-desktop/syntax-parser": "workspace:*",
-        "@legend-desktop/syntax-settings": "workspace:*",
-        "@legend-desktop/text-input-search": "0.0.0",
-        "@legend-desktop/theme": "workspace:*",
-        "@legend-desktop/virtualized-document": "workspace:*",
-        "@legend-desktop/window-manager": "0.0.0",
-        "@legend-desktop/windows": "0.0.0",
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/auto-updater": "0.0.0",
+        "@legend-apps/command-runner": "0.0.0",
+        "@legend-apps/context-menu": "0.0.0",
+        "@legend-apps/design-system": "workspace:*",
+        "@legend-apps/diff-parser": "workspace:*",
+        "@legend-apps/document-app": "0.0.0",
+        "@legend-apps/drag-drop": "0.0.0",
+        "@legend-apps/file-dialog": "0.0.0",
+        "@legend-apps/file-system-watcher": "0.0.0",
+        "@legend-apps/glass-effect-view": "0.0.0",
+        "@legend-apps/instrumentation": "workspace:*",
+        "@legend-apps/keyboard-manager": "0.0.0",
+        "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/native-select": "workspace:*",
+        "@legend-apps/recent-documents": "0.0.0",
+        "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/sf-symbol": "0.0.0",
+        "@legend-apps/source-viewer": "workspace:*",
+        "@legend-apps/storage": "0.0.0",
+        "@legend-apps/syntax-parser": "workspace:*",
+        "@legend-apps/syntax-settings": "workspace:*",
+        "@legend-apps/text-input-search": "0.0.0",
+        "@legend-apps/theme": "workspace:*",
+        "@legend-apps/virtualized-document": "workspace:*",
+        "@legend-apps/window-manager": "0.0.0",
+        "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
       },
     },
     "apps/markdown": {
-      "name": "@legend-desktop/app-markdown",
+      "name": "@legend-apps/app-markdown",
       "version": "0.0.1",
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
-        "@legend-desktop/app-exit": "0.0.0",
-        "@legend-desktop/appearance-settings": "workspace:*",
-        "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/classnames": "0.0.0",
-        "@legend-desktop/context-menu": "0.0.0",
-        "@legend-desktop/design-system": "workspace:*",
-        "@legend-desktop/document-app": "0.0.0",
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/hotkeys": "workspace:*",
-        "@legend-desktop/keyboard-manager": "0.0.0",
-        "@legend-desktop/markdown-block-editor": "0.0.0",
-        "@legend-desktop/markdown-document": "workspace:*",
-        "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/native-select": "workspace:*",
-        "@legend-desktop/recent-documents": "0.0.0",
-        "@legend-desktop/reorder-controls": "0.0.0",
-        "@legend-desktop/settings-window": "0.0.0",
-        "@legend-desktop/sf-symbol": "0.0.0",
-        "@legend-desktop/storage": "0.0.0",
-        "@legend-desktop/theme": "workspace:*",
-        "@legend-desktop/window-manager": "0.0.0",
-        "@legend-desktop/windows": "0.0.0",
+        "@legend-apps/app-exit": "0.0.0",
+        "@legend-apps/appearance-settings": "workspace:*",
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/classnames": "0.0.0",
+        "@legend-apps/context-menu": "0.0.0",
+        "@legend-apps/design-system": "workspace:*",
+        "@legend-apps/document-app": "0.0.0",
+        "@legend-apps/file-dialog": "0.0.0",
+        "@legend-apps/file-system-watcher": "0.0.0",
+        "@legend-apps/hotkeys": "workspace:*",
+        "@legend-apps/keyboard-manager": "0.0.0",
+        "@legend-apps/markdown-block-editor": "0.0.0",
+        "@legend-apps/markdown-document": "workspace:*",
+        "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/native-select": "workspace:*",
+        "@legend-apps/recent-documents": "0.0.0",
+        "@legend-apps/reorder-controls": "0.0.0",
+        "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/sf-symbol": "0.0.0",
+        "@legend-apps/storage": "0.0.0",
+        "@legend-apps/theme": "workspace:*",
+        "@legend-apps/window-manager": "0.0.0",
+        "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
@@ -120,39 +120,39 @@
       },
     },
     "apps/music": {
-      "name": "@legend-desktop/app-music",
+      "name": "@legend-apps/app-music",
       "version": "0.0.1",
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
-        "@legend-desktop/ai": "0.0.0",
-        "@legend-desktop/app-exit": "0.0.0",
-        "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/audio-player": "0.0.0",
-        "@legend-desktop/auto-updater": "0.0.0",
-        "@legend-desktop/classnames": "0.0.0",
-        "@legend-desktop/command-runner": "0.0.0",
-        "@legend-desktop/context-menu": "0.0.0",
-        "@legend-desktop/drag-drop": "0.0.0",
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/glass-effect-view": "0.0.0",
-        "@legend-desktop/global-hotkey": "0.0.0",
-        "@legend-desktop/hotkeys": "workspace:*",
-        "@legend-desktop/keyboard-manager": "0.0.0",
-        "@legend-desktop/media-library-scanner": "0.0.0",
-        "@legend-desktop/media-tags": "0.0.0",
-        "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/reorder-controls": "0.0.0",
-        "@legend-desktop/runtime-utils": "0.0.0",
-        "@legend-desktop/settings-window": "0.0.0",
-        "@legend-desktop/sf-symbol": "0.0.0",
-        "@legend-desktop/sidebar": "0.0.0",
-        "@legend-desktop/storage": "0.0.0",
-        "@legend-desktop/text-input-search": "0.0.0",
-        "@legend-desktop/theme": "workspace:*",
-        "@legend-desktop/window-controls": "0.0.0",
-        "@legend-desktop/window-manager": "0.0.0",
-        "@legend-desktop/windows": "0.0.0",
+        "@legend-apps/ai": "0.0.0",
+        "@legend-apps/app-exit": "0.0.0",
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/audio-player": "0.0.0",
+        "@legend-apps/auto-updater": "0.0.0",
+        "@legend-apps/classnames": "0.0.0",
+        "@legend-apps/command-runner": "0.0.0",
+        "@legend-apps/context-menu": "0.0.0",
+        "@legend-apps/drag-drop": "0.0.0",
+        "@legend-apps/file-dialog": "0.0.0",
+        "@legend-apps/file-system-watcher": "0.0.0",
+        "@legend-apps/glass-effect-view": "0.0.0",
+        "@legend-apps/global-hotkey": "0.0.0",
+        "@legend-apps/hotkeys": "workspace:*",
+        "@legend-apps/keyboard-manager": "0.0.0",
+        "@legend-apps/media-library-scanner": "0.0.0",
+        "@legend-apps/media-tags": "0.0.0",
+        "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/reorder-controls": "0.0.0",
+        "@legend-apps/runtime-utils": "0.0.0",
+        "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/sf-symbol": "0.0.0",
+        "@legend-apps/sidebar": "0.0.0",
+        "@legend-apps/storage": "0.0.0",
+        "@legend-apps/text-input-search": "0.0.0",
+        "@legend-apps/theme": "workspace:*",
+        "@legend-apps/window-controls": "0.0.0",
+        "@legend-apps/window-manager": "0.0.0",
+        "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/motion": "catalog:",
         "@legendapp/state": "catalog:",
@@ -161,43 +161,43 @@
       },
     },
     "apps/test-kitchen-sink": {
-      "name": "@legend-desktop/app-test-kitchen-sink",
+      "name": "@legend-apps/app-test-kitchen-sink",
       "version": "0.0.1",
       "dependencies": {
-        "@legend-desktop/ai": "0.0.0",
-        "@legend-desktop/app-exit": "0.0.0",
-        "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/audio-player": "0.0.0",
-        "@legend-desktop/auto-updater": "0.0.0",
-        "@legend-desktop/command-runner": "0.0.0",
-        "@legend-desktop/context-menu": "0.0.0",
-        "@legend-desktop/document-scanner": "0.0.0",
-        "@legend-desktop/drag-drop": "0.0.0",
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-scanner": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/glass-effect-view": "0.0.0",
-        "@legend-desktop/global-hotkey": "0.0.0",
-        "@legend-desktop/keyboard-manager": "0.0.0",
-        "@legend-desktop/markdown-block-editor": "0.0.0",
-        "@legend-desktop/markdown-parser": "0.0.0",
-        "@legend-desktop/media-library-scanner": "0.0.0",
-        "@legend-desktop/media-tags": "0.0.0",
-        "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/sf-symbol": "0.0.0",
-        "@legend-desktop/sidebar": "0.0.0",
-        "@legend-desktop/text-input-search": "0.0.0",
-        "@legend-desktop/window-controls": "0.0.0",
-        "@legend-desktop/window-manager": "0.0.0",
+        "@legend-apps/ai": "0.0.0",
+        "@legend-apps/app-exit": "0.0.0",
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/audio-player": "0.0.0",
+        "@legend-apps/auto-updater": "0.0.0",
+        "@legend-apps/command-runner": "0.0.0",
+        "@legend-apps/context-menu": "0.0.0",
+        "@legend-apps/document-scanner": "0.0.0",
+        "@legend-apps/drag-drop": "0.0.0",
+        "@legend-apps/file-dialog": "0.0.0",
+        "@legend-apps/file-scanner": "0.0.0",
+        "@legend-apps/file-system-watcher": "0.0.0",
+        "@legend-apps/glass-effect-view": "0.0.0",
+        "@legend-apps/global-hotkey": "0.0.0",
+        "@legend-apps/keyboard-manager": "0.0.0",
+        "@legend-apps/markdown-block-editor": "0.0.0",
+        "@legend-apps/markdown-parser": "0.0.0",
+        "@legend-apps/media-library-scanner": "0.0.0",
+        "@legend-apps/media-tags": "0.0.0",
+        "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/sf-symbol": "0.0.0",
+        "@legend-apps/sidebar": "0.0.0",
+        "@legend-apps/text-input-search": "0.0.0",
+        "@legend-apps/window-controls": "0.0.0",
+        "@legend-apps/window-manager": "0.0.0",
         "@legendapp/list": "catalog:",
         "react-native-enriched-markdown": "^0.5.0",
       },
     },
     "packages/ai": {
-      "name": "@legend-desktop/ai",
+      "name": "@legend-apps/ai",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/command-runner": "0.0.0",
+        "@legend-apps/command-runner": "0.0.0",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -205,7 +205,7 @@
       },
     },
     "packages/app-exit": {
-      "name": "@legend-desktop/app-exit",
+      "name": "@legend-apps/app-exit",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -213,12 +213,12 @@
       },
     },
     "packages/appearance-settings": {
-      "name": "@legend-desktop/appearance-settings",
+      "name": "@legend-apps/appearance-settings",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/design-system": "workspace:*",
-        "@legend-desktop/settings-window": "0.0.0",
-        "@legend-desktop/theme": "workspace:*",
+        "@legend-apps/design-system": "workspace:*",
+        "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/theme": "workspace:*",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -226,7 +226,7 @@
       },
     },
     "packages/appkit-split-view": {
-      "name": "@legend-desktop/appkit-split-view",
+      "name": "@legend-apps/appkit-split-view",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -234,7 +234,7 @@
       },
     },
     "packages/audio-player": {
-      "name": "@legend-desktop/audio-player",
+      "name": "@legend-apps/audio-player",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -242,7 +242,7 @@
       },
     },
     "packages/auto-updater": {
-      "name": "@legend-desktop/auto-updater",
+      "name": "@legend-apps/auto-updater",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -250,7 +250,7 @@
       },
     },
     "packages/classnames": {
-      "name": "@legend-desktop/classnames",
+      "name": "@legend-apps/classnames",
       "version": "0.0.0",
       "dependencies": {
         "clsx": "^2.1.1",
@@ -258,7 +258,7 @@
       },
     },
     "packages/command-runner": {
-      "name": "@legend-desktop/command-runner",
+      "name": "@legend-apps/command-runner",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -266,7 +266,7 @@
       },
     },
     "packages/context-menu": {
-      "name": "@legend-desktop/context-menu",
+      "name": "@legend-apps/context-menu",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -274,12 +274,12 @@
       },
     },
     "packages/design-system": {
-      "name": "@legend-desktop/design-system",
+      "name": "@legend-apps/design-system",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/classnames": "0.0.0",
-        "@legend-desktop/context-menu": "0.0.0",
-        "@legend-desktop/native-select": "workspace:*",
+        "@legend-apps/classnames": "0.0.0",
+        "@legend-apps/context-menu": "0.0.0",
+        "@legend-apps/native-select": "workspace:*",
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
@@ -288,7 +288,7 @@
       },
     },
     "packages/diff-parser": {
-      "name": "@legend-desktop/diff-parser",
+      "name": "@legend-apps/diff-parser",
       "version": "0.0.0",
       "devDependencies": {
         "nitrogen": "0.35.6",
@@ -300,21 +300,21 @@
       },
     },
     "packages/document-app": {
-      "name": "@legend-desktop/document-app",
+      "name": "@legend-apps/document-app",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/file-dialog": "0.0.0",
-        "@legend-desktop/file-system-watcher": "0.0.0",
-        "@legend-desktop/native-menu": "0.0.0",
-        "@legend-desktop/recent-documents": "0.0.0",
-        "@legend-desktop/window-manager": "0.0.0",
+        "@legend-apps/file-dialog": "0.0.0",
+        "@legend-apps/file-system-watcher": "0.0.0",
+        "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/recent-documents": "0.0.0",
+        "@legend-apps/window-manager": "0.0.0",
       },
     },
     "packages/document-scanner": {
-      "name": "@legend-desktop/document-scanner",
+      "name": "@legend-apps/document-scanner",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/file-scanner": "0.0.0",
+        "@legend-apps/file-scanner": "0.0.0",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -322,7 +322,7 @@
       },
     },
     "packages/drag-drop": {
-      "name": "@legend-desktop/drag-drop",
+      "name": "@legend-apps/drag-drop",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -330,7 +330,7 @@
       },
     },
     "packages/file-dialog": {
-      "name": "@legend-desktop/file-dialog",
+      "name": "@legend-apps/file-dialog",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -338,7 +338,7 @@
       },
     },
     "packages/file-scanner": {
-      "name": "@legend-desktop/file-scanner",
+      "name": "@legend-apps/file-scanner",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -346,7 +346,7 @@
       },
     },
     "packages/file-system-watcher": {
-      "name": "@legend-desktop/file-system-watcher",
+      "name": "@legend-apps/file-system-watcher",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -354,7 +354,7 @@
       },
     },
     "packages/glass-effect-view": {
-      "name": "@legend-desktop/glass-effect-view",
+      "name": "@legend-apps/glass-effect-view",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -362,7 +362,7 @@
       },
     },
     "packages/global-hotkey": {
-      "name": "@legend-desktop/global-hotkey",
+      "name": "@legend-apps/global-hotkey",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -370,12 +370,12 @@
       },
     },
     "packages/hotkeys": {
-      "name": "@legend-desktop/hotkeys",
+      "name": "@legend-apps/hotkeys",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/classnames": "0.0.0",
-        "@legend-desktop/keyboard-manager": "0.0.0",
-        "@legend-desktop/native-menu": "0.0.0",
+        "@legend-apps/classnames": "0.0.0",
+        "@legend-apps/keyboard-manager": "0.0.0",
+        "@legend-apps/native-menu": "0.0.0",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -383,7 +383,7 @@
       },
     },
     "packages/instrumentation": {
-      "name": "@legend-desktop/instrumentation",
+      "name": "@legend-apps/instrumentation",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -391,7 +391,7 @@
       },
     },
     "packages/keyboard-manager": {
-      "name": "@legend-desktop/keyboard-manager",
+      "name": "@legend-apps/keyboard-manager",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -399,21 +399,21 @@
       },
     },
     "packages/markdown-block-editor": {
-      "name": "@legend-desktop/markdown-block-editor",
+      "name": "@legend-apps/markdown-block-editor",
       "version": "0.0.0",
       "peerDependencies": {
-        "@legend-desktop/markdown-parser": "workspace:*",
+        "@legend-apps/markdown-parser": "workspace:*",
         "react": "catalog:",
         "react-native": "catalog:",
         "react-native-enriched-markdown": "*",
       },
     },
     "packages/markdown-document": {
-      "name": "@legend-desktop/markdown-document",
+      "name": "@legend-apps/markdown-document",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/markdown-block-editor": "0.0.0",
-        "@legend-desktop/markdown-parser": "0.0.0",
+        "@legend-apps/markdown-block-editor": "0.0.0",
+        "@legend-apps/markdown-parser": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
@@ -424,7 +424,7 @@
       },
     },
     "packages/markdown-parser": {
-      "name": "@legend-desktop/markdown-parser",
+      "name": "@legend-apps/markdown-parser",
       "version": "0.0.0",
       "devDependencies": {
         "nitrogen": "0.35.6",
@@ -436,11 +436,11 @@
       },
     },
     "packages/media-library-scanner": {
-      "name": "@legend-desktop/media-library-scanner",
+      "name": "@legend-apps/media-library-scanner",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/file-scanner": "0.0.0",
-        "@legend-desktop/media-tags": "0.0.0",
+        "@legend-apps/file-scanner": "0.0.0",
+        "@legend-apps/media-tags": "0.0.0",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -448,7 +448,7 @@
       },
     },
     "packages/media-tags": {
-      "name": "@legend-desktop/media-tags",
+      "name": "@legend-apps/media-tags",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -456,7 +456,7 @@
       },
     },
     "packages/native-menu": {
-      "name": "@legend-desktop/native-menu",
+      "name": "@legend-apps/native-menu",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -464,7 +464,7 @@
       },
     },
     "packages/native-select": {
-      "name": "@legend-desktop/native-select",
+      "name": "@legend-apps/native-select",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -472,7 +472,7 @@
       },
     },
     "packages/recent-documents": {
-      "name": "@legend-desktop/recent-documents",
+      "name": "@legend-apps/recent-documents",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -480,11 +480,11 @@
       },
     },
     "packages/reorder-controls": {
-      "name": "@legend-desktop/reorder-controls",
+      "name": "@legend-apps/reorder-controls",
       "version": "0.0.0",
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
-        "@legend-desktop/classnames": "0.0.0",
+        "@legend-apps/classnames": "0.0.0",
         "@legendapp/state": "catalog:",
       },
       "peerDependencies": {
@@ -493,7 +493,7 @@
       },
     },
     "packages/runtime-utils": {
-      "name": "@legend-desktop/runtime-utils",
+      "name": "@legend-apps/runtime-utils",
       "version": "0.0.0",
       "dependencies": {
         "@legendapp/state": "catalog:",
@@ -504,12 +504,12 @@
       },
     },
     "packages/settings-window": {
-      "name": "@legend-desktop/settings-window",
+      "name": "@legend-apps/settings-window",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/appkit-split-view": "0.0.0",
-        "@legend-desktop/classnames": "0.0.0",
-        "@legend-desktop/window-manager": "0.0.0",
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/classnames": "0.0.0",
+        "@legend-apps/window-manager": "0.0.0",
         "@legendapp/list": "catalog:",
       },
       "peerDependencies": {
@@ -518,7 +518,7 @@
       },
     },
     "packages/sf-symbol": {
-      "name": "@legend-desktop/sf-symbol",
+      "name": "@legend-apps/sf-symbol",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -526,7 +526,7 @@
       },
     },
     "packages/sidebar": {
-      "name": "@legend-desktop/sidebar",
+      "name": "@legend-apps/sidebar",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -534,11 +534,11 @@
       },
     },
     "packages/source-viewer": {
-      "name": "@legend-desktop/source-viewer",
+      "name": "@legend-apps/source-viewer",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/syntax-parser": "workspace:*",
-        "@legend-desktop/virtualized-document": "workspace:*",
+        "@legend-apps/syntax-parser": "workspace:*",
+        "@legend-apps/virtualized-document": "workspace:*",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -546,7 +546,7 @@
       },
     },
     "packages/storage": {
-      "name": "@legend-desktop/storage",
+      "name": "@legend-apps/storage",
       "version": "0.0.0",
       "dependencies": {
         "@legendapp/state": "catalog:",
@@ -558,10 +558,10 @@
       },
     },
     "packages/syntax-parser": {
-      "name": "@legend-desktop/syntax-parser",
+      "name": "@legend-apps/syntax-parser",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/storage": "workspace:*",
+        "@legend-apps/storage": "workspace:*",
         "expo-file-system": "~19.0.21",
       },
       "devDependencies": {
@@ -574,12 +574,12 @@
       },
     },
     "packages/syntax-settings": {
-      "name": "@legend-desktop/syntax-settings",
+      "name": "@legend-apps/syntax-settings",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/design-system": "workspace:*",
-        "@legend-desktop/settings-window": "0.0.0",
-        "@legend-desktop/syntax-parser": "workspace:*",
+        "@legend-apps/design-system": "workspace:*",
+        "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/syntax-parser": "workspace:*",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -587,7 +587,7 @@
       },
     },
     "packages/text-input-search": {
-      "name": "@legend-desktop/text-input-search",
+      "name": "@legend-apps/text-input-search",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -595,10 +595,10 @@
       },
     },
     "packages/theme": {
-      "name": "@legend-desktop/theme",
+      "name": "@legend-apps/theme",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/markdown-document": "workspace:*",
+        "@legend-apps/markdown-document": "workspace:*",
         "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "0.5.0",
         "uniwind": "^1.6.3",
@@ -609,7 +609,7 @@
       },
     },
     "packages/virtualized-document": {
-      "name": "@legend-desktop/virtualized-document",
+      "name": "@legend-apps/virtualized-document",
       "version": "0.0.0",
       "dependencies": {
         "@legendapp/list": "catalog:",
@@ -621,7 +621,7 @@
       },
     },
     "packages/window-controls": {
-      "name": "@legend-desktop/window-controls",
+      "name": "@legend-apps/window-controls",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -629,7 +629,7 @@
       },
     },
     "packages/window-manager": {
-      "name": "@legend-desktop/window-manager",
+      "name": "@legend-apps/window-manager",
       "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
@@ -637,10 +637,10 @@
       },
     },
     "packages/windows": {
-      "name": "@legend-desktop/windows",
+      "name": "@legend-apps/windows",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/window-manager": "0.0.0",
+        "@legend-apps/window-manager": "0.0.0",
         "@legendapp/state": "catalog:",
       },
       "peerDependencies": {
@@ -652,7 +652,7 @@
       "name": "shell",
       "version": "0.0.0",
       "dependencies": {
-        "@legend-desktop/appkit-split-view": "0.0.0",
+        "@legend-apps/appkit-split-view": "0.0.0",
         "expo": "~54.0.33",
         "expo-status-bar": "~3.0.9",
         "react": "catalog:",
@@ -990,105 +990,105 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@legend-desktop/ai": ["@legend-desktop/ai@workspace:packages/ai"],
+    "@legend-apps/ai": ["@legend-apps/ai@workspace:packages/ai"],
 
-    "@legend-desktop/app-code": ["@legend-desktop/app-code@workspace:apps/code"],
+    "@legend-apps/app-code": ["@legend-apps/app-code@workspace:apps/code"],
 
-    "@legend-desktop/app-diff": ["@legend-desktop/app-diff@workspace:apps/diff"],
+    "@legend-apps/app-diff": ["@legend-apps/app-diff@workspace:apps/diff"],
 
-    "@legend-desktop/app-exit": ["@legend-desktop/app-exit@workspace:packages/app-exit"],
+    "@legend-apps/app-exit": ["@legend-apps/app-exit@workspace:packages/app-exit"],
 
-    "@legend-desktop/app-markdown": ["@legend-desktop/app-markdown@workspace:apps/markdown"],
+    "@legend-apps/app-markdown": ["@legend-apps/app-markdown@workspace:apps/markdown"],
 
-    "@legend-desktop/app-music": ["@legend-desktop/app-music@workspace:apps/music"],
+    "@legend-apps/app-music": ["@legend-apps/app-music@workspace:apps/music"],
 
-    "@legend-desktop/app-test-kitchen-sink": ["@legend-desktop/app-test-kitchen-sink@workspace:apps/test-kitchen-sink"],
+    "@legend-apps/app-test-kitchen-sink": ["@legend-apps/app-test-kitchen-sink@workspace:apps/test-kitchen-sink"],
 
-    "@legend-desktop/appearance-settings": ["@legend-desktop/appearance-settings@workspace:packages/appearance-settings"],
+    "@legend-apps/appearance-settings": ["@legend-apps/appearance-settings@workspace:packages/appearance-settings"],
 
-    "@legend-desktop/appkit-split-view": ["@legend-desktop/appkit-split-view@workspace:packages/appkit-split-view"],
+    "@legend-apps/appkit-split-view": ["@legend-apps/appkit-split-view@workspace:packages/appkit-split-view"],
 
-    "@legend-desktop/audio-player": ["@legend-desktop/audio-player@workspace:packages/audio-player"],
+    "@legend-apps/audio-player": ["@legend-apps/audio-player@workspace:packages/audio-player"],
 
-    "@legend-desktop/auto-updater": ["@legend-desktop/auto-updater@workspace:packages/auto-updater"],
+    "@legend-apps/auto-updater": ["@legend-apps/auto-updater@workspace:packages/auto-updater"],
 
-    "@legend-desktop/classnames": ["@legend-desktop/classnames@workspace:packages/classnames"],
+    "@legend-apps/classnames": ["@legend-apps/classnames@workspace:packages/classnames"],
 
-    "@legend-desktop/command-runner": ["@legend-desktop/command-runner@workspace:packages/command-runner"],
+    "@legend-apps/command-runner": ["@legend-apps/command-runner@workspace:packages/command-runner"],
 
-    "@legend-desktop/context-menu": ["@legend-desktop/context-menu@workspace:packages/context-menu"],
+    "@legend-apps/context-menu": ["@legend-apps/context-menu@workspace:packages/context-menu"],
 
-    "@legend-desktop/design-system": ["@legend-desktop/design-system@workspace:packages/design-system"],
+    "@legend-apps/design-system": ["@legend-apps/design-system@workspace:packages/design-system"],
 
-    "@legend-desktop/diff-parser": ["@legend-desktop/diff-parser@workspace:packages/diff-parser"],
+    "@legend-apps/diff-parser": ["@legend-apps/diff-parser@workspace:packages/diff-parser"],
 
-    "@legend-desktop/document-app": ["@legend-desktop/document-app@workspace:packages/document-app"],
+    "@legend-apps/document-app": ["@legend-apps/document-app@workspace:packages/document-app"],
 
-    "@legend-desktop/document-scanner": ["@legend-desktop/document-scanner@workspace:packages/document-scanner"],
+    "@legend-apps/document-scanner": ["@legend-apps/document-scanner@workspace:packages/document-scanner"],
 
-    "@legend-desktop/drag-drop": ["@legend-desktop/drag-drop@workspace:packages/drag-drop"],
+    "@legend-apps/drag-drop": ["@legend-apps/drag-drop@workspace:packages/drag-drop"],
 
-    "@legend-desktop/file-dialog": ["@legend-desktop/file-dialog@workspace:packages/file-dialog"],
+    "@legend-apps/file-dialog": ["@legend-apps/file-dialog@workspace:packages/file-dialog"],
 
-    "@legend-desktop/file-scanner": ["@legend-desktop/file-scanner@workspace:packages/file-scanner"],
+    "@legend-apps/file-scanner": ["@legend-apps/file-scanner@workspace:packages/file-scanner"],
 
-    "@legend-desktop/file-system-watcher": ["@legend-desktop/file-system-watcher@workspace:packages/file-system-watcher"],
+    "@legend-apps/file-system-watcher": ["@legend-apps/file-system-watcher@workspace:packages/file-system-watcher"],
 
-    "@legend-desktop/glass-effect-view": ["@legend-desktop/glass-effect-view@workspace:packages/glass-effect-view"],
+    "@legend-apps/glass-effect-view": ["@legend-apps/glass-effect-view@workspace:packages/glass-effect-view"],
 
-    "@legend-desktop/global-hotkey": ["@legend-desktop/global-hotkey@workspace:packages/global-hotkey"],
+    "@legend-apps/global-hotkey": ["@legend-apps/global-hotkey@workspace:packages/global-hotkey"],
 
-    "@legend-desktop/hotkeys": ["@legend-desktop/hotkeys@workspace:packages/hotkeys"],
+    "@legend-apps/hotkeys": ["@legend-apps/hotkeys@workspace:packages/hotkeys"],
 
-    "@legend-desktop/instrumentation": ["@legend-desktop/instrumentation@workspace:packages/instrumentation"],
+    "@legend-apps/instrumentation": ["@legend-apps/instrumentation@workspace:packages/instrumentation"],
 
-    "@legend-desktop/keyboard-manager": ["@legend-desktop/keyboard-manager@workspace:packages/keyboard-manager"],
+    "@legend-apps/keyboard-manager": ["@legend-apps/keyboard-manager@workspace:packages/keyboard-manager"],
 
-    "@legend-desktop/markdown-block-editor": ["@legend-desktop/markdown-block-editor@workspace:packages/markdown-block-editor"],
+    "@legend-apps/markdown-block-editor": ["@legend-apps/markdown-block-editor@workspace:packages/markdown-block-editor"],
 
-    "@legend-desktop/markdown-document": ["@legend-desktop/markdown-document@workspace:packages/markdown-document"],
+    "@legend-apps/markdown-document": ["@legend-apps/markdown-document@workspace:packages/markdown-document"],
 
-    "@legend-desktop/markdown-parser": ["@legend-desktop/markdown-parser@workspace:packages/markdown-parser"],
+    "@legend-apps/markdown-parser": ["@legend-apps/markdown-parser@workspace:packages/markdown-parser"],
 
-    "@legend-desktop/media-library-scanner": ["@legend-desktop/media-library-scanner@workspace:packages/media-library-scanner"],
+    "@legend-apps/media-library-scanner": ["@legend-apps/media-library-scanner@workspace:packages/media-library-scanner"],
 
-    "@legend-desktop/media-tags": ["@legend-desktop/media-tags@workspace:packages/media-tags"],
+    "@legend-apps/media-tags": ["@legend-apps/media-tags@workspace:packages/media-tags"],
 
-    "@legend-desktop/native-menu": ["@legend-desktop/native-menu@workspace:packages/native-menu"],
+    "@legend-apps/native-menu": ["@legend-apps/native-menu@workspace:packages/native-menu"],
 
-    "@legend-desktop/native-select": ["@legend-desktop/native-select@workspace:packages/native-select"],
+    "@legend-apps/native-select": ["@legend-apps/native-select@workspace:packages/native-select"],
 
-    "@legend-desktop/recent-documents": ["@legend-desktop/recent-documents@workspace:packages/recent-documents"],
+    "@legend-apps/recent-documents": ["@legend-apps/recent-documents@workspace:packages/recent-documents"],
 
-    "@legend-desktop/reorder-controls": ["@legend-desktop/reorder-controls@workspace:packages/reorder-controls"],
+    "@legend-apps/reorder-controls": ["@legend-apps/reorder-controls@workspace:packages/reorder-controls"],
 
-    "@legend-desktop/runtime-utils": ["@legend-desktop/runtime-utils@workspace:packages/runtime-utils"],
+    "@legend-apps/runtime-utils": ["@legend-apps/runtime-utils@workspace:packages/runtime-utils"],
 
-    "@legend-desktop/settings-window": ["@legend-desktop/settings-window@workspace:packages/settings-window"],
+    "@legend-apps/settings-window": ["@legend-apps/settings-window@workspace:packages/settings-window"],
 
-    "@legend-desktop/sf-symbol": ["@legend-desktop/sf-symbol@workspace:packages/sf-symbol"],
+    "@legend-apps/sf-symbol": ["@legend-apps/sf-symbol@workspace:packages/sf-symbol"],
 
-    "@legend-desktop/sidebar": ["@legend-desktop/sidebar@workspace:packages/sidebar"],
+    "@legend-apps/sidebar": ["@legend-apps/sidebar@workspace:packages/sidebar"],
 
-    "@legend-desktop/source-viewer": ["@legend-desktop/source-viewer@workspace:packages/source-viewer"],
+    "@legend-apps/source-viewer": ["@legend-apps/source-viewer@workspace:packages/source-viewer"],
 
-    "@legend-desktop/storage": ["@legend-desktop/storage@workspace:packages/storage"],
+    "@legend-apps/storage": ["@legend-apps/storage@workspace:packages/storage"],
 
-    "@legend-desktop/syntax-parser": ["@legend-desktop/syntax-parser@workspace:packages/syntax-parser"],
+    "@legend-apps/syntax-parser": ["@legend-apps/syntax-parser@workspace:packages/syntax-parser"],
 
-    "@legend-desktop/syntax-settings": ["@legend-desktop/syntax-settings@workspace:packages/syntax-settings"],
+    "@legend-apps/syntax-settings": ["@legend-apps/syntax-settings@workspace:packages/syntax-settings"],
 
-    "@legend-desktop/text-input-search": ["@legend-desktop/text-input-search@workspace:packages/text-input-search"],
+    "@legend-apps/text-input-search": ["@legend-apps/text-input-search@workspace:packages/text-input-search"],
 
-    "@legend-desktop/theme": ["@legend-desktop/theme@workspace:packages/theme"],
+    "@legend-apps/theme": ["@legend-apps/theme@workspace:packages/theme"],
 
-    "@legend-desktop/virtualized-document": ["@legend-desktop/virtualized-document@workspace:packages/virtualized-document"],
+    "@legend-apps/virtualized-document": ["@legend-apps/virtualized-document@workspace:packages/virtualized-document"],
 
-    "@legend-desktop/window-controls": ["@legend-desktop/window-controls@workspace:packages/window-controls"],
+    "@legend-apps/window-controls": ["@legend-apps/window-controls@workspace:packages/window-controls"],
 
-    "@legend-desktop/window-manager": ["@legend-desktop/window-manager@workspace:packages/window-manager"],
+    "@legend-apps/window-manager": ["@legend-apps/window-manager@workspace:packages/window-manager"],
 
-    "@legend-desktop/windows": ["@legend-desktop/windows@workspace:packages/windows"],
+    "@legend-apps/windows": ["@legend-apps/windows@workspace:packages/windows"],
 
     "@legendapp/list": ["@legendapp/list@3.3.1", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*", "react-dom": "*", "react-native": "*" }, "optionalPeers": ["react-dom", "react-native"] }, "sha512-qBzrjRB5fkza2dFjbB6p9pn70vgHjiISKt2NgW8AGEeGt7d69rtPPDgp4FsbF7sATc34tPPeaToW57pM/8vc9w=="],
 

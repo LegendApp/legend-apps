@@ -3,7 +3,7 @@ import { type Animated, ScrollView, View } from "react-native";
 
 import { EffectView } from "./EffectView";
 import { SidebarButton } from "./SidebarButton";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 export interface SidebarHeadingT {
     type: "heading";

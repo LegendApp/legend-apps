@@ -1,4 +1,4 @@
-import { commandRunner, type CommandRunner } from "@legend-desktop/command-runner";
+import { commandRunner, type CommandRunner } from "@legend-apps/command-runner";
 
 export type DiffMergeConflictStage = {
   mode: string;

@@ -9,8 +9,8 @@ import { Icon } from "../systems/Icon";
 import { localMusicState$ } from "../systems/LocalMusicState";
 import { setIsScrubbing } from "../systems/PlaybackInteractionState";
 import { type PlaybackControlId, settings$ } from "../systems/Settings";
-import { cn } from "@legend-desktop/classnames";
-import { perfCount } from "@legend-desktop/runtime-utils";
+import { cn } from "@legend-apps/classnames";
+import { perfCount } from "@legend-apps/runtime-utils";
 
 export type OverlayPlaybackMode = {
     enabled: boolean;

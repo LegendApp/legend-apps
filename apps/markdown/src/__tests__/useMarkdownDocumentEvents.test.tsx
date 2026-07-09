@@ -1,6 +1,6 @@
 import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { addAppExitListener, completeAppExit } from "@legend-desktop/app-exit";
+import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import {
   getLastMarkdownDocumentPath,
@@ -13,16 +13,16 @@ const mockCompleteAppExit = completeAppExit as jest.MockedFunction<typeof comple
 const mockGetLastMarkdownDocumentPath = getLastMarkdownDocumentPath as jest.MockedFunction<typeof getLastMarkdownDocumentPath>;
 const mockGetMarkdownStartupBehaviorSetting = getMarkdownStartupBehaviorSetting as jest.MockedFunction<typeof getMarkdownStartupBehaviorSetting>;
 
-jest.mock("@legend-desktop/app-exit", () => ({
+jest.mock("@legend-apps/app-exit", () => ({
   addAppExitListener: jest.fn(),
   completeAppExit: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/recent-documents", () => ({
+jest.mock("@legend-apps/recent-documents", () => ({
   addRecentDocumentOpenListener: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/window-manager", () => ({
+jest.mock("@legend-apps/window-manager", () => ({
   addWindowCloseRequestedListener: jest.fn(),
 }));
 

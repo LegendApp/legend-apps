@@ -1,8 +1,8 @@
 import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
-import { useNativeMenu } from "@legend-desktop/native-menu";
-import { addWindowClosedListener } from "@legend-desktop/window-manager";
+import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
+import { useNativeMenu } from "@legend-apps/native-menu";
+import { addWindowClosedListener } from "@legend-apps/window-manager";
 import { editorWindowIdentifier } from "../appConstants";
 import { App } from "../App";
 import { registerMarkdownEditorMenuHandlers, registerMarkdownEditorRecentDocumentHandler } from "../markdownEditorActions";
@@ -14,19 +14,19 @@ const mockAddWindowClosedListener = addWindowClosedListener as jest.MockedFuncti
 const mockUseNativeMenu = useNativeMenu as jest.MockedFunction<typeof useNativeMenu>;
 const mockOpenMarkdownEditorWindow = openMarkdownEditorWindow as jest.MockedFunction<typeof openMarkdownEditorWindow>;
 
-jest.mock("@legend-desktop/file-dialog", () => ({
+jest.mock("@legend-apps/file-dialog", () => ({
   openFileDialog: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/native-menu", () => ({
+jest.mock("@legend-apps/native-menu", () => ({
   useNativeMenu: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/recent-documents", () => ({
+jest.mock("@legend-apps/recent-documents", () => ({
   addRecentDocumentOpenListener: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/window-manager", () => ({
+jest.mock("@legend-apps/window-manager", () => ({
   addWindowClosedListener: jest.fn(),
 }));
 

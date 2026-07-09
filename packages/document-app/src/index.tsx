@@ -1,8 +1,8 @@
-import { openFileDialog } from "@legend-desktop/file-dialog";
-import { watchFiles } from "@legend-desktop/file-system-watcher";
-import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legend-desktop/native-menu";
-import { addRecentDocumentOpenListener } from "@legend-desktop/recent-documents";
-import { addApplicationReopenRequestedListener, addWindowClosedListener } from "@legend-desktop/window-manager";
+import { openFileDialog } from "@legend-apps/file-dialog";
+import { watchFiles } from "@legend-apps/file-system-watcher";
+import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legend-apps/native-menu";
+import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
+import { addApplicationReopenRequestedListener, addWindowClosedListener } from "@legend-apps/window-manager";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type DocumentAppController = {

@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffRenderRow, DiffSideBySideFileHeader, DiffSideBySideRenderRow } from "@legend-desktop/diff-parser";
+import type { DiffFileSummary, DiffRenderRow, DiffSideBySideFileHeader, DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
 import {
   createCollapsedFileIndexList,
   createIdentityDiffRowIndexes,

@@ -1,6 +1,6 @@
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
-import { useStableCallback } from "@legend-desktop/runtime-utils";
+import { useStableCallback } from "@legend-apps/runtime-utils";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { playlistNavigationState$ } from "../state/playlistNavigationState";
 import { keysPressed$, useOnHotkeys } from "../systems/keyboard/Keyboard";

@@ -113,7 +113,7 @@ async function main() {
       ...launchArgs,
     ]);
 
-    runAgent(["open", "app.legend.markdown.macos", "--surface", "app", "--no-record"]);
+    runAgent(["open", "so.legend.markdown.macos", "--surface", "app", "--no-record"]);
     runAgent(["perf", "metrics", "--json"], { capturePath: path.join(profileDir, "metrics-before.json") });
     runAgent(["perf", "frames", "--json"], { capturePath: path.join(profileDir, "frames-before.json") });
     runAgent(["perf", "cpu", "profile", "start", "--kind", "xctrace", "--out", tracePath]);

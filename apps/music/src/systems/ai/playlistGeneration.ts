@@ -2,8 +2,8 @@ import {
     getAICommandAvailability,
     runAITool,
     type AIToolRunResult,
-} from "@legend-desktop/ai";
-import { commandRunner, type CommandRunner } from "@legend-desktop/command-runner";
+} from "@legend-apps/ai";
+import { commandRunner, type CommandRunner } from "@legend-apps/command-runner";
 import type { LocalTrack } from "../LocalMusicState";
 import { buildPlaylistAICatalog } from "./libraryCatalog";
 import { parsePlaylistAISuggestions } from "./parser";

@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace diffparser = margelo::nitro::legenddesktop::diffparser;
+namespace diffparser = margelo::nitro::legendapps::diffparser;
 
 namespace {
 

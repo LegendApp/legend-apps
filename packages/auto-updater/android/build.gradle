@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.autoupdater"
+  namespace "so.legend.apps.autoupdater"
   compileSdkVersion 35
 
   defaultConfig {

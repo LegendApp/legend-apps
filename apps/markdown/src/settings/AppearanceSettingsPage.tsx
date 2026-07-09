@@ -1,10 +1,10 @@
-import { SegmentedOptions, SelectControl } from "@legend-desktop/design-system";
-import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-desktop/theme";
+import { SegmentedOptions, SelectControl } from "@legend-apps/design-system";
+import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-apps/theme";
 import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
-} from "@legend-desktop/settings-window";
+} from "@legend-apps/settings-window";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import {

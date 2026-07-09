@@ -18,11 +18,11 @@ import { AppMenuController } from "./systems/AppMenu";
 import { HookKeyboard } from "./systems/keyboard/HookKeyboard";
 import { hydrateLibraryFromCache } from "./systems/LibraryState";
 import { initializeLocalMusic } from "./systems/LocalMusicState";
-import { perfCount, perfMark } from "@legend-desktop/runtime-utils";
-import { runAfterInteractionsWithLabel } from "@legend-desktop/runtime-utils";
+import { perfCount, perfMark } from "@legend-apps/runtime-utils";
+import { runAfterInteractionsWithLabel } from "@legend-apps/runtime-utils";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { WindowsNavigator } from "./windows";
-import { WindowProvider } from "@legend-desktop/windows";
+import { WindowProvider } from "@legend-apps/windows";
 
 LogBox.ignoreLogs(["Open debugger", "unknown error"]);
 

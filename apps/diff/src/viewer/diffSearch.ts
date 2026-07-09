@@ -1,4 +1,4 @@
-import type { DiffDocument, DiffFileSummary, DiffRenderRow } from "@legend-desktop/diff-parser";
+import type { DiffDocument, DiffFileSummary, DiffRenderRow } from "@legend-apps/diff-parser";
 import { diffRowKindFileHeader } from "./diffViewerConstants";
 
 export type DiffSearchMode = "content" | "file";

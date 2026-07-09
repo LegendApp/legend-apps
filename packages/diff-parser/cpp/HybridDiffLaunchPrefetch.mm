@@ -6,7 +6,7 @@
 #include <optional>
 #include <utility>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 namespace {
 
@@ -55,7 +55,7 @@ void startLaunchPrefetchedUnifiedDiffUrl(
   }
 }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace {
 
@@ -168,7 +168,7 @@ bool shouldLaunchPrefetchDiffUrl() {
     appId = [infoValue isKindOfClass:NSString.class] ? infoValue : nil;
   }
   NSString* bundleIdentifier = NSBundle.mainBundle.bundleIdentifier;
-  return [appId isEqualToString:@"diff"] || [bundleIdentifier isEqualToString:@"app.legend.diff.macos"];
+  return [appId isEqualToString:@"diff"] || [bundleIdentifier isEqualToString:@"so.legend.diff.macos"];
 }
 
 void startLaunchDiffUrlPrefetchIfNeeded() {
@@ -184,7 +184,7 @@ void startLaunchDiffUrlPrefetchIfNeeded() {
     if (value.length > 0) {
       auto normalized = normalizeGithubLaunchDiffUrl(value);
       if (normalized.has_value()) {
-        margelo::nitro::legenddesktop::diffparser::startLaunchPrefetchedUnifiedDiffUrl(
+        margelo::nitro::legendapps::diffparser::startLaunchPrefetchedUnifiedDiffUrl(
             normalized->diffUrl,
             normalized->sourceLabel);
       }

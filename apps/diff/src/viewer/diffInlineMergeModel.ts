@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffSideBySideFileHeader } from "@legend-desktop/diff-parser";
+import type { DiffFileSummary, DiffSideBySideFileHeader } from "@legend-apps/diff-parser";
 import type { DiffViewMode } from "../diffSettings";
 import type { DiffMergeConflictFile, DiffMergeDisplayModel, DiffMergeDisplayRow } from "../diffMerge";
 

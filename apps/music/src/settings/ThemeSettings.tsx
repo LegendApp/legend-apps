@@ -12,7 +12,7 @@ import {
 } from "../systems/Settings";
 import { themeState$, useTheme } from "../theme/ThemeProvider";
 import { getMusicTheme, musicThemeOptions, type MusicThemeName } from "../theme/musicThemes";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 function applyMusicTheme(themeName: MusicThemeName) {
     const theme = getMusicTheme(themeName);

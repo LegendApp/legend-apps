@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
 import { Button } from "./Button";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 type ToastType = "info" | "error";
 

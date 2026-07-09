@@ -14,15 +14,15 @@
 #endif
 
 // Forward declaration of `HybridDiffDocumentSpec` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { class HybridDiffDocumentSpec; }
+namespace margelo::nitro::legendapps::diffparser { class HybridDiffDocumentSpec; }
 // Forward declaration of `DiffLoadProgress` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadProgress; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffLoadProgress; }
 
 #include <memory>
 #include "HybridDiffDocumentSpec.hpp"
 #include "DiffLoadProgress.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   using namespace margelo::nitro;
 
@@ -66,4 +66,4 @@ namespace margelo::nitro::legenddesktop::diffparser {
       static constexpr auto TAG = "DiffLoadSession";
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

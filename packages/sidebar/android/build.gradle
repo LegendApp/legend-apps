@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.sidebar"
+  namespace "so.legend.apps.sidebar"
   compileSdkVersion 35
 
   defaultConfig {

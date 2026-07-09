@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffSideBySideFileHeader).
@@ -51,22 +51,22 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffSideBySideFileHeader& lhs, const DiffSideBySideFileHeader& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffSideBySideFileHeader <> JS DiffSideBySideFileHeader (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffSideBySideFileHeader> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffSideBySideFileHeader fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffSideBySideFileHeader> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffSideBySideFileHeader fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffSideBySideFileHeader(
+      return margelo::nitro::legendapps::diffparser::DiffSideBySideFileHeader(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileIndex"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceStart"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "listIndex")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffSideBySideFileHeader& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffSideBySideFileHeader& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "fileIndex"), JSIConverter<double>::toJSI(runtime, arg.fileIndex));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceStart"), JSIConverter<double>::toJSI(runtime, arg.sourceStart));

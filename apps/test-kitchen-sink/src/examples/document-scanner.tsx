@@ -1,5 +1,5 @@
-import { addDocumentScannerListener, scanDocuments } from "@legend-desktop/document-scanner";
-import { openFileDialog } from "@legend-desktop/file-dialog";
+import { addDocumentScannerListener, scanDocuments } from "@legend-apps/document-scanner";
+import { openFileDialog } from "@legend-apps/file-dialog";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, formatFirstPaths, styles } from "./shared";

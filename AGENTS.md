@@ -19,7 +19,7 @@ Use Bun from the repo root.
 
 ## Coding Style & Naming Conventions
 
-TypeScript is strict, ESM-based, and uses React JSX (`react-jsx`). Follow the existing style: two-space indentation, double quotes, semicolons, and named exports for package APIs. Package names use `@legend-desktop/<kebab-name>`. Native module files follow the existing `Native<Name>.ts`, `RN<Name>.podspec`, and platform class naming patterns.
+TypeScript is strict, ESM-based, and uses React JSX (`react-jsx`). Follow the existing style: two-space indentation, double quotes, semicolons, and named exports for package APIs. Package names use `@legend-apps/<kebab-name>`. Native module files follow the existing `Native<Name>.ts`, `RN<Name>.podspec`, and platform class naming patterns.
 
 ## UI Styling
 
@@ -70,7 +70,7 @@ Use the normal `agent-device logs clear --restart` / `mark before` / repro / `ma
 - Verify there is exactly one current debug app process, and that it comes from `DerivedData/.../Build/Products/Debug/...`, not `shell/.legend/workspaces/release/...`.
 - Bind with `agent-device open <bundle-id-or-app-name> --session <name> --platform macos --surface app` and verify the process path separately. Avoid `--surface frontmost-app` unless the user is explicitly asking to inspect whichever app is currently frontmost.
 - If `app.log` only contains `agent-device` markers, confirm `logs path` reports `active=true`, the debug prefix was emitted after `logs clear --restart`, and the session is bound to the correct app.
-- For temporary instrumentation that must be visible in `agent-device logs` on macOS, prefer native unified logging with the app bundle id subsystem, for example `os_log_create("app.legend.markdown.macos", "debug-category")`. Plain `NSLog` can be missed by the app-scoped filter.
+- For temporary instrumentation that must be visible in `agent-device logs` on macOS, prefer native unified logging with the app bundle id subsystem, for example `os_log_create("so.legend.markdown.macos", "debug-category")`. Plain `NSLog` can be missed by the app-scoped filter.
 - If JS-side timing is required and app logs do not include it, try `agent-device react-devtools ...` before falling back to file-backed logging.
 
 ### macOS Dev App Pitfalls
@@ -84,7 +84,7 @@ Before a native rebuild/relaunch, close the running app first. If the app is alr
 
 Do not rely on `agent-device open <bundle-id>` as the primary way to launch current code. For generated macOS apps it can bind to a stale release build under `shell/.legend/workspaces/release/...`, which will not contain current JS/native changes. After launching, verify the running process when behavior or logs look stale:
 
-- `ps -axo pid,lstart,command | rg "legendapp-shell-macos|Legend Markdown|Legend Music|app.legend.(music|markdown)"`
+- `ps -axo pid,lstart,command | rg "legendapp-shell-macos|Legend Markdown|Legend Music|so.legend.(music|markdown)"`
 - Debug/current builds should run from Xcode `DerivedData/.../Build/Products/Debug/legendapp-shell-macos.app/...`.
 - Stale release builds usually run from `shell/.legend/workspaces/release/<app>/macos/.../<Display Name>.app/...`.
 

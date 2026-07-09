@@ -1,12 +1,12 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import { AutoUpdater } from "@legend-desktop/auto-updater";
+import { AutoUpdater } from "@legend-apps/auto-updater";
 import {
     clearMenus,
     configureMenus,
     type NativeMenuAction,
     updateMenuItems,
-} from "@legend-desktop/native-menu";
+} from "@legend-apps/native-menu";
 
 import { localAudioControls, localPlayerState$, queue$ } from "../../components/LocalAudioPlayer";
 import { savePlaylistUI$ } from "../../state/savePlaylistUIState";
@@ -18,7 +18,7 @@ import { KeyCodes } from "../keyboard/KeyboardManager";
 import type { LocalTrack } from "../LocalMusicState";
 
 const menuOwnerId = "music";
-const { __emitNativeMenuAction } = require("@legend-desktop/native-menu") as {
+const { __emitNativeMenuAction } = require("@legend-apps/native-menu") as {
     __emitNativeMenuAction(action: NativeMenuAction): void;
 };
 

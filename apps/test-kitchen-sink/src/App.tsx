@@ -1,8 +1,8 @@
 import {
   addKitchenSinkMenuListener,
   configureKitchenSinkMenus,
-} from "@legend-desktop/appkit-split-view";
-import { openWindow } from "@legend-desktop/window-manager";
+} from "@legend-apps/appkit-split-view";
+import { openWindow } from "@legend-apps/window-manager";
 import { useEffect, useState } from "react";
 import { AppRegistry, Pressable, ScrollView, Text, View } from "react-native";
 import shellPackage from "../../../shell/package.json";

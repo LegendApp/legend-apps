@@ -13,30 +13,30 @@ import {
 
 describe("diffFiles", () => {
   it("uses the last path segment as the filename", () => {
-    expect(getFilename("/Users/jay/code/legend-desktop")).toBe("legend-desktop");
-    expect(getFilename("legend-desktop")).toBe("legend-desktop");
+    expect(getFilename("/Users/jay/code/legend-apps")).toBe("legend-apps");
+    expect(getFilename("legend-apps")).toBe("legend-apps");
   });
 
   it("normalizes local paths and file URLs as folder sources", () => {
-    expect(normalizeDiffOpenSource("/Users/jay/code/legend-desktop")).toEqual({
+    expect(normalizeDiffOpenSource("/Users/jay/code/legend-apps")).toEqual({
       kind: "folder",
-      label: "legend-desktop",
-      value: "/Users/jay/code/legend-desktop",
+      label: "legend-apps",
+      value: "/Users/jay/code/legend-apps",
     });
     expect(normalizeDiffOpenSource("file:///Users/jay/My%20Repo")).toEqual({
       kind: "folder",
       label: "My Repo",
       value: "/Users/jay/My Repo",
     });
-    expect(normalizeDiffOpenSource(".", "/Users/jay/code/legend-desktop")).toEqual({
+    expect(normalizeDiffOpenSource(".", "/Users/jay/code/legend-apps")).toEqual({
       kind: "folder",
-      label: "legend-desktop",
-      value: "/Users/jay/code/legend-desktop",
+      label: "legend-apps",
+      value: "/Users/jay/code/legend-apps",
     });
-    expect(normalizeDiffOpenSource("packages/diff-parser", "/Users/jay/code/legend-desktop")).toEqual({
+    expect(normalizeDiffOpenSource("packages/diff-parser", "/Users/jay/code/legend-apps")).toEqual({
       kind: "folder",
       label: "diff-parser",
-      value: "/Users/jay/code/legend-desktop/packages/diff-parser",
+      value: "/Users/jay/code/legend-apps/packages/diff-parser",
     });
   });
 
@@ -54,17 +54,17 @@ describe("diffFiles", () => {
   });
 
   it("normalizes supported GitHub pull and commit URLs", () => {
-    expect(normalizeDiffOpenSource("github.com/legendapp/legend-desktop/pull/123")).toEqual({
-      diffUrl: "https://github.com/legendapp/legend-desktop/pull/123.diff",
+    expect(normalizeDiffOpenSource("github.com/legendapp/legend-apps/pull/123")).toEqual({
+      diffUrl: "https://github.com/legendapp/legend-apps/pull/123.diff",
       kind: "github",
-      label: "legendapp/legend-desktop#123",
-      value: "https://github.com/legendapp/legend-desktop/pull/123",
+      label: "legendapp/legend-apps#123",
+      value: "https://github.com/legendapp/legend-apps/pull/123",
     });
-    expect(normalizeDiffOpenSource("https://github.com/legendapp/legend-desktop/commit/abcdef123456.diff")).toEqual({
-      diffUrl: "https://github.com/legendapp/legend-desktop/commit/abcdef123456.diff",
+    expect(normalizeDiffOpenSource("https://github.com/legendapp/legend-apps/commit/abcdef123456.diff")).toEqual({
+      diffUrl: "https://github.com/legendapp/legend-apps/commit/abcdef123456.diff",
       kind: "github",
-      label: "legendapp/legend-desktop@abcdef1",
-      value: "https://github.com/legendapp/legend-desktop/commit/abcdef123456",
+      label: "legendapp/legend-apps@abcdef1",
+      value: "https://github.com/legendapp/legend-apps/commit/abcdef123456",
     });
   });
 
@@ -75,10 +75,10 @@ describe("diffFiles", () => {
 
   it("preserves already-normalized source objects", () => {
     const source: DiffOpenSource = {
-      diffUrl: "https://github.com/legendapp/legend-desktop/pull/1.diff",
+      diffUrl: "https://github.com/legendapp/legend-apps/pull/1.diff",
       kind: "github",
-      label: "legendapp/legend-desktop#1",
-      value: "https://github.com/legendapp/legend-desktop/pull/1",
+      label: "legendapp/legend-apps#1",
+      value: "https://github.com/legendapp/legend-apps/pull/1",
     };
     expect(normalizeDiffOpenSource(source)).toBe(source);
   });

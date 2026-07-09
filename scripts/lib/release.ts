@@ -3,7 +3,7 @@ import { rootDir } from "./apps";
 import type { AppManifest, AppPackageMetadata } from "./types";
 
 const githubOwner = "LegendApp";
-const githubRepo = "legend-desktop";
+const githubRepo = "legend-apps";
 const githubBranch = "main";
 
 export function getMacOSReleaseVersion(appPackage: AppPackageMetadata) {

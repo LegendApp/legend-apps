@@ -1,4 +1,4 @@
-import { GlassEffectView, type GlassEffectStyle } from "@legend-desktop/glass-effect-view";
+import { GlassEffectView, type GlassEffectStyle } from "@legend-apps/glass-effect-view";
 import type { ReactNode } from "react";
 import type { ColorValue, ViewProps } from "react-native";
 

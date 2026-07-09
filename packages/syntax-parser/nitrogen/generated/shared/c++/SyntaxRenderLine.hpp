@@ -29,13 +29,13 @@
 #endif
 
 // Forward declaration of `SyntaxTokenRun` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxTokenRun; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxTokenRun; }
 
 #include <string>
 #include "SyntaxTokenRun.hpp"
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   /**
    * A struct which can be represented as a JavaScript object (SyntaxRenderLine).
@@ -54,26 +54,26 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     friend bool operator==(const SyntaxRenderLine& lhs, const SyntaxRenderLine& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser
 
 namespace margelo::nitro {
 
   // C++ SyntaxRenderLine <> JS SyntaxRenderLine (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine> final {
-    static inline margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine> final {
+    static inline margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine(
+      return margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "text"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))
+        JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "text"), JSIConverter<std::string>::toJSI(runtime, arg.text));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokens"), JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun>>::toJSI(runtime, arg.tokens));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokens"), JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun>>::toJSI(runtime, arg.tokens));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -86,7 +86,7 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "text")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))) return false;
       return true;
     }
   };

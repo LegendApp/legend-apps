@@ -22,7 +22,7 @@
 #include <os/log.h>
 #endif
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 struct DiffTokenizedSourceState {
   std::shared_ptr<syntaxparser::TextMateHighlighterContext> context;
@@ -70,7 +70,7 @@ void clearStringMemory(std::string& value) {
 
 #ifdef __APPLE__
 os_log_t diffMemoryLog() {
-  static os_log_t log = os_log_create("app.legend.diff.macos", "memory");
+  static os_log_t log = os_log_create("so.legend.diff.macos", "memory");
   return log;
 }
 
@@ -1979,4 +1979,4 @@ std::shared_ptr<HybridDiffDocument> getRegisteredDiffDocument(double documentId)
   return document;
 }
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

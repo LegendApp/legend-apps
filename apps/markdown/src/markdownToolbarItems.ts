@@ -1,4 +1,4 @@
-import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
+import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 
 export type MarkdownToolbarItem = {
   id: MarkdownToolbarItemId;

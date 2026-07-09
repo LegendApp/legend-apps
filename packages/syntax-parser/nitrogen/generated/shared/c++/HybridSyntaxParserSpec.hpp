@@ -14,16 +14,16 @@
 #endif
 
 // Forward declaration of `SyntaxHighlightResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxHighlightResult; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxHighlightResult; }
 // Forward declaration of `SyntaxFileLoadResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxFileLoadResult; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxFileLoadResult; }
 
 #include "SyntaxHighlightResult.hpp"
 #include <NitroModules/Promise.hpp>
 #include <string>
 #include "SyntaxFileLoadResult.hpp"
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   using namespace margelo::nitro;
 
@@ -66,4 +66,4 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
       static constexpr auto TAG = "SyntaxParser";
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

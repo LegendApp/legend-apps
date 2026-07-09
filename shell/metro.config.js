@@ -23,7 +23,7 @@ config.watchFolders = [
 
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules || {}),
-  "@legend-desktop/app": appSrc,
+  "@legend-apps/app": appSrc,
 };
 
 config.resolver.platforms = [...new Set([...(config.resolver.platforms || []), "macos"])];
@@ -32,7 +32,7 @@ config.resolver.unstable_conditionsByPlatform = {
   macos: ["react-native"],
 };
 config.resolver.useWatchman = false;
-config.cacheVersion = `legend-desktop-${appId}-${process.env.LEGEND_PLATFORM || "native"}`;
+config.cacheVersion = `legend-apps-${appId}-${process.env.LEGEND_PLATFORM || "native"}`;
 
 delete config.watcher?.unstable_workerThreads;
 

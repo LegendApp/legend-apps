@@ -1,4 +1,4 @@
-import { commandRunner } from "@legend-desktop/command-runner";
+import { commandRunner } from "@legend-apps/command-runner";
 import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";

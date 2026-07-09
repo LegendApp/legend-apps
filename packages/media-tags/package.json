@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/media-tags",
+  "name": "@legend-apps/media-tags",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.mediatags"
+      "javaPackageName": "so.legend.apps.mediatags"
     },
     "ios": {
       "modulesProvider": {

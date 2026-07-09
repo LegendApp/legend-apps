@@ -1,5 +1,5 @@
-import type { MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
-import { getLegendDisplayTheme } from "@legend-desktop/theme";
+import type { MarkdownSelectionAnchor } from "@legend-apps/markdown-document";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import {
   Pressable,
   StyleSheet,

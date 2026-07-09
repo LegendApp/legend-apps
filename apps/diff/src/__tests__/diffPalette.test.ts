@@ -1,5 +1,5 @@
-import type { LegendDisplayThemeColors } from "@legend-desktop/theme";
-import type { SyntaxTheme } from "@legend-desktop/syntax-parser";
+import type { LegendDisplayThemeColors } from "@legend-apps/theme";
+import type { SyntaxTheme } from "@legend-apps/syntax-parser";
 import { getDiffPalette } from "../diffPalette";
 
 const displayColors: LegendDisplayThemeColors = {

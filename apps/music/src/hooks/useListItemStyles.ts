@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 export type ListItemVariant = "default" | "compact";
 

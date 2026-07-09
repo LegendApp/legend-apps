@@ -2,10 +2,10 @@ import { useMount, useObserveEffect } from "@legendapp/state/react";
 import { useCallback } from "react";
 import { Dimensions } from "react-native";
 
-import { useWindowManager } from "@legend-desktop/window-manager";
+import { useWindowManager } from "@legend-apps/window-manager";
 import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { stateSaved$ } from "../systems/State";
-import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
+import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
 
 const MEDIA_LIBRARY_WINDOW_KEY = "MediaLibraryWindow" as const;

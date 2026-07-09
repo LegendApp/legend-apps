@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffLoadTiming).
@@ -59,16 +59,16 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffLoadTiming& lhs, const DiffLoadTiming& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffLoadTiming <> JS DiffLoadTiming (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffLoadTiming fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffLoadTiming> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffLoadTiming fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffLoadTiming(
+      return margelo::nitro::legendapps::diffparser::DiffLoadTiming(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "diffMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fetchMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "openRepoMs"))),
@@ -82,7 +82,7 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileCount")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffLoadTiming& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffLoadTiming& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "diffMs"), JSIConverter<double>::toJSI(runtime, arg.diffMs));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "fetchMs"), JSIConverter<double>::toJSI(runtime, arg.fetchMs));

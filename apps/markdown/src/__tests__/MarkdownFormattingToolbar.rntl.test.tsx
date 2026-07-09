@@ -1,6 +1,6 @@
 import { fireEvent, render } from "@testing-library/react-native";
 import React, { createRef } from "react";
-import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
+import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { MarkdownFormattingToolbar } from "../MarkdownFormattingToolbar";
 
 const mockToolbarLayouts = {

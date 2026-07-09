@@ -6,7 +6,7 @@ import { Icon } from "../systems/Icon";
 import { startNavMeasurement } from "../systems/NavTime";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import type { SFSymbols } from "../types/SFSymbols";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 import { useTooltip } from "./TooltipProvider";
 
 const DOUBLE_CLICK_DURATION = 300;

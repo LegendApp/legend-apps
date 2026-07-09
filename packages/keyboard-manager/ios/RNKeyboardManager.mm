@@ -35,7 +35,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   if (self = [super init]) {
 #if TARGET_OS_OSX
     _eventResponses = [NSMutableDictionary dictionary];
-    _eventResponseQueue = dispatch_queue_create("com.legenddesktop.keyboard.responses", DISPATCH_QUEUE_CONCURRENT);
+    _eventResponseQueue = dispatch_queue_create("so.legend.apps.keyboard.responses", DISPATCH_QUEUE_CONCURRENT);
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(applicationWillTerminate:)
                                                name:NSApplicationWillTerminateNotification

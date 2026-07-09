@@ -6,7 +6,7 @@ import {
   type MarkdownBlockMetadata as NativeMarkdownBlockMetadata,
   type MarkdownRenderBlock,
   type MarkdownTransactionResult as NativeMarkdownTransactionResult,
-} from "@legend-desktop/markdown-parser";
+} from "@legend-apps/markdown-parser";
 import type {
   MarkdownBlockMetadata,
   MarkdownBlockSnapshot,

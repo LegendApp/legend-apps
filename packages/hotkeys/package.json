@@ -1,13 +1,13 @@
 {
-  "name": "@legend-desktop/hotkeys",
+  "name": "@legend-apps/hotkeys",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
-    "@legend-desktop/classnames": "0.0.0",
-    "@legend-desktop/keyboard-manager": "0.0.0",
-    "@legend-desktop/native-menu": "0.0.0"
+    "@legend-apps/classnames": "0.0.0",
+    "@legend-apps/keyboard-manager": "0.0.0",
+    "@legend-apps/native-menu": "0.0.0"
   },
   "peerDependencies": {
     "react": "catalog:",

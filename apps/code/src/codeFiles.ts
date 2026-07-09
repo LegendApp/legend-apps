@@ -1,4 +1,4 @@
-import { getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legend-desktop/document-app";
+import { getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legend-apps/document-app";
 import { codeFileTypes } from "./appConstants";
 
 export function isCodePath(path: string) {

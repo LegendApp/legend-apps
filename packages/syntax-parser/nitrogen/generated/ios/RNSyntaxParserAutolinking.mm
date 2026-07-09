@@ -19,7 +19,7 @@
 
 + (void) load {
   using namespace margelo::nitro;
-  using namespace margelo::nitro::legenddesktop::syntaxparser;
+  using namespace margelo::nitro::legendapps::syntaxparser;
 
   HybridObjectRegistry::registerHybridObjectConstructor(
     "SyntaxParser",

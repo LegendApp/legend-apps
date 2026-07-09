@@ -14,15 +14,15 @@
 #endif
 
 // Forward declaration of `MarkdownBlockMetadata` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownBlockMetadata; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownBlockMetadata; }
 // Forward declaration of `MarkdownRenderBlock` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownRenderBlock; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownRenderBlock; }
 // Forward declaration of `MarkdownDocumentTiming` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownDocumentTiming; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownDocumentTiming; }
 // Forward declaration of `MarkdownTransactionResult` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransactionResult; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownTransactionResult; }
 // Forward declaration of `MarkdownTransaction` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransaction; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownTransaction; }
 
 #include <string>
 #include <vector>
@@ -32,7 +32,7 @@ namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownTransac
 #include "MarkdownTransactionResult.hpp"
 #include "MarkdownTransaction.hpp"
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   using namespace margelo::nitro;
 
@@ -85,4 +85,4 @@ namespace margelo::nitro::legenddesktop::markdownparser {
       static constexpr auto TAG = "MarkdownDocument";
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

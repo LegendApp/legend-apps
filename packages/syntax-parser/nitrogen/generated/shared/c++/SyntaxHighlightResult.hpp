@@ -29,18 +29,18 @@
 #endif
 
 // Forward declaration of `SyntaxRenderLine` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxRenderLine; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxRenderLine; }
 // Forward declaration of `SyntaxStyle` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxStyle; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxStyle; }
 // Forward declaration of `SyntaxHighlightTiming` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxHighlightTiming; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxHighlightTiming; }
 
 #include "SyntaxRenderLine.hpp"
 #include <vector>
 #include "SyntaxStyle.hpp"
 #include "SyntaxHighlightTiming.hpp"
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   /**
    * A struct which can be represented as a JavaScript object (SyntaxHighlightResult).
@@ -59,26 +59,26 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     friend bool operator==(const SyntaxHighlightResult& lhs, const SyntaxHighlightResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser
 
 namespace margelo::nitro {
 
   // C++ SyntaxHighlightResult <> JS SyntaxHighlightResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightResult> final {
-    static inline margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightResult> final {
+    static inline margelo::nitro::legendapps::syntaxparser::SyntaxHighlightResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightResult(
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lines"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles"))),
-        JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
+      return margelo::nitro::legendapps::syntaxparser::SyntaxHighlightResult(
+        JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lines"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxStyle>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles"))),
+        JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::syntaxparser::SyntaxHighlightResult& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "lines"), JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine>>::toJSI(runtime, arg.lines));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "styles"), JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle>>::toJSI(runtime, arg.styles));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming>::toJSI(runtime, arg.timing));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "lines"), JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine>>::toJSI(runtime, arg.lines));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "styles"), JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxStyle>>::toJSI(runtime, arg.styles));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming>::toJSI(runtime, arg.timing));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -89,9 +89,9 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lines")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles")))) return false;
-      if (!JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lines")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxStyle>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles")))) return false;
+      if (!JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
       return true;
     }
   };

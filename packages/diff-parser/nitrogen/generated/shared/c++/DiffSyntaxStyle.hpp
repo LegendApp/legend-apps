@@ -32,7 +32,7 @@
 
 #include <string>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffSyntaxStyle).
@@ -51,22 +51,22 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffSyntaxStyle& lhs, const DiffSyntaxStyle& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffSyntaxStyle <> JS DiffSyntaxStyle (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffSyntaxStyle> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffSyntaxStyle fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle(
+      return margelo::nitro::legendapps::diffparser::DiffSyntaxStyle(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopeId"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "foreground"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fontStyle")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffSyntaxStyle& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffSyntaxStyle& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "scopeId"), JSIConverter<double>::toJSI(runtime, arg.scopeId));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "foreground"), JSIConverter<std::string>::toJSI(runtime, arg.foreground));

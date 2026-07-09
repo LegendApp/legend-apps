@@ -4,12 +4,12 @@ import type {
   DiffRenderRow,
   DiffSideBySideFileHeader,
   DiffSideBySideRenderRow,
-} from "@legend-desktop/diff-parser";
-import { DiffNativeRow } from "@legend-desktop/diff-parser";
+} from "@legend-apps/diff-parser";
+import { DiffNativeRow } from "@legend-apps/diff-parser";
 import {
   sourceViewerCodeFontFamily,
-} from "@legend-desktop/source-viewer";
-import { SFSymbol } from "@legend-desktop/sf-symbol";
+} from "@legend-apps/source-viewer";
+import { SFSymbol } from "@legend-apps/sf-symbol";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { memo } from "react";

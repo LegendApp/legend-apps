@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-desktop/storage";
+import { createObservableFile } from "@legend-apps/storage";
 
 const maxRecentFiles = 20;
 

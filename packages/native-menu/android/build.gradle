@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.nativemenu"
+  namespace "so.legend.apps.nativemenu"
   compileSdkVersion 35
 
   defaultConfig {

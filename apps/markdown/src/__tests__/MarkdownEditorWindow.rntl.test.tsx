@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react-native";
-import { watchFiles } from "@legend-desktop/file-system-watcher";
+import { watchFiles } from "@legend-apps/file-system-watcher";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
@@ -57,13 +57,13 @@ const mockSession = {
   setSaveState: jest.fn(),
 };
 
-jest.mock("@legend-desktop/file-system-watcher", () => ({
+jest.mock("@legend-apps/file-system-watcher", () => ({
   watchFiles: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
-jest.mock("@legend-desktop/document-app", () => {
+jest.mock("@legend-apps/document-app", () => {
   const React = require("react");
-  const { watchFiles } = require("@legend-desktop/file-system-watcher");
+  const { watchFiles } = require("@legend-apps/file-system-watcher");
 
   return {
     useWatchedDocumentReload: ({
@@ -109,12 +109,12 @@ jest.mock("@legend-desktop/document-app", () => {
   };
 });
 
-jest.mock("@legend-desktop/file-dialog", () => ({
+jest.mock("@legend-apps/file-dialog", () => ({
   openFileDialog: jest.fn(),
   saveFileDialog: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/markdown-document", () => ({
+jest.mock("@legend-apps/markdown-document", () => ({
   MarkdownDocument: (props: unknown) => mockMarkdownDocument(props),
   nativeMarkdownDocumentAdapter: {},
 }));

@@ -1,4 +1,4 @@
-import type { CommandRunnerResult } from "@legend-desktop/command-runner";
+import type { CommandRunnerResult } from "@legend-apps/command-runner";
 import { getFilename, type DiffFilePairOpenSource } from "./diffFiles";
 
 export type DiffFilePairSource = DiffFilePairOpenSource;

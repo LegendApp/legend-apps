@@ -1,11 +1,11 @@
 {
-  "name": "@legend-desktop/windows",
+  "name": "@legend-apps/windows",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "dependencies": {
-    "@legend-desktop/window-manager": "0.0.0",
+    "@legend-apps/window-manager": "0.0.0",
     "@legendapp/state": "catalog:"
   },
   "peerDependencies": {

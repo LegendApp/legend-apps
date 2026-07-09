@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.recentdocuments"
+  namespace "so.legend.apps.recentdocuments"
   compileSdkVersion 35
 
   defaultConfig {

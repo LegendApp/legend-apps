@@ -290,6 +290,6 @@ public final class RNMediaTagsID3Bridge: NSObject {
         NSError(domain: writerErrorDomain, code: code, userInfo: [NSLocalizedDescriptionKey: message])
     }
 
-    private static let writerErrorDomain = "LegendDesktop.MediaTags.ID3Writer"
+    private static let writerErrorDomain = "LegendApps.MediaTags.ID3Writer"
     private static let maxArtworkBytes = 10 * 1024 * 1024
 }

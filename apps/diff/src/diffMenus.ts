@@ -7,7 +7,7 @@ import {
   settingsTargetTitles,
   shiftModifier,
   type NativeMenuConfig,
-} from "@legend-desktop/native-menu";
+} from "@legend-apps/native-menu";
 
 export const diffMenuConfig: NativeMenuConfig[] = [
   {

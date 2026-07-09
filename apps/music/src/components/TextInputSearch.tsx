@@ -3,7 +3,7 @@ import {
     TextInputSearch as NativeTextInputSearch,
     type TextInputSearchProps as NativeTextInputSearchProps,
     type TextInputSearchRef,
-} from "@legend-desktop/text-input-search";
+} from "@legend-apps/text-input-search";
 import { forwardRef, memo, useCallback } from "react";
 
 export interface TextInputSearchProps extends NativeTextInputSearchProps {

@@ -1,6 +1,6 @@
 import { NativeEventEmitter } from "react-native";
 import NativeDocumentScanner from "./NativeDocumentScanner";
-import type { FileScannerOptions, ScannedFile } from "@legend-desktop/file-scanner";
+import type { FileScannerOptions, ScannedFile } from "@legend-apps/file-scanner";
 
 export type DocumentScannerOptions = FileScannerOptions;
 export type ScannedDocument = ScannedFile;

@@ -1,6 +1,6 @@
-import { useHotkeys } from "@legend-desktop/hotkeys";
-import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
-import type { MarkdownDocumentCommands } from "@legend-desktop/markdown-document";
+import { useHotkeys } from "@legend-apps/hotkeys";
+import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
+import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { useEffect, useMemo, type RefObject } from "react";
 import { markdownHotkeyDefinitions } from "./markdownHotkeys";
 import {

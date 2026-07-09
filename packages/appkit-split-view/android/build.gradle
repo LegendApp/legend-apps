@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.appkitsplitview"
+  namespace "so.legend.apps.appkitsplitview"
   compileSdkVersion 35
 
   defaultConfig {

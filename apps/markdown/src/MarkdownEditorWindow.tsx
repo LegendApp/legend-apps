@@ -1,11 +1,11 @@
-import { useWatchedDocumentReload } from "@legend-desktop/document-app";
+import { useWatchedDocumentReload } from "@legend-apps/document-app";
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,
   type MarkdownDocumentProps,
   type MarkdownSelectionAnchor,
-} from "@legend-desktop/markdown-document";
-import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-desktop/theme";
+} from "@legend-apps/markdown-document";
+import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";

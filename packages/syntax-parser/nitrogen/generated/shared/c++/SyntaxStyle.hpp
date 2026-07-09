@@ -32,7 +32,7 @@
 
 #include <string>
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   /**
    * A struct which can be represented as a JavaScript object (SyntaxStyle).
@@ -51,22 +51,22 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     friend bool operator==(const SyntaxStyle& lhs, const SyntaxStyle& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser
 
 namespace margelo::nitro {
 
   // C++ SyntaxStyle <> JS SyntaxStyle (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle> final {
-    static inline margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxStyle> final {
+    static inline margelo::nitro::legendapps::syntaxparser::SyntaxStyle fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle(
+      return margelo::nitro::legendapps::syntaxparser::SyntaxStyle(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "id"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "foreground"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fontStyle")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::syntaxparser::SyntaxStyle& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "id"), JSIConverter<double>::toJSI(runtime, arg.id));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "foreground"), JSIConverter<std::string>::toJSI(runtime, arg.foreground));

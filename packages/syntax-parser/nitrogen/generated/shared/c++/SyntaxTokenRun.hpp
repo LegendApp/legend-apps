@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   /**
    * A struct which can be represented as a JavaScript object (SyntaxTokenRun).
@@ -51,22 +51,22 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     friend bool operator==(const SyntaxTokenRun& lhs, const SyntaxTokenRun& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser
 
 namespace margelo::nitro {
 
   // C++ SyntaxTokenRun <> JS SyntaxTokenRun (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun> final {
-    static inline margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun> final {
+    static inline margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun(
+      return margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "startColumn"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "length"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styleId")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxTokenRun& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::syntaxparser::SyntaxTokenRun& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "startColumn"), JSIConverter<double>::toJSI(runtime, arg.startColumn));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "length"), JSIConverter<double>::toJSI(runtime, arg.length));

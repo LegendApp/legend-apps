@@ -2,7 +2,7 @@
 
 #include "../nitrogen/generated/shared/c++/HybridMarkdownParserSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
 class HybridMarkdownParser final : public HybridMarkdownParserSpec {
 public:
@@ -17,4 +17,4 @@ public:
       double initialBlockCount) override;
 };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

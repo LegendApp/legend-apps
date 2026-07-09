@@ -3,17 +3,17 @@ import {
   type LegendListRef,
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 import {
   SidebarSplitView,
   type SidebarSplitViewAppearance,
-} from "@legend-desktop/appkit-split-view";
+} from "@legend-apps/appkit-split-view";
 import {
   setWindowOptions,
   setWindowTitle,
   WindowStyleMask,
   type WindowOptions,
-} from "@legend-desktop/window-manager";
+} from "@legend-apps/window-manager";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,

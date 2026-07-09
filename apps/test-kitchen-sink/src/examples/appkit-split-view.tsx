@@ -1,4 +1,4 @@
-import { SidebarSplitView } from "@legend-desktop/appkit-split-view";
+import { SidebarSplitView } from "@legend-apps/appkit-split-view";
 import { StyleSheet, Text, View } from "react-native";
 import { styles } from "./shared";
 

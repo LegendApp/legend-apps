@@ -24,7 +24,7 @@ export LEGEND_TEAM_ID="TEAMID1234"
 For notarization, set either a notarytool keychain profile:
 
 ```sh
-export LEGEND_NOTARY_KEYCHAIN_PROFILE="legend-desktop"
+export LEGEND_NOTARY_KEYCHAIN_PROFILE="legend-apps"
 ```
 
 Or Apple ID credentials:

@@ -1,7 +1,7 @@
 global.IS_REACT_ACT_ENVIRONMENT = true;
 process.env.RNTL_SKIP_AUTO_CLEANUP = "true";
 
-jest.mock("@legend-desktop/appkit-split-view", () => {
+jest.mock("@legend-apps/appkit-split-view", () => {
   const React = require("react");
   const { View } = require("react-native");
 
@@ -10,7 +10,7 @@ jest.mock("@legend-desktop/appkit-split-view", () => {
   };
 });
 
-jest.mock("@legend-desktop/reorder-controls", () => {
+jest.mock("@legend-apps/reorder-controls", () => {
   const React = require("react");
   const { View } = require("react-native");
 
@@ -25,7 +25,7 @@ jest.mock("@legend-desktop/reorder-controls", () => {
   };
 });
 
-jest.mock("@legend-desktop/storage", () => {
+jest.mock("@legend-apps/storage", () => {
   const { observable } = require("@legendapp/state");
 
   return {
@@ -33,7 +33,7 @@ jest.mock("@legend-desktop/storage", () => {
   };
 });
 
-jest.mock("@legend-desktop/keyboard-manager", () => ({
+jest.mock("@legend-apps/keyboard-manager", () => ({
   addKeyDownListener: jest.fn(() => () => undefined),
   addKeyUpListener: jest.fn(() => () => undefined),
   createModifierMask: (...modifiers) => modifiers.reduce((mask, modifier) => mask | modifier, 0),
@@ -92,7 +92,7 @@ jest.mock("@legend-desktop/keyboard-manager", () => ({
   },
 }));
 
-jest.mock("@legend-desktop/window-manager", () => ({
+jest.mock("@legend-apps/window-manager", () => ({
   setWindowOptions: jest.fn(async () => undefined),
   setWindowTitle: jest.fn(async () => undefined),
   WindowStyleMask: {
@@ -104,6 +104,6 @@ jest.mock("@legend-desktop/window-manager", () => ({
   },
 }));
 
-jest.mock("@legend-desktop/sf-symbol", () => ({
+jest.mock("@legend-apps/sf-symbol", () => ({
   SFSymbol: () => null,
 }));

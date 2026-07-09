@@ -3,7 +3,7 @@ import { useObservable, useValue } from "@legendapp/state/react";
 import { Text } from "react-native";
 
 import { DropdownMenu } from "./DropdownMenu";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 export interface SelectOption {
     label: string;

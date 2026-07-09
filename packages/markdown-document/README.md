@@ -1,4 +1,4 @@
-# @legend-desktop/markdown-document
+# @legend-apps/markdown-document
 
 Reusable markdown document surface for Legend Desktop apps.
 
@@ -6,7 +6,7 @@ Reusable markdown document surface for Legend Desktop apps.
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,
-} from "@legend-desktop/markdown-document";
+} from "@legend-apps/markdown-document";
 
 export function DocumentScreen({ filename }: { filename: string }) {
   return (

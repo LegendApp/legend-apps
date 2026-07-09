@@ -29,13 +29,13 @@
 #endif
 
 // Forward declaration of `HybridSyntaxDocumentSpec` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { class HybridSyntaxDocumentSpec; }
+namespace margelo::nitro::legendapps::syntaxparser { class HybridSyntaxDocumentSpec; }
 // Forward declaration of `SyntaxRenderLine` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxRenderLine; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxRenderLine; }
 // Forward declaration of `SyntaxStyle` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxStyle; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxStyle; }
 // Forward declaration of `SyntaxHighlightTiming` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxHighlightTiming; }
+namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxHighlightTiming; }
 
 #include <memory>
 #include "HybridSyntaxDocumentSpec.hpp"
@@ -44,7 +44,7 @@ namespace margelo::nitro::legenddesktop::syntaxparser { struct SyntaxHighlightTi
 #include "SyntaxStyle.hpp"
 #include "SyntaxHighlightTiming.hpp"
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
   /**
    * A struct which can be represented as a JavaScript object (SyntaxFileLoadResult).
@@ -64,28 +64,28 @@ namespace margelo::nitro::legenddesktop::syntaxparser {
     friend bool operator==(const SyntaxFileLoadResult& lhs, const SyntaxFileLoadResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser
 
 namespace margelo::nitro {
 
   // C++ SyntaxFileLoadResult <> JS SyntaxFileLoadResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxFileLoadResult> final {
-    static inline margelo::nitro::legenddesktop::syntaxparser::SyntaxFileLoadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxFileLoadResult> final {
+    static inline margelo::nitro::legendapps::syntaxparser::SyntaxFileLoadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::syntaxparser::SyntaxFileLoadResult(
-        JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::syntaxparser::HybridSyntaxDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialLines"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles"))),
-        JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
+      return margelo::nitro::legendapps::syntaxparser::SyntaxFileLoadResult(
+        JSIConverter<std::shared_ptr<margelo::nitro::legendapps::syntaxparser::HybridSyntaxDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialLines"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxStyle>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles"))),
+        JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::syntaxparser::SyntaxFileLoadResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::syntaxparser::SyntaxFileLoadResult& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::syntaxparser::HybridSyntaxDocumentSpec>>::toJSI(runtime, arg.document));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialLines"), JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine>>::toJSI(runtime, arg.initialLines));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "styles"), JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle>>::toJSI(runtime, arg.styles));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming>::toJSI(runtime, arg.timing));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legendapps::syntaxparser::HybridSyntaxDocumentSpec>>::toJSI(runtime, arg.document));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialLines"), JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine>>::toJSI(runtime, arg.initialLines));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "styles"), JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxStyle>>::toJSI(runtime, arg.styles));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming>::toJSI(runtime, arg.timing));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -96,10 +96,10 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::syntaxparser::HybridSyntaxDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxRenderLine>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialLines")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::syntaxparser::SyntaxStyle>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles")))) return false;
-      if (!JSIConverter<margelo::nitro::legenddesktop::syntaxparser::SyntaxHighlightTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
+      if (!JSIConverter<std::shared_ptr<margelo::nitro::legendapps::syntaxparser::HybridSyntaxDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxRenderLine>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialLines")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::syntaxparser::SyntaxStyle>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "styles")))) return false;
+      if (!JSIConverter<margelo::nitro::legendapps::syntaxparser::SyntaxHighlightTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
       return true;
     }
   };

@@ -1,4 +1,4 @@
-import { createDefaultHotkeyState, KeyCodes, type HotkeyDefinition } from "@legend-desktop/hotkeys";
+import { createDefaultHotkeyState, KeyCodes, type HotkeyDefinition } from "@legend-apps/hotkeys";
 
 export const markdownHotkeyDefinitions = [
   {

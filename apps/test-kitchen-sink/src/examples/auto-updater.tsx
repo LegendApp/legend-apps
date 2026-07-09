@@ -1,4 +1,4 @@
-import { AutoUpdater } from "@legend-desktop/auto-updater";
+import { AutoUpdater } from "@legend-apps/auto-updater";
 import { useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

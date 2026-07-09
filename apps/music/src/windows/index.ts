@@ -1,10 +1,10 @@
-import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
+import { createSettingsWindowOptions } from "@legend-apps/settings-window";
 import {
     createBorderlessOverlayWindowStyle,
     createUnifiedToolbarWindowStyle,
     createWindowsNavigator,
     type WindowsConfig,
-} from "@legend-desktop/windows";
+} from "@legend-apps/windows";
 import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "../overlay/OverlayConstants";
 
 const windowsConfig = {
@@ -52,4 +52,4 @@ export const WindowsNavigator = createWindowsNavigator(windowsConfig);
 
 export type RegisteredWindow = keyof typeof windowsConfig;
 
-export * from "@legend-desktop/windows";
+export * from "@legend-apps/windows";

@@ -1,5 +1,5 @@
-import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-desktop/appkit-split-view";
-import { commandRunner } from "@legend-desktop/command-runner";
+import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-apps/appkit-split-view";
+import { commandRunner } from "@legend-apps/command-runner";
 import {
   DiffMergeNativePane,
   DiffNativeRowConfig,
@@ -16,17 +16,17 @@ import {
   type DiffSideBySideFileHeader,
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
-} from "@legend-desktop/diff-parser";
-import { DragDropView, type DragDropFileEvent } from "@legend-desktop/drag-drop";
-import { revealInFinder } from "@legend-desktop/file-dialog";
-import { addKeyDownListener, KeyCodes } from "@legend-desktop/keyboard-manager";
-import { nowMs, type SyntaxStyleMap } from "@legend-desktop/source-viewer";
-import { noteRecentDocument } from "@legend-desktop/recent-documents";
-import { SFSymbol } from "@legend-desktop/sf-symbol";
-import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, getSyntaxTheme, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-desktop/syntax-parser";
-import { getLegendDisplayTheme } from "@legend-desktop/theme";
-import { addWindowCloseRequestedListener, closeWindow } from "@legend-desktop/window-manager";
-import { useWindowId } from "@legend-desktop/windows";
+} from "@legend-apps/diff-parser";
+import { DragDropView, type DragDropFileEvent } from "@legend-apps/drag-drop";
+import { revealInFinder } from "@legend-apps/file-dialog";
+import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
+import { nowMs, type SyntaxStyleMap } from "@legend-apps/source-viewer";
+import { noteRecentDocument } from "@legend-apps/recent-documents";
+import { SFSymbol } from "@legend-apps/sf-symbol";
+import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, getSyntaxTheme, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
+import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
+import { useWindowId } from "@legend-apps/windows";
 import {
   VirtualizedFixedDocumentList,
   type VirtualizedDocumentRowsState,
@@ -35,7 +35,7 @@ import {
   type VirtualizedDocumentVisibleRangeInfo,
   type VirtualizedFixedDocumentListRef,
   type VirtualizedFixedDocumentListRenderRowProps,
-} from "@legend-desktop/virtualized-document";
+} from "@legend-apps/virtualized-document";
 import {
   LegendList,
   type LegendListRenderItemProps,

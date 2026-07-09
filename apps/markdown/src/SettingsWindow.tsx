@@ -2,8 +2,8 @@ import { PortalProvider } from "@gorhom/portal";
 import {
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-desktop/settings-window";
-import { getLegendDisplayThemeAppearance } from "@legend-desktop/theme";
+} from "@legend-apps/settings-window";
+import { getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import { settingsWindowIdentifier } from "./appConstants";
 import { useMarkdownDisplayThemeSetting } from "./markdownSettings";
 import { AppearanceSettingsContent } from "./settings/AppearanceSettingsPage";

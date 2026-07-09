@@ -1,4 +1,4 @@
-import { createMockCommandRunner } from "@legend-desktop/command-runner";
+import { createMockCommandRunner } from "@legend-apps/command-runner";
 import { generatePlaylistExtension } from "../playlistGeneration";
 import type { LocalPlaylist, LocalTrack } from "../../LocalMusicState";
 

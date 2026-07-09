@@ -2,7 +2,7 @@
 
 #include "../nitrogen/generated/shared/c++/HybridSyntaxParserSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
 class HybridSyntaxParser final : public HybridSyntaxParserSpec {
 public:
@@ -19,4 +19,4 @@ public:
       double initialLineCount) override;
 };
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

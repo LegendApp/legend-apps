@@ -2,7 +2,7 @@
 
 ## Goal
 
-Bootstrap `legend-desktop` as a monorepo with one reusable React Native app shell and multiple command-selected apps.
+Bootstrap `legend-apps` as a monorepo with one reusable React Native app shell and multiple command-selected apps.
 
 The first proof should include:
 
@@ -26,12 +26,12 @@ Do not check in a persistent `current app` source file. Instead, command scripts
 The shell source imports a stable virtual module:
 
 ```ts
-import { App } from "@legend-desktop/app";
+import { App } from "@legend-apps/app";
 
 export default App;
 ```
 
-Metro resolves `@legend-desktop/app` to exactly one app package based on the command environment:
+Metro resolves `@legend-apps/app` to exactly one app package based on the command environment:
 
 ```txt
 LEGEND_APP=music
@@ -45,7 +45,7 @@ Native linking is also app-specific. Each app owns a manifest declaring its supp
 ## Target Layout
 
 ```txt
-legend-desktop/
+legend-apps/
   package.json
   bun.lock
   tsconfig.json
@@ -122,14 +122,14 @@ export default {
   displayName: "Legend Music",
   platforms: ["macos", "ios", "android"],
   bundleIds: {
-    ios: "app.legend.music",
-    macos: "app.legend.music.macos",
+    ios: "so.legend.music",
+    macos: "so.legend.music.macos",
   },
-  androidPackage: "app.legend.music",
+  androidPackage: "so.legend.music",
   nativeModules: {
-    macos: ["@legend-desktop/music-test"],
-    ios: ["@legend-desktop/music-test"],
-    android: ["@legend-desktop/music-test"],
+    macos: ["@legend-apps/music-test"],
+    ios: ["@legend-apps/music-test"],
+    android: ["@legend-apps/music-test"],
   },
 };
 ```
@@ -142,10 +142,10 @@ export default {
   displayName: "Legend Markdown",
   platforms: ["macos", "ios", "android"],
   bundleIds: {
-    ios: "app.legend.markdown",
-    macos: "app.legend.markdown.macos",
+    ios: "so.legend.markdown",
+    macos: "so.legend.markdown.macos",
   },
-  androidPackage: "app.legend.markdown",
+  androidPackage: "so.legend.markdown",
   nativeModules: {
     macos: [],
     ios: [],
@@ -156,7 +156,7 @@ export default {
 
 The manifests are the source of truth for app-specific native dependencies. Root package dependencies may include all workspace packages, but autolinking must be filtered by the active manifest.
 
-For the first implementation, avoid making `shell/package.json` depend directly on every app package. The selected app should be pulled into Metro through `@legend-desktop/app`, while native packages should be included through explicit generated autolinking config. This reduces the chance that Expo or React Native autolinking discovers inactive app dependencies through normal package dependency traversal.
+For the first implementation, avoid making `shell/package.json` depend directly on every app package. The selected app should be pulled into Metro through `@legend-apps/app`, while native packages should be included through explicit generated autolinking config. This reduces the chance that Expo or React Native autolinking discovers inactive app dependencies through normal package dependency traversal.
 
 ## Commands
 
@@ -291,8 +291,8 @@ Required checks:
 
 1. Resolve Metro graph for each app/platform.
 2. Build or export release JS bundle for each app/platform.
-3. Assert `music` includes `@legend-desktop/music-test` in JS and native autolinking output.
-4. Assert `markdown` excludes `@legend-desktop/music-test` from:
+3. Assert `music` includes `@legend-apps/music-test` in JS and native autolinking output.
+4. Assert `markdown` excludes `@legend-apps/music-test` from:
    - Metro dependency graph.
    - Release JS bundle text.
    - Expo autolinking output for `ios` and `android`.
@@ -304,8 +304,8 @@ Example verification commands:
 ```sh
 bun run verify music macos
 bun run verify markdown macos
-bun run verify markdown ios --excludes @legend-desktop/music-test
-bun run verify markdown android --excludes @legend-desktop/music-test
+bun run verify markdown ios --excludes @legend-apps/music-test
+bun run verify markdown android --excludes @legend-apps/music-test
 ```
 
 This is doable. The strongest verification is a combination of autolinking output and bundle inspection:
@@ -328,7 +328,7 @@ registerRootComponent(ShellApp);
 
 ```tsx
 // shell/src/ShellApp.tsx
-import { App } from "@legend-desktop/app";
+import { App } from "@legend-apps/app";
 
 export default function ShellApp() {
   return <App />;
@@ -340,7 +340,7 @@ export default function ShellApp() {
 - Uses `@expo/metro-config`.
 - Uses `@rnx-kit/metro-config` if needed for macOS compatibility.
 - Requires `LEGEND_APP`.
-- Resolves `@legend-desktop/app` to `../apps/<app>/src`.
+- Resolves `@legend-apps/app` to `../apps/<app>/src`.
 - Adds root, apps, and packages to `watchFolders`.
 - Keeps platform extension support for `ios`, `android`, `macos`, `native`, and default extensions.
 - Uses app-specific cache keys so switching from music to markdown cannot reuse stale module resolution.
@@ -386,7 +386,7 @@ Implementation notes:
 - Android should use the New Architecture component path.
 - Keep the module intentionally tiny so bootstrap complexity stays in the shell/config system, not native behavior.
 - The `music` app should render the native view under `Hello Music`.
-- The `markdown` app should not import `@legend-desktop/music-test`.
+- The `markdown` app should not import `@legend-apps/music-test`.
 
 ## Native Linking Strategy
 
@@ -407,8 +407,8 @@ For React Native modules:
 
 Expected result:
 
-- `music` autolinks `@legend-desktop/music-test`.
-- `markdown` does not autolink `@legend-desktop/music-test`.
+- `music` autolinks `@legend-apps/music-test`.
+- `markdown` does not autolink `@legend-apps/music-test`.
 
 ## iOS and Android Prebuild
 
@@ -488,9 +488,9 @@ Expected:
 For markdown:
 
 ```sh
-bun run verify markdown macos --excludes @legend-desktop/music-test
-bun run verify markdown ios --excludes @legend-desktop/music-test
-bun run verify markdown android --excludes @legend-desktop/music-test
+bun run verify markdown macos --excludes @legend-apps/music-test
+bun run verify markdown ios --excludes @legend-apps/music-test
+bun run verify markdown android --excludes @legend-apps/music-test
 ```
 
 The verifier should fail if any of these include `music-test`:
@@ -506,9 +506,9 @@ The verifier should fail if any of these include `music-test`:
 For music:
 
 ```sh
-bun run verify music macos --includes @legend-desktop/music-test
-bun run verify music ios --includes @legend-desktop/music-test
-bun run verify music android --includes @legend-desktop/music-test
+bun run verify music macos --includes @legend-apps/music-test
+bun run verify music ios --includes @legend-apps/music-test
+bun run verify music android --includes @legend-apps/music-test
 ```
 
 The verifier should fail if the JS wrapper or native module is missing.
@@ -524,8 +524,8 @@ Create:
 - Root `.gitignore`.
 - `apps/`, `packages/`, `scripts/`, and `shell/`.
 - Workspace package naming convention:
-  - `@legend-desktop/app-music` if app packages need package names.
-  - `@legend-desktop/music-test` for shared packages.
+  - `@legend-apps/app-music` if app packages need package names.
+  - `@legend-apps/music-test` for shared packages.
 
 Validation:
 
@@ -602,8 +602,8 @@ Validation:
 
 ```sh
 bun run music macos
-bun run verify music macos --includes @legend-desktop/music-test
-bun run verify markdown macos --excludes @legend-desktop/music-test
+bun run verify music macos --includes @legend-apps/music-test
+bun run verify markdown macos --excludes @legend-apps/music-test
 ```
 
 ### Phase 5: iOS and Android Prebuild
@@ -671,5 +671,5 @@ bun run verify:all
 - `bun run markdown ios` and `bun run markdown android` can generate and run native projects through Expo prebuild.
 - `bun run music build <platform>` works for `macos`, `ios`, and `android`.
 - `bun run markdown build <platform>` works for `macos`, `ios`, and `android`.
-- `bun run verify markdown <platform> --excludes @legend-desktop/music-test` proves markdown does not include `music-test`.
-- `bun run verify music <platform> --includes @legend-desktop/music-test` proves music does include `music-test`.
+- `bun run verify markdown <platform> --excludes @legend-apps/music-test` proves markdown does not include `music-test`.
+- `bun run verify music <platform> --includes @legend-apps/music-test` proves music does include `music-test`.

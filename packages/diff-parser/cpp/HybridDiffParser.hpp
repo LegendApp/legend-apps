@@ -2,7 +2,7 @@
 
 #include "../nitrogen/generated/shared/c++/HybridDiffParserSpec.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 class HybridDiffParser final : public HybridDiffParserSpec {
 public:
@@ -35,4 +35,4 @@ public:
       double initialRowCount) override;
 };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

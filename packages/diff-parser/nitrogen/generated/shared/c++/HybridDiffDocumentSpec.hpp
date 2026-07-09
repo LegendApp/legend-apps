@@ -14,23 +14,23 @@
 #endif
 
 // Forward declaration of `DiffCachedRow` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffCachedRow; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffCachedRow; }
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffRenderRow; }
 // Forward declaration of `DiffSideBySideFileHeader` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideFileHeader; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffSideBySideFileHeader; }
 // Forward declaration of `DiffSideBySideRenderRow` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSideBySideRenderRow; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffSideBySideRenderRow; }
 // Forward declaration of `DiffTokenizedRowRange` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffTokenizedRowRange; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffTokenizedRowRange; }
 // Forward declaration of `DiffFileSummary` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffFileSummary; }
 // Forward declaration of `DiffSyntaxScope` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxScope; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffSyntaxScope; }
 // Forward declaration of `DiffSyntaxStyle` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxStyle; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffSyntaxStyle; }
 // Forward declaration of `DiffLoadTiming` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffLoadTiming; }
 
 #include "DiffCachedRow.hpp"
 #include "DiffRenderRow.hpp"
@@ -44,7 +44,7 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 #include <string>
 #include "DiffLoadTiming.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   using namespace margelo::nitro;
 
@@ -112,4 +112,4 @@ namespace margelo::nitro::legenddesktop::diffparser {
       static constexpr auto TAG = "DiffDocument";
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

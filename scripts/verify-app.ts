@@ -210,7 +210,7 @@ async function verifyOne(appId: string, platform: Platform) {
   }
 
   const appSource = fs.readFileSync(path.join(rootDir, "apps", appId, "src", "App.tsx"), "utf8");
-  assertNotContains(appSource, "@legend-desktop/music-test", `${appId} app source imports removed music-test package`);
+  assertNotContains(appSource, "@legend-apps/music-test", `${appId} app source imports removed music-test package`);
 
   if (platform === "macos") {
     verifyMacOSIdentity(manifest, generated);

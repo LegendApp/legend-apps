@@ -1,1 +1,1 @@
-export * from "@legend-desktop/settings-window";
+export * from "@legend-apps/settings-window";

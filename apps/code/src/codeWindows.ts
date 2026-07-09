@@ -1,6 +1,6 @@
-import { createSettingsWindowOptions } from "@legend-desktop/settings-window";
-import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-desktop/windows";
-import { openWindow, setWindowOptions } from "@legend-desktop/window-manager";
+import { createSettingsWindowOptions } from "@legend-apps/settings-window";
+import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
+import { openWindow, setWindowOptions } from "@legend-apps/window-manager";
 import {
   codeSettingsWindowIdentifier,
   codeSettingsWindowModuleName,

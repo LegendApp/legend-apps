@@ -1,4 +1,4 @@
-import type { CommandRunner, CommandRunnerResult } from "@legend-desktop/command-runner";
+import type { CommandRunner, CommandRunnerResult } from "@legend-apps/command-runner";
 
 export type AIToolId = "claude" | "codex";
 

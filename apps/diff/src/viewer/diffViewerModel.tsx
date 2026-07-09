@@ -3,7 +3,7 @@ import type {
   DiffFileSummary,
   DiffLoadTiming,
   DiffRenderRow,
-} from "@legend-desktop/diff-parser";
+} from "@legend-apps/diff-parser";
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { createContext, type ReactNode, type SetStateAction, useCallback, useContext, useMemo } from "react";

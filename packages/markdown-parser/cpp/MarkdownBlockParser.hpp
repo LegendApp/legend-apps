@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
 struct MarkdownParseResult {
   std::shared_ptr<const MarkdownSource> source;
@@ -21,4 +21,4 @@ std::vector<MarkdownBlockRange> parseMarkdownBlocks(const char* bytes, size_t le
 std::vector<MarkdownBlockRange> parseMarkdownBlocks(const std::string& source);
 MarkdownParseResult streamMarkdownSource(std::shared_ptr<const MarkdownSource> source, double readMs);
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser

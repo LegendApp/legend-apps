@@ -5,7 +5,7 @@
 
 #include <exception>
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
 HybridSyntaxParser::HybridSyntaxParser() : HybridObject(TAG) {}
 
@@ -77,4 +77,4 @@ std::shared_ptr<Promise<SyntaxFileLoadResult>> HybridSyntaxParser::loadCodeFile(
   });
 }
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

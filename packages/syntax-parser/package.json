@@ -1,11 +1,11 @@
 {
-  "name": "@legend-desktop/syntax-parser",
+  "name": "@legend-apps/syntax-parser",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "dependencies": {
-    "@legend-desktop/storage": "workspace:*",
+    "@legend-apps/storage": "workspace:*",
     "expo-file-system": "~19.0.21"
   },
   "peerDependencies": {

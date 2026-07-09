@@ -32,7 +32,7 @@
 
 
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   /**
    * A struct which can be represented as a JavaScript object (MarkdownDocumentTiming).
@@ -54,16 +54,16 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     friend bool operator==(const MarkdownDocumentTiming& lhs, const MarkdownDocumentTiming& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser
 
 namespace margelo::nitro {
 
   // C++ MarkdownDocumentTiming <> JS MarkdownDocumentTiming (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownDocumentTiming> final {
-    static inline margelo::nitro::legenddesktop::markdownparser::MarkdownDocumentTiming fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownDocumentTiming> final {
+    static inline margelo::nitro::legendapps::markdownparser::MarkdownDocumentTiming fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::markdownparser::MarkdownDocumentTiming(
+      return margelo::nitro::legendapps::markdownparser::MarkdownDocumentTiming(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceBytes"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "readMs"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "mdParseMs"))),
@@ -72,7 +72,7 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "documentMs")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownDocumentTiming& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::markdownparser::MarkdownDocumentTiming& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceBytes"), JSIConverter<double>::toJSI(runtime, arg.sourceBytes));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "readMs"), JSIConverter<double>::toJSI(runtime, arg.readMs));

@@ -29,13 +29,13 @@
 #endif
 
 // Forward declaration of `DiffSyntaxTokenRun` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxTokenRun; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffSyntaxTokenRun; }
 
 #include <string>
 #include "DiffSyntaxTokenRun.hpp"
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffRenderRow).
@@ -60,16 +60,16 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffRenderRow& lhs, const DiffRenderRow& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffRenderRow <> JS DiffRenderRow (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffRenderRow> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffRenderRow fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffRenderRow> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffRenderRow fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffRenderRow(
+      return margelo::nitro::legendapps::diffparser::DiffRenderRow(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "index"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "kind"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileIndex"))),
@@ -78,10 +78,10 @@ namespace margelo::nitro {
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newLineNumber"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changeType"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "text"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxTokenRun>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))
+        JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffSyntaxTokenRun>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffRenderRow& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffRenderRow& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "index"), JSIConverter<double>::toJSI(runtime, arg.index));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "kind"), JSIConverter<double>::toJSI(runtime, arg.kind));
@@ -91,7 +91,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "newLineNumber"), JSIConverter<double>::toJSI(runtime, arg.newLineNumber));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "changeType"), JSIConverter<double>::toJSI(runtime, arg.changeType));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "text"), JSIConverter<std::string>::toJSI(runtime, arg.text));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokens"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxTokenRun>>::toJSI(runtime, arg.tokens));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "tokens"), JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffSyntaxTokenRun>>::toJSI(runtime, arg.tokens));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -110,7 +110,7 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "newLineNumber")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changeType")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "text")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxTokenRun>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffSyntaxTokenRun>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "tokens")))) return false;
       return true;
     }
   };

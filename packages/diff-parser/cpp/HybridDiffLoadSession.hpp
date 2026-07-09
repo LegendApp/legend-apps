@@ -10,7 +10,7 @@
 #include <string>
 #include <thread>
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
 class HybridDiffLoadSession final : public HybridDiffLoadSessionSpec {
 public:
@@ -65,4 +65,4 @@ private:
   std::string error_;
 };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser

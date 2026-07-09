@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/context-menu",
+  "name": "@legend-apps/context-menu",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.contextmenu"
+      "javaPackageName": "so.legend.apps.contextmenu"
     },
     "ios": {
       "modulesProvider": {

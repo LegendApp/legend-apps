@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.mediatags"
+  namespace "so.legend.apps.mediatags"
   compileSdkVersion 35
 
   defaultConfig {

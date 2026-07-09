@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from "react-native";
-import type { SyntaxDocument, SyntaxHighlightTiming, SyntaxRenderLine, SyntaxStyle } from "@legend-desktop/syntax-parser";
+import type { SyntaxDocument, SyntaxHighlightTiming, SyntaxRenderLine, SyntaxStyle } from "@legend-apps/syntax-parser";
 import {
   useVirtualizedDocumentRows,
   VirtualizedFixedDocumentList,
@@ -16,7 +16,7 @@ import {
   type VirtualizedDocumentRowsState,
   type VirtualizedDocumentSnapshot,
   type VirtualizedFixedDocumentListRenderRowProps,
-} from "@legend-desktop/virtualized-document";
+} from "@legend-apps/virtualized-document";
 
 export const sourceViewerRowHeight = 22;
 export const sourceViewerLineNumberWidth = 72;

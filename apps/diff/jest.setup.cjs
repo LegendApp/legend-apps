@@ -44,12 +44,12 @@ jest.mock("@legendapp/list/react-native", () => {
   };
 });
 
-jest.mock("@legend-desktop/context-menu", () => ({
+jest.mock("@legend-apps/context-menu", () => ({
   __esModule: true,
   showContextMenu: jest.fn(async () => null),
 }));
 
-jest.mock("@legend-desktop/glass-effect-view", () => {
+jest.mock("@legend-apps/glass-effect-view", () => {
   const React = require("react");
   const { View } = require("react-native");
 
@@ -60,7 +60,7 @@ jest.mock("@legend-desktop/glass-effect-view", () => {
   };
 });
 
-jest.mock("@legend-desktop/native-select", () => {
+jest.mock("@legend-apps/native-select", () => {
   const React = require("react");
   const { View } = require("react-native");
 
@@ -71,7 +71,7 @@ jest.mock("@legend-desktop/native-select", () => {
   };
 });
 
-jest.mock("@legend-desktop/settings-window", () => {
+jest.mock("@legend-apps/settings-window", () => {
   const React = require("react");
   const { View } = require("react-native");
 

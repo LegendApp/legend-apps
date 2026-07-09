@@ -122,7 +122,7 @@ static BOOL shouldInterceptStructuralEnterForBlock(NSString *blockId, NSString *
   }
 
   const auto metadata =
-      margelo::nitro::legenddesktop::markdownparser::metadataForRegisteredBlockId(std::string([blockId UTF8String]));
+      margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(std::string([blockId UTF8String]));
   return metadata.type != "codeBlock";
 }
 
@@ -206,7 +206,7 @@ static NSString *nativeMarkdownForBlockId(NSString *blockId)
   }
 
   const std::string markdown =
-      margelo::nitro::legenddesktop::markdownparser::markdownForRegisteredBlockId(std::string([blockId UTF8String]));
+      margelo::nitro::legendapps::markdownparser::markdownForRegisteredBlockId(std::string([blockId UTF8String]));
   return [[NSString alloc] initWithBytes:markdown.data()
                                   length:markdown.size()
                                 encoding:NSUTF8StringEncoding] ?: @"";
@@ -295,7 +295,7 @@ static std::string stringForNSString(NSString *value)
 
 static MarkdownBlockSpacingConfig spacingForBlockMetadata(
     const MarkdownLayoutSpacingConfig& config,
-    const margelo::nitro::legenddesktop::markdownparser::RegisteredMarkdownBlockMetadata& metadata)
+    const margelo::nitro::legendapps::markdownparser::RegisteredMarkdownBlockMetadata& metadata)
 {
   if (metadata.id.empty()) {
     return config.fallback;
@@ -339,11 +339,11 @@ static NSEdgeInsets rowPaddingForBlockIds(
     NSString *previousBlockId,
     NSString *nextBlockId)
 {
-  const auto metadata = margelo::nitro::legenddesktop::markdownparser::metadataForRegisteredBlockId(stringForNSString(blockId));
+  const auto metadata = margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(stringForNSString(blockId));
   const MarkdownBlockSpacingConfig spacing = spacingForBlockMetadata(config, metadata);
   CGFloat paddingTop = 0;
   if (previousBlockId.length > 0) {
-    const auto previousMetadata = margelo::nitro::legenddesktop::markdownparser::metadataForRegisteredBlockId(stringForNSString(previousBlockId));
+    const auto previousMetadata = margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(stringForNSString(previousBlockId));
     const MarkdownBlockSpacingConfig previousSpacing = spacingForBlockMetadata(config, previousMetadata);
     paddingTop = MAX(previousSpacing.marginBottom, spacing.marginTop);
   }

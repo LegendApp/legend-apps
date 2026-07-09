@@ -44,7 +44,7 @@ static void LegendWindowMemoryLog(NSString *event, NSDictionary *payload)
   static os_log_t log;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
-    NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"app.legend.window-manager";
+    NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"so.legend.apps.window-manager";
     log = os_log_create(bundleIdentifier.UTF8String, "memory");
   });
   os_log_with_type(log, OS_LOG_TYPE_DEFAULT, "[WindowMemory] %{public}@ %{public}@", event, (payload ?: @{}).description);

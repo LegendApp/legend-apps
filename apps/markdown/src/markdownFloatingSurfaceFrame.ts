@@ -1,4 +1,4 @@
-import type { MarkdownSelectionAnchor } from "@legend-desktop/markdown-document";
+import type { MarkdownSelectionAnchor } from "@legend-apps/markdown-document";
 
 export type MarkdownFloatingSurfaceCoordinateSpace = "content" | "item";
 export type MarkdownFloatingSurfacePlacement = "above" | "below";

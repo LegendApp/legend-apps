@@ -1,5 +1,5 @@
-import type { ContextMenuItem } from "@legend-desktop/context-menu";
-import { revealInFinder } from "@legend-desktop/file-dialog";
+import type { ContextMenuItem } from "@legend-apps/context-menu";
+import { revealInFinder } from "@legend-apps/file-dialog";
 
 export const TRACK_CONTEXT_MENU_ITEMS = {
     queueAdd: { id: "queue-add", title: "Add to Queue" } as const,

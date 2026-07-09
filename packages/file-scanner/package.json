@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/file-scanner",
+  "name": "@legend-apps/file-scanner",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.filescanner"
+      "javaPackageName": "so.legend.apps.filescanner"
     },
     "ios": {
       "modulesProvider": {

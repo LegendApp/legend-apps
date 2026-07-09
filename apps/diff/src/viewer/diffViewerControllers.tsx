@@ -1,9 +1,9 @@
-import type { DiffDocument } from "@legend-desktop/diff-parser";
-import { watchDirectories } from "@legend-desktop/file-system-watcher";
-import { updateMenuItems, type NativeMenuItemPatch } from "@legend-desktop/native-menu";
-import { elapsedMs, measureAfterEffect, nowMs } from "@legend-desktop/source-viewer";
-import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-desktop/window-manager";
-import { useWindowId } from "@legend-desktop/windows";
+import type { DiffDocument } from "@legend-apps/diff-parser";
+import { watchDirectories } from "@legend-apps/file-system-watcher";
+import { updateMenuItems, type NativeMenuItemPatch } from "@legend-apps/native-menu";
+import { elapsedMs, measureAfterEffect, nowMs } from "@legend-apps/source-viewer";
+import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-apps/window-manager";
+import { useWindowId } from "@legend-apps/windows";
 import { useObserveEffect } from "@legendapp/state/react";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { TextInput } from "react-native";

@@ -4,7 +4,7 @@ import {
   type UserThemeLoadIssue,
   type UserDisplayThemeLoadResult,
   type UserMarkdownLayoutThemeLoadResult,
-} from "@legend-desktop/theme";
+} from "@legend-apps/theme";
 import { markdownStorage } from "./markdownStorage";
 
 export type { UserThemeLoadIssue, UserDisplayThemeLoadResult, UserMarkdownLayoutThemeLoadResult };

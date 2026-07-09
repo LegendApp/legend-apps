@@ -1,20 +1,20 @@
 import { useEffect } from "react";
-import { AutoUpdater } from "@legend-desktop/auto-updater";
-import { hotkeyToMenuShortcut } from "@legend-desktop/hotkeys";
+import { AutoUpdater } from "@legend-apps/auto-updater";
+import { hotkeyToMenuShortcut } from "@legend-apps/hotkeys";
 import {
     type NativeMenuAction,
     type NativeMenuConfig,
     type NativeMenuItemPatch,
     updateMenuItems,
     useNativeMenu,
-} from "@legend-desktop/native-menu";
+} from "@legend-apps/native-menu";
 import { localAudioControls, localPlayerState$, queue$ } from "../components/LocalAudioPlayer";
 import { savePlaylistUI$ } from "../state/savePlaylistUIState";
 import { type RepeatMode, settings$ } from "./Settings";
 import { state$, stateSaved$ } from "./State";
 import { hotkeys$ } from "./hotkeys";
 import { KeyCodes } from "./keyboard/KeyboardManager";
-import { perfCount, perfLog } from "@legend-desktop/runtime-utils";
+import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 
 const MENU_OWNER_ID = "music";
 const APP_MENU_ID = "app";

@@ -1,4 +1,4 @@
-import { SwitchControl } from "@legend-desktop/design-system";
+import { SwitchControl } from "@legend-apps/design-system";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -7,12 +7,12 @@ import {
   SettingsSection,
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-desktop/settings-window";
+} from "@legend-apps/settings-window";
 import {
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,
   SyntaxThemeSelectorSection,
-} from "@legend-desktop/syntax-settings";
+} from "@legend-apps/syntax-settings";
 import { diffSettingsWindowIdentifier } from "./appConstants";
 import { getDiffCliInstallStatus, installDiffCli, uninstallDiffCli, type DiffCliInstallStatus } from "./diffCli";
 import {

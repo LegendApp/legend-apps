@@ -1,4 +1,4 @@
-import type { NativeMenuAction, NativeMenuActionHandlers } from "@legend-desktop/native-menu";
+import type { NativeMenuAction, NativeMenuActionHandlers } from "@legend-apps/native-menu";
 
 type RecentDocumentHandler = (path: string) => Promise<void>;
 

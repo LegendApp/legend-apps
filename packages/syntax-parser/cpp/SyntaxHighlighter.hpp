@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace margelo::nitro::legenddesktop::syntaxparser {
+namespace margelo::nitro::legendapps::syntaxparser {
 
 using SyntaxClock = std::chrono::steady_clock;
 
@@ -85,4 +85,4 @@ SyntaxScopeTokenizedLine tokenizeSyntaxScopeLine(
     TextMateStateStack& state,
     SyntaxScopeState& scopeState);
 
-} // namespace margelo::nitro::legenddesktop::syntaxparser
+} // namespace margelo::nitro::legendapps::syntaxparser

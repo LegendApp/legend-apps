@@ -101,43 +101,43 @@ const KeyCodes = {
     MODIFIER_FUNCTION: 1 << 23,
 };
 
-jest.mock("@legend-desktop/audio-player", () => ({
+jest.mock("@legend-apps/audio-player", () => ({
     __esModule: true,
     audioPlayer: mockAudioPlayer,
     addAudioPlayerListener: mockAudioPlayer.addListener,
 }));
 
-jest.mock("@legend-desktop/media-library-scanner", () => ({
+jest.mock("@legend-apps/media-library-scanner", () => ({
     __esModule: true,
     ...mockMediaLibraryScanner,
 }));
 
-jest.mock("@legend-desktop/media-tags", () => ({
+jest.mock("@legend-apps/media-tags", () => ({
     __esModule: true,
     readMediaTags: jest.fn(async () => ({ durationSeconds: 180 })),
     writeMediaTags: jest.fn(async () => ({ success: true })),
 }));
 
-jest.mock("@legend-desktop/file-system-watcher", () => ({
+jest.mock("@legend-apps/file-system-watcher", () => ({
     __esModule: true,
     addDirectoryChangeListener: jest.fn(() => ({ remove: jest.fn() })),
     setWatchedDirectories: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/app-exit", () => ({
+jest.mock("@legend-apps/app-exit", () => ({
     __esModule: true,
     addAppExitListener: jest.fn(() => ({ remove: jest.fn() })),
     completeAppExit: jest.fn(),
 }));
 
-jest.mock("@legend-desktop/auto-updater", () => ({
+jest.mock("@legend-apps/auto-updater", () => ({
     __esModule: true,
     AutoUpdater: {
         checkForUpdates: jest.fn(async () => ({ success: true })),
     },
 }));
 
-jest.mock("@legend-desktop/native-menu", () => ({
+jest.mock("@legend-apps/native-menu", () => ({
     __esModule: true,
     ...mockNativeMenu,
     useNativeMenu: ({ handlers, menus, onAction, ownerId }) => {
@@ -162,25 +162,25 @@ jest.mock("@legend-desktop/native-menu", () => ({
     __emitNativeMenuAction: (action) => nativeMenuListeners.emit("action", action),
 }));
 
-jest.mock("@legend-desktop/context-menu", () => ({
+jest.mock("@legend-apps/context-menu", () => ({
     __esModule: true,
     showContextMenu: jest.fn(async () => null),
 }));
 
-jest.mock("@legend-desktop/drag-drop", () => ({
+jest.mock("@legend-apps/drag-drop", () => ({
     __esModule: true,
     DragDropView: React.forwardRef((props, ref) => React.createElement(ReactNative.View, { ...props, ref })),
     TrackDragSource: ({ children }) => React.createElement(React.Fragment, null, children),
 }));
 
-jest.mock("@legend-desktop/file-dialog", () => ({
+jest.mock("@legend-apps/file-dialog", () => ({
     __esModule: true,
     openFileDialog: jest.fn(async () => null),
     selectDirectory: jest.fn(async () => null),
     showInFinder: jest.fn(async () => false),
 }));
 
-jest.mock("@legend-desktop/window-controls", () => ({
+jest.mock("@legend-apps/window-controls", () => ({
     __esModule: true,
     default: {
         close: jest.fn(),
@@ -192,7 +192,7 @@ jest.mock("@legend-desktop/window-controls", () => ({
     },
 }));
 
-jest.mock("@legend-desktop/window-manager", () => ({
+jest.mock("@legend-apps/window-manager", () => ({
     __esModule: true,
     closeFrontmostWindow: jest.fn(async () => ({ success: true })),
     closeWindow: jest.fn(async () => ({ success: true })),
@@ -222,7 +222,7 @@ jest.mock("@legend-desktop/window-manager", () => ({
     },
 }));
 
-jest.mock("@legend-desktop/keyboard-manager", () => ({
+jest.mock("@legend-apps/keyboard-manager", () => ({
     __esModule: true,
     default: {
         addKeyDownListener: jest.fn(() => jest.fn()),
@@ -237,28 +237,28 @@ jest.mock("@legend-desktop/keyboard-manager", () => ({
     KeyCodes,
 }));
 
-jest.mock("@legend-desktop/sf-symbol", () => ({
+jest.mock("@legend-apps/sf-symbol", () => ({
     __esModule: true,
     SFSymbol: () => null,
 }));
 
-jest.mock("@legend-desktop/sidebar", () => ({
+jest.mock("@legend-apps/sidebar", () => ({
     __esModule: true,
     NativeSidebarItemView: ({ children }) => React.createElement(React.Fragment, null, children),
     NativeSidebarView: ({ children }) => React.createElement(React.Fragment, null, children),
 }));
 
-jest.mock("@legend-desktop/glass-effect-view", () => ({
+jest.mock("@legend-apps/glass-effect-view", () => ({
     __esModule: true,
     GlassEffectView: ({ children }) => React.createElement(React.Fragment, null, children),
 }));
 
-jest.mock("@legend-desktop/text-input-search", () => ({
+jest.mock("@legend-apps/text-input-search", () => ({
     __esModule: true,
     TextInputSearch: ReactNative.TextInput,
 }));
 
-jest.mock("@legend-desktop/storage", () => {
+jest.mock("@legend-apps/storage", () => {
     const { observable } = require("@legendapp/state");
     const plugins = new WeakMap();
 

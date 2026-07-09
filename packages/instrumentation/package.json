@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/instrumentation",
+  "name": "@legend-apps/instrumentation",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",

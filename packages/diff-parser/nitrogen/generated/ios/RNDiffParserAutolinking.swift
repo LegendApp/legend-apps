@@ -10,7 +10,7 @@ import NitroModules
 // TODO: Use empty enums once Swift supports exporting them as namespaces
 //       See: https://github.com/swiftlang/swift/pull/83616
 public final class RNDiffParserAutolinking {
-  public typealias bridge = margelo.nitro.legenddesktop.diffparser.bridge.swift
+  public typealias bridge = margelo.nitro.legendapps.diffparser.bridge.swift
 
   
 }

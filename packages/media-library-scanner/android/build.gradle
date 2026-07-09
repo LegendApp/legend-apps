@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.medialibraryscanner"
+  namespace "so.legend.apps.medialibraryscanner"
   compileSdkVersion 35
 
   defaultConfig {

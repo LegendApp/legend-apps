@@ -1,11 +1,11 @@
 import type {
   MarkdownDocumentCommands,
-} from "@legend-desktop/markdown-document";
-import { revealInFinder } from "@legend-desktop/file-dialog";
+} from "@legend-apps/markdown-document";
+import { revealInFinder } from "@legend-apps/file-dialog";
 import {
   updateMenuItems,
   type NativeMenuActionHandlers,
-} from "@legend-desktop/native-menu";
+} from "@legend-apps/native-menu";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useEffect, useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";

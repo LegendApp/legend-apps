@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-desktop/storage";
+import { createObservableFile } from "@legend-apps/storage";
 import type { KeyboardEventCodeHotkey } from "./keyboard/Keyboard";
 import { KeyCodes } from "./keyboard/KeyboardManager";
 import { isMusicThemeName, type MusicThemeName } from "../theme/musicThemes";

@@ -29,15 +29,15 @@
 #endif
 
 // Forward declaration of `HybridDiffDocumentSpec` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { class HybridDiffDocumentSpec; }
+namespace margelo::nitro::legendapps::diffparser { class HybridDiffDocumentSpec; }
 // Forward declaration of `DiffFileSummary` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffFileSummary; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffFileSummary; }
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffRenderRow; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffRenderRow; }
 // Forward declaration of `DiffSyntaxScope` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffSyntaxScope; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffSyntaxScope; }
 // Forward declaration of `DiffLoadTiming` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
+namespace margelo::nitro::legendapps::diffparser { struct DiffLoadTiming; }
 
 #include <memory>
 #include "HybridDiffDocumentSpec.hpp"
@@ -47,7 +47,7 @@ namespace margelo::nitro::legenddesktop::diffparser { struct DiffLoadTiming; }
 #include "DiffSyntaxScope.hpp"
 #include "DiffLoadTiming.hpp"
 
-namespace margelo::nitro::legenddesktop::diffparser {
+namespace margelo::nitro::legendapps::diffparser {
 
   /**
    * A struct which can be represented as a JavaScript object (DiffLoadResult).
@@ -68,30 +68,30 @@ namespace margelo::nitro::legenddesktop::diffparser {
     friend bool operator==(const DiffLoadResult& lhs, const DiffLoadResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::diffparser
+} // namespace margelo::nitro::legendapps::diffparser
 
 namespace margelo::nitro {
 
   // C++ DiffLoadResult <> JS DiffLoadResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadResult> final {
-    static inline margelo::nitro::legenddesktop::diffparser::DiffLoadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::diffparser::DiffLoadResult> final {
+    static inline margelo::nitro::legendapps::diffparser::DiffLoadResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::diffparser::DiffLoadResult(
-        JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::diffparser::HybridDiffDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffFileSummary>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "files"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialRows"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopes"))),
-        JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
+      return margelo::nitro::legendapps::diffparser::DiffLoadResult(
+        JSIConverter<std::shared_ptr<margelo::nitro::legendapps::diffparser::HybridDiffDocumentSpec>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffFileSummary>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "files"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffRenderRow>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialRows"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffSyntaxScope>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopes"))),
+        JSIConverter<margelo::nitro::legendapps::diffparser::DiffLoadTiming>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::diffparser::DiffLoadResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::DiffLoadResult& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::diffparser::HybridDiffDocumentSpec>>::toJSI(runtime, arg.document));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "files"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffFileSummary>>::toJSI(runtime, arg.files));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialRows"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>>::toJSI(runtime, arg.initialRows));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "scopes"), JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope>>::toJSI(runtime, arg.scopes));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming>::toJSI(runtime, arg.timing));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "document"), JSIConverter<std::shared_ptr<margelo::nitro::legendapps::diffparser::HybridDiffDocumentSpec>>::toJSI(runtime, arg.document));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "files"), JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffFileSummary>>::toJSI(runtime, arg.files));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "initialRows"), JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffRenderRow>>::toJSI(runtime, arg.initialRows));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "scopes"), JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffSyntaxScope>>::toJSI(runtime, arg.scopes));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "timing"), JSIConverter<margelo::nitro::legendapps::diffparser::DiffLoadTiming>::toJSI(runtime, arg.timing));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -102,11 +102,11 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<std::shared_ptr<margelo::nitro::legenddesktop::diffparser::HybridDiffDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffFileSummary>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "files")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffRenderRow>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialRows")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::diffparser::DiffSyntaxScope>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopes")))) return false;
-      if (!JSIConverter<margelo::nitro::legenddesktop::diffparser::DiffLoadTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
+      if (!JSIConverter<std::shared_ptr<margelo::nitro::legendapps::diffparser::HybridDiffDocumentSpec>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "document")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffFileSummary>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "files")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffRenderRow>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "initialRows")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::diffparser::DiffSyntaxScope>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "scopes")))) return false;
+      if (!JSIConverter<margelo::nitro::legendapps::diffparser::DiffLoadTiming>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "timing")))) return false;
       return true;
     }
   };

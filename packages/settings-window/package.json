@@ -1,14 +1,14 @@
 {
-  "name": "@legend-desktop/settings-window",
+  "name": "@legend-apps/settings-window",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
   "dependencies": {
     "@legendapp/list": "catalog:",
-    "@legend-desktop/appkit-split-view": "0.0.0",
-    "@legend-desktop/classnames": "0.0.0",
-    "@legend-desktop/window-manager": "0.0.0"
+    "@legend-apps/appkit-split-view": "0.0.0",
+    "@legend-apps/classnames": "0.0.0",
+    "@legend-apps/window-manager": "0.0.0"
   },
   "peerDependencies": {
     "react": "catalog:",

@@ -1,4 +1,4 @@
-import type { DragDropFileEvent } from "@legend-desktop/drag-drop";
+import type { DragDropFileEvent } from "@legend-apps/drag-drop";
 import { getDroppedDiffSource, getUnsupportedDropMessage } from "../diffDrop";
 
 function drop(event: Partial<DragDropFileEvent>): DragDropFileEvent {

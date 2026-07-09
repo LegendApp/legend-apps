@@ -1,5 +1,5 @@
-import { NativeSegmentedControl } from "@legend-desktop/native-select";
-import { SFSymbol } from "@legend-desktop/sf-symbol";
+import { NativeSegmentedControl } from "@legend-apps/native-select";
+import { SFSymbol } from "@legend-apps/sf-symbol";
 import type { RefObject, ReactNode } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";

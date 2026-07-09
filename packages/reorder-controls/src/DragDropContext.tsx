@@ -3,7 +3,7 @@ import { useObservable } from "@legendapp/state/react";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 import { type LayoutRectangle, View } from "react-native";
 
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 const MAX_VERTICAL_PROXIMITY = 80;
 

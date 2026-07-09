@@ -29,16 +29,16 @@
 #endif
 
 // Forward declaration of `MarkdownChangedRange` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownChangedRange; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownChangedRange; }
 // Forward declaration of `MarkdownRenderBlock` to properly resolve imports.
-namespace margelo::nitro::legenddesktop::markdownparser { struct MarkdownRenderBlock; }
+namespace margelo::nitro::legendapps::markdownparser { struct MarkdownRenderBlock; }
 
 #include "MarkdownChangedRange.hpp"
 #include "MarkdownRenderBlock.hpp"
 #include <vector>
 #include <string>
 
-namespace margelo::nitro::legenddesktop::markdownparser {
+namespace margelo::nitro::legendapps::markdownparser {
 
   /**
    * A struct which can be represented as a JavaScript object (MarkdownTransactionResult).
@@ -59,29 +59,29 @@ namespace margelo::nitro::legenddesktop::markdownparser {
     friend bool operator==(const MarkdownTransactionResult& lhs, const MarkdownTransactionResult& rhs) = default;
   };
 
-} // namespace margelo::nitro::legenddesktop::markdownparser
+} // namespace margelo::nitro::legendapps::markdownparser
 
 namespace margelo::nitro {
 
   // C++ MarkdownTransactionResult <> JS MarkdownTransactionResult (object)
   template <>
-  struct JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownTransactionResult> final {
-    static inline margelo::nitro::legenddesktop::markdownparser::MarkdownTransactionResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
+  struct JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownTransactionResult> final {
+    static inline margelo::nitro::legendapps::markdownparser::MarkdownTransactionResult fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
-      return margelo::nitro::legenddesktop::markdownparser::MarkdownTransactionResult(
+      return margelo::nitro::legendapps::markdownparser::MarkdownTransactionResult(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "revision"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceLength"))),
-        JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedRange"))),
-        JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedBlocks"))),
+        JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownChangedRange>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedRange"))),
+        JSIConverter<std::vector<margelo::nitro::legendapps::markdownparser::MarkdownRenderBlock>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedBlocks"))),
         JSIConverter<std::vector<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "retiredBlockIds")))
       );
     }
-    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legenddesktop::markdownparser::MarkdownTransactionResult& arg) {
+    static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::markdownparser::MarkdownTransactionResult& arg) {
       jsi::Object obj(runtime);
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "revision"), JSIConverter<double>::toJSI(runtime, arg.revision));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "sourceLength"), JSIConverter<double>::toJSI(runtime, arg.sourceLength));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "changedRange"), JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange>::toJSI(runtime, arg.changedRange));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "changedBlocks"), JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock>>::toJSI(runtime, arg.changedBlocks));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "changedRange"), JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownChangedRange>::toJSI(runtime, arg.changedRange));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "changedBlocks"), JSIConverter<std::vector<margelo::nitro::legendapps::markdownparser::MarkdownRenderBlock>>::toJSI(runtime, arg.changedBlocks));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "retiredBlockIds"), JSIConverter<std::vector<std::string>>::toJSI(runtime, arg.retiredBlockIds));
       return obj;
     }
@@ -95,8 +95,8 @@ namespace margelo::nitro {
       }
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "revision")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "sourceLength")))) return false;
-      if (!JSIConverter<margelo::nitro::legenddesktop::markdownparser::MarkdownChangedRange>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedRange")))) return false;
-      if (!JSIConverter<std::vector<margelo::nitro::legenddesktop::markdownparser::MarkdownRenderBlock>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedBlocks")))) return false;
+      if (!JSIConverter<margelo::nitro::legendapps::markdownparser::MarkdownChangedRange>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedRange")))) return false;
+      if (!JSIConverter<std::vector<margelo::nitro::legendapps::markdownparser::MarkdownRenderBlock>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "changedBlocks")))) return false;
       if (!JSIConverter<std::vector<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "retiredBlockIds")))) return false;
       return true;
     }

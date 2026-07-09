@@ -11,7 +11,7 @@
 #include <vector>
 
 using namespace facebook::react;
-using namespace margelo::nitro::legenddesktop::diffparser;
+using namespace margelo::nitro::legendapps::diffparser;
 
 #if TARGET_OS_OSX
 static constexpr double diffChangeTypeAdd = 1;

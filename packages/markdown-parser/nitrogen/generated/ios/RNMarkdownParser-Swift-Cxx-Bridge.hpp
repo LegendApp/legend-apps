@@ -20,8 +20,8 @@
  * Contains specialized versions of C++ templated types so they can be accessed from Swift,
  * as well as helper functions to interact with those C++ types from Swift.
  */
-namespace margelo::nitro::legenddesktop::markdownparser::bridge::swift {
+namespace margelo::nitro::legendapps::markdownparser::bridge::swift {
 
   
 
-} // namespace margelo::nitro::legenddesktop::markdownparser::bridge::swift
+} // namespace margelo::nitro::legendapps::markdownparser::bridge::swift

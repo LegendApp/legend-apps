@@ -1,6 +1,6 @@
-import { applyLegendDisplayThemeToUniwind } from "@legend-desktop/theme";
-import { type HotkeyState, type HotkeyValue } from "@legend-desktop/hotkeys";
-import { createObservableFile } from "@legend-desktop/storage";
+import { applyLegendDisplayThemeToUniwind } from "@legend-apps/theme";
+import { type HotkeyState, type HotkeyValue } from "@legend-apps/hotkeys";
+import { createObservableFile } from "@legend-apps/storage";
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import {

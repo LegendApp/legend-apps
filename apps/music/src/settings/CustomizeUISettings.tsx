@@ -10,7 +10,7 @@ import { SUPPORT_PLAYLISTS } from "../systems/constants";
 import { Icon } from "../systems/Icon";
 import { type PlaybackControlId, settings$, type UIControlLayout } from "../systems/Settings";
 import type { SFSymbols } from "../types/SFSymbols";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 
 type ControlGroup = "shown" | "hidden";
 type ControlDragData<T extends string> = {

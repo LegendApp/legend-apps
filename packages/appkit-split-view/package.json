@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/appkit-split-view",
+  "name": "@legend-apps/appkit-split-view",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "all",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.appkitsplitview"
+      "javaPackageName": "so.legend.apps.appkitsplitview"
     },
     "ios": {
       "modulesProvider": {

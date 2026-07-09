@@ -10,8 +10,8 @@
 // Include C++ implementation defined types
 
 
-namespace margelo::nitro::legenddesktop::diffparser::bridge::swift {
+namespace margelo::nitro::legendapps::diffparser::bridge::swift {
 
   
 
-} // namespace margelo::nitro::legenddesktop::diffparser::bridge::swift
+} // namespace margelo::nitro::legendapps::diffparser::bridge::swift

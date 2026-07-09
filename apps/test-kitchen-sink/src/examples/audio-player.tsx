@@ -9,8 +9,8 @@ import {
   setVolume,
   stop,
   updateNowPlayingInfo,
-} from "@legend-desktop/audio-player";
-import { openFileDialog } from "@legend-desktop/file-dialog";
+} from "@legend-apps/audio-player";
+import { openFileDialog } from "@legend-apps/file-dialog";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

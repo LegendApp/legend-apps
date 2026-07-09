@@ -1,6 +1,6 @@
 import { useMount } from "@legendapp/state/react";
 import { useRef } from "react";
-import { useWindowManager } from "@legend-desktop/window-manager";
+import { useWindowManager } from "@legend-apps/window-manager";
 import { useWindowId } from "./WindowProvider";
 
 export function useWindowFocusEffect(callback: () => void) {

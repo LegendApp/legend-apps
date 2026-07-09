@@ -1,5 +1,5 @@
 {
-  "name": "@legend-desktop/markdown-block-editor",
+  "name": "@legend-apps/markdown-block-editor",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -9,7 +9,7 @@
     "type": "components",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.legenddesktop.markdownblockeditor"
+      "javaPackageName": "so.legend.apps.markdownblockeditor"
     },
     "ios": {
       "componentProvider": {
@@ -19,7 +19,7 @@
     }
   },
   "peerDependencies": {
-    "@legend-desktop/markdown-parser": "workspace:*",
+    "@legend-apps/markdown-parser": "workspace:*",
     "react": "catalog:",
     "react-native": "catalog:",
     "react-native-enriched-markdown": "*"

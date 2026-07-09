@@ -21,14 +21,14 @@ import { localPlayerState$ } from "../LocalAudioPlayer";
 import { Table, TableCell, type TableColumnSpec, TableHeader, TableRow } from "../Table";
 import type { TrackData } from "../TrackItem";
 import { useListItemStyles } from "../../hooks/useListItemStyles";
-import { type ContextMenuItem, showContextMenu } from "@legend-desktop/context-menu";
-import { type NativeDragTrack, TrackDragSource } from "@legend-desktop/drag-drop";
+import { type ContextMenuItem, showContextMenu } from "@legend-apps/context-menu";
+import { type NativeDragTrack, TrackDragSource } from "@legend-apps/drag-drop";
 import { Icon } from "../../systems/Icon";
 import { libraryUI$ } from "../../systems/LibraryState";
 import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "../../systems/LocalMusicState";
 import { addTracksToPlaylist } from "../../systems/LocalPlaylists";
 import { themeState$ } from "../../theme/ThemeProvider";
-import { cn } from "@legend-desktop/classnames";
+import { cn } from "@legend-apps/classnames";
 import type { QueueAction } from "../../utils/queueActions";
 import { useLibraryTrackList } from "./useLibraryTrackList";
 

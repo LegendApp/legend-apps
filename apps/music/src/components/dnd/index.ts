@@ -4,7 +4,7 @@ export {
     type DraggedItem,
     DroppableZone,
     useDragDrop,
-} from "@legend-desktop/reorder-controls";
+} from "@legend-apps/reorder-controls";
 export {
     type DragData,
     LOCAL_PLAYLIST_DRAG_ZONE_ID,

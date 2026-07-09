@@ -1,4 +1,4 @@
-import type { DiffFileSummary } from "@legend-desktop/diff-parser";
+import type { DiffFileSummary } from "@legend-apps/diff-parser";
 
 type FileStatusPresentation = {
   backgroundColor: string;

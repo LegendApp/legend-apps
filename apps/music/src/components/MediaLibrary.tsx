@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 
 import { Panel, PanelGroup, ResizeHandle } from "./ResizablePanels";
 import { settings$ } from "../systems/Settings";
-import { perfCount } from "@legend-desktop/runtime-utils";
+import { perfCount } from "@legend-apps/runtime-utils";
 import { MediaLibrarySidebar } from "./MediaLibrary/Sidebar";
 import { TrackList } from "./MediaLibrary/TrackList";
 

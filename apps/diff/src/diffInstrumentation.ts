@@ -1,4 +1,4 @@
-import { createInstrumentationLogger, type InstrumentationPayloadInput } from "@legend-desktop/instrumentation";
+import { createInstrumentationLogger, type InstrumentationPayloadInput } from "@legend-apps/instrumentation";
 
 const diffInstrumentation = createInstrumentationLogger({
   debugId: "diff",

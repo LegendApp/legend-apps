@@ -10,8 +10,8 @@
 // Include C++ implementation defined types
 
 
-namespace margelo::nitro::legenddesktop::markdownparser::bridge::swift {
+namespace margelo::nitro::legendapps::markdownparser::bridge::swift {
 
   
 
-} // namespace margelo::nitro::legenddesktop::markdownparser::bridge::swift
+} // namespace margelo::nitro::legendapps::markdownparser::bridge::swift

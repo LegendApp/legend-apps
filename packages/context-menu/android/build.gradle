@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-  namespace "com.legenddesktop.contextmenu"
+  namespace "so.legend.apps.contextmenu"
   compileSdkVersion 35
 
   defaultConfig {
