@@ -7,7 +7,6 @@ import { useEffect, useRef } from "react";
 import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
-import { logDiffMemoryMark, logDiffOpenTiming } from "./diffInstrumentation";
 import { diffMenuConfig } from "./diffMenus";
 import {
   getDiffShowOnlyHunksSetting,
@@ -20,6 +19,8 @@ import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
+const diffStartupSyntaxWarmupDelayMs = 1000;
+
 LogBox.ignoreLogs([
   "Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Text/TextNativeComponent')",
   "Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Utilities/codegenNativeCommands')",
@@ -27,46 +28,14 @@ LogBox.ignoreLogs([
 
 registerDiffWindows();
 initializeSyntaxAssetsSync();
-logDiffOpenTiming("app.module", () => ({
-  phase: "evaluated",
-}));
-logDiffMemoryMark("app.module", () => ({
-  phase: "evaluated",
-}));
-const initialUrlLookupStartedAt = nowMs();
-logDiffOpenTiming("launch.initialUrl.start", () => ({}));
-const initialUrlPromise = Linking.getInitialURL().then((url) => {
-  logDiffOpenTiming("launch.initialUrl.finish", () => ({
-    elapsedMs: elapsedMs(initialUrlLookupStartedAt),
-    hasUrl: Boolean(url),
-  }));
-  return url;
-});
+const initialUrlPromise = Linking.getInitialURL();
 void initialUrlPromise.catch(() => undefined);
-logDiffMemoryMark("viewer.prefetch.start", () => ({}));
-const viewerPrefetchStartedAt = nowMs();
-logDiffOpenTiming("viewer.prefetch.start", () => ({}));
-prefetchDiffViewerWindow()
-  .then(() => {
-    logDiffMemoryMark("viewer.prefetch.finish", () => ({}));
-    logDiffOpenTiming("viewer.prefetch.finish", () => ({
-      elapsedMs: elapsedMs(viewerPrefetchStartedAt),
-    }));
-  })
-  .catch(reportDiffAppControllerError);
+prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
 configureDiffAutoUpdates().catch(reportDiffAppControllerError);
 
 type DiffAppProps = {
   launchArguments?: string[];
 };
-
-function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-function elapsedMs(start: number) {
-  return Number((nowMs() - start).toFixed(1));
-}
 
 function reportDiffAppControllerError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -80,73 +49,42 @@ async function configureDiffAutoUpdates() {
   }
 }
 
+function scheduleDiffSyntaxHighlightersForStartupAfterLaunch() {
+  setTimeout(() => {
+    warmDiffSyntaxHighlightersForStartup().catch(reportDiffAppControllerError);
+  }, diffStartupSyntaxWarmupDelayMs);
+}
+
 async function openDiffViewerForSelectedFolder(controller: DocumentAppController) {
-  const dialogStartedAt = nowMs();
-  logDiffOpenTiming("menu.dialog.start", () => ({}));
   const folderPath = await openDiffFolderDialog();
-  const dialogFinishedAt = nowMs();
-  logDiffOpenTiming("menu.dialog.finish", () => ({
-    dialogMs: Number((dialogFinishedAt - dialogStartedAt).toFixed(1)),
-    folderPath,
-  }));
 
   if (folderPath) {
-    const windowStartedAt = nowMs();
     await openDiffViewerWindow(normalizeDiffOpenSource(folderPath));
     controller.setDocumentWindowOpen(true);
-    logDiffOpenTiming("menu.window.opened", () => ({
-      folderPath,
-      windowOpenMs: elapsedMs(windowStartedAt),
-    }));
   }
 }
 
 async function openDiffViewerForUrl(controller: DocumentAppController) {
-  const windowStartedAt = nowMs();
   await openDiffViewerWindow(null, { focusUrlInput: true, freshWindow: true });
   controller.setDocumentWindowOpen(true);
-  logDiffOpenTiming("menu.url.window.opened", () => ({
-    windowOpenMs: elapsedMs(windowStartedAt),
-  }));
 }
 
 async function openDiffViewerForSelectedFiles(controller: DocumentAppController) {
-  const dialogStartedAt = nowMs();
-  logDiffOpenTiming("menu.filePairDialog.start", () => ({}));
   const source = await openDiffFilePairDialog();
-  const dialogFinishedAt = nowMs();
-  logDiffOpenTiming("menu.filePairDialog.finish", () => ({
-    dialogMs: Number((dialogFinishedAt - dialogStartedAt).toFixed(1)),
-    source,
-  }));
 
   if (source) {
-    const windowStartedAt = nowMs();
     await openDiffViewerWindow(source);
     controller.setDocumentWindowOpen(true);
-    logDiffOpenTiming("menu.filePair.window.opened", () => ({
-      source,
-      windowOpenMs: elapsedMs(windowStartedAt),
-    }));
   }
 }
 
 async function openDiffStartWindow(controller: DocumentAppController) {
-  const windowStartedAt = nowMs();
   await openDiffViewerWindow(null, { freshWindow: true });
   controller.setDocumentWindowOpen(true);
-  logDiffOpenTiming("start.window.opened", () => ({
-    windowOpenMs: elapsedMs(windowStartedAt),
-  }));
 }
 
 async function openDiffViewerFromClipboard(controller: DocumentAppController) {
-  const clipboardStartedAt = nowMs();
   const result = await commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 });
-  logDiffOpenTiming("menu.clipboard.read", () => ({
-    clipboardMs: elapsedMs(clipboardStartedAt),
-    exitCode: result.exitCode,
-  }));
 
   if (result.exitCode !== 0) {
     throw new Error(result.stderr || "Unable to read the clipboard.");
@@ -157,56 +95,26 @@ async function openDiffViewerFromClipboard(controller: DocumentAppController) {
     throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
   }
 
-  const windowStartedAt = nowMs();
   await openDiffViewerWindow(source);
   controller.setDocumentWindowOpen(true);
-  logDiffOpenTiming("menu.clipboard.window.opened", () => ({
-    source,
-    windowOpenMs: elapsedMs(windowStartedAt),
-  }));
 }
 
 function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
   return {
     startWindow: () => {
-      logDiffOpenTiming("menu.startWindow", () => ({}));
-      openDiffStartWindow(controller)
-        .then(() => {
-          logDiffOpenTiming("menu.startWindow.finish", () => ({}));
-        })
-        .catch(reportDiffAppControllerError);
+      openDiffStartWindow(controller).catch(reportDiffAppControllerError);
     },
     openFolder: () => {
-      logDiffOpenTiming("menu.openFolder", () => ({}));
-      openDiffViewerForSelectedFolder(controller)
-        .then(() => {
-          logDiffOpenTiming("menu.openFolder.finish", () => ({}));
-        })
-        .catch(reportDiffAppControllerError);
+      openDiffViewerForSelectedFolder(controller).catch(reportDiffAppControllerError);
     },
     compareFiles: () => {
-      logDiffOpenTiming("menu.compareFiles", () => ({}));
-      openDiffViewerForSelectedFiles(controller)
-        .then(() => {
-          logDiffOpenTiming("menu.compareFiles.finish", () => ({}));
-        })
-        .catch(reportDiffAppControllerError);
+      openDiffViewerForSelectedFiles(controller).catch(reportDiffAppControllerError);
     },
     openUrl: () => {
-      logDiffOpenTiming("menu.openUrl", () => ({}));
-      openDiffViewerForUrl(controller)
-        .then(() => {
-          logDiffOpenTiming("menu.openUrl.finish", () => ({}));
-        })
-        .catch(reportDiffAppControllerError);
+      openDiffViewerForUrl(controller).catch(reportDiffAppControllerError);
     },
     openFromClipboard: () => {
-      logDiffOpenTiming("menu.openFromClipboard", () => ({}));
-      openDiffViewerFromClipboard(controller)
-        .then(() => {
-          logDiffOpenTiming("menu.openFromClipboard.finish", () => ({}));
-        })
-        .catch(reportDiffAppControllerError);
+      openDiffViewerFromClipboard(controller).catch(reportDiffAppControllerError);
     },
     settings: () => {
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
@@ -242,21 +150,9 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
   let source = getLaunchDiffSource(launchArguments?.slice(1));
   let initialUrl: string | null = null;
   if (!source) {
-    const initialUrlAwaitStartedAt = nowMs();
-    logDiffOpenTiming("launch.initialUrl.await.start", () => ({}));
     initialUrl = await initialUrlPromise;
-    logDiffOpenTiming("launch.initialUrl.await.finish", () => ({
-      awaitMs: elapsedMs(initialUrlAwaitStartedAt),
-      hasUrl: Boolean(initialUrl),
-    }));
     source = getDiffSourceFromOpenUrl(initialUrl ?? "");
   }
-  const startedAt = nowMs();
-  logDiffOpenTiming("launch.open.start", () => ({
-    initialUrl,
-    source,
-    launchArgumentCount: launchArguments?.length ?? 0,
-  }));
 
   let restoredWindowCount = 0;
   if (source) {
@@ -264,45 +160,19 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
     controller.setDocumentWindowOpen(true);
   } else {
     if (getDiffRestoreWindowsOnStartupSetting()) {
-      const restoreStartedAt = nowMs();
-      logDiffOpenTiming("launch.restore.start", () => ({}));
       restoredWindowCount = await restoreSavedDiffWindows();
-      logDiffOpenTiming("launch.restore.finish", () => ({
-        restoredWindows: restoredWindowCount,
-        restoreMs: elapsedMs(restoreStartedAt),
-      }));
     }
     if (restoredWindowCount === 0) {
       await openDiffViewerWindow(null);
     }
     controller.setDocumentWindowOpen(true);
     if (restoredWindowCount === 0) {
-      logDiffMemoryMark("startup.syntaxWarmup.start", () => ({}));
-      warmDiffSyntaxHighlightersForStartup()
-        .then((warmupResults) => {
-          logDiffMemoryMark("startup.syntaxWarmup.finish", () => ({
-            languages: warmupResults.map((warmupResult) => warmupResult.language),
-          }));
-        })
-        .catch(reportDiffAppControllerError);
+      scheduleDiffSyntaxHighlightersForStartupAfterLaunch();
     }
   }
-  logDiffOpenTiming("launch.open.finish", () => ({
-    restoredWindows: restoredWindowCount,
-    source,
-    windowOpenMs: elapsedMs(startedAt),
-  }));
 }
 
-let loggedFirstAppRender = false;
-
 export function App({ launchArguments }: DiffAppProps) {
-  if (!loggedFirstAppRender) {
-    loggedFirstAppRender = true;
-    logDiffOpenTiming("app.render.first", () => ({
-      launchArgumentCount: launchArguments?.length ?? 0,
-    }));
-  }
   const handledOpenUrlRef = useRef<{ handledAt: number; url: string } | null>(null);
   const controller = useDocumentAppController({
     createMenuHandlers: createDiffMenuHandlers,
@@ -316,12 +186,6 @@ export function App({ launchArguments }: DiffAppProps) {
     windowIdentifier: diffViewerWindowIdentifier,
   });
   const controllerRef = useRef(controller);
-
-  useEffect(() => {
-    logDiffOpenTiming("app.effect.mount", () => ({
-      launchArgumentCount: launchArguments?.length ?? 0,
-    }));
-  }, [launchArguments]);
 
   useEffect(() => {
     controllerRef.current = controller;
@@ -342,10 +206,6 @@ export function App({ launchArguments }: DiffAppProps) {
       if (url && !isImmediateDuplicate) {
         handledOpenUrlRef.current = { handledAt: now, url };
         const source = getDiffSourceFromOpenUrl(url);
-        logDiffOpenTiming("url.open", () => ({
-          source,
-          url,
-        }));
         if (source) {
           const currentController = controllerRef.current;
           openDiffViewerWindow(source)

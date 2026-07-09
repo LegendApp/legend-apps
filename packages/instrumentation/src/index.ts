@@ -78,7 +78,7 @@ function getNamespaceEnabledOverride(namespace: string) {
 }
 
 export function isInstrumentationEnabled(namespace = "default") {
-  return getNamespaceEnabledOverride(namespace) ?? false;
+  return isDev() && (getNamespaceEnabledOverride(namespace) ?? false);
 }
 
 function resolvePayload(payload: InstrumentationPayloadInput | undefined) {
