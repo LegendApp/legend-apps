@@ -611,6 +611,11 @@ std::vector<DiffRenderRow> HybridDiffDocument::getPlainRows(double start, double
   return renderRowsLocked(safeStart, end);
 }
 
+std::vector<double> HybridDiffDocument::getHunkRowIndexes() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return hunkRowIndexes_;
+}
+
 void HybridDiffDocument::appendStoredRowLocked(DiffRenderRow row) {
   DiffStoredRow storedRow;
   storedRow.index = row.index;
@@ -623,6 +628,15 @@ void HybridDiffDocument::appendStoredRowLocked(DiffRenderRow row) {
   storedRow.textOffset = rowText_.size();
   storedRow.textLength = row.text.size();
   rowText_.append(row.text);
+  const bool startsHunk = storedRow.kind == diffRowKindLine
+      && storedRow.hunkIndex >= 0
+      && (rows_.empty()
+          || rows_.back().kind != diffRowKindLine
+          || rows_.back().fileIndex != storedRow.fileIndex
+          || rows_.back().hunkIndex != storedRow.hunkIndex);
+  if (startsHunk) {
+    hunkRowIndexes_.push_back(static_cast<double>(rows_.size()));
+  }
   appendChangedLineRunLocked(storedRow, rows_.size());
   rows_.push_back(std::move(storedRow));
 }
@@ -1441,6 +1455,7 @@ double HybridDiffDocument::releaseNativeResources() {
       clearVectorMemory(files_);
       clearVectorMemory(rows_);
       clearStringMemory(rowText_);
+      clearVectorMemory(hunkRowIndexes_);
       clearVectorMemory(changedLineBlocks_);
       clearVectorMemory(rowTokenized_);
       clearVectorMemory(sideBySideLines_);
@@ -1620,6 +1635,7 @@ size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
 	    size += backingStore_->getExternalMemorySize();
 	  }
   size += rowTokenized_.capacity() * sizeof(uint8_t);
+  size += hunkRowIndexes_.capacity() * sizeof(double);
   size += changedLineBlocks_.capacity() * sizeof(DiffChangedLineBlock);
   for (const auto& block : changedLineBlocks_) {
     size += block.addedRuns.capacity() * sizeof(DiffChangedLineRun);

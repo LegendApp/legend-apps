@@ -136,6 +136,7 @@ public:
   DiffCachedRow getRow(double index) override;
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
+  std::vector<double> getHunkRowIndexes() override;
   double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffSideBySideFileHeader> getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) override;
   double getSideBySideListIndexForSourceRow(double sourceRowIndex, const std::vector<double>& collapsedFileIndexes) override;
@@ -239,6 +240,7 @@ private:
   std::vector<DiffFileSummary> files_;
   std::vector<DiffStoredRow> rows_;
   std::string rowText_;
+  std::vector<double> hunkRowIndexes_;
   std::vector<DiffChangedLineBlock> changedLineBlocks_;
   std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;

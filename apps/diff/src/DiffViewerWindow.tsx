@@ -182,6 +182,7 @@ import {
   DiffWindowChromeController,
   DiffWindowToolbarItemController,
 } from "./viewer/diffViewerControllers";
+import { getAdjacentDiffHunkIndex } from "./viewer/diffHunkNavigation";
 import {
   DiffViewerModelProvider,
   emptyDiffLoadProgressState,
@@ -4601,6 +4602,43 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   );
   const rowRender$ = useObservable(rowRenderInitialState) as unknown as Observable<DiffRowRenderState>;
 
+  const hunkListIndexes = useMemo(() => {
+    let indexes: number[] = [];
+    if (loadedDocument) {
+      if (viewMode === "unified") {
+        indexes = loadedDocument.getHunkRowIndexes()
+          .map((rowIndex) => getVisibleListIndex(rowIndex))
+          .filter((index): index is number => index !== undefined);
+      } else {
+        indexes = [...sideBySideHunkHeaderIndexes].sort((left, right) => left - right);
+      }
+    }
+    return indexes;
+  }, [getVisibleListIndex, loadedDocument, sideBySideHunkHeaderIndexes, viewMode]);
+
+  const navigateToHunk = useCallback((direction: -1 | 1) => {
+    const list = listRef.current;
+    const currentIndex = list?.getState().start ?? 0;
+    const targetIndex = getAdjacentDiffHunkIndex(hunkListIndexes, currentIndex, direction);
+    let didNavigate = false;
+
+    if (list && targetIndex !== null) {
+      list.scrollToIndex({
+        animated: true,
+        index: targetIndex,
+        viewOffset: diffTitlebarTopInset,
+        viewPosition: 0,
+      }).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+      didNavigate = true;
+    }
+
+    return didNavigate;
+  }, [hunkListIndexes]);
+  const navigateToNextHunk = useCallback(() => navigateToHunk(1), [navigateToHunk]);
+  const navigateToPreviousHunk = useCallback(() => navigateToHunk(-1), [navigateToHunk]);
+
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
     const listIndex = viewMode === "unified"
@@ -5207,6 +5245,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         copyCurrentRelativePath={copyCurrentRelativePath}
         copyCurrentSource={copyCurrentSource}
         focusSearch={focusSearch}
+        navigateToNextHunk={navigateToNextHunk}
+        navigateToPreviousHunk={navigateToPreviousHunk}
         reloadCurrentSource={reloadCurrentSource}
         revealCurrentFolder={revealCurrentFolder}
         saveMergeDrafts={saveMergeDraftsFromCommand}

@@ -171,6 +171,20 @@ export const diffMenuConfig: NativeMenuConfig[] = [
       },
       { separator: true, id: "separator-view-hunks", placement: { before: "Enter Full Screen" } },
       {
+        id: "previousHunk",
+        title: "Previous Hunk",
+        enabled: false,
+        placement: { before: "Enter Full Screen" },
+        shortcut: { key: "[", modifiers: commandModifier | optionModifier },
+      },
+      {
+        id: "nextHunk",
+        title: "Next Hunk",
+        enabled: false,
+        placement: { before: "Enter Full Screen" },
+        shortcut: { key: "]", modifiers: commandModifier | optionModifier },
+      },
+      {
         id: "showOnlyHunks",
         title: "Show Only Hunks",
         checked: true,

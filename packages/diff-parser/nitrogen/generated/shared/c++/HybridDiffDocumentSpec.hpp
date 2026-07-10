@@ -82,6 +82,7 @@ namespace margelo::nitro::legendapps::diffparser {
       virtual DiffCachedRow getRow(double index) = 0;
       virtual std::vector<DiffRenderRow> getPlainRows(double start, double count) = 0;
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
+      virtual std::vector<double> getHunkRowIndexes() = 0;
       virtual double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) = 0;
       virtual std::vector<DiffSideBySideFileHeader> getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) = 0;
       virtual double getSideBySideListIndexForSourceRow(double sourceRowIndex, const std::vector<double>& collapsedFileIndexes) = 0;

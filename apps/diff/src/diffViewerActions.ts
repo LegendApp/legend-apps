@@ -5,6 +5,8 @@ type DiffViewerActionId =
   | "copyRelativePath"
   | "copySource"
   | "filterFiles"
+  | "nextHunk"
+  | "previousHunk"
   | "reload"
   | "revealInFinder"
   | "save"

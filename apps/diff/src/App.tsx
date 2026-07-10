@@ -115,6 +115,8 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
       AutoUpdater.checkForUpdates().catch(reportDiffAppControllerError);
     },
     filterFiles: dispatchDiffViewerAction,
+    nextHunk: dispatchDiffViewerAction,
+    previousHunk: dispatchDiffViewerAction,
     reload: dispatchDiffViewerAction,
     revealInFinder: dispatchDiffViewerAction,
     save: dispatchDiffViewerAction,

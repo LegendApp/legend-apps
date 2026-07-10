@@ -22,6 +22,7 @@ namespace margelo::nitro::legendapps::diffparser {
       prototype.registerHybridMethod("getRow", &HybridDiffDocumentSpec::getRow);
       prototype.registerHybridMethod("getPlainRows", &HybridDiffDocumentSpec::getPlainRows);
       prototype.registerHybridMethod("getRows", &HybridDiffDocumentSpec::getRows);
+      prototype.registerHybridMethod("getHunkRowIndexes", &HybridDiffDocumentSpec::getHunkRowIndexes);
       prototype.registerHybridMethod("getSideBySideRowCount", &HybridDiffDocumentSpec::getSideBySideRowCount);
       prototype.registerHybridMethod("getSideBySideFileHeaders", &HybridDiffDocumentSpec::getSideBySideFileHeaders);
       prototype.registerHybridMethod("getSideBySideListIndexForSourceRow", &HybridDiffDocumentSpec::getSideBySideListIndexForSourceRow);

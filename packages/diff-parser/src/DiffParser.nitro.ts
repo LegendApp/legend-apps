@@ -127,6 +127,7 @@ export interface DiffDocument
   getRow(index: number): DiffCachedRow;
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
+  getHunkRowIndexes(): number[];
   getSideBySideRowCount(collapsedFileIndexes: number[]): number;
   getSideBySideFileHeaders(collapsedFileIndexes: number[]): DiffSideBySideFileHeader[];
   getSideBySideListIndexForSourceRow(sourceRowIndex: number, collapsedFileIndexes: number[]): number;

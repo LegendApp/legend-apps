@@ -150,6 +150,14 @@ export function DiffNativeMenuController({
         id: "filterFiles",
       },
       {
+        enabled: hasLoadedFiles,
+        id: "previousHunk",
+      },
+      {
+        enabled: hasLoadedFiles,
+        id: "nextHunk",
+      },
+      {
         checked: currentViewMode === "unified",
         enabled: currentShowViewModeToolbar,
         id: "viewUnified",
@@ -308,6 +316,8 @@ export function DiffActionHandlersController({
   copyCurrentRelativePath,
   copyCurrentSource,
   focusSearch,
+  navigateToNextHunk,
+  navigateToPreviousHunk,
   reloadCurrentSource,
   revealCurrentFolder,
   saveMergeDrafts,
@@ -318,6 +328,8 @@ export function DiffActionHandlersController({
   copyCurrentRelativePath: () => boolean;
   copyCurrentSource: () => boolean;
   focusSearch: () => boolean;
+  navigateToNextHunk: () => boolean;
+  navigateToPreviousHunk: () => boolean;
   reloadCurrentSource: () => boolean;
   revealCurrentFolder: () => boolean;
   saveMergeDrafts: () => boolean;
@@ -329,6 +341,8 @@ export function DiffActionHandlersController({
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
     filterFiles: focusSearch,
+    nextHunk: navigateToNextHunk,
+    previousHunk: navigateToPreviousHunk,
     reload: reloadCurrentSource,
     revealInFinder: revealCurrentFolder,
     save: saveMergeDrafts,
@@ -339,6 +353,8 @@ export function DiffActionHandlersController({
     copyCurrentRelativePath,
     copyCurrentSource,
     focusSearch,
+    navigateToNextHunk,
+    navigateToPreviousHunk,
     reloadCurrentSource,
     revealCurrentFolder,
     saveMergeDrafts,
