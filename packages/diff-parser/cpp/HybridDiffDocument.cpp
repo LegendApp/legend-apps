@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include "git2.h"
+#include <iterator>
 #include <map>
 #include <sstream>
 #include <unordered_set>
@@ -36,6 +37,7 @@ struct DiffSyntaxState {
 namespace {
 
 constexpr double diffRowKindLine = 2;
+constexpr double diffChangeTypeAdd = 1;
 constexpr double diffChangeTypeRemove = 2;
 constexpr double emptySideBySideRowIndex = -1;
 constexpr double defaultBackgroundTokenizeChunkRowCount = 16;
@@ -621,7 +623,116 @@ void HybridDiffDocument::appendStoredRowLocked(DiffRenderRow row) {
   storedRow.textOffset = rowText_.size();
   storedRow.textLength = row.text.size();
   rowText_.append(row.text);
+  appendChangedLineRunLocked(storedRow, rows_.size());
   rows_.push_back(std::move(storedRow));
+}
+
+void HybridDiffDocument::appendChangedLineRunLocked(const DiffStoredRow& row, size_t rowIndex) {
+  const bool isAdded = row.kind == diffRowKindLine && row.changeType == diffChangeTypeAdd;
+  const bool isRemoved = row.kind == diffRowKindLine && row.changeType == diffChangeTypeRemove;
+  if (isAdded || isRemoved) {
+    const bool continuesBlock = !changedLineBlocks_.empty()
+        && changedLineBlocks_.back().rowEnd == rowIndex
+        && changedLineBlocks_.back().fileIndex == row.fileIndex
+        && changedLineBlocks_.back().hunkIndex == row.hunkIndex;
+    if (!continuesBlock) {
+      changedLineBlocks_.push_back(DiffChangedLineBlock{
+          .rowStart = rowIndex,
+          .rowEnd = rowIndex,
+          .fileIndex = row.fileIndex,
+          .hunkIndex = row.hunkIndex,
+      });
+    }
+
+    auto& block = changedLineBlocks_.back();
+    auto& runs = isAdded ? block.addedRuns : block.removedRuns;
+    auto& count = isAdded ? block.addedCount : block.removedCount;
+    const bool continuesRun = !runs.empty() && runs.back().rowStart + runs.back().rowCount == rowIndex;
+    if (continuesRun) {
+      runs.back().rowCount += 1;
+    } else {
+      runs.push_back(DiffChangedLineRun{
+          .rowStart = rowIndex,
+          .rowCount = 1,
+          .ordinalStart = count,
+      });
+    }
+    count += 1;
+    block.rowEnd = rowIndex + 1;
+  }
+}
+
+std::optional<DiffChangedLinePair> HybridDiffDocument::getChangedLinePair(double rowIndex) {
+  const auto safeRowIndex = static_cast<size_t>(std::max(0.0, std::floor(rowIndex)));
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (safeRowIndex >= rows_.size() || changedLineBlocks_.empty()) {
+    return std::nullopt;
+  }
+
+  const auto blockAfter = std::upper_bound(
+      changedLineBlocks_.begin(),
+      changedLineBlocks_.end(),
+      safeRowIndex,
+      [](size_t index, const DiffChangedLineBlock& block) {
+        return index < block.rowStart;
+      });
+  if (blockAfter == changedLineBlocks_.begin()) {
+    return std::nullopt;
+  }
+
+  const auto& block = *std::prev(blockAfter);
+  const auto& row = rows_[safeRowIndex];
+  const bool isAdded = row.changeType == diffChangeTypeAdd;
+  const bool isRemoved = row.changeType == diffChangeTypeRemove;
+  if (safeRowIndex < block.rowStart || safeRowIndex >= block.rowEnd || (!isAdded && !isRemoved)) {
+    return std::nullopt;
+  }
+
+  const auto& sourceRuns = isAdded ? block.addedRuns : block.removedRuns;
+  const auto& counterpartRuns = isAdded ? block.removedRuns : block.addedRuns;
+  const auto sourceRunAfter = std::upper_bound(
+      sourceRuns.begin(),
+      sourceRuns.end(),
+      safeRowIndex,
+      [](size_t index, const DiffChangedLineRun& run) {
+        return index < run.rowStart;
+      });
+  if (sourceRunAfter == sourceRuns.begin()) {
+    return std::nullopt;
+  }
+
+  const auto& sourceRun = *std::prev(sourceRunAfter);
+  if (safeRowIndex >= sourceRun.rowStart + sourceRun.rowCount) {
+    return std::nullopt;
+  }
+  const auto ordinal = sourceRun.ordinalStart + safeRowIndex - sourceRun.rowStart;
+  const auto counterpartRunAfter = std::upper_bound(
+      counterpartRuns.begin(),
+      counterpartRuns.end(),
+      ordinal,
+      [](size_t targetOrdinal, const DiffChangedLineRun& run) {
+        return targetOrdinal < run.ordinalStart;
+      });
+  if (counterpartRunAfter == counterpartRuns.begin()) {
+    return std::nullopt;
+  }
+
+  const auto& counterpartRun = *std::prev(counterpartRunAfter);
+  if (ordinal >= counterpartRun.ordinalStart + counterpartRun.rowCount) {
+    return std::nullopt;
+  }
+  const auto counterpartRowIndex = counterpartRun.rowStart + ordinal - counterpartRun.ordinalStart;
+  if (counterpartRowIndex >= rows_.size()) {
+    return std::nullopt;
+  }
+
+  const auto addedRowIndex = isAdded ? safeRowIndex : counterpartRowIndex;
+  const auto removedRowIndex = isRemoved ? safeRowIndex : counterpartRowIndex;
+  return DiffChangedLinePair{
+      .addedRow = renderRowLocked(addedRowIndex),
+      .removedRow = renderRowLocked(removedRowIndex),
+      .balanced = block.addedCount == block.removedCount,
+  };
 }
 
 DiffRenderRow HybridDiffDocument::renderRowLocked(size_t index) const {
@@ -1330,6 +1441,7 @@ double HybridDiffDocument::releaseNativeResources() {
       clearVectorMemory(files_);
       clearVectorMemory(rows_);
       clearStringMemory(rowText_);
+      clearVectorMemory(changedLineBlocks_);
       clearVectorMemory(rowTokenized_);
       clearVectorMemory(sideBySideLines_);
       sideBySideLinesReady_ = false;
@@ -1508,6 +1620,11 @@ size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
 	    size += backingStore_->getExternalMemorySize();
 	  }
   size += rowTokenized_.capacity() * sizeof(uint8_t);
+  size += changedLineBlocks_.capacity() * sizeof(DiffChangedLineBlock);
+  for (const auto& block : changedLineBlocks_) {
+    size += block.addedRuns.capacity() * sizeof(DiffChangedLineRun);
+    size += block.removedRuns.capacity() * sizeof(DiffChangedLineRun);
+  }
   size += backgroundTokenizeRanges_.size() * sizeof(DiffTokenizationRange);
   for (const auto& file : files_) {
     size += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();

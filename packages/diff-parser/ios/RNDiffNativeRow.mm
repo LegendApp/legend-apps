@@ -4,10 +4,12 @@
 #import <react/renderer/components/RNDiffParserSpec/Props.h>
 #import <react/renderer/components/RNDiffParserSpec/RCTComponentViewHelpers.h>
 
+#import "../cpp/DiffInlineChange.hpp"
 #import "../cpp/HybridDiffDocument.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -65,6 +67,24 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   return [NSString stringWithUTF8String:value.c_str()] ?: @"";
 }
 
+static std::u16string RNDiffUTF16String(NSString *text)
+{
+  std::u16string result(text.length, u'\0');
+  if (text.length > 0) {
+    [text getCharacters:reinterpret_cast<unichar *>(result.data()) range:NSMakeRange(0, text.length)];
+  }
+  return result;
+}
+
+static NSArray<NSValue *> *RNDiffInlineRangeValues(const std::vector<DiffInlineChangeRange> &ranges)
+{
+  NSMutableArray<NSValue *> *values = [NSMutableArray arrayWithCapacity:ranges.size()];
+  for (const auto &range : ranges) {
+    [values addObject:[NSValue valueWithRange:NSMakeRange(range.start, range.length)]];
+  }
+  return values;
+}
+
 @protocol RNDiffHorizontalScrollerSyncing <NSObject>
 - (void)syncFromConfig;
 - (void)handleScrollWheel:(NSEvent *)event;
@@ -84,6 +104,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, assign) double maxHorizontalOffset;
 @property(nonatomic, assign) double maxTextWidth;
 @property(nonatomic, weak) id<RNDiffHorizontalScrollerSyncing> horizontalScroller;
+@property(nonatomic, assign) BOOL highlightChangedCharacters;
 @property(nonatomic, assign) BOOL syntaxHighlightingEnabled;
 @property(nonatomic, copy) NSString *themeName;
 @property(nonatomic, copy) NSString *presentation;
@@ -94,6 +115,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, strong) NSColor *removeAccentColor;
 @property(nonatomic, strong) NSColor *addBackgroundColor;
 @property(nonatomic, strong) NSColor *removeBackgroundColor;
+@property(nonatomic, strong) NSColor *addInlineHighlightColor;
+@property(nonatomic, strong) NSColor *removeInlineHighlightColor;
 @property(nonatomic, strong) NSColor *dividerColor;
 @property(nonatomic, strong) NSColor *searchHighlightColor;
 @property(nonatomic, strong) NSColor *activeSearchHighlightColor;
@@ -111,6 +134,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, copy) NSDictionary *removeMarkerAttributes;
 @property(nonatomic, copy) NSDictionary *mutedMarkerAttributes;
 @property(nonatomic, strong) NSMutableDictionary<NSNumber *, id> *scopeColorById;
+@property(nonatomic, strong) NSCache<NSNumber *, NSArray<NSValue *> *> *inlineHighlightRangesByRowIndex;
 - (void)recordTextWidth:(double)textWidth;
 - (void)setHorizontalOffsetClamped:(double)horizontalOffset;
 - (void)updateHorizontalMetrics;
@@ -130,6 +154,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 - (NSString *)searchHighlightsForRowIndex:(double)rowIndex active:(BOOL)active;
 - (const std::vector<double> &)collapsedFileIndexes;
 - (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document;
+- (NSArray<NSValue *> *)inlineHighlightRangesForRow:(const DiffRenderRow &)row
+                                           document:(HybridDiffDocument *)document;
 - (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType;
 - (NSDictionary *)markerAttributesForChangeType:(double)changeType;
 - (void)updateTextAttributes;
@@ -152,10 +178,13 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     _horizontalOffset = 0;
     _maxHorizontalOffset = 0;
     _maxTextWidth = 0;
+    _highlightChangedCharacters = YES;
     _syntaxHighlightingEnabled = YES;
     _themeName = @"dark-plus";
     _presentation = @"unified";
     _scopeColorById = [NSMutableDictionary new];
+    _inlineHighlightRangesByRowIndex = [NSCache new];
+    _inlineHighlightRangesByRowIndex.countLimit = 4096;
     _font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
     _foregroundColor = NSColor.labelColor;
     _mutedColor = NSColor.secondaryLabelColor;
@@ -163,6 +192,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     _removeAccentColor = _foregroundColor;
     _addBackgroundColor = NSColor.clearColor;
     _removeBackgroundColor = NSColor.clearColor;
+    _addInlineHighlightColor = [_addAccentColor colorWithAlphaComponent:0.28];
+    _removeInlineHighlightColor = [_removeAccentColor colorWithAlphaComponent:0.28];
     _dividerColor = NSColor.clearColor;
     _searchHighlightColor = [NSColor colorWithRed:1 green:0.78 blue:0.2 alpha:0.42];
     _activeSearchHighlightColor = [NSColor colorWithRed:1 green:0.48 blue:0 alpha:0.74];
@@ -298,6 +329,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
   self.removeAccentColor = RNDiffColorFromString(removeAccentColor, nextForegroundColor);
   self.addBackgroundColor = RNDiffColorFromString(addBackgroundColor, NSColor.clearColor);
   self.removeBackgroundColor = RNDiffColorFromString(removeBackgroundColor, NSColor.clearColor);
+  self.addInlineHighlightColor = [self.addAccentColor colorWithAlphaComponent:0.28];
+  self.removeInlineHighlightColor = [self.removeAccentColor colorWithAlphaComponent:0.28];
   self.dividerColor = RNDiffColorFromString(dividerColor, NSColor.clearColor);
   if (shouldResetScopeColors) {
     [self.scopeColorById removeAllObjects];
@@ -401,6 +434,43 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
   }
   self.scopeColorById[key] = scopeColor ?: NSNull.null;
   return scopeColor;
+}
+
+- (NSArray<NSValue *> *)inlineHighlightRangesForRow:(const DiffRenderRow &)row
+                                           document:(HybridDiffDocument *)document
+{
+  if (!self.highlightChangedCharacters || row.index < 0 || row.kind != diffRowKindLine) {
+    return @[];
+  }
+
+  NSNumber *rowKey = @(floor(row.index));
+  NSArray<NSValue *> *cachedRanges = [self.inlineHighlightRangesByRowIndex objectForKey:rowKey];
+  if (cachedRanges != nil) {
+    return cachedRanges;
+  }
+
+  const auto pair = document->getChangedLinePair(row.index);
+  if (!pair.has_value()) {
+    return @[];
+  }
+
+  NSString *removedText = RNDiffStringFromStdString(pair->removedRow.text);
+  NSString *addedText = RNDiffStringFromStdString(pair->addedRow.text);
+  const auto removedUTF16 = RNDiffUTF16String(removedText);
+  const auto addedUTF16 = RNDiffUTF16String(addedText);
+  const bool similarEnough = pair->balanced || getDiffInlineLineSimilarity(removedUTF16, addedUTF16) >= 0.25;
+  if (!similarEnough) {
+    return @[];
+  }
+
+  const auto ranges = createDiffInlineChangeRanges(removedUTF16, addedUTF16);
+  NSArray<NSValue *> *removedRanges = RNDiffInlineRangeValues(ranges.removedRanges);
+  NSArray<NSValue *> *addedRanges = RNDiffInlineRangeValues(ranges.addedRanges);
+  NSNumber *removedKey = @(floor(pair->removedRow.index));
+  NSNumber *addedKey = @(floor(pair->addedRow.index));
+  [self.inlineHighlightRangesByRowIndex setObject:removedRanges forKey:removedKey];
+  [self.inlineHighlightRangesByRowIndex setObject:addedRanges forKey:addedKey];
+  return row.changeType == diffChangeTypeRemove ? removedRanges : addedRanges;
 }
 
 - (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType
@@ -728,6 +798,22 @@ static void RNDiffDrawHorizontalText(
   [[attributedText mutableString] setString:text];
   if (attributedText.length > 0) {
     [attributedText setAttributes:config.baseTextAttributes range:NSMakeRange(0, attributedText.length)];
+    NSColor *inlineHighlightColor = plain.changeType == diffChangeTypeAdd
+      ? config.addInlineHighlightColor
+      : plain.changeType == diffChangeTypeRemove
+        ? config.removeInlineHighlightColor
+        : nil;
+    if (inlineHighlightColor != nil) {
+      NSArray<NSValue *> *inlineRanges = [config inlineHighlightRangesForRow:plain document:document];
+      for (NSValue *rangeValue in inlineRanges) {
+        const NSRange range = rangeValue.rangeValue;
+        if (range.location < attributedText.length && range.length > 0) {
+          [attributedText addAttribute:NSBackgroundColorAttributeName
+                                 value:inlineHighlightColor
+                                 range:NSMakeRange(range.location, MIN(range.length, attributedText.length - range.location))];
+        }
+      }
+    }
     [self applyEncodedHighlights:highlights toAttributedText:attributedText color:config.searchHighlightColor];
     [self applyEncodedHighlights:activeHighlights toAttributedText:attributedText color:config.activeSearchHighlightColor];
   }
@@ -1338,6 +1424,7 @@ static void RNDiffDrawHorizontalText(
   config.lineNumberWidth = newProps.lineNumberWidth;
   config.markerWidth = newProps.markerWidth;
   config.horizontalViewportWidth = newProps.horizontalViewportWidth;
+  config.highlightChangedCharacters = newProps.highlightChangedCharacters;
   config.syntaxHighlightingEnabled = newProps.syntaxHighlightingEnabled;
   config.themeName = [NSString stringWithUTF8String:newProps.themeName.c_str()] ?: @"dark-plus";
   config.presentation = [NSString stringWithUTF8String:newProps.presentation.c_str()] ?: @"unified";

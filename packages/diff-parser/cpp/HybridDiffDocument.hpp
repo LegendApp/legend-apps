@@ -92,6 +92,29 @@ struct DiffStoredRow {
   size_t textLength = 0;
 };
 
+struct DiffChangedLineRun {
+  size_t rowStart = 0;
+  size_t rowCount = 0;
+  size_t ordinalStart = 0;
+};
+
+struct DiffChangedLineBlock {
+  size_t rowStart = 0;
+  size_t rowEnd = 0;
+  double fileIndex = -1;
+  double hunkIndex = -1;
+  std::vector<DiffChangedLineRun> addedRuns;
+  std::vector<DiffChangedLineRun> removedRuns;
+  size_t addedCount = 0;
+  size_t removedCount = 0;
+};
+
+struct DiffChangedLinePair {
+  DiffRenderRow addedRow;
+  DiffRenderRow removedRow;
+  bool balanced = false;
+};
+
 class HybridDiffDocument final : public HybridDiffDocumentSpec {
 public:
   HybridDiffDocument(
@@ -126,6 +149,7 @@ public:
   std::vector<DiffSyntaxScope> getScopes() override;
   std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) override;
   DiffSyntaxStyle getNativeScopeStyle(const std::string& themeName, double scopeId);
+  std::optional<DiffChangedLinePair> getChangedLinePair(double rowIndex);
   DiffLoadTiming getTiming() override;
   double requestTokenizedRows(double start, double count, const std::string& reason) override;
   double requestTokenizedSideBySideRows(
@@ -161,6 +185,7 @@ protected:
 private:
   size_t getExternalMemorySizeLocked() const noexcept;
   void appendStoredRowLocked(DiffRenderRow row);
+  void appendChangedLineRunLocked(const DiffStoredRow& row, size_t rowIndex);
   DiffRenderRow renderRowLocked(size_t index) const;
   std::vector<DiffRenderRow> renderRowsLocked(size_t start, size_t end) const;
   void ensureSideBySideLinesLocked(size_t minLineCount = std::numeric_limits<size_t>::max());
@@ -214,6 +239,7 @@ private:
   std::vector<DiffFileSummary> files_;
   std::vector<DiffStoredRow> rows_;
   std::string rowText_;
+  std::vector<DiffChangedLineBlock> changedLineBlocks_;
   std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
   bool sideBySideLinesReady_ = false;

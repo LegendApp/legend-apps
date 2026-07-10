@@ -1,4 +1,5 @@
 #include "../cpp/DiffParserCore.hpp"
+#include "../cpp/DiffInlineChange.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +39,46 @@ void expectEqual(const std::string& actual, const std::string& expected, const s
   if (actual != expected) {
     throw std::runtime_error(message + " expected \"" + expected + "\" but got \"" + actual + "\"");
   }
+}
+
+void expectRange(
+    const diffparser::DiffInlineChangeRange& actual,
+    size_t expectedStart,
+    size_t expectedLength,
+    const std::string& message) {
+  expectEqual(static_cast<double>(actual.start), static_cast<double>(expectedStart), message + " start");
+  expectEqual(static_cast<double>(actual.length), static_cast<double>(expectedLength), message + " length");
+}
+
+void assertInlineChangeRanges() {
+  const auto multipleChanges = diffparser::createDiffInlineChangeRanges(
+      u"value = oldName + count;",
+      u"value = newName + total;");
+  expectEqual(static_cast<double>(multipleChanges.removedRanges.size()), 2, "inline removed range count");
+  expectEqual(static_cast<double>(multipleChanges.addedRanges.size()), 2, "inline added range count");
+  expectRange(multipleChanges.removedRanges[0], 8, 3, "inline first removed range");
+  expectRange(multipleChanges.removedRanges[1], 18, 5, "inline second removed range");
+  expectRange(multipleChanges.addedRanges[0], 8, 3, "inline first added range");
+  expectRange(multipleChanges.addedRanges[1], 18, 5, "inline second added range");
+
+  const auto withinWord = diffparser::createDiffInlineChangeRanges(u"searchTerm", u"searchText");
+  expectEqual(static_cast<double>(withinWord.removedRanges.size()), 1, "within-word removed range count");
+  expectEqual(static_cast<double>(withinWord.addedRanges.size()), 1, "within-word added range count");
+  expectRange(withinWord.removedRanges[0], 8, 2, "within-word removed range");
+  expectRange(withinWord.addedRanges[0], 8, 2, "within-word added range");
+
+  const auto unicodePrefix = diffparser::createDiffInlineChangeRanges(
+      u"const emoji = \U0001f600old;",
+      u"const emoji = \U0001f600new;");
+  expectRange(unicodePrefix.removedRanges[0], 16, 3, "unicode-prefix removed range");
+  expectRange(unicodePrefix.addedRanges[0], 16, 3, "unicode-prefix added range");
+
+  expect(
+      diffparser::getDiffInlineLineSimilarity(u"const title = old", u"const title = new") >= 0.25,
+      "similar changed lines should pass the unbalanced pairing threshold");
+  expect(
+      diffparser::getDiffInlineLineSimilarity(u"alpha beta", u"gamma delta") < 0.25,
+      "unrelated changed lines should not pass the unbalanced pairing threshold");
 }
 
 const diffparser::DiffFileSummary& fileAt(const diffparser::DiffParsedDocument& parsed, size_t index) {
@@ -501,6 +542,7 @@ int main(int argc, char** argv) {
     assertFileSummaries(parsed);
     assertRenderRows(parsed);
     assertSideBySideRows(parsed);
+    assertInlineChangeRanges();
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 1), parsed);
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 17), parsed);
     if (argc > 1) {

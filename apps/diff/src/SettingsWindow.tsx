@@ -20,6 +20,7 @@ import {
   setDiffAdaptiveLightModeEnabledSetting,
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
+  setDiffHighlightChangedCharactersSetting,
   setDiffRestoreWindowsOnStartupSetting,
   setDiffShowOnlyHunksSetting,
   setDiffShowStatisticsPanelSetting,
@@ -28,6 +29,7 @@ import {
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
+  useDiffHighlightChangedCharactersSetting,
   useDiffRestoreWindowsOnStartupSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
@@ -126,6 +128,7 @@ function SyntaxSettingsPage() {
 }
 
 function SyntaxSettingsContent() {
+  const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
 
   return (
@@ -136,6 +139,18 @@ function SyntaxSettingsContent() {
       <SourceSyntaxToggleSettingsRows
         onSyntaxHighlightingChange={setDiffSyntaxHighlightingEnabledSetting}
         syntaxHighlightingEnabled={syntaxHighlightingEnabled}
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Highlight changed characters"
+            checked={highlightChangedCharacters}
+            onChange={setDiffHighlightChangedCharactersSetting}
+          />
+        )}
+        description="Emphasize character-level changes within paired added and removed lines."
+        title="Highlight changed characters"
       />
     </SettingsSection>
   );

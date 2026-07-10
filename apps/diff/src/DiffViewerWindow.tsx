@@ -93,6 +93,7 @@ import {
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
+  useDiffHighlightChangedCharactersSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
   useDiffSidebarWidthSetting,
@@ -645,6 +646,7 @@ type DiffNativeRowConfigProps = {
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
+  highlightChangedCharacters: boolean;
   lineNumberWidth: number;
   markerWidth: number;
   mutedColor: string;
@@ -1753,6 +1755,7 @@ function DiffNativeRowConfigView({
       fontFamily={nativeRowConfig.fontFamily}
       fontSize={nativeRowConfig.fontSize}
       foregroundColor={nativeRowConfig.foregroundColor}
+      highlightChangedCharacters={nativeRowConfig.highlightChangedCharacters}
       horizontalViewportWidth={horizontalViewportWidth}
       lineNumberWidth={nativeRowConfig.lineNumberWidth}
       markerWidth={nativeRowConfig.markerWidth}
@@ -2700,6 +2703,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const windowShownAfterSplitMetricsRef = useRef(false);
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
+  const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
   const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
@@ -4473,6 +4477,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      highlightChangedCharacters,
       mutedColor,
       palette.addAccent,
       palette.addBackground,
@@ -4497,6 +4502,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      highlightChangedCharacters,
       lineNumberWidth: diffUnifiedLineNumberWidth,
       markerWidth: diffUnifiedMarkerWidth,
       mutedColor,
@@ -4514,6 +4520,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fontFamily,
     fontSize,
     foregroundColor,
+    highlightChangedCharacters,
     listSyntaxTheme,
     loadedDocumentId,
     mutedColor,
@@ -4535,6 +4542,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      highlightChangedCharacters,
       mutedColor,
       palette.addAccent,
       palette.addBackground,
@@ -4559,6 +4567,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      highlightChangedCharacters,
       lineNumberWidth: diffSideBySideLineNumberWidth,
       markerWidth: diffSideBySideMarkerWidth,
       mutedColor,
@@ -4577,6 +4586,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     fontFamily,
     fontSize,
     foregroundColor,
+    highlightChangedCharacters,
     listSyntaxTheme,
     loadedDocumentId,
     mutedColor,

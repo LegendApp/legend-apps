@@ -19,6 +19,7 @@ export type DiffSettingsFile = {
   adaptiveLightModeEnabled?: boolean;
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
+  highlightChangedCharacters?: boolean;
   syntaxHighlightingEnabled?: boolean;
   syntaxTheme: string;
   restoreWindowsOnStartup?: boolean;
@@ -40,6 +41,7 @@ export const defaultDiffSidebarWidth = 180;
 export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffShowStatisticsPanel = false;
 export const defaultDiffAdaptiveLightModeEnabled = true;
+export const defaultDiffHighlightChangedCharacters = true;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const diffFontSizeOptions = sourceFontSizeOptions;
 export const diffViewModeOptions = [
@@ -85,6 +87,10 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffFontSize,
       normalize: normalizeDiffFontSize,
     },
+    highlightChangedCharacters: {
+      defaultValue: defaultDiffHighlightChangedCharacters,
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffHighlightChangedCharacters),
+    },
     syntaxHighlightingEnabled: {
       defaultValue: defaultDiffSyntaxHighlightingEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffSyntaxHighlightingEnabled),
@@ -119,6 +125,7 @@ const diffSettings = createObservableSettings({
 const adaptiveLightModeEnabledSetting = diffSettings.field("adaptiveLightModeEnabled");
 const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
+const highlightChangedCharactersSetting = diffSettings.field("highlightChangedCharacters");
 const syntaxHighlightingEnabledSetting = diffSettings.field("syntaxHighlightingEnabled");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const restoreWindowsOnStartupSetting = diffSettings.field("restoreWindowsOnStartup");
@@ -146,6 +153,10 @@ export function getDiffFontFamilySetting(): DiffFontFamilySetting {
 
 export function getDiffFontSizeSetting(): number {
   return fontSizeSetting.get();
+}
+
+export function getDiffHighlightChangedCharactersSetting(): boolean {
+  return highlightChangedCharactersSetting.get();
 }
 
 export function getDiffViewModeSetting(): DiffViewMode {
@@ -182,6 +193,13 @@ export function useDiffAdaptiveLightModeEnabledSetting(): boolean {
 
 export function useDiffFontSizeSetting(): number {
   return normalizeDiffFontSize(useValue(diffSettings$.fontSize));
+}
+
+export function useDiffHighlightChangedCharactersSetting(): boolean {
+  return normalizeBooleanSetting(
+    useValue(diffSettings$.highlightChangedCharacters),
+    defaultDiffHighlightChangedCharacters,
+  );
 }
 
 export function useDiffSyntaxThemeSetting(): string {
@@ -231,6 +249,10 @@ export function setDiffFontFamilySetting(fontFamily: DiffFontFamilySetting) {
 
 export function setDiffFontSizeSetting(fontSize: number) {
   fontSizeSetting.set(fontSize);
+}
+
+export function setDiffHighlightChangedCharactersSetting(enabled: boolean) {
+  highlightChangedCharactersSetting.set(enabled);
 }
 
 export function setDiffViewModeSetting(viewMode: DiffViewMode) {
