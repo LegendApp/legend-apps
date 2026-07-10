@@ -54,7 +54,7 @@ describe("AppMenuController", () => {
         stateSaved$.libraryIsOpen.set(false);
         hotkeys$.set({
             ...hotkeys$.peek(),
-            ToggleShuffle: `${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.KEY_S}`,
+            ToggleShuffle: [`${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.KEY_S}`],
         });
     });
 

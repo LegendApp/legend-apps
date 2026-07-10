@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { AutoUpdater } from "@legend-apps/auto-updater";
-import { hotkeyToMenuShortcut } from "@legend-apps/hotkeys";
+import { hotkeyToMenuShortcut, type HotkeyValue } from "@legend-apps/hotkeys";
 import {
     type NativeMenuAction,
     type NativeMenuConfig,
@@ -109,17 +109,21 @@ function getRepeatMenuPatch(mode: RepeatMode): NativeMenuItemPatch {
     };
 }
 
+function getMenuShortcut(bindings: readonly HotkeyValue[]) {
+    return bindings
+        .map(hotkeyToMenuShortcut)
+        .find((shortcut) => shortcut !== null) ?? null;
+}
+
 function getPlaybackShortcutPatches(): NativeMenuItemPatch[] {
     const hotkeys = hotkeys$.get();
-    const playPauseShortcut =
-        hotkeyToMenuShortcut(hotkeys.PlayPause) ?? hotkeyToMenuShortcut(hotkeys.PlayPauseSpace);
 
     return [
-        { id: "playbackPrevious", shortcut: hotkeyToMenuShortcut(hotkeys.PreviousTrack) },
-        { id: "playbackPlayPause", shortcut: playPauseShortcut },
-        { id: "playbackNext", shortcut: hotkeyToMenuShortcut(hotkeys.NextTrack) },
-        { id: "playbackToggleShuffle", shortcut: hotkeyToMenuShortcut(hotkeys.ToggleShuffle) },
-        { id: "playbackToggleRepeat", shortcut: hotkeyToMenuShortcut(hotkeys.ToggleRepeatMode) },
+        { id: "playbackPrevious", shortcut: getMenuShortcut(hotkeys.PreviousTrack) },
+        { id: "playbackPlayPause", shortcut: getMenuShortcut(hotkeys.PlayPause) },
+        { id: "playbackNext", shortcut: getMenuShortcut(hotkeys.NextTrack) },
+        { id: "playbackToggleShuffle", shortcut: getMenuShortcut(hotkeys.ToggleShuffle) },
+        { id: "playbackToggleRepeat", shortcut: getMenuShortcut(hotkeys.ToggleRepeatMode) },
     ];
 }
 

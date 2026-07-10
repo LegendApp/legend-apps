@@ -1,4 +1,5 @@
 import { useValue } from "@legendapp/state/react";
+import { parseHotkey, type HotkeyHandlerContext } from "@legend-apps/hotkeys";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { initializeLocalAudioPlayer, localAudioControls } from "./LocalAudioPlayer";
@@ -7,6 +8,7 @@ import { MusicLayoutRenderer } from "../layout/MusicLayoutRenderer";
 import { mainLayout$, normalizeMusicLayoutFile } from "../layout/MusicLayoutState";
 import { SUPPORT_ACCOUNTS } from "../systems/constants";
 import { useOnHotkeys } from "../systems/keyboard/Keyboard";
+import { KeyCodes } from "../systems/keyboard/KeyboardManager";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { preloadPersistence } from "../utils/preloadPersistence";
 
@@ -17,6 +19,19 @@ type MainContainerProps = {
     benchmarkElapsedSeconds?: number;
 };
 
+function handleConfigurableMediaHotkey(
+    context: HotkeyHandlerContext,
+    nativeMediaKey: number,
+    action: () => void,
+) {
+    const isNativeMediaKey = parseHotkey(context.binding).includes(nativeMediaKey);
+    if (!isNativeMediaKey) {
+        action();
+        return true;
+    }
+    return false;
+}
+
 export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     perfCount("MainContainer.render");
     // const _playlistNavigation = useValue(playlistNavigationState$);
@@ -24,14 +39,23 @@ export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     const layout = useMemo(() => normalizeMusicLayoutFile(layoutFile), [layoutFile]);
 
     useOnHotkeys({
-        // These are handled by native media keys, don't need to handle them here
-        // PlayPause: localAudioControls.togglePlayPause,
-        // NextTrack: localAudioControls.playNext,
-        // PreviousTrack: localAudioControls.playPrevious,
+        PlayPause: (context) => handleConfigurableMediaHotkey(
+            context,
+            KeyCodes.KEY_MEDIA_PLAY_PAUSE,
+            () => void localAudioControls.togglePlayPause(),
+        ),
+        NextTrack: (context) => handleConfigurableMediaHotkey(
+            context,
+            KeyCodes.KEY_MEDIA_NEXT,
+            localAudioControls.playNext,
+        ),
+        PreviousTrack: (context) => handleConfigurableMediaHotkey(
+            context,
+            KeyCodes.KEY_MEDIA_PREVIOUS,
+            localAudioControls.playPrevious,
+        ),
         ToggleShuffle: localAudioControls.toggleShuffle,
         ToggleRepeatMode: localAudioControls.cycleRepeatMode,
-        // Only handle space bar globally when no track is selected in the playlist
-        PlayPauseSpace: localAudioControls.togglePlayPause,
     });
 
     perfLog("MainContainer.hotkeys", {

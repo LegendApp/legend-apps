@@ -9,6 +9,7 @@ import { TooltipProvider } from "../components/TooltipProvider";
 import { AccountSettingsContent } from "./AccountSettings";
 import { CustomizeUISettingsContent } from "./CustomizeUISettings";
 import { GeneralSettingsContent } from "./GeneralSettings";
+import { HotkeysSettingsContent } from "./HotkeysSettings";
 import { LibrarySettingsContent } from "./LibrarySettings";
 import { OpenSourceSettingsContent } from "./OpenSourceSettings";
 import { OverlaySettingsContent } from "./OverlaySettings";
@@ -19,12 +20,13 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 import { getMusicThemeAppearance } from "../theme/musicThemes";
 import { ax } from "../utils/ax";
 
-export type SettingsPage = "general" | "library" | "overlay" | "theme" | "ui-customize" | "account" | "open-source";
+export type SettingsPage = "general" | "hotkeys" | "library" | "overlay" | "theme" | "ui-customize" | "account" | "open-source";
 
 const SETTINGS_WINDOW_IDENTIFIER = "settings";
 
 const SETTING_PAGES: VirtualizedSettingsWindowPage<SettingsPage>[] = ax([
     { id: "general", title: "General", renderContent: () => <GeneralSettingsContent /> },
+    { id: "hotkeys", title: "Hotkeys", renderContent: () => <HotkeysSettingsContent /> },
     { id: "library", title: "Library", renderContent: () => <LibrarySettingsContent /> },
     { id: "overlay", title: "Overlay", renderContent: () => <OverlaySettingsContent /> },
     { id: "theme", title: "Appearance", renderContent: () => <ThemeSettingsContent /> },

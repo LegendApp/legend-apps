@@ -1,9 +1,10 @@
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
+import type { HotkeyHandlerContext } from "@legend-apps/hotkeys";
 import { useStableCallback } from "@legend-apps/runtime-utils";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { playlistNavigationState$ } from "../state/playlistNavigationState";
-import { keysPressed$, useOnHotkeys } from "../systems/keyboard/Keyboard";
+import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { KeyCodes } from "../systems/keyboard/KeyboardManager";
 import { state$ } from "../systems/State";
 
@@ -98,10 +99,6 @@ export function usePlaylistSelection<T extends { isSeparator?: boolean }>(
         setAnchorAndFocus(index, index);
     });
 
-    const isModifierPressed = useStableCallback((modifier: number) => {
-        return Boolean(keysPressed$.get()[modifier]);
-    });
-
     const canHandleHotkeys = useStableCallback(() => {
         if (itemsLength === 0) {
             return false;
@@ -138,12 +135,12 @@ export function usePlaylistSelection<T extends { isSeparator?: boolean }>(
         return Math.min(...currentSelection);
     });
 
-    const moveSelection = useStableCallback((direction: "up" | "down") => {
+    const moveSelection = useStableCallback((direction: "up" | "down", pressedKeys: ReadonlySet<number>) => {
         if (!shouldHandleHotkeys()) {
-            return;
+            return false;
         }
 
-        const hasShift = isModifierPressed(KeyCodes.MODIFIER_SHIFT);
+        const hasShift = pressedKeys.has(KeyCodes.MODIFIER_SHIFT);
         const currentFocus = selectionFocus$.get();
         const currentSelection = selectedIndices$.get();
         const baseIndex =
@@ -171,14 +168,15 @@ export function usePlaylistSelection<T extends { isSeparator?: boolean }>(
         } else {
             applySingleSelection(nextIndex);
         }
+        return true;
     });
 
-    const moveSelectionUp = useStableCallback(() => {
-        moveSelection("up");
+    const moveSelectionUp = useStableCallback((context: HotkeyHandlerContext) => {
+        return moveSelection("up", context.pressedKeys);
     });
 
-    const moveSelectionDown = useStableCallback(() => {
-        moveSelection("down");
+    const moveSelectionDown = useStableCallback((context: HotkeyHandlerContext) => {
+        return moveSelection("down", context.pressedKeys);
     });
 
     const syncSelectionAfterReorder = useStableCallback((fromIndex: number, toIndex: number) => {
@@ -283,39 +281,42 @@ export function usePlaylistSelection<T extends { isSeparator?: boolean }>(
 
     const activateSelection = useStableCallback(() => {
         if (!shouldHandleHotkeys()) {
-            return;
+            return false;
         }
 
         const currentIndex = getPrimarySelectionIndex();
         if (currentIndex >= 0 && currentIndex < itemsLength) {
             handleTrackClick(currentIndex);
+            return true;
         }
+        return false;
     });
 
     const handleDeleteHotkey = useStableCallback(() => {
         console.log("Playlist.handleDeleteHotkey", { canHandleHotkeys: canHandleHotkeys() });
         if (!onDeleteSelection || !canHandleHotkeys()) {
-            return;
+            return false;
         }
 
         const currentSelection = selectedIndices$.get();
         if (currentSelection.size === 0) {
-            return;
+            return false;
         }
 
         const indices = Array.from(currentSelection).sort((a, b) => a - b);
         onDeleteSelection(indices);
         clearSelection();
+        return true;
     });
 
     const selectAllItems = useStableCallback(() => {
         if (!shouldHandleHotkeys()) {
-            return;
+            return false;
         }
 
         if (items.length === 0) {
             clearSelection();
-            return;
+            return false;
         }
 
         const selectableIndices: number[] = [];
@@ -327,34 +328,40 @@ export function usePlaylistSelection<T extends { isSeparator?: boolean }>(
 
         if (selectableIndices.length === 0) {
             clearSelection();
-            return;
+            return false;
         }
 
         updateSelectionState(new Set(selectableIndices));
         setAnchorAndFocus(selectableIndices[0], selectableIndices[selectableIndices.length - 1]);
+        return true;
     });
 
     const handleEscapeHotkey = useStableCallback(() => {
         if (!shouldHandleHotkeys()) {
-            return;
+            return false;
         }
 
+        const hadSelection = selectedIndices$.get().size > 0;
         clearSelection();
+        return hadSelection;
     });
 
     const deleteHotkey = onDeleteSelection ? handleDeleteHotkey : undefined;
 
-    useOnHotkeys({
-        Up: moveSelectionUp,
-        Down: moveSelectionDown,
-        Enter: activateSelection,
-        Space: activateSelection,
-        Delete: deleteHotkey,
-        Backspace: deleteHotkey,
-        ForwardDelete: deleteHotkey,
-        SelectAll: selectAllItems,
-        Escape: handleEscapeHotkey,
-    });
+    useOnHotkeys(
+        {
+            Up: moveSelectionUp,
+            Down: moveSelectionDown,
+            Enter: activateSelection,
+            Space: activateSelection,
+            Delete: deleteHotkey,
+            Backspace: deleteHotkey,
+            ForwardDelete: deleteHotkey,
+            SelectAll: selectAllItems,
+            Escape: handleEscapeHotkey,
+        },
+        { priority: 200 },
+    );
 
     return {
         selectedIndices$,

@@ -1,21 +1,31 @@
-import { useMount } from "@legendapp/state/react";
+import { useHotkeySuspension, type HotkeyScope } from "@legend-apps/hotkeys";
+import { useMount, useValue } from "@legendapp/state/react";
 import { useRef } from "react";
 import { AppState, type AppStateStatus, TextInput } from "react-native";
 import { useWindowManager } from "@legend-apps/window-manager";
-import { activeWindowId$, useHookKeyboard } from "./Keyboard";
+import { musicHotkeyRouter } from "./Keyboard";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
+import { state$ } from "../State";
+
+const applicationHotkeyScope: HotkeyScope = { kind: "application" };
 
 export function HookKeyboard() {
     perfCount("HookKeyboard.render");
-    useHookKeyboard();
+    const isDropdownOpen = useValue(state$.isDropdownOpen);
     const windowManagerRef = useRef(useWindowManager());
 
+    useHotkeySuspension({
+        active: isDropdownOpen,
+        router: musicHotkeyRouter,
+        scope: applicationHotkeyScope,
+    });
+
     useMount(() => {
-        activeWindowId$.set("main");
+        musicHotkeyRouter.setActiveWindowId("main");
 
         const subscription = windowManagerRef.current.onWindowFocused(({ identifier }) => {
             const nextIdentifier = identifier && identifier.length > 0 ? identifier : "main";
-            activeWindowId$.set(nextIdentifier);
+            musicHotkeyRouter.setActiveWindowId(nextIdentifier);
         });
 
         return () => {
