@@ -7,11 +7,37 @@
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#if DEBUG
+#import <os/log.h>
+#endif
 
 @class RNNativeMenu;
 
 static BOOL RNNativeMenuHandleBoundSender(id sender);
 static void RNNativeMenuInstallCommandBridge(void);
+#if DEBUG
+static uint64_t RNNativeMenuHunkDebugSequence = 0;
+
+static void RNNativeMenuLogHunkAction(NSDictionary *payload, NSString *source)
+{
+  NSString *itemId = [payload[@"itemId"] isKindOfClass:NSString.class] ? payload[@"itemId"] : @"";
+  if (![itemId isEqualToString:@"previousHunk"] && ![itemId isEqualToString:@"nextHunk"]) {
+    return;
+  }
+
+  NSTimeInterval timestampMs = NSDate.date.timeIntervalSince1970 * 1000.0;
+  uint64_t sequence = ++RNNativeMenuHunkDebugSequence;
+  static os_log_t log = os_log_create("so.legend.diff.macos", "hotkey-debug");
+  os_log_with_type(
+      log,
+      OS_LOG_TYPE_DEFAULT,
+      "%{public}.0f [DEBUG diff-hotkey-v1] native.menu.action {\"seq\":%llu,\"itemId\":\"%{public}@\",\"source\":\"%{public}@\"}",
+      timestampMs,
+      sequence,
+      itemId,
+      source);
+}
+#endif
 
 @interface NSApplication (RNNativeMenuCommandBridge)
 @end
@@ -96,6 +122,9 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
     return NO;
   }
 
+#if DEBUG
+  RNNativeMenuLogHunkAction(payload, @"bound");
+#endif
   [module emitBoundMenuItemAction:payload];
   return YES;
 }
@@ -615,11 +644,17 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
 - (void)handleMenuAction:(NSMenuItem *)sender
 {
   NSDictionary *payload = [sender.representedObject isKindOfClass:[NSDictionary class]] ? sender.representedObject : @{};
+#if DEBUG
+  RNNativeMenuLogHunkAction(payload, @"direct");
+#endif
   [self sendEventWithName:@"NativeMenuAction" body:payload];
 }
 
 - (void)emitBoundMenuItemAction:(NSDictionary *)payload
 {
+#if DEBUG
+  RNNativeMenuLogHunkAction(payload, @"emitted-bound");
+#endif
   [self sendEventWithName:@"NativeMenuAction" body:payload];
 }
 

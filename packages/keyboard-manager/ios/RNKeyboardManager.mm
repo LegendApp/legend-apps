@@ -8,11 +8,62 @@
 #import <Carbon/Carbon.h>
 #import <IOKit/hidsystem/IOLLEvent.h>
 #import <IOKit/hidsystem/ev_keymap.h>
+#if DEBUG
+#import <os/log.h>
+#endif
 #endif
 
 static NSInteger const RNKeyboardMediaPlayPause = 10001;
 static NSInteger const RNKeyboardMediaNext = 10002;
 static NSInteger const RNKeyboardMediaPrevious = 10003;
+
+#if TARGET_OS_OSX && DEBUG
+static uint64_t RNKeyboardHunkDebugSequence = 0;
+
+static os_log_t RNKeyboardHunkDebugLog(void)
+{
+  static os_log_t log = os_log_create("so.legend.diff.macos", "hotkey-debug");
+  return log;
+}
+
+static void RNKeyboardLogLifecycle(NSString *event, BOOL hasListeners)
+{
+  NSTimeInterval timestampMs = NSDate.date.timeIntervalSince1970 * 1000.0;
+  uint64_t sequence = ++RNKeyboardHunkDebugSequence;
+  os_log_with_type(
+      RNKeyboardHunkDebugLog(),
+      OS_LOG_TYPE_DEFAULT,
+      "%{public}.0f [DEBUG diff-hotkey-v2] native.keyboard.%{public}@ {\"seq\":%llu,\"hasListeners\":%{public}s}",
+      timestampMs,
+      event,
+      sequence,
+      hasListeners ? "true" : "false");
+}
+
+static void RNKeyboardLogHunkShortcut(
+    NSEvent *event,
+    NSString *phase,
+    uint64_t sequence,
+    BOOL handled,
+    BOOL hasListeners)
+{
+  NSTimeInterval timestampMs = NSDate.date.timeIntervalSince1970 * 1000.0;
+  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  os_log_with_type(
+      RNKeyboardHunkDebugLog(),
+      OS_LOG_TYPE_DEFAULT,
+      "%{public}.0f [DEBUG diff-hotkey-v2] native.keyboard.%{public}@ {\"seq\":%llu,\"keyCode\":%ld,\"modifiers\":%llu,\"characters\":\"%{public}@\",\"charactersIgnoringModifiers\":\"%{public}@\",\"handled\":%{public}s,\"hasListeners\":%{public}s}",
+      timestampMs,
+      phase,
+      sequence,
+      (long)event.keyCode,
+      (unsigned long long)modifiers,
+      event.characters ?: @"",
+      event.charactersIgnoringModifiers ?: @"",
+      handled ? "true" : "false",
+      hasListeners ? "true" : "false");
+}
+#endif
 
 @implementation RNKeyboardManager {
   BOOL _hasListeners;
@@ -61,12 +112,18 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
 - (void)startObserving
 {
   _hasListeners = YES;
+#if TARGET_OS_OSX && DEBUG
+  RNKeyboardLogLifecycle(@"start-observing", _hasListeners);
+#endif
 }
 
 - (void)stopObserving
 {
   _hasListeners = NO;
 #if TARGET_OS_OSX
+#if DEBUG
+  RNKeyboardLogLifecycle(@"stop-observing", _hasListeners);
+#endif
   [self stopMonitoringInternal];
 #endif
 }
@@ -131,6 +188,9 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
     }
     return [strongSelf handleKeyboardEvent:event];
   }];
+#if DEBUG
+  RNKeyboardLogLifecycle(@"monitor-started", _hasListeners);
+#endif
 }
 
 - (void)stopMonitoringInternal
@@ -143,6 +203,17 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
 
 - (NSEvent *)handleKeyboardEvent:(NSEvent *)event
 {
+#if DEBUG
+  NSEventModifierFlags debugModifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  BOOL isHunkNavigationKey = event.keyCode == kVK_ANSI_LeftBracket || event.keyCode == kVK_ANSI_RightBracket;
+  BOOL isHunkShortcut = event.type == NSEventTypeKeyDown &&
+      (debugModifiers & NSEventModifierFlagCommand) == NSEventModifierFlagCommand &&
+      isHunkNavigationKey;
+  uint64_t debugSequence = isHunkShortcut ? ++RNKeyboardHunkDebugSequence : 0;
+  if (isHunkShortcut) {
+    RNKeyboardLogHunkShortcut(event, @"received", debugSequence, NO, _hasListeners);
+  }
+#endif
   if (!_hasListeners) {
     return event;
   }
@@ -156,7 +227,17 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   }
 
   NSString *eventName = event.type == NSEventTypeKeyDown ? @"onKeyDown" : @"onKeyUp";
+#if DEBUG
+  if (isHunkShortcut) {
+    RNKeyboardLogHunkShortcut(event, @"before-js", debugSequence, NO, _hasListeners);
+  }
+#endif
   BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode modifiers:event.modifierFlags];
+#if DEBUG
+  if (isHunkShortcut) {
+    RNKeyboardLogHunkShortcut(event, @"after-js", debugSequence, handled, _hasListeners);
+  }
+#endif
   return handled ? nil : event;
 }
 
