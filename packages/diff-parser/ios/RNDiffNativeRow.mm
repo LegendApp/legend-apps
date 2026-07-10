@@ -67,6 +67,31 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   return [NSString stringWithUTF8String:value.c_str()] ?: @"";
 }
 
+static NSString *RNDiffAccessibleLineDescription(const DiffRenderRow &row, NSString *side)
+{
+  if (row.kind != diffRowKindLine) {
+    return @"";
+  }
+
+  NSString *changeDescription = @"Unchanged";
+  double lineNumber = row.newLineNumber >= 0 ? row.newLineNumber : row.oldLineNumber;
+  if (row.changeType == diffChangeTypeAdd) {
+    changeDescription = @"Added";
+    lineNumber = row.newLineNumber;
+  } else if (row.changeType == diffChangeTypeRemove) {
+    changeDescription = @"Removed";
+    lineNumber = row.oldLineNumber;
+  }
+
+  NSString *text = RNDiffStringFromStdString(row.text);
+  NSString *contentDescription = text.length > 0 ? text : @"blank line";
+  NSString *sidePrefix = side.length > 0 ? [side stringByAppendingString:@", "] : @"";
+  if (lineNumber >= 0) {
+    return [NSString stringWithFormat:@"%@%@ line %.0f: %@", sidePrefix, changeDescription, lineNumber, contentDescription];
+  }
+  return [NSString stringWithFormat:@"%@%@: %@", sidePrefix, changeDescription, contentDescription];
+}
+
 static std::u16string RNDiffUTF16String(NSString *text)
 {
   std::u16string result(text.length, u'\0');
@@ -730,6 +755,59 @@ static void RNDiffDrawHorizontalText(
 - (BOOL)isFlipped
 {
   return YES;
+}
+
+- (NSString *)diffAccessibilityLabel
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  NSString *label = @"";
+  if (config) {
+    auto document = getRegisteredDiffDocument(config.documentId);
+    if (document) {
+      if ([config.presentation isEqualToString:@"blocks"]) {
+        const auto row = document->getPlainSideBySideRow(self.rowIndex, [config collapsedFileIndexes]);
+        if (row.kind != "file-header") {
+          if (row.newRowEqualsOldRow && row.oldRowVisible && row.newRowVisible) {
+            label = RNDiffAccessibleLineDescription(row.oldRow, @"");
+          } else {
+            NSMutableArray<NSString *> *descriptions = [NSMutableArray new];
+            if (row.oldRowVisible) {
+              NSString *oldDescription = RNDiffAccessibleLineDescription(row.oldRow, @"Old side");
+              if (oldDescription.length > 0) {
+                [descriptions addObject:oldDescription];
+              }
+            }
+            if (row.newRowVisible) {
+              NSString *newDescription = RNDiffAccessibleLineDescription(row.newRow, @"New side");
+              if (newDescription.length > 0) {
+                [descriptions addObject:newDescription];
+              }
+            }
+            label = [descriptions componentsJoinedByString:@". "];
+          }
+        }
+      } else {
+        const auto row = document->getRow(self.rowIndex);
+        label = RNDiffAccessibleLineDescription(row.plain, @"");
+      }
+    }
+  }
+  return label;
+}
+
+- (BOOL)isAccessibilityElement
+{
+  return [self diffAccessibilityLabel].length > 0;
+}
+
+- (NSString *)accessibilityRole
+{
+  return NSAccessibilityStaticTextRole;
+}
+
+- (NSString *)accessibilityLabel
+{
+  return [self diffAccessibilityLabel];
 }
 
 - (void)scrollWheel:(NSEvent *)event
@@ -1500,6 +1578,7 @@ static void RNDiffDrawHorizontalText(
   _contentView.rowIndex = newProps.rowIndex;
   _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
   [_contentView setNeedsDisplay:YES];
+  NSAccessibilityPostNotification(_contentView, NSAccessibilityValueChangedNotification);
 #endif
   [super updateProps:props oldProps:oldProps];
 }
@@ -1514,6 +1593,7 @@ static void RNDiffDrawHorizontalText(
   _contentView.adaptiveRender = @"normal";
   [_contentView.attributedTextScratch.mutableString setString:@""];
   [_contentView setNeedsDisplay:YES];
+  NSAccessibilityPostNotification(_contentView, NSAccessibilityValueChangedNotification);
 #endif
 }
 
