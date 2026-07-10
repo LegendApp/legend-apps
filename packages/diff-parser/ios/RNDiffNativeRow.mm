@@ -1,5 +1,7 @@
 #import "RNDiffNativeRow.h"
 
+#import <CoreText/CoreText.h>
+
 #import <react/renderer/components/RNDiffParserSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNDiffParserSpec/Props.h>
 #import <react/renderer/components/RNDiffParserSpec/RCTComponentViewHelpers.h>
@@ -130,6 +132,12 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, assign) double maxTextWidth;
 @property(nonatomic, weak) id<RNDiffHorizontalScrollerSyncing> horizontalScroller;
 @property(nonatomic, assign) BOOL highlightChangedCharacters;
+@property(nonatomic, assign) BOOL hasSelection;
+@property(nonatomic, assign) double selectionAnchorRowIndex;
+@property(nonatomic, assign) NSUInteger selectionAnchorColumn;
+@property(nonatomic, assign) double selectionFocusRowIndex;
+@property(nonatomic, assign) NSUInteger selectionFocusColumn;
+@property(nonatomic, assign) NSInteger selectionSide;
 @property(nonatomic, assign) BOOL syntaxHighlightingEnabled;
 @property(nonatomic, copy) NSString *themeName;
 @property(nonatomic, copy) NSString *presentation;
@@ -181,6 +189,13 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 - (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document;
 - (NSArray<NSValue *> *)inlineHighlightRangesForRow:(const DiffRenderRow &)row
                                            document:(HybridDiffDocument *)document;
+- (void)setSelectionAnchorRowIndex:(double)anchorRowIndex
+                      anchorColumn:(NSUInteger)anchorColumn
+                     focusRowIndex:(double)focusRowIndex
+                       focusColumn:(NSUInteger)focusColumn
+                              side:(NSInteger)side;
+- (void)setSelectionFocusRowIndex:(double)focusRowIndex focusColumn:(NSUInteger)focusColumn;
+- (NSRange)selectionRangeForRowIndex:(double)rowIndex side:(NSInteger)side textLength:(NSUInteger)textLength;
 - (NSDictionary *)lineNumberAttributesForChangeType:(double)changeType;
 - (NSDictionary *)markerAttributesForChangeType:(double)changeType;
 - (void)updateTextAttributes;
@@ -204,6 +219,10 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     _maxHorizontalOffset = 0;
     _maxTextWidth = 0;
     _highlightChangedCharacters = YES;
+    _hasSelection = NO;
+    _selectionAnchorRowIndex = -1;
+    _selectionFocusRowIndex = -1;
+    _selectionSide = 0;
     _syntaxHighlightingEnabled = YES;
     _themeName = @"dark-plus";
     _presentation = @"unified";
@@ -440,6 +459,64 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 - (const std::vector<double> &)collapsedFileIndexes
 {
   return _collapsedFileIndexes;
+}
+
+- (void)setSelectionAnchorRowIndex:(double)anchorRowIndex
+                      anchorColumn:(NSUInteger)anchorColumn
+                     focusRowIndex:(double)focusRowIndex
+                       focusColumn:(NSUInteger)focusColumn
+                              side:(NSInteger)side
+{
+  self.hasSelection = YES;
+  self.selectionAnchorRowIndex = floor(anchorRowIndex);
+  self.selectionAnchorColumn = anchorColumn;
+  self.selectionFocusRowIndex = floor(focusRowIndex);
+  self.selectionFocusColumn = focusColumn;
+  self.selectionSide = side;
+  RNDiffNativeRowInvalidateViews(self.configId);
+}
+
+- (void)setSelectionFocusRowIndex:(double)focusRowIndex focusColumn:(NSUInteger)focusColumn
+{
+  if (self.hasSelection) {
+    self.selectionFocusRowIndex = floor(focusRowIndex);
+    self.selectionFocusColumn = focusColumn;
+    RNDiffNativeRowInvalidateViews(self.configId);
+  }
+}
+
+- (NSRange)selectionRangeForRowIndex:(double)rowIndex side:(NSInteger)side textLength:(NSUInteger)textLength
+{
+  if (!self.hasSelection || side != self.selectionSide) {
+    return NSMakeRange(NSNotFound, 0);
+  }
+
+  double startRow = self.selectionAnchorRowIndex;
+  NSUInteger startColumn = self.selectionAnchorColumn;
+  double endRow = self.selectionFocusRowIndex;
+  NSUInteger endColumn = self.selectionFocusColumn;
+  if (startRow > endRow || (startRow == endRow && startColumn > endColumn)) {
+    std::swap(startRow, endRow);
+    std::swap(startColumn, endColumn);
+  }
+
+  const double safeRowIndex = floor(rowIndex);
+  if (safeRowIndex < startRow || safeRowIndex > endRow) {
+    return NSMakeRange(NSNotFound, 0);
+  }
+
+  const NSUInteger safeStartColumn = MIN(startColumn, textLength);
+  const NSUInteger safeEndColumn = MIN(endColumn, textLength);
+  if (startRow == endRow) {
+    return NSMakeRange(safeStartColumn, safeEndColumn - safeStartColumn);
+  }
+  if (safeRowIndex == startRow) {
+    return NSMakeRange(safeStartColumn, textLength - safeStartColumn);
+  }
+  if (safeRowIndex == endRow) {
+    return NSMakeRange(0, safeEndColumn);
+  }
+  return NSMakeRange(0, textLength);
 }
 
 - (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document
@@ -810,6 +887,259 @@ static void RNDiffDrawHorizontalText(
   return [self diffAccessibilityLabel];
 }
 
+- (BOOL)acceptsFirstResponder
+{
+  return YES;
+}
+
+- (void)resetCursorRects
+{
+  [super resetCursorRects];
+  [self addCursorRect:self.bounds cursor:NSCursor.IBeamCursor];
+}
+
+- (NSString *)selectableTextForRowIndex:(double)rowIndex
+                                    side:(NSInteger)side
+                                document:(HybridDiffDocument *)document
+                                  config:(RNDiffNativeRowRenderConfig *)config
+{
+  NSString *text = nil;
+  if ([config.presentation isEqualToString:@"blocks"]) {
+    const auto row = document->getPlainSideBySideRow(rowIndex, [config collapsedFileIndexes]);
+    if (side == 0 && row.oldRowVisible && row.oldRow.kind == diffRowKindLine) {
+      text = RNDiffStringFromStdString(row.oldRow.text);
+    } else if (side == 1 && row.newRowVisible) {
+      const DiffRenderRow &newRow = row.newRowEqualsOldRow ? row.oldRow : row.newRow;
+      if (newRow.kind == diffRowKindLine) {
+        text = RNDiffStringFromStdString(newRow.text);
+      }
+    }
+  } else {
+    const auto row = document->getRow(rowIndex);
+    if (row.plain.kind == diffRowKindLine) {
+      text = RNDiffStringFromStdString(row.plain.text);
+    }
+  }
+  return text;
+}
+
+- (NSString *)selectableTextForSide:(NSInteger)side
+                            document:(HybridDiffDocument *)document
+                              config:(RNDiffNativeRowRenderConfig *)config
+{
+  return [self selectableTextForRowIndex:self.rowIndex side:side document:document config:config];
+}
+
+- (NSUInteger)textColumnForPoint:(NSPoint)point
+                             side:(NSInteger)side
+                             text:(NSString *)text
+                           config:(RNDiffNativeRowRenderConfig *)config
+{
+  CGFloat textX = config.changeBarWidth + config.lineNumberWidth * 2 + config.markerWidth;
+  if ([config.presentation isEqualToString:@"blocks"]) {
+    const CGFloat columnWidth = floor(self.bounds.size.width / 2.0);
+    textX = (side == 0 ? 0 : columnWidth) + config.lineNumberWidth + config.markerWidth;
+  }
+  const CGFloat relativeX = point.x - textX + config.horizontalOffset;
+  NSUInteger column = 0;
+  if (relativeX > 0 && text.length > 0) {
+    NSAttributedString *attributedText = [[NSAttributedString alloc] initWithString:text
+                                                                         attributes:config.baseTextAttributes];
+    CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)attributedText);
+    const CFIndex stringIndex = CTLineGetStringIndexForPosition(line, CGPointMake(relativeX, 0));
+    const double lineWidth = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
+    if (stringIndex != kCFNotFound) {
+      column = MIN(static_cast<NSUInteger>(stringIndex), text.length);
+    } else if (relativeX >= lineWidth) {
+      column = text.length;
+    }
+    CFRelease(line);
+  }
+  return column;
+}
+
+- (RNDiffNativeRowContentView *)nearestRowViewForWindowPoint:(NSPoint)windowPoint
+{
+  RNDiffNativeRowContentView *nearestView = self;
+  CGFloat nearestDistance = CGFLOAT_MAX;
+  for (NSView *view in RNDiffNativeRowViewRegistry()[self.configId]) {
+    if (![view isKindOfClass:RNDiffNativeRowContentView.class]) {
+      continue;
+    }
+    RNDiffNativeRowContentView *rowView = (RNDiffNativeRowContentView *)view;
+    const NSRect windowRect = [rowView convertRect:rowView.bounds toView:nil];
+    CGFloat distance = 0;
+    if (windowPoint.y < NSMinY(windowRect)) {
+      distance = NSMinY(windowRect) - windowPoint.y;
+    } else if (windowPoint.y > NSMaxY(windowRect)) {
+      distance = windowPoint.y - NSMaxY(windowRect);
+    }
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestView = rowView;
+      if (distance == 0 && NSPointInRect(windowPoint, windowRect)) {
+        break;
+      }
+    }
+  }
+  return nearestView;
+}
+
+- (NSRange)wordRangeAtColumn:(NSUInteger)column text:(NSString *)text
+{
+  if (text.length == 0) {
+    return NSMakeRange(0, 0);
+  }
+
+  const NSUInteger characterIndex = MIN(column, text.length - 1);
+  __block NSRange wordRange = NSMakeRange(NSNotFound, 0);
+  [text enumerateSubstringsInRange:NSMakeRange(0, text.length)
+                           options:NSStringEnumerationByWords | NSStringEnumerationSubstringNotRequired
+                        usingBlock:^(__unused NSString *substring, NSRange substringRange, __unused NSRange enclosingRange, BOOL *stop) {
+    if (NSLocationInRange(characterIndex, substringRange)) {
+      wordRange = substringRange;
+      *stop = YES;
+    }
+  }];
+  if (wordRange.location == NSNotFound) {
+    wordRange = [text rangeOfComposedCharacterSequenceAtIndex:characterIndex];
+  }
+  return wordRange;
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  auto document = config ? getRegisteredDiffDocument(config.documentId) : nullptr;
+  const NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  const NSInteger side = config && [config.presentation isEqualToString:@"blocks"] && point.x >= floor(self.bounds.size.width / 2.0)
+    ? 1
+    : 0;
+  NSString *text = document ? [self selectableTextForSide:side document:document.get() config:config] : nil;
+
+  if (config && document && text != nil) {
+    [self.window makeFirstResponder:self];
+    const NSUInteger column = [self textColumnForPoint:point side:side text:text config:config];
+    if (event.clickCount >= 3) {
+      [config setSelectionAnchorRowIndex:self.rowIndex
+                            anchorColumn:0
+                           focusRowIndex:self.rowIndex
+                             focusColumn:text.length
+                                    side:side];
+    } else if (event.clickCount == 2) {
+      const NSRange wordRange = [self wordRangeAtColumn:column text:text];
+      [config setSelectionAnchorRowIndex:self.rowIndex
+                            anchorColumn:wordRange.location
+                           focusRowIndex:self.rowIndex
+                             focusColumn:NSMaxRange(wordRange)
+                                    side:side];
+    } else {
+      [config setSelectionAnchorRowIndex:self.rowIndex
+                            anchorColumn:column
+                           focusRowIndex:self.rowIndex
+                             focusColumn:column
+                                    side:side];
+    }
+
+    BOOL tracking = YES;
+    while (tracking) {
+      NSEvent *nextEvent = [self.window nextEventMatchingMask:NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp
+                                                    untilDate:NSDate.distantFuture
+                                                       inMode:NSEventTrackingRunLoopMode
+                                                      dequeue:YES];
+      if (nextEvent.type == NSEventTypeLeftMouseDragged) {
+        [self autoscroll:nextEvent];
+        RNDiffNativeRowContentView *targetView = [self nearestRowViewForWindowPoint:nextEvent.locationInWindow];
+        NSPoint targetPoint = [targetView convertPoint:nextEvent.locationInWindow fromView:nil];
+        NSString *targetText = [targetView selectableTextForSide:side document:document.get() config:config];
+        if (targetText != nil) {
+          const NSUInteger targetColumn = [targetView textColumnForPoint:targetPoint side:side text:targetText config:config];
+          [config setSelectionFocusRowIndex:targetView.rowIndex focusColumn:targetColumn];
+        }
+      } else {
+        tracking = NO;
+      }
+    }
+  } else {
+    [super mouseDown:event];
+  }
+}
+
+- (NSString *)selectedTextForDocument:(HybridDiffDocument *)document
+                               config:(RNDiffNativeRowRenderConfig *)config
+{
+  if (!config.hasSelection) {
+    return @"";
+  }
+
+  double startRow = config.selectionAnchorRowIndex;
+  NSUInteger startColumn = config.selectionAnchorColumn;
+  double endRow = config.selectionFocusRowIndex;
+  NSUInteger endColumn = config.selectionFocusColumn;
+  if (startRow > endRow || (startRow == endRow && startColumn > endColumn)) {
+    std::swap(startRow, endRow);
+    std::swap(startColumn, endColumn);
+  }
+
+  NSMutableArray<NSString *> *lines = [NSMutableArray new];
+  for (double rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
+    NSString *line = [self selectableTextForRowIndex:rowIndex
+                                                side:config.selectionSide
+                                            document:document
+                                              config:config];
+    if (line != nil) {
+      const NSRange range = [config selectionRangeForRowIndex:rowIndex
+                                                        side:config.selectionSide
+                                                  textLength:line.length];
+      if (range.location != NSNotFound) {
+        [lines addObject:[line substringWithRange:range]];
+      }
+    }
+  }
+  return [lines componentsJoinedByString:@"\n"];
+}
+
+- (void)copy:(id)sender
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  auto document = config ? getRegisteredDiffDocument(config.documentId) : nullptr;
+  NSString *selectedText = document ? [self selectedTextForDocument:document.get() config:config] : @"";
+  if (selectedText.length > 0) {
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+    [pasteboard setString:selectedText forType:NSPasteboardTypeString];
+  }
+}
+
+- (void)selectAll:(id)sender
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  auto document = config ? getRegisteredDiffDocument(config.documentId) : nullptr;
+  if (config && document) {
+    const double rowCount = [config.presentation isEqualToString:@"blocks"]
+      ? document->getSideBySideRowCount([config collapsedFileIndexes])
+      : document->getRowCount();
+    if (rowCount > 0) {
+      [config setSelectionAnchorRowIndex:0
+                            anchorColumn:0
+                           focusRowIndex:rowCount - 1
+                             focusColumn:NSUIntegerMax
+                                    side:config.selectionSide];
+    }
+  }
+}
+
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
+{
+  if (item.action == @selector(copy:)) {
+    RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+    return config.hasSelection
+      && (config.selectionAnchorRowIndex != config.selectionFocusRowIndex
+          || config.selectionAnchorColumn != config.selectionFocusColumn);
+  }
+  return YES;
+}
+
 - (void)scrollWheel:(NSEvent *)event
 {
   if (!RNDiffHandleHorizontalScroll(self.configId, event)) {
@@ -870,6 +1200,8 @@ static void RNDiffDrawHorizontalText(
                                              config:(RNDiffNativeRowRenderConfig *)config
                                          highlights:(NSString *)highlights
                                    activeHighlights:(NSString *)activeHighlights
+                                  selectionRowIndex:(double)selectionRowIndex
+                                      selectionSide:(NSInteger)selectionSide
 {
   NSString *text = RNDiffStringFromStdString(plain.text);
   NSMutableAttributedString *attributedText = self.attributedTextScratch;
@@ -909,6 +1241,18 @@ static void RNDiffDrawHorizontalText(
         }
       }
     }
+  }
+
+  const NSRange selectionRange = [config selectionRangeForRowIndex:selectionRowIndex
+                                                              side:selectionSide
+                                                        textLength:attributedText.length];
+  if (selectionRange.location != NSNotFound && selectionRange.length > 0) {
+    [attributedText addAttribute:NSBackgroundColorAttributeName
+                           value:NSColor.selectedTextBackgroundColor
+                           range:selectionRange];
+    [attributedText addAttribute:NSForegroundColorAttributeName
+                           value:NSColor.selectedTextColor
+                           range:selectionRange];
   }
 
   return attributedText;
@@ -973,7 +1317,9 @@ static void RNDiffDrawHorizontalText(
                                                                 document:document
                                                                   config:config
                                                               highlights:searchHighlights
-                                                        activeHighlights:activeSearchHighlights];
+                                                        activeHighlights:activeSearchHighlights
+                                                       selectionRowIndex:self.rowIndex
+                                                           selectionSide:0];
 
   const CGFloat textX = config.changeBarWidth + config.lineNumberWidth * 2 + config.markerWidth;
   RNDiffDrawHorizontalText(
@@ -1042,7 +1388,9 @@ static void RNDiffDrawHorizontalText(
                                                                 document:document
                                                                   config:config
                                                               highlights:highlights
-                                                        activeHighlights:activeHighlights];
+                                                        activeHighlights:activeHighlights
+                                                       selectionRowIndex:self.rowIndex
+                                                           selectionSide:oldSide ? 0 : 1];
   const CGFloat textX = columnRect.origin.x + config.lineNumberWidth + config.markerWidth;
   RNDiffDrawHorizontalText(
     attributedText,
