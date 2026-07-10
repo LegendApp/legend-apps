@@ -173,12 +173,12 @@ export function parseHotkey(value: HotkeyValue | null | undefined): number[] {
     .map((segment) => segment.trim())
     .filter(Boolean)
     .map((segment) => {
-      if (textToKeyCode[segment] !== undefined) {
-        return textToKeyCode[segment];
+      const numeric = Number(segment);
+      if (!Number.isNaN(numeric)) {
+        return numeric;
       }
 
-      const numeric = Number(segment);
-      return Number.isNaN(numeric) ? undefined : numeric;
+      return textToKeyCode[segment];
     })
     .filter((keyCode): keyCode is number => typeof keyCode === "number");
 }

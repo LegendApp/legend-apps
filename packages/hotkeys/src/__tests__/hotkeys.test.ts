@@ -1,4 +1,4 @@
-import { KeyCodes, matchesHotkey } from "../index";
+import { KeyCodes, matchesHotkey, parseHotkey } from "../index";
 
 function keyboardEvent(keyCode: number, modifiers = 0) {
   return {
@@ -8,6 +8,12 @@ function keyboardEvent(keyCode: number, modifiers = 0) {
 }
 
 describe("matchesHotkey", () => {
+  it("does not confuse low numeric virtual key codes with digit labels", () => {
+    expect(parseHotkey(KeyCodes.KEY_A)).toEqual([KeyCodes.KEY_A]);
+    expect(parseHotkey(KeyCodes.KEY_S)).toEqual([KeyCodes.KEY_S]);
+    expect(parseHotkey(KeyCodes.KEY_1)).toEqual([KeyCodes.KEY_1]);
+  });
+
   it("ignores the implicit function modifier on navigation keys", () => {
     const implicitArrowModifiers = KeyCodes.MODIFIER_FUNCTION | 0x100;
 

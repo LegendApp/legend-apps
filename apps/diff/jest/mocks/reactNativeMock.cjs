@@ -11,6 +11,11 @@ module.exports = {
     getInitialURL: jest.fn(async () => null),
     openURL: jest.fn(async () => undefined),
   },
+  NativeEventEmitter: class NativeEventEmitter {
+    addListener() {
+      return { remove() {} };
+    }
+  },
   Platform: {
     OS: "macos",
     select: (values) => values.macos ?? values.native ?? values.default,
@@ -23,5 +28,15 @@ module.exports = {
   },
   Text: createComponent("Text"),
   TextInput: createComponent("TextInput"),
+  TurboModuleRegistry: {
+    get: jest.fn(() => null),
+    getEnforcing: jest.fn(() => ({
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+      respondToKeyEvent: jest.fn(),
+      startMonitoringKeyboard: jest.fn(async () => true),
+      stopMonitoringKeyboard: jest.fn(async () => true),
+    })),
+  },
   View: createComponent("View"),
 };
