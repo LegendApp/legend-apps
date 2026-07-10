@@ -961,6 +961,7 @@ export function Playlist() {
             handleReorderDragStart,
             handleTrackClick,
             handleTrackContextMenu,
+            handleTrackDoubleClick,
             handleTrackMouseDown,
             playlistTrackByEntryId,
             selectedIndices$,
