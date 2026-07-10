@@ -5,6 +5,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface RNDiffNativeRow : RCTViewComponentView
 @end
 
+@interface RNDiffHorizontalScroller : RCTViewComponentView
+@end
+
 @interface RNDiffNativeRowConfig : RCTViewComponentView
 @end
 

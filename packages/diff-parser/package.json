@@ -10,6 +10,7 @@
     "jsSrcsDir": "src",
     "ios": {
       "componentProvider": {
+        "DiffHorizontalScroller": "RNDiffHorizontalScroller",
         "DiffNativeRowConfig": "RNDiffNativeRowConfig",
         "DiffNativeRow": "RNDiffNativeRow",
         "DiffMergeNativePane": "RNDiffMergeNativePane"

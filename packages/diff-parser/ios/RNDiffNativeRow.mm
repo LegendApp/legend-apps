@@ -7,6 +7,7 @@
 #import "../cpp/HybridDiffDocument.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <variant>
 #include <vector>
 
@@ -64,12 +65,25 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
   return [NSString stringWithUTF8String:value.c_str()] ?: @"";
 }
 
+@protocol RNDiffHorizontalScrollerSyncing <NSObject>
+- (void)syncFromConfig;
+- (void)handleScrollWheel:(NSEvent *)event;
+@end
+
+static void RNDiffNativeRowInvalidateViews(NSString *configId);
+
 @interface RNDiffNativeRowRenderConfig : NSObject
+@property(nonatomic, copy) NSString *configId;
 @property(nonatomic, assign) double documentId;
 @property(nonatomic, assign) double rowHeight;
 @property(nonatomic, assign) double changeBarWidth;
 @property(nonatomic, assign) double lineNumberWidth;
 @property(nonatomic, assign) double markerWidth;
+@property(nonatomic, assign) double horizontalViewportWidth;
+@property(nonatomic, assign) double horizontalOffset;
+@property(nonatomic, assign) double maxHorizontalOffset;
+@property(nonatomic, assign) double maxTextWidth;
+@property(nonatomic, weak) id<RNDiffHorizontalScrollerSyncing> horizontalScroller;
 @property(nonatomic, assign) BOOL syntaxHighlightingEnabled;
 @property(nonatomic, copy) NSString *themeName;
 @property(nonatomic, copy) NSString *presentation;
@@ -97,6 +111,9 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 @property(nonatomic, copy) NSDictionary *removeMarkerAttributes;
 @property(nonatomic, copy) NSDictionary *mutedMarkerAttributes;
 @property(nonatomic, strong) NSMutableDictionary<NSNumber *, id> *scopeColorById;
+- (void)recordTextWidth:(double)textWidth;
+- (void)setHorizontalOffsetClamped:(double)horizontalOffset;
+- (void)updateHorizontalMetrics;
 - (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize;
 - (void)setForegroundColorString:(NSString *)foregroundColor
                 mutedColorString:(NSString *)mutedColor
@@ -125,11 +142,16 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 - (instancetype)init
 {
   if (self = [super init]) {
+    _configId = @"";
     _documentId = 0;
     _rowHeight = 18;
     _changeBarWidth = 3;
     _lineNumberWidth = 44;
     _markerWidth = 14;
+    _horizontalViewportWidth = 0;
+    _horizontalOffset = 0;
+    _maxHorizontalOffset = 0;
+    _maxTextWidth = 0;
     _syntaxHighlightingEnabled = YES;
     _themeName = @"dark-plus";
     _presentation = @"unified";
@@ -209,8 +231,55 @@ static NSString *RNDiffStringFromStdString(const std::string &value)
 - (void)setFontFamily:(NSString *)fontFamily fontSize:(double)fontSize
 {
   NSFont *font = [NSFont fontWithName:fontFamily size:fontSize];
-  self.font = font ?: [NSFont monospacedSystemFontOfSize:fontSize weight:NSFontWeightRegular];
+  NSFont *nextFont = font ?: [NSFont monospacedSystemFontOfSize:fontSize weight:NSFontWeightRegular];
+  const BOOL fontChanged = ![self.font.fontName isEqualToString:nextFont.fontName]
+    || fabs(self.font.pointSize - nextFont.pointSize) > 0.01;
+  self.font = nextFont;
+  if (fontChanged) {
+    self.maxTextWidth = 0;
+    self.horizontalOffset = 0;
+  }
+  const CGFloat spaceWidth = [@" " sizeWithAttributes:@{NSFontAttributeName: self.font}].width;
+  self.textParagraph.defaultTabInterval = MAX(1, spaceWidth * 4);
+  self.textParagraph.tabStops = @[];
   [self updateTextAttributes];
+}
+
+- (void)recordTextWidth:(double)textWidth
+{
+  if (std::isfinite(textWidth) && textWidth > self.maxTextWidth) {
+    self.maxTextWidth = ceil(textWidth);
+    [self updateHorizontalMetrics];
+  }
+}
+
+- (void)setHorizontalOffsetClamped:(double)horizontalOffset
+{
+  const double nextOffset = std::clamp(horizontalOffset, 0.0, self.maxHorizontalOffset);
+  if (fabs(nextOffset - self.horizontalOffset) > 0.01) {
+    self.horizontalOffset = nextOffset;
+    RNDiffNativeRowInvalidateViews(self.configId);
+    [self.horizontalScroller syncFromConfig];
+  }
+}
+
+- (void)updateHorizontalMetrics
+{
+  const double columnWidth = [self.presentation isEqualToString:@"blocks"]
+    ? floor(self.horizontalViewportWidth / 2.0)
+    : self.horizontalViewportWidth;
+  const double gutterWidth = [self.presentation isEqualToString:@"blocks"]
+    ? self.lineNumberWidth + self.markerWidth
+    : self.changeBarWidth + self.lineNumberWidth * 2 + self.markerWidth;
+  const double textViewportWidth = MAX(0, columnWidth - gutterWidth - diffSideBySideHorizontalPadding);
+  const double nextMaxOffset = MAX(0, self.maxTextWidth - textViewportWidth);
+  const BOOL offsetChanged = self.horizontalOffset > nextMaxOffset;
+  self.maxHorizontalOffset = nextMaxOffset;
+  if (offsetChanged) {
+    self.horizontalOffset = nextMaxOffset;
+    RNDiffNativeRowInvalidateViews(self.configId);
+  }
+  [self.horizontalScroller syncFromConfig];
 }
 
 - (void)setForegroundColorString:(NSString *)foregroundColor
@@ -373,11 +442,9 @@ static RNDiffNativeRowRenderConfig *RNDiffNativeRowConfigForId(NSString *configI
   return RNDiffNativeRowConfigRegistry()[configId];
 }
 
-@class RNDiffNativeRowContentView;
-
-static NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *> *> *RNDiffNativeRowViewRegistry()
+static NSMutableDictionary<NSString *, NSHashTable<NSView *> *> *RNDiffNativeRowViewRegistry()
 {
-  static NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *> *> *registry;
+  static NSMutableDictionary<NSString *, NSHashTable<NSView *> *> *registry;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     registry = [NSMutableDictionary new];
@@ -385,13 +452,13 @@ static NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *>
   return registry;
 }
 
-static void RNDiffNativeRowRegisterView(NSString *configId, RNDiffNativeRowContentView *view)
+static void RNDiffNativeRowRegisterView(NSString *configId, NSView *view)
 {
   if (configId.length == 0) {
     return;
   }
-  NSMutableDictionary<NSString *, NSHashTable<RNDiffNativeRowContentView *> *> *registry = RNDiffNativeRowViewRegistry();
-  NSHashTable<RNDiffNativeRowContentView *> *views = registry[configId];
+  NSMutableDictionary<NSString *, NSHashTable<NSView *> *> *registry = RNDiffNativeRowViewRegistry();
+  NSHashTable<NSView *> *views = registry[configId];
   if (!views) {
     views = [NSHashTable weakObjectsHashTable];
     registry[configId] = views;
@@ -399,12 +466,12 @@ static void RNDiffNativeRowRegisterView(NSString *configId, RNDiffNativeRowConte
   [views addObject:view];
 }
 
-static void RNDiffNativeRowUnregisterView(NSString *configId, RNDiffNativeRowContentView *view)
+static void RNDiffNativeRowUnregisterView(NSString *configId, NSView *view)
 {
   if (configId.length == 0) {
     return;
   }
-  NSHashTable<RNDiffNativeRowContentView *> *views = RNDiffNativeRowViewRegistry()[configId];
+  NSHashTable<NSView *> *views = RNDiffNativeRowViewRegistry()[configId];
   [views removeObject:view];
   if (views.count == 0) {
     [RNDiffNativeRowViewRegistry() removeObjectForKey:configId];
@@ -413,9 +480,161 @@ static void RNDiffNativeRowUnregisterView(NSString *configId, RNDiffNativeRowCon
 
 static void RNDiffNativeRowInvalidateViews(NSString *configId)
 {
-  for (RNDiffNativeRowContentView *view in RNDiffNativeRowViewRegistry()[configId]) {
-    [(NSView *)view setNeedsDisplay:YES];
+  for (NSView *view in RNDiffNativeRowViewRegistry()[configId]) {
+    [view setNeedsDisplay:YES];
   }
+}
+
+@class RNDiffHorizontalScrollerContentView;
+
+static NSMapTable<NSString *, RNDiffHorizontalScrollerContentView *> *RNDiffHorizontalScrollerRegistry()
+{
+  static NSMapTable<NSString *, RNDiffHorizontalScrollerContentView *> *registry;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    registry = [NSMapTable strongToWeakObjectsMapTable];
+  });
+  return registry;
+}
+
+@interface RNDiffHorizontalScrollerContentView : NSView <RNDiffHorizontalScrollerSyncing>
+@property(nonatomic, copy) NSString *configId;
+@property(nonatomic, strong) NSScrollView *scrollView;
+@property(nonatomic, strong) NSView *scrollDocumentView;
+@property(nonatomic, assign) BOOL scrollEnabled;
+@property(nonatomic, assign) BOOL syncingFromConfig;
+@end
+
+@implementation RNDiffHorizontalScrollerContentView
+
+- (instancetype)init
+{
+  if (self = [super initWithFrame:NSZeroRect]) {
+    _configId = @"";
+    _scrollDocumentView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 1, 1)];
+    _scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    _scrollView.autohidesScrollers = NO;
+    _scrollView.drawsBackground = NO;
+    _scrollView.hasHorizontalScroller = YES;
+    _scrollView.hasVerticalScroller = NO;
+    _scrollView.horizontalScrollElasticity = NSScrollElasticityNone;
+    _scrollView.scrollerStyle = NSScrollerStyleOverlay;
+    _scrollView.verticalScrollElasticity = NSScrollElasticityNone;
+    _scrollView.documentView = _scrollDocumentView;
+    _scrollView.contentView.postsBoundsChangedNotifications = YES;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleClipViewBoundsChanged:)
+                                                 name:NSViewBoundsDidChangeNotification
+                                               object:_scrollView.contentView];
+    [self addSubview:_scrollView];
+  }
+  return self;
+}
+
+- (BOOL)isFlipped
+{
+  return YES;
+}
+
+- (void)setConfigId:(NSString *)configId
+{
+  NSString *nextConfigId = configId ?: @"";
+  if ([_configId isEqualToString:nextConfigId]) {
+    return;
+  }
+  if (_configId.length > 0 && [RNDiffHorizontalScrollerRegistry() objectForKey:_configId] == self) {
+    [RNDiffHorizontalScrollerRegistry() removeObjectForKey:_configId];
+    RNDiffNativeRowRenderConfig *previousConfig = RNDiffNativeRowConfigForId(_configId);
+    if (previousConfig.horizontalScroller == self) {
+      previousConfig.horizontalScroller = nil;
+    }
+  }
+  _configId = [nextConfigId copy];
+  if (_configId.length > 0) {
+    [RNDiffHorizontalScrollerRegistry() setObject:self forKey:_configId];
+    RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(_configId);
+    config.horizontalScroller = self;
+  }
+  [self syncFromConfig];
+}
+
+- (void)dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  if (_configId.length > 0 && [RNDiffHorizontalScrollerRegistry() objectForKey:_configId] == self) {
+    [RNDiffHorizontalScrollerRegistry() removeObjectForKey:_configId];
+  }
+}
+
+- (void)layout
+{
+  [super layout];
+  self.scrollView.frame = self.bounds;
+  [self syncFromConfig];
+}
+
+- (void)handleClipViewBoundsChanged:(__unused NSNotification *)notification
+{
+  if (!self.syncingFromConfig) {
+    RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+    [config setHorizontalOffsetClamped:self.scrollView.contentView.bounds.origin.x];
+  }
+}
+
+- (void)handleScrollWheel:(NSEvent *)event
+{
+  if (self.scrollEnabled) {
+    [self.scrollView scrollWheel:event];
+  }
+}
+
+- (void)syncFromConfig
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  const double viewportWidth = MAX(0, config.horizontalViewportWidth);
+  const double maxOffset = MAX(0, config.maxHorizontalOffset);
+  self.scrollEnabled = config != nil && viewportWidth > 0 && maxOffset > 0.5;
+  self.hidden = !self.scrollEnabled;
+  self.scrollView.horizontalScroller.hidden = !self.scrollEnabled;
+
+  const CGFloat documentWidth = MAX(1, viewportWidth + maxOffset);
+  self.scrollDocumentView.frame = NSMakeRect(0, 0, documentWidth, MAX(1, self.bounds.size.height));
+  self.syncingFromConfig = YES;
+  [self.scrollView.contentView scrollToPoint:NSMakePoint(config.horizontalOffset, 0)];
+  [self.scrollView reflectScrolledClipView:self.scrollView.contentView];
+  self.syncingFromConfig = NO;
+}
+
+@end
+
+static BOOL RNDiffHandleHorizontalScroll(NSString *configId, NSEvent *event)
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(configId);
+  const CGFloat deltaX = fabs(event.scrollingDeltaX);
+  const CGFloat deltaY = fabs(event.scrollingDeltaY);
+  const BOOL shiftScroll = (event.modifierFlags & NSEventModifierFlagShift) != 0 && deltaY > 0.01;
+  const BOOL horizontalScroll = deltaX > 0.01 && deltaX >= deltaY;
+  if ((shiftScroll || horizontalScroll) && config.horizontalScroller != nil && config.maxHorizontalOffset > 0.5) {
+    [config.horizontalScroller handleScrollWheel:event];
+    return YES;
+  }
+  return NO;
+}
+
+static void RNDiffDrawHorizontalText(
+    NSMutableAttributedString *attributedText,
+    NSRect clipRect,
+    CGFloat textY,
+    RNDiffNativeRowRenderConfig *config)
+{
+  if (clipRect.size.width <= 0 || attributedText.length == 0) {
+    return;
+  }
+  [config recordTextWidth:[attributedText size].width];
+  [NSGraphicsContext saveGraphicsState];
+  NSRectClip(clipRect);
+  [attributedText drawAtPoint:NSMakePoint(clipRect.origin.x - config.horizontalOffset, textY)];
+  [NSGraphicsContext restoreGraphicsState];
 }
 
 @interface RNDiffNativeRowContentView : NSView
@@ -441,6 +660,13 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 - (BOOL)isFlipped
 {
   return YES;
+}
+
+- (void)scrollWheel:(NSEvent *)event
+{
+  if (!RNDiffHandleHorizontalScroll(self.configId, event)) {
+    [super scrollWheel:event];
+  }
 }
 
 - (void)setConfigId:(NSString *)configId
@@ -586,7 +812,12 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                                         activeHighlights:activeSearchHighlights];
 
   const CGFloat textX = config.changeBarWidth + config.lineNumberWidth * 2 + config.markerWidth;
-  [attributedText drawInRect:NSMakeRect(textX, textY, MAX(0, self.bounds.size.width - textX - 12), config.rowHeight)];
+  RNDiffDrawHorizontalText(
+    attributedText,
+    NSMakeRect(textX, 0, MAX(0, self.bounds.size.width - textX - diffSideBySideHorizontalPadding), config.rowHeight),
+    textY,
+    config
+  );
 }
 
 - (void)drawSideBySidePlainRow:(const DiffRenderRow &)plain
@@ -649,12 +880,12 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                                               highlights:highlights
                                                         activeHighlights:activeHighlights];
   const CGFloat textX = columnRect.origin.x + config.lineNumberWidth + config.markerWidth;
-  [attributedText drawInRect:NSMakeRect(
-    textX,
+  RNDiffDrawHorizontalText(
+    attributedText,
+    NSMakeRect(textX, columnRect.origin.y, MAX(0, NSMaxX(columnRect) - textX - diffSideBySideHorizontalPadding), config.rowHeight),
     textY,
-    MAX(0, NSMaxX(columnRect) - textX - diffSideBySideHorizontalPadding),
-    config.rowHeight
-  )];
+    config
+  );
 }
 
 - (void)drawSideBySideDocument:(HybridDiffDocument *)document
@@ -721,6 +952,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 @property(nonatomic, copy) NSString *fontFamily;
 @property(nonatomic, assign) double fontSize;
 @property(nonatomic, strong) NSColor *foregroundColor;
+@property(nonatomic, copy) NSString *horizontalConfigId;
 @property(nonatomic, strong) NSColor *inlineHighlightColor;
 @property(nonatomic, copy) NSString *inlineHighlights;
 @property(nonatomic, assign) double lineNumber;
@@ -742,6 +974,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
     _fontFamily = @"Menlo";
     _fontSize = 13;
     _foregroundColor = NSColor.labelColor;
+    _horizontalConfigId = @"";
     _inlineHighlightColor = [NSColor colorWithRed:0.75 green:0.53 blue:0 alpha:0.3];
     _inlineHighlights = @"";
     _lineNumber = -1;
@@ -762,11 +995,31 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 - (void)dealloc
 {
   [_attributedTextScratch.mutableString setString:@""];
+  RNDiffNativeRowUnregisterView(_horizontalConfigId, self);
 }
 
 - (BOOL)isFlipped
 {
   return YES;
+}
+
+- (void)setHorizontalConfigId:(NSString *)horizontalConfigId
+{
+  NSString *nextConfigId = horizontalConfigId ?: @"";
+  if ([_horizontalConfigId isEqualToString:nextConfigId]) {
+    return;
+  }
+  RNDiffNativeRowUnregisterView(_horizontalConfigId, self);
+  _horizontalConfigId = [nextConfigId copy];
+  RNDiffNativeRowRegisterView(_horizontalConfigId, self);
+  [self setNeedsDisplay:YES];
+}
+
+- (void)scrollWheel:(NSEvent *)event
+{
+  if (!RNDiffHandleHorizontalScroll(self.horizontalConfigId, event)) {
+    [super scrollWheel:event];
+  }
 }
 
 - (NSFont *)baseFont
@@ -853,6 +1106,9 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   [super drawRect:dirtyRect];
 
   NSFont *baseFont = [self baseFont];
+  const CGFloat spaceWidth = [@" " sizeWithAttributes:@{NSFontAttributeName: baseFont}].width;
+  self.textParagraph.defaultTabInterval = MAX(1, spaceWidth * 4);
+  self.textParagraph.tabStops = @[];
   const CGFloat textY = MAX(0, (self.rowHeight - baseFont.ascender + baseFont.descender) / 2.0);
   NSDictionary *lineNumberAttributes = @{
     NSFontAttributeName: baseFont,
@@ -878,12 +1134,17 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   }
 
   const CGFloat textX = self.lineNumberWidth;
-  [attributedText drawInRect:NSMakeRect(
-    textX,
-    textY,
-    MAX(0, self.bounds.size.width - textX - diffSideBySideHorizontalPadding),
-    self.rowHeight
-  )];
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.horizontalConfigId);
+  if (config) {
+    RNDiffDrawHorizontalText(
+      attributedText,
+      NSMakeRect(textX, 0, MAX(0, self.bounds.size.width - textX - diffSideBySideHorizontalPadding), self.rowHeight),
+      textY,
+      config
+    );
+  } else {
+    [attributedText drawAtPoint:NSMakePoint(textX, textY)];
+  }
 }
 
 @end
@@ -919,6 +1180,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   _contentView.fontFamily = [NSString stringWithUTF8String:newProps.fontFamily.c_str()] ?: @"Menlo";
   _contentView.fontSize = newProps.fontSize;
   _contentView.foregroundColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.foregroundColor.c_str()] ?: @"", NSColor.labelColor);
+  _contentView.horizontalConfigId = [NSString stringWithUTF8String:newProps.horizontalConfigId.c_str()] ?: @"";
   _contentView.inlineHighlightColor = RNDiffColorFromString([NSString stringWithUTF8String:newProps.inlineHighlightColor.c_str()] ?: @"", [NSColor colorWithRed:0.75 green:0.53 blue:0 alpha:0.3]);
   _contentView.inlineHighlights = [NSString stringWithUTF8String:newProps.inlineHighlights.c_str()] ?: @"";
   _contentView.lineNumber = newProps.lineNumber;
@@ -937,6 +1199,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
   [super prepareForRecycle];
 #if TARGET_OS_OSX
   _contentView.configVersion = 0;
+  _contentView.horizontalConfigId = @"";
   _contentView.inlineHighlights = @"";
   _contentView.lineNumber = -1;
   _contentView.text = @"";
@@ -964,6 +1227,74 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
 + (ComponentDescriptorProvider)componentDescriptorProvider
 {
   return concreteComponentDescriptorProvider<DiffMergeNativePaneComponentDescriptor>();
+}
+
+@end
+
+@interface RNDiffHorizontalScroller () <RCTDiffHorizontalScrollerViewProtocol>
+@end
+
+@implementation RNDiffHorizontalScroller {
+#if TARGET_OS_OSX
+  RNDiffHorizontalScrollerContentView *_contentView;
+#endif
+}
+
+- (instancetype)init
+{
+  if (self = [super init]) {
+    _props = std::make_shared<const DiffHorizontalScrollerProps>();
+#if TARGET_OS_OSX
+    _contentView = [RNDiffHorizontalScrollerContentView new];
+    _contentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self addSubview:_contentView];
+#endif
+  }
+  return self;
+}
+
+- (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
+{
+  const auto &newProps = *std::static_pointer_cast<DiffHorizontalScrollerProps const>(props);
+#if TARGET_OS_OSX
+  _contentView.configId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
+#endif
+  [super updateProps:props oldProps:oldProps];
+}
+
+- (void)prepareForRecycle
+{
+  [super prepareForRecycle];
+#if TARGET_OS_OSX
+  _contentView.configId = @"";
+#endif
+}
+
+- (void)layoutSubviews
+{
+  [super layoutSubviews];
+#if TARGET_OS_OSX
+  _contentView.frame = self.bounds;
+#endif
+}
+
+- (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
+           oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
+{
+  [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+  [self layoutSubviews];
+}
+
+#if TARGET_OS_OSX
+- (NSView *)hitTest:(NSPoint)point
+{
+  return _contentView.scrollEnabled ? [super hitTest:point] : nil;
+}
+#endif
+
++ (ComponentDescriptorProvider)componentDescriptorProvider
+{
+  return concreteComponentDescriptorProvider<DiffHorizontalScrollerComponentDescriptor>();
 }
 
 @end
@@ -999,11 +1330,14 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
     config = [RNDiffNativeRowRenderConfig new];
     RNDiffNativeRowConfigRegistry()[nextConfigId] = config;
   }
+  config.configId = nextConfigId;
+  config.horizontalScroller = [RNDiffHorizontalScrollerRegistry() objectForKey:nextConfigId];
   config.documentId = newProps.documentId;
   config.rowHeight = newProps.rowHeight;
   config.changeBarWidth = newProps.changeBarWidth;
   config.lineNumberWidth = newProps.lineNumberWidth;
   config.markerWidth = newProps.markerWidth;
+  config.horizontalViewportWidth = newProps.horizontalViewportWidth;
   config.syntaxHighlightingEnabled = newProps.syntaxHighlightingEnabled;
   config.themeName = [NSString stringWithUTF8String:newProps.themeName.c_str()] ?: @"dark-plus";
   config.presentation = [NSString stringWithUTF8String:newProps.presentation.c_str()] ?: @"unified";
@@ -1024,6 +1358,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId)
                                       active:NO];
   [config setSearchHighlightByRowIndexString:[NSString stringWithUTF8String:newProps.activeSearchHighlightByRowIndex.c_str()] ?: @""
                                       active:YES];
+  [config updateHorizontalMetrics];
   RNDiffNativeRowInvalidateViews(nextConfigId);
 #endif
   [super updateProps:props oldProps:oldProps];

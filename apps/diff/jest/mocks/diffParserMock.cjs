@@ -5,6 +5,10 @@ const DiffNativeRow = React.memo(function DiffNativeRow(props) {
   return React.createElement(View, props);
 });
 
+const DiffHorizontalScroller = React.memo(function DiffHorizontalScroller(props) {
+  return React.createElement(View, props);
+});
+
 const DiffNativeRowConfig = React.memo(function DiffNativeRowConfig(props) {
   return React.createElement(View, props);
 });
@@ -15,6 +19,7 @@ const DiffMergeNativePane = React.memo(function DiffMergeNativePane(props) {
 
 module.exports = {
   __esModule: true,
+  DiffHorizontalScroller,
   DiffMergeNativePane,
   DiffNativeRow,
   DiffNativeRowConfig,

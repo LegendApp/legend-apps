@@ -27,6 +27,10 @@ function loadModuleWithParser(parser = createParser()) {
     __esModule: true,
     default: "DiffNativeRowConfig",
   }));
+  jest.doMock("../DiffHorizontalScrollerNativeComponent", () => ({
+    __esModule: true,
+    default: "DiffHorizontalScroller",
+  }));
   jest.doMock("../DiffNativeRowNativeComponent", () => ({
     __esModule: true,
     default: "DiffNativeRow",
@@ -40,6 +44,15 @@ function loadModuleWithParser(parser = createParser()) {
 }
 
 describe("@legend-apps/diff-parser", () => {
+  it("exports the native diff rendering surfaces", () => {
+    const { diffParser } = loadModuleWithParser();
+
+    expect(diffParser.DiffHorizontalScroller).toBe("DiffHorizontalScroller");
+    expect(diffParser.DiffMergeNativePane).toBe("DiffMergeNativePane");
+    expect(diffParser.DiffNativeRow).toBe("DiffNativeRow");
+    expect(diffParser.DiffNativeRowConfig).toBe("DiffNativeRowConfig");
+  });
+
   it("loads git folder diffs with default row count", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 

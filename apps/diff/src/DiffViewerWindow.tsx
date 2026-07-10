@@ -1,6 +1,7 @@
 import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-apps/appkit-split-view";
 import { commandRunner } from "@legend-apps/command-runner";
 import {
+  DiffHorizontalScroller,
   DiffMergeNativePane,
   DiffNativeRowConfig,
   loadUnifiedDiff,
@@ -1393,9 +1394,11 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
   const nativeUnifiedRows = viewMode === "unified";
   const nativeSideBySideRows = viewMode !== "unified";
+  const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
   const inlineMergeModel = useDiffInlineMergeModel({
     collapsedFileIndexes: rowConfig.collapsedFileIndexes,
     files: state.files,
+    horizontalConfigId: nativeRowConfig?.configId ?? "",
     mergeState,
     onResolveMergeConflict,
     resolvingMergeConflictKeys$,
@@ -1443,7 +1446,6 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
       requestSideBySideRangeRef.current(start, count, options);
     }
   }, [nativeRowsRef, requestSideBySideRangeRef]);
-  const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
   const hasTopChrome = diffTopChromeHeight > 0;
   const diffListContentContainerStyle = hasTopChrome ? undefined : styles.diffListContent;
   const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
@@ -1638,10 +1640,18 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
         {nativeRowConfig && !shouldShowNoChanges ? (
           <DiffNativeRowConfigView
             nativeRowConfig={nativeRowConfig}
+            splitPaneMetrics$={splitPaneMetrics$}
             syntaxTokenizationVersion$={syntaxTokenizationVersion$}
           />
         ) : null}
         {contentBody}
+        {nativeRowConfig && !shouldShowNoChanges ? (
+          <DiffHorizontalScroller
+            collapsable={false}
+            configId={nativeRowConfig.configId}
+            style={styles.diffHorizontalScroller}
+          />
+        ) : null}
       </View>
     );
   }
@@ -1717,12 +1727,15 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
 
 function DiffNativeRowConfigView({
   nativeRowConfig,
+  splitPaneMetrics$,
   syntaxTokenizationVersion$,
 }: {
   nativeRowConfig: DiffNativeRowConfigProps;
+  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   syntaxTokenizationVersion$: Observable<number>;
 }) {
   const tokenizationVersion = useValue(() => syntaxTokenizationVersion$.get());
+  const horizontalViewportWidth = useValue(() => splitPaneMetrics$.contentWidth.get());
   return (
     <DiffNativeRowConfig
       addAccentColor={nativeRowConfig.addAccentColor}
@@ -1740,6 +1753,7 @@ function DiffNativeRowConfigView({
       fontFamily={nativeRowConfig.fontFamily}
       fontSize={nativeRowConfig.fontSize}
       foregroundColor={nativeRowConfig.foregroundColor}
+      horizontalViewportWidth={horizontalViewportWidth}
       lineNumberWidth={nativeRowConfig.lineNumberWidth}
       markerWidth={nativeRowConfig.markerWidth}
       mutedColor={nativeRowConfig.mutedColor}
@@ -1974,6 +1988,7 @@ function DiffMergeCodePane({
   foregroundColor,
   fontFamily,
   fontSize,
+  horizontalConfigId,
   inlineHighlightColor,
   inlineHighlights,
   lineNumber,
@@ -1987,6 +2002,7 @@ function DiffMergeCodePane({
   foregroundColor: string;
   fontFamily: string;
   fontSize: number;
+  horizontalConfigId: string;
   inlineHighlightColor: string;
   inlineHighlights: string;
   lineNumber?: number;
@@ -2014,6 +2030,7 @@ function DiffMergeCodePane({
       fontFamily={fontFamily}
       fontSize={fontSize}
       foregroundColor={foregroundColor}
+      horizontalConfigId={horizontalConfigId}
       inlineHighlightColor={inlineHighlightColor}
       inlineHighlights={inlineHighlights}
       lineNumber={lineNumber ?? -1}
@@ -2100,6 +2117,7 @@ function DiffMergeCenterGutter({
 function DiffMergeLineRow({
   controlBlock,
   file,
+  horizontalConfigId,
   mergeSyntaxByPath$,
   mergeRender$,
   onResolveMergeConflict,
@@ -2109,6 +2127,7 @@ function DiffMergeLineRow({
 }: {
   controlBlock: DiffMergeConflictBlock | null;
   file: DiffMergeConflictFile;
+  horizontalConfigId: string;
   mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
   mergeRender$: Observable<DiffMergeRenderState>;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
@@ -2155,6 +2174,7 @@ function DiffMergeLineRow({
             foregroundColor={foregroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            horizontalConfigId={horizontalConfigId}
             inlineHighlightColor={conflictPalette.inlineBackground}
             inlineHighlights={encodeMergeInlineHighlights(row?.leftInlineChangeRanges)}
             lineNumber={row?.leftLineNumber}
@@ -2180,6 +2200,7 @@ function DiffMergeLineRow({
             foregroundColor={foregroundColor}
             fontFamily={fontFamily}
             fontSize={fontSize}
+            horizontalConfigId={horizontalConfigId}
             inlineHighlightColor={conflictPalette.inlineBackground}
             inlineHighlights={encodeMergeInlineHighlights(row?.rightInlineChangeRanges)}
             lineNumber={row?.rightLineNumber}
@@ -2207,6 +2228,7 @@ function DiffMergePlaceholderRow({
 function useDiffInlineMergeModel({
   collapsedFileIndexes,
   files,
+  horizontalConfigId,
   mergeState,
   onResolveMergeConflict,
   resolvingMergeConflictKeys$,
@@ -2221,6 +2243,7 @@ function useDiffInlineMergeModel({
 }: {
   collapsedFileIndexes: ReadonlySet<number>;
   files: readonly DiffFileSummary[];
+  horizontalConfigId: string;
   mergeState: DiffMergeState;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
@@ -2255,11 +2278,11 @@ function useDiffInlineMergeModel({
     if (mergeState.status !== "ready" || mergeState.files.length === 0) {
       return "merge:none";
     }
-    return mergeState.files.map((file) => {
+    return `${horizontalConfigId}:` + mergeState.files.map((file) => {
       const model = mergeDisplayModelByPath.get(file.path);
       return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
     }).join("|");
-  }, [mergeDisplayModelByPath, mergeState]);
+  }, [horizontalConfigId, mergeDisplayModelByPath, mergeState]);
   const controlRowByFilePath = useMemo(() => {
     const map = new Map<string, Map<string, number>>();
     if (mergeState.status === "ready") {
@@ -2328,6 +2351,7 @@ function useDiffInlineMergeModel({
         <DiffMergeLineRow
           controlBlock={controlBlock}
           file={file}
+          horizontalConfigId={horizontalConfigId}
           mergeRender$={mergeRender$}
           mergeSyntaxByPath$={mergeSyntaxByPath$}
           onResolveMergeConflict={onResolveMergeConflict}
@@ -2337,7 +2361,7 @@ function useDiffInlineMergeModel({
         />
       );
     },
-    [controlRowByFilePath, inlineList, mergeRender$, mergeSyntaxByPath$, onResolveMergeConflict, resolvingMergeConflictKeys$],
+    [controlRowByFilePath, horizontalConfigId, inlineList, mergeRender$, mergeSyntaxByPath$, onResolveMergeConflict, resolvingMergeConflictKeys$],
   );
 
   useEffect(() => {
@@ -5356,6 +5380,14 @@ const styles = StyleSheet.create({
   },
   diffPane: {
     flex: 1,
+  },
+  diffHorizontalScroller: {
+    bottom: 0,
+    height: 16,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    zIndex: 30,
   },
   diffPaneContent: {
     flex: 1,

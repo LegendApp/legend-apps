@@ -16,6 +16,7 @@ export interface NativeProps extends ViewProps {
   fontFamily: string;
   fontSize: CodegenTypes.Double;
   foregroundColor: string;
+  horizontalViewportWidth: CodegenTypes.Double;
   lineNumberWidth: CodegenTypes.Double;
   markerWidth: CodegenTypes.Double;
   mutedColor: string;
