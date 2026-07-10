@@ -4670,8 +4670,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   const navigateToHunk = useCallback((direction: -1 | 1) => {
     const list = listRef.current;
-    const currentIndex = list?.getState().start ?? 0;
-    const targetIndex = getAdjacentDiffHunkIndex(hunkListIndexes, currentIndex, direction);
+    const listState = list?.getState();
+    const currentPosition = listState
+      ? listState.scroll + (documentError ? diffTitlebarTopInset : 0)
+      : 0;
+    const targetIndex = getAdjacentDiffHunkIndex(
+      hunkListIndexes,
+      currentPosition,
+      direction,
+      listState?.positionAtIndex,
+    );
     let didNavigate = false;
 
     if (list && targetIndex !== null) {
@@ -4687,7 +4695,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     return didNavigate;
-  }, [hunkListIndexes]);
+  }, [documentError, hunkListIndexes]);
   const navigateToNextHunk = useCallback(() => navigateToHunk(1), [navigateToHunk]);
   const navigateToPreviousHunk = useCallback(() => navigateToHunk(-1), [navigateToHunk]);
 

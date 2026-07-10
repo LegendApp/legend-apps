@@ -175,14 +175,14 @@ export const diffMenuConfig: NativeMenuConfig[] = [
         title: "Previous Hunk",
         enabled: false,
         placement: { before: "Enter Full Screen" },
-        shortcut: { key: "[", modifiers: commandModifier | optionModifier },
+        shortcut: { key: "[", modifiers: commandModifier },
       },
       {
         id: "nextHunk",
         title: "Next Hunk",
         enabled: false,
         placement: { before: "Enter Full Screen" },
-        shortcut: { key: "]", modifiers: commandModifier | optionModifier },
+        shortcut: { key: "]", modifiers: commandModifier },
       },
       {
         id: "showOnlyHunks",
