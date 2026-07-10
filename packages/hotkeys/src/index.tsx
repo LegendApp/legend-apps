@@ -119,6 +119,8 @@ export const KeyText: Record<number, string> = (() => {
     [KeyCodes.KEY_UP]: "↑",
     [KeyCodes.KEY_MINUS]: "-",
     [KeyCodes.KEY_EQUALS]: "=",
+    [KeyCodes.KEY_LEFT_BRACKET]: "[",
+    [KeyCodes.KEY_RIGHT_BRACKET]: "]",
     [KeyCodes.KEY_COMMA]: ",",
     [KeyCodes.KEY_PERIOD]: ".",
     [KeyCodes.KEY_SLASH]: "/",
@@ -467,7 +469,7 @@ export function createHotkeyRouter({
     updatePressedModifiers(event);
 
     const currentWindowId = readActiveWindowId();
-    if (isSuspended(currentWindowId)) {
+    if (getActiveHotkeyCaptureId() !== null || isSuspended(currentWindowId)) {
       return false;
     }
 
@@ -938,6 +940,219 @@ type HotkeysSettingsPageProps<HotkeyId extends string> = {
   showTitle?: boolean;
   values: HotkeyState<HotkeyId>;
 };
+
+type HotkeyBindingsSettingsPageProps<HotkeyId extends string> = {
+  definitions: readonly HotkeyDefinition<HotkeyId>[];
+  onCaptureChange?: (isCapturing: boolean) => void;
+  onChange: (id: HotkeyId, values: readonly HotkeyValue[]) => void;
+  onResetAll?: () => void;
+  renderFooter?: () => ReactNode;
+  showTitle?: boolean;
+  values: Record<HotkeyId, readonly HotkeyValue[]>;
+};
+
+export function hotkeyBindingListsEqual(
+  left: readonly HotkeyValue[],
+  right: readonly HotkeyValue[],
+) {
+  return left.length === right.length && left.every((value, index) => `${value}` === `${right[index]}`);
+}
+
+export function getHotkeyBindingConflicts<HotkeyId extends string>(
+  definitions: readonly HotkeyDefinition<HotkeyId>[],
+  values: Record<HotkeyId, readonly HotkeyValue[]>,
+) {
+  const commandsByBinding = new Map<string, HotkeyId[]>();
+  for (const definition of definitions) {
+    for (const binding of values[definition.id] ?? getDefaultHotkeyBindings(definition)) {
+      const key = `${serializeHotkey(parseHotkey(binding))}`;
+      const commandIds = commandsByBinding.get(key) ?? [];
+      if (!commandIds.includes(definition.id)) {
+        commandIds.push(definition.id);
+        commandsByBinding.set(key, commandIds);
+      }
+    }
+  }
+  return new Map([...commandsByBinding].filter(([, commandIds]) => commandIds.length > 1));
+}
+
+export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
+  definitions,
+  onCaptureChange,
+  onChange,
+  onResetAll,
+  renderFooter,
+  showTitle = true,
+  values,
+}: HotkeyBindingsSettingsPageProps<HotkeyId>) {
+  const [addingBindingForId, setAddingBindingForId] = useState<HotkeyId | null>(null);
+  const conflicts = getHotkeyBindingConflicts(definitions, values);
+  const titles = new Map(definitions.map((definition) => [definition.id, definition.title]));
+  const hasCustomBindings = definitions.some((definition) => {
+    return !hotkeyBindingListsEqual(values[definition.id] ?? [], getDefaultHotkeyBindings(definition));
+  });
+
+  const resetAll = () => {
+    setAddingBindingForId(null);
+    if (onResetAll) {
+      onResetAll();
+    } else {
+      for (const definition of definitions) {
+        onChange(definition.id, getDefaultHotkeyBindings(definition));
+      }
+    }
+  };
+
+  return (
+    <>
+      <View className="flex-col gap-6">
+        <View className={cn("flex-row items-center gap-4", showTitle ? "justify-between" : "justify-end")}>
+          {showTitle ? (
+            <Text className="text-xl font-semibold text-text-primary leading-tight">Hotkeys</Text>
+          ) : null}
+            <Pressable
+              accessibilityRole="button"
+              className={cn(
+                "rounded-md border border-border-primary bg-background-primary px-3 py-1.5",
+                !hasCustomBindings && "opacity-50",
+              )}
+              disabled={!hasCustomBindings}
+              onPress={resetAll}
+            >
+              <Text className="text-sm text-text-primary">Reset All</Text>
+            </Pressable>
+        </View>
+        <View className="overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20">
+          {definitions.map((definition, definitionIndex) => {
+            const bindings = values[definition.id] ?? getDefaultHotkeyBindings(definition);
+            const defaultBindings = getDefaultHotkeyBindings(definition);
+            const isCustom = !hotkeyBindingListsEqual(bindings, defaultBindings);
+            return (
+              <View key={definition.id}>
+                {definitionIndex > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
+                <View className="flex-row items-start justify-between gap-6 px-4 py-3.5">
+                  <View className="min-w-0 flex-1 flex-col gap-1 pr-6" style={styles.rowText}>
+                    <Text className="font-semibold text-text-primary leading-tight" style={styles.rowTitle}>
+                      {definition.title}
+                    </Text>
+                    {definition.description ? (
+                      <Text className="leading-relaxed text-text-secondary" style={styles.rowDescription}>
+                        {definition.description}
+                      </Text>
+                    ) : null}
+                    {bindings.map((binding) => {
+                      const conflictIds = conflicts.get(`${serializeHotkey(parseHotkey(binding))}`) ?? [];
+                      const conflictingTitles = conflictIds
+                        .filter((id) => id !== definition.id)
+                        .map((id) => titles.get(id))
+                        .filter((title): title is string => Boolean(title));
+                      return conflictingTitles.length > 0 ? (
+                        <Text key={`conflict-${binding}`} className="text-xs text-danger">
+                          {formatHotkey(binding)} also triggers {conflictingTitles.join(", ")}.
+                        </Text>
+                      ) : null;
+                    })}
+                  </View>
+                  <View className="max-w-full flex-shrink flex-col items-end gap-2" style={styles.rowControl}>
+                    {bindings.map((binding, bindingIndex) => (
+                      <View key={`${binding}-${bindingIndex}`} className="flex-row items-center gap-2">
+                        <HotkeyCapture
+                          onCaptureChange={onCaptureChange}
+                          onChange={(value) => {
+                            if (value !== null) {
+                              const next = [...bindings];
+                              next[bindingIndex] = value;
+                              onChange(definition.id, normalizePersistedBindings(next));
+                            }
+                          }}
+                          value={binding}
+                        />
+                        <Pressable
+                          accessibilityLabel={`Remove ${definition.title} shortcut ${formatHotkey(binding)}`}
+                          accessibilityRole="button"
+                          className="rounded-md px-2 py-1.5 hover:bg-background-primary"
+                          onPress={() => onChange(
+                            definition.id,
+                            bindings.filter((_, index) => index !== bindingIndex),
+                          )}
+                        >
+                          <Text className="text-sm text-text-secondary">Remove</Text>
+                        </Pressable>
+                      </View>
+                    ))}
+                    {addingBindingForId === definition.id ? (
+                      <View className="flex-row items-center gap-2">
+                        <HotkeyCapture
+                          onCaptureChange={(isCapturing) => {
+                            onCaptureChange?.(isCapturing);
+                            if (!isCapturing) {
+                              setAddingBindingForId(null);
+                            }
+                          }}
+                          onChange={(value) => {
+                            if (value !== null) {
+                              onChange(definition.id, normalizePersistedBindings([...bindings, value]));
+                            }
+                            setAddingBindingForId(null);
+                          }}
+                          value={null}
+                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          className="rounded-md px-2 py-1.5 hover:bg-background-primary"
+                          onPress={() => setAddingBindingForId(null)}
+                        >
+                          <Text className="text-sm text-text-secondary">Cancel</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View className="flex-row items-center gap-3">
+                        {isCustom ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            className="rounded-md px-2 py-1.5 hover:bg-background-primary"
+                            onPress={() => onChange(definition.id, defaultBindings)}
+                          >
+                            <Text className="text-sm text-text-secondary">Reset</Text>
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          className="rounded-md border border-border-primary bg-background-primary px-3 py-1.5"
+                          onPress={() => setAddingBindingForId(definition.id)}
+                        >
+                          <Text className="text-sm text-text-primary">Add Shortcut</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+      {renderFooter?.()}
+    </>
+  );
+}
+
+export function HotkeyBindingsSettingsPage<HotkeyId extends string>(
+  props: HotkeyBindingsSettingsPageProps<HotkeyId>,
+) {
+  return (
+    <View className="flex-1 overflow-hidden" style={styles.page}>
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="flex flex-col"
+        contentContainerStyle={styles.pageContent}
+        horizontal={false}
+      >
+        <HotkeyBindingsSettingsContent {...props} />
+      </ScrollView>
+    </View>
+  );
+}
 
 export function HotkeysSettingsContent<HotkeyId extends string>({
   definitions,

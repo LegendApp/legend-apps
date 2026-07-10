@@ -1,4 +1,5 @@
 import { SwitchControl } from "@legend-apps/design-system";
+import { HotkeyBindingsSettingsContent as SharedHotkeyBindingsSettingsContent } from "@legend-apps/hotkeys";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -15,6 +16,12 @@ import {
 } from "@legend-apps/syntax-settings";
 import { diffSettingsWindowIdentifier } from "./appConstants";
 import { getDiffCliInstallStatus, installDiffCli, uninstallDiffCli, type DiffCliInstallStatus } from "./diffCli";
+import {
+  diffHotkeyDefinitions,
+  resetDiffHotkeyBindings,
+  setDiffHotkeyBindings,
+  useDiffHotkeyBindings,
+} from "./diffHotkeys";
 import {
   diffFontFamilyOptions,
   setDiffAdaptiveLightModeEnabledSetting,
@@ -42,7 +49,7 @@ import {
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
 
-type DiffSettingsPage = "appearance" | "syntax" | "debugging" | "commandLine";
+type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine";
 
 function AppearanceSettingsPage() {
   return (
@@ -183,6 +190,20 @@ function SyntaxSettingsContent() {
         title="Show whitespace characters"
       />
     </SettingsSection>
+  );
+}
+
+function HotkeysSettingsContent() {
+  const bindings = useDiffHotkeyBindings();
+
+  return (
+    <SharedHotkeyBindingsSettingsContent
+      definitions={diffHotkeyDefinitions}
+      onChange={setDiffHotkeyBindings}
+      onResetAll={resetDiffHotkeyBindings}
+      showTitle={false}
+      values={bindings}
+    />
   );
 }
 
@@ -397,6 +418,11 @@ const pages: VirtualizedSettingsWindowPage<DiffSettingsPage>[] = [
     id: "syntax",
     renderContent: () => <SyntaxSettingsContent />,
     title: "Syntax",
+  },
+  {
+    id: "hotkeys",
+    renderContent: () => <HotkeysSettingsContent />,
+    title: "Hotkeys",
   },
   {
     id: "debugging",

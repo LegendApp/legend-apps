@@ -1,15 +1,21 @@
 import type { DiffDocument } from "@legend-apps/diff-parser";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
+import { useRoutedHotkeys, type HotkeyScope } from "@legend-apps/hotkeys";
 import { updateMenuItems, type NativeMenuItemPatch } from "@legend-apps/native-menu";
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-apps/source-viewer";
 import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-apps/window-manager";
 import { useWindowId } from "@legend-apps/windows";
 import { useObserveEffect } from "@legendapp/state/react";
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
 import { diffCompareToolbarTargetChooseRef, type DiffCompareRepoState } from "../diffCompareTargets";
 import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
+import {
+  diffHotkeyDefinitions,
+  diffHotkeyRouter,
+  useDiffHotkeyBindings,
+} from "../diffHotkeys";
 import {
   getDiffShowOnlyHunksSetting,
   getDiffSyntaxTheme,
@@ -336,6 +342,44 @@ export function DiffActionHandlersController({
   toggleShowOnlyHunks: () => boolean;
   toggleSidebar: () => boolean;
 }) {
+  const bindings = useDiffHotkeyBindings();
+  const windowIdentifier = useWindowId();
+  const hotkeyScope = useMemo<HotkeyScope>(() => ({
+    kind: "window",
+    windowId: windowIdentifier,
+  }), [windowIdentifier]);
+  const hotkeyHandlers = useMemo(() => ({
+    copyRelativePath: copyCurrentRelativePath,
+    copySource: copyCurrentSource,
+    filterFiles: focusSearch,
+    nextHunk: navigateToNextHunk,
+    previousHunk: navigateToPreviousHunk,
+    reload: reloadCurrentSource,
+    toggleSidebar,
+    viewBlocks: () => setDiffViewModeSetting("blocks"),
+    viewUnified: () => setDiffViewModeSetting("unified"),
+  }), [
+    copyCurrentRelativePath,
+    copyCurrentSource,
+    focusSearch,
+    navigateToNextHunk,
+    navigateToPreviousHunk,
+    reloadCurrentSource,
+    toggleSidebar,
+  ]);
+
+  useRoutedHotkeys({
+    bindings,
+    definitions: diffHotkeyDefinitions,
+    handlers: hotkeyHandlers,
+    router: diffHotkeyRouter,
+    scope: hotkeyScope,
+  });
+
+  useEffect(() => {
+    diffHotkeyRouter.setActiveWindowId(windowIdentifier);
+  }, [windowIdentifier]);
+
   useEffect(() => registerDiffViewerActionHandlers({
     copyFilePath: copyCurrentFilePath,
     copyRelativePath: copyCurrentRelativePath,

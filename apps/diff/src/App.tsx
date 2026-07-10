@@ -1,14 +1,23 @@
 import { AutoUpdater } from "@legend-apps/auto-updater";
 import { commandRunner } from "@legend-apps/command-runner";
 import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
-import type { NativeMenuActionHandlers } from "@legend-apps/native-menu";
+import { useRoutedHotkeys } from "@legend-apps/hotkeys";
+import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/native-menu";
 import { initializeSyntaxAssetsSync } from "@legend-apps/syntax-parser";
-import { useEffect, useRef } from "react";
+import { addWindowFocusedListener } from "@legend-apps/window-manager";
+import { useEffect, useMemo, useRef } from "react";
 import { Linking, LogBox } from "react-native";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { installDiffAppExitHandler } from "./diffAppExit";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
+import {
+  diffApplicationHotkeyScope,
+  diffHotkeyDefinitions,
+  diffHotkeyRouter,
+  getDiffHotkeyMenuPatches,
+  useDiffHotkeyBindings,
+} from "./diffHotkeys";
 import {
   getDiffShowOnlyHunksSetting,
   getDiffRestoreWindowsOnStartupSetting,
@@ -135,6 +144,48 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
   };
 }
 
+function DiffApplicationHotkeysController({ controller }: { controller: DocumentAppController }) {
+  const bindings = useDiffHotkeyBindings();
+  const handlers = useMemo(() => ({
+    compareFiles: () => {
+      openDiffViewerForSelectedFiles(controller).catch(controller.reportError);
+    },
+    openFolder: () => {
+      openDiffViewerForSelectedFolder(controller).catch(controller.reportError);
+    },
+    openFromClipboard: () => {
+      openDiffViewerFromClipboard(controller).catch(controller.reportError);
+    },
+    openUrl: () => {
+      openDiffViewerForUrl(controller).catch(controller.reportError);
+    },
+    startWindow: () => {
+      openDiffStartWindow(controller).catch(controller.reportError);
+    },
+  }), [controller]);
+
+  useRoutedHotkeys({
+    bindings,
+    definitions: diffHotkeyDefinitions,
+    handlers,
+    router: diffHotkeyRouter,
+    scope: diffApplicationHotkeyScope,
+  });
+
+  useEffect(() => {
+    const subscription = addWindowFocusedListener(({ identifier }) => {
+      diffHotkeyRouter.setActiveWindowId(identifier);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    updateMenuItems(diffMenuOwnerId, getDiffHotkeyMenuPatches(bindings));
+  }, [bindings]);
+
+  return null;
+}
+
 async function openRecentDiffFolder(path: string, controller: DocumentAppController) {
   await openDiffViewerWindow(normalizeDiffOpenSource(path));
   controller.setDocumentWindowOpen(true);
@@ -229,7 +280,7 @@ export function App({ launchArguments }: DiffAppProps) {
     };
   }, []);
 
-  return null;
+  return <DiffApplicationHotkeysController controller={controller} />;
 }
 
 export default App;
