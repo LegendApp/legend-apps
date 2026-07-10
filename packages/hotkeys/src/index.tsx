@@ -19,6 +19,8 @@ export type HotkeyValue =
   | `${number}+${number}+${number}+${number}`;
 
 export type HotkeyDefinition<HotkeyId extends string = string> = {
+  allowExtraModifiers?: boolean;
+  defaultBindings?: readonly HotkeyValue[];
   defaultValue: HotkeyValue | null;
   description?: string;
   id: HotkeyId;
@@ -29,6 +31,26 @@ export type HotkeyDefinition<HotkeyId extends string = string> = {
 export type HotkeyState<HotkeyId extends string = string> = Record<HotkeyId, HotkeyValue | null>;
 
 export type HotkeyHandlers<HotkeyId extends string = string> = Partial<Record<HotkeyId, () => boolean | void>>;
+
+export type HotkeyBindingValue = HotkeyValue | readonly HotkeyValue[] | null;
+export type HotkeyBindingState<HotkeyId extends string = string> = Record<HotkeyId, HotkeyBindingValue>;
+
+export type HotkeyScope =
+  | { kind: "application" }
+  | { kind: "window"; windowId: string };
+
+export type HotkeyHandlerContext = {
+  binding: HotkeyValue;
+  event: KeyboardEvent;
+  pressedKeys: ReadonlySet<number>;
+  repeated: boolean;
+};
+
+export type RoutedHotkeyHandlers<HotkeyId extends string = string> = Partial<
+  Record<HotkeyId, (context: HotkeyHandlerContext) => boolean | void>
+>;
+
+export type HotkeyRouter = ReturnType<typeof createHotkeyRouter>;
 
 const modifierCodes = [
   KeyCodes.MODIFIER_COMMAND,
@@ -166,6 +188,24 @@ export function createDefaultHotkeyState<HotkeyId extends string>(
   return Object.fromEntries(definitions.map((definition) => [definition.id, definition.defaultValue])) as HotkeyState<HotkeyId>;
 }
 
+export function getDefaultHotkeyBindings<HotkeyId extends string>(
+  definition: HotkeyDefinition<HotkeyId>,
+): readonly HotkeyValue[] {
+  if (definition.defaultBindings) {
+    return definition.defaultBindings;
+  }
+
+  return definition.defaultValue === null ? [] : [definition.defaultValue];
+}
+
+export function normalizeHotkeyBindings(value: HotkeyBindingValue | undefined): readonly HotkeyValue[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  return Array.isArray(value) ? value : [value as HotkeyValue];
+}
+
 function eventModifierCodes(event: KeyboardEvent, configuredModifiers: readonly number[] = []) {
   return modifierCodes.filter((modifier) => {
     const ignoreImplicitFunctionModifier =
@@ -190,6 +230,245 @@ export function matchesHotkey(event: KeyboardEvent, value: HotkeyValue | null | 
   const activeMask = createModifierMask(...activeModifiers);
 
   return configuredKeyCode !== undefined && event.keyCode === configuredKeyCode && activeMask === modifierMask;
+}
+
+function matchesRoutedHotkey(
+  event: KeyboardEvent,
+  value: HotkeyValue,
+  pressedKeys: ReadonlySet<number>,
+  allowExtraModifiers: boolean,
+) {
+  const keyCodes = parseHotkey(value);
+  const configuredModifiers = keyCodes.filter(isModifierKeyCode);
+  const configuredKeys = keyCodes.filter((keyCode) => !isModifierKeyCode(keyCode));
+
+  if (configuredKeys.length === 0 || !configuredKeys.includes(event.keyCode)) {
+    return false;
+  }
+
+  const requiredKeysPressed = configuredKeys.every((keyCode) => pressedKeys.has(keyCode));
+  if (!requiredKeysPressed) {
+    return false;
+  }
+
+  const activeModifiers = eventModifierCodes(event, configuredModifiers);
+  const configuredMask = createModifierMask(...configuredModifiers);
+  const activeMask = createModifierMask(...activeModifiers);
+  return allowExtraModifiers
+    ? (activeMask & configuredMask) === configuredMask
+    : activeMask === configuredMask;
+}
+
+type HotkeyRegistration<HotkeyId extends string> = {
+  bindings: Partial<HotkeyBindingState<HotkeyId>>;
+  definitions: readonly HotkeyDefinition<HotkeyId>[];
+  enabled: () => boolean;
+  handlers: RoutedHotkeyHandlers<HotkeyId>;
+  order: number;
+  priority: number;
+  scope: HotkeyScope;
+};
+
+type HotkeySuspension = {
+  order: number;
+  scope: HotkeyScope;
+};
+
+const applicationScope: HotkeyScope = { kind: "application" };
+const defaultApplicationPriority = 0;
+const defaultWindowPriority = 100;
+
+function hotkeyScopeMatches(scope: HotkeyScope, activeWindowId: string | null) {
+  return scope.kind === "application" || scope.windowId === activeWindowId;
+}
+
+export function createHotkeyRouter({
+  getActiveWindowId,
+}: {
+  getActiveWindowId?: () => string | null;
+} = {}) {
+  const pressedKeys = new Set<number>();
+  const registrations = new Set<HotkeyRegistration<string>>();
+  const suspensions = new Set<HotkeySuspension>();
+  let activeWindowId: string | null = null;
+  let nextOrder = 0;
+  let removeKeyDownListener: (() => void) | undefined;
+  let removeKeyUpListener: (() => void) | undefined;
+
+  const readActiveWindowId = () => getActiveWindowId?.() ?? activeWindowId;
+
+  const updatePressedModifiers = (event: KeyboardEvent) => {
+    for (const modifier of modifierCodes) {
+      if (hasModifier(event, modifier)) {
+        pressedKeys.add(modifier);
+      } else {
+        pressedKeys.delete(modifier);
+      }
+    }
+  };
+
+  const isSuspended = (currentWindowId: string | null) => {
+    for (const suspension of suspensions) {
+      if (hotkeyScopeMatches(suspension.scope, currentWindowId)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const dispatchKeyDown = (event: KeyboardEvent) => {
+    const repeated = pressedKeys.has(event.keyCode);
+    pressedKeys.add(event.keyCode);
+    updatePressedModifiers(event);
+
+    const currentWindowId = readActiveWindowId();
+    if (isSuspended(currentWindowId)) {
+      return false;
+    }
+
+    const sortedRegistrations = [...registrations].sort((left, right) => {
+      return right.priority - left.priority || right.order - left.order;
+    });
+
+    for (const registration of sortedRegistrations) {
+      if (registration.enabled() && hotkeyScopeMatches(registration.scope, currentWindowId)) {
+        for (const definition of registration.definitions) {
+          const handler = registration.handlers[definition.id];
+          if (handler && (!repeated || definition.repeat)) {
+            const configuredValue = registration.bindings[definition.id];
+            const bindings = configuredValue === undefined
+              ? getDefaultHotkeyBindings(definition)
+              : normalizeHotkeyBindings(configuredValue);
+
+            for (const binding of bindings) {
+              if (matchesRoutedHotkey(event, binding, pressedKeys, definition.allowExtraModifiers === true)) {
+                const handled = handler({
+                  binding,
+                  event,
+                  pressedKeys: new Set(pressedKeys),
+                  repeated,
+                });
+                if (handled !== false) {
+                  return true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  };
+
+  const dispatchKeyUp = (event: KeyboardEvent) => {
+    pressedKeys.delete(event.keyCode);
+    updatePressedModifiers(event);
+    return false;
+  };
+
+  const updateListeners = () => {
+    const shouldListen = registrations.size > 0;
+    if (shouldListen && !removeKeyDownListener) {
+      removeKeyDownListener = addKeyDownListener(dispatchKeyDown);
+      removeKeyUpListener = addKeyUpListener(dispatchKeyUp);
+    } else if (!shouldListen && removeKeyDownListener) {
+      removeKeyDownListener();
+      removeKeyUpListener?.();
+      removeKeyDownListener = undefined;
+      removeKeyUpListener = undefined;
+      pressedKeys.clear();
+    }
+  };
+
+  const register = <HotkeyId extends string>({
+    bindings = {},
+    definitions,
+    enabled = true,
+    handlers,
+    priority,
+    scope = applicationScope,
+  }: {
+    bindings?: Partial<HotkeyBindingState<HotkeyId>>;
+    definitions: readonly HotkeyDefinition<HotkeyId>[];
+    enabled?: boolean | (() => boolean);
+    handlers: RoutedHotkeyHandlers<HotkeyId>;
+    priority?: number;
+    scope?: HotkeyScope;
+  }) => {
+    const registration: HotkeyRegistration<HotkeyId> = {
+      bindings,
+      definitions,
+      enabled: typeof enabled === "function" ? enabled : () => enabled,
+      handlers,
+      order: nextOrder++,
+      priority: priority ?? (scope.kind === "window" ? defaultWindowPriority : defaultApplicationPriority),
+      scope,
+    };
+    registrations.add(registration as HotkeyRegistration<string>);
+    updateListeners();
+
+    return () => {
+      registrations.delete(registration as HotkeyRegistration<string>);
+      updateListeners();
+    };
+  };
+
+  const suspend = (scope: HotkeyScope = applicationScope) => {
+    const suspension = { order: nextOrder++, scope };
+    suspensions.add(suspension);
+    return () => {
+      suspensions.delete(suspension);
+    };
+  };
+
+  return {
+    getPressedKeys: (): ReadonlySet<number> => new Set(pressedKeys),
+    register,
+    setActiveWindowId: (windowId: string | null) => {
+      activeWindowId = windowId;
+    },
+    suspend,
+  };
+}
+
+export function useRoutedHotkeys<HotkeyId extends string>({
+  bindings,
+  definitions,
+  enabled,
+  handlers,
+  priority,
+  router,
+  scope,
+}: {
+  bindings?: Partial<HotkeyBindingState<HotkeyId>>;
+  definitions: readonly HotkeyDefinition<HotkeyId>[];
+  enabled?: boolean | (() => boolean);
+  handlers: RoutedHotkeyHandlers<HotkeyId>;
+  priority?: number;
+  router: HotkeyRouter;
+  scope?: HotkeyScope;
+}) {
+  useEffect(() => {
+    return router.register({ bindings, definitions, enabled, handlers, priority, scope });
+  }, [bindings, definitions, enabled, handlers, priority, router, scope]);
+}
+
+export function useHotkeySuspension({
+  active,
+  router,
+  scope,
+}: {
+  active: boolean;
+  router: HotkeyRouter;
+  scope?: HotkeyScope;
+}) {
+  useEffect(() => {
+    if (active) {
+      return router.suspend(scope);
+    }
+    return undefined;
+  }, [active, router, scope]);
 }
 
 function keyCodeToMenuKeyEquivalent(keyCode: number): string | null {
