@@ -166,6 +166,38 @@ describe("diffFiles", () => {
       label: "repo",
       value: "/tmp/repo",
     });
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=changes.patch")).toEqual({
+      kind: "diffFile",
+      label: "changes.patch",
+      value: "/tmp/repo/changes.patch",
+    });
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=https%3A%2F%2Fgithub.com%2Fowner%2Frepo%2Fpull%2F7")).toEqual({
+      diffUrl: "https://github.com/owner/repo/pull/7.diff",
+      kind: "github",
+      label: "owner/repo#7",
+      value: "https://github.com/owner/repo/pull/7",
+    });
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=--cached")).toEqual({
+      args: ["--cached"],
+      cwd: "/tmp/repo",
+      kind: "git",
+      label: "--cached",
+      value: "/tmp/repo --cached",
+    });
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=HEAD~1")).toEqual({
+      args: ["HEAD~1"],
+      cwd: "/tmp/repo",
+      kind: "git",
+      label: "HEAD~1",
+      value: "/tmp/repo HEAD~1",
+    });
+    expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=main...HEAD&arg=--&arg=src%2FApp.tsx")).toEqual({
+      args: ["main...HEAD", "--", "src/App.tsx"],
+      cwd: "/tmp/repo",
+      kind: "git",
+      label: "main...HEAD -- src/App.tsx",
+      value: "/tmp/repo main...HEAD -- src/App.tsx",
+    });
     expect(getDiffSourceFromOpenUrl("https://github.com/owner/repo/pull/1")).toBeNull();
   });
 

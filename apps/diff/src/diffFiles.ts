@@ -225,14 +225,15 @@ function isGitDiffArgument(value: string) {
   return value.includes("..") && !value.startsWith(".");
 }
 
-function createGitDiffSource(value: string, cwd: string | null | undefined): DiffOpenSource | null {
+function createGitDiffSource(args: string[], cwd: string | null | undefined): DiffOpenSource | null {
   const trimmedCwd = cwd?.trim();
+  const label = args.join(" ");
   return trimmedCwd ? {
-    args: [value],
+    args,
     cwd: trimmedCwd,
     kind: "git",
-    label: value,
-    value: `${trimmedCwd} ${value}`,
+    label,
+    value: `${trimmedCwd} ${label}`,
   } : null;
 }
 
@@ -244,7 +245,7 @@ function normalizeDiffOpenSourceString(value: string, cwd?: string | null) {
     : null;
   return getFilePairSourceFromText(trimmedValue, cwd)
     ?? getGithubDiffSource(trimmedValue)
-    ?? (isGitDiffArgument(trimmedValue) ? createGitDiffSource(trimmedValue, cwd) : null)
+    ?? (isGitDiffArgument(trimmedValue) ? createGitDiffSource([trimmedValue], cwd) : null)
     ?? (resolvedFilePath && isDiffFilePath(resolvedFilePath) ? createDiffFileSource(resolvedFilePath) : null)
     ?? (folderPath ? {
       kind: "folder" as const,
@@ -371,13 +372,35 @@ function getDiffOpenUrlArgs(url: URL) {
   return args;
 }
 
+function isExplicitLocalCliSource(value: string) {
+  return value === "."
+    || value.startsWith("./")
+    || value.startsWith("../")
+    || value.startsWith("/")
+    || value.startsWith("file://");
+}
+
+function getDiffCliSource(args: string[], cwd: string | null) {
+  let source: DiffOpenSource | null = null;
+  if (args.length === 0) {
+    source = normalizeDiffOpenSource(cwd);
+  } else if (args.length === 1) {
+    const argument = args[0];
+    const resolvedPath = getLocalInputPath(argument, cwd);
+    source = getGithubDiffSource(argument)
+      ?? (resolvedPath && isDiffFilePath(resolvedPath) ? createDiffFileSource(resolvedPath) : null)
+      ?? (isExplicitLocalCliSource(argument) ? normalizeDiffOpenSource(argument, cwd) : null);
+  }
+  return source ?? createGitDiffSource(args, cwd);
+}
+
 export function getDiffSourceFromOpenUrl(value: string) {
   const url = parseUrl(value);
   let source: DiffOpenSource | null = null;
   if (url?.protocol === diffUrlScheme && url.hostname === "open") {
     const cwd = url.searchParams.get("cwd");
     const args = getDiffOpenUrlArgs(url);
-    source = getLaunchDiffSource([...args, ...(cwd ? [diffCwdLaunchArgument, cwd] : [])]);
+    source = getDiffCliSource(args, cwd);
   }
   return source;
 }
