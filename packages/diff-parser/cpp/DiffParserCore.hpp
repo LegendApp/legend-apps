@@ -30,6 +30,7 @@ struct DiffGitCompareOptions {
   std::string baseKind = "head";
   std::string baseRef;
   bool useMergeBase = true;
+  bool ignoreWhitespace = false;
 };
 
 struct DiffProgressiveCallbacks {
@@ -42,7 +43,7 @@ struct DiffProgressiveCallbacks {
   std::function<void(const DiffFileSummary& file)> onFileFinished;
 };
 
-DiffParsedDocument parseUnifiedDiffText(const std::string& diffText);
+DiffParsedDocument parseUnifiedDiffText(const std::string& diffText, bool ignoreWhitespace = false);
 
 class UnifiedDiffStreamParser {
 public:
@@ -60,7 +61,8 @@ private:
 DiffParsedDocument parseGitRepositoryDiff(
     const std::string& folderPath,
     bool showOnlyHunks = true,
-    DiffGitCompareOptions compareOptions = {});
+    DiffGitCompareOptions compareOptions = {},
+    std::function<bool()> shouldCancel = {});
 DiffLoadTiming parseGitRepositoryDiffProgressive(
     const std::string& folderPath,
     const DiffProgressiveCallbacks& callbacks,

@@ -81,6 +81,44 @@ void assertInlineChangeRanges() {
       "unrelated changed lines should not pass the unbalanced pairing threshold");
 }
 
+void assertIgnoreWhitespaceChanges() {
+  const std::string fixture =
+      "diff --git a/whitespace.ts b/whitespace.ts\n"
+      "--- a/whitespace.ts\n"
+      "+++ b/whitespace.ts\n"
+      "@@ -1 +1 @@\n"
+      "-const value = 1;\n"
+      "+const   value = 1;\n"
+      "diff --git a/mixed.ts b/mixed.ts\n"
+      "--- a/mixed.ts\n"
+      "+++ b/mixed.ts\n"
+      "@@ -1,2 +1,2 @@\n"
+      "-const oldName = true;\n"
+      "-  const keep = 1;\n"
+      "+const newName = true;\n"
+      "+const keep=1;\n";
+  const auto parsed = diffparser::parseUnifiedDiffText(fixture, true);
+
+  expectEqual(static_cast<double>(parsed.files.size()), 1, "ignore whitespace file count");
+  expectEqual(parsed.files[0].path, "mixed.ts", "ignore whitespace retained file");
+  expectEqual(parsed.files[0].additions, 1, "ignore whitespace additions");
+  expectEqual(parsed.files[0].deletions, 1, "ignore whitespace deletions");
+  expectEqual(parsed.timing.fileCount, 1, "ignore whitespace timing file count");
+  expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "ignore whitespace timing row count");
+
+  const diffparser::DiffRenderRow *contextRow = nullptr;
+  for (const auto& row : parsed.rows) {
+    if (row.text == "const keep=1;") {
+      contextRow = &row;
+      break;
+    }
+  }
+  expect(contextRow != nullptr, "ignore whitespace matched row");
+  expectEqual(contextRow->changeType, diffChangeTypeContext, "ignore whitespace matched row type");
+  expectEqual(contextRow->oldLineNumber, 2, "ignore whitespace matched old line");
+  expectEqual(contextRow->newLineNumber, 2, "ignore whitespace matched new line");
+}
+
 const diffparser::DiffFileSummary& fileAt(const diffparser::DiffParsedDocument& parsed, size_t index) {
   expect(index < parsed.files.size(), "expected file index " + std::to_string(index));
   return parsed.files[index];
@@ -416,8 +454,8 @@ diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::st
 
 void assertGitRepositoryDiff(const std::string& fixturePath) {
   const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath);
-  expectEqual(static_cast<double>(parsed.files.size()), 5, "git file count");
-  expectEqual(parsed.timing.fileCount, 5, "git timing file count");
+  expectEqual(static_cast<double>(parsed.files.size()), 6, "git file count");
+  expectEqual(parsed.timing.fileCount, 6, "git timing file count");
   expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git timing row count");
   expect(!parsed.repositoryPath.empty(), "git repository path should be set");
   expect(!parsed.workdirPath.empty(), "git workdir path should be set");
@@ -468,7 +506,7 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
   const auto& conflictBranchRow = findRowTextForFile(parsed, conflicted, "export const side = \"branch\";");
   expectEqual(conflictBranchRow.changeType, diffChangeTypeAdd, "git conflicted branch row type");
 
-  expectEqual(static_cast<double>(parsed.fileSources.size()), 5, "git file source count");
+  expectEqual(static_cast<double>(parsed.fileSources.size()), 6, "git file source count");
   for (const auto& sources : parsed.fileSources) {
     const auto& file = fileAt(parsed, static_cast<size_t>(sources.fileIndex));
     expectEqual(sources.oldPath, file.oldPath, "git file source old path");
@@ -481,8 +519,8 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
 
 void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
   const auto parsed = parseGitRepositoryDiffByFileForTest(fixturePath);
-  expectEqual(static_cast<double>(parsed.files.size()), 5, "git by-file file count");
-  expectEqual(parsed.timing.fileCount, 5, "git by-file timing file count");
+  expectEqual(static_cast<double>(parsed.files.size()), 6, "git by-file file count");
+  expectEqual(parsed.timing.fileCount, 6, "git by-file timing file count");
   expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git by-file timing row count");
 
   const auto& modified = findFile(parsed, "src/App.tsx");
@@ -533,6 +571,17 @@ void assertGitRepositoryDiffAgainstCompareBase(const std::string& fixturePath) {
   expectEqual(added.status, "untracked", "git compare-base untracked status");
 }
 
+void assertGitRepositoryDiffIgnoresWhitespace(const std::string& fixturePath) {
+  const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath, true, diffparser::DiffGitCompareOptions{
+      .ignoreWhitespace = true,
+  });
+  expectEqual(static_cast<double>(parsed.files.size()), 5, "git ignore-whitespace file count");
+  const bool hasWhitespaceFile = std::any_of(parsed.files.begin(), parsed.files.end(), [](const auto& file) {
+    return file.path == "src/Whitespace.ts";
+  });
+  expect(!hasWhitespaceFile, "git ignore-whitespace should omit whitespace-only files");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -543,12 +592,14 @@ int main(int argc, char** argv) {
     assertRenderRows(parsed);
     assertSideBySideRows(parsed);
     assertInlineChangeRanges();
+    assertIgnoreWhitespaceChanges();
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 1), parsed);
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 17), parsed);
     if (argc > 1) {
       assertGitRepositoryDiff(argv[1]);
       assertGitRepositoryDiffByFile(argv[1]);
       assertGitRepositoryDiffAgainstCompareBase(argv[1]);
+      assertGitRepositoryDiffIgnoresWhitespace(argv[1]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

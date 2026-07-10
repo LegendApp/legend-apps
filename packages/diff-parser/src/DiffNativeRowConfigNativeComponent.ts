@@ -27,6 +27,7 @@ export interface NativeProps extends ViewProps {
   rowHeight: CodegenTypes.Double;
   searchHighlightByRowIndex: string;
   searchHighlightColor: string;
+  showWhitespaceCharacters: boolean;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
   tokenizationVersion: CodegenTypes.Double;

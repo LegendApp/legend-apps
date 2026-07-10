@@ -45,8 +45,9 @@ double elapsedDiffMs(DiffClock::time_point start, DiffClock::time_point end) {
 
 std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
     const std::string& diffText,
-    const std::string& sourceLabel) {
-  auto parsed = parseUnifiedDiffText(diffText);
+    const std::string& sourceLabel,
+    bool ignoreWhitespaceChanges) {
+  auto parsed = parseUnifiedDiffText(diffText, ignoreWhitespaceChanges);
 
   return std::make_shared<HybridDiffDocument>(
       std::move(parsed.files),
@@ -62,11 +63,13 @@ std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
 DiffGitCompareOptions createCompareOptions(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
-    bool compareUseMergeBase) {
+    bool compareUseMergeBase,
+    bool ignoreWhitespaceChanges) {
   return DiffGitCompareOptions{
       .baseKind = compareBaseKind,
       .baseRef = compareBaseRef,
       .useMergeBase = compareUseMergeBase,
+      .ignoreWhitespace = ignoreWhitespaceChanges,
   };
 }
 
@@ -102,11 +105,12 @@ std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
     bool showOnlyHunks,
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
-    bool compareUseMergeBase) {
+    bool compareUseMergeBase,
+    bool ignoreWhitespaceChanges) {
   return HybridDiffLoadSession::create(
       folderPath,
       showOnlyHunks,
-      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase));
+      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
 }
 
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFromUrl(
@@ -125,13 +129,14 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     bool showOnlyHunks,
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
-    bool compareUseMergeBase) {
-  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareBaseKind, compareBaseRef, compareUseMergeBase]() -> DiffLoadResult {
+    bool compareUseMergeBase,
+    bool ignoreWhitespaceChanges) {
+  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
     auto document = loadGitDiffDocument(
         folderPath,
         showOnlyHunks,
-        createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase));
+        createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
     document->logMemorySnapshot("loadGitFolderDiff.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
@@ -156,10 +161,11 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     const std::string& diffText,
     const std::string& sourceLabel,
-    double initialRowCount) {
-  return Promise<DiffLoadResult>::async([diffText, sourceLabel, initialRowCount]() -> DiffLoadResult {
+    double initialRowCount,
+    bool ignoreWhitespaceChanges) {
+  return Promise<DiffLoadResult>::async([diffText, sourceLabel, initialRowCount, ignoreWhitespaceChanges]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadUnifiedDiffDocument(diffText, sourceLabel);
+    auto document = loadUnifiedDiffDocument(diffText, sourceLabel, ignoreWhitespaceChanges);
     document->logMemorySnapshot("loadUnifiedDiff.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
@@ -184,11 +190,12 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
 std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUrl(
     const std::string& diffUrl,
     const std::string& sourceLabel,
-    double initialRowCount) {
-  return Promise<DiffLoadResult>::async([diffUrl, sourceLabel, initialRowCount]() -> DiffLoadResult {
+    double initialRowCount,
+    bool ignoreWhitespaceChanges) {
+  return Promise<DiffLoadResult>::async([diffUrl, sourceLabel, initialRowCount, ignoreWhitespaceChanges]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
     const auto diff = loadDiffUrlText(diffUrl);
-    auto document = loadUnifiedDiffDocument(diff.text, sourceLabel);
+    auto document = loadUnifiedDiffDocument(diff.text, sourceLabel, ignoreWhitespaceChanges);
     document->logMemorySnapshot("loadUnifiedDiffFromUrl.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;

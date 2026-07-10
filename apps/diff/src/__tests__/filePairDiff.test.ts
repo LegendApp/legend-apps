@@ -34,6 +34,11 @@ describe("filePairDiff", () => {
     });
   });
 
+  it("adds the native ignore-all-whitespace option when requested", () => {
+    const source = createDiffFilePairSource("/tmp/old/App.tsx", "/tmp/new/App.tsx");
+    expect(createFilePairDiffCommand(source, true).args.slice(0, 2)).toEqual(["-u", "-w"]);
+  });
+
   it("sanitizes display paths used in diff headers", () => {
     expect(getFilePairDiffDisplayPath("/tmp/old/App\tName.tsx", "a")).toBe("a/App Name.tsx");
     expect(getFilePairDiffDisplayPath("/tmp/old/\n", "b")).toBe("b/file");

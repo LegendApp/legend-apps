@@ -20,6 +20,8 @@ export type DiffSettingsFile = {
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
   highlightChangedCharacters?: boolean;
+  ignoreWhitespaceChanges?: boolean;
+  showWhitespaceCharacters?: boolean;
   syntaxHighlightingEnabled?: boolean;
   syntaxTheme: string;
   restoreWindowsOnStartup?: boolean;
@@ -42,6 +44,8 @@ export const defaultDiffShowOnlyHunks = true;
 export const defaultDiffShowStatisticsPanel = false;
 export const defaultDiffAdaptiveLightModeEnabled = true;
 export const defaultDiffHighlightChangedCharacters = true;
+export const defaultDiffIgnoreWhitespaceChanges = false;
+export const defaultDiffShowWhitespaceCharacters = false;
 export const defaultDiffSyntaxHighlightingEnabled = true;
 export const diffFontSizeOptions = sourceFontSizeOptions;
 export const diffViewModeOptions = [
@@ -91,6 +95,14 @@ const diffSettings = createObservableSettings({
       defaultValue: defaultDiffHighlightChangedCharacters,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffHighlightChangedCharacters),
     },
+    ignoreWhitespaceChanges: {
+      defaultValue: defaultDiffIgnoreWhitespaceChanges,
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffIgnoreWhitespaceChanges),
+    },
+    showWhitespaceCharacters: {
+      defaultValue: defaultDiffShowWhitespaceCharacters,
+      normalize: (value) => normalizeBooleanSetting(value, defaultDiffShowWhitespaceCharacters),
+    },
     syntaxHighlightingEnabled: {
       defaultValue: defaultDiffSyntaxHighlightingEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffSyntaxHighlightingEnabled),
@@ -126,6 +138,8 @@ const adaptiveLightModeEnabledSetting = diffSettings.field("adaptiveLightModeEna
 const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
 const highlightChangedCharactersSetting = diffSettings.field("highlightChangedCharacters");
+const ignoreWhitespaceChangesSetting = diffSettings.field("ignoreWhitespaceChanges");
+const showWhitespaceCharactersSetting = diffSettings.field("showWhitespaceCharacters");
 const syntaxHighlightingEnabledSetting = diffSettings.field("syntaxHighlightingEnabled");
 const syntaxThemeSetting = diffSettings.field("syntaxTheme");
 const restoreWindowsOnStartupSetting = diffSettings.field("restoreWindowsOnStartup");
@@ -157,6 +171,14 @@ export function getDiffFontSizeSetting(): number {
 
 export function getDiffHighlightChangedCharactersSetting(): boolean {
   return highlightChangedCharactersSetting.get();
+}
+
+export function getDiffIgnoreWhitespaceChangesSetting(): boolean {
+  return ignoreWhitespaceChangesSetting.get();
+}
+
+export function getDiffShowWhitespaceCharactersSetting(): boolean {
+  return showWhitespaceCharactersSetting.get();
 }
 
 export function getDiffViewModeSetting(): DiffViewMode {
@@ -199,6 +221,20 @@ export function useDiffHighlightChangedCharactersSetting(): boolean {
   return normalizeBooleanSetting(
     useValue(diffSettings$.highlightChangedCharacters),
     defaultDiffHighlightChangedCharacters,
+  );
+}
+
+export function useDiffIgnoreWhitespaceChangesSetting(): boolean {
+  return normalizeBooleanSetting(
+    useValue(diffSettings$.ignoreWhitespaceChanges),
+    defaultDiffIgnoreWhitespaceChanges,
+  );
+}
+
+export function useDiffShowWhitespaceCharactersSetting(): boolean {
+  return normalizeBooleanSetting(
+    useValue(diffSettings$.showWhitespaceCharacters),
+    defaultDiffShowWhitespaceCharacters,
   );
 }
 
@@ -253,6 +289,14 @@ export function setDiffFontSizeSetting(fontSize: number) {
 
 export function setDiffHighlightChangedCharactersSetting(enabled: boolean) {
   highlightChangedCharactersSetting.set(enabled);
+}
+
+export function setDiffIgnoreWhitespaceChangesSetting(enabled: boolean) {
+  ignoreWhitespaceChangesSetting.set(enabled);
+}
+
+export function setDiffShowWhitespaceCharactersSetting(enabled: boolean) {
+  showWhitespaceCharactersSetting.set(enabled);
 }
 
 export function setDiffViewModeSetting(viewMode: DiffViewMode) {

@@ -58,7 +58,7 @@ describe("@legend-apps/diff-parser", () => {
 
     await expect(diffParser.loadGitFolderDiff("/tmp/repo")).resolves.toEqual({ ok: "git" });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true, "head", "", true);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true, "head", "", true, false);
   });
 
   it("passes explicit git folder diff row count", async () => {
@@ -66,15 +66,18 @@ describe("@legend-apps/diff-parser", () => {
 
     await diffParser.loadGitFolderDiff("/tmp/repo", 25);
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "head", "", true);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "head", "", true, false);
   });
 
   it("passes git folder diff load options", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 
-    await diffParser.loadGitFolderDiff("/tmp/repo", 25, { showOnlyHunks: false });
+    await diffParser.loadGitFolderDiff("/tmp/repo", 25, {
+      ignoreWhitespaceChanges: true,
+      showOnlyHunks: false,
+    });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false, "head", "", true);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false, "head", "", true, true);
   });
 
   it("passes git folder compare base options", async () => {
@@ -86,7 +89,7 @@ describe("@legend-apps/diff-parser", () => {
       compareUseMergeBase: false,
     });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "ref", "origin/main", false);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "ref", "origin/main", false, false);
   });
 
   it("starts progressive git folder diff sessions", () => {
@@ -94,15 +97,18 @@ describe("@legend-apps/diff-parser", () => {
 
     expect(diffParser.startGitFolderDiff("/tmp/repo")).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "head", "", true);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "head", "", true, false);
   });
 
   it("starts progressive git folder diff sessions with options", () => {
     const { diffParser, parser } = loadModuleWithParser();
 
-    expect(diffParser.startGitFolderDiff("/tmp/repo", { showOnlyHunks: false })).toEqual({ ok: "session" });
+    expect(diffParser.startGitFolderDiff("/tmp/repo", {
+      ignoreWhitespaceChanges: true,
+      showOnlyHunks: false,
+    })).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false, "head", "", true);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false, "head", "", true, true);
   });
 
   it("passes progressive git folder compare base options", () => {
@@ -114,7 +120,7 @@ describe("@legend-apps/diff-parser", () => {
       compareUseMergeBase: false,
     })).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "ref", "origin/main", false);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "ref", "origin/main", false, false);
   });
 
   it("starts progressive unified diff URL sessions", () => {
@@ -141,20 +147,31 @@ describe("@legend-apps/diff-parser", () => {
 
     await expect(diffParser.loadUnifiedDiff("diff --git a/a b/a", "fixture")).resolves.toEqual({ ok: "unified" });
     await diffParser.loadUnifiedDiff("diff --git a/b b/b", "fixture 2", 10);
+    await diffParser.loadUnifiedDiff("diff --git a/c b/c", "fixture 3", 20, true);
 
-    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(1, "diff --git a/a b/a", "fixture", 200);
-    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(2, "diff --git a/b b/b", "fixture 2", 10);
+    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(1, "diff --git a/a b/a", "fixture", 200, false);
+    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(2, "diff --git a/b b/b", "fixture 2", 10, false);
+    expect(parser.loadUnifiedDiff).toHaveBeenNthCalledWith(3, "diff --git a/c b/c", "fixture 3", 20, true);
   });
 
   it("loads unified diffs from URLs", async () => {
     const { diffParser, parser } = loadModuleWithParser();
 
     await expect(diffParser.loadUnifiedDiffFromUrl("https://github.com/owner/repo/pull/1.diff", "owner/repo#1")).resolves.toEqual({ ok: "url" });
+    await diffParser.loadUnifiedDiffFromUrl("https://github.com/owner/repo/pull/2.diff", "owner/repo#2", 50, true);
 
     expect(parser.loadUnifiedDiffFromUrl).toHaveBeenCalledWith(
       "https://github.com/owner/repo/pull/1.diff",
       "owner/repo#1",
       200,
+      false,
+    );
+    expect(parser.loadUnifiedDiffFromUrl).toHaveBeenNthCalledWith(
+      2,
+      "https://github.com/owner/repo/pull/2.diff",
+      "owner/repo#2",
+      50,
+      true,
     );
   });
 

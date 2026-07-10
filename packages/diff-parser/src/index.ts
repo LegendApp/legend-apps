@@ -13,6 +13,7 @@ function normalizeGitFolderLoadOptions(options?: Partial<DiffGitFolderLoadOption
     compareBaseKind: options?.compareBaseKind ?? "head",
     compareBaseRef: options?.compareBaseRef ?? "",
     compareUseMergeBase: options?.compareUseMergeBase ?? true,
+    ignoreWhitespaceChanges: options?.ignoreWhitespaceChanges ?? false,
     showOnlyHunks: options?.showOnlyHunks ?? true,
   };
 }
@@ -26,6 +27,7 @@ export function loadGitFolderDiff(folderPath: string, initialRowCount = 200, opt
     normalizedOptions.compareBaseKind,
     normalizedOptions.compareBaseRef,
     normalizedOptions.compareUseMergeBase,
+    normalizedOptions.ignoreWhitespaceChanges,
   );
 }
 
@@ -37,6 +39,7 @@ export function startGitFolderDiff(folderPath: string, options?: Partial<DiffGit
     normalizedOptions.compareBaseKind,
     normalizedOptions.compareBaseRef,
     normalizedOptions.compareUseMergeBase,
+    normalizedOptions.ignoreWhitespaceChanges,
   );
 }
 
@@ -52,12 +55,12 @@ export function logDiffTimingMark(message: string) {
   }
 }
 
-export function loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount = 200) {
-  return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, initialRowCount);
+export function loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount = 200, ignoreWhitespaceChanges = false) {
+  return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, initialRowCount, ignoreWhitespaceChanges);
 }
 
-export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount = 200) {
-  return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, initialRowCount);
+export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount = 200, ignoreWhitespaceChanges = false) {
+  return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, initialRowCount, ignoreWhitespaceChanges);
 }
 
 export { default as DiffNativeRowConfig } from "./DiffNativeRowConfigNativeComponent";

@@ -138,6 +138,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, assign) double selectionFocusRowIndex;
 @property(nonatomic, assign) NSUInteger selectionFocusColumn;
 @property(nonatomic, assign) NSInteger selectionSide;
+@property(nonatomic, assign) BOOL showWhitespaceCharacters;
 @property(nonatomic, assign) BOOL syntaxHighlightingEnabled;
 @property(nonatomic, copy) NSString *themeName;
 @property(nonatomic, copy) NSString *presentation;
@@ -223,6 +224,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     _selectionAnchorRowIndex = -1;
     _selectionFocusRowIndex = -1;
     _selectionSide = 0;
+    _showWhitespaceCharacters = NO;
     _syntaxHighlightingEnabled = YES;
     _themeName = @"dark-plus";
     _presentation = @"unified";
@@ -806,6 +808,24 @@ static void RNDiffDrawHorizontalText(
   [NSGraphicsContext saveGraphicsState];
   NSRectClip(clipRect);
   [attributedText drawAtPoint:NSMakePoint(clipRect.origin.x - config.horizontalOffset, textY)];
+  if (config.showWhitespaceCharacters) {
+    CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)attributedText);
+    NSDictionary *markerAttributes = @{
+      NSFontAttributeName: config.font,
+      NSForegroundColorAttributeName: [config.mutedColor colorWithAlphaComponent:0.75],
+    };
+    NSString *text = attributedText.string;
+    for (NSUInteger index = 0; index < text.length; index += 1) {
+      const unichar character = [text characterAtIndex:index];
+      NSString *marker = character == ' ' ? @"·" : character == '\t' ? @"→" : nil;
+      if (marker != nil) {
+        const CGFloat offset = CTLineGetOffsetForStringIndex(line, static_cast<CFIndex>(index), nullptr);
+        [marker drawAtPoint:NSMakePoint(clipRect.origin.x - config.horizontalOffset + offset, textY)
+             withAttributes:markerAttributes];
+      }
+    }
+    CFRelease(line);
+  }
   [NSGraphicsContext restoreGraphicsState];
 }
 
@@ -1851,6 +1871,7 @@ static void RNDiffDrawHorizontalText(
   config.markerWidth = newProps.markerWidth;
   config.horizontalViewportWidth = newProps.horizontalViewportWidth;
   config.highlightChangedCharacters = newProps.highlightChangedCharacters;
+  config.showWhitespaceCharacters = newProps.showWhitespaceCharacters;
   config.syntaxHighlightingEnabled = newProps.syntaxHighlightingEnabled;
   config.themeName = [NSString stringWithUTF8String:newProps.themeName.c_str()] ?: @"dark-plus";
   config.presentation = [NSString stringWithUTF8String:newProps.presentation.c_str()] ?: @"unified";

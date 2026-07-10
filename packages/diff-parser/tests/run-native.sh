@@ -40,6 +40,9 @@ EOF
 cat > "$GIT_FIXTURE/src/Conflict.ts" <<'EOF'
 export const side = "base";
 EOF
+cat > "$GIT_FIXTURE/src/Whitespace.ts" <<'EOF'
+export const spaced = true;
+EOF
 printf '\x00\x01\x02\x03' > "$GIT_FIXTURE/assets/logo.bin"
 
 git -C "$GIT_FIXTURE" init --quiet
@@ -73,6 +76,9 @@ export const outsideFullFileContext = "base";
 EOF
 cat > "$GIT_FIXTURE/src/NewFile.ts" <<'EOF'
 export const added = true;
+EOF
+cat > "$GIT_FIXTURE/src/Whitespace.ts" <<'EOF'
+export   const   spaced = true;
 EOF
 rm "$GIT_FIXTURE/src/Deleted.ts"
 printf '\xff\x00\xfe\x01' > "$GIT_FIXTURE/assets/logo.bin"

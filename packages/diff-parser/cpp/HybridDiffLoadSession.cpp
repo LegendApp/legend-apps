@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <utility>
 
@@ -144,7 +145,38 @@ void HybridDiffLoadSession::runGitFolder() {
   const auto startedAt = DiffClock::now();
   document_->logMemorySnapshot("progressive.runStart");
   try {
-    auto timing = parseGitRepositoryDiffProgressiveByFile(folderPath_, DiffProgressiveCallbacks{
+    DiffLoadTiming timing;
+    if (compareOptions_.ignoreWhitespace) {
+      auto parsed = parseGitRepositoryDiff(
+          folderPath_,
+          showOnlyHunks_,
+          compareOptions_,
+          [this] {
+            return cancelled_.load();
+          });
+      document_->setProgressRepositoryMetadata(
+          std::move(parsed.repositoryPath),
+          std::move(parsed.workdirPath),
+          std::move(parsed.headTreeOid));
+      for (size_t fileIndex = 0; fileIndex < parsed.files.size() && !cancelled_.load(); fileIndex += 1) {
+        const auto& file = parsed.files[fileIndex];
+        const size_t rowStart = static_cast<size_t>(std::max(0.0, std::floor(file.rowStart)));
+        const size_t rowEnd = std::min(
+            parsed.rows.size(),
+            rowStart + static_cast<size_t>(std::max(0.0, std::floor(file.rowCount))));
+        if (rowStart < rowEnd && fileIndex < parsed.fileSources.size()) {
+          document_->appendProgressFile(file, parsed.fileSources[fileIndex], parsed.rows[rowStart]);
+          for (size_t rowIndex = rowStart + 1; rowIndex < rowEnd; rowIndex += 1) {
+            document_->appendProgressRow(parsed.rows[rowIndex]);
+          }
+          rowVersion_.fetch_add(rowEnd - rowStart);
+          fileVersion_.fetch_add(1);
+          noteRowsAvailable();
+        }
+      }
+      timing = parsed.timing;
+    } else {
+      timing = parseGitRepositoryDiffProgressiveByFile(folderPath_, DiffProgressiveCallbacks{
         .shouldCancel = [this] {
           return cancelled_.load();
         },
@@ -185,7 +217,8 @@ void HybridDiffLoadSession::runGitFolder() {
           document_->updateProgressFile(file);
           fileVersion_.fetch_add(1);
         },
-    }, showOnlyHunks_, compareOptions_);
+      }, showOnlyHunks_, compareOptions_);
+    }
     timing.documentMs = elapsedSessionMs(startedAt, DiffClock::now());
     timing.nativeTotalMs = timing.documentMs;
     document_->setProgressTiming(timing);

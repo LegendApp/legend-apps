@@ -3,8 +3,10 @@ import {
   defaultDiffFontSize,
   defaultDiffAdaptiveLightModeEnabled,
   defaultDiffHighlightChangedCharacters,
+  defaultDiffIgnoreWhitespaceChanges,
   defaultDiffSidebarWidth,
   defaultDiffShowOnlyHunks,
+  defaultDiffShowWhitespaceCharacters,
   defaultDiffSyntaxHighlightingEnabled,
   defaultDiffViewMode,
   diffViewModeOptions,
@@ -12,7 +14,9 @@ import {
   getDiffFontFamilySetting,
   getDiffFontSizeSetting,
   getDiffHighlightChangedCharactersSetting,
+  getDiffIgnoreWhitespaceChangesSetting,
   getDiffShowOnlyHunksSetting,
+  getDiffShowWhitespaceCharactersSetting,
   getDiffSidebarWidthSetting,
   getDiffSyntaxHighlightingEnabledSetting,
   getDiffSyntaxTheme,
@@ -23,7 +27,9 @@ import {
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffHighlightChangedCharactersSetting,
+  setDiffIgnoreWhitespaceChangesSetting,
   setDiffShowOnlyHunksSetting,
+  setDiffShowWhitespaceCharactersSetting,
   setDiffSidebarWidthSetting,
   setDiffSyntaxHighlightingEnabledSetting,
   setDiffSyntaxThemeSetting,
@@ -39,6 +45,8 @@ describe("diffSettings", () => {
     expect(getDiffSidebarWidthSetting()).toBe(defaultDiffSidebarWidth);
     expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(defaultDiffAdaptiveLightModeEnabled);
     expect(getDiffHighlightChangedCharactersSetting()).toBe(defaultDiffHighlightChangedCharacters);
+    expect(getDiffIgnoreWhitespaceChangesSetting()).toBe(defaultDiffIgnoreWhitespaceChanges);
+    expect(getDiffShowWhitespaceCharactersSetting()).toBe(defaultDiffShowWhitespaceCharacters);
     expect(getDiffSyntaxThemeSetting()).toBe("dark-plus");
     expect(getDiffSyntaxTheme().name).toBe("dark-plus");
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(defaultDiffSyntaxHighlightingEnabled);
@@ -64,6 +72,8 @@ describe("diffSettings", () => {
     setDiffSidebarWidthSetting(320);
     setDiffAdaptiveLightModeEnabledSetting(false);
     setDiffHighlightChangedCharactersSetting(false);
+    setDiffIgnoreWhitespaceChangesSetting(true);
+    setDiffShowWhitespaceCharactersSetting(true);
     setDiffSyntaxHighlightingEnabledSetting(false);
 
     expect(getDiffFontFamilySetting()).toBe("SF Mono");
@@ -75,6 +85,8 @@ describe("diffSettings", () => {
     expect(getDiffSidebarWidthSetting()).toBe(320);
     expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(false);
     expect(getDiffHighlightChangedCharactersSetting()).toBe(false);
+    expect(getDiffIgnoreWhitespaceChangesSetting()).toBe(true);
+    expect(getDiffShowWhitespaceCharactersSetting()).toBe(true);
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(false);
   });
 
@@ -87,6 +99,8 @@ describe("diffSettings", () => {
     setDiffSidebarWidthSetting(20);
     setDiffAdaptiveLightModeEnabledSetting("yes" as never);
     setDiffHighlightChangedCharactersSetting("yes" as never);
+    setDiffIgnoreWhitespaceChangesSetting("yes" as never);
+    setDiffShowWhitespaceCharactersSetting("yes" as never);
     setDiffSyntaxHighlightingEnabledSetting("yes" as never);
 
     expect(getDiffFontFamilySetting()).toBe(defaultDiffFontFamily);
@@ -97,6 +111,8 @@ describe("diffSettings", () => {
     expect(getDiffSidebarWidthSetting()).toBe(defaultDiffSidebarWidth);
     expect(getDiffAdaptiveLightModeEnabledSetting()).toBe(defaultDiffAdaptiveLightModeEnabled);
     expect(getDiffHighlightChangedCharactersSetting()).toBe(defaultDiffHighlightChangedCharacters);
+    expect(getDiffIgnoreWhitespaceChangesSetting()).toBe(defaultDiffIgnoreWhitespaceChanges);
+    expect(getDiffShowWhitespaceCharactersSetting()).toBe(defaultDiffShowWhitespaceCharacters);
     expect(getDiffSyntaxHighlightingEnabledSetting()).toBe(defaultDiffSyntaxHighlightingEnabled);
   });
 });

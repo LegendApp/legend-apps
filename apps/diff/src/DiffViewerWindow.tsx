@@ -5,6 +5,7 @@ import {
   DiffMergeNativePane,
   DiffNativeRowConfig,
   loadUnifiedDiff,
+  loadUnifiedDiffFromUrl,
   startGitFolderDiff,
   startUnifiedDiffFromUrl,
   type DiffDocument,
@@ -86,6 +87,7 @@ import {
 import {
   defaultDiffSidebarWidth,
   diffSettings$,
+  getDiffIgnoreWhitespaceChangesSetting,
   getDiffViewModeSetting,
   getDiffShowOnlyHunksSetting,
   setDiffShowOnlyHunksSetting,
@@ -94,8 +96,10 @@ import {
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffHighlightChangedCharactersSetting,
+  useDiffIgnoreWhitespaceChangesSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
+  useDiffShowWhitespaceCharactersSetting,
   useDiffSidebarWidthSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxTheme,
@@ -376,9 +380,14 @@ function getDiffSourceCacheKey(source: DiffOpenSource) {
   return `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`;
 }
 
-function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean) {
+function getDiffLoadedCacheKey(
+  source: DiffOpenSource,
+  showOnlyHunks: boolean,
+  ignoreWhitespaceChanges: boolean,
+) {
   const mode = showOnlyHunks ? "hunks" : "full";
-  return `${getDiffSourceCacheKey(source)}:${mode}`;
+  const whitespace = ignoreWhitespaceChanges ? "ignore-whitespace" : "include-whitespace";
+  return `${getDiffSourceCacheKey(source)}:${mode}:${whitespace}`;
 }
 
 function getDiffGitFolderLoadCompareOptions(source: DiffOpenSource) {
@@ -657,6 +666,7 @@ type DiffNativeRowConfigProps = {
   rowHeight: number;
   searchHighlightByRowIndex: string;
   searchHighlightColor: string;
+  showWhitespaceCharacters: boolean;
   syntaxHighlightingEnabled: boolean;
   themeName: string;
 };
@@ -1767,6 +1777,7 @@ function DiffNativeRowConfigView({
       rowHeight={nativeRowConfig.rowHeight}
       searchHighlightByRowIndex={nativeRowConfig.searchHighlightByRowIndex}
       searchHighlightColor={nativeRowConfig.searchHighlightColor}
+      showWhitespaceCharacters={nativeRowConfig.showWhitespaceCharacters}
       style={styles.nativeDiffRowConfig}
       syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
       themeName={nativeRowConfig.themeName}
@@ -2705,9 +2716,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
+  const ignoreWhitespaceChanges = useDiffIgnoreWhitespaceChangesSetting();
+  const previousIgnoreWhitespaceChangesRef = useRef(ignoreWhitespaceChanges);
   const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const rowHeight = getDiffLineRowHeight(fontSize);
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
+  const showWhitespaceCharacters = useDiffShowWhitespaceCharactersSetting();
   const sidebarWidth = useDiffSidebarWidthSetting();
   const viewMode = useDiffViewModeSetting();
   const syntaxTheme = useDiffSyntaxTheme();
@@ -3289,8 +3303,13 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }));
     const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
     const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
+    const loadIgnoreWhitespaceChanges = getDiffIgnoreWhitespaceChangesSetting();
     const sourceCacheKey = getDiffSourceCacheKey(nextSource);
-    const loadedCacheKey = getDiffLoadedCacheKey(nextSource, loadShowOnlyHunks);
+    const loadedCacheKey = getDiffLoadedCacheKey(
+      nextSource,
+      loadShowOnlyHunks,
+      loadIgnoreWhitespaceChanges,
+    );
     const stateBeforeLoad = state$.peek();
     const isBackgroundWatchRefresh =
       options?.reason === "watch" &&
@@ -3527,38 +3546,50 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           sourceLabel: nextSource.label,
           sourceKind: nextSource.kind,
         }));
-        progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
-        activeProgressiveSessionRef.current = progressiveSession;
-        if (shouldStartNativeBeforeLoadingState) {
-          publishLoadingState();
-        }
-        let progress = progressiveSession.consumeChanges(initialRowCount);
-        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
-        while (
-          loadRequestIdRef.current === requestId &&
-          !shouldPublishInitialProgress(progress, initialRowCount, nowMs() - nativeStartedAt)
-        ) {
-          await waitForDiffProgressPoll();
-          progress = progressiveSession.consumeChanges(initialRowCount);
-          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
-        }
-        if (loadRequestIdRef.current !== requestId) {
-          progressiveSession.cancel();
-        } else if (progress.error) {
-          loadError = new Error(progress.error);
+        if (loadIgnoreWhitespaceChanges) {
+          if (shouldStartNativeBeforeLoadingState) {
+            publishLoadingState();
+          }
+          result = await loadUnifiedDiffFromUrl(
+            nextSource.diffUrl,
+            nextSource.label,
+            initialRowCount,
+            true,
+          );
         } else {
-          result = progress;
-          logDiffOpenTiming("viewer.native.initialProgress", () => ({
-            ...getDiffLoadTimingPayload(progress.timing),
-            complete: progress.complete,
-            files: progress.files.length,
-            initialRows: progress.initialRows.length,
-            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-            requestId,
-            rowVersion: progress.rowVersion,
-            rows: progress.document.rowCount,
-            sourceKind: nextSource.kind,
-          }));
+          progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
+          activeProgressiveSessionRef.current = progressiveSession;
+          if (shouldStartNativeBeforeLoadingState) {
+            publishLoadingState();
+          }
+          let progress = progressiveSession.consumeChanges(initialRowCount);
+          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+          while (
+            loadRequestIdRef.current === requestId &&
+            !shouldPublishInitialProgress(progress, initialRowCount, nowMs() - nativeStartedAt)
+          ) {
+            await waitForDiffProgressPoll();
+            progress = progressiveSession.consumeChanges(initialRowCount);
+            setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+          }
+          if (loadRequestIdRef.current !== requestId) {
+            progressiveSession.cancel();
+          } else if (progress.error) {
+            loadError = new Error(progress.error);
+          } else {
+            result = progress;
+            logDiffOpenTiming("viewer.native.initialProgress", () => ({
+              ...getDiffLoadTimingPayload(progress.timing),
+              complete: progress.complete,
+              files: progress.files.length,
+              initialRows: progress.initialRows.length,
+              nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
+              requestId,
+              rowVersion: progress.rowVersion,
+              rows: progress.document.rowCount,
+              sourceKind: nextSource.kind,
+            }));
+          }
         }
       } else if (nextSource.kind === "git") {
         logDiffOpenTiming("viewer.git.start", () => ({
@@ -3568,7 +3599,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           sourceKind: nextSource.kind,
         }));
         const commandResult = await commandRunner.runCommand({
-          args: ["diff", ...nextSource.args],
+          args: ["diff", ...(loadIgnoreWhitespaceChanges ? ["--ignore-all-space"] : []), ...nextSource.args],
           command: "git",
           cwd: nextSource.cwd,
           timeoutMs: 60_000,
@@ -3582,7 +3613,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             stdoutLength: commandResult.stdout.length,
             timedOut: commandResult.timedOut,
           }));
-          result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
+          result = await loadUnifiedDiff(
+            commandResult.stdout,
+            nextSource.label,
+            initialRowCount,
+            loadIgnoreWhitespaceChanges,
+          );
           const loadedResult = result;
           logDiffOpenTiming("viewer.native.finish", () => ({
             ...getDiffLoadTimingPayload(loadedResult.timing),
@@ -3597,7 +3633,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           }));
         }
       } else if (nextSource.kind === "filePair") {
-        const diffCommand = createFilePairDiffCommand(nextSource);
+        const diffCommand = createFilePairDiffCommand(nextSource, loadIgnoreWhitespaceChanges);
         logDiffOpenTiming("viewer.filePair.start", () => ({
           args: diffCommand.args,
           requestId,
@@ -3615,7 +3651,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             stdoutLength: commandResult.stdout.length,
             timedOut: commandResult.timedOut,
           }));
-          result = await loadUnifiedDiff(createFilePairUnifiedDiff(nextSource, commandResult), nextSource.label, initialRowCount);
+          result = await loadUnifiedDiff(
+            createFilePairUnifiedDiff(nextSource, commandResult),
+            nextSource.label,
+            initialRowCount,
+            loadIgnoreWhitespaceChanges,
+          );
           const loadedResult = result;
           logDiffOpenTiming("viewer.native.finish", () => ({
             ...getDiffLoadTimingPayload(loadedResult.timing),
@@ -3651,7 +3692,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             stdoutLength: commandResult.stdout.length,
             timedOut: commandResult.timedOut,
           }));
-          result = await loadUnifiedDiff(commandResult.stdout, nextSource.label, initialRowCount);
+          result = await loadUnifiedDiff(
+            commandResult.stdout,
+            nextSource.label,
+            initialRowCount,
+            loadIgnoreWhitespaceChanges,
+          );
           const loadedResult = result;
           logDiffOpenTiming("viewer.native.finish", () => ({
             ...getDiffLoadTimingPayload(loadedResult.timing),
@@ -3675,6 +3721,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         }));
         progressiveSession = startGitFolderDiff(nextSource.value, {
           ...getDiffGitFolderLoadCompareOptions(nextSource),
+          ignoreWhitespaceChanges: loadIgnoreWhitespaceChanges,
           showOnlyHunks: loadShowOnlyHunks,
         });
         activeProgressiveSessionRef.current = progressiveSession;
@@ -3835,6 +3882,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       }));
     }
   }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$, windowIdentifier]);
+
+  useEffect(() => {
+    const changed = previousIgnoreWhitespaceChangesRef.current !== ignoreWhitespaceChanges;
+    previousIgnoreWhitespaceChangesRef.current = ignoreWhitespaceChanges;
+    if (changed) {
+      const currentState = state$.peek();
+      if (currentState.status === "loaded") {
+        loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
+          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+        });
+      }
+    }
+  }, [ignoreWhitespaceChanges, loadSource, setDocumentErrorValue, state$]);
 
   const saveMergeDrafts = useCallback(async () => {
     if (savingMergeDraftsRef.current) {
@@ -4485,6 +4545,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       palette.removeAccent,
       palette.removeBackground,
       rowHeight,
+      showWhitespaceCharacters,
       syntaxHighlightingEnabled,
       listSyntaxTheme,
     ]);
@@ -4513,6 +4574,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       searchHighlightByRowIndex: searchHighlightByRowIndexPayload,
       searchHighlightColor: diffSearchHighlightColor,
+      showWhitespaceCharacters,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
     };
@@ -4527,6 +4589,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     mutedColor,
     rowHeight,
     searchHighlightByRowIndexPayload,
+    showWhitespaceCharacters,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);
@@ -4550,6 +4613,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       palette.removeAccent,
       palette.removeBackground,
       rowHeight,
+      showWhitespaceCharacters,
       syntaxHighlightingEnabled,
       listSyntaxTheme,
     ]);
@@ -4578,6 +4642,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       rowHeight,
       searchHighlightByRowIndex: searchHighlightByRowIndexPayload,
       searchHighlightColor: diffSearchHighlightColor,
+      showWhitespaceCharacters,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
     };
@@ -4593,6 +4658,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     mutedColor,
     rowHeight,
     searchHighlightByRowIndexPayload,
+    showWhitespaceCharacters,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
   ]);

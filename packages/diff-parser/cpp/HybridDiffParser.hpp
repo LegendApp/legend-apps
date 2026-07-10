@@ -14,7 +14,8 @@ public:
       bool showOnlyHunks,
       const std::string& compareBaseKind,
       const std::string& compareBaseRef,
-      bool compareUseMergeBase) override;
+      bool compareUseMergeBase,
+      bool ignoreWhitespaceChanges) override;
   std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel) override;
@@ -24,15 +25,18 @@ public:
       bool showOnlyHunks,
       const std::string& compareBaseKind,
       const std::string& compareBaseRef,
-      bool compareUseMergeBase) override;
+      bool compareUseMergeBase,
+      bool ignoreWhitespaceChanges) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(
       const std::string& diffText,
       const std::string& sourceLabel,
-      double initialRowCount) override;
+      double initialRowCount,
+      bool ignoreWhitespaceChanges) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel,
-      double initialRowCount) override;
+      double initialRowCount,
+      bool ignoreWhitespaceChanges) override;
 };
 
 } // namespace margelo::nitro::legendapps::diffparser

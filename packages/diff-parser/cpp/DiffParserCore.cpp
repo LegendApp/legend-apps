@@ -1154,7 +1154,175 @@ DiffLoadTiming UnifiedDiffStreamParser::finish() {
   return impl_->finish();
 }
 
-DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {
+static std::string normalizeWhitespaceForComparison(const std::string& text) {
+  std::string normalized;
+  normalized.reserve(text.size());
+  for (const unsigned char character : text) {
+    if (!std::isspace(character)) {
+      normalized.push_back(static_cast<char>(character));
+    }
+  }
+  return normalized;
+}
+
+static std::vector<DiffRenderRow> filterWhitespaceChangeBlock(const std::vector<DiffRenderRow>& block) {
+  std::vector<DiffRenderRow> removedRows;
+  std::vector<DiffRenderRow> addedRows;
+  for (const auto& row : block) {
+    if (isRemoveRow(row)) {
+      removedRows.push_back(row);
+    } else if (isAddRow(row)) {
+      addedRows.push_back(row);
+    }
+  }
+
+  std::unordered_map<std::string, std::vector<size_t>> addedIndexesByText;
+  for (size_t index = 0; index < addedRows.size(); index += 1) {
+    addedIndexesByText[normalizeWhitespaceForComparison(addedRows[index].text)].push_back(index);
+  }
+
+  std::vector<std::pair<size_t, size_t>> matches;
+  size_t minimumAddedIndex = 0;
+  for (size_t removedIndex = 0; removedIndex < removedRows.size(); removedIndex += 1) {
+    const auto key = normalizeWhitespaceForComparison(removedRows[removedIndex].text);
+    const auto found = addedIndexesByText.find(key);
+    if (found != addedIndexesByText.end()) {
+      const auto match = std::lower_bound(found->second.begin(), found->second.end(), minimumAddedIndex);
+      if (match != found->second.end()) {
+        matches.emplace_back(removedIndex, *match);
+        minimumAddedIndex = *match + 1;
+      }
+    }
+  }
+
+  std::vector<DiffRenderRow> filtered;
+  size_t removedIndex = 0;
+  size_t addedIndex = 0;
+  for (const auto& [matchedRemovedIndex, matchedAddedIndex] : matches) {
+    while (removedIndex < matchedRemovedIndex) {
+      filtered.push_back(removedRows[removedIndex]);
+      removedIndex += 1;
+    }
+    while (addedIndex < matchedAddedIndex) {
+      filtered.push_back(addedRows[addedIndex]);
+      addedIndex += 1;
+    }
+
+    DiffRenderRow contextRow = addedRows[matchedAddedIndex];
+    contextRow.oldLineNumber = removedRows[matchedRemovedIndex].oldLineNumber;
+    contextRow.changeType = diffChangeTypeContext;
+    filtered.push_back(std::move(contextRow));
+    removedIndex = matchedRemovedIndex + 1;
+    addedIndex = matchedAddedIndex + 1;
+  }
+  while (removedIndex < removedRows.size()) {
+    filtered.push_back(removedRows[removedIndex]);
+    removedIndex += 1;
+  }
+  while (addedIndex < addedRows.size()) {
+    filtered.push_back(addedRows[addedIndex]);
+    addedIndex += 1;
+  }
+  return filtered;
+}
+
+static std::vector<DiffRenderRow> filterWhitespaceHunk(const std::vector<DiffRenderRow>& hunkRows) {
+  std::vector<DiffRenderRow> filtered;
+  std::vector<DiffRenderRow> changeBlock;
+  auto flushChangeBlock = [&] {
+    if (!changeBlock.empty()) {
+      auto filteredBlock = filterWhitespaceChangeBlock(changeBlock);
+      filtered.insert(
+          filtered.end(),
+          std::make_move_iterator(filteredBlock.begin()),
+          std::make_move_iterator(filteredBlock.end()));
+      changeBlock.clear();
+    }
+  };
+
+  for (const auto& row : hunkRows) {
+    if (isAddRow(row) || isRemoveRow(row)) {
+      changeBlock.push_back(row);
+    } else {
+      flushChangeBlock();
+      filtered.push_back(row);
+    }
+  }
+  flushChangeBlock();
+  return filtered;
+}
+
+static void filterWhitespaceOnlyChanges(DiffParsedDocument& document) {
+  std::vector<DiffFileSummary> files;
+  std::vector<DiffRenderRow> rows;
+  std::vector<DiffFileSources> fileSources;
+
+  for (size_t sourceFileIndex = 0; sourceFileIndex < document.files.size(); sourceFileIndex += 1) {
+    const auto& sourceFile = document.files[sourceFileIndex];
+    const size_t sourceStart = static_cast<size_t>(std::max(0.0, std::floor(sourceFile.rowStart)));
+    const size_t sourceEnd = std::min(
+        document.rows.size(),
+        sourceStart + static_cast<size_t>(std::max(0.0, std::floor(sourceFile.rowCount))));
+    std::vector<std::vector<DiffRenderRow>> keptHunks;
+    size_t rowIndex = std::min(sourceStart + 1, sourceEnd);
+    while (rowIndex < sourceEnd) {
+      const double hunkIndex = document.rows[rowIndex].hunkIndex;
+      std::vector<DiffRenderRow> hunkRows;
+      while (rowIndex < sourceEnd && document.rows[rowIndex].hunkIndex == hunkIndex) {
+        hunkRows.push_back(document.rows[rowIndex]);
+        rowIndex += 1;
+      }
+      auto filteredHunk = filterWhitespaceHunk(hunkRows);
+      const bool hasChanges = std::any_of(filteredHunk.begin(), filteredHunk.end(), [](const DiffRenderRow& row) {
+        return isAddRow(row) || isRemoveRow(row);
+      });
+      if (hasChanges) {
+        keptHunks.push_back(std::move(filteredHunk));
+      }
+    }
+
+    const bool keepMetadataOnlyFile = sourceFile.isBinary || sourceFile.status != "modified";
+    if (!keptHunks.empty() || keepMetadataOnlyFile) {
+      DiffFileSummary file = sourceFile;
+      file.index = static_cast<double>(files.size());
+      file.rowStart = static_cast<double>(rows.size());
+      file.additions = 0;
+      file.deletions = 0;
+
+      DiffRenderRow headerRow = sourceStart < document.rows.size() ? document.rows[sourceStart] : DiffRenderRow();
+      headerRow.index = static_cast<double>(rows.size());
+      headerRow.fileIndex = file.index;
+      rows.push_back(std::move(headerRow));
+
+      for (size_t hunkIndex = 0; hunkIndex < keptHunks.size(); hunkIndex += 1) {
+        for (auto& row : keptHunks[hunkIndex]) {
+          row.index = static_cast<double>(rows.size());
+          row.fileIndex = file.index;
+          row.hunkIndex = static_cast<double>(hunkIndex);
+          file.additions += isAddRow(row) ? 1 : 0;
+          file.deletions += isRemoveRow(row) ? 1 : 0;
+          rows.push_back(std::move(row));
+        }
+      }
+      file.rowCount = static_cast<double>(rows.size()) - file.rowStart;
+      files.push_back(std::move(file));
+
+      if (sourceFileIndex < document.fileSources.size()) {
+        DiffFileSources sources = document.fileSources[sourceFileIndex];
+        sources.fileIndex = static_cast<double>(fileSources.size());
+        fileSources.push_back(std::move(sources));
+      }
+    }
+  }
+
+  document.files = std::move(files);
+  document.rows = std::move(rows);
+  document.fileSources = std::move(fileSources);
+  document.timing.rowCount = static_cast<double>(document.rows.size());
+  document.timing.fileCount = static_cast<double>(document.files.size());
+}
+
+DiffParsedDocument parseUnifiedDiffText(const std::string& diffText, bool ignoreWhitespace) {
   const auto loadStartedAt = DiffClock::now();
   UnifiedDiffBuildState state;
   size_t lineStart = 0;
@@ -1215,7 +1383,7 @@ DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {
   timing.rowCount = static_cast<double>(state.diff.rows.size());
   timing.fileCount = static_cast<double>(state.diff.files.size());
 
-  return {
+  DiffParsedDocument document{
     .files = std::move(state.diff.files),
     .rows = std::move(state.diff.rows),
     .fileSources = std::move(state.fileSources),
@@ -1224,6 +1392,10 @@ DiffParsedDocument parseUnifiedDiffText(const std::string& diffText) {
     .headTreeOid = "",
     .timing = timing,
   };
+  if (ignoreWhitespace) {
+    filterWhitespaceOnlyChanges(document);
+  }
+  return document;
 }
 
 DiffLoadTiming parseGitRepositoryDiffProgressive(
@@ -1255,6 +1427,9 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
     throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
   }
   options.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+  if (compareOptions.ignoreWhitespace) {
+    options.flags |= GIT_DIFF_IGNORE_WHITESPACE;
+  }
   if (!showOnlyHunks) {
     options.context_lines = fullFileDiffContextLines;
   }
@@ -1379,6 +1554,9 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     throw std::runtime_error(gitErrorMessage("Failed to initialize git diff options"));
   }
   diffOptions.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+  if (compareOptions.ignoreWhitespace) {
+    diffOptions.flags |= GIT_DIFF_IGNORE_WHITESPACE;
+  }
   if (!showOnlyHunks) {
     diffOptions.context_lines = fullFileDiffContextLines;
   }
@@ -1502,17 +1680,19 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
 DiffParsedDocument parseGitRepositoryDiff(
     const std::string& folderPath,
     bool showOnlyHunks,
-    DiffGitCompareOptions compareOptions) {
+    DiffGitCompareOptions compareOptions,
+    std::function<bool()> shouldCancel) {
   std::vector<DiffFileSummary> files;
   std::vector<DiffRenderRow> rows;
   std::vector<DiffFileSources> fileSources;
   std::string repositoryPath;
   std::string workdirPath;
   std::string headTreeOid;
+  const bool ignoreWhitespace = compareOptions.ignoreWhitespace;
 
   const auto timing = parseGitRepositoryDiffProgressive(folderPath, DiffProgressiveCallbacks{
-      .shouldCancel = [] {
-        return false;
+      .shouldCancel = [shouldCancel] {
+        return shouldCancel ? shouldCancel() : false;
       },
       .onRepositoryMetadata = [&](DiffRepositoryMetadata metadata) {
         repositoryPath = std::move(metadata.repositoryPath);
@@ -1541,7 +1721,7 @@ DiffParsedDocument parseGitRepositoryDiff(
       },
   }, showOnlyHunks, std::move(compareOptions));
 
-  return {
+  DiffParsedDocument document{
     .files = std::move(files),
     .rows = std::move(rows),
     .fileSources = std::move(fileSources),
@@ -1550,6 +1730,10 @@ DiffParsedDocument parseGitRepositoryDiff(
     .headTreeOid = std::move(headTreeOid),
     .timing = timing,
   };
+  if (ignoreWhitespace) {
+    filterWhitespaceOnlyChanges(document);
+  }
+  return document;
 }
 
 } // namespace margelo::nitro::legendapps::diffparser

@@ -112,6 +112,7 @@ export interface DiffGitFolderLoadOptions {
   compareBaseKind: string;
   compareBaseRef: string;
   compareUseMergeBase: boolean;
+  ignoreWhitespaceChanges: boolean;
   showOnlyHunks: boolean;
 }
 
@@ -164,9 +165,9 @@ export interface DiffParser
     ios: "c++";
   }> {
   logTimingMark(message: string): number;
-  startGitFolderDiff(folderPath: string, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean): DiffLoadSession;
+  startGitFolderDiff(folderPath: string, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean): DiffLoadSession;
   startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string): DiffLoadSession;
-  loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean): Promise<DiffLoadResult>;
-  loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
-  loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number): Promise<DiffLoadResult>;
+  loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
+  loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
+  loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
 }

@@ -21,18 +21,22 @@ import {
   setDiffFontFamilySetting,
   setDiffFontSizeSetting,
   setDiffHighlightChangedCharactersSetting,
+  setDiffIgnoreWhitespaceChangesSetting,
   setDiffRestoreWindowsOnStartupSetting,
   setDiffShowOnlyHunksSetting,
   setDiffShowStatisticsPanelSetting,
+  setDiffShowWhitespaceCharactersSetting,
   setDiffSyntaxHighlightingEnabledSetting,
   setDiffSyntaxThemeSetting,
   useDiffAdaptiveLightModeEnabledSetting,
   useDiffFontFamilySetting,
   useDiffFontSizeSetting,
   useDiffHighlightChangedCharactersSetting,
+  useDiffIgnoreWhitespaceChangesSetting,
   useDiffRestoreWindowsOnStartupSetting,
   useDiffShowOnlyHunksSetting,
   useDiffShowStatisticsPanelSetting,
+  useDiffShowWhitespaceCharactersSetting,
   useDiffSyntaxHighlightingEnabledSetting,
   useDiffSyntaxTheme,
   useDiffSyntaxThemeSetting,
@@ -129,6 +133,8 @@ function SyntaxSettingsPage() {
 
 function SyntaxSettingsContent() {
   const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
+  const ignoreWhitespaceChanges = useDiffIgnoreWhitespaceChangesSetting();
+  const showWhitespaceCharacters = useDiffShowWhitespaceCharactersSetting();
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
 
   return (
@@ -151,6 +157,30 @@ function SyntaxSettingsContent() {
         )}
         description="Emphasize character-level changes within paired added and removed lines."
         title="Highlight changed characters"
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Ignore whitespace changes"
+            checked={ignoreWhitespaceChanges}
+            onChange={setDiffIgnoreWhitespaceChangesSetting}
+          />
+        )}
+        description="Ignore changes that only add, remove, or rearrange whitespace. Open diffs reload when this changes."
+        title="Ignore whitespace changes"
+      />
+      <SettingsRow
+        align="center"
+        control={(
+          <SwitchControl
+            accessibilityLabel="Show whitespace characters"
+            checked={showWhitespaceCharacters}
+            onChange={setDiffShowWhitespaceCharactersSetting}
+          />
+        )}
+        description="Draw visible markers for spaces and tabs without changing copied text."
+        title="Show whitespace characters"
       />
     </SettingsSection>
   );

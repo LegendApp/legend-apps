@@ -21,12 +21,16 @@ export function getFilePairDiffDisplayPath(path: string, prefix: "a" | "b") {
   return `${prefix}/${sanitizeDiffLabel(getFilename(path))}`;
 }
 
-export function createFilePairDiffCommand(source: DiffFilePairSource): FilePairDiffCommand {
+export function createFilePairDiffCommand(
+  source: DiffFilePairSource,
+  ignoreWhitespaceChanges = false,
+): FilePairDiffCommand {
   const oldDisplayPath = getFilePairDiffDisplayPath(source.oldPath, "a");
   const newDisplayPath = getFilePairDiffDisplayPath(source.newPath, "b");
   return {
     args: [
       "-u",
+      ...(ignoreWhitespaceChanges ? ["-w"] : []),
       "-L",
       oldDisplayPath,
       "-L",
