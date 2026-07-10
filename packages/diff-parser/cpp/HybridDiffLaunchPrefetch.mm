@@ -1,4 +1,5 @@
 #include "HybridDiffLaunchPrefetch.hpp"
+#include "DiffStartupDiagnostics.hpp"
 
 #import <Foundation/Foundation.h>
 
@@ -194,7 +195,9 @@ void startLaunchDiffUrlPrefetchIfNeeded() {
 
 __attribute__((constructor))
 static void HybridDiffLaunchPrefetchConstructor() {
+  margelo::nitro::legendapps::diffparser::logDiffStartupDiagnostic("native.library.constructor.start");
   startLaunchDiffUrlPrefetchIfNeeded();
+  margelo::nitro::legendapps::diffparser::logDiffStartupDiagnostic("native.library.constructor.finish");
 }
 
 } // namespace

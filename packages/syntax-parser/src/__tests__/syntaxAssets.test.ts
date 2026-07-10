@@ -18,6 +18,9 @@ const validThemeFile = {
 
 function loadSyntaxAssets(sourceRoot?: string): {
   fileSystemMock: typeof import("expo-file-system/next") & {
+    __getDirectoryCreateCount: (path: string) => number;
+    __getFileReadCount: (path: string) => number;
+    __mockDirectoryExists: (path: string) => boolean;
     __resetMockFileSystem: () => void;
     __setMockFile: (path: string, content: string) => void;
   };
@@ -67,7 +70,42 @@ describe("syntaxAssets", () => {
     expect(syntaxAssets.parseSyntaxGrammarFile("bad.json", { scopeName: "source.bad" })).toBeNull();
   });
 
-  it("seeds bundled themes while leaving grammars available until installed", () => {
+  it("loads only the requested installed theme once without creating directories", () => {
+    const { fileSystemMock, syntaxAssets } = loadSyntaxAssets();
+    const themesDirectory = "/tmp/application-support/syntax-assets/themes";
+    const draculaPath = `${themesDirectory}/dracula.json`;
+    const otherPath = `${themesDirectory}/one-light.json`;
+    fileSystemMock.__setMockFile(draculaPath, JSON.stringify({
+      ...validThemeFile,
+      displayName: "Dracula",
+    }));
+    fileSystemMock.__setMockFile(otherPath, JSON.stringify({
+      ...validThemeFile,
+      displayName: "One Light",
+    }));
+
+    expect(syntaxAssets.getSyntaxTheme("dracula").name).toBe("dracula");
+    expect(syntaxAssets.getSyntaxTheme("dracula").name).toBe("dracula");
+    expect(fileSystemMock.__getFileReadCount(draculaPath)).toBe(1);
+    expect(fileSystemMock.__getFileReadCount(otherPath)).toBe(0);
+    expect(fileSystemMock.__getDirectoryCreateCount(themesDirectory)).toBe(0);
+
+    expect(syntaxAssets.getAvailableSyntaxThemes().some((theme) => theme.name === "one-light")).toBe(true);
+    expect(fileSystemMock.__getFileReadCount(draculaPath)).toBe(1);
+    expect(fileSystemMock.__getFileReadCount(otherPath)).toBe(1);
+    expect(fileSystemMock.__getDirectoryCreateCount(themesDirectory)).toBe(0);
+  });
+
+  it("does not create an asset directory when the requested theme is missing", () => {
+    const { fileSystemMock, syntaxAssets } = loadSyntaxAssets();
+    const themesDirectory = "/tmp/application-support/syntax-assets/themes";
+
+    expect(syntaxAssets.getSyntaxTheme("missing-theme")).toEqual(syntaxAssets.getSyntaxTheme("dark-plus"));
+    expect(fileSystemMock.__mockDirectoryExists(themesDirectory)).toBe(false);
+    expect(fileSystemMock.__getDirectoryCreateCount(themesDirectory)).toBe(0);
+  });
+
+  it("treats bundled themes as installed while leaving grammars available until installed", () => {
     const { syntaxAssets } = loadSyntaxAssets();
 
     expect(syntaxAssets.isSyntaxThemeInstalled("dark-plus")).toBe(true);
@@ -95,6 +133,9 @@ describe("syntaxAssets", () => {
     await syntaxAssets.ensureSyntaxGrammar("tsx");
 
     expect(syntaxAssets.isSyntaxGrammarInstalled("tsx")).toBe(true);
+    for (const filename of ["javascript.json", "typescript.json", "jsx.json", "tsx.json"]) {
+      expect(new fileSystemMock.File(`/tmp/application-support/syntax-assets/grammars/${filename}`).exists).toBe(true);
+    }
     expect(syntaxAssets.getAvailableSyntaxGrammars().filter((grammar) => grammar.status === "installed").map((grammar) => grammar.filename).sort()).toEqual([
       "javascript.json",
       "jsx.json",
@@ -151,11 +192,15 @@ describe("syntaxAssets", () => {
 
     expect(syntaxAssets.isSyntaxThemeInstalled("dracula")).toBe(true);
     expect(syntaxAssets.normalizeSyntaxThemeName("dracula")).toBe("dracula");
+    expect(fileSystemMock.__mockDirectoryExists("/tmp/application-support/syntax-assets/themes")).toBe(true);
+    const installedThemeFile = new fileSystemMock.File("/tmp/application-support/syntax-assets/themes/dracula.json");
+    expect(installedThemeFile.exists).toBe(true);
 
-    syntaxAssets.removeSyntaxAsset("theme", "dark-plus.json");
+    await syntaxAssets.removeSyntaxAsset("theme", "dark-plus.json");
     expect(syntaxAssets.isSyntaxThemeInstalled("dark-plus")).toBe(true);
 
-    syntaxAssets.removeSyntaxAsset("theme", "dracula.json");
+    await syntaxAssets.removeSyntaxAsset("theme", "dracula.json");
     expect(syntaxAssets.isSyntaxThemeInstalled("dracula")).toBe(false);
+    expect(new fileSystemMock.File(installedThemeFile.uri).exists).toBe(false);
   });
 });

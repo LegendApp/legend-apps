@@ -197,10 +197,6 @@ SyntaxAssetRoots syntaxAssetRoots(const char* resourceBundleName, const char* as
   if (!supportRoot.empty()) {
     roots.applicationSupportRoot = supportRoot / "syntax-assets" / assetFolderName;
   }
-  if (!roots.applicationSupportRoot.empty()) {
-    std::error_code error;
-    std::filesystem::create_directories(roots.applicationSupportRoot, error);
-  }
 
   roots.bundledRoot = resourceBundleRoot(resourceBundleName);
 #endif

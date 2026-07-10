@@ -3,7 +3,6 @@ export {
   defaultSyntaxThemeName,
   getAvailableSyntaxThemes,
   getSyntaxTheme,
-  initializeSyntaxAssetsSync,
   isAvailableSyntaxThemeName,
   normalizeSyntaxThemeName,
   type BundledSyntaxThemeName,

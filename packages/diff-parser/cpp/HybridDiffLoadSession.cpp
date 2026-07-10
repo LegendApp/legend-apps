@@ -1,12 +1,16 @@
 #include "HybridDiffLoadSession.hpp"
 
 #include "DiffParserCore.hpp"
+#include "DiffStartupDiagnostics.hpp"
 #include "HybridDiffUrlLoader.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <exception>
+#include <initializer_list>
+#include <sstream>
+#include <string_view>
 #include <utility>
 
 namespace margelo::nitro::legendapps::diffparser {
@@ -17,6 +21,21 @@ using DiffClock = std::chrono::steady_clock;
 
 double elapsedSessionMs(DiffClock::time_point start, DiffClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+std::string startupMetrics(std::initializer_list<std::pair<std::string_view, double>> metrics) {
+  std::ostringstream payload;
+  payload << "{";
+  bool first = true;
+  for (const auto& [name, value] : metrics) {
+    if (!first) {
+      payload << ",";
+    }
+    first = false;
+    payload << "\"" << name << "\":" << value;
+  }
+  payload << "}";
+  return payload.str();
 }
 
 DiffLoadTiming createEmptyTiming() {
@@ -128,6 +147,9 @@ size_t HybridDiffLoadSession::getExternalMemorySize() noexcept {
 }
 
 void HybridDiffLoadSession::start() {
+  logDiffStartupDiagnostic("native.session.start", kind_ == Kind::GitFolder
+    ? "{\"kind\":\"folder\"}"
+    : "{\"kind\":\"url\"}");
   workerThread_ = std::thread([this] {
     run();
   });
@@ -143,6 +165,7 @@ void HybridDiffLoadSession::run() {
 
 void HybridDiffLoadSession::runGitFolder() {
   const auto startedAt = DiffClock::now();
+  logDiffStartupDiagnostic("native.session.worker.start", "{\"kind\":\"folder\"}");
   document_->logMemorySnapshot("progressive.runStart");
   try {
     DiffLoadTiming timing;
@@ -231,6 +254,11 @@ void HybridDiffLoadSession::runGitFolder() {
   complete_.store(true);
   rowVersion_.fetch_add(1);
   fileVersion_.fetch_add(1);
+  logDiffStartupDiagnostic("native.session.worker.finish", startupMetrics({
+    { "durationMs", elapsedSessionMs(startedAt, DiffClock::now()) },
+    { "files", static_cast<double>(document_->getFileCount()) },
+    { "rows", static_cast<double>(document_->getRowCount()) },
+  }));
   document_->logMemorySnapshot("progressive.complete");
 }
 
@@ -298,6 +326,9 @@ void HybridDiffLoadSession::joinWorker() {
 
 void HybridDiffLoadSession::noteRowsAvailable() {
   if (!firstRowsLogged_.load() && document_->getRowCount() > 0 && !firstRowsLogged_.exchange(true)) {
+    logDiffStartupDiagnostic("native.session.firstRows", startupMetrics({
+      { "rows", static_cast<double>(document_->getRowCount()) },
+    }));
     document_->logMemorySnapshot("progressive.firstRows");
   }
   if (!initialRowsLogged_.load() && document_->getRowCount() >= 160 && !initialRowsLogged_.exchange(true)) {

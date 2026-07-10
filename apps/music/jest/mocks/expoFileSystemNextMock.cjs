@@ -1,5 +1,7 @@
 const fileContents = new Map();
 const directories = new Set();
+const directoryCreateCounts = new Map();
+const fileReadCounts = new Map();
 
 const normalizePath = (input) => {
     if (!input) {
@@ -48,6 +50,7 @@ class Directory {
     }
 
     create() {
+        directoryCreateCounts.set(this.path, (directoryCreateCounts.get(this.path) ?? 0) + 1);
         directories.add(this.path);
         this.exists = true;
     }
@@ -97,6 +100,7 @@ class File {
     }
 
     textSync() {
+        fileReadCounts.set(this.path, (fileReadCounts.get(this.path) ?? 0) + 1);
         return this.text();
     }
 
@@ -126,6 +130,15 @@ module.exports = {
     __setMockFile(path, content) {
         new File(path).write(content);
     },
+    __getDirectoryCreateCount(path) {
+        return directoryCreateCounts.get(normalizePath(path)) ?? 0;
+    },
+    __getFileReadCount(path) {
+        return fileReadCounts.get(normalizePath(path)) ?? 0;
+    },
+    __mockDirectoryExists(path) {
+        return directories.has(normalizePath(path));
+    },
     __setMockFileSystem(data) {
         fileContents.clear();
         directories.clear();
@@ -145,6 +158,8 @@ module.exports = {
     __resetMockFileSystem() {
         fileContents.clear();
         directories.clear();
+        directoryCreateCounts.clear();
+        fileReadCounts.clear();
         cache.create();
         document.create();
     },

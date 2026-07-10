@@ -1,4 +1,4 @@
-import { createStorage } from "@legend-apps/storage";
+import { createObservableFile, createStorage, getPersistPlugin } from "@legend-apps/storage";
 import { File } from "expo-file-system/next";
 
 import darkPlusTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json";
@@ -55,10 +55,16 @@ type SyntaxAssetSource = {
   kind: SyntaxAssetKind;
 };
 
+type SyntaxAssetFileValue = Record<string, unknown> | null;
+type SyntaxAssetFileStore = ReturnType<typeof createObservableFile<SyntaxAssetFileValue>>;
+
 const syntaxAssetStorage = createStorage({
   root: "applicationSupport",
   subfolder: "syntax-assets",
 });
+const syntaxAssetFileStores = new Map<string, SyntaxAssetFileStore>();
+const installedSyntaxThemeCache = new Map<string, SyntaxTheme | null>();
+const installedSyntaxGrammarCache = new Map<string, ReturnType<typeof parseSyntaxGrammarFile>>();
 
 export const syntaxAssetFolder = {
   grammars: "grammars",
@@ -82,6 +88,42 @@ const fallbackTheme: SyntaxTheme = {
   label: "Dark Plus",
   name: defaultSyntaxThemeName,
 };
+
+function syntaxAssetDirectory(kind: SyntaxAssetKind) {
+  return kind === "grammar" ? syntaxAssetFolder.grammars : syntaxAssetFolder.themes;
+}
+
+function syntaxAssetStoreKey(kind: SyntaxAssetKind, filename: string) {
+  return `${kind}:${filenameForAssetName(normalizeAssetName(filename))}`;
+}
+
+function getSyntaxAssetFileStore(kind: SyntaxAssetKind, filename: string) {
+  const name = normalizeAssetName(filename);
+  const normalizedFilename = filenameForAssetName(name);
+  const key = syntaxAssetStoreKey(kind, normalizedFilename);
+  let store = syntaxAssetFileStores.get(key);
+  if (!store) {
+    store = createObservableFile<SyntaxAssetFileValue>({
+      filename: name,
+      initialValue: null,
+      saveTimeout: 0,
+      subfolder: `syntax-assets/${syntaxAssetDirectory(kind)}`,
+    });
+    syntaxAssetFileStores.set(key, store);
+  }
+  return store;
+}
+
+function getSyntaxAssetFileValue(kind: SyntaxAssetKind, filename: string) {
+  return getSyntaxAssetFileStore(kind, filename).peek();
+}
+
+async function setSyntaxAssetFileValue(kind: SyntaxAssetKind, filename: string, value: SyntaxAssetFileValue) {
+  const store = getSyntaxAssetFileStore(kind, filename);
+  store.set(value);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await getPersistPlugin(store)?.flush();
+}
 
 export const popularSyntaxThemes = [
   { name: "github-dark-dimmed", label: "GitHub Dark Dimmed", appearance: "dark", background: "#22272e", foreground: "#adbac7" },
@@ -177,26 +219,11 @@ function appearanceFromBackground(background: string): SyntaxThemeAppearance {
 }
 
 export function getSyntaxAssetStorage() {
-  initializeSyntaxAssetsSync();
   return syntaxAssetStorage;
 }
 
 export function getSyntaxAssetDirectoryUri(kind: SyntaxAssetKind) {
-  initializeSyntaxAssetsSync();
-  return syntaxAssetStorage.directory(kind === "grammar" ? syntaxAssetFolder.grammars : syntaxAssetFolder.themes).uri;
-}
-
-export function initializeSyntaxAssetsSync() {
-  syntaxAssetStorage.ensureDirectory(syntaxAssetFolder.grammars);
-  syntaxAssetStorage.ensureDirectory(syntaxAssetFolder.themes);
-
-  for (const name of seededSyntaxThemeNames) {
-    const filename = filenameForAssetName(name);
-    const relativePath = `${syntaxAssetFolder.themes}/${filename}`;
-    if (!syntaxAssetStorage.file(relativePath).exists) {
-      syntaxAssetStorage.write(relativePath, seededThemeFiles[name as keyof typeof seededThemeFiles], { format: "json" });
-    }
-  }
+  return syntaxAssetStorage.directory(syntaxAssetDirectory(kind)).uri;
 }
 
 export function parseSyntaxThemeFile(filename: string, value: unknown): SyntaxTheme | null {
@@ -236,21 +263,52 @@ export function parseSyntaxGrammarFile(filename: string, value: unknown): { labe
   return { label, name, scopeName };
 }
 
+function getInstalledSyntaxTheme(filename: string): SyntaxTheme | null {
+  const name = normalizeAssetName(filename);
+  if (!installedSyntaxThemeCache.has(name)) {
+    const value = seededSyntaxThemeNames.includes(name)
+      ? seededThemeFiles[name as keyof typeof seededThemeFiles]
+      : getSyntaxAssetFileValue("theme", filenameForAssetName(name));
+    installedSyntaxThemeCache.set(name, parseSyntaxThemeFile(filenameForAssetName(name), value));
+  }
+  return installedSyntaxThemeCache.get(name) ?? null;
+}
+
+function getInstalledSyntaxGrammar(filename: string) {
+  const normalizedFilename = filenameForAssetName(normalizeAssetName(filename));
+  if (!installedSyntaxGrammarCache.has(normalizedFilename)) {
+    const value = getSyntaxAssetFileValue("grammar", normalizedFilename);
+    installedSyntaxGrammarCache.set(normalizedFilename, parseSyntaxGrammarFile(normalizedFilename, value));
+  }
+  return installedSyntaxGrammarCache.get(normalizedFilename) ?? null;
+}
+
 function listInstalledSyntaxThemes(): SyntaxThemeAssetEntry[] {
-  initializeSyntaxAssetsSync();
-  const entries: SyntaxThemeAssetEntry[] = [];
+  const entries = seededSyntaxThemeNames.map((name): SyntaxThemeAssetEntry => {
+    const filename = filenameForAssetName(name);
+    const theme = getInstalledSyntaxTheme(name) ?? fallbackTheme;
+    return {
+      ...theme,
+      filename,
+      kind: "theme",
+      removable: false,
+      status: "seeded",
+    };
+  });
   for (const entry of syntaxAssetStorage.list(syntaxAssetFolder.themes, { extension: ".json" })) {
-    const parsed = syntaxAssetStorage.read(`${syntaxAssetFolder.themes}/${entry.name}`, { format: "json" });
-    const theme = parseSyntaxThemeFile(entry.name, parsed);
+    const name = normalizeAssetName(entry.name);
+    if (seededSyntaxThemeNames.includes(name) || name.endsWith("__m")) {
+      continue;
+    }
+    const theme = getInstalledSyntaxTheme(entry.name);
     if (theme) {
       const filename = entry.name;
-      const seeded = seededSyntaxThemeNames.includes(theme.name);
       entries.push({
         ...theme,
         filename,
         kind: "theme",
-        removable: !seeded,
-        status: seeded ? "seeded" : "installed",
+        removable: true,
+        status: "installed",
       });
     }
   }
@@ -258,14 +316,15 @@ function listInstalledSyntaxThemes(): SyntaxThemeAssetEntry[] {
 }
 
 function listInstalledSyntaxGrammars(): SyntaxGrammarAssetEntry[] {
-  initializeSyntaxAssetsSync();
   const catalogByFilename = new Map<string, typeof popularSyntaxGrammars[number]>(
     popularSyntaxGrammars.map((grammar) => [grammar.filename, grammar]),
   );
   const entries: SyntaxGrammarAssetEntry[] = [];
   for (const entry of syntaxAssetStorage.list(syntaxAssetFolder.grammars, { extension: ".json" })) {
-    const parsed = syntaxAssetStorage.read(`${syntaxAssetFolder.grammars}/${entry.name}`, { format: "json" });
-    const grammar = parseSyntaxGrammarFile(entry.name, parsed);
+    if (normalizeAssetName(entry.name).endsWith("__m")) {
+      continue;
+    }
+    const grammar = getInstalledSyntaxGrammar(entry.name);
     if (grammar) {
       const catalogEntry = catalogByFilename.get(entry.name);
       entries.push({
@@ -333,19 +392,20 @@ export function getAvailableSyntaxGrammars(): SyntaxGrammarAssetEntry[] {
 }
 
 export function getSyntaxTheme(name: string): SyntaxTheme {
-  return getAvailableSyntaxThemes().find((theme) => theme.name === name)
-    ?? popularSyntaxThemes.find((theme) => theme.name === name)
-    ?? fallbackTheme;
+  return getInstalledSyntaxTheme(name) ?? fallbackTheme;
 }
 
 export function getSyntaxThemeFile(name: string): unknown {
-  initializeSyntaxAssetsSync();
   const normalizedName = normalizeSyntaxThemeName(name);
-  return syntaxAssetStorage.read(`${syntaxAssetFolder.themes}/${filenameForAssetName(normalizedName)}`, { format: "json" });
+  return seededSyntaxThemeNames.includes(normalizedName)
+    ? seededThemeFiles[normalizedName as keyof typeof seededThemeFiles]
+    : getSyntaxAssetFileValue("theme", filenameForAssetName(normalizedName));
 }
 
 export function isAvailableSyntaxThemeName(value: unknown): value is string {
-  return typeof value === "string" && getAvailableSyntaxThemes().some((theme) => theme.name === value);
+  return typeof value === "string" && (
+    popularSyntaxThemes.some((theme) => theme.name === value) || isSyntaxThemeInstalled(value)
+  );
 }
 
 export function normalizeSyntaxThemeName(value: unknown) {
@@ -353,15 +413,14 @@ export function normalizeSyntaxThemeName(value: unknown) {
 }
 
 export function isSyntaxThemeInstalled(name: string) {
-  return getAvailableSyntaxThemes().some((theme) => theme.name === name && theme.status !== "available");
+  return getInstalledSyntaxTheme(name) !== null;
 }
 
 export function isSyntaxGrammarInstalled(language: string) {
   const normalized = normalizeAssetName(language);
-  const installedFiles = new Set(listInstalledSyntaxGrammars().map((grammar) => grammar.filename));
   const catalogEntry = popularSyntaxGrammars.find((grammar) => grammar.name === normalized);
   const dependencies = catalogEntry?.dependencies ?? [filenameForAssetName(normalized)];
-  return dependencies.every((filename) => installedFiles.has(filename));
+  return dependencies.every((filename) => getInstalledSyntaxGrammar(filename) !== null);
 }
 
 function extensionForPath(path: string) {
@@ -462,9 +521,17 @@ function readDevSyntaxAssetFile(source: SyntaxAssetSource) {
   }
 }
 
-function writeSyntaxAsset(kind: SyntaxAssetKind, filename: string, value: unknown) {
-  const directory = kind === "grammar" ? syntaxAssetFolder.grammars : syntaxAssetFolder.themes;
-  syntaxAssetStorage.write(`${directory}/${filename}`, value, { format: "json" });
+async function writeSyntaxAsset(kind: SyntaxAssetKind, filename: string, value: unknown) {
+  if (!isObject(value)) {
+    throw new Error(`Invalid syntax ${kind} file ${filename}.`);
+  }
+  await setSyntaxAssetFileValue(kind, filename, value);
+  if (kind === "theme") {
+    installedSyntaxThemeCache.set(normalizeAssetName(filename), parseSyntaxThemeFile(filename, value));
+  } else {
+    const normalizedFilename = filenameForAssetName(normalizeAssetName(filename));
+    installedSyntaxGrammarCache.set(normalizedFilename, parseSyntaxGrammarFile(normalizedFilename, value));
+  }
 }
 
 function unavailableSyntaxAssetMessage(kind: SyntaxAssetKind) {
@@ -474,30 +541,28 @@ function unavailableSyntaxAssetMessage(kind: SyntaxAssetKind) {
     : `Syntax ${label} downloads are not configured yet.`;
 }
 
-function installDevSyntaxAsset(kind: SyntaxAssetKind, filename: string) {
+async function installDevSyntaxAsset(kind: SyntaxAssetKind, filename: string) {
   const value = readDevSyntaxAssetFile({ filename, kind });
   if (!value) {
     throw new Error(unavailableSyntaxAssetMessage(kind));
   }
-  writeSyntaxAsset(kind, filename, value);
+  await writeSyntaxAsset(kind, filename, value);
 }
 
 export async function ensureSyntaxTheme(name: string) {
-  initializeSyntaxAssetsSync();
   if (!isSyntaxThemeInstalled(name)) {
-    installDevSyntaxAsset("theme", filenameForAssetName(name));
+    await installDevSyntaxAsset("theme", filenameForAssetName(name));
   }
 }
 
 export async function ensureSyntaxGrammar(language: string) {
-  initializeSyntaxAssetsSync();
   if (!isSyntaxGrammarInstalled(language)) {
     const normalized = normalizeAssetName(language);
     const catalogEntry = popularSyntaxGrammars.find((grammar) => grammar.name === normalized);
     const dependencies = catalogEntry?.dependencies ?? [filenameForAssetName(normalized)];
     for (const filename of dependencies) {
-      if (!syntaxAssetStorage.file(`${syntaxAssetFolder.grammars}/${filename}`).exists) {
-        installDevSyntaxAsset("grammar", filename);
+      if (!getInstalledSyntaxGrammar(filename)) {
+        await installDevSyntaxAsset("grammar", filename);
       }
     }
   }
@@ -517,14 +582,18 @@ export async function ensureSyntaxGrammarsForPaths(paths: readonly string[]) {
   }
 }
 
-export function removeSyntaxAsset(kind: SyntaxAssetKind, filename: string) {
-  initializeSyntaxAssetsSync();
-  const directory = kind === "grammar" ? syntaxAssetFolder.grammars : syntaxAssetFolder.themes;
+export async function removeSyntaxAsset(kind: SyntaxAssetKind, filename: string) {
   const name = normalizeAssetName(filename);
   if (kind === "theme" && seededSyntaxThemeNames.includes(name)) {
     return;
   }
-  syntaxAssetStorage.delete(`${directory}/${filenameForAssetName(name)}`);
+  const normalizedFilename = filenameForAssetName(name);
+  await setSyntaxAssetFileValue(kind, normalizedFilename, null);
+  if (kind === "theme") {
+    installedSyntaxThemeCache.set(name, null);
+  } else {
+    installedSyntaxGrammarCache.set(normalizedFilename, null);
+  }
 }
 
 export const bundledSyntaxThemes = popularSyntaxThemes.filter((theme) => seededSyntaxThemeNames.includes(theme.name));

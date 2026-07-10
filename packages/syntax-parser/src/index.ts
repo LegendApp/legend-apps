@@ -34,7 +34,6 @@ export {
   getSyntaxAssetStorage,
   getSyntaxLanguageForPath,
   getSyntaxTheme,
-  initializeSyntaxAssetsSync,
   isAvailableSyntaxThemeName,
   isSyntaxGrammarInstalled,
   isSyntaxThemeInstalled,

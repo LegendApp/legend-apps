@@ -32,11 +32,6 @@ RCT_EXPORT_MODULE(NativeStorage)
   }
 
   NSURL *appURL = [baseURL URLByAppendingPathComponent:[self applicationSupportFolderName] isDirectory:YES];
-  NSError *error = nil;
-  [[NSFileManager defaultManager] createDirectoryAtURL:appURL
-                          withIntermediateDirectories:YES
-                                           attributes:nil
-                                                error:&error];
   return appURL.absoluteString ?: @"";
 }
 

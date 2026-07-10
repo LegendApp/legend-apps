@@ -4,7 +4,6 @@ import {
   type DocumentAppController,
 } from "@legend-apps/document-app";
 import type { NativeMenuActionHandlers } from "@legend-apps/native-menu";
-import { initializeSyntaxAssetsSync } from "@legend-apps/syntax-parser";
 import { closeWindow } from "@legend-apps/window-manager";
 import { useEffect } from "react";
 import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
@@ -15,7 +14,6 @@ import { focusCodeViewerWindow, openCodeSettingsWindow, openCodeViewerWindow, re
 import { requestCodeViewerFile } from "./codeViewerRequests";
 
 registerCodeWindows();
-initializeSyntaxAssetsSync();
 installCodeBenchmarkHook();
 
 declare global {

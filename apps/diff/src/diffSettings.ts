@@ -14,6 +14,7 @@ import {
   type SyntaxTheme,
 } from "@legend-apps/syntax-parser";
 import { useValue } from "@legendapp/state/react";
+import { logDiffOpenTiming } from "./diffInstrumentation";
 
 export type DiffSettingsFile = {
   adaptiveLightModeEnabled?: boolean;
@@ -158,7 +159,14 @@ export function getDiffSyntaxThemeSetting(): string {
 }
 
 export function getDiffSyntaxTheme(): SyntaxTheme {
-  return getSyntaxTheme(getDiffSyntaxThemeSetting());
+  const startedAt = globalThis.performance?.now?.() ?? Date.now();
+  const syntaxTheme = getSyntaxTheme(getDiffSyntaxThemeSetting());
+  logDiffOpenTiming("startup.syntaxTheme.resolve", () => ({
+    callSite: "imperative",
+    durationMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - startedAt).toFixed(3)),
+    theme: syntaxTheme.name,
+  }));
+  return syntaxTheme;
 }
 
 export function getDiffFontFamilySetting(): DiffFontFamilySetting {
@@ -244,7 +252,15 @@ export function useDiffSyntaxThemeSetting(): string {
 }
 
 export function useDiffSyntaxTheme(): SyntaxTheme {
-  return getSyntaxTheme(useDiffSyntaxThemeSetting());
+  const syntaxThemeSetting = useDiffSyntaxThemeSetting();
+  const startedAt = globalThis.performance?.now?.() ?? Date.now();
+  const syntaxTheme = getSyntaxTheme(syntaxThemeSetting);
+  logDiffOpenTiming("startup.syntaxTheme.resolve", () => ({
+    callSite: "hook",
+    durationMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - startedAt).toFixed(3)),
+    theme: syntaxTheme.name,
+  }));
+  return syntaxTheme;
 }
 
 export function useDiffViewModeSetting(): DiffViewMode {

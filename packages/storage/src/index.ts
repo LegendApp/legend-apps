@@ -60,7 +60,7 @@ export type StoragePersistPluginOptions = {
   storage: Storage;
 };
 
-export type CreateObservableFileOptions<T extends object> = {
+export type CreateObservableFileOptions<T> = {
   filename: string;
   format?: "json";
   initialValue: T;
@@ -196,7 +196,10 @@ export function createStorage({ root = "applicationSupport", subfolder }: Storag
     ensureDirectory,
     file,
     list(relativePath = "", options = {}) {
-      const targetDirectory = ensureDirectory(relativePath);
+      const targetDirectory = directory(relativePath);
+      if (!targetDirectory.exists) {
+        return [];
+      }
       const entries = targetDirectory.list();
       const extension = options.extension ? normalizeExtension(options.extension).toLowerCase() : undefined;
       return extension
@@ -237,7 +240,6 @@ class ObservablePersistStorage implements ManagedPersistPlugin {
   }
 
   initialize(_configOptions: ObservablePersistPluginOptions) {
-    this.storage.ensureDirectory();
     if (isArray(this.preload)) {
       const metadataTables = this.preload
         .map((table) => table.endsWith(metadataSuffix) ? undefined : `${table}${metadataSuffix}`)
@@ -335,7 +337,7 @@ export function observablePersistStorage(options: StoragePersistPluginOptions) {
   return new ObservablePersistStorage(options);
 }
 
-export function createObservableFile<T extends object>({
+export function createObservableFile<T>({
   filename,
   format = "json",
   initialValue,
@@ -355,7 +357,7 @@ export function createObservableFile<T extends object>({
     storage: targetStorage,
   });
 
-  const data$ = observable<Record<string, any>>(
+  const data$ = observable(
     synced({
       initial: initialValue,
       persist: {
@@ -374,7 +376,7 @@ export function createObservableFile<T extends object>({
   }
 
   observablePersistPlugins.set(data$ as unknown as Observable<unknown>, plugin);
-  return data$ as unknown as Observable<T>;
+  return data$ as Observable<T>;
 }
 
 function getObservableSettingsInitialValue<TFields extends ObservableSettingsFields>(
@@ -431,6 +433,6 @@ export function createObservableSettings<const TFields extends ObservableSetting
   };
 }
 
-export function getPersistPlugin(obs$: Observable<unknown>): ManagedPersistPlugin | undefined {
-  return observablePersistPlugins.get(obs$);
+export function getPersistPlugin<T>(obs$: Observable<T>): ManagedPersistPlugin | undefined {
+  return observablePersistPlugins.get(obs$ as unknown as Observable<unknown>);
 }

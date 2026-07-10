@@ -1,7 +1,7 @@
 import { createInstrumentationLogger, type InstrumentationPayloadInput } from "@legend-apps/instrumentation";
 
 const diffInstrumentation = createInstrumentationLogger({
-  debugId: "diff",
+  debugId: "diff-startup-candidates-v1",
   memoryLabel: "DiffMemory",
   namespace: "diff",
   timingLabel: "DiffOpenTiming",
