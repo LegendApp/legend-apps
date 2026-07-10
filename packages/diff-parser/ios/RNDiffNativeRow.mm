@@ -130,6 +130,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, assign) double horizontalOffset;
 @property(nonatomic, assign) double maxHorizontalOffset;
 @property(nonatomic, assign) double maxTextWidth;
+@property(nonatomic, assign) double textCharacterWidth;
 @property(nonatomic, weak) id<RNDiffHorizontalScrollerSyncing> horizontalScroller;
 @property(nonatomic, assign) BOOL highlightChangedCharacters;
 @property(nonatomic, assign) BOOL hasSelection;
@@ -232,6 +233,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     _inlineHighlightRangesByRowIndex = [NSCache new];
     _inlineHighlightRangesByRowIndex.countLimit = 4096;
     _font = [NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];
+    _textCharacterWidth = [@" " sizeWithAttributes:@{NSFontAttributeName: _font}].width;
     _foregroundColor = NSColor.labelColor;
     _mutedColor = NSColor.secondaryLabelColor;
     _addAccentColor = _foregroundColor;
@@ -317,6 +319,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     self.horizontalOffset = 0;
   }
   const CGFloat spaceWidth = [@" " sizeWithAttributes:@{NSFontAttributeName: self.font}].width;
+  self.textCharacterWidth = spaceWidth;
   self.textParagraph.defaultTabInterval = MAX(1, spaceWidth * 4);
   self.textParagraph.tabStops = @[];
   [self updateTextAttributes];
@@ -799,12 +802,38 @@ static void RNDiffDrawHorizontalText(
     NSMutableAttributedString *attributedText,
     NSRect clipRect,
     CGFloat textY,
-    RNDiffNativeRowRenderConfig *config)
+    RNDiffNativeRowRenderConfig *config,
+    NSDictionary *uniformTextAttributes,
+    CGFloat uniformCharacterWidth)
 {
   if (clipRect.size.width <= 0 || attributedText.length == 0) {
     return;
   }
-  [config recordTextWidth:[attributedText size].width];
+  CGFloat textWidth = 0;
+  BOOL measuredAsColumns = uniformTextAttributes != nil && uniformCharacterWidth > 0;
+  NSUInteger columnCount = 0;
+  NSString *text = attributedText.string;
+  if (measuredAsColumns) {
+    for (NSUInteger index = 0; index < text.length; index += 1) {
+      const unichar character = [text characterAtIndex:index];
+      if (character == '\t') {
+        columnCount += 4 - columnCount % 4;
+      } else if (character >= 0x20 && character <= 0x7e) {
+        columnCount += 1;
+      } else {
+        measuredAsColumns = NO;
+        break;
+      }
+    }
+  }
+  if (measuredAsColumns) {
+    textWidth = columnCount * uniformCharacterWidth;
+  } else if (uniformTextAttributes != nil) {
+    textWidth = [text sizeWithAttributes:uniformTextAttributes].width;
+  } else {
+    textWidth = [attributedText size].width;
+  }
+  [config recordTextWidth:textWidth];
   [NSGraphicsContext saveGraphicsState];
   NSRectClip(clipRect);
   [attributedText drawAtPoint:NSMakePoint(clipRect.origin.x - config.horizontalOffset, textY)];
@@ -814,7 +843,6 @@ static void RNDiffDrawHorizontalText(
       NSFontAttributeName: config.font,
       NSForegroundColorAttributeName: [config.mutedColor colorWithAlphaComponent:0.75],
     };
-    NSString *text = attributedText.string;
     for (NSUInteger index = 0; index < text.length; index += 1) {
       const unichar character = [text characterAtIndex:index];
       NSString *marker = character == ' ' ? @"·" : character == '\t' ? @"→" : nil;
@@ -1346,7 +1374,9 @@ static void RNDiffDrawHorizontalText(
     attributedText,
     NSMakeRect(textX, 0, MAX(0, self.bounds.size.width - textX - diffSideBySideHorizontalPadding), config.rowHeight),
     textY,
-    config
+    config,
+    config.baseTextAttributes,
+    config.textCharacterWidth
   );
 }
 
@@ -1416,7 +1446,9 @@ static void RNDiffDrawHorizontalText(
     attributedText,
     NSMakeRect(textX, columnRect.origin.y, MAX(0, NSMaxX(columnRect) - textX - diffSideBySideHorizontalPadding), config.rowHeight),
     textY,
-    config
+    config,
+    config.baseTextAttributes,
+    config.textCharacterWidth
   );
 }
 
@@ -1600,12 +1632,13 @@ static void RNDiffDrawHorizontalText(
   }
 }
 
-- (void)applyEncodedTokensToAttributedText:(NSMutableAttributedString *)attributedText baseFont:(NSFont *)baseFont
+- (BOOL)applyEncodedTokensToAttributedText:(NSMutableAttributedString *)attributedText baseFont:(NSFont *)baseFont
 {
   if (self.tokens.length == 0 || attributedText.length == 0) {
-    return;
+    return NO;
   }
 
+  BOOL hasMetricChangingFont = NO;
   for (NSString *encodedToken in [self.tokens componentsSeparatedByString:@";"]) {
     if (encodedToken.length == 0) {
       continue;
@@ -1630,7 +1663,9 @@ static void RNDiffDrawHorizontalText(
     [attributedText addAttribute:NSFontAttributeName
                            value:tokenFont
                            range:NSMakeRange(location, length)];
+    hasMetricChangingFont = hasMetricChangingFont || ![tokenFont isEqual:baseFont];
   }
+  return hasMetricChangingFont;
 }
 
 - (void)drawRect:(NSRect)dirtyRect
@@ -1655,14 +1690,16 @@ static void RNDiffDrawHorizontalText(
 
   NSMutableAttributedString *attributedText = self.attributedTextScratch;
   [[attributedText mutableString] setString:self.text ?: @""];
+  NSDictionary *baseTextAttributes = @{
+    NSFontAttributeName: baseFont,
+    NSForegroundColorAttributeName: self.foregroundColor,
+    NSParagraphStyleAttributeName: self.textParagraph,
+  };
+  BOOL hasMetricChangingFont = NO;
   if (attributedText.length > 0) {
-    [attributedText setAttributes:@{
-      NSFontAttributeName: baseFont,
-      NSForegroundColorAttributeName: self.foregroundColor,
-      NSParagraphStyleAttributeName: self.textParagraph,
-    } range:NSMakeRange(0, attributedText.length)];
+    [attributedText setAttributes:baseTextAttributes range:NSMakeRange(0, attributedText.length)];
     [self applyEncodedInlineHighlightsToAttributedText:attributedText];
-    [self applyEncodedTokensToAttributedText:attributedText baseFont:baseFont];
+    hasMetricChangingFont = [self applyEncodedTokensToAttributedText:attributedText baseFont:baseFont];
   }
 
   const CGFloat textX = self.lineNumberWidth;
@@ -1672,7 +1709,9 @@ static void RNDiffDrawHorizontalText(
       attributedText,
       NSMakeRect(textX, 0, MAX(0, self.bounds.size.width - textX - diffSideBySideHorizontalPadding), self.rowHeight),
       textY,
-      config
+      config,
+      hasMetricChangingFont ? nil : baseTextAttributes,
+      hasMetricChangingFont ? 0 : spaceWidth
     );
   } else {
     [attributedText drawAtPoint:NSMakePoint(textX, textY)];
