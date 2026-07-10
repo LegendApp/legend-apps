@@ -386,7 +386,15 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
       </View>
       {file ? (
         <View style={styles.fileMeta}>
-          {!file.isBinary ? (
+          {file.isBinary ? (
+            <Text
+              accessibilityLabel="Binary file preview unavailable"
+              selectable={false}
+              style={[styles.binaryMessage, { color: mutedColor, fontFamily, lineHeight: fileHeaderLineHeight }]}
+            >
+              Binary file - preview unavailable
+            </Text>
+          ) : (
             <>
               <Text selectable={false} style={[styles.fileAdded, { color: palette.addAccent, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]}>
                 +{file.additions}
@@ -395,7 +403,7 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
                 -{file.deletions}
               </Text>
             </>
-          ) : null}
+          )}
         </View>
       ) : null}
     </Pressable>
@@ -607,6 +615,9 @@ const styles = StyleSheet.create({
     fontFamily: sourceViewerCodeFontFamily,
     fontSize: 12,
     lineHeight: 18,
+  },
+  binaryMessage: {
+    fontSize: 11,
   },
   fileDisclosure: {
     alignItems: "center",

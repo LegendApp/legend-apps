@@ -118,6 +118,39 @@ describe("DiffRows", () => {
     expect(view.getByText("-1")).toBeTruthy();
   });
 
+  it("explains when binary file previews are unavailable", async () => {
+    const binaryFile = createFile({
+      isBinary: true,
+      path: "assets/logo.bin",
+    });
+    const view = await render(
+      <DiffUnifiedRow
+        adaptiveRender="normal"
+        collapsedFileIndexes$={observable(new Set<number>())}
+        index={0}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$({
+          document: {
+            ...createRowRenderState().document,
+            fileByIndex: new Map([[binaryFile.index, binaryFile]]),
+            fileByRowStart: new Map([[binaryFile.rowStart, binaryFile]]),
+          },
+        })}
+        row={createRow({
+          fileIndex: 0,
+          index: 0,
+          kind: diffRowKindFileHeader,
+          newLineNumber: -1,
+          oldLineNumber: -1,
+          text: binaryFile.path,
+        })}
+      />,
+    );
+
+    expect(view.getByText("Binary file - preview unavailable")).toBeTruthy();
+    expect(view.queryByText("+2")).toBeNull();
+  });
+
   it("renders unified changed rows with the native row component", async () => {
     const view = await render(
       <DiffUnifiedRow
