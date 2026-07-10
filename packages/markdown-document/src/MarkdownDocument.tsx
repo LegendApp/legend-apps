@@ -2,7 +2,7 @@ import { LegendList, type LegendListRef, type LegendListRenderItemProps } from "
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownEditorHost } from "@legend-apps/markdown-block-editor";
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
 } from "react-native-enriched-markdown";
@@ -436,6 +436,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     },
     ref,
   ) => {
+    "use no memo";
+    // React Compiler does not yet support the editor's async transaction control flow.
+
     const loadVersionRef = useRef(0);
     const hydrateFrameRef = useRef<number | undefined>(undefined);
     const containerRef = useRef<View>(null);
@@ -2954,14 +2957,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useImperativeHandle(ref, () => commands, [commands]);
     useImperativeHandle(commandsRef, () => commands, [commands]);
 
+    const blockIndexById = useMemo(() => createBlockIndexById(blockIds), [blockIds]);
     const selectedBlockIds = useMemo(() => {
       const selectedIds = new Set<string>();
       if (!blockSelection) {
         return selectedIds;
       }
 
-      const anchorIndex = getBlockIndexById(blockSelection.anchorBlockId);
-      const focusIndex = getBlockIndexById(blockSelection.focusBlockId);
+      const anchorIndex = blockIndexById.get(blockSelection.anchorBlockId) ?? -1;
+      const focusIndex = blockIndexById.get(blockSelection.focusBlockId) ?? -1;
       if (anchorIndex >= 0 && focusIndex >= 0) {
         const startIndex = Math.min(anchorIndex, focusIndex);
         const endIndex = Math.max(anchorIndex, focusIndex);
@@ -2974,14 +2978,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       return selectedIds;
-    }, [blockIds, blockSelection, getBlockIndexById]);
+    }, [blockIds, blockIndexById, blockSelection]);
     useEffect(() => {
       documentRenderState$.blockIds.set(blockIds);
     }, [blockIds, documentRenderState$]);
     useEffect(() => {
       documentRenderState$.blockSelection.set(blockSelection);
     }, [blockSelection, documentRenderState$]);
-    useEffect(() => {
+    useLayoutEffect(() => {
       const previousActiveBlockId = activeRenderBlockIdRef.current;
       if (previousActiveBlockId && previousActiveBlockId !== activeBlockId) {
         documentRenderState$.activeBlocksById.get(previousActiveBlockId).delete();
@@ -3158,15 +3162,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, [adapter, hydrateRemainingBlocks]);
     const activeBlockStateForRender = useValue(documentRenderState$.activeBlocksById.get(activeBlockId ?? ""));
-    const activeBlockSnapshot = activeBlockId && activeBlockSnapshotRef.current?.id === activeBlockId
-      ? activeBlockSnapshotRef.current
-      : undefined;
-    const activeBlock = activeBlockStateForRender?.block ?? (activeBlockSnapshot
-      ? {
-        ...activeBlockSnapshot,
-        markdown: draftMarkdown,
-      }
-      : undefined);
+    const activeBlockMarkdown = activeBlockStateForRender?.block.markdown ?? (activeBlockId ? draftMarkdown : "");
     const applyNativeEditorFrame = useCallback((frame: NativeEditorFramePayload, source: "begin" | "change") => {
       const { blockId, height, rowHeight, width, x, y } = frame;
       const blockIndex = getBlockIndexById(blockId);
@@ -3314,7 +3310,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return (
         <MarkdownNativeEditorHost
           activeBlockId={activeBlockId ?? ""}
-          activeBlockMarkdown={activeBlock?.markdown ?? ""}
+          activeBlockMarkdown={activeBlockMarkdown}
           containerRef={containerRef}
           markdownLayoutConfigJson={nativeMarkdownLayoutConfigJson}
           onBeginEditing={handleNativeBeginEditing}

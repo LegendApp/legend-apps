@@ -6,7 +6,7 @@ import {
   type LegendListRenderItemProps,
   useAdaptiveRender,
 } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
 import type {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -239,7 +239,9 @@ function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
 
 function useLatestValueRef<T>(value: T) {
   const ref = useRef(value);
-  ref.current = value;
+  useLayoutEffect(() => {
+    ref.current = value;
+  }, [value]);
   return ref;
 }
 

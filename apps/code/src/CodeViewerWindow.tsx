@@ -170,6 +170,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     shouldHighlightSyntax: boolean,
   ) => {
     const loadStartedAt = nowMs();
+    const initialHighlightLineCount = shouldHighlightSyntax ? codeInitialLineCount : 0;
 
     try {
       setState({
@@ -181,7 +182,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         filePath,
         getCodeLanguage(filePath),
         syntaxThemeName,
-        shouldHighlightSyntax ? codeInitialLineCount : 0,
+        initialHighlightLineCount,
       );
       const loadFinishedAt = nowMs();
       const timing = toSourceDocumentTiming(highlighted.timing, loadFinishedAt - loadStartedAt);

@@ -16,6 +16,7 @@ const sourceRoots = [
   path.join(rootDir, "packages"),
 ];
 const ignoredDirectories = new Set([
+  ".build",
   "android",
   "build",
   "dist",
