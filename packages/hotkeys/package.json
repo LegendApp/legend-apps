@@ -4,10 +4,21 @@
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
+  "exports": {
+    ".": {
+      "react-native": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    },
+    "./storage": {
+      "react-native": "./src/storage.ts",
+      "default": "./src/storage.ts"
+    }
+  },
   "dependencies": {
     "@legend-apps/classnames": "0.0.0",
     "@legend-apps/keyboard-manager": "0.0.0",
-    "@legend-apps/native-menu": "0.0.0"
+    "@legend-apps/native-menu": "0.0.0",
+    "@legend-apps/storage": "0.0.0"
   },
   "peerDependencies": {
     "react": "catalog:",

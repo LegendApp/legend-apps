@@ -35,6 +35,18 @@ export type HotkeyHandlers<HotkeyId extends string = string> = Partial<Record<Ho
 export type HotkeyBindingValue = HotkeyValue | readonly HotkeyValue[] | null;
 export type HotkeyBindingState<HotkeyId extends string = string> = Record<HotkeyId, HotkeyBindingValue>;
 
+export const hotkeyFileVersion = 1;
+
+export type HotkeyFile<HotkeyId extends string = string> = {
+  bindings: Record<HotkeyId, readonly HotkeyValue[]>;
+  version: typeof hotkeyFileVersion;
+};
+
+export type SerializedHotkeyFile = {
+  bindings: Record<string, readonly string[]>;
+  version: typeof hotkeyFileVersion;
+};
+
 export type HotkeyScope =
   | { kind: "application" }
   | { kind: "window"; windowId: string };
@@ -204,6 +216,139 @@ export function normalizeHotkeyBindings(value: HotkeyBindingValue | undefined): 
   }
 
   return Array.isArray(value) ? value : [value as HotkeyValue];
+}
+
+function titleCaseStorageToken(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join("");
+}
+
+function storageTokenForKeyName(name: string) {
+  if (name.startsWith("MODIFIER_")) {
+    return titleCaseStorageToken(name.substring("MODIFIER_".length));
+  }
+
+  const keyName = name.substring("KEY_".length);
+  if (/^[A-Z]$/.test(keyName)) {
+    return `Key${keyName}`;
+  }
+  if (/^[0-9]$/.test(keyName)) {
+    return `Digit${keyName}`;
+  }
+
+  const specialTokens: Record<string, string> = {
+    BACKSPACE: "Backspace",
+    DELETE: "Backspace",
+    DOWN: "ArrowDown",
+    LEFT: "ArrowLeft",
+    MEDIA_NEXT: "MediaNext",
+    MEDIA_PLAY_PAUSE: "MediaPlayPause",
+    MEDIA_PREVIOUS: "MediaPrevious",
+    RIGHT: "ArrowRight",
+    UP: "ArrowUp",
+  };
+  return specialTokens[keyName] ?? titleCaseStorageToken(keyName);
+}
+
+const storageTokenToKeyCode = new Map<string, number>();
+const keyCodeToStorageToken = new Map<number, string>();
+
+for (const [name, value] of Object.entries(KeyCodes)) {
+  if (typeof value === "number") {
+    const token = storageTokenForKeyName(name);
+    storageTokenToKeyCode.set(token, value);
+    if (!keyCodeToStorageToken.has(value) || name === "KEY_DELETE") {
+      keyCodeToStorageToken.set(value, token);
+    }
+  }
+}
+
+function parseStoredHotkey(value: unknown): HotkeyValue | null {
+  if (typeof value !== "number" && typeof value !== "string") {
+    return null;
+  }
+
+  if (typeof value === "number" || /^\d+(\+\d+)*$/.test(value)) {
+    return serializeHotkey(parseHotkey(value as HotkeyValue));
+  }
+
+  const storedCodes = value
+    .split("+")
+    .map((token) => {
+      const trimmed = token.trim();
+      const unknownCode = /^Code(\d+)$/.exec(trimmed);
+      return unknownCode ? Number(unknownCode[1]) : storageTokenToKeyCode.get(trimmed);
+    });
+  if (storedCodes.length > 0 && storedCodes.every((keyCode) => keyCode !== undefined)) {
+    return serializeHotkey(storedCodes as number[]);
+  }
+
+  return serializeHotkey(parseHotkey(value as HotkeyValue));
+}
+
+export function serializeHotkeyForStorage(value: HotkeyValue): string {
+  return parseHotkey(value)
+    .map((keyCode) => keyCodeToStorageToken.get(keyCode) ?? `Code${keyCode}`)
+    .join("+");
+}
+
+function normalizePersistedBindings(value: unknown): readonly HotkeyValue[] {
+  const values = Array.isArray(value) ? value : value === null || value === undefined ? [] : [value];
+  const normalized: HotkeyValue[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of values) {
+    const binding = parseStoredHotkey(candidate);
+    if (binding !== null) {
+      const key = `${binding}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        normalized.push(binding);
+      }
+    }
+  }
+  return normalized;
+}
+
+export function normalizeHotkeyFile<HotkeyId extends string>(
+  value: unknown,
+  definitions: readonly HotkeyDefinition<HotkeyId>[],
+): HotkeyFile<HotkeyId> {
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const persistedBindings = record.bindings && typeof record.bindings === "object" && !Array.isArray(record.bindings)
+    ? record.bindings as Record<string, unknown>
+    : record;
+  const bindings = Object.fromEntries(definitions.map((definition) => {
+    const persisted = persistedBindings[definition.id];
+    const normalized = persisted === undefined
+      ? getDefaultHotkeyBindings(definition)
+      : normalizePersistedBindings(persisted);
+    return [definition.id, normalized];
+  })) as Record<HotkeyId, readonly HotkeyValue[]>;
+
+  return {
+    bindings,
+    version: hotkeyFileVersion,
+  };
+}
+
+export function serializeHotkeyFile<HotkeyId extends string>(
+  value: HotkeyFile<HotkeyId>,
+  definitions: readonly HotkeyDefinition<HotkeyId>[],
+): SerializedHotkeyFile {
+  const normalized = normalizeHotkeyFile(value, definitions);
+  return {
+    bindings: Object.fromEntries(Object.entries(normalized.bindings).map(([id, bindings]) => [
+      id,
+      (bindings as readonly HotkeyValue[]).map(serializeHotkeyForStorage),
+    ])),
+    version: hotkeyFileVersion,
+  };
 }
 
 function eventModifierCodes(event: KeyboardEvent, configuredModifiers: readonly number[] = []) {
