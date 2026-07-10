@@ -7,6 +7,7 @@ import {
   defaultDiffShowOnlyHunks,
   defaultDiffSyntaxHighlightingEnabled,
   defaultDiffViewMode,
+  diffViewModeOptions,
   getDiffAdaptiveLightModeEnabledSetting,
   getDiffFontFamilySetting,
   getDiffFontSizeSetting,
@@ -44,6 +45,10 @@ describe("diffSettings", () => {
   });
 
   it("accepts only known view modes", () => {
+    expect(diffViewModeOptions).toEqual([
+      { label: "Unified", value: "unified" },
+      { label: "Side-by-Side", value: "blocks" },
+    ]);
     expect(isDiffViewMode("unified")).toBe(true);
     expect(isDiffViewMode("blocks")).toBe(true);
     expect(isDiffViewMode("merge")).toBe(false);

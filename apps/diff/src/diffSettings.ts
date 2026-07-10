@@ -46,7 +46,7 @@ export const defaultDiffSyntaxHighlightingEnabled = true;
 export const diffFontSizeOptions = sourceFontSizeOptions;
 export const diffViewModeOptions = [
   { label: "Unified", value: "unified" },
-  { label: "Blocks", value: "blocks" },
+  { label: "Side-by-Side", value: "blocks" },
 ] as const;
 
 function normalizeDiffFontSize(fontSize: unknown): number {

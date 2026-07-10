@@ -163,7 +163,7 @@ export const diffMenuConfig: NativeMenuConfig[] = [
       },
       {
         id: "viewBlocks",
-        title: "Blocks",
+        title: "Side-by-Side",
         checked: false,
         enabled: false,
         placement: { before: "Enter Full Screen" },
