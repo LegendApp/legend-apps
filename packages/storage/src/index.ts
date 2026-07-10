@@ -416,14 +416,18 @@ export function createObservableSettings<const TFields extends ObservableSetting
   } {
     type TValue = ObservableSettingsValues<TFields>[TKey];
     const settingField = fields[key] as ObservableSettingsField<TValue>;
-    const setting$ = (settings$ as any)[key];
+    let setting$: any;
+    const getSetting = () => {
+      setting$ ??= (settings$ as any)[key];
+      return setting$;
+    };
 
     return {
-      get: () => normalizeObservableSettingsValue(settingField, setting$.get()),
+      get: () => normalizeObservableSettingsValue(settingField, getSetting().get()),
       set: (value: TValue) => {
-        setting$.set(normalizeObservableSettingsValue(settingField, value));
+        getSetting().set(normalizeObservableSettingsValue(settingField, value));
       },
-      use: () => normalizeObservableSettingsValue(settingField, useValue(setting$)),
+      use: () => normalizeObservableSettingsValue(settingField, useValue(getSetting())),
     };
   }
 

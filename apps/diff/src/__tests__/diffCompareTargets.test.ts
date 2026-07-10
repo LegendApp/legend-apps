@@ -4,6 +4,7 @@ import {
   diffCompareToolbarTargetChooseRef,
   diffCompareToolbarTargetHead,
   getDiffCompareToolbarModel,
+  parseDiffCompareRepoRefs,
   type DiffCompareRepoState,
 } from "../diffCompareTargets";
 import type { DiffOpenSource } from "../diffFiles";
@@ -19,6 +20,32 @@ const repoState: DiffCompareRepoState = {
 };
 
 describe("diffCompareTargets", () => {
+  it("parses current upstream default local and remote refs from one snapshot", () => {
+    expect(parseDiffCompareRepoRefs([
+      "refs/heads/feature/sidebar\t*\torigin/feature/sidebar\t",
+      "refs/heads/main\t \t\t",
+      "refs/remotes/origin/HEAD\t \t\torigin/main",
+      "refs/remotes/origin/feature/sidebar\t \t\t",
+      "refs/remotes/origin/main\t \t\t",
+    ].join("\n"))).toEqual({
+      currentBranch: "feature/sidebar",
+      defaultBranch: "origin/main",
+      localBranches: ["feature/sidebar", "main"],
+      remoteBranches: ["origin/HEAD", "origin/feature/sidebar", "origin/main"],
+      upstreamBranch: "origin/feature/sidebar",
+    });
+  });
+
+  it("returns an empty ref snapshot outside a Git repository", () => {
+    expect(parseDiffCompareRepoRefs(null)).toEqual({
+      currentBranch: null,
+      defaultBranch: null,
+      localBranches: [],
+      remoteBranches: [],
+      upstreamBranch: null,
+    });
+  });
+
   it("shows folders as worktree compared to HEAD", () => {
     const source: DiffOpenSource = {
       kind: "folder",

@@ -5,6 +5,32 @@
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#import <os/log.h>
+
+static void LegendCommandRunnerTiming(NSString *event, NSDictionary *payload)
+{
+#if DEBUG
+  if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"so.legend.diff.macos"]) {
+    return;
+  }
+
+  static os_log_t log = os_log_create("so.legend.diff.macos", "startup-diagnosis");
+  static NSUInteger sequence = 0;
+  sequence += 1;
+  NSData *jsonData = [NSJSONSerialization dataWithJSONObject:(payload ?: @{}) options:0 error:nil];
+  NSString *json = jsonData ? [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] : @"{}";
+  const long long timestamp = (long long)(NSDate.date.timeIntervalSince1970 * 1000.0);
+  NSString *message = [NSString stringWithFormat:@"%lld [DEBUG diff-startup-boundaries-v2] %@ {\"seq\":%lu,\"data\":%@}",
+                       timestamp,
+                       event,
+                       (unsigned long)sequence,
+                       json ?: @"{}"];
+  os_log_with_type(log, OS_LOG_TYPE_DEFAULT, "%{public}@", message);
+#else
+  (void)event;
+  (void)payload;
+#endif
+}
 #endif
 
 @implementation RNCommandRunner {
@@ -75,20 +101,23 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
 #endif
 }
 
-- (void)runCommand:(NSString *)paramsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
-{
 #if TARGET_OS_OSX
-  NSDictionary *params = [self parseObjectJSON:paramsJson];
+- (NSDictionary *)normalizedCommandFromParams:(NSDictionary *)params
+                                     errorCode:(NSString **)errorCode
+                                  errorMessage:(NSString **)errorMessage
+{
   NSString *command = [params[@"command"] isKindOfClass:[NSString class]] ? params[@"command"] : nil;
   if (command.length == 0) {
-    reject(@"missing_command", @"Missing command to execute.", nil);
-    return;
+    *errorCode = @"missing_command";
+    *errorMessage = @"Missing command to execute.";
+    return nil;
   }
 
   NSString *resolvedPath = [self resolveCommandPath:command];
   if (resolvedPath.length == 0) {
-    reject(@"command_not_found", [NSString stringWithFormat:@"Command not found: %@", command], nil);
-    return;
+    *errorCode = @"command_not_found";
+    *errorMessage = [NSString stringWithFormat:@"Command not found: %@", command];
+    return nil;
   }
 
   NSArray *rawArgs = [params[@"args"] isKindOfClass:[NSArray class]] ? params[@"args"] : @[];
@@ -102,90 +131,204 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   NSString *input = [params[@"input"] isKindOfClass:[NSString class]] ? params[@"input"] : nil;
   NSString *cwd = [params[@"cwd"] isKindOfClass:[NSString class]] ? params[@"cwd"] : nil;
   NSNumber *timeoutMs = [params[@"timeoutMs"] isKindOfClass:[NSNumber class]] ? params[@"timeoutMs"] : nil;
+  static NSUInteger commandSequence = 0;
+  NSUInteger commandId = ++commandSequence;
+  CFAbsoluteTime enqueuedAt = CFAbsoluteTimeGetCurrent();
+  LegendCommandRunnerTiming(@"native.command.enqueued", @{
+    @"args": args,
+    @"command": command ?: @"",
+    @"commandId": @(commandId),
+  });
+
+  return @{
+    @"args": args,
+    @"commandId": @(commandId),
+    @"cwd": cwd ?: NSNull.null,
+    @"enqueuedAt": @(enqueuedAt),
+    @"input": input ?: NSNull.null,
+    @"resolvedPath": resolvedPath,
+    @"timeoutMs": timeoutMs ?: NSNull.null,
+  };
+}
+
+- (NSDictionary *)executeNormalizedCommand:(NSDictionary *)params
+                                  errorCode:(NSString **)errorCode
+                               errorMessage:(NSString **)errorMessage
+                                      error:(NSError **)commandError
+{
+  NSArray<NSString *> *args = params[@"args"];
+  NSNumber *commandId = params[@"commandId"];
+  NSString *cwd = [params[@"cwd"] isKindOfClass:NSString.class] ? params[@"cwd"] : nil;
+  NSNumber *enqueuedAt = params[@"enqueuedAt"];
+  NSString *input = [params[@"input"] isKindOfClass:NSString.class] ? params[@"input"] : nil;
+  NSString *resolvedPath = params[@"resolvedPath"];
+  NSNumber *timeoutMs = [params[@"timeoutMs"] isKindOfClass:NSNumber.class] ? params[@"timeoutMs"] : nil;
+  CFAbsoluteTime queueStartedAt = CFAbsoluteTimeGetCurrent();
+  LegendCommandRunnerTiming(@"native.command.queue.start", @{
+    @"commandId": commandId,
+    @"queueWaitMs": @((queueStartedAt - enqueuedAt.doubleValue) * 1000.0),
+  });
+
+  NSTask *task = [[NSTask alloc] init];
+  task.executableURL = [NSURL fileURLWithPath:resolvedPath];
+  task.arguments = args;
+  if (cwd.length > 0) {
+    NSString *expandedCwd = [cwd stringByExpandingTildeInPath];
+    BOOL isDirectory = NO;
+    BOOL cwdExists = [[NSFileManager defaultManager] fileExistsAtPath:expandedCwd isDirectory:&isDirectory];
+    if (!cwdExists || !isDirectory) {
+      *errorCode = @"invalid_cwd";
+      *errorMessage = [NSString stringWithFormat:@"Working directory not found: %@", cwd];
+      return nil;
+    }
+    task.currentDirectoryURL = [NSURL fileURLWithPath:expandedCwd isDirectory:YES];
+  }
+
+  NSPipe *stdoutPipe = [NSPipe pipe];
+  NSPipe *stderrPipe = [NSPipe pipe];
+  task.standardOutput = stdoutPipe;
+  task.standardError = stderrPipe;
+
+  NSPipe *stdinPipe = nil;
+  if (input != nil) {
+    stdinPipe = [NSPipe pipe];
+    task.standardInput = stdinPipe;
+  }
+
+  NSError *error = nil;
+  BOOL didLaunch = [task launchAndReturnError:&error];
+  if (!didLaunch) {
+    *errorCode = @"spawn_failed";
+    *errorMessage = error.localizedDescription ?: @"Failed to start command.";
+    *commandError = error;
+    return nil;
+  }
+
+  if (input != nil && stdinPipe != nil) {
+    NSData *inputData = [input dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
+    [[stdinPipe fileHandleForWriting] writeData:inputData];
+    [[stdinPipe fileHandleForWriting] closeFile];
+  }
+
+  NSTimeInterval timeoutSeconds = timeoutMs != nil ? timeoutMs.doubleValue / 1000.0 : 0;
+  BOOL hasTimeout = timeoutSeconds > 0;
+  NSLock *timeoutLock = [[NSLock alloc] init];
+  __block BOOL didTimeout = NO;
+
+  if (hasTimeout) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutSeconds * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      if (task.isRunning) {
+        [timeoutLock lock];
+        didTimeout = YES;
+        [timeoutLock unlock];
+        [task terminate];
+      }
+    });
+  }
+
+  [task waitUntilExit];
+  CFAbsoluteTime taskFinishedAt = CFAbsoluteTimeGetCurrent();
+  LegendCommandRunnerTiming(@"native.command.task.finish", @{
+    @"commandId": commandId,
+    @"taskMs": @((taskFinishedAt - queueStartedAt) * 1000.0),
+  });
+
+  NSData *stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
+  NSData *stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
+  NSString *stdout = [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"";
+  NSString *stderr = [[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding] ?: @"";
+
+  BOOL timedOut = NO;
+  if (hasTimeout) {
+    [timeoutLock lock];
+    timedOut = didTimeout;
+    [timeoutLock unlock];
+  }
+
+  return @{
+    @"stdout": stdout,
+    @"stderr": stderr,
+    @"exitCode": @(task.terminationStatus),
+    @"timedOut": @(timedOut),
+  };
+}
+#endif
+
+- (void)runCommand:(NSString *)paramsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  NSString *errorCode = nil;
+  NSString *errorMessage = nil;
+  NSDictionary *command = [self normalizedCommandFromParams:[self parseObjectJSON:paramsJson]
+                                                   errorCode:&errorCode
+                                                errorMessage:&errorMessage];
+  if (!command) {
+    reject(errorCode, errorMessage, nil);
+    return;
+  }
 
   dispatch_async(_workQueue, ^{
-    NSTask *task = [[NSTask alloc] init];
-    task.executableURL = [NSURL fileURLWithPath:resolvedPath];
-    task.arguments = args;
-    if (cwd.length > 0) {
-      NSString *expandedCwd = [cwd stringByExpandingTildeInPath];
-      BOOL isDirectory = NO;
-      BOOL cwdExists = [[NSFileManager defaultManager] fileExistsAtPath:expandedCwd isDirectory:&isDirectory];
-      if (!cwdExists || !isDirectory) {
+    NSString *commandErrorCode = nil;
+    NSString *commandErrorMessage = nil;
+    NSError *commandError = nil;
+    NSDictionary *payload = [self executeNormalizedCommand:command
+                                                 errorCode:&commandErrorCode
+                                              errorMessage:&commandErrorMessage
+                                                     error:&commandError];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (payload) {
+        resolve([self jsonStringFromObject:payload]);
+      } else {
+        reject(commandErrorCode, commandErrorMessage, commandError);
+      }
+    });
+  });
+#else
+  reject(@"unsupported_platform", @"Command execution is only supported on macOS.", nil);
+#endif
+}
+
+- (void)runCommands:(NSString *)paramsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  NSArray *params = [self parseArrayJSON:paramsJson];
+  NSMutableArray<NSDictionary *> *commands = [NSMutableArray arrayWithCapacity:params.count];
+  for (id value in params) {
+    if (![value isKindOfClass:NSDictionary.class]) {
+      reject(@"invalid_command", @"Invalid command batch entry.", nil);
+      return;
+    }
+    NSString *errorCode = nil;
+    NSString *errorMessage = nil;
+    NSDictionary *command = [self normalizedCommandFromParams:value errorCode:&errorCode errorMessage:&errorMessage];
+    if (!command) {
+      reject(errorCode, errorMessage, nil);
+      return;
+    }
+    [commands addObject:command];
+  }
+
+  dispatch_async(_workQueue, ^{
+    NSMutableArray<NSDictionary *> *results = [NSMutableArray arrayWithCapacity:commands.count];
+    for (NSDictionary *command in commands) {
+      NSString *commandErrorCode = nil;
+      NSString *commandErrorMessage = nil;
+      NSError *commandError = nil;
+      NSDictionary *payload = [self executeNormalizedCommand:command
+                                                   errorCode:&commandErrorCode
+                                                errorMessage:&commandErrorMessage
+                                                       error:&commandError];
+      if (!payload) {
         dispatch_async(dispatch_get_main_queue(), ^{
-          reject(@"invalid_cwd", [NSString stringWithFormat:@"Working directory not found: %@", cwd], nil);
+          reject(commandErrorCode, commandErrorMessage, commandError);
         });
         return;
       }
-      task.currentDirectoryURL = [NSURL fileURLWithPath:expandedCwd isDirectory:YES];
+      [results addObject:payload];
     }
-
-    NSPipe *stdoutPipe = [NSPipe pipe];
-    NSPipe *stderrPipe = [NSPipe pipe];
-    task.standardOutput = stdoutPipe;
-    task.standardError = stderrPipe;
-
-    NSPipe *stdinPipe = nil;
-    if (input != nil) {
-      stdinPipe = [NSPipe pipe];
-      task.standardInput = stdinPipe;
-    }
-
-    NSError *error = nil;
-    BOOL didLaunch = [task launchAndReturnError:&error];
-    if (!didLaunch) {
-      dispatch_async(dispatch_get_main_queue(), ^{
-        reject(@"spawn_failed", error.localizedDescription ?: @"Failed to start command.", error);
-      });
-      return;
-    }
-
-    if (input != nil && stdinPipe != nil) {
-      NSData *inputData = [input dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
-      [[stdinPipe fileHandleForWriting] writeData:inputData];
-      [[stdinPipe fileHandleForWriting] closeFile];
-    }
-
-    NSTimeInterval timeoutSeconds = timeoutMs != nil ? timeoutMs.doubleValue / 1000.0 : 0;
-    BOOL hasTimeout = timeoutSeconds > 0;
-    NSLock *timeoutLock = [[NSLock alloc] init];
-    __block BOOL didTimeout = NO;
-
-    if (hasTimeout) {
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutSeconds * NSEC_PER_SEC)),
-                     dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        if (task.isRunning) {
-          [timeoutLock lock];
-          didTimeout = YES;
-          [timeoutLock unlock];
-          [task terminate];
-        }
-      });
-    }
-
-    [task waitUntilExit];
-
-    NSData *stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
-    NSData *stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
-    NSString *stdout = [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"";
-    NSString *stderr = [[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding] ?: @"";
-
-    BOOL timedOut = NO;
-    if (hasTimeout) {
-      [timeoutLock lock];
-      timedOut = didTimeout;
-      [timeoutLock unlock];
-    }
-
-    NSDictionary *payload = @{
-      @"stdout": stdout,
-      @"stderr": stderr,
-      @"exitCode": @(task.terminationStatus),
-      @"timedOut": @(timedOut),
-    };
-
     dispatch_async(dispatch_get_main_queue(), ^{
-      resolve([self jsonStringFromObject:payload]);
+      resolve([self jsonStringFromObject:results]);
     });
   });
 #else

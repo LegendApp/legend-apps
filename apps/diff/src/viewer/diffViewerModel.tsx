@@ -105,6 +105,32 @@ export const emptyDiffViewerState: DiffViewerState = {
   source: null,
 };
 
+function areDiffStatisticsEqual(
+  currentStatistics: DiffStatisticsState | null,
+  nextStatistics: DiffStatisticsState | null,
+) {
+  if (currentStatistics === nextStatistics) {
+    return true;
+  }
+  if (!currentStatistics || !nextStatistics) {
+    return false;
+  }
+  return (
+    currentStatistics.cacheHit === nextStatistics.cacheHit &&
+    currentStatistics.downloadMs === nextStatistics.downloadMs &&
+    currentStatistics.fileCount === nextStatistics.fileCount &&
+    currentStatistics.firstPaintMs === nextStatistics.firstPaintMs &&
+    currentStatistics.loadComplete === nextStatistics.loadComplete &&
+    currentStatistics.loadToFrameMs === nextStatistics.loadToFrameMs &&
+    currentStatistics.loadToNativeMs === nextStatistics.loadToNativeMs &&
+    currentStatistics.nativeToSetStateMs === nextStatistics.nativeToSetStateMs &&
+    currentStatistics.nativeTotalMs === nextStatistics.nativeTotalMs &&
+    currentStatistics.requestId === nextStatistics.requestId &&
+    currentStatistics.rowCount === nextStatistics.rowCount &&
+    currentStatistics.setStateToFrameMs === nextStatistics.setStateToFrameMs
+  );
+}
+
 export const unavailableDiffMergeState: DiffMergeState = {
   status: "unavailable",
   reason: "Merge mode is available for local Git repositories.",
@@ -221,20 +247,7 @@ export function DiffViewerModelProvider({
   }, [loadProgress$]);
   const setLoadStatisticsValue = useCallback((nextStatistics: DiffStatisticsState | null) => {
     const currentStatistics = loadStatistics$.peek();
-    if (
-      currentStatistics?.cacheHit !== nextStatistics?.cacheHit ||
-      currentStatistics?.downloadMs !== nextStatistics?.downloadMs ||
-      currentStatistics?.fileCount !== nextStatistics?.fileCount ||
-      currentStatistics?.firstPaintMs !== nextStatistics?.firstPaintMs ||
-      currentStatistics?.loadComplete !== nextStatistics?.loadComplete ||
-      currentStatistics?.loadToFrameMs !== nextStatistics?.loadToFrameMs ||
-      currentStatistics?.loadToNativeMs !== nextStatistics?.loadToNativeMs ||
-      currentStatistics?.nativeToSetStateMs !== nextStatistics?.nativeToSetStateMs ||
-      currentStatistics?.nativeTotalMs !== nextStatistics?.nativeTotalMs ||
-      currentStatistics?.requestId !== nextStatistics?.requestId ||
-      currentStatistics?.rowCount !== nextStatistics?.rowCount ||
-      currentStatistics?.setStateToFrameMs !== nextStatistics?.setStateToFrameMs
-    ) {
+    if (!areDiffStatisticsEqual(currentStatistics, nextStatistics)) {
       loadStatistics$.set(nextStatistics);
     }
   }, [loadStatistics$]);

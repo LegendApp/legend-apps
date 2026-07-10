@@ -1,4 +1,4 @@
-import { createSettingsWindowOptions } from "@legend-apps/settings-window";
+import { createSettingsWindowOptions } from "@legend-apps/settings-window/options";
 import { createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
 import type { WindowFrame } from "@legend-apps/window-manager";
 import {
@@ -13,7 +13,6 @@ import { logDiffOpenTiming } from "./diffInstrumentation";
 import { DiffViewerWindowShell } from "./DiffViewerWindowShell";
 import { createDiffViewerWindowStyle } from "./diffWindowControls";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
-import { SettingsWindow } from "./SettingsWindow";
 
 let diffViewerUntitledWindowId = 0;
 let diffViewerUrlFocusRequestId = 0;
@@ -29,8 +28,8 @@ const diffWindowsConfig = {
     },
   },
   [diffSettingsWindowModuleName]: {
-    component: SettingsWindow,
     identifier: diffSettingsWindowIdentifier,
+    loadComponent: () => import("./SettingsWindow").then((module) => module.SettingsWindow),
     options: createSettingsWindowOptions({ title: "Appearance" }),
   },
 } satisfies WindowsConfig;

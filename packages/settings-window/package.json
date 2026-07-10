@@ -4,6 +4,16 @@
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
+  "exports": {
+    ".": {
+      "react-native": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    },
+    "./options": {
+      "react-native": "./src/options.ts",
+      "default": "./src/options.ts"
+    }
+  },
   "dependencies": {
     "@legendapp/list": "catalog:",
     "@legend-apps/appkit-split-view": "0.0.0",

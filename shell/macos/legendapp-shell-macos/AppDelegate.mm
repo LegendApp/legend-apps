@@ -6,6 +6,10 @@
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <Carbon/Carbon.h>
 
+#if DEBUG
+#import <os/log.h>
+#endif
+
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
 
 static BOOL LegendIsMarkdownPath(NSString *value)
@@ -42,6 +46,31 @@ static NSString *LegendMainWindowFrameAutoSaveName(NSString *appId)
 static NSString *LegendCurrentAppId(void)
 {
   return NSProcessInfo.processInfo.environment[@"LEGEND_APP"] ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
+}
+
+static void LegendLogDiffStartup(NSString *event, NSDictionary *payload)
+{
+#if DEBUG
+  if (![LegendCurrentAppId() isEqualToString:@"diff"]) {
+    return;
+  }
+
+  static os_log_t log = os_log_create("so.legend.diff.macos", "startup-diagnosis");
+  static NSUInteger sequence = 0;
+  sequence += 1;
+  NSData *jsonData = [NSJSONSerialization dataWithJSONObject:(payload ?: @{}) options:0 error:nil];
+  NSString *json = jsonData ? [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] : @"{}";
+  const long long timestamp = (long long)(NSDate.date.timeIntervalSince1970 * 1000.0);
+  NSString *message = [NSString stringWithFormat:@"%lld [DEBUG diff-startup-boundaries-v2] %@ {\"seq\":%lu,\"data\":%@}",
+                       timestamp,
+                       event,
+                       (unsigned long)sequence,
+                       json ?: @"{}"];
+  os_log_with_type(log, OS_LOG_TYPE_DEFAULT, "%{public}@", message);
+#else
+  (void)event;
+  (void)payload;
+#endif
 }
 
 static NSString *LegendCurrentDisplayName(void)
@@ -165,6 +194,8 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
+  CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
+  LegendLogDiffStartup(@"native.appDelegate.willFinish.start", @{});
   LegendConfigureApplicationMenuTitles();
 
   Class documentControllerClass = NSClassFromString(@"RNRecentDocumentController");
@@ -176,10 +207,15 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
                                                     andSelector:@selector(getUrlEventHandler:withReplyEvent:)
                                                   forEventClass:kInternetEventClass
                                                      andEventID:kAEGetURL];
+  LegendLogDiffStartup(@"native.appDelegate.willFinish.finish", @{
+    @"durationMs": @((CFAbsoluteTimeGetCurrent() - startedAt) * 1000.0),
+  });
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+  CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
+  LegendLogDiffStartup(@"native.appDelegate.didFinish.start", @{});
   self.moduleName = @"main";
   self.initialProps = @{
     @"launchArguments": [[NSProcessInfo processInfo] arguments] ?: @[],
@@ -190,8 +226,13 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
                                            selector:@selector(windowDidBecomeKey:)
                                                name:NSWindowDidBecomeKeyNotification
                                              object:nil];
-  
+
+  CFAbsoluteTime superStartedAt = CFAbsoluteTimeGetCurrent();
+  LegendLogDiffStartup(@"native.appDelegate.super.start", @{});
   [super applicationDidFinishLaunching:notification];
+  LegendLogDiffStartup(@"native.appDelegate.super.finish", @{
+    @"durationMs": @((CFAbsoluteTimeGetCurrent() - superStartedAt) * 1000.0),
+  });
 
   if ([LegendCurrentAppId() isEqualToString:@"music"]) {
     NSAppearance *darkAppearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
@@ -199,6 +240,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
       [NSApp setAppearance:darkAppearance];
     }
   }
+  LegendLogDiffStartup(@"native.appDelegate.didFinish.finish", @{
+    @"durationMs": @((CFAbsoluteTimeGetCurrent() - startedAt) * 1000.0),
+  });
 }
 
 - (void)dealloc
@@ -328,6 +372,8 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions
 {
+  CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
+  LegendLogDiffStartup(@"native.hostWindow.load.start", @{});
   NSString *appId = LegendCurrentAppId();
   BOOL isMarkdown = [appId isEqualToString:@"markdown"];
   BOOL isMusic = [appId isEqualToString:@"music"];
@@ -337,6 +383,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
                                            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
                                              backing:NSBackingStoreBuffered
                                                defer:NO];
+  LegendLogDiffStartup(@"native.hostWindow.windowCreated", @{
+    @"elapsedMs": @((CFAbsoluteTimeGetCurrent() - startedAt) * 1000.0),
+  });
 
   if (isMarkdown) {
     NSColor *backgroundColor = [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
@@ -363,9 +412,15 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
   self.window.autorecalculatesKeyViewLoop = YES;
 
+  CFAbsoluteTime rootViewStartedAt = CFAbsoluteTimeGetCurrent();
+  LegendLogDiffStartup(@"native.hostWindow.rootView.start", @{});
   RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName
                                                      initialProperties:self.initialProps
                                                          launchOptions:launchOptions];
+  LegendLogDiffStartup(@"native.hostWindow.rootView.finish", @{
+    @"durationMs": @((CFAbsoluteTimeGetCurrent() - rootViewStartedAt) * 1000.0),
+    @"elapsedMs": @((CFAbsoluteTimeGetCurrent() - startedAt) * 1000.0),
+  });
 
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 
@@ -422,6 +477,10 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   if (isMusic) {
     LegendConfigureMusicWindow(self.window);
   }
+  LegendLogDiffStartup(@"native.hostWindow.load.finish", @{
+    @"hidden": @(hostWindowHidden),
+    @"totalMs": @((CFAbsoluteTimeGetCurrent() - startedAt) * 1000.0),
+  });
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

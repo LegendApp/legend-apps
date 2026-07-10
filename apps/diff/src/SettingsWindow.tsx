@@ -1,3 +1,4 @@
+import { markSettingsModuleEvaluated } from "./settingsDependenciesStartupMarker";
 import { SwitchControl } from "@legend-apps/design-system";
 import { HotkeyBindingsSettingsContent as SharedHotkeyBindingsSettingsContent } from "@legend-apps/hotkeys";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -450,3 +451,5 @@ export function SettingsWindow() {
 }
 
 export default SettingsWindow;
+
+markSettingsModuleEvaluated();

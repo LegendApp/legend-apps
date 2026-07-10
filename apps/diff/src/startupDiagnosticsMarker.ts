@@ -1,9 +1,13 @@
 import { createInstrumentationLogger } from "@legend-apps/instrumentation";
 
 const startupDiagnostics = createInstrumentationLogger({
-  debugId: "diff-startup-candidates-v1",
+  debugId: "diff-startup-boundaries-v2",
   namespace: "diff",
   timingLabel: "DiffOpenTiming",
 });
 
-startupDiagnostics.timing("app.beforeDependencyImports", () => ({}));
+export function markDiffStartupBoundary(event: string) {
+  startupDiagnostics.timing(event, () => ({}));
+}
+
+markDiffStartupBoundary("app.beforeDependencyImports");

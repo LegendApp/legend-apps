@@ -100,6 +100,7 @@ clang++ \
   -I"$GIT2_ROOT/build/gen_headers" \
   "$ROOT/packages/diff-parser/cpp/DiffParserCore.cpp" \
   "$ROOT/packages/diff-parser/cpp/DiffInlineChange.cpp" \
+  "$ROOT/packages/diff-parser/cpp/DiffStartupDiagnostics.cpp" \
   "$ROOT/packages/diff-parser/tests/native_unified_diff_parser_test.cpp" \
   "$GIT2_ROOT/build/libgit2.a" \
   -liconv \

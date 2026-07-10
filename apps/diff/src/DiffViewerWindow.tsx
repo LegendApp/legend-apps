@@ -44,7 +44,7 @@ import {
 } from "@legendapp/list/react-native";
 import { computed, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 import { registerDiffWindowExitPreparation } from "./diffAppExit";
@@ -229,7 +229,67 @@ logDiffOpenTiming("viewer.module.evaluated", () => ({
   nativeRows: true,
 }));
 
-let loggedFirstViewerWindowRender = false;
+function DiffListStartupProbe({
+  height,
+  itemCount,
+  viewMode,
+}: {
+  height: number;
+  itemCount: number;
+  viewMode: DiffSettingsFile["viewMode"];
+}) {
+  const renderedAtRef = useRef(nowMs());
+  const initialPayloadRef = useRef({ height, itemCount, viewMode });
+
+  useLayoutEffect(() => {
+    logDiffOpenTiming("viewer.list.layoutEffect.first", () => ({
+      elapsedSinceRenderMs: Number((nowMs() - renderedAtRef.current).toFixed(1)),
+      ...initialPayloadRef.current,
+    }));
+  }, []);
+
+  useEffect(() => {
+    const effectAt = nowMs();
+    logDiffOpenTiming("viewer.list.passiveEffect.first", () => ({
+      elapsedSinceRenderMs: Number((effectAt - renderedAtRef.current).toFixed(1)),
+      ...initialPayloadRef.current,
+    }));
+    const timeoutHandle = setTimeout(() => {
+      const timeoutAt = nowMs();
+      logDiffOpenTiming("viewer.list.timeout.first", () => ({
+        elapsedSinceEffectMs: Number((timeoutAt - effectAt).toFixed(1)),
+        elapsedSinceRenderMs: Number((timeoutAt - renderedAtRef.current).toFixed(1)),
+        ...initialPayloadRef.current,
+      }));
+    }, 0);
+    let secondFrameHandle: number | undefined;
+    const firstFrameHandle = requestAnimationFrame(() => {
+      const firstFrameAt = nowMs();
+      logDiffOpenTiming("viewer.list.frame.first", () => ({
+        elapsedSinceEffectMs: Number((firstFrameAt - effectAt).toFixed(1)),
+        elapsedSinceRenderMs: Number((firstFrameAt - renderedAtRef.current).toFixed(1)),
+        ...initialPayloadRef.current,
+      }));
+      secondFrameHandle = requestAnimationFrame(() => {
+        const secondFrameAt = nowMs();
+        logDiffOpenTiming("viewer.list.frame.second", () => ({
+          elapsedSinceFirstFrameMs: Number((secondFrameAt - firstFrameAt).toFixed(1)),
+          elapsedSinceRenderMs: Number((secondFrameAt - renderedAtRef.current).toFixed(1)),
+          ...initialPayloadRef.current,
+        }));
+      });
+    });
+    return () => {
+      clearTimeout(timeoutHandle);
+      cancelAnimationFrame(firstFrameHandle);
+      if (secondFrameHandle !== undefined) {
+        cancelAnimationFrame(secondFrameHandle);
+      }
+    };
+  }, []);
+
+  return null;
+}
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
@@ -688,7 +748,9 @@ function noopVirtualizedDocumentRequestRange() {
 
 function useRenderLatestRef<T>(value: T) {
   const ref = useRef(value);
-  ref.current = value;
+  useLayoutEffect(() => {
+    ref.current = value;
+  }, [value]);
   return ref;
 }
 
@@ -1643,6 +1705,14 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
             syntaxTokenizationVersion$={syntaxTokenizationVersion$}
           />
         ) : null}
+        {!shouldShowNoChanges ? (
+          <DiffListStartupProbe
+            key={`${state.document.documentId}:${viewMode}`}
+            height={diffListHeight}
+            itemCount={activeItemIndexes.length}
+            viewMode={viewMode}
+          />
+        ) : null}
         {contentBody}
         {nativeRowConfig && !shouldShowNoChanges ? (
           <DiffHorizontalScroller
@@ -2258,7 +2328,7 @@ function useDiffInlineMergeModel({
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }) {
   const mergeSyntaxByPath$ = useObservable<DiffMergeSyntaxByPath>({});
-  const mergeRenderInitialState = useMemo(createDiffMergeRenderState, []);
+  const mergeRenderInitialState = useMemo(() => createDiffMergeRenderState(), []);
   const mergeRender$ = useObservable(mergeRenderInitialState) as unknown as Observable<DiffMergeRenderState>;
   const mergeDisplayModelByPath = useMemo(() => {
     const map = new Map<string, DiffMergeDisplayModel>();
@@ -2670,14 +2740,6 @@ function DiffCompareRefPrompt({
 
 export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
   const safeProps = props ?? {};
-  if (!loggedFirstViewerWindowRender) {
-    loggedFirstViewerWindowRender = true;
-    logDiffOpenTiming("viewer.window.render.first", () => ({
-      focusUrlInput: typeof safeProps.focusUrlInputRequestId === "number",
-      hasFolderPath: Boolean(safeProps.folderPath),
-      hasSource: Boolean(safeProps.source),
-    }));
-  }
 
   useEffect(() => {
     logDiffOpenTiming("viewer.window.effect.mount", () => ({
@@ -2695,6 +2757,9 @@ export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
 }
 
 function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
+  "use no memo";
+  // React Compiler does not yet support the async try/finally workflows in this controller.
+
   const windowIdentifier = useWindowId();
   const renderCountRef = useRef(0);
   const loggedFirstContentRenderRef = useRef(false);
@@ -2874,38 +2939,73 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     : toolbarSource?.kind === "git"
       ? toolbarSource.cwd
       : null;
+  const compareRepoStateReady = compareRepoPath !== null &&
+    toolbarSource !== null &&
+    state.status === "loaded" &&
+    state.loadComplete !== false &&
+    sourcesMatch(state.source, toolbarSource);
 
   useEffect(() => {
     let cancelled = false;
-    if (!compareRepoPath) {
+    let firstFrameId: number | null = null;
+    let secondFrameId: number | null = null;
+    if (!compareRepoPath || !compareRepoStateReady) {
       setCompareRepoState(null);
     } else {
-      loadDiffCompareRepoState(compareRepoPath)
-        .then((nextState) => {
+      firstFrameId = requestAnimationFrame(() => {
+        secondFrameId = requestAnimationFrame(() => {
           if (!cancelled) {
-            setCompareRepoState(nextState);
-          }
-        })
-        .catch((error: unknown) => {
-          if (!cancelled) {
-            console.error(`Unable to load diff compare targets: ${getErrorMessage(error)}`);
-            setCompareRepoState({
-              currentBranch: null,
-              defaultBranch: null,
-              localBranches: [],
-              remoteBranches: [],
-              remoteNames: [],
+            const startedAt = nowMs();
+            logDiffOpenTiming("viewer.compareRepoState.start", () => ({
               repoPath: compareRepoPath,
-              upstreamBranch: null,
-            });
+            }));
+            loadDiffCompareRepoState(compareRepoPath)
+              .then((nextState) => {
+                if (!cancelled) {
+                  logDiffOpenTiming("viewer.compareRepoState.finish", () => ({
+                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                    localBranches: nextState.localBranches.length,
+                    remoteBranches: nextState.remoteBranches.length,
+                    remoteNames: nextState.remoteNames.length,
+                    repoPath: compareRepoPath,
+                  }));
+                  setCompareRepoState(nextState);
+                }
+              })
+              .catch((error: unknown) => {
+                if (!cancelled) {
+                  logDiffOpenTiming("viewer.compareRepoState.error", () => ({
+                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
+                    message: getErrorMessage(error),
+                    repoPath: compareRepoPath,
+                  }));
+                  console.error(`Unable to load diff compare targets: ${getErrorMessage(error)}`);
+                  setCompareRepoState({
+                    currentBranch: null,
+                    defaultBranch: null,
+                    localBranches: [],
+                    remoteBranches: [],
+                    remoteNames: [],
+                    repoPath: compareRepoPath,
+                    upstreamBranch: null,
+                  });
+                }
+              });
           }
         });
+      });
     }
 
     return () => {
       cancelled = true;
+      if (firstFrameId !== null) {
+        cancelAnimationFrame(firstFrameId);
+      }
+      if (secondFrameId !== null) {
+        cancelAnimationFrame(secondFrameId);
+      }
     };
-  }, [compareRepoPath]);
+  }, [compareRepoPath, compareRepoStateReady]);
 
   const diffPalette = useMemo(
     () => getDiffPalette(syntaxTheme, displayTheme.colors),

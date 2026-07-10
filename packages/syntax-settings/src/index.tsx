@@ -9,42 +9,17 @@ import {
 } from "@legend-apps/syntax-parser";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
+import {
+  sourceFontSizeOptions,
+  type SourceFontFamilySetting,
+} from "./values";
 
-export type SourceFontFamilySetting = typeof sourceFontFamilyOptions[number]["value"];
-
-export const sourceFontFamilyOptions = [
-  { label: "Menlo", value: "Menlo" },
-  { label: "SF Mono", value: "SF Mono" },
-  { label: "Monaco", value: "Monaco" },
-  { label: "Courier New", value: "Courier New" },
-  { label: "Courier", value: "Courier" },
-] as const;
-
-export const sourceFontSizeOptions = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+export * from "./values";
 
 const sourceFontSizeSettingOptions = sourceFontSizeOptions.map((fontSize) => ({
   label: String(fontSize),
   value: fontSize,
 }));
-
-export function normalizeSourceFontFamily(
-  fontFamily: unknown,
-  defaultFontFamily: SourceFontFamilySetting,
-): SourceFontFamilySetting {
-  return typeof fontFamily === "string" && sourceFontFamilyOptions.some((option) => option.value === fontFamily)
-    ? fontFamily as SourceFontFamilySetting
-    : defaultFontFamily;
-}
-
-export function normalizeSourceFontSize(fontSize: unknown, defaultFontSize: number): number {
-  return typeof fontSize === "number" && sourceFontSizeOptions.includes(fontSize as typeof sourceFontSizeOptions[number])
-    ? fontSize
-    : defaultFontSize;
-}
-
-export function normalizeBooleanSetting(value: unknown, defaultValue: boolean): boolean {
-  return typeof value === "boolean" ? value : defaultValue;
-}
 
 export type SourceTypographySettingsRowsProps<FontFamily extends string = SourceFontFamilySetting> = {
   fontAccessibilityLabel: string;

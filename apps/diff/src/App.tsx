@@ -1,18 +1,23 @@
 import "./startupDiagnosticsMarker";
 
+import "./platformDependenciesStartupMarker";
 import { AutoUpdater } from "@legend-apps/auto-updater";
 import { commandRunner } from "@legend-apps/command-runner";
+import "./documentDependenciesStartupMarker";
 import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
 import { useRoutedHotkeys } from "@legend-apps/hotkeys";
 import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/native-menu";
 import { addWindowFocusedListener } from "@legend-apps/window-manager";
-import { useEffect, useMemo, useRef } from "react";
+import "./reactDependenciesStartupMarker";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Linking, LogBox } from "react-native";
+import "./diffCoreDependenciesStartupMarker";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { installDiffAppExitHandler } from "./diffAppExit";
 import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
+import "./hotkeysDependenciesStartupMarker";
 import {
   diffApplicationHotkeyScope,
   diffHotkeyDefinitions,
@@ -20,6 +25,7 @@ import {
   getDiffHotkeyMenuPatches,
   useDiffHotkeyBindings,
 } from "./diffHotkeys";
+import "./settingsStoreDependenciesStartupMarker";
 import {
   getDiffShowOnlyHunksSetting,
   getDiffRestoreWindowsOnStartupSetting,
@@ -27,7 +33,9 @@ import {
   setDiffViewModeSetting,
 } from "./diffSettings";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
+import "./restorationDependenciesStartupMarker";
 import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
+import "./windowsDependenciesStartupMarker";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
 function nowMs() {
@@ -282,6 +290,14 @@ export function App({ launchArguments }: DiffAppProps) {
     windowIdentifier: diffViewerWindowIdentifier,
   });
   const controllerRef = useRef(controller);
+
+  useLayoutEffect(() => {
+    logDiffOpenTiming("app.layoutEffect.first", () => ({}));
+  }, []);
+
+  useEffect(() => {
+    logDiffOpenTiming("app.passiveEffect.first", () => ({}));
+  }, []);
 
   useEffect(() => {
     controllerRef.current = controller;

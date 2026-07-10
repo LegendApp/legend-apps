@@ -6,7 +6,7 @@ import {
   sourceFontFamilyOptions,
   sourceFontSizeOptions,
   type SourceFontFamilySetting,
-} from "@legend-apps/syntax-settings";
+} from "@legend-apps/syntax-settings/values";
 import {
   defaultSyntaxThemeName,
   getSyntaxTheme,

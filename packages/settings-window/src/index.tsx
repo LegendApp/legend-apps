@@ -11,8 +11,6 @@ import {
 import {
   setWindowOptions,
   setWindowTitle,
-  WindowStyleMask,
-  type WindowOptions,
 } from "@legend-apps/window-manager";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -25,11 +23,9 @@ import {
 
 const SETTINGS_SIDEBAR_TOP_INSET = 52;
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
-const SETTINGS_WINDOW_DEFAULT_HEIGHT = 640;
-const SETTINGS_WINDOW_DEFAULT_WIDTH = 820;
-const SETTINGS_WINDOW_MIN_HEIGHT = 500;
-const SETTINGS_WINDOW_MIN_WIDTH = 720;
 const SettingsRowGroupContext = createContext(false);
+
+export * from "./options";
 
 export type SettingsWindowPage<PageId extends string = string> = {
   id: PageId;
@@ -42,53 +38,6 @@ export type VirtualizedSettingsWindowPage<PageId extends string = string> = {
   title: string;
   renderContent: () => ReactNode;
 };
-
-export type CreateSettingsWindowOptionsInput = Omit<WindowOptions, "windowStyle" | "transparentBackground"> & {
-  initialPage?: string;
-  windowStyle?: WindowOptions["windowStyle"];
-  transparentBackground?: boolean;
-};
-
-export function createSettingsWindowOptions({
-  initialPage,
-  title = "Settings",
-  transparentBackground = true,
-  windowStyle,
-  ...options
-}: CreateSettingsWindowOptionsInput = {}): WindowOptions {
-  const initialProperties = initialPage || options.initialProperties
-    ? {
-        ...(options.initialProperties ?? {}),
-        ...(initialPage ? { initialPage } : {}),
-      }
-    : undefined;
-
-  return {
-    ...options,
-    initialProperties,
-    title,
-    transparentBackground,
-    windowStyle: {
-      hasToolbar: true,
-      height: SETTINGS_WINDOW_DEFAULT_HEIGHT,
-      mask: [
-        WindowStyleMask.Titled,
-        WindowStyleMask.Closable,
-        WindowStyleMask.Resizable,
-        WindowStyleMask.FullSizeContentView,
-        WindowStyleMask.UnifiedTitleAndToolbar,
-      ],
-      minHeight: SETTINGS_WINDOW_MIN_HEIGHT,
-      minWidth: SETTINGS_WINDOW_MIN_WIDTH,
-      titlebarAppearsTransparent: true,
-      titlebarSeparatorStyle: "none",
-      titleVisibility: "visible",
-      toolbarStyle: "unified",
-      width: SETTINGS_WINDOW_DEFAULT_WIDTH,
-      ...(windowStyle ?? {}),
-    },
-  };
-}
 
 type SettingsWindowProps<PageId extends string = string> = {
   appearance?: SidebarSplitViewAppearance;

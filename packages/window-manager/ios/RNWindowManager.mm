@@ -35,7 +35,28 @@ static inline NSAppearance *LegendDarkAppearance()
 
 static void LegendWindowOpenTiming(NSString *event, NSDictionary *payload)
 {
-  NSLog(@"[WindowOpenTiming] %@ %@", event, payload ?: @{});
+#if DEBUG
+  NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"";
+  if (![bundleIdentifier isEqualToString:@"so.legend.diff.macos"]) {
+    return;
+  }
+
+  static os_log_t log = os_log_create("so.legend.diff.macos", "startup-diagnosis");
+  static NSUInteger sequence = 0;
+  sequence += 1;
+  NSData *jsonData = [NSJSONSerialization dataWithJSONObject:(payload ?: @{}) options:0 error:nil];
+  NSString *json = jsonData ? [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] : @"{}";
+  const long long timestamp = (long long)(NSDate.date.timeIntervalSince1970 * 1000.0);
+  NSString *message = [NSString stringWithFormat:@"%lld [DEBUG diff-startup-boundaries-v2] %@ {\"seq\":%lu,\"data\":%@}",
+                       timestamp,
+                       event,
+                       (unsigned long)sequence,
+                       json ?: @"{}"];
+  os_log_with_type(log, OS_LOG_TYPE_DEFAULT, "%{public}@", message);
+#else
+  (void)event;
+  (void)payload;
+#endif
 }
 
 static void LegendWindowMemoryLog(NSString *event, NSDictionary *payload)
@@ -1620,6 +1641,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
     BOOL hasToolbar = [windowStyle[@"hasToolbar"] boolValue];
     NSWindow *existingWindow = (NSWindow *)self.windows[identifier];
+    CFAbsoluteTime nativeOpenStartedAt = CFAbsoluteTimeGetCurrent();
     LegendWindowOpenTiming(@"native.open.start", @{
       @"identifier": identifier ?: @"",
       @"moduleName": moduleName ?: @"",
@@ -1769,10 +1791,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSUInteger styleMask = maskNumber
       ? maskNumber.unsignedIntegerValue
       : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable);
+    CFAbsoluteTime windowCreateStartedAt = CFAbsoluteTimeGetCurrent();
     NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
+    CFAbsoluteTime windowAllocatedAt = CFAbsoluteTimeGetCurrent();
     LegendApplyContentLayoutModeOption(window, contentLayoutMode);
     LegendApplyContentLayoutMode(window, maskNumber, usesTitlebarBackground);
 
@@ -1795,11 +1819,16 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     LegendApplyToolbarStyle(window, toolbarStyle);
     LegendApplyTitlebarSeparatorStyle(window, titlebarSeparatorStyle);
+    CFAbsoluteTime titlebarControlsStartedAt = CFAbsoluteTimeGetCurrent();
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:identifier];
+    CFAbsoluteTime titlebarControlsFinishedAt = CFAbsoluteTimeGetCurrent();
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:identifier];
+    CFAbsoluteTime toolbarItemsFinishedAt = CFAbsoluteTimeGetCurrent();
     [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:identifier];
-    LegendApplyWindowAppearance(window, appearance);
+    CFAbsoluteTime titlebarMaterialFinishedAt = CFAbsoluteTimeGetCurrent();
+    CFAbsoluteTime postAppearanceDisplayFinishedAt = CFAbsoluteTimeGetCurrent();
     LegendApplyWindowBackgroundColor(window, backgroundColor);
+    CFAbsoluteTime postAppearanceFinishedAt = CFAbsoluteTimeGetCurrent();
     if (levelNumber) {
       window.level = levelNumber.integerValue;
     }
@@ -1809,6 +1838,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
         [window invalidateShadow];
       }
     }
+    CFAbsoluteTime postWindowFlagsFinishedAt = CFAbsoluteTimeGetCurrent();
     if (transparentBackground) {
       window.opaque = NO;
       if (!hasToolbar) {
@@ -1817,6 +1847,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       window.contentView.wantsLayer = YES;
       window.contentView.layer.masksToBounds = NO;
     }
+    CFAbsoluteTime postTransparencyFinishedAt = CFAbsoluteTimeGetCurrent();
 
     if (originX || originY) {
       NSPoint origin = window.frame.origin;
@@ -1830,12 +1861,34 @@ willBeInsertedIntoToolbar:(BOOL)flag
     } else {
       [window center];
     }
+    CFAbsoluteTime positioningFinishedAt = CFAbsoluteTimeGetCurrent();
 
     if (hasMinWidth || hasMinHeight) {
       NSSize currentMinSize = window.minSize;
       [window setMinSize:NSMakeSize(hasMinWidth ? minWidth : currentMinSize.width,
                                     hasMinHeight ? minHeight : currentMinSize.height)];
     }
+
+    CFAbsoluteTime beforeRootViewAt = CFAbsoluteTimeGetCurrent();
+    LegendWindowOpenTiming(@"native.open.chrome.summary", @{
+      @"baseStyleMs": @((titlebarControlsStartedAt - windowAllocatedAt) * 1000.0),
+      @"identifier": identifier ?: @"",
+      @"minSizeMs": @((beforeRootViewAt - positioningFinishedAt) * 1000.0),
+      @"positioningMs": @((positioningFinishedAt - postTransparencyFinishedAt) * 1000.0),
+      @"postAppearanceBackgroundMs": @((postAppearanceFinishedAt - postAppearanceDisplayFinishedAt) * 1000.0),
+      @"postAppearanceDisplayMs": @((postAppearanceDisplayFinishedAt - titlebarMaterialFinishedAt) * 1000.0),
+      @"postAppearanceMs": @((postAppearanceFinishedAt - titlebarMaterialFinishedAt) * 1000.0),
+      @"postStyleMs": @((beforeRootViewAt - titlebarMaterialFinishedAt) * 1000.0),
+      @"postTransparencyMs": @((postTransparencyFinishedAt - postWindowFlagsFinishedAt) * 1000.0),
+      @"postWindowFlagsMs": @((postWindowFlagsFinishedAt - postAppearanceFinishedAt) * 1000.0),
+      @"preAllocationMs": @((windowCreateStartedAt - nativeOpenStartedAt) * 1000.0),
+      @"titlebarControlsMs": @((titlebarControlsFinishedAt - titlebarControlsStartedAt) * 1000.0),
+      @"titlebarMaterialMs": @((titlebarMaterialFinishedAt - toolbarItemsFinishedAt) * 1000.0),
+      @"toolbarItemCount": @([windowStyle[@"toolbarItems"] isKindOfClass:NSArray.class] ? [windowStyle[@"toolbarItems"] count] : 0),
+      @"toolbarItemsMs": @((toolbarItemsFinishedAt - titlebarControlsFinishedAt) * 1000.0),
+      @"totalBeforeRootMs": @((beforeRootViewAt - nativeOpenStartedAt) * 1000.0),
+      @"windowAllocationMs": @((windowAllocatedAt - windowCreateStartedAt) * 1000.0),
+    });
 
 	    NSDictionary *initialProps = [self initialPropsFromOptions:options];
 	    LegendWindowOpenTiming(@"native.open.createWindow.start", @{
@@ -2089,6 +2142,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
 {
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
+    CFAbsoluteTime startedAt = CFAbsoluteTimeGetCurrent();
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
     NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
@@ -2097,12 +2151,30 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
+    CFAbsoluteTime parsedAt = CFAbsoluteTimeGetCurrent();
     LegendApplyWindowOptions(window, options);
+    CFAbsoluteTime baseOptionsAppliedAt = CFAbsoluteTimeGetCurrent();
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
+    CFAbsoluteTime titlebarControlsAppliedAt = CFAbsoluteTimeGetCurrent();
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
+    CFAbsoluteTime toolbarItemsAppliedAt = CFAbsoluteTimeGetCurrent();
     [self applyTitlebarMaterialFromOptions:options toWindow:window identifier:targetIdentifier];
+    CFAbsoluteTime titlebarMaterialAppliedAt = CFAbsoluteTimeGetCurrent();
     RCTUIView *rootView = self.rootViews[targetIdentifier];
     LegendSizeRootViewToWindow(rootView, window);
+    CFAbsoluteTime finishedAt = CFAbsoluteTimeGetCurrent();
+    NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+    LegendWindowOpenTiming(@"native.setWindowOptions.summary", @{
+      @"applyBaseMs": @((baseOptionsAppliedAt - parsedAt) * 1000.0),
+      @"identifier": targetIdentifier,
+      @"parseMs": @((parsedAt - startedAt) * 1000.0),
+      @"sizeRootMs": @((finishedAt - titlebarMaterialAppliedAt) * 1000.0),
+      @"titlebarControlsMs": @((titlebarControlsAppliedAt - baseOptionsAppliedAt) * 1000.0),
+      @"titlebarMaterialMs": @((titlebarMaterialAppliedAt - toolbarItemsAppliedAt) * 1000.0),
+      @"toolbarItemCount": @([windowStyle[@"toolbarItems"] isKindOfClass:NSArray.class] ? [windowStyle[@"toolbarItems"] count] : 0),
+      @"toolbarItemsMs": @((toolbarItemsAppliedAt - titlebarControlsAppliedAt) * 1000.0),
+      @"totalMs": @((finishedAt - startedAt) * 1000.0),
+    });
     resolve([self successJson]);
   });
 #else

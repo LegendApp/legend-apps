@@ -4,6 +4,16 @@
   "private": true,
   "main": "src/index.tsx",
   "react-native": "src/index.tsx",
+  "exports": {
+    ".": {
+      "react-native": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    },
+    "./values": {
+      "react-native": "./src/values.ts",
+      "default": "./src/values.ts"
+    }
+  },
   "dependencies": {
     "@legend-apps/design-system": "workspace:*",
     "@legend-apps/settings-window": "0.0.0",

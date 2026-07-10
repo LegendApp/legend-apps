@@ -14,7 +14,7 @@ namespace margelo::nitro::legendapps::diffparser {
 namespace {
 
 #if DEBUG
-constexpr const char* startupDebugId = "diff-startup-candidates-v1";
+constexpr const char* startupDebugId = "diff-startup-boundaries-v2";
 std::atomic<uint64_t> startupSequence{0};
 
 uint64_t epochMilliseconds() {

@@ -21,6 +21,7 @@ export type CommandRunnerResult = {
 export type CommandRunner = {
   getAvailability(commands: string[]): Promise<CommandAvailability>;
   runCommand(params: CommandRunnerParams): Promise<CommandRunnerResult>;
+  runCommands(params: CommandRunnerParams[]): Promise<CommandRunnerResult[]>;
 };
 
 const unavailableError = new Error("CommandRunner native module is not available");
@@ -31,6 +32,15 @@ function safeParseObject<T extends object>(value: string, fallback: T): T {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as T) : fallback;
   } catch {
     return fallback;
+  }
+}
+
+function safeParseArray<T>(value: string): T[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as T[] : [];
+  } catch {
+    return [];
   }
 }
 
@@ -70,6 +80,17 @@ export const commandRunner: CommandRunner = {
     const result = await NativeCommandRunner.runCommand(JSON.stringify(params));
     return normalizeCommandRunnerResult(result);
   },
+  async runCommands(params) {
+    if (params.length === 0) {
+      return [];
+    }
+    if (!NativeCommandRunner || Platform.OS !== "macos") {
+      throw unavailableError;
+    }
+
+    const result = await NativeCommandRunner.runCommands(JSON.stringify(params));
+    return safeParseArray<unknown>(result).map((value) => normalizeCommandRunnerResult(JSON.stringify(value)));
+  },
 };
 
 export function createMockCommandRunner({
@@ -79,20 +100,25 @@ export function createMockCommandRunner({
   availability?: CommandAvailability;
   run?: (params: CommandRunnerParams) => Promise<CommandRunnerResult> | CommandRunnerResult;
 } = {}): CommandRunner {
+  const runCommand = async (params: CommandRunnerParams) => {
+    if (run) {
+      return run(params);
+    }
+    return {
+      stdout: params.input ?? params.args?.join(" ") ?? "",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    };
+  };
+
   return {
     async getAvailability(commands) {
       return Object.fromEntries(normalizeCommands(commands).map((command) => [command, Boolean(availability[command])]));
     },
-    async runCommand(params) {
-      if (run) {
-        return run(params);
-      }
-      return {
-        stdout: params.input ?? params.args?.join(" ") ?? "",
-        stderr: "",
-        exitCode: 0,
-        timedOut: false,
-      };
+    runCommand,
+    async runCommands(params) {
+      return Promise.all(params.map(runCommand));
     },
   };
 }

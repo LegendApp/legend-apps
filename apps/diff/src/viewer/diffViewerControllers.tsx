@@ -273,6 +273,11 @@ export function DiffWindowChromeController({
       lastToolbarModelRef.current = toolbarModel;
       lastCompareRepoStateKeyRef.current = compareRepoStateKey;
       const startedAt = nowMs();
+      logDiffOpenTiming("viewer.toolbarOptions.start", () => ({
+        hasCompareRepoState: compareRepoState !== null,
+        observe,
+        source: toolbarModel.source,
+      }));
       setDiffViewerWindowToolbarOptions({
         compareRepoState,
         hasUnsavedMergeDrafts: toolbarModel.hasUnsavedMergeDrafts,

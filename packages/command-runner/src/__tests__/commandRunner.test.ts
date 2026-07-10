@@ -5,6 +5,7 @@ type CommandRunnerModule = typeof import("../index");
 function loadCommandRunnerWithNative(nativeModule: {
   getAvailability?: jest.Mock;
   runCommand?: jest.Mock;
+  runCommands?: jest.Mock;
 }) {
   jest.resetModules();
   jest.doMock("react-native", () => ({
@@ -35,6 +36,10 @@ describe("commandRunner", () => {
     await expect(commandRunner.runCommand({ command: "echo" })).rejects.toThrow(
       "CommandRunner native module is not available",
     );
+  });
+
+  it("returns an empty batch without the native module", async () => {
+    await expect(commandRunner.runCommands([])).resolves.toEqual([]);
   });
 
   it("serializes normalized command availability requests", async () => {
@@ -125,6 +130,33 @@ describe("commandRunner", () => {
       timedOut: false,
     });
   });
+
+  it("serializes command batches and normalizes every result", async () => {
+    const nativeModule = {
+      runCommands: jest.fn(async () => JSON.stringify([
+        { stdout: "one", stderr: "", exitCode: 0, timedOut: false },
+        { stdout: 2, stderr: "err", exitCode: "1", timedOut: false },
+      ])),
+    };
+    const { commandRunner: nativeCommandRunner } = loadCommandRunnerWithNative(nativeModule);
+    const params = [{ command: "one" }, { command: "two" }];
+
+    await expect(nativeCommandRunner.runCommands(params)).resolves.toEqual([
+      { stdout: "one", stderr: "", exitCode: 0, timedOut: false },
+      { stdout: "", stderr: "err", exitCode: -1, timedOut: false },
+    ]);
+    expect(nativeModule.runCommands).toHaveBeenCalledWith(JSON.stringify(params));
+  });
+
+  it("does not call native for an empty command batch", async () => {
+    const nativeModule = {
+      runCommands: jest.fn(),
+    };
+    const { commandRunner: nativeCommandRunner } = loadCommandRunnerWithNative(nativeModule);
+
+    await expect(nativeCommandRunner.runCommands([])).resolves.toEqual([]);
+    expect(nativeModule.runCommands).not.toHaveBeenCalled();
+  });
 });
 
 describe("createMockCommandRunner", () => {
@@ -175,5 +207,21 @@ describe("createMockCommandRunner", () => {
       exitCode: 0,
       timedOut: false,
     });
+  });
+
+  it("runs mock command batches with the configured runner", async () => {
+    const runner = createMockCommandRunner({
+      run: (params) => ({
+        stdout: params.command,
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      }),
+    });
+
+    await expect(runner.runCommands([{ command: "one" }, { command: "two" }])).resolves.toEqual([
+      expect.objectContaining({ stdout: "one" }),
+      expect.objectContaining({ stdout: "two" }),
+    ]);
   });
 });

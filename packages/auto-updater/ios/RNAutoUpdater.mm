@@ -14,7 +14,7 @@ static void LogDiffStartupAutoUpdater(NSString *event, NSDictionary *payload)
   static NSUInteger sequence = 0;
   sequence += 1;
   const long long timestamp = (long long)(NSDate.date.timeIntervalSince1970 * 1000.0);
-  NSString *message = [NSString stringWithFormat:@"%lld [DEBUG diff-startup-candidates-v1] %@ {\"seq\":%lu,\"data\":%@}",
+  NSString *message = [NSString stringWithFormat:@"%lld [DEBUG diff-startup-boundaries-v2] %@ {\"seq\":%lu,\"data\":%@}",
                        timestamp,
                        event,
                        (unsigned long)sequence,

@@ -1,4 +1,5 @@
 import { commandRunner } from "@legend-apps/command-runner";
+import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";
@@ -241,47 +242,68 @@ export function getDiffCompareToolbarModel(
   };
 }
 
-async function runGitValue(repoPath: string, args: string[]) {
-  const result = await commandRunner.runCommand({
-    args,
-    command: "git",
-    cwd: repoPath,
-    timeoutMs: 5_000,
-  });
-  return result.exitCode === 0 ? result.stdout.trim() || null : null;
-}
+const gitRefFormat = "%(refname)%09%(HEAD)%09%(upstream:short)%09%(symref:short)";
+const localRefPrefix = "refs/heads/";
+const remoteRefPrefix = "refs/remotes/";
 
-async function runGitLines(repoPath: string, args: string[]) {
-  const value = await runGitValue(repoPath, args);
-  return value ? value.split("\n").map((line) => line.trim()).filter(Boolean) : [];
-}
+export function parseDiffCompareRepoRefs(value: string | null) {
+  let currentBranch: string | null = null;
+  let defaultBranch: string | null = null;
+  let upstreamBranch: string | null = null;
+  const localBranches: string[] = [];
+  const remoteBranches: string[] = [];
 
-export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCompareRepoState> {
-  const [
-    currentBranch,
-    upstreamBranch,
-    defaultBranchRaw,
-    localBranchRefs,
-    remoteBranchRefs,
-    remoteNames,
-  ] = await Promise.all([
-    runGitValue(repoPath, ["branch", "--show-current"]),
-    runGitValue(repoPath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]),
-    runGitValue(repoPath, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]),
-    runGitLines(repoPath, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]),
-    runGitLines(repoPath, ["for-each-ref", "--format=%(refname:short)", "refs/remotes"]),
-    runGitLines(repoPath, ["remote"]),
-  ]);
+  for (const line of value?.split("\n") ?? []) {
+    const [refName = "", head = "", upstream = "", symref = ""] = line.split("\t");
+    if (refName.startsWith(localRefPrefix)) {
+      const branch = refName.slice(localRefPrefix.length);
+      localBranches.push(branch);
+      if (head === "*") {
+        currentBranch = branch;
+        upstreamBranch = upstream || null;
+      }
+    } else if (refName.startsWith(remoteRefPrefix)) {
+      const branch = refName.slice(remoteRefPrefix.length);
+      remoteBranches.push(branch);
+      if (refName === "refs/remotes/origin/HEAD") {
+        defaultBranch = symref || null;
+      }
+    }
+  }
 
-  const defaultBranch = defaultBranchRaw?.replace(/^origin\/HEAD$/, "") || stripRemoteHead(defaultBranchRaw ?? "");
   return {
     currentBranch,
     defaultBranch,
-    localBranches: uniqueValues(localBranchRefs),
-    remoteBranches: uniqueValues(remoteBranchRefs),
+    localBranches: uniqueValues(localBranches),
+    remoteBranches: uniqueValues(remoteBranches),
+    upstreamBranch,
+  };
+}
+
+export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCompareRepoState> {
+  const startedAt = globalThis.performance?.now?.() ?? Date.now();
+  const commands = [
+    { args: ["for-each-ref", `--format=${gitRefFormat}`, "refs/heads", "refs/remotes"], command: "git", cwd: repoPath, timeoutMs: 5_000 },
+    { args: ["remote"], command: "git", cwd: repoPath, timeoutMs: 5_000 },
+  ];
+  logDiffOpenTiming("viewer.compareRepoState.batch.start", () => ({
+    commandCount: commands.length,
+  }));
+  const [refsResult, remotesResult] = await commandRunner.runCommands(commands);
+  logDiffOpenTiming("viewer.compareRepoState.batch.finish", () => ({
+    commandCount: commands.length,
+    durationMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - startedAt).toFixed(1)),
+  }));
+  const refsValue = refsResult.exitCode === 0 ? refsResult.stdout.trim() || null : null;
+  const remoteNames = remotesResult.exitCode === 0
+    ? remotesResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean)
+    : [];
+  const refs = parseDiffCompareRepoRefs(refsValue);
+
+  return {
+    ...refs,
     remoteNames: uniqueValues(remoteNames),
     repoPath,
-    upstreamBranch,
   };
 }
 
