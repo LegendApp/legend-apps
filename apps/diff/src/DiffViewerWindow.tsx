@@ -796,64 +796,50 @@ function createDiffRowRenderState(
   state$: Observable<DiffViewerState>,
   collapsedFileIndexes$: Observable<Set<number>>,
 ) {
-  const document$ = computed<DiffDocument | null>(() => getCurrentLoadedDiffState(state$)?.document ?? null);
-  const documentId$ = computed<number>(() => getCurrentLoadedDiffState(state$)?.document.documentId ?? 0);
-  const collapsedFileIndexList$ = computed<readonly number[]>(() => getCurrentCollapsedFileIndexList(collapsedFileIndexes$));
-  const collapsedFileIndexesKey$ = computed<string>(() => collapsedFileIndexList$.get().join(","));
-  const fileByIndex$ = computed<ReadonlyMap<number, DiffFileSummary>>(() => {
-    const currentState = getCurrentLoadedDiffState(state$);
-    return currentState ? createFileByIndex(currentState.files) : new Map<number, DiffFileSummary>();
-  });
-  const fileByRowStart$ = computed<ReadonlyMap<number, DiffFileSummary>>(() => {
-    const currentState = getCurrentLoadedDiffState(state$);
-    return currentState ? createFileByRowStart(currentState.files) : new Map<number, DiffFileSummary>();
-  });
-  const fileHeaderRowIndexes$ = computed<ReadonlySet<number>>(() => {
-    const currentState = getCurrentLoadedDiffState(state$);
-    return currentState ? createFileHeaderRowIndexes(currentState.files) : new Set<number>();
-  });
-  const sideBySideRowCount$ = computed<number>(() => {
-    const document = getCurrentLoadedDiffState(state$)?.document;
-    const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
-    return document
-      ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
-      : 0;
-  });
-  const sideBySideLayoutMetadata$ = computed(() => {
-    const document = getCurrentLoadedDiffState(state$)?.document;
-    const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
-    return document
-      ? getBoundedSideBySideLayoutMetadata(document, sideBySideRowCount$.get(), collapsedFileIndexList)
-      : {
-          fileHeaders: [],
-          hunkHeaderIndexes: new Set<number>(),
-        };
-  });
-  const sideBySideFileHeaderByListIndex$ = computed<ReadonlyMap<number, DiffSideBySideFileHeader>>(() => (
-    createSideBySideFileHeaderByListIndex(sideBySideLayoutMetadata$.get().fileHeaders)
-  ));
-  const sideBySideConfigId$ = computed<string>(() => `diff:${documentId$.get()}:blocks`);
-  const unifiedConfigId$ = computed<string>(() => `diff:${documentId$.get()}:unified`);
-
   return {
     document: {
-      collapsedFileIndexList: collapsedFileIndexList$,
-      current: document$,
-      fileByIndex: fileByIndex$,
-      fileByRowStart: fileByRowStart$,
-      fileHeaderRowIndexes: fileHeaderRowIndexes$,
-      sideBySideFileHeaderByListIndex: sideBySideFileHeaderByListIndex$,
-      sideBySideRowCount: sideBySideRowCount$,
+      collapsedFileIndexList: () => getCurrentCollapsedFileIndexList(collapsedFileIndexes$),
+      current: () => getCurrentLoadedDiffState(state$)?.document ?? null,
+      fileByIndex: () => {
+        const currentState = getCurrentLoadedDiffState(state$);
+        return currentState ? createFileByIndex(currentState.files) : new Map<number, DiffFileSummary>();
+      },
+      fileByRowStart: () => {
+        const currentState = getCurrentLoadedDiffState(state$);
+        return currentState ? createFileByRowStart(currentState.files) : new Map<number, DiffFileSummary>();
+      },
+      fileHeaderRowIndexes: () => {
+        const currentState = getCurrentLoadedDiffState(state$);
+        return currentState ? createFileHeaderRowIndexes(currentState.files) : new Set<number>();
+      },
+      sideBySideFileHeaderByListIndex: () => {
+        const document = getCurrentLoadedDiffState(state$)?.document;
+        const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
+        const rowCount = document
+          ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
+          : 0;
+        const layoutMetadata = document
+          ? getBoundedSideBySideLayoutMetadata(document, rowCount, collapsedFileIndexList)
+          : { fileHeaders: [] };
+        return createSideBySideFileHeaderByListIndex(layoutMetadata.fileHeaders);
+      },
+      sideBySideRowCount: () => {
+        const document = getCurrentLoadedDiffState(state$)?.document;
+        const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
+        return document
+          ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
+          : 0;
+      },
     },
     nativeRows: {
-      sideBySideConfigId: sideBySideConfigId$,
-      sideBySideConfigVersion: computed<number>(() => {
+      sideBySideConfigId: () => `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:blocks`,
+      sideBySideConfigVersion: () => {
         const settings = diffRenderSettings$.get();
         const palette = getDiffRowPalette(settings.syntaxTheme.appearance);
         const dividerColor = getSideBySideDividerColor(settings.syntaxTheme.appearance);
         return hashDiffNativeRowConfigVersion([
-          sideBySideConfigId$.get(),
-          collapsedFileIndexesKey$.get(),
+          `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:blocks`,
+          getCurrentCollapsedFileIndexList(collapsedFileIndexes$).join(","),
           dividerColor,
           diffSideBySideLineNumberWidth,
           diffSideBySideMarkerWidth,
@@ -869,13 +855,13 @@ function createDiffRowRenderState(
           settings.syntaxHighlightingEnabled,
           settings.syntaxThemeName,
         ]);
-      }),
-      unifiedConfigId: unifiedConfigId$,
-      unifiedConfigVersion: computed<number>(() => {
+      },
+      unifiedConfigId: () => `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:unified`,
+      unifiedConfigVersion: () => {
         const settings = diffRenderSettings$.get();
         const palette = getDiffRowPalette(settings.syntaxTheme.appearance);
         return hashDiffNativeRowConfigVersion([
-          unifiedConfigId$.get(),
+          `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:unified`,
           diffUnifiedChangeBarWidth,
           diffUnifiedLineNumberWidth,
           diffUnifiedMarkerWidth,
@@ -891,47 +877,47 @@ function createDiffRowRenderState(
           settings.syntaxHighlightingEnabled,
           settings.syntaxThemeName,
         ]);
-      }),
+      },
     },
     presentation: {
-      borderColor: computed<string>(() => diffRenderSettings$.get().diffPalette.border),
-      fileHeaderBackgroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.fileHeaderBackground),
-      fontFamily: computed<string>(() => diffRenderSettings$.get().fontFamily),
-      fontSize: computed<number>(() => diffRenderSettings$.get().fontSize),
-      foregroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.foreground),
-      hunkHeaderBackgroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.hunkHeaderBackground),
-      mutedColor: computed<string>(() => diffRenderSettings$.get().diffPalette.muted),
-      rowHeight: computed<number>(() => diffRenderSettings$.get().rowHeight),
-      showOnlyHunks: computed<boolean>(() => diffRenderSettings$.get().showOnlyHunks),
-      syntaxAppearance: computed<"dark" | "light">(() => diffRenderSettings$.get().syntaxTheme.appearance),
-      syntaxHighlightingEnabled: computed<boolean>(() => diffRenderSettings$.get().syntaxHighlightingEnabled),
-      syntaxThemeName: computed<string>(() => diffRenderSettings$.get().syntaxThemeName),
+      borderColor: () => diffRenderSettings$.get().diffPalette.border,
+      fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
+      fontFamily: () => diffRenderSettings$.get().fontFamily,
+      fontSize: () => diffRenderSettings$.get().fontSize,
+      foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
+      hunkHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.hunkHeaderBackground,
+      mutedColor: () => diffRenderSettings$.get().diffPalette.muted,
+      rowHeight: () => diffRenderSettings$.get().rowHeight,
+      showOnlyHunks: () => diffRenderSettings$.get().showOnlyHunks,
+      syntaxAppearance: () => diffRenderSettings$.get().syntaxTheme.appearance,
+      syntaxHighlightingEnabled: () => diffRenderSettings$.get().syntaxHighlightingEnabled,
+      syntaxThemeName: () => diffRenderSettings$.get().syntaxThemeName,
     },
   };
 }
 
 function createDiffSidebarRenderState() {
   return {
-    conflictBadgeBackgroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeBackground),
-    conflictBadgeTextColor: computed<string>(() => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeText),
-    foregroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.foreground),
-    selectedBackgroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.sidebarSelectedBackground),
-    selectedBorderColor: computed<string>(() => diffRenderSettings$.get().diffPalette.sidebarSelectedBorder),
-    sidebarFolderColor: computed<string>(() => diffRenderSettings$.get().diffPalette.sidebarFolder),
+    conflictBadgeBackgroundColor: () => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeBackground,
+    conflictBadgeTextColor: () => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeText,
+    foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
+    selectedBackgroundColor: () => diffRenderSettings$.get().diffPalette.sidebarSelectedBackground,
+    selectedBorderColor: () => diffRenderSettings$.get().diffPalette.sidebarSelectedBorder,
+    sidebarFolderColor: () => diffRenderSettings$.get().diffPalette.sidebarFolder,
   };
 }
 
 function createDiffMergeRenderState() {
   return {
-    borderColor: computed<string>(() => diffRenderSettings$.get().diffPalette.border),
-    fileHeaderBackgroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.fileHeaderBackground),
-    fontFamily: computed<string>(() => diffRenderSettings$.get().fontFamily),
-    fontSize: computed<number>(() => diffRenderSettings$.get().fontSize),
-    foregroundColor: computed<string>(() => diffRenderSettings$.get().diffPalette.foreground),
-    mutedColor: computed<string>(() => diffRenderSettings$.get().diffPalette.muted),
-    primaryColor: computed<string>(() => diffRenderSettings$.get().diffPalette.primary),
-    rowHeight: computed<number>(() => diffRenderSettings$.get().rowHeight),
-    syntaxAppearance: computed<"dark" | "light">(() => diffRenderSettings$.get().syntaxTheme.appearance),
+    borderColor: () => diffRenderSettings$.get().diffPalette.border,
+    fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
+    fontFamily: () => diffRenderSettings$.get().fontFamily,
+    fontSize: () => diffRenderSettings$.get().fontSize,
+    foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
+    mutedColor: () => diffRenderSettings$.get().diffPalette.muted,
+    primaryColor: () => diffRenderSettings$.get().diffPalette.primary,
+    rowHeight: () => diffRenderSettings$.get().rowHeight,
+    syntaxAppearance: () => diffRenderSettings$.get().syntaxTheme.appearance,
   };
 }
 
