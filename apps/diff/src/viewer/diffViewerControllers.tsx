@@ -25,7 +25,7 @@ import {
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
   setDiffViewerWindowToolbarOptions,
-} from "../diffWindows";
+} from "../diffWindowControls";
 import {
   emptyDiffLoadProgressState,
   emptyDiffViewerState,

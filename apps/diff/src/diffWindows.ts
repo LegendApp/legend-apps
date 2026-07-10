@@ -1,168 +1,22 @@
 import { createSettingsWindowOptions } from "@legend-apps/settings-window";
-import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { createUnifiedToolbarWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
-import { focusToolbarSearchItem, setWindowOptions, showWindow, type WindowFrame } from "@legend-apps/window-manager";
+import { createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
+import type { WindowFrame } from "@legend-apps/window-manager";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,
   diffViewerWindowIdentifier,
   diffViewerWindowModuleName,
 } from "./appConstants";
-import { getDiffCompareToolbarModel, type DiffCompareRepoState } from "./diffCompareTargets";
 import { upsertSavedDiffWindow } from "./diffAppMetadata";
 import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { logDiffOpenTiming } from "./diffInstrumentation";
-import { getDiffPalette } from "./diffPalette";
-import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { DiffViewerWindowShell } from "./DiffViewerWindowShell";
-import { getDiffViewerWindowTitleVisibility } from "./diffWindowChrome";
+import { createDiffViewerWindowStyle } from "./diffWindowControls";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 
-export const diffViewModeToolbarItemId = "diff-view-mode";
-export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
-export const diffCompareToolbarItemId = "diff-compare-target";
-export const diffSearchToolbarItemId = "diff-global-search";
 let diffViewerUntitledWindowId = 0;
 let diffViewerUrlFocusRequestId = 0;
-const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
-  blocks: "rectangle.split.2x1",
-  unified: "rectangle.portrait",
-};
-
-function createDiffSidebarToolbarItem(sidebarCollapsed?: boolean) {
-  return {
-    bordered: true,
-    id: diffSidebarToolbarItemId,
-    label: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
-    placement: "leading" as const,
-    systemImageName: "sidebar.left",
-    tooltip: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
-    type: "button" as const,
-  };
-}
-
-function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffViewModeSetting()) {
-  return {
-    id: diffViewModeToolbarItemId,
-    label: "View Mode",
-    selectedValue,
-    segments: diffViewModeOptions.map((option) => ({
-      label: option.label,
-      systemImageName: diffViewModeToolbarIconByValue[option.value],
-      value: option.value,
-    })),
-    type: "segmented" as const,
-  };
-}
-
-function createDiffCompareToolbarItem(source: DiffOpenSource | null | undefined, repoState: DiffCompareRepoState | null) {
-  const compareModel = getDiffCompareToolbarModel(source, repoState);
-  return compareModel ? {
-    bordered: true,
-    id: diffCompareToolbarItemId,
-    label: compareModel.label,
-    menuItems: compareModel.menuItems,
-    systemImageName: "arrow.triangle.branch",
-    tooltip: compareModel.tooltip,
-    type: "menuButton" as const,
-    value: compareModel.activeSelection,
-  } : null;
-}
-
-function createDiffSearchToolbarItem() {
-  return {
-    collapses: true,
-    id: diffSearchToolbarItemId,
-    label: "Search",
-    placeholder: "Search diff or @files",
-    placement: "trailing" as const,
-    type: "search" as const,
-    width: 220,
-  };
-}
-
-function createDiffViewerToolbarItems({
-  showSidebarControl,
-  showViewModeToolbar,
-  compareRepoState,
-  sidebarCollapsed,
-  source,
-  viewMode,
-}: {
-  showSidebarControl?: boolean;
-  showViewModeToolbar?: boolean;
-  compareRepoState?: DiffCompareRepoState | null;
-  sidebarCollapsed?: boolean;
-  source?: DiffOpenSource | null;
-  viewMode?: DiffViewMode;
-}) {
-  const compareToolbarItem = showViewModeToolbar ? createDiffCompareToolbarItem(source, compareRepoState ?? null) : null;
-  return [
-    ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
-    ...(showViewModeToolbar ? [createDiffSearchToolbarItem()] : []),
-    ...(compareToolbarItem ? [compareToolbarItem] : []),
-    ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
-  ];
-}
-
-function createDiffViewerWindowStyle({
-  appearance,
-  includeFrame,
-  includeToolbarItems = true,
-  showSidebarControl,
-  showViewModeToolbar,
-  compareRepoState,
-  sidebarCollapsed,
-  source,
-  viewMode,
-}: {
-  appearance?: "dark" | "light";
-  includeFrame: boolean;
-  includeToolbarItems?: boolean;
-  showSidebarControl?: boolean;
-  showViewModeToolbar?: boolean;
-  compareRepoState?: DiffCompareRepoState | null;
-  sidebarCollapsed?: boolean;
-  source?: DiffOpenSource | null;
-  viewMode?: DiffViewMode;
-}) {
-  const syntaxTheme = getDiffSyntaxTheme();
-  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
-  const diffPalette = getDiffPalette(syntaxTheme, displayTheme.colors);
-
-  const windowStyle = createUnifiedToolbarWindowStyle({
-    appearance: appearance ?? syntaxTheme.appearance,
-    backgroundColor: diffPalette.background,
-    frame: {
-      width: 1180,
-      height: 780,
-      minWidth: 640,
-      minHeight: 460,
-    },
-    includeFrame,
-    miniaturizable: true,
-  });
-
-  return {
-    ...windowStyle,
-    contentLayoutMode: "fullSize" as const,
-    titleVisibility: getDiffViewerWindowTitleVisibility(showViewModeToolbar),
-    titlebarControls: [],
-    ...(includeToolbarItems
-      ? {
-          toolbarItems: createDiffViewerToolbarItems({
-            showSidebarControl,
-            showViewModeToolbar,
-            compareRepoState,
-            sidebarCollapsed,
-            source,
-            viewMode,
-          }),
-        }
-      : {}),
-  };
-}
 
 const diffWindowsConfig = {
   [diffViewerWindowModuleName]: {
@@ -284,68 +138,10 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
   });
 }
 
-export function showDiffViewerWindow(windowIdentifier: string) {
-  return showWindow(windowIdentifier);
-}
-
 export function prefetchDiffViewerWindow() {
   return DiffWindowsNavigator.prefetch(diffViewerWindowModuleName as DiffWindow);
 }
 
 export function openDiffSettingsWindow() {
   return DiffWindowsNavigator.open(diffSettingsWindowModuleName as DiffWindow);
-}
-
-export function setDiffViewerWindowAppearance({
-  appearance,
-  windowIdentifier,
-}: {
-  appearance: "dark" | "light";
-  windowIdentifier: string;
-}) {
-  return setWindowOptions(windowIdentifier, {
-    windowStyle: {
-      appearance,
-    },
-  });
-}
-
-export function setDiffViewerWindowToolbarOptions({
-  source,
-  compareRepoState,
-  hasUnsavedMergeDrafts,
-  showSidebarControl,
-  showViewModeToolbar,
-  sidebarCollapsed,
-  title,
-  viewMode,
-  windowIdentifier,
-}: {
-  source: DiffOpenSource | null;
-  compareRepoState: DiffCompareRepoState | null;
-  hasUnsavedMergeDrafts: boolean;
-  showSidebarControl: boolean;
-  showViewModeToolbar: boolean;
-  sidebarCollapsed: boolean;
-  title: string;
-  viewMode: DiffViewMode;
-  windowIdentifier: string;
-}) {
-  return setWindowOptions(windowIdentifier, {
-    representedURL: source?.value,
-    title,
-    windowStyle: createDiffViewerWindowStyle({
-      includeFrame: false,
-      showSidebarControl,
-      showViewModeToolbar,
-      compareRepoState,
-      sidebarCollapsed,
-      source,
-      viewMode,
-    }),
-  });
-}
-
-export function focusDiffSearchToolbarItem(windowIdentifier: string, value = "") {
-  return focusToolbarSearchItem(windowIdentifier, diffSearchToolbarItemId, value);
 }

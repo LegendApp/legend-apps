@@ -59,7 +59,7 @@ import { getDroppedDiffSource, getUnsupportedDropMessage } from "./diffDrop";
 import { getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "./filePairDiff";
 import { getDiffPalette } from "./diffPalette";
-import { focusDiffSearchToolbarItem, showDiffViewerWindow } from "./diffWindows";
+import { focusDiffSearchToolbarItem, showDiffViewerWindow } from "./diffWindowControls";
 import {
   createDiffMergeDraftFileWithResolvedBlock,
   createReadyMergeState,
