@@ -433,11 +433,11 @@ const DiffFileHeaderRow = memo(function DiffFileHeaderRow({
       ) : null}
       <View style={styles.fileTitleGroup}>
         {pathContext ? (
-          <Text selectable style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
+          <Text selectable={false} style={[styles.filePath, { color: mutedColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
             {pathContext}
           </Text>
         ) : null}
-        <Text selectable style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
+        <Text selectable={false} style={[styles.fileName, { color: foregroundColor, fontFamily, fontSize, lineHeight: fileHeaderLineHeight }]} numberOfLines={1}>
           {filename}
         </Text>
       </View>
