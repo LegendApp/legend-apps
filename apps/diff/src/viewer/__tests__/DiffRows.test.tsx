@@ -1,8 +1,14 @@
-import type { DiffFileSummary, DiffRenderRow, DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
+import type { DiffDocument, DiffFileSummary, DiffRenderRow, DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
 import { observable } from "@legendapp/state";
 import { render } from "@testing-library/react-native";
 import React from "react";
-import { DiffSideBySideRow, DiffUnifiedRow, type DiffRowRenderState } from "../DiffRows";
+import {
+  DiffSideBySideRow,
+  DiffUnifiedRow,
+  getDiffSideBySideHunkHeaderInfo,
+  getDiffUnifiedHunkHeaderInfo,
+  type DiffRowRenderState,
+} from "../DiffRows";
 import { diffChangeTypeAdd, diffChangeTypeRemove, diffRowKindFileHeader } from "../diffViewerConstants";
 
 function createFile(overrides: Partial<DiffFileSummary> = {}): DiffFileSummary {
@@ -291,5 +297,67 @@ describe("DiffRows", () => {
     expect(view.getByText("SidebarView.swift")).toBeTruthy();
     expect(view.queryByText("src/windows/")).toBeNull();
     expect(view.queryByText("index.ts")).toBeNull();
+  });
+
+  it("caches unified hunk line ranges for a stable document", () => {
+    const rows = Array.from({ length: 5_000 }, (_, index) => createRow({
+      index,
+      newLineNumber: index + 1,
+      oldLineNumber: index + 1,
+    }));
+    const getPlainRows = jest.fn((start: number, count: number) => rows.slice(start, start + count));
+    const document = {
+      getPlainRows,
+      rowCount: rows.length,
+    } as unknown as DiffDocument;
+
+    expect(getDiffUnifiedHunkHeaderInfo(document, 0, rows[0])).toEqual({
+      hunkNumber: 1,
+      lineLabel: "Lines 1-5000",
+    });
+    expect(getPlainRows).toHaveBeenCalledTimes(5_000);
+
+    expect(getDiffUnifiedHunkHeaderInfo(document, 0, rows[0])).toEqual({
+      hunkNumber: 1,
+      lineLabel: "Lines 1-5000",
+    });
+    expect(getPlainRows).toHaveBeenCalledTimes(5_000);
+  });
+
+  it("caches side-by-side hunk ranges for the active collapse state", () => {
+    const rows = Array.from({ length: 5_000 }, (_, index): DiffSideBySideRenderRow => {
+      const line = createRow({
+        index,
+        newLineNumber: index + 1,
+        oldLineNumber: index + 1,
+      });
+      return {
+        fileIndex: 0,
+        hunkIndex: 0,
+        index,
+        kind: "changed",
+        newRow: line,
+        newRowEqualsOldRow: true,
+        newRowVisible: true,
+        oldRow: line,
+        oldRowVisible: true,
+        sourceEnd: index + 1,
+        sourceStart: index,
+      };
+    });
+    const getPlainSideBySideRow = jest.fn((index: number) => rows[index]);
+    const document = { getPlainSideBySideRow } as unknown as DiffDocument;
+
+    expect(getDiffSideBySideHunkHeaderInfo(document, 0, [], rows.length, rows[0])).toEqual({
+      hunkNumber: 1,
+      lineLabel: "Lines 1-5000",
+    });
+    expect(getPlainSideBySideRow).toHaveBeenCalledTimes(5_000);
+
+    expect(getDiffSideBySideHunkHeaderInfo(document, 0, [], rows.length, rows[0])).toEqual({
+      hunkNumber: 1,
+      lineLabel: "Lines 1-5000",
+    });
+    expect(getPlainSideBySideRow).toHaveBeenCalledTimes(5_000);
   });
 });

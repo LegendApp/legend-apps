@@ -56,6 +56,19 @@ type DiffHunkHeaderInfo = {
   lineLabel: string;
 };
 
+type DiffHunkHeaderCacheEntry = {
+  fileIndex: number;
+  hunkIndex: number;
+  info: DiffHunkHeaderInfo;
+  rowCount: number;
+};
+
+const unifiedHunkHeaderCache = new WeakMap<DiffDocument, Map<number, DiffHunkHeaderCacheEntry>>();
+const sideBySideHunkHeaderCache = new WeakMap<DiffDocument, {
+  collapsedFileIndexesKey: string;
+  entries: Map<number, DiffHunkHeaderCacheEntry>;
+}>();
+
 type DiffHunkHeaderProps = {
   borderColor: string;
   fontFamily: string;
@@ -178,7 +191,25 @@ function getDiffLineRangeLabel(range: { maxNew: number; maxOld: number; minNew: 
 }
 
 export function getDiffUnifiedHunkHeaderInfo(document: DiffDocument | null, index: number, row?: DiffRenderRow): DiffHunkHeaderInfo | null {
-  if (!document || !row || !isDiffUnifiedHunkStart(document, index, row)) {
+  if (!document || !isRenderableHunkRow(row)) {
+    return null;
+  }
+
+  let cache = unifiedHunkHeaderCache.get(document);
+  if (!cache) {
+    cache = new Map();
+    unifiedHunkHeaderCache.set(document, cache);
+  }
+  const cached = cache.get(index);
+  if (
+    cached
+    && cached.fileIndex === row.fileIndex
+    && cached.hunkIndex === row.hunkIndex
+    && cached.rowCount === document.rowCount
+  ) {
+    return cached.info;
+  }
+  if (!isDiffUnifiedHunkStart(document, index, row)) {
     return null;
   }
 
@@ -197,10 +228,17 @@ export function getDiffUnifiedHunkHeaderInfo(document: DiffDocument | null, inde
     recordDiffLineRange(currentRow, range);
   }
 
-  return {
+  const info = {
     hunkNumber: row.hunkIndex + 1,
     lineLabel: getDiffLineRangeLabel(range),
   };
+  cache.set(index, {
+    fileIndex: row.fileIndex,
+    hunkIndex: row.hunkIndex,
+    info,
+    rowCount: document.rowCount,
+  });
+  return info;
 }
 
 export function isDiffSideBySideHunkStart(
@@ -239,7 +277,29 @@ export function getDiffSideBySideHunkHeaderInfo(
   rowCount: number,
   row?: DiffSideBySideRenderRow,
 ): DiffHunkHeaderInfo | null {
-  if (!document || !row || !isDiffSideBySideHunkStart(document, index, collapsedFileIndexList, row)) {
+  if (!document || !isRenderableHunkRow(row)) {
+    return null;
+  }
+
+  const collapsedFileIndexesKey = collapsedFileIndexList.join(",");
+  let cacheState = sideBySideHunkHeaderCache.get(document);
+  if (!cacheState || cacheState.collapsedFileIndexesKey !== collapsedFileIndexesKey) {
+    cacheState = {
+      collapsedFileIndexesKey,
+      entries: new Map(),
+    };
+    sideBySideHunkHeaderCache.set(document, cacheState);
+  }
+  const cached = cacheState.entries.get(index);
+  if (
+    cached
+    && cached.fileIndex === row.fileIndex
+    && cached.hunkIndex === row.hunkIndex
+    && cached.rowCount === rowCount
+  ) {
+    return cached.info;
+  }
+  if (!isDiffSideBySideHunkStart(document, index, collapsedFileIndexList, row)) {
     return null;
   }
 
@@ -259,10 +319,17 @@ export function getDiffSideBySideHunkHeaderInfo(
     recordSideBySideDiffLineRange(currentRow, range);
   }
 
-  return {
+  const info = {
     hunkNumber: row.hunkIndex + 1,
     lineLabel: getDiffLineRangeLabel(range),
   };
+  cacheState.entries.set(index, {
+    fileIndex: row.fileIndex,
+    hunkIndex: row.hunkIndex,
+    info,
+    rowCount,
+  });
+  return info;
 }
 
 const DiffHunkHeader = memo(function DiffHunkHeader({
