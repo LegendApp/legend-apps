@@ -185,6 +185,7 @@ protected:
 
 private:
   size_t getExternalMemorySizeLocked() const noexcept;
+  void compactCompletedStorageLocked();
   void appendStoredRowLocked(DiffRenderRow row);
   void appendChangedLineRunLocked(const DiffStoredRow& row, size_t rowIndex);
   DiffRenderRow renderRowLocked(size_t index) const;
