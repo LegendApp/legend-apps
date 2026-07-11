@@ -205,7 +205,9 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
 {
 #if DEBUG
   NSEventModifierFlags debugModifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-  BOOL isHunkNavigationKey = event.keyCode == kVK_ANSI_LeftBracket || event.keyCode == kVK_ANSI_RightBracket;
+  BOOL isKeyboardEvent = event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp;
+  BOOL isHunkNavigationKey = isKeyboardEvent &&
+      (event.keyCode == kVK_ANSI_LeftBracket || event.keyCode == kVK_ANSI_RightBracket);
   BOOL isHunkShortcut = event.type == NSEventTypeKeyDown &&
       (debugModifiers & NSEventModifierFlagCommand) == NSEventModifierFlagCommand &&
       isHunkNavigationKey;
