@@ -617,16 +617,40 @@ std::vector<double> HybridDiffDocument::getHunkRowIndexes() {
 }
 
 void HybridDiffDocument::appendStoredRowLocked(DiffRenderRow row) {
+  const auto validSignedValue = [](double value) {
+    return std::isfinite(value) &&
+        std::floor(value) == value &&
+        value >= std::numeric_limits<int32_t>::min() &&
+        value <= std::numeric_limits<int32_t>::max();
+  };
+  const auto validByteValue = [](double value) {
+    return std::isfinite(value) &&
+        std::floor(value) == value &&
+        value >= 0 &&
+        value <= std::numeric_limits<uint8_t>::max();
+  };
+  const bool validRow =
+      row.index == static_cast<double>(rows_.size()) &&
+      validByteValue(row.kind) &&
+      validSignedValue(row.fileIndex) &&
+      validSignedValue(row.hunkIndex) &&
+      validSignedValue(row.oldLineNumber) &&
+      validSignedValue(row.newLineNumber) &&
+      validByteValue(row.changeType) &&
+      row.text.size() <= std::numeric_limits<uint32_t>::max();
+  if (!validRow) {
+    throw std::overflow_error("Diff row exceeds compact storage limits");
+  }
+
   DiffStoredRow storedRow;
-  storedRow.index = row.index;
-  storedRow.kind = row.kind;
-  storedRow.fileIndex = row.fileIndex;
-  storedRow.hunkIndex = row.hunkIndex;
-  storedRow.oldLineNumber = row.oldLineNumber;
-  storedRow.newLineNumber = row.newLineNumber;
-  storedRow.changeType = row.changeType;
+  storedRow.kind = static_cast<uint8_t>(row.kind);
+  storedRow.fileIndex = static_cast<int32_t>(row.fileIndex);
+  storedRow.hunkIndex = static_cast<int32_t>(row.hunkIndex);
+  storedRow.oldLineNumber = static_cast<int32_t>(row.oldLineNumber);
+  storedRow.newLineNumber = static_cast<int32_t>(row.newLineNumber);
+  storedRow.changeType = static_cast<uint8_t>(row.changeType);
   storedRow.textOffset = rowText_.size();
-  storedRow.textLength = row.text.size();
+  storedRow.textLength = static_cast<uint32_t>(row.text.size());
   rowText_.append(row.text);
   const bool startsHunk = storedRow.kind == diffRowKindLine
       && storedRow.hunkIndex >= 0
@@ -653,8 +677,8 @@ void HybridDiffDocument::appendChangedLineRunLocked(const DiffStoredRow& row, si
       changedLineBlocks_.push_back(DiffChangedLineBlock{
           .rowStart = rowIndex,
           .rowEnd = rowIndex,
-          .fileIndex = row.fileIndex,
-          .hunkIndex = row.hunkIndex,
+          .fileIndex = static_cast<double>(row.fileIndex),
+          .hunkIndex = static_cast<double>(row.hunkIndex),
       });
     }
 
@@ -755,11 +779,11 @@ DiffRenderRow HybridDiffDocument::renderRowLocked(size_t index) const {
   }
 
   const auto& row = rows_[index];
-  const auto textOffset = std::min(rowText_.size(), row.textOffset);
+  const auto textOffset = std::min(rowText_.size(), static_cast<size_t>(row.textOffset));
   const auto textEnd = std::min(rowText_.size(), textOffset + row.textLength);
   const auto textLength = textEnd - textOffset;
   return DiffRenderRow(
-      row.index,
+      static_cast<double>(index),
       row.kind,
       row.fileIndex,
       row.hunkIndex,

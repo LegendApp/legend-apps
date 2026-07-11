@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <limits>
@@ -81,16 +82,17 @@ struct DiffTokenizationRange {
 };
 
 struct DiffStoredRow {
-  double index = 0;
-  double kind = 0;
-  double fileIndex = -1;
-  double hunkIndex = -1;
-  double oldLineNumber = -1;
-  double newLineNumber = -1;
-  double changeType = 0;
-  size_t textOffset = 0;
-  size_t textLength = 0;
+  uint64_t textOffset = 0;
+  uint32_t textLength = 0;
+  int32_t fileIndex = -1;
+  int32_t hunkIndex = -1;
+  int32_t oldLineNumber = -1;
+  int32_t newLineNumber = -1;
+  uint8_t kind = 0;
+  uint8_t changeType = 0;
 };
+
+static_assert(sizeof(DiffStoredRow) == 32);
 
 struct DiffChangedLineRun {
   size_t rowStart = 0;
