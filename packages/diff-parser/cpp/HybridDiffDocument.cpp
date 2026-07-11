@@ -14,6 +14,7 @@
 #include <iterator>
 #include <map>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
@@ -396,21 +397,29 @@ double getSideBySideSourceEnd(double oldRowIndex, double newRowIndex, double fal
 }
 
 DiffSideBySideLine createSideBySideLine(
-    double index,
     double kind,
     double fileIndex,
     double hunkIndex,
     double oldRowIndex,
     double newRowIndex) {
+  const double signedValues[] = {fileIndex, hunkIndex, oldRowIndex, newRowIndex};
+  for (const auto value : signedValues) {
+    if (
+        std::floor(value) != value ||
+        value < std::numeric_limits<int32_t>::min() ||
+        value > std::numeric_limits<int32_t>::max()) {
+      throw std::overflow_error("Side-by-side row index exceeds compact storage");
+    }
+  }
+  if (std::floor(kind) != kind || kind < 0 || kind > std::numeric_limits<uint8_t>::max()) {
+    throw std::overflow_error("Side-by-side row kind exceeds compact storage");
+  }
   return DiffSideBySideLine{
-      .index = index,
-      .kind = kind,
-      .fileIndex = fileIndex,
-      .hunkIndex = hunkIndex,
-      .sourceStart = getSideBySideSourceStart(oldRowIndex, newRowIndex, index),
-      .sourceEnd = getSideBySideSourceEnd(oldRowIndex, newRowIndex, index),
-      .oldRowIndex = oldRowIndex,
-      .newRowIndex = newRowIndex,
+      .fileIndex = static_cast<int32_t>(fileIndex),
+      .hunkIndex = static_cast<int32_t>(hunkIndex),
+      .oldRowIndex = static_cast<int32_t>(oldRowIndex),
+      .newRowIndex = static_cast<int32_t>(newRowIndex),
+      .kind = static_cast<uint8_t>(kind),
   };
 }
 
@@ -843,9 +852,10 @@ void HybridDiffDocument::ensureSideBySideLinesLocked(size_t minLineCount) {
       sideBySideLines_.clear();
     } else {
       auto eraseFrom = sideBySideLines_.end();
-      for (auto iterator = sideBySideLines_.begin(); iterator != sideBySideLines_.end(); ++iterator) {
-        if (iterator->sourceStart >= static_cast<double>(rebuildStart)) {
-          eraseFrom = iterator;
+      for (size_t index = 0; index < sideBySideLines_.size(); index += 1) {
+        const auto& line = sideBySideLines_[index];
+        if (getSideBySideSourceStart(line.oldRowIndex, line.newRowIndex, static_cast<double>(index)) >= static_cast<double>(rebuildStart)) {
+          eraseFrom = sideBySideLines_.begin() + static_cast<std::ptrdiff_t>(index);
           break;
         }
       }
@@ -856,7 +866,6 @@ void HybridDiffDocument::ensureSideBySideLinesLocked(size_t minLineCount) {
     const auto indexOffset = sideBySideLines_.size();
     sideBySideLines_.reserve(indexOffset + nextLines.size());
     for (auto& line : nextLines) {
-      line.index = static_cast<double>(sideBySideLines_.size());
       sideBySideLines_.push_back(std::move(line));
     }
 
@@ -1099,12 +1108,13 @@ std::vector<DiffSideBySideFileHeader> HybridDiffDocument::getSideBySideFileHeade
   fileHeaders.reserve(files_.size());
   size_t logicalIndex = 0;
 
-  for (const auto& line : sideBySideLines_) {
+  for (size_t sourceIndex = 0; sourceIndex < sideBySideLines_.size(); sourceIndex += 1) {
+    const auto& line = sideBySideLines_[sourceIndex];
     if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
       if (line.kind == sideBySideKindFileHeader) {
         fileHeaders.push_back(DiffSideBySideFileHeader(
             line.fileIndex,
-            line.sourceStart,
+            getSideBySideSourceStart(line.oldRowIndex, line.newRowIndex, static_cast<double>(sourceIndex)),
             static_cast<double>(logicalIndex)));
       }
       logicalIndex += 1;
@@ -1126,9 +1136,18 @@ double HybridDiffDocument::getSideBySideListIndexForSourceRow(
   ensureSideBySideLinesLocked();
   const auto collapsedFileIndexSet = createCollapsedFileIndexSet(collapsedFileIndexes);
   size_t logicalIndex = 0;
-  for (const auto& line : sideBySideLines_) {
+  for (size_t sourceIndex = 0; sourceIndex < sideBySideLines_.size(); sourceIndex += 1) {
+    const auto& line = sideBySideLines_[sourceIndex];
     if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
-      if (line.sourceStart <= safeSourceRowIndex && safeSourceRowIndex < line.sourceEnd) {
+      const auto sourceStart = getSideBySideSourceStart(
+          line.oldRowIndex,
+          line.newRowIndex,
+          static_cast<double>(sourceIndex));
+      const auto sourceEnd = getSideBySideSourceEnd(
+          line.oldRowIndex,
+          line.newRowIndex,
+          static_cast<double>(sourceIndex));
+      if (sourceStart <= safeSourceRowIndex && safeSourceRowIndex < sourceEnd) {
         return static_cast<double>(logicalIndex);
       }
       logicalIndex += 1;
@@ -1138,10 +1157,14 @@ double HybridDiffDocument::getSideBySideListIndexForSourceRow(
   return emptySideBySideRowIndex;
 }
 
-DiffSideBySideRenderRow HybridDiffDocument::createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows) {
+DiffSideBySideRenderRow HybridDiffDocument::createSideBySideRenderRow(
+    const DiffSideBySideLine& line,
+    double index,
+    double sourceFallbackIndex,
+    bool tokenizeRows) {
   const auto emptyRow = createEmptyRenderRow();
-  const auto oldRowIndex = static_cast<size_t>(std::max(0.0, line.oldRowIndex));
-  const auto newRowIndex = static_cast<size_t>(std::max(0.0, line.newRowIndex));
+  const auto oldRowIndex = static_cast<size_t>(std::max(0, line.oldRowIndex));
+  const auto newRowIndex = static_cast<size_t>(std::max(0, line.newRowIndex));
   const auto oldRowVisible = line.oldRowIndex >= 0 && oldRowIndex < rows_.size();
   const auto newRowVisible = line.newRowIndex >= 0 && newRowIndex < rows_.size();
   const auto newRowEqualsOldRow = oldRowVisible && newRowVisible && oldRowIndex == newRowIndex;
@@ -1171,8 +1194,8 @@ DiffSideBySideRenderRow HybridDiffDocument::createSideBySideRenderRow(const Diff
       sideBySideKindString(line.kind),
       line.fileIndex,
       line.hunkIndex,
-      line.sourceStart,
-      line.sourceEnd,
+      getSideBySideSourceStart(line.oldRowIndex, line.newRowIndex, sourceFallbackIndex),
+      getSideBySideSourceEnd(line.oldRowIndex, line.newRowIndex, sourceFallbackIndex),
       oldRowVisible,
       newRowVisible,
       newRowEqualsOldRow,
@@ -1192,23 +1215,40 @@ DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRowForIndex(
   if (!hasCollapsedFileIndexes(collapsedFileIndexSet)) {
     ensureSideBySideLinesLocked(safeIndex + 1);
     if (safeIndex < sideBySideLines_.size()) {
-      return createSideBySideRenderRow(sideBySideLines_[safeIndex], static_cast<double>(safeIndex), tokenizeRows);
+      return createSideBySideRenderRow(
+          sideBySideLines_[safeIndex],
+          static_cast<double>(safeIndex),
+          static_cast<double>(safeIndex),
+          tokenizeRows);
     }
-    return createSideBySideRenderRow(createSideBySideLine(index, sideBySideKindLine, -1, -1, -1, -1), index, tokenizeRows);
+    return createSideBySideRenderRow(
+        createSideBySideLine(sideBySideKindLine, -1, -1, -1, -1),
+        index,
+        index,
+        tokenizeRows);
   }
 
   ensureSideBySideLinesLocked();
   size_t logicalIndex = 0;
-  for (const auto& line : sideBySideLines_) {
+  for (size_t sourceIndex = 0; sourceIndex < sideBySideLines_.size(); sourceIndex += 1) {
+    const auto& line = sideBySideLines_[sourceIndex];
     if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
       if (logicalIndex == safeIndex) {
-        return createSideBySideRenderRow(line, static_cast<double>(logicalIndex), tokenizeRows);
+        return createSideBySideRenderRow(
+            line,
+            static_cast<double>(logicalIndex),
+            static_cast<double>(sourceIndex),
+            tokenizeRows);
       }
       logicalIndex += 1;
     }
   }
 
-  return createSideBySideRenderRow(createSideBySideLine(index, sideBySideKindLine, -1, -1, -1, -1), index, tokenizeRows);
+  return createSideBySideRenderRow(
+      createSideBySideLine(sideBySideKindLine, -1, -1, -1, -1),
+      index,
+      index,
+      tokenizeRows);
 }
 
 std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRowsForRange(
@@ -1231,17 +1271,26 @@ std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRowsForRan
     ensureSideBySideLinesLocked(safeStart + safeCount);
     const auto end = std::min(sideBySideLines_.size(), safeStart + safeCount);
     for (size_t index = safeStart; index < end; index += 1) {
-      rows.push_back(createSideBySideRenderRow(sideBySideLines_[index], static_cast<double>(index), tokenizeRows));
+      rows.push_back(createSideBySideRenderRow(
+          sideBySideLines_[index],
+          static_cast<double>(index),
+          static_cast<double>(index),
+          tokenizeRows));
     }
     return rows;
   }
 
   ensureSideBySideLinesLocked();
   size_t logicalIndex = 0;
-  for (const auto& line : sideBySideLines_) {
+  for (size_t sourceIndex = 0; sourceIndex < sideBySideLines_.size(); sourceIndex += 1) {
+    const auto& line = sideBySideLines_[sourceIndex];
     if (shouldIncludeSideBySideLine(line, collapsedFileIndexSet)) {
       if (logicalIndex >= safeStart && rows.size() < safeCount) {
-        rows.push_back(createSideBySideRenderRow(line, static_cast<double>(logicalIndex), tokenizeRows));
+        rows.push_back(createSideBySideRenderRow(
+            line,
+            static_cast<double>(logicalIndex),
+            static_cast<double>(sourceIndex),
+            tokenizeRows));
       }
       logicalIndex += 1;
       if (rows.size() >= safeCount) {

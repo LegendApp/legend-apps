@@ -65,15 +65,14 @@ std::shared_ptr<DiffBackingStore> createLocalRepoDiffBackingStore(
 std::shared_ptr<DiffBackingStore> createUnifiedDiffBackingStore();
 
 struct DiffSideBySideLine {
-  double index = 0;
-  double kind = 0;
-  double fileIndex = -1;
-  double hunkIndex = -1;
-  double sourceStart = 0;
-  double sourceEnd = 0;
-  double oldRowIndex = -1;
-  double newRowIndex = -1;
+  int32_t fileIndex = -1;
+  int32_t hunkIndex = -1;
+  int32_t oldRowIndex = -1;
+  int32_t newRowIndex = -1;
+  uint8_t kind = 0;
 };
+
+static_assert(sizeof(DiffSideBySideLine) == 20);
 
 struct DiffTokenizationRange {
   size_t start = 0;
@@ -209,7 +208,11 @@ private:
   void retainTokenizedRowsNearLocked(size_t start, size_t end);
   void releaseSourceCachesOutsideRowWindowLocked(size_t start, size_t end);
   void releaseAllSourceCachesLocked();
-  DiffSideBySideRenderRow createSideBySideRenderRow(const DiffSideBySideLine& line, double index, bool tokenizeRows);
+  DiffSideBySideRenderRow createSideBySideRenderRow(
+      const DiffSideBySideLine& line,
+      double index,
+      double sourceFallbackIndex,
+      bool tokenizeRows);
   DiffSideBySideRenderRow getSideBySideRowForIndex(
       double index,
       const std::vector<double>& collapsedFileIndexes,

@@ -430,48 +430,30 @@ std::string trimDiffLine(const char* content, size_t contentLength) {
   return std::string(content, length);
 }
 
-double getSideBySideSourceStart(double oldRowIndex, double newRowIndex, double fallbackIndex) {
-  if (oldRowIndex >= 0 && newRowIndex >= 0) {
-    return std::min(oldRowIndex, newRowIndex);
-  }
-  if (oldRowIndex >= 0) {
-    return oldRowIndex;
-  }
-  if (newRowIndex >= 0) {
-    return newRowIndex;
-  }
-  return fallbackIndex;
-}
-
-double getSideBySideSourceEnd(double oldRowIndex, double newRowIndex, double fallbackIndex) {
-  if (oldRowIndex >= 0 && newRowIndex >= 0) {
-    return std::max(oldRowIndex, newRowIndex) + 1;
-  }
-  if (oldRowIndex >= 0) {
-    return oldRowIndex + 1;
-  }
-  if (newRowIndex >= 0) {
-    return newRowIndex + 1;
-  }
-  return fallbackIndex + 1;
-}
-
 DiffSideBySideLine createSideBySideLine(
-    double index,
     double kind,
     double fileIndex,
     double hunkIndex,
     double oldRowIndex,
     double newRowIndex) {
+  const double signedValues[] = {fileIndex, hunkIndex, oldRowIndex, newRowIndex};
+  for (const auto value : signedValues) {
+    if (
+        std::floor(value) != value ||
+        value < std::numeric_limits<int32_t>::min() ||
+        value > std::numeric_limits<int32_t>::max()) {
+      throw std::overflow_error("Side-by-side row index exceeds compact storage");
+    }
+  }
+  if (std::floor(kind) != kind || kind < 0 || kind > std::numeric_limits<uint8_t>::max()) {
+    throw std::overflow_error("Side-by-side row kind exceeds compact storage");
+  }
   return DiffSideBySideLine{
-      .index = index,
-      .kind = kind,
-      .fileIndex = fileIndex,
-      .hunkIndex = hunkIndex,
-      .sourceStart = getSideBySideSourceStart(oldRowIndex, newRowIndex, index),
-      .sourceEnd = getSideBySideSourceEnd(oldRowIndex, newRowIndex, index),
-      .oldRowIndex = oldRowIndex,
-      .newRowIndex = newRowIndex,
+      .fileIndex = static_cast<int32_t>(fileIndex),
+      .hunkIndex = static_cast<int32_t>(hunkIndex),
+      .oldRowIndex = static_cast<int32_t>(oldRowIndex),
+      .newRowIndex = static_cast<int32_t>(newRowIndex),
+      .kind = static_cast<uint8_t>(kind),
   };
 }
 
@@ -997,7 +979,6 @@ std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<Diff
 
   auto pushLine = [&](double kind, double fileIndex, double hunkIndex, double oldRowIndex, double newRowIndex) {
     lines.push_back(createSideBySideLine(
-        static_cast<double>(lines.size()),
         kind,
         fileIndex,
         hunkIndex,
