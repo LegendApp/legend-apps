@@ -4,7 +4,6 @@ import { codegenNativeComponent } from "react-native";
 export interface NativeProps extends ViewProps {
   adaptiveRender: string;
   configId: string;
-  configVersion: CodegenTypes.Double;
   rowIndex: CodegenTypes.Double;
 }
 

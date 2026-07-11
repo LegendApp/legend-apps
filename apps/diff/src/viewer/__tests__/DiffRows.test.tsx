@@ -47,12 +47,6 @@ function createRowRenderState(overrides: Partial<DiffRowRenderState> = {}): Diff
       sideBySideFileHeaderByListIndex: new Map(),
       sideBySideRowCount: 0,
     },
-    nativeRows: {
-      sideBySideConfigId: "test:blocks",
-      sideBySideConfigVersion: 1,
-      unifiedConfigId: "test:unified",
-      unifiedConfigVersion: 1,
-    },
     presentation: {
       borderColor: "#30363d",
       fileHeaderBackgroundColor: "#161b22",
@@ -101,6 +95,7 @@ describe("DiffRows", () => {
         hasHunkHeader={false}
         index={0}
         isFileHeader
+        nativeConfigId="test:unified"
         onToggleFileCollapsed={jest.fn()}
         rowRender$={rowRender$}
         row={createRow({
@@ -132,6 +127,7 @@ describe("DiffRows", () => {
         hasHunkHeader={false}
         index={0}
         isFileHeader
+        nativeConfigId="test:unified"
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -163,6 +159,7 @@ describe("DiffRows", () => {
         hasHunkHeader={false}
         index={1}
         isFileHeader={false}
+        nativeConfigId="test:unified"
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -187,7 +184,6 @@ describe("DiffRows", () => {
     expect(renderedTreeHasProps(view.toJSON(), {
       adaptiveRender: "normal",
       configId: "test:unified",
-      configVersion: 1,
       rowIndex: 1,
     })).toBe(true);
   });
@@ -228,6 +224,7 @@ describe("DiffRows", () => {
         hasHunkHeader={false}
         index={0}
         isFileHeader={false}
+        nativeConfigId="test:blocks"
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -246,7 +243,6 @@ describe("DiffRows", () => {
     expect(renderedTreeHasProps(view.toJSON(), {
       adaptiveRender: "normal",
       configId: "test:blocks",
-      configVersion: 1,
       rowIndex: 0,
     })).toBe(true);
   });
@@ -270,6 +266,7 @@ describe("DiffRows", () => {
         hasHunkHeader={false}
         index={0}
         isFileHeader
+        nativeConfigId="test:blocks"
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {

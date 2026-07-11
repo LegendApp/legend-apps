@@ -859,7 +859,6 @@ static void RNDiffDrawHorizontalText(
 
 @interface RNDiffNativeRowContentView : NSView
 @property(nonatomic, copy) NSString *configId;
-@property(nonatomic, assign) double configVersion;
 @property(nonatomic, assign) double rowIndex;
 @property(nonatomic, copy) NSString *adaptiveRender;
 @property(nonatomic, strong) NSMutableAttributedString *attributedTextScratch;
@@ -1982,7 +1981,6 @@ static void RNDiffDrawHorizontalText(
   const auto &newProps = *std::static_pointer_cast<DiffNativeRowProps const>(props);
 #if TARGET_OS_OSX
   _contentView.configId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
-  _contentView.configVersion = newProps.configVersion;
   _contentView.rowIndex = newProps.rowIndex;
   _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
   [_contentView setNeedsDisplay:YES];
@@ -1996,7 +1994,6 @@ static void RNDiffDrawHorizontalText(
   [super prepareForRecycle];
 #if TARGET_OS_OSX
   _contentView.configId = @"";
-  _contentView.configVersion = 0;
   _contentView.rowIndex = -1;
   _contentView.adaptiveRender = @"normal";
   [_contentView.attributedTextScratch.mutableString setString:@""];

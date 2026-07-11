@@ -893,54 +893,6 @@ function createDiffRowRenderState(
           : 0;
       },
     },
-    nativeRows: {
-      sideBySideConfigId: () => `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:blocks`,
-      sideBySideConfigVersion: () => {
-        const settings = diffRenderSettings$.get();
-        const palette = getDiffRowPalette(settings.syntaxTheme.appearance);
-        const dividerColor = getSideBySideDividerColor(settings.syntaxTheme.appearance);
-        return hashDiffNativeRowConfigVersion([
-          `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:blocks`,
-          getCurrentCollapsedFileIndexList(collapsedFileIndexes$).join(","),
-          dividerColor,
-          diffSideBySideLineNumberWidth,
-          diffSideBySideMarkerWidth,
-          settings.fontFamily,
-          settings.fontSize,
-          settings.diffPalette.foreground,
-          settings.diffPalette.muted,
-          palette.addAccent,
-          palette.addBackground,
-          palette.removeAccent,
-          palette.removeBackground,
-          settings.rowHeight,
-          settings.syntaxHighlightingEnabled,
-          settings.syntaxThemeName,
-        ]);
-      },
-      unifiedConfigId: () => `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:unified`,
-      unifiedConfigVersion: () => {
-        const settings = diffRenderSettings$.get();
-        const palette = getDiffRowPalette(settings.syntaxTheme.appearance);
-        return hashDiffNativeRowConfigVersion([
-          `diff:${getCurrentLoadedDiffState(state$)?.document.documentId ?? 0}:unified`,
-          diffUnifiedChangeBarWidth,
-          diffUnifiedLineNumberWidth,
-          diffUnifiedMarkerWidth,
-          settings.fontFamily,
-          settings.fontSize,
-          settings.diffPalette.foreground,
-          settings.diffPalette.muted,
-          palette.addAccent,
-          palette.addBackground,
-          palette.removeAccent,
-          palette.removeBackground,
-          settings.rowHeight,
-          settings.syntaxHighlightingEnabled,
-          settings.syntaxThemeName,
-        ]);
-      },
-    },
     presentation: {
       borderColor: () => diffRenderSettings$.get().diffPalette.border,
       fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
@@ -5132,13 +5084,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           hasHunkHeader={showOnlyHunks && isDiffUnifiedHunkStart(loadedDocument, index, row)}
           index={index}
           isFileHeader={getItemType(index) === "file-header"}
+          nativeConfigId={nativeUnifiedRowConfig.configId}
           onToggleFileCollapsed={toggleFileCollapsed}
           rowRender$={rowRender$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, getItemType, loadedDocument, rowRender$, showOnlyHunks, toggleFileCollapsed],
+    [collapsedFileIndexes$, getItemType, loadedDocument, nativeUnifiedRowConfig.configId, rowRender$, showOnlyHunks, toggleFileCollapsed],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -5170,13 +5123,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           hasHunkHeader={showOnlyHunks && sideBySideHunkHeaderIndexes.has(index)}
           index={index}
           isFileHeader={getSideBySideItemType(index) === "file-header"}
+          nativeConfigId={nativeSideBySideRowConfig.configId}
           onToggleFileCollapsed={toggleFileCollapsed}
           rowRender$={rowRender$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, getSideBySideItemType, rowRender$, showOnlyHunks, sideBySideHunkHeaderIndexes, toggleFileCollapsed],
+    [collapsedFileIndexes$, getSideBySideItemType, nativeSideBySideRowConfig.configId, rowRender$, showOnlyHunks, sideBySideHunkHeaderIndexes, toggleFileCollapsed],
   );
 
   const documentErrorHeight = documentError
