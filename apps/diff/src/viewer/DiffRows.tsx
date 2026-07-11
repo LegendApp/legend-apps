@@ -93,7 +93,9 @@ type DiffObservedFileHeaderRowProps = Omit<DiffFileHeaderRowProps, "isCollapsed"
 type DiffUnifiedRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
+  hasHunkHeader: boolean;
   index: number;
+  isFileHeader: boolean;
   onToggleFileCollapsed: (fileIndex: number) => void;
   rowRender$: Observable<DiffRowRenderState>;
   row: DiffRenderRow | undefined;
@@ -102,7 +104,9 @@ type DiffUnifiedRowProps = {
 type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
+  hasHunkHeader: boolean;
   index: number;
+  isFileHeader: boolean;
   onToggleFileCollapsed: (fileIndex: number) => void;
   rowRender$: Observable<DiffRowRenderState>;
   row: DiffSideBySideRenderRow | undefined;
@@ -291,18 +295,23 @@ function DiffNativeUnifiedLineRow({
   index: number;
   rowRender$: Observable<DiffRowRenderState>;
 }) {
-  const nativeUnifiedRowConfigId = useValue(() => rowRender$.nativeRows.unifiedConfigId.get());
-  const nativeUnifiedRowConfigVersion = useValue(() => rowRender$.nativeRows.unifiedConfigVersion.get());
-  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
+  const nativeRow = useValue(() => ({
+    configId: rowRender$.nativeRows.unifiedConfigId.get(),
+    configVersion: rowRender$.nativeRows.unifiedConfigVersion.get(),
+    documentReady: rowRender$.document.current.get() !== null,
+    rowHeight: rowRender$.presentation.rowHeight.get(),
+  }));
 
-  return (
+  return nativeRow.documentReady ? (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
-      configId={nativeUnifiedRowConfigId}
-      configVersion={nativeUnifiedRowConfigVersion}
+      configId={nativeRow.configId}
+      configVersion={nativeRow.configVersion}
       rowIndex={index}
-      style={[styles.nativeDiffRow, { height: rowHeight }]}
+      style={[styles.nativeDiffRow, { height: nativeRow.rowHeight }]}
     />
+  ) : (
+    <View style={{ height: nativeRow.rowHeight }} />
   );
 }
 
@@ -315,18 +324,23 @@ function DiffNativeSideBySideLineRow({
   index: number;
   rowRender$: Observable<DiffRowRenderState>;
 }) {
-  const nativeSideBySideRowConfigId = useValue(() => rowRender$.nativeRows.sideBySideConfigId.get());
-  const nativeSideBySideRowConfigVersion = useValue(() => rowRender$.nativeRows.sideBySideConfigVersion.get());
-  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
+  const nativeRow = useValue(() => ({
+    configId: rowRender$.nativeRows.sideBySideConfigId.get(),
+    configVersion: rowRender$.nativeRows.sideBySideConfigVersion.get(),
+    documentReady: rowRender$.document.current.get() !== null,
+    rowHeight: rowRender$.presentation.rowHeight.get(),
+  }));
 
-  return (
+  return nativeRow.documentReady ? (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
-      configId={nativeSideBySideRowConfigId}
-      configVersion={nativeSideBySideRowConfigVersion}
+      configId={nativeRow.configId}
+      configVersion={nativeRow.configVersion}
       rowIndex={index}
-      style={[styles.nativeDiffRow, { height: rowHeight }]}
+      style={[styles.nativeDiffRow, { height: nativeRow.rowHeight }]}
     />
+  ) : (
+    <View style={{ height: nativeRow.rowHeight }} />
   );
 }
 
@@ -428,8 +442,7 @@ const DiffObservedFileHeaderRow = memo(function DiffObservedFileHeaderRow({
   );
 });
 
-export const DiffUnifiedRow = memo(function DiffUnifiedRow({
-  adaptiveRender,
+const DiffUnifiedFileHeaderRow = memo(function DiffUnifiedFileHeaderRow({
   collapsedFileIndexes$,
   index,
   onToggleFileCollapsed,
@@ -437,77 +450,78 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow({
   row,
 }: DiffUnifiedRowProps) {
   const borderColor = useValue(() => rowRender$.presentation.borderColor.get());
-  const document = useValue(() => rowRender$.document.current.get()) as DiffDocument | null;
   const fileHeaderBackgroundColor = useValue(() => rowRender$.presentation.fileHeaderBackgroundColor.get());
   const fileByIndex = useValue(() => rowRender$.document.fileByIndex.get());
   const fileByRowStart = useValue(() => rowRender$.document.fileByRowStart.get());
-  const fileHeaderRowIndexes = useValue(() => rowRender$.document.fileHeaderRowIndexes.get());
   const fontFamily = useValue(() => rowRender$.presentation.fontFamily.get());
   const fontSize = useValue(() => rowRender$.presentation.fontSize.get());
   const foregroundColor = useValue(() => rowRender$.presentation.foregroundColor.get());
-  const hunkHeaderBackgroundColor = useValue(() => rowRender$.presentation.hunkHeaderBackgroundColor.get());
   const mutedColor = useValue(() => rowRender$.presentation.mutedColor.get());
-  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
-  const showOnlyHunks = useValue(() => rowRender$.presentation.showOnlyHunks.get());
   const syntaxAppearance = useValue(() => rowRender$.presentation.syntaxAppearance.get());
-  const isFileHeader = row?.kind === diffRowKindFileHeader || fileHeaderRowIndexes.has(index);
-  const displayRow = row ?? (
-    document && !isFileHeader
-      ? getPlainUnifiedRow(document, index)
-      : undefined
-  );
-  const hunkHeaderInfo = showOnlyHunks
-    ? getDiffUnifiedHunkHeaderInfo(document, index, displayRow)
-    : null;
   const file = row ? fileByIndex.get(row.fileIndex) : fileByRowStart.get(index);
-
-  if (isFileHeader) {
-    const fileIndex = file?.index ?? row?.fileIndex ?? index;
-    return (
-      <DiffObservedFileHeaderRow
-        borderColor={borderColor}
-        collapsedFileIndexes$={collapsedFileIndexes$}
-        fallbackFileIndex={fileIndex}
-        fallbackPath={row?.text ?? ""}
-        file={file}
-        fileHeaderBackgroundColor={fileHeaderBackgroundColor}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        onToggleFileCollapsed={onToggleFileCollapsed}
-        syntaxAppearance={syntaxAppearance}
-      />
-    );
-  }
+  const fileIndex = file?.index ?? row?.fileIndex ?? index;
 
   return (
+    <DiffObservedFileHeaderRow
+      borderColor={borderColor}
+      collapsedFileIndexes$={collapsedFileIndexes$}
+      fallbackFileIndex={fileIndex}
+      fallbackPath={row?.text ?? ""}
+      file={file}
+      fileHeaderBackgroundColor={fileHeaderBackgroundColor}
+      fontFamily={fontFamily}
+      fontSize={fontSize}
+      foregroundColor={foregroundColor}
+      mutedColor={mutedColor}
+      onToggleFileCollapsed={onToggleFileCollapsed}
+      syntaxAppearance={syntaxAppearance}
+    />
+  );
+});
+
+const DiffUnifiedHunkHeaderRow = memo(function DiffUnifiedHunkHeaderRow({
+  index,
+  rowRender$,
+  row,
+}: DiffUnifiedRowProps) {
+  const borderColor = useValue(() => rowRender$.presentation.borderColor.get());
+  const document = useValue(() => rowRender$.document.current.get()) as DiffDocument | null;
+  const fontFamily = useValue(() => rowRender$.presentation.fontFamily.get());
+  const fontSize = useValue(() => rowRender$.presentation.fontSize.get());
+  const hunkHeaderBackgroundColor = useValue(() => rowRender$.presentation.hunkHeaderBackgroundColor.get());
+  const mutedColor = useValue(() => rowRender$.presentation.mutedColor.get());
+  const displayRow = row ?? (document ? getPlainUnifiedRow(document, index) : undefined);
+  const info = getDiffUnifiedHunkHeaderInfo(document, index, displayRow);
+
+  return info ? (
+    <DiffHunkHeader
+      borderColor={borderColor}
+      fontFamily={fontFamily}
+      fontSize={fontSize}
+      hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
+      info={info}
+      mutedColor={mutedColor}
+    />
+  ) : null;
+});
+
+const DiffUnifiedLineRow = memo(function DiffUnifiedLineRow(props: DiffUnifiedRowProps) {
+  const { adaptiveRender, hasHunkHeader, index, rowRender$ } = props;
+  return (
     <>
-      {hunkHeaderInfo ? (
-        <DiffHunkHeader
-          borderColor={borderColor}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
-          info={hunkHeaderInfo}
-          mutedColor={mutedColor}
-        />
-      ) : null}
-      {document ? (
-        <DiffNativeUnifiedLineRow
-          adaptiveRender={adaptiveRender}
-          index={index}
-          rowRender$={rowRender$}
-        />
-      ) : (
-        <View style={{ height: rowHeight }} />
-      )}
+      {hasHunkHeader ? <DiffUnifiedHunkHeaderRow {...props} /> : null}
+      <DiffNativeUnifiedLineRow adaptiveRender={adaptiveRender} index={index} rowRender$={rowRender$} />
     </>
   );
 });
 
-export const DiffSideBySideRow = memo(function DiffSideBySideRow({
-  adaptiveRender,
+export const DiffUnifiedRow = memo(function DiffUnifiedRow(props: DiffUnifiedRowProps) {
+  return props.isFileHeader
+    ? <DiffUnifiedFileHeaderRow {...props} />
+    : <DiffUnifiedLineRow {...props} />;
+});
+
+const DiffSideBySideFileHeaderRow = memo(function DiffSideBySideFileHeaderRow({
   collapsedFileIndexes$,
   index,
   onToggleFileCollapsed,
@@ -515,85 +529,83 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
   row,
 }: DiffSideBySideRowProps) {
   const borderColor = useValue(() => rowRender$.presentation.borderColor.get());
-  const collapsedFileIndexList = useValue(() => rowRender$.document.collapsedFileIndexList.get());
-  const document = useValue(() => rowRender$.document.current.get()) as DiffDocument | null;
   const fileHeaderBackgroundColor = useValue(() => rowRender$.presentation.fileHeaderBackgroundColor.get());
   const fileByIndex = useValue(() => rowRender$.document.fileByIndex.get());
   const fileByRowStart = useValue(() => rowRender$.document.fileByRowStart.get());
   const fontFamily = useValue(() => rowRender$.presentation.fontFamily.get());
   const fontSize = useValue(() => rowRender$.presentation.fontSize.get());
   const foregroundColor = useValue(() => rowRender$.presentation.foregroundColor.get());
-  const hunkHeaderBackgroundColor = useValue(() => rowRender$.presentation.hunkHeaderBackgroundColor.get());
   const mutedColor = useValue(() => rowRender$.presentation.mutedColor.get());
-  const rowHeight = useValue(() => rowRender$.presentation.rowHeight.get());
-  const showOnlyHunks = useValue(() => rowRender$.presentation.showOnlyHunks.get());
   const sideBySideFileHeaderByListIndex = useValue(() => rowRender$.document.sideBySideFileHeaderByListIndex.get());
-  const sideBySideRowCount = useValue(() => rowRender$.document.sideBySideRowCount.get());
   const syntaxAppearance = useValue(() => rowRender$.presentation.syntaxAppearance.get());
-  const displayRow = showOnlyHunks
-    ? row ?? (
-        document
-          ? document.getPlainSideBySideRow(index, [...collapsedFileIndexList])
-          : undefined
-      )
-    : row;
   const fileHeader = row?.kind === "file-header"
     ? { fileIndex: row.fileIndex, sourceStart: row.sourceStart }
     : sideBySideFileHeaderByListIndex.get(index);
-  const hunkHeaderInfo = showOnlyHunks
-    ? getDiffSideBySideHunkHeaderInfo(
-        document,
-        index,
-        collapsedFileIndexList,
-        sideBySideRowCount,
-        displayRow,
-    )
-    : null;
-
-  if (fileHeader) {
-    const file = fileByIndex.get(fileHeader.fileIndex) ?? fileByRowStart.get(fileHeader.sourceStart);
-    const fileIndex = file?.index ?? index;
-    return (
-      <DiffObservedFileHeaderRow
-        borderColor={borderColor}
-        collapsedFileIndexes$={collapsedFileIndexes$}
-        fallbackFileIndex={fileIndex}
-        fallbackPath={file?.path ?? ""}
-        file={file}
-        fileHeaderBackgroundColor={fileHeaderBackgroundColor}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        onToggleFileCollapsed={onToggleFileCollapsed}
-        syntaxAppearance={syntaxAppearance}
-      />
-    );
-  }
+  const file = fileHeader
+    ? fileByIndex.get(fileHeader.fileIndex) ?? fileByRowStart.get(fileHeader.sourceStart)
+    : undefined;
+  const fileIndex = file?.index ?? index;
 
   return (
+    <DiffObservedFileHeaderRow
+      borderColor={borderColor}
+      collapsedFileIndexes$={collapsedFileIndexes$}
+      fallbackFileIndex={fileIndex}
+      fallbackPath={file?.path ?? ""}
+      file={file}
+      fileHeaderBackgroundColor={fileHeaderBackgroundColor}
+      fontFamily={fontFamily}
+      fontSize={fontSize}
+      foregroundColor={foregroundColor}
+      mutedColor={mutedColor}
+      onToggleFileCollapsed={onToggleFileCollapsed}
+      syntaxAppearance={syntaxAppearance}
+    />
+  );
+});
+
+const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
+  index,
+  rowRender$,
+  row,
+}: DiffSideBySideRowProps) {
+  const borderColor = useValue(() => rowRender$.presentation.borderColor.get());
+  const collapsedFileIndexList = useValue(() => rowRender$.document.collapsedFileIndexList.get());
+  const document = useValue(() => rowRender$.document.current.get()) as DiffDocument | null;
+  const fontFamily = useValue(() => rowRender$.presentation.fontFamily.get());
+  const fontSize = useValue(() => rowRender$.presentation.fontSize.get());
+  const hunkHeaderBackgroundColor = useValue(() => rowRender$.presentation.hunkHeaderBackgroundColor.get());
+  const mutedColor = useValue(() => rowRender$.presentation.mutedColor.get());
+  const sideBySideRowCount = useValue(() => rowRender$.document.sideBySideRowCount.get());
+  const displayRow = row ?? (document ? document.getPlainSideBySideRow(index, [...collapsedFileIndexList]) : undefined);
+  const info = getDiffSideBySideHunkHeaderInfo(document, index, collapsedFileIndexList, sideBySideRowCount, displayRow);
+
+  return info ? (
+    <DiffHunkHeader
+      borderColor={borderColor}
+      fontFamily={fontFamily}
+      fontSize={fontSize}
+      hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
+      info={info}
+      mutedColor={mutedColor}
+    />
+  ) : null;
+});
+
+const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSideBySideRowProps) {
+  const { adaptiveRender, hasHunkHeader, index, rowRender$ } = props;
+  return (
     <>
-      {hunkHeaderInfo ? (
-        <DiffHunkHeader
-          borderColor={borderColor}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          hunkHeaderBackgroundColor={hunkHeaderBackgroundColor}
-          info={hunkHeaderInfo}
-          mutedColor={mutedColor}
-        />
-      ) : null}
-      {document ? (
-        <DiffNativeSideBySideLineRow
-          adaptiveRender={adaptiveRender}
-          index={index}
-          rowRender$={rowRender$}
-        />
-      ) : (
-        <View style={{ height: rowHeight }} />
-      )}
+      {hasHunkHeader ? <DiffSideBySideHunkHeaderRow {...props} /> : null}
+      <DiffNativeSideBySideLineRow adaptiveRender={adaptiveRender} index={index} rowRender$={rowRender$} />
     </>
   );
+});
+
+export const DiffSideBySideRow = memo(function DiffSideBySideRow(props: DiffSideBySideRowProps) {
+  return props.isFileHeader
+    ? <DiffSideBySideFileHeaderRow {...props} />
+    : <DiffSideBySideLineRow {...props} />;
 });
 
 const styles = StyleSheet.create({

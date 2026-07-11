@@ -98,7 +98,9 @@ describe("DiffRows", () => {
       <DiffUnifiedRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
         index={0}
+        isFileHeader
         onToggleFileCollapsed={jest.fn()}
         rowRender$={rowRender$}
         row={createRow({
@@ -127,7 +129,9 @@ describe("DiffRows", () => {
       <DiffUnifiedRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
         index={0}
+        isFileHeader
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -156,7 +160,9 @@ describe("DiffRows", () => {
       <DiffUnifiedRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
         index={1}
+        isFileHeader={false}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -219,7 +225,9 @@ describe("DiffRows", () => {
       <DiffSideBySideRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
         index={0}
+        isFileHeader={false}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -259,7 +267,9 @@ describe("DiffRows", () => {
       <DiffSideBySideRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
         index={0}
+        isFileHeader
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
