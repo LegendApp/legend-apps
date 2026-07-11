@@ -1727,19 +1727,6 @@ void HybridDiffDocument::setProgressTiming(const DiffLoadTiming& timing) {
   timing_ = timing;
   timing_.rowCount = static_cast<double>(rows_.size());
   timing_.fileCount = static_cast<double>(files_.size());
-  compactCompletedStorageLocked();
-}
-
-void HybridDiffDocument::compactCompletedStorageLocked() {
-  files_.shrink_to_fit();
-  rows_.shrink_to_fit();
-  rowText_.shrink_to_fit();
-  hunkRowIndexes_.shrink_to_fit();
-  changedLineBlocks_.shrink_to_fit();
-  changedAddedLineRuns_.shrink_to_fit();
-  changedRemovedLineRuns_.shrink_to_fit();
-  rowTokenized_.shrink_to_fit();
-  fileSources_.shrink_to_fit();
 }
 
 size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
