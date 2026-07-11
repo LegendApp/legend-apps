@@ -242,4 +242,47 @@ describe("DiffRows", () => {
       rowIndex: 0,
     })).toBe(true);
   });
+
+  it("uses the file index when progressive file summaries share a row start", async () => {
+    const firstFile = createFile({
+      index: 0,
+      path: "macos/LegendMusic-macOS/Sidebar/SidebarView.swift",
+      rowStart: 0,
+    });
+    const unresolvedFile = createFile({
+      index: 39,
+      path: "src/windows/index.ts",
+      rowCount: 0,
+      rowStart: 0,
+    });
+    const view = await render(
+      <DiffSideBySideRow
+        adaptiveRender="normal"
+        collapsedFileIndexes$={observable(new Set<number>())}
+        index={0}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$({
+          document: {
+            ...createRowRenderState().document,
+            fileByIndex: new Map([
+              [firstFile.index, firstFile],
+              [unresolvedFile.index, unresolvedFile],
+            ]),
+            fileByRowStart: new Map([[unresolvedFile.rowStart, unresolvedFile]]),
+            sideBySideFileHeaderByListIndex: new Map([[0, {
+              fileIndex: firstFile.index,
+              listIndex: 0,
+              sourceStart: 0,
+            }]]),
+          },
+        })}
+        row={undefined}
+      />,
+    );
+
+    expect(view.getByText("macos/LegendMusic-macOS/Sidebar/")).toBeTruthy();
+    expect(view.getByText("SidebarView.swift")).toBeTruthy();
+    expect(view.queryByText("src/windows/")).toBeNull();
+    expect(view.queryByText("index.ts")).toBeNull();
+  });
 });

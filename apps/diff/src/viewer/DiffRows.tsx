@@ -551,7 +551,7 @@ export const DiffSideBySideRow = memo(function DiffSideBySideRow({
     : null;
 
   if (fileHeader) {
-    const file = fileByRowStart.get(fileHeader.sourceStart) ?? fileByIndex.get(fileHeader.fileIndex);
+    const file = fileByIndex.get(fileHeader.fileIndex) ?? fileByRowStart.get(fileHeader.sourceStart);
     const fileIndex = file?.index ?? index;
     return (
       <DiffObservedFileHeaderRow
