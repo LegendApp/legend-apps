@@ -1872,6 +1872,64 @@ static void RNDiffDrawHorizontalText(
 @interface RNDiffNativeRowConfig () <RCTDiffNativeRowConfigViewProtocol>
 @end
 
+#if TARGET_OS_OSX
+static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
+    NSString *configId,
+    RNDiffNativeRowRenderConfig *config,
+    NSString *encodedRanges)
+{
+  if (encodedRanges.length == 0) {
+    return 0;
+  }
+
+  NSMutableArray<NSValue *> *ranges = [NSMutableArray array];
+  for (NSString *encodedRange in [encodedRanges componentsSeparatedByString:@","]) {
+    const NSArray<NSString *> *bounds = [encodedRange componentsSeparatedByString:@":"];
+    if (bounds.count == 2) {
+      const double start = bounds[0].doubleValue;
+      const double end = bounds[1].doubleValue;
+      if (end > start) {
+        [ranges addObject:[NSValue valueWithRange:NSMakeRange((NSUInteger)start, (NSUInteger)(end - start))]];
+      }
+    }
+  }
+  if (ranges.count == 0) {
+    return 0;
+  }
+
+  auto document = getRegisteredDiffDocument(config.documentId);
+  if (!document) {
+    return 0;
+  }
+
+  NSUInteger invalidatedCount = 0;
+  for (NSView *view in RNDiffNativeRowViewRegistry()[configId]) {
+    if (![view isKindOfClass:RNDiffNativeRowContentView.class]) {
+      continue;
+    }
+    RNDiffNativeRowContentView *rowView = (RNDiffNativeRowContentView *)view;
+    double rowStart = rowView.rowIndex;
+    double rowEnd = rowStart + 1;
+    if ([config.presentation isEqualToString:@"blocks"]) {
+      const auto row = document->getPlainSideBySideRow(rowView.rowIndex, [config collapsedFileIndexes]);
+      rowStart = row.sourceStart;
+      rowEnd = row.sourceEnd;
+    }
+    for (NSValue *rangeValue in ranges) {
+      const NSRange range = rangeValue.rangeValue;
+      const double rangeStart = range.location;
+      const double rangeEnd = range.location + range.length;
+      if (rowStart < rangeEnd && rowEnd > rangeStart) {
+        [rowView setNeedsDisplay:YES];
+        invalidatedCount += 1;
+        break;
+      }
+    }
+  }
+  return invalidatedCount;
+}
+#endif
+
 @implementation RNDiffNativeRowConfig {
 #if TARGET_OS_OSX
   NSString *_configId;
@@ -1890,6 +1948,16 @@ static void RNDiffDrawHorizontalText(
 {
   const auto &newProps = *std::static_pointer_cast<DiffNativeRowConfigProps const>(props);
 #if TARGET_OS_OSX
+  BOOL tokenizationOnlyUpdate = NO;
+  if (oldProps) {
+    const auto &previousProps = *std::static_pointer_cast<DiffNativeRowConfigProps const>(oldProps);
+    tokenizationOnlyUpdate = newProps.tokenizationVersion != previousProps.tokenizationVersion
+      && newProps.configVersion == previousProps.configVersion
+      && newProps.documentId == previousProps.documentId
+      && newProps.horizontalViewportWidth == previousProps.horizontalViewportWidth
+      && newProps.searchHighlightByRowIndex == previousProps.searchHighlightByRowIndex
+      && newProps.activeSearchHighlightByRowIndex == previousProps.activeSearchHighlightByRowIndex;
+  }
   NSString *nextConfigId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
   if (_configId.length > 0 && ![_configId isEqualToString:nextConfigId]) {
     [RNDiffNativeRowConfigRegistry() removeObjectForKey:_configId];
@@ -1931,7 +1999,14 @@ static void RNDiffDrawHorizontalText(
   [config setSearchHighlightByRowIndexString:[NSString stringWithUTF8String:newProps.activeSearchHighlightByRowIndex.c_str()] ?: @""
                                       active:YES];
   [config updateHorizontalMetrics];
-  RNDiffNativeRowInvalidateViews(nextConfigId);
+  if (tokenizationOnlyUpdate) {
+    RNDiffNativeRowInvalidateTokenizedRanges(
+        nextConfigId,
+        config,
+        [NSString stringWithUTF8String:newProps.tokenizedRowRanges.c_str()] ?: @"");
+  } else {
+    RNDiffNativeRowInvalidateViews(nextConfigId);
+  }
 #endif
   [super updateProps:props oldProps:oldProps];
 }

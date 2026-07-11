@@ -31,6 +31,7 @@ export interface NativeProps extends ViewProps {
   syntaxHighlightingEnabled: boolean;
   themeName: string;
   tokenizationVersion: CodegenTypes.Double;
+  tokenizedRowRanges: string;
 }
 
 export default codegenNativeComponent<NativeProps>("DiffNativeRowConfig") as HostComponent<NativeProps>;

@@ -644,7 +644,7 @@ type DiffLoadedBodyProps = {
   splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   state: DiffLoadedState;
   syntaxAppearance: "dark" | "light";
-  syntaxTokenizationVersion$: Observable<number>;
+  syntaxTokenizationState$: Observable<{ ranges: string; version: number }>;
   viewMode: ReturnType<typeof getDiffViewModeSetting>;
   visibleItemIndexes: Array<number | undefined>;
 };
@@ -1396,7 +1396,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   splitPaneMetrics$,
   state,
   adaptiveLightModeEnabled,
-  syntaxTokenizationVersion$,
+  syntaxTokenizationState$,
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedContentPaneProps) {
@@ -1654,7 +1654,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
           <DiffNativeRowConfigView
             nativeRowConfig={nativeRowConfig}
             splitPaneMetrics$={splitPaneMetrics$}
-            syntaxTokenizationVersion$={syntaxTokenizationVersion$}
+            syntaxTokenizationState$={syntaxTokenizationState$}
           />
         ) : null}
         {!shouldShowNoChanges ? (
@@ -1749,13 +1749,13 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
 function DiffNativeRowConfigView({
   nativeRowConfig,
   splitPaneMetrics$,
-  syntaxTokenizationVersion$,
+  syntaxTokenizationState$,
 }: {
   nativeRowConfig: DiffNativeRowConfigProps;
   splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
-  syntaxTokenizationVersion$: Observable<number>;
+  syntaxTokenizationState$: Observable<{ ranges: string; version: number }>;
 }) {
-  const tokenizationVersion = useValue(() => syntaxTokenizationVersion$.get());
+  const tokenizationState = useValue(() => syntaxTokenizationState$.get());
   const horizontalViewportWidth = useValue(() => splitPaneMetrics$.contentWidth.get());
   return (
     <DiffNativeRowConfig
@@ -1789,7 +1789,8 @@ function DiffNativeRowConfigView({
       style={styles.nativeDiffRowConfig}
       syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
       themeName={nativeRowConfig.themeName}
-      tokenizationVersion={tokenizationVersion}
+      tokenizationVersion={tokenizationState.version}
+      tokenizedRowRanges={tokenizationState.ranges}
     />
   );
 }
@@ -2806,7 +2807,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const mergeDraftsSourceKeyRef = useRef<string | null>(null);
   const savingMergeDraftsRef = useRef(false);
   const suppressFileWatcherReloadUntilRef = useRef(0);
-  const syntaxTokenizationVersion$ = useObservable(0);
+  const syntaxTokenizationState$ = useObservable({ ranges: "", version: 0 });
   const resolvingMergeConflictKeys$ = useObservable<ReadonlySet<string>>(new Set());
   const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
   const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
@@ -3227,8 +3228,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       const document = state.document;
       const updateTokenizationVersion = () => {
         const tokenizationVersion = document.getTokenizedRowVersion();
-        if (syntaxTokenizationVersion$.peek() !== tokenizationVersion) {
-          syntaxTokenizationVersion$.set(tokenizationVersion);
+        if (syntaxTokenizationState$.version.peek() !== tokenizationVersion) {
+          const ranges = document.consumeTokenizedRowRanges()
+            .map((range) => `${Math.floor(range.start)}:${Math.ceil(range.end)}`)
+            .join(",");
+          syntaxTokenizationState$.set({ ranges, version: tokenizationVersion });
         }
       };
 
@@ -3239,11 +3243,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       };
     }
 
-    if (syntaxTokenizationVersion$.peek() !== 0) {
-      syntaxTokenizationVersion$.set(0);
+    if (syntaxTokenizationState$.version.peek() !== 0) {
+      syntaxTokenizationState$.set({ ranges: "", version: 0 });
     }
     return undefined;
-  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled, syntaxTokenizationVersion$]);
+  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled, syntaxTokenizationState$]);
   useEffect(() => {
     resetSideBySideRuntime();
     if (state.status === "loaded") {
@@ -5248,7 +5252,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             sideBySideItemIndexes={sideBySideItemIndexes}
             splitPaneMetrics$={splitPaneMetrics$}
             state={state}
-            syntaxTokenizationVersion$={syntaxTokenizationVersion$}
+            syntaxTokenizationState$={syntaxTokenizationState$}
             viewMode={renderViewMode}
             visibleItemIndexes={visibleItemIndexes}
           />
