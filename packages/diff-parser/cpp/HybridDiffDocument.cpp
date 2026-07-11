@@ -678,34 +678,43 @@ void HybridDiffDocument::appendChangedLineRunLocked(const DiffStoredRow& row, si
   const bool isAdded = row.kind == diffRowKindLine && row.changeType == diffChangeTypeAdd;
   const bool isRemoved = row.kind == diffRowKindLine && row.changeType == diffChangeTypeRemove;
   if (isAdded || isRemoved) {
+    if (rowIndex >= std::numeric_limits<uint32_t>::max()) {
+      throw std::overflow_error("Changed diff row index exceeds compact storage");
+    }
     const bool continuesBlock = !changedLineBlocks_.empty()
         && changedLineBlocks_.back().rowEnd == rowIndex
         && changedLineBlocks_.back().fileIndex == row.fileIndex
         && changedLineBlocks_.back().hunkIndex == row.hunkIndex;
     if (!continuesBlock) {
       changedLineBlocks_.push_back(DiffChangedLineBlock{
-          .rowStart = rowIndex,
-          .rowEnd = rowIndex,
-          .fileIndex = static_cast<double>(row.fileIndex),
-          .hunkIndex = static_cast<double>(row.hunkIndex),
+          .rowStart = static_cast<uint32_t>(rowIndex),
+          .rowEnd = static_cast<uint32_t>(rowIndex),
+          .fileIndex = row.fileIndex,
+          .hunkIndex = row.hunkIndex,
+          .addedRunStart = static_cast<uint32_t>(changedAddedLineRuns_.size()),
+          .removedRunStart = static_cast<uint32_t>(changedRemovedLineRuns_.size()),
       });
     }
 
     auto& block = changedLineBlocks_.back();
-    auto& runs = isAdded ? block.addedRuns : block.removedRuns;
-    auto& count = isAdded ? block.addedCount : block.removedCount;
-    const bool continuesRun = !runs.empty() && runs.back().rowStart + runs.back().rowCount == rowIndex;
+    auto& runs = isAdded ? changedAddedLineRuns_ : changedRemovedLineRuns_;
+    auto& runStart = isAdded ? block.addedRunStart : block.removedRunStart;
+    auto& runCount = isAdded ? block.addedRunCount : block.removedRunCount;
+    const auto existingLineCount = runCount > 0
+        ? runs[runStart + runCount - 1].ordinalStart + runs[runStart + runCount - 1].rowCount
+        : 0;
+    const bool continuesRun = runCount > 0 && runs.back().rowStart + runs.back().rowCount == rowIndex;
     if (continuesRun) {
       runs.back().rowCount += 1;
     } else {
       runs.push_back(DiffChangedLineRun{
-          .rowStart = rowIndex,
+          .rowStart = static_cast<uint32_t>(rowIndex),
           .rowCount = 1,
-          .ordinalStart = count,
+          .ordinalStart = existingLineCount,
       });
+      runCount += 1;
     }
-    count += 1;
-    block.rowEnd = rowIndex + 1;
+    block.rowEnd = static_cast<uint32_t>(rowIndex + 1);
   }
 }
 
@@ -735,16 +744,22 @@ std::optional<DiffChangedLinePair> HybridDiffDocument::getChangedLinePair(double
     return std::nullopt;
   }
 
-  const auto& sourceRuns = isAdded ? block.addedRuns : block.removedRuns;
-  const auto& counterpartRuns = isAdded ? block.removedRuns : block.addedRuns;
+  const auto& sourceRuns = isAdded ? changedAddedLineRuns_ : changedRemovedLineRuns_;
+  const auto& counterpartRuns = isAdded ? changedRemovedLineRuns_ : changedAddedLineRuns_;
+  const auto sourceRunStart = isAdded ? block.addedRunStart : block.removedRunStart;
+  const auto sourceRunCount = isAdded ? block.addedRunCount : block.removedRunCount;
+  const auto counterpartRunStart = isAdded ? block.removedRunStart : block.addedRunStart;
+  const auto counterpartRunCount = isAdded ? block.removedRunCount : block.addedRunCount;
+  const auto sourceRunsBegin = sourceRuns.begin() + sourceRunStart;
+  const auto sourceRunsEnd = sourceRunsBegin + sourceRunCount;
   const auto sourceRunAfter = std::upper_bound(
-      sourceRuns.begin(),
-      sourceRuns.end(),
+      sourceRunsBegin,
+      sourceRunsEnd,
       safeRowIndex,
       [](size_t index, const DiffChangedLineRun& run) {
         return index < run.rowStart;
       });
-  if (sourceRunAfter == sourceRuns.begin()) {
+  if (sourceRunAfter == sourceRunsBegin) {
     return std::nullopt;
   }
 
@@ -753,14 +768,16 @@ std::optional<DiffChangedLinePair> HybridDiffDocument::getChangedLinePair(double
     return std::nullopt;
   }
   const auto ordinal = sourceRun.ordinalStart + safeRowIndex - sourceRun.rowStart;
+  const auto counterpartRunsBegin = counterpartRuns.begin() + counterpartRunStart;
+  const auto counterpartRunsEnd = counterpartRunsBegin + counterpartRunCount;
   const auto counterpartRunAfter = std::upper_bound(
-      counterpartRuns.begin(),
-      counterpartRuns.end(),
+      counterpartRunsBegin,
+      counterpartRunsEnd,
       ordinal,
       [](size_t targetOrdinal, const DiffChangedLineRun& run) {
         return targetOrdinal < run.ordinalStart;
       });
-  if (counterpartRunAfter == counterpartRuns.begin()) {
+  if (counterpartRunAfter == counterpartRunsBegin) {
     return std::nullopt;
   }
 
@@ -775,10 +792,18 @@ std::optional<DiffChangedLinePair> HybridDiffDocument::getChangedLinePair(double
 
   const auto addedRowIndex = isAdded ? safeRowIndex : counterpartRowIndex;
   const auto removedRowIndex = isRemoved ? safeRowIndex : counterpartRowIndex;
+  const auto addedCount = block.addedRunCount > 0
+      ? changedAddedLineRuns_[block.addedRunStart + block.addedRunCount - 1].ordinalStart +
+          changedAddedLineRuns_[block.addedRunStart + block.addedRunCount - 1].rowCount
+      : 0;
+  const auto removedCount = block.removedRunCount > 0
+      ? changedRemovedLineRuns_[block.removedRunStart + block.removedRunCount - 1].ordinalStart +
+          changedRemovedLineRuns_[block.removedRunStart + block.removedRunCount - 1].rowCount
+      : 0;
   return DiffChangedLinePair{
       .addedRow = renderRowLocked(addedRowIndex),
       .removedRow = renderRowLocked(removedRowIndex),
-      .balanced = block.addedCount == block.removedCount,
+      .balanced = addedCount == removedCount,
   };
 }
 
@@ -1530,6 +1555,8 @@ double HybridDiffDocument::releaseNativeResources() {
       clearStringMemory(rowText_);
       clearVectorMemory(hunkRowIndexes_);
       clearVectorMemory(changedLineBlocks_);
+      clearVectorMemory(changedAddedLineRuns_);
+      clearVectorMemory(changedRemovedLineRuns_);
       clearVectorMemory(rowTokenized_);
       clearVectorMemory(sideBySideLines_);
       sideBySideLinesReady_ = false;
@@ -1709,10 +1736,8 @@ void HybridDiffDocument::compactCompletedStorageLocked() {
   rowText_.shrink_to_fit();
   hunkRowIndexes_.shrink_to_fit();
   changedLineBlocks_.shrink_to_fit();
-  for (auto& block : changedLineBlocks_) {
-    block.addedRuns.shrink_to_fit();
-    block.removedRuns.shrink_to_fit();
-  }
+  changedAddedLineRuns_.shrink_to_fit();
+  changedRemovedLineRuns_.shrink_to_fit();
   rowTokenized_.shrink_to_fit();
   fileSources_.shrink_to_fit();
 }
@@ -1725,10 +1750,8 @@ size_t HybridDiffDocument::getExternalMemorySizeLocked() const noexcept {
   size += rowTokenized_.capacity() * sizeof(uint8_t);
   size += hunkRowIndexes_.capacity() * sizeof(double);
   size += changedLineBlocks_.capacity() * sizeof(DiffChangedLineBlock);
-  for (const auto& block : changedLineBlocks_) {
-    size += block.addedRuns.capacity() * sizeof(DiffChangedLineRun);
-    size += block.removedRuns.capacity() * sizeof(DiffChangedLineRun);
-  }
+  size += changedAddedLineRuns_.capacity() * sizeof(DiffChangedLineRun);
+  size += changedRemovedLineRuns_.capacity() * sizeof(DiffChangedLineRun);
   size += backgroundTokenizeRanges_.size() * sizeof(DiffTokenizationRange);
   for (const auto& file : files_) {
     size += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();

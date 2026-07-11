@@ -94,21 +94,25 @@ struct DiffStoredRow {
 static_assert(sizeof(DiffStoredRow) == 32);
 
 struct DiffChangedLineRun {
-  size_t rowStart = 0;
-  size_t rowCount = 0;
-  size_t ordinalStart = 0;
+  uint32_t rowStart = 0;
+  uint32_t rowCount = 0;
+  uint32_t ordinalStart = 0;
 };
 
+static_assert(sizeof(DiffChangedLineRun) == 12);
+
 struct DiffChangedLineBlock {
-  size_t rowStart = 0;
-  size_t rowEnd = 0;
-  double fileIndex = -1;
-  double hunkIndex = -1;
-  std::vector<DiffChangedLineRun> addedRuns;
-  std::vector<DiffChangedLineRun> removedRuns;
-  size_t addedCount = 0;
-  size_t removedCount = 0;
+  uint32_t rowStart = 0;
+  uint32_t rowEnd = 0;
+  int32_t fileIndex = -1;
+  int32_t hunkIndex = -1;
+  uint32_t addedRunStart = 0;
+  uint32_t addedRunCount = 0;
+  uint32_t removedRunStart = 0;
+  uint32_t removedRunCount = 0;
 };
+
+static_assert(sizeof(DiffChangedLineBlock) == 32);
 
 struct DiffChangedLinePair {
   DiffRenderRow addedRow;
@@ -248,6 +252,8 @@ private:
   std::string rowText_;
   std::vector<double> hunkRowIndexes_;
   std::vector<DiffChangedLineBlock> changedLineBlocks_;
+  std::vector<DiffChangedLineRun> changedAddedLineRuns_;
+  std::vector<DiffChangedLineRun> changedRemovedLineRuns_;
   std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
   bool sideBySideLinesReady_ = false;
