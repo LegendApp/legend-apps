@@ -91,6 +91,28 @@ function renderedTreeHasProps(node: unknown, expectedProps: Record<string, unkno
   return found;
 }
 
+function findRenderedTreeWithProps(node: unknown, expectedProps: Record<string, unknown>): { props: Record<string, unknown> } | null {
+  let found: { props: Record<string, unknown> } | null = null;
+  if (node && typeof node === "object") {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        found = findRenderedTreeWithProps(child, expectedProps);
+        if (found) {
+          break;
+        }
+      }
+    } else {
+      const current = node as { children?: unknown; props?: Record<string, unknown> };
+      if (current.props && Object.entries(expectedProps).every(([key, value]) => current.props?.[key] === value)) {
+        found = { props: current.props };
+      } else if (current.children) {
+        found = findRenderedTreeWithProps(current.children, expectedProps);
+      }
+    }
+  }
+  return found;
+}
+
 describe("DiffRows", () => {
   it("renders unified file headers with status and counts", async () => {
     const rowRender$ = createRowRender$();
@@ -102,6 +124,7 @@ describe("DiffRows", () => {
         index={0}
         isFileHeader
         nativeConfigId="test:unified"
+        nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={rowRender$}
         row={createRow({
@@ -134,6 +157,7 @@ describe("DiffRows", () => {
         index={0}
         isFileHeader
         nativeConfigId="test:unified"
+        nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -166,6 +190,7 @@ describe("DiffRows", () => {
         index={1}
         isFileHeader={false}
         nativeConfigId="test:unified"
+        nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -187,11 +212,13 @@ describe("DiffRows", () => {
       />,
     );
 
-    expect(renderedTreeHasProps(view.toJSON(), {
+    const nativeRow = findRenderedTreeWithProps(view.toJSON(), {
       adaptiveRender: "normal",
       configId: "test:unified",
       rowIndex: 1,
-    })).toBe(true);
+    });
+    expect(nativeRow).not.toBeNull();
+    expect(nativeRow?.props.style).toEqual([{ width: "100%" }, { height: 24 }]);
   });
 
   it("renders side-by-side changed rows with the native row component", async () => {
@@ -231,6 +258,7 @@ describe("DiffRows", () => {
         index={0}
         isFileHeader={false}
         nativeConfigId="test:blocks"
+        nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {
@@ -246,11 +274,13 @@ describe("DiffRows", () => {
       />,
     );
 
-    expect(renderedTreeHasProps(view.toJSON(), {
+    const nativeRow = findRenderedTreeWithProps(view.toJSON(), {
       adaptiveRender: "normal",
       configId: "test:blocks",
       rowIndex: 0,
-    })).toBe(true);
+    });
+    expect(nativeRow).not.toBeNull();
+    expect(nativeRow?.props.style).toEqual([{ width: "100%" }, { height: 24 }]);
   });
 
   it("uses the file index when progressive file summaries share a row start", async () => {
@@ -273,6 +303,7 @@ describe("DiffRows", () => {
         index={0}
         isFileHeader
         nativeConfigId="test:blocks"
+        nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
         rowRender$={createRowRender$({
           document: {

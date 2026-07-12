@@ -104,6 +104,7 @@ type DiffUnifiedRowProps = {
   index: number;
   isFileHeader: boolean;
   nativeConfigId: string;
+  nativeRowHeight: number;
   onToggleFileCollapsed: (fileIndex: number) => void;
   rowRender$: Observable<DiffRowRenderState>;
   row: DiffRenderRow | undefined;
@@ -116,6 +117,7 @@ type DiffSideBySideRowProps = {
   index: number;
   isFileHeader: boolean;
   nativeConfigId: string;
+  nativeRowHeight: number;
   onToggleFileCollapsed: (fileIndex: number) => void;
   rowRender$: Observable<DiffRowRenderState>;
   row: DiffSideBySideRenderRow | undefined;
@@ -353,17 +355,19 @@ function DiffNativeUnifiedLineRow({
   adaptiveRender,
   index,
   nativeConfigId,
+  nativeRowHeight,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
   nativeConfigId: string;
+  nativeRowHeight: number;
 }) {
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
       configId={nativeConfigId}
       rowIndex={index}
-      style={styles.nativeDiffRow}
+      style={[styles.nativeDiffRow, { height: nativeRowHeight }]}
     />
   );
 }
@@ -372,17 +376,19 @@ function DiffNativeSideBySideLineRow({
   adaptiveRender,
   index,
   nativeConfigId,
+  nativeRowHeight,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
   nativeConfigId: string;
+  nativeRowHeight: number;
 }) {
   return (
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
       configId={nativeConfigId}
       rowIndex={index}
-      style={styles.nativeDiffRow}
+      style={[styles.nativeDiffRow, { height: nativeRowHeight }]}
     />
   );
 }
@@ -555,11 +561,16 @@ const DiffUnifiedHunkHeaderRow = memo(function DiffUnifiedHunkHeaderRow({
 });
 
 const DiffUnifiedLineRow = memo(function DiffUnifiedLineRow(props: DiffUnifiedRowProps) {
-  const { adaptiveRender, hasHunkHeader, index, nativeConfigId } = props;
+  const { adaptiveRender, hasHunkHeader, index, nativeConfigId, nativeRowHeight } = props;
   return (
     <>
       {hasHunkHeader ? <DiffUnifiedHunkHeaderRow {...props} /> : null}
-      <DiffNativeUnifiedLineRow adaptiveRender={adaptiveRender} index={index} nativeConfigId={nativeConfigId} />
+      <DiffNativeUnifiedLineRow
+        adaptiveRender={adaptiveRender}
+        index={index}
+        nativeConfigId={nativeConfigId}
+        nativeRowHeight={nativeRowHeight}
+      />
     </>
   );
 });
@@ -650,11 +661,16 @@ const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
 });
 
 const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSideBySideRowProps) {
-  const { adaptiveRender, hasHunkHeader, index, nativeConfigId } = props;
+  const { adaptiveRender, hasHunkHeader, index, nativeConfigId, nativeRowHeight } = props;
   return (
     <>
       {hasHunkHeader ? <DiffSideBySideHunkHeaderRow {...props} /> : null}
-      <DiffNativeSideBySideLineRow adaptiveRender={adaptiveRender} index={index} nativeConfigId={nativeConfigId} />
+      <DiffNativeSideBySideLineRow
+        adaptiveRender={adaptiveRender}
+        index={index}
+        nativeConfigId={nativeConfigId}
+        nativeRowHeight={nativeRowHeight}
+      />
     </>
   );
 });
@@ -737,7 +753,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   nativeDiffRow: {
-    height: "100%",
     width: "100%",
   },
 });

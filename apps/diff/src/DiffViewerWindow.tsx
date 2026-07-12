@@ -5089,13 +5089,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index={index}
           isFileHeader={getItemType(index) === "file-header"}
           nativeConfigId={nativeUnifiedRowConfig.configId}
+          nativeRowHeight={rowHeight}
           onToggleFileCollapsed={toggleFileCollapsed}
           rowRender$={rowRender$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, getItemType, loadedDocument, nativeUnifiedRowConfig.configId, rowRender$, showOnlyHunks, toggleFileCollapsed],
+    [collapsedFileIndexes$, getItemType, loadedDocument, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {
@@ -5128,13 +5129,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           index={index}
           isFileHeader={getSideBySideItemType(index) === "file-header"}
           nativeConfigId={nativeSideBySideRowConfig.configId}
+          nativeRowHeight={rowHeight}
           onToggleFileCollapsed={toggleFileCollapsed}
           rowRender$={rowRender$}
           row={row}
         />
       );
     },
-    [collapsedFileIndexes$, getSideBySideItemType, nativeSideBySideRowConfig.configId, rowRender$, showOnlyHunks, sideBySideHunkHeaderIndexes, toggleFileCollapsed],
+    [collapsedFileIndexes$, getSideBySideItemType, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, sideBySideHunkHeaderIndexes, toggleFileCollapsed],
   );
 
   const documentErrorHeight = documentError
