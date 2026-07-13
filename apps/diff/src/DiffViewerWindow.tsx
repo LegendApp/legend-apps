@@ -224,6 +224,12 @@ const diffUnsavedMergeBannerHeight = 48;
 const diffActiveSearchHighlightColor = "#ff7a00d9";
 const diffActiveSearchRowHighlightColor = "#ff950038";
 const diffSearchHighlightColor = "#ffcc336b";
+const diffListContentInset = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: diffTitlebarTopInset,
+};
 
 logDiffOpenTiming("viewer.module.evaluated", () => ({
   nativeRows: true,
@@ -1460,7 +1466,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     }
   }, [nativeRowsRef, requestSideBySideRangeRef]);
   const hasTopChrome = diffTopChromeHeight > 0;
-  const diffListContentContainerStyle = hasTopChrome ? undefined : styles.diffListContent;
+  const contentInset = hasTopChrome ? undefined : diffListContentInset;
   const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
   const sideBySideLineOverscan = Math.max(12, Math.floor(diffLineOverscan / 10));
   const diffListStyle = useMemo(
@@ -1581,7 +1587,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
       contentBody = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
-          contentContainerStyle={diffListContentContainerStyle}
+          contentInset={contentInset}
           dataKey={`diff:${state.document.documentId}:unified`}
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-unified-list"
@@ -1609,7 +1615,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
       contentBody = (
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
-          contentContainerStyle={diffListContentContainerStyle}
+          contentInset={contentInset}
           dataKey={`diff:${state.document.documentId}:${viewMode}`}
           dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-side-by-side-list"
@@ -5566,9 +5572,6 @@ const styles = StyleSheet.create({
   diffPaneContent: {
     flex: 1,
     minHeight: 0,
-  },
-  diffListContent: {
-    paddingTop: diffTitlebarTopInset,
   },
   diffPaneTopChrome: {
     paddingTop: diffTitlebarTopInset,

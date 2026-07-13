@@ -103,6 +103,7 @@ type VirtualizedFixedDocumentListDocumentIndexMapper = (index: number, listIndex
 export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  contentInset?: NativeScrollEvent["contentInset"];
   dataKey?: string | number;
   dataVersion?: string | number;
   debugName?: string;
@@ -506,6 +507,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
 
 export function VirtualizedFixedDocumentList<TRow>({
   adaptiveRender,
+  contentInset,
   dataKey,
   dataVersion,
   debugName,
@@ -901,6 +903,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   return (
     <LegendList
       contentContainerStyle={contentContainerStyle}
+      contentInset={contentInset}
       data={itemIndexes}
       dataKey={dataKey}
       dataVersion={dataVersion}
