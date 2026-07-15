@@ -4,6 +4,7 @@ import {
   type AdaptiveRenderConfig,
   type LegendListRef,
   type LegendListRenderItemProps,
+  type ViewabilityConfig,
   useAdaptiveRender,
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
@@ -104,6 +105,7 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   adaptiveRender?: AdaptiveRenderConfig;
   contentContainerStyle?: StyleProp<ViewStyle>;
   contentInset?: NativeScrollEvent["contentInset"];
+  viewabilityConfig?: ViewabilityConfig;
   dataKey?: string | number;
   dataVersion?: string | number;
   debugName?: string;
@@ -534,6 +536,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   requestRange,
   rowHeight,
   style,
+  viewabilityConfig,
 }: VirtualizedFixedDocumentListProps<TRow>) {
   const hasRequestedInitialRangeRef = useRef(false);
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -920,6 +923,7 @@ export function VirtualizedFixedDocumentList<TRow>({
       recycleItems={recycleItems}
       renderItem={renderItem}
       style={style}
+      viewabilityConfig={viewabilityConfig}
     />
   );
 }

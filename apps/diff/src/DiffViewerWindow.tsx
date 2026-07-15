@@ -230,6 +230,7 @@ const diffListContentInset = {
   right: 0,
   top: diffTitlebarTopInset,
 };
+const diffListViewabilityConfig = { startOffset: diffTitlebarTopInset };
 
 logDiffOpenTiming("viewer.module.evaluated", () => ({
   nativeRows: true,
@@ -1467,6 +1468,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   }, [nativeRowsRef, requestSideBySideRangeRef]);
   const hasTopChrome = diffTopChromeHeight > 0;
   const contentInset = hasTopChrome ? undefined : diffListContentInset;
+  const viewabilityConfig = hasTopChrome ? undefined : diffListViewabilityConfig;
   const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
   const sideBySideLineOverscan = Math.max(12, Math.floor(diffLineOverscan / 10));
   const diffListStyle = useMemo(
@@ -1588,6 +1590,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           contentInset={contentInset}
+          viewabilityConfig={viewabilityConfig}
           dataKey={`diff:${state.document.documentId}:unified`}
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-unified-list"
@@ -1616,6 +1619,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
         <VirtualizedFixedDocumentList
           adaptiveRender={adaptiveRender}
           contentInset={contentInset}
+          viewabilityConfig={viewabilityConfig}
           dataKey={`diff:${state.document.documentId}:${viewMode}`}
           dataVersion={`${sideBySideDataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-side-by-side-list"
