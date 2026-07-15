@@ -3000,7 +3000,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const currentItemCountLimit = itemCountLimitState?.documentId === loadedDocumentId
     ? itemCountLimitState.limit
     : diffProgressiveInitialPaintRowCount;
-  const initialItemCountLimit = loadedDocument !== null && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
+  const isProgressiveLoadIncomplete = state.status === "loaded" && state.loadComplete === false;
+  const initialItemCountLimit = loadedDocument !== null &&
+    isProgressiveLoadIncomplete &&
+    loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
     ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
     : null;
 
@@ -4917,13 +4920,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return handled;
   }), [advanceSearchResult, focusFileSearch, focusSearch]);
 
-  const scrollToFileRef = useRenderLatestRef(scrollToFile);
   const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
     activeFileIndex$.set(file.index);
-    requestAnimationFrame(() => {
-      scrollToFileRef.current(file);
-    });
-  }, [activeFileIndex$, scrollToFileRef]);
+    scrollToFile(file);
+  }, [activeFileIndex$, scrollToFile]);
 
   const toggleSidebarFolder = useCallback((title: string) => {
     setCollapsedSidebarFolders((currentFolders) => {
