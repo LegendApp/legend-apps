@@ -17,9 +17,39 @@ export type DiffInlineMergeList = {
   sourceRowByItemIndex: Map<number, number>;
 };
 
+export type DiffInlineMergeItemIndexAllocator = {
+  getItemIndex: (filePath: string, rowIndex: number) => number;
+  locationByItemIndex: ReadonlyMap<number, { filePath: string; rowIndex: number }>;
+};
+
+export function createDiffInlineMergeItemIndexAllocator(): DiffInlineMergeItemIndexAllocator {
+  const itemIndexesByFilePath = new Map<string, number[]>();
+  const locationByItemIndex = new Map<number, { filePath: string; rowIndex: number }>();
+  let nextItemIndex = -1;
+  return {
+    getItemIndex: (filePath, rowIndex) => {
+      let itemIndexes = itemIndexesByFilePath.get(filePath);
+      if (!itemIndexes) {
+        itemIndexes = [];
+        itemIndexesByFilePath.set(filePath, itemIndexes);
+      }
+      let itemIndex = itemIndexes[rowIndex];
+      if (itemIndex === undefined) {
+        itemIndex = nextItemIndex;
+        nextItemIndex -= 1;
+        itemIndexes[rowIndex] = itemIndex;
+        locationByItemIndex.set(itemIndex, { filePath, rowIndex });
+      }
+      return itemIndex;
+    },
+    locationByItemIndex,
+  };
+}
+
 type CreateDiffInlineMergeListOptions = {
   collapsedFileIndexes: ReadonlySet<number>;
   files: readonly DiffFileSummary[];
+  getMergeItemIndex: (filePath: string, rowIndex: number) => number;
   mergeDisplayModelByPath: ReadonlyMap<string, DiffMergeDisplayModel>;
   mergeFileByPath: ReadonlyMap<string, DiffMergeConflictFile>;
   sideBySideFileHeaderByListIndex: ReadonlyMap<number, DiffSideBySideFileHeader>;
@@ -30,15 +60,15 @@ type CreateDiffInlineMergeListOptions = {
 
 function createInlineRowsForFile({
   file,
+  getMergeItemIndex,
   model,
-  nextItemIndex,
   rowByItemIndex,
   sourceFileIndex,
   sourceRowIndex,
 }: {
   file: DiffMergeConflictFile;
+  getMergeItemIndex: (filePath: string, rowIndex: number) => number;
   model: DiffMergeDisplayModel | undefined;
-  nextItemIndex: { current: number };
   rowByItemIndex: Map<number, DiffInlineMergeRow>;
   sourceFileIndex: number;
   sourceRowIndex: number;
@@ -46,8 +76,7 @@ function createInlineRowsForFile({
   const itemIndexes: number[] = [];
   if (model && model.rows.length > 0) {
     for (let rowIndex = 0; rowIndex < model.rows.length; rowIndex += 1) {
-      const itemIndex = nextItemIndex.current;
-      nextItemIndex.current -= 1;
+      const itemIndex = getMergeItemIndex(file.path, rowIndex);
       itemIndexes.push(itemIndex);
       rowByItemIndex.set(itemIndex, {
         file,
@@ -75,6 +104,7 @@ function getMergeFileForDiffFile(
 export function createDiffInlineMergeList({
   collapsedFileIndexes,
   files,
+  getMergeItemIndex,
   mergeDisplayModelByPath,
   mergeFileByPath,
   sideBySideFileHeaderByListIndex,
@@ -92,7 +122,6 @@ export function createDiffInlineMergeList({
     };
   }
 
-  const nextItemIndex = { current: -1 };
   const fileByIndex = new Map<number, DiffFileSummary>();
   for (const file of files) {
     fileByIndex.set(file.index, file);
@@ -124,8 +153,8 @@ export function createDiffInlineMergeList({
         if (!collapsedFileIndexes.has(file.index)) {
           itemIndexes.push(...createInlineRowsForFile({
             file: mergeFile,
+            getMergeItemIndex,
             model: mergeDisplayModelByPath.get(mergeFile.path),
-            nextItemIndex,
             rowByItemIndex,
             sourceFileIndex: file.index,
             sourceRowIndex: rowStart,
@@ -157,8 +186,8 @@ export function createDiffInlineMergeList({
         sourceRowByItemIndex.set(rowIndex, rowIndex);
         itemIndexes.push(...createInlineRowsForFile({
           file: mergeFile,
+          getMergeItemIndex,
           model: mergeDisplayModelByPath.get(mergeFile.path),
-          nextItemIndex,
           rowByItemIndex,
           sourceFileIndex: file.index,
           sourceRowIndex: header.sourceStart,

@@ -1,6 +1,6 @@
 import type { DiffFileSummary, DiffSideBySideFileHeader } from "@legend-apps/diff-parser";
 import type { DiffMergeConflictFile, DiffMergeDisplayModel, DiffMergeDisplayRow } from "../../diffMerge";
-import { createDiffInlineMergeList } from "../diffInlineMergeModel";
+import { createDiffInlineMergeItemIndexAllocator, createDiffInlineMergeList } from "../diffInlineMergeModel";
 
 function createFile(overrides: Partial<DiffFileSummary>): DiffFileSummary {
   return {
@@ -65,6 +65,7 @@ describe("diffInlineMergeModel", () => {
     const unifiedModel = createDiffInlineMergeList({
       collapsedFileIndexes: new Set(),
       files: [createFile({ rowCount: unifiedItemIndexes.length, rowStart: 0 })],
+      getMergeItemIndex: createDiffInlineMergeItemIndexAllocator().getItemIndex,
       mergeDisplayModelByPath: new Map(),
       mergeFileByPath: new Map(),
       sideBySideFileHeaderByListIndex: new Map(),
@@ -75,6 +76,7 @@ describe("diffInlineMergeModel", () => {
     const sideBySideModel = createDiffInlineMergeList({
       collapsedFileIndexes: new Set(),
       files: [createFile({ rowCount: sideBySideItemIndexes.length, rowStart: 0 })],
+      getMergeItemIndex: createDiffInlineMergeItemIndexAllocator().getItemIndex,
       mergeDisplayModelByPath: new Map(),
       mergeFileByPath: new Map(),
       sideBySideFileHeaderByListIndex: new Map(),
@@ -102,6 +104,7 @@ describe("diffInlineMergeModel", () => {
     const model = createDiffInlineMergeList({
       collapsedFileIndexes: new Set(),
       files,
+      getMergeItemIndex: createDiffInlineMergeItemIndexAllocator().getItemIndex,
       mergeDisplayModelByPath: new Map([[mergeFile.path, createMergeModel(["ours", "theirs"])]]),
       mergeFileByPath: new Map([[mergeFile.path, mergeFile]]),
       sideBySideFileHeaderByListIndex: new Map(),
@@ -129,6 +132,7 @@ describe("diffInlineMergeModel", () => {
     const model = createDiffInlineMergeList({
       collapsedFileIndexes: new Set([1]),
       files,
+      getMergeItemIndex: createDiffInlineMergeItemIndexAllocator().getItemIndex,
       mergeDisplayModelByPath: new Map([[mergeFile.path, createMergeModel(["ours", "theirs"])]]),
       mergeFileByPath: new Map([[mergeFile.path, mergeFile]]),
       sideBySideFileHeaderByListIndex: new Map(),
@@ -158,6 +162,7 @@ describe("diffInlineMergeModel", () => {
     const model = createDiffInlineMergeList({
       collapsedFileIndexes: new Set(),
       files,
+      getMergeItemIndex: createDiffInlineMergeItemIndexAllocator().getItemIndex,
       mergeDisplayModelByPath: new Map([[mergeFile.path, createMergeModel(["renamed"])]]),
       mergeFileByPath: new Map([[mergeFile.path, mergeFile]]),
       sideBySideFileHeaderByListIndex: new Map(),
@@ -171,6 +176,46 @@ describe("diffInlineMergeModel", () => {
     expect(model.rowByItemIndex.get(-1)?.file.path).toBe("src/OldConflict.ts");
   });
 
+  it("keeps later merge file item indexes stable when an earlier file changes row count", () => {
+    const files = [
+      createFile({ index: 0, path: "src/First.ts", rowCount: 2, rowStart: 0 }),
+      createFile({ index: 1, path: "src/Second.ts", rowCount: 2, rowStart: 2 }),
+    ];
+    const firstMergeFile = createMergeFile("src/First.ts");
+    const secondMergeFile = createMergeFile("src/Second.ts");
+    const mergeFileByPath = new Map([
+      [firstMergeFile.path, firstMergeFile],
+      [secondMergeFile.path, secondMergeFile],
+    ]);
+    const itemIndexAllocator = createDiffInlineMergeItemIndexAllocator();
+    const createModel = (firstFileRows: readonly string[]) => createDiffInlineMergeList({
+      collapsedFileIndexes: new Set(),
+      files,
+      getMergeItemIndex: itemIndexAllocator.getItemIndex,
+      mergeDisplayModelByPath: new Map([
+        [firstMergeFile.path, createMergeModel(firstFileRows)],
+        [secondMergeFile.path, createMergeModel(["second-a", "second-b"])],
+      ]),
+      mergeFileByPath,
+      sideBySideFileHeaderByListIndex: new Map(),
+      sideBySideItemIndexes: [],
+      unifiedItemIndexes: [0, 1, 2, 3],
+      viewMode: "unified" as const,
+    });
+
+    const initialModel = createModel(["first-a", "first-b"]);
+    const updatedModel = createModel(["first-a"]);
+
+    expect(initialModel.itemIndexes).toEqual([0, -1, -2, 2, -3, -4]);
+    expect(updatedModel.itemIndexes).toEqual([0, -1, 2, -3, -4]);
+    expect(updatedModel.rowByItemIndex.get(-3)?.file.path).toBe("src/Second.ts");
+    expect(updatedModel.rowByItemIndex.get(-4)?.file.path).toBe("src/Second.ts");
+    expect(itemIndexAllocator.locationByItemIndex.get(-3)).toEqual({
+      filePath: "src/Second.ts",
+      rowIndex: 0,
+    });
+  });
+
   it("replaces side-by-side conflict blocks with inline merge rows mapped to the header source row", () => {
     const files = [
       createFile({ index: 0, path: "src/Conflict.ts", rowCount: 4, rowStart: 10 }),
@@ -181,6 +226,7 @@ describe("diffInlineMergeModel", () => {
     const model = createDiffInlineMergeList({
       collapsedFileIndexes: new Set(),
       files,
+      getMergeItemIndex: createDiffInlineMergeItemIndexAllocator().getItemIndex,
       mergeDisplayModelByPath: new Map([[mergeFile.path, createMergeModel(["ours", "theirs"])]]),
       mergeFileByPath: new Map([[mergeFile.path, mergeFile]]),
       sideBySideFileHeaderByListIndex: new Map([

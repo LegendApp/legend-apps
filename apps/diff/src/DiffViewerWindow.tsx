@@ -42,7 +42,7 @@ import {
   LegendList,
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
-import { computed, type Observable } from "@legendapp/state";
+import { batch, computed, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
@@ -145,7 +145,9 @@ import {
   useDiffSideBySideRuntime,
 } from "./viewer/diffLoadedDocumentModel";
 import {
+  createDiffInlineMergeItemIndexAllocator,
   createDiffInlineMergeList,
+  type DiffInlineMergeItemIndexAllocator,
   type DiffInlineMergeRow,
 } from "./viewer/diffInlineMergeModel";
 import {
@@ -1417,6 +1419,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
   const inlineMergeModel = useDiffInlineMergeModel({
     collapsedFileIndexes: rowConfig.collapsedFileIndexes,
+    documentId: state.document.documentId,
     files: state.files,
     horizontalConfigId: nativeRowConfig?.configId ?? "",
     mergeState,
@@ -1497,7 +1500,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   }, [activeFileIndex$, handleTopItemChangedRef, inlineMergeModelRef]);
   const renderUnifiedRow = useCallback(
     (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow | DiffInlineMergeRow>) => (
-      inlineMergeModelRef.current.getInlineMergeRow(props.index)
+      props.index < 0
         ? inlineMergeModelRef.current.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
         : renderRowRef.current(props as VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>)
     ),
@@ -1525,7 +1528,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   }, [activeFileIndex$, handleSideBySideTopItemChangedRef, inlineMergeModelRef]);
   const renderSideBySideListRow = useCallback(
     (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow | DiffInlineMergeRow>) => (
-      inlineMergeModelRef.current.getInlineMergeRow(props.index)
+      props.index < 0
         ? inlineMergeModelRef.current.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
         : renderSideBySideRowRef.current(props as VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>)
     ),
@@ -1883,6 +1886,16 @@ type DiffMergeSyntaxState = {
 };
 
 type DiffMergeSyntaxByPath = Record<string, DiffMergeSyntaxState | undefined>;
+
+type DiffMergeFileRenderModel = {
+  controlRowByBlockKey: ReadonlyMap<string, number>;
+  file: DiffMergeConflictFile;
+  horizontalConfigId: string;
+  model: DiffMergeDisplayModel;
+  showOnlyHunks: boolean;
+};
+
+type DiffMergeVersionByKey = Record<string, number | undefined>;
 
 function createMergeSyntaxStyleMap(styles: readonly SyntaxStyle[]): SyntaxStyleMap {
   return new Map(styles.map((style) => [style.id, style]));
@@ -2259,8 +2272,65 @@ function DiffMergePlaceholderRow({
   return <View style={{ height: rowHeight }} />;
 }
 
+function DiffMergeObservableLineRow({
+  itemIndex,
+  mergeFileRenderByPathRef,
+  mergeFileVersionByPath$,
+  mergeItemIndexAllocator,
+  mergeRender$,
+  mergeSyntaxByPath$,
+  onResolveMergeConflict,
+  resolvingMergeConflictKeys$,
+}: {
+  itemIndex: number;
+  mergeFileRenderByPathRef: RefObject<ReadonlyMap<string, DiffMergeFileRenderModel>>;
+  mergeFileVersionByPath$: Observable<DiffMergeVersionByKey>;
+  mergeItemIndexAllocator: DiffInlineMergeItemIndexAllocator;
+  mergeRender$: Observable<DiffMergeRenderState>;
+  mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
+  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+}) {
+  const location = mergeItemIndexAllocator.locationByItemIndex.get(itemIndex);
+  useValue(() => (
+    location
+      ? mergeFileVersionByPath$[location.filePath].get()
+      : undefined
+  ));
+  const renderFile = location
+    ? mergeFileRenderByPathRef.current.get(location.filePath)
+    : undefined;
+
+  let content: ReactElement;
+  if (location && renderFile) {
+    const { controlRowByBlockKey, file, horizontalConfigId, model } = renderFile;
+    const displayRow = model.rows[location.rowIndex];
+    const controlBlock = displayRow?.conflictBlock
+      && controlRowByBlockKey.get(getMergeConflictKey(file, displayRow.conflictBlock)) === location.rowIndex
+      ? displayRow.conflictBlock
+      : null;
+    content = (
+      <DiffMergeLineRow
+        controlBlock={controlBlock}
+        file={file}
+        horizontalConfigId={horizontalConfigId}
+        mergeRender$={mergeRender$}
+        mergeSyntaxByPath$={mergeSyntaxByPath$}
+        onResolveMergeConflict={onResolveMergeConflict}
+        resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
+        row={displayRow}
+        rowIndex={location.rowIndex}
+      />
+    );
+  } else {
+    content = <DiffMergePlaceholderRow mergeRender$={mergeRender$} />;
+  }
+  return content;
+}
+
 function useDiffInlineMergeModel({
   collapsedFileIndexes,
+  documentId,
   files,
   horizontalConfigId,
   mergeState,
@@ -2276,6 +2346,7 @@ function useDiffInlineMergeModel({
   viewMode,
 }: {
   collapsedFileIndexes: ReadonlySet<number>;
+  documentId: number;
   files: readonly DiffFileSummary[];
   horizontalConfigId: string;
   mergeState: DiffMergeState;
@@ -2317,18 +2388,36 @@ function useDiffInlineMergeModel({
       return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
     }).join("|");
   }, [horizontalConfigId, mergeDisplayModelByPath, mergeState]);
-  const controlRowByFilePath = useMemo(() => {
-    const map = new Map<string, Map<string, number>>();
+  const mergeFileRenderByPath = useMemo(() => {
+    const map = new Map<string, DiffMergeFileRenderModel>();
     if (mergeState.status === "ready") {
       for (const file of mergeState.files) {
         const model = mergeDisplayModelByPath.get(file.path);
         if (model) {
-          map.set(file.path, getMergeControlRowByBlockKey(model.conflictRanges, file));
+          map.set(file.path, {
+            controlRowByBlockKey: getMergeControlRowByBlockKey(model.conflictRanges, file),
+            file,
+            horizontalConfigId,
+            model,
+            showOnlyHunks,
+          });
         }
       }
     }
     return map;
-  }, [mergeDisplayModelByPath, mergeState]);
+  }, [horizontalConfigId, mergeDisplayModelByPath, mergeState, showOnlyHunks]);
+
+  const mergeItemIndexAllocatorRef = useRef({
+    allocator: createDiffInlineMergeItemIndexAllocator(),
+    documentId,
+  });
+  if (mergeItemIndexAllocatorRef.current.documentId !== documentId) {
+    mergeItemIndexAllocatorRef.current = {
+      allocator: createDiffInlineMergeItemIndexAllocator(),
+      documentId,
+    };
+  }
+  const getMergeItemIndex = mergeItemIndexAllocatorRef.current.allocator.getItemIndex;
 
   const emptyMergeFileByPath = useMemo(() => new Map<string, DiffMergeConflictFile>(), []);
   const mergeFileByPath = mergeState.status === "ready" ? mergeState.fileByPath : emptyMergeFileByPath;
@@ -2336,6 +2425,7 @@ function useDiffInlineMergeModel({
     () => createDiffInlineMergeList({
       collapsedFileIndexes,
       files,
+      getMergeItemIndex,
       mergeDisplayModelByPath,
       mergeFileByPath,
       sideBySideFileHeaderByListIndex,
@@ -2346,6 +2436,7 @@ function useDiffInlineMergeModel({
     [
       collapsedFileIndexes,
       files,
+      getMergeItemIndex,
       mergeDisplayModelByPath,
       mergeFileByPath,
       sideBySideFileHeaderByListIndex,
@@ -2354,6 +2445,42 @@ function useDiffInlineMergeModel({
       viewMode,
     ],
   );
+
+  const mergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
+  const publishedMergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
+  const mergeFileVersionByPath$ = useObservable<DiffMergeVersionByKey>({});
+  const mergeObservableVersionRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const previousFileRenderByPath = publishedMergeFileRenderByPathRef.current;
+    mergeFileRenderByPathRef.current = mergeFileRenderByPath;
+
+    batch(() => {
+      previousFileRenderByPath.forEach((_previousRenderFile, filePath) => {
+        if (!mergeFileRenderByPath.has(filePath)) {
+          mergeObservableVersionRef.current += 1;
+          mergeFileVersionByPath$[filePath].set(mergeObservableVersionRef.current);
+        }
+      });
+      mergeFileRenderByPath.forEach((renderFile, filePath) => {
+        const previousRenderFile = previousFileRenderByPath.get(filePath);
+        if (
+          !previousRenderFile ||
+          previousRenderFile.file !== renderFile.file ||
+          previousRenderFile.horizontalConfigId !== renderFile.horizontalConfigId ||
+          previousRenderFile.showOnlyHunks !== renderFile.showOnlyHunks
+        ) {
+          mergeObservableVersionRef.current += 1;
+          mergeFileVersionByPath$[filePath].set(mergeObservableVersionRef.current);
+        }
+      });
+    });
+
+    publishedMergeFileRenderByPathRef.current = mergeFileRenderByPath;
+  }, [
+    mergeFileRenderByPath,
+    mergeFileVersionByPath$,
+  ]);
 
   const getInlineMergeRow = useCallback((index: number) => inlineList.rowByItemIndex.get(index), [inlineList]);
   const getDocumentIndex = useCallback((index: number) => {
@@ -2371,31 +2498,26 @@ function useDiffInlineMergeModel({
   ), [inlineList]);
   const renderMergeRow = useCallback(
     ({ index }: VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>) => {
-      const mergeRow = inlineList.rowByItemIndex.get(index);
-      if (!mergeRow) {
-        return <DiffMergePlaceholderRow mergeRender$={mergeRender$} />;
-      }
-      const { file, row: displayRow, rowIndex } = mergeRow;
-      const controlRowByBlockKey = controlRowByFilePath.get(file.path) ?? new Map<string, number>();
-      const controlBlock = displayRow?.conflictBlock
-        && controlRowByBlockKey.get(getMergeConflictKey(file, displayRow.conflictBlock)) === rowIndex
-        ? displayRow.conflictBlock
-        : null;
       return (
-        <DiffMergeLineRow
-          controlBlock={controlBlock}
-          file={file}
-          horizontalConfigId={horizontalConfigId}
+        <DiffMergeObservableLineRow
+          itemIndex={index}
+          mergeFileRenderByPathRef={mergeFileRenderByPathRef}
+          mergeFileVersionByPath$={mergeFileVersionByPath$}
+          mergeItemIndexAllocator={mergeItemIndexAllocatorRef.current.allocator}
           mergeRender$={mergeRender$}
           mergeSyntaxByPath$={mergeSyntaxByPath$}
           onResolveMergeConflict={onResolveMergeConflict}
           resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-          row={displayRow}
-          rowIndex={rowIndex}
         />
       );
     },
-    [controlRowByFilePath, horizontalConfigId, inlineList, mergeRender$, mergeSyntaxByPath$, onResolveMergeConflict, resolvingMergeConflictKeys$],
+    [
+      mergeFileVersionByPath$,
+      mergeRender$,
+      mergeSyntaxByPath$,
+      onResolveMergeConflict,
+      resolvingMergeConflictKeys$,
+    ],
   );
 
   useEffect(() => {
