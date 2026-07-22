@@ -1,6 +1,6 @@
 import type { DiffDocument, DiffFileSummary, DiffRenderRow, DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
 import { observable } from "@legendapp/state";
-import { render } from "@testing-library/react-native";
+import { act, render } from "@testing-library/react-native";
 import React from "react";
 import {
   DiffSideBySideRow,
@@ -254,9 +254,7 @@ describe("DiffRows", () => {
       <DiffSideBySideRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
-        hasHunkHeader={false}
         index={0}
-        isFileHeader={false}
         nativeConfigId="test:blocks"
         nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
@@ -299,9 +297,7 @@ describe("DiffRows", () => {
       <DiffSideBySideRow
         adaptiveRender="normal"
         collapsedFileIndexes$={observable(new Set<number>())}
-        hasHunkHeader={false}
         index={0}
-        isFileHeader
         nativeConfigId="test:blocks"
         nativeRowHeight={24}
         onToggleFileCollapsed={jest.fn()}
@@ -328,6 +324,76 @@ describe("DiffRows", () => {
     expect(view.getByText("SidebarView.swift")).toBeTruthy();
     expect(view.queryByText("src/windows/")).toBeNull();
     expect(view.queryByText("index.ts")).toBeNull();
+  });
+
+  it("updates a mounted side-by-side row when collapse changes its presentation", async () => {
+    const firstFile = createFile({ index: 0, path: "src/First.tsx", rowStart: 0 });
+    const secondFile = createFile({ index: 1, path: "src/Second.tsx", rowStart: 8 });
+    const line = createRow({ index: 1 });
+    const lineRow: DiffSideBySideRenderRow = {
+      fileIndex: 0,
+      hunkIndex: 0,
+      index: 1,
+      kind: "unchanged",
+      newRow: line,
+      newRowEqualsOldRow: true,
+      newRowVisible: true,
+      oldRow: line,
+      oldRowVisible: true,
+      sourceEnd: 2,
+      sourceStart: 1,
+    };
+    const fileHeaderRow: DiffSideBySideRenderRow = {
+      ...lineRow,
+      fileIndex: 1,
+      hunkIndex: -1,
+      kind: "file-header",
+      sourceEnd: 9,
+      sourceStart: 8,
+    };
+    const document = {
+      getPlainSideBySideRow: jest.fn((_index: number, collapsedFileIndexes: number[]) => (
+        collapsedFileIndexes.includes(firstFile.index) ? fileHeaderRow : lineRow
+      )),
+    } as unknown as DiffDocument;
+    const collapsedFileIndexes$ = observable(new Set<number>());
+    const rowRender$ = createRowRender$({
+      document: {
+        ...createRowRenderState().document,
+        current: document,
+        fileByIndex: new Map([
+          [firstFile.index, firstFile],
+          [secondFile.index, secondFile],
+        ]),
+      },
+      presentation: {
+        ...createRowRenderState().presentation,
+        showOnlyHunks: false,
+      },
+    });
+    const view = await render(
+      <DiffSideBySideRow
+        adaptiveRender="normal"
+        collapsedFileIndexes$={collapsedFileIndexes$}
+        index={1}
+        nativeConfigId="test:blocks"
+        nativeRowHeight={24}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={rowRender$}
+        row={undefined}
+      />,
+    );
+
+    expect(findRenderedTreeWithProps(view.toJSON(), { rowIndex: 1 })).not.toBeNull();
+    expect(view.queryByText("Second.tsx")).toBeNull();
+
+    await act(async () => {
+      collapsedFileIndexes$.set(new Set([firstFile.index]));
+      rowRender$.document.collapsedFileIndexList.set([firstFile.index]);
+    });
+
+    expect(findRenderedTreeWithProps(view.toJSON(), { rowIndex: 1 })).toBeNull();
+    expect(view.getByText("Second.tsx")).toBeTruthy();
   });
 
   it("caches unified hunk line ranges for a stable document", () => {

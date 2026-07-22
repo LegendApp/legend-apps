@@ -113,15 +113,20 @@ type DiffUnifiedRowProps = {
 type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
-  hasHunkHeader: boolean;
   index: number;
-  isFileHeader: boolean;
   nativeConfigId: string;
   nativeRowHeight: number;
   onToggleFileCollapsed: (fileIndex: number) => void;
   rowRender$: Observable<DiffRowRenderState>;
   row: DiffSideBySideRenderRow | undefined;
 };
+
+type DiffSideBySideLineRowProps = DiffSideBySideRowProps & {
+  hasHunkHeader: boolean;
+};
+
+const diffSideBySidePresentationFileHeader = 1;
+const diffSideBySidePresentationHunkHeader = 2;
 
 const diffDarkPalette = {
   addAccent: "#7ee787",
@@ -258,6 +263,17 @@ export function isDiffSideBySideHunkStart(
     return true;
   }
   return previousRow.fileIndex !== row.fileIndex || previousRow.hunkIndex !== row.hunkIndex;
+}
+
+function getCurrentPlainSideBySideRow(
+  document: DiffDocument | null,
+  index: number,
+  collapsedFileIndexList: readonly number[],
+  fallbackRow: DiffSideBySideRenderRow | undefined,
+) {
+  return document?.getPlainSideBySideRow
+    ? document.getPlainSideBySideRow(index, [...collapsedFileIndexList])
+    : fallbackRow;
 }
 
 function recordSideBySideDiffLineRange(
@@ -598,8 +614,11 @@ const DiffSideBySideFileHeaderRow = memo(function DiffSideBySideFileHeaderRow({
     syntaxAppearance: rowRender$.presentation.syntaxAppearance.get(),
   }));
   const fileHeaderAndFile = useValue(() => {
-    const fileHeader = row?.kind === "file-header"
-      ? { fileIndex: row.fileIndex, sourceStart: row.sourceStart }
+    const collapsedFileIndexList = rowRender$.document.collapsedFileIndexList.get();
+    const document = rowRender$.document.current.get() as DiffDocument | null;
+    const displayRow = getCurrentPlainSideBySideRow(document, index, collapsedFileIndexList, row);
+    const fileHeader = displayRow?.kind === "file-header"
+      ? { fileIndex: displayRow.fileIndex, sourceStart: displayRow.sourceStart }
       : rowRender$.document.sideBySideFileHeaderByListIndex.get().get(index);
     const file = fileHeader
       ? rowRender$.document.fileByIndex.get().get(fileHeader.fileIndex)
@@ -637,7 +656,7 @@ const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
     const collapsedFileIndexList = rowRender$.document.collapsedFileIndexList.get();
     const document = rowRender$.document.current.get() as DiffDocument | null;
     const sideBySideRowCount = rowRender$.document.sideBySideRowCount.get();
-    const displayRow = row ?? (document ? document.getPlainSideBySideRow(index, [...collapsedFileIndexList]) : undefined);
+    const displayRow = getCurrentPlainSideBySideRow(document, index, collapsedFileIndexList, row);
     return {
       borderColor: rowRender$.presentation.borderColor.get(),
       fontFamily: rowRender$.presentation.fontFamily.get(),
@@ -660,7 +679,7 @@ const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
   ) : null;
 });
 
-const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSideBySideRowProps) {
+const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSideBySideLineRowProps) {
   const { adaptiveRender, hasHunkHeader, index, nativeConfigId, nativeRowHeight } = props;
   return (
     <>
@@ -676,9 +695,30 @@ const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSid
 });
 
 export const DiffSideBySideRow = memo(function DiffSideBySideRow(props: DiffSideBySideRowProps) {
-  return props.isFileHeader
+  const { index, row, rowRender$ } = props;
+  const rowPresentation = useValue(() => {
+    const collapsedFileIndexList = rowRender$.document.collapsedFileIndexList.get();
+    const document = rowRender$.document.current.get() as DiffDocument | null;
+    const displayRow = getCurrentPlainSideBySideRow(document, index, collapsedFileIndexList, row);
+    const isFileHeader = displayRow?.kind === "file-header"
+      || (!displayRow && rowRender$.document.sideBySideFileHeaderByListIndex.get().has(index));
+    if (isFileHeader) {
+      return diffSideBySidePresentationFileHeader;
+    }
+
+    const hasHunkHeader = rowRender$.presentation.showOnlyHunks.get()
+      && isDiffSideBySideHunkStart(document, index, collapsedFileIndexList, displayRow);
+    return hasHunkHeader ? diffSideBySidePresentationHunkHeader : 0;
+  });
+
+  return rowPresentation & diffSideBySidePresentationFileHeader
     ? <DiffSideBySideFileHeaderRow {...props} />
-    : <DiffSideBySideLineRow {...props} />;
+    : (
+      <DiffSideBySideLineRow
+        {...props}
+        hasHunkHeader={Boolean(rowPresentation & diffSideBySidePresentationHunkHeader)}
+      />
+    );
 });
 
 const styles = StyleSheet.create({

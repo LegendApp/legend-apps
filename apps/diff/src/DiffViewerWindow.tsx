@@ -4676,10 +4676,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     });
   }, [setCollapsedFileIndexesValue]);
   const listSyntaxTheme = syntaxTheme.name;
-  const sideBySideDataVersion = useMemo(
-    () => hashDiffNativeRowConfigVersion([diffRows.dataVersion, collapsedFileIndexesKey, sideBySideRowCount]),
-    [collapsedFileIndexesKey, diffRows.dataVersion, sideBySideRowCount],
-  );
+  const sideBySideDataVersion = diffRows.dataVersion;
   const rowConfig = useMemo<DiffRowConfig>(
     () => ({
       borderColor: diffPalette.border,
@@ -5257,9 +5254,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         <DiffSideBySideRow
           adaptiveRender={adaptiveRender}
           collapsedFileIndexes$={collapsedFileIndexes$}
-          hasHunkHeader={showOnlyHunks && sideBySideHunkHeaderIndexes.has(index)}
           index={index}
-          isFileHeader={getSideBySideItemType(index) === "file-header"}
           nativeConfigId={nativeSideBySideRowConfig.configId}
           nativeRowHeight={rowHeight}
           onToggleFileCollapsed={toggleFileCollapsed}
@@ -5268,7 +5263,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, getSideBySideItemType, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, sideBySideHunkHeaderIndexes, toggleFileCollapsed],
+    [collapsedFileIndexes$, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, toggleFileCollapsed],
   );
 
   const documentErrorHeight = documentError
