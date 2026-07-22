@@ -52,6 +52,39 @@ export interface DiffSideBySideFileHeader {
   listIndex: number;
 }
 
+export interface DiffSideBySideProjectionSplice {
+  index: number;
+  deleteCount: number;
+  insertCount: number;
+}
+
+export interface DiffSideBySideProjectionCommit {
+  changed: boolean;
+  previousRevision: number;
+  revision: number;
+  previousLength: number;
+  length: number;
+  splices: DiffSideBySideProjectionSplice[];
+}
+
+export interface DiffSideBySideProjectionItem {
+  itemId: number;
+  kind: string;
+  fileIndex: number;
+  hunkIndex: number;
+  sourceStart: number;
+  sourceEnd: number;
+  hunkStart: boolean;
+}
+
+export interface DiffSideBySideProjectionLocation {
+  listIndex: number;
+  itemId: number;
+  fileIndex: number;
+  collapsed: boolean;
+  exact: boolean;
+}
+
 export interface DiffSideBySideRenderRow {
   index: number;
   kind: string;
@@ -129,6 +162,7 @@ export interface DiffDocument
   getPlainRows(start: number, count: number): DiffRenderRow[];
   getRows(start: number, count: number): DiffRenderRow[];
   getHunkRowIndexes(): number[];
+  createSideBySideProjection(collapsedFileIndexes: number[]): DiffSideBySideProjection;
   getSideBySideRowCount(collapsedFileIndexes: number[]): number;
   getSideBySideFileHeaders(collapsedFileIndexes: number[]): DiffSideBySideFileHeader[];
   getSideBySideListIndexForSourceRow(sourceRowIndex: number, collapsedFileIndexes: number[]): number;
@@ -149,6 +183,31 @@ export interface DiffDocument
   releaseNativeResources(): number;
   startBackgroundTokenization(chunkRowCount: number, chunkBudgetMs: number, maxRowCount: number, maxSourceLineCount: number): number;
   stopBackgroundTokenization(): number;
+}
+
+export interface DiffSideBySideProjection
+  extends HybridObject<{
+    ios: "c++";
+  }> {
+  readonly projectionId: number;
+  readonly revision: number;
+  readonly rowCount: number;
+  readonly documentGeneration: number;
+  setFileCollapsed(fileIndex: number, collapsed: boolean): DiffSideBySideProjectionCommit;
+  refresh(): DiffSideBySideProjectionCommit;
+  isFileCollapsed(fileIndex: number): boolean;
+  getItemId(index: number): number;
+  getItem(itemId: number): DiffSideBySideProjectionItem;
+  getFileLocation(fileIndex: number): DiffSideBySideProjectionLocation;
+  getItemLocation(itemId: number): DiffSideBySideProjectionLocation;
+  getSourceLocation(sourceRowIndex: number): DiffSideBySideProjectionLocation;
+  getHunkLocations(): DiffSideBySideProjectionLocation[];
+  getPlainRowForItem(itemId: number, listIndex: number): DiffSideBySideRenderRow;
+  getRowForItem(itemId: number, listIndex: number): DiffSideBySideRenderRow;
+  getPlainRows(start: number, count: number): DiffSideBySideRenderRow[];
+  getRows(start: number, count: number): DiffSideBySideRenderRow[];
+  requestTokenizedRows(start: number, count: number, reason: string): number;
+  releaseNativeResources(): number;
 }
 
 export interface DiffLoadSession

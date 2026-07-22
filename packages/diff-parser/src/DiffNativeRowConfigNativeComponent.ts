@@ -22,6 +22,7 @@ export interface NativeProps extends ViewProps {
   markerWidth: CodegenTypes.Double;
   mutedColor: string;
   presentation: string;
+  projectionId: CodegenTypes.Double;
   removeAccentColor: string;
   removeBackgroundColor: string;
   rowHeight: CodegenTypes.Double;

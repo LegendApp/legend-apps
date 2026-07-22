@@ -1,5 +1,6 @@
 #include "../cpp/DiffParserCore.hpp"
 #include "../cpp/DiffInlineChange.hpp"
+#include "../cpp/DiffSideBySideProjection.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -389,6 +390,85 @@ void assertSideBySideRows(const diffparser::DiffParsedDocument& parsed) {
   expect(foundAddedOnlyLine, "side-by-side should keep unpaired added rows");
 }
 
+void assertSideBySideProjection(const diffparser::DiffParsedDocument& parsed) {
+  const auto lines = diffparser::createDiffSideBySideLines(parsed.rows);
+  diffparser::DiffSideBySideIndex index;
+  index.rebuild(lines, 1, 0);
+  diffparser::DiffSideBySideProjection projection(index);
+
+  expectEqual(static_cast<double>(projection.length()), static_cast<double>(lines.size()), "projection initial length");
+  expectEqual(static_cast<double>(projection.documentGeneration()), 1, "projection document generation");
+  expect(!index.files().empty(), "projection file spans");
+
+  const auto firstFile = index.files().front();
+  expect(firstFile.baseCount > 1, "projection first file expanded rows");
+  const auto secondFile = index.files().size() > 1 ? std::optional(index.files()[1]) : std::nullopt;
+  const auto firstFileHeader = projection.visibleIndexForFile(firstFile.fileIndex);
+  expect(firstFileHeader.has_value(), "projection first file header index");
+  expectEqual(static_cast<double>(*firstFileHeader), 0, "projection first file header starts at zero");
+
+  const auto collapse = projection.setFileCollapsed(firstFile.fileIndex, true);
+  expect(collapse.changed, "projection collapse should change");
+  expectEqual(static_cast<double>(collapse.splices.size()), 1, "projection collapse splice count");
+  expectEqual(static_cast<double>(collapse.splices[0].index), 1, "projection collapse splice index");
+  expectEqual(
+      static_cast<double>(collapse.splices[0].deleteCount),
+      static_cast<double>(firstFile.baseCount - 1),
+      "projection collapse delete count");
+  expectEqual(collapse.splices[0].insertCount, 0, "projection collapse insert count");
+  expect(projection.isFileCollapsed(firstFile.fileIndex), "projection collapsed state");
+
+  const auto hiddenLocation = projection.locateItem(firstFile.baseStart + 1);
+  expect(hiddenLocation.has_value(), "projection hidden row location");
+  expect(hiddenLocation->collapsed, "projection hidden row collapsed state");
+  expect(!hiddenLocation->exact, "projection hidden row maps to header");
+  expectEqual(static_cast<double>(hiddenLocation->itemId), static_cast<double>(firstFile.baseStart), "projection hidden row item");
+  expectEqual(static_cast<double>(hiddenLocation->visibleIndex), 0, "projection hidden row visible index");
+
+  if (secondFile.has_value()) {
+    const auto secondHeader = projection.visibleIndexForFile(secondFile->fileIndex);
+    expect(secondHeader.has_value(), "projection second header after collapse");
+    expectEqual(static_cast<double>(*secondHeader), 1, "projection second header shifts by exact splice");
+    const auto secondHeaderItem = projection.itemIdAt(*secondHeader);
+    expect(secondHeaderItem.has_value(), "projection second header item");
+    expectEqual(
+        static_cast<double>(*secondHeaderItem),
+        static_cast<double>(secondFile->baseStart),
+        "projection retained item identity");
+  }
+
+  const auto noChange = projection.setFileCollapsed(firstFile.fileIndex, true);
+  expect(!noChange.changed, "projection idempotent collapse");
+  expectEqual(static_cast<double>(noChange.revision), static_cast<double>(collapse.revision), "projection idempotent revision");
+
+  const auto expand = projection.setFileCollapsed(firstFile.fileIndex, false);
+  expect(expand.changed, "projection expand should change");
+  expectEqual(static_cast<double>(expand.splices.size()), 1, "projection expand splice count");
+  expectEqual(static_cast<double>(expand.splices[0].index), 1, "projection expand splice index");
+  expectEqual(expand.splices[0].deleteCount, 0, "projection expand delete count");
+  expectEqual(
+      static_cast<double>(expand.splices[0].insertCount),
+      static_cast<double>(firstFile.baseCount - 1),
+      "projection expand insert count");
+  expectEqual(static_cast<double>(projection.length()), static_cast<double>(lines.size()), "projection restored length");
+
+  size_t expectedHunkStarts = 0;
+  int32_t previousFileIndex = -1;
+  int32_t previousHunkIndex = -1;
+  for (size_t itemId = 0; itemId < lines.size(); itemId += 1) {
+    const auto& line = lines[itemId];
+    const bool expectedHunkStart =
+        line.kind != sideBySideKindFileHeader &&
+        line.hunkIndex >= 0 &&
+        (line.fileIndex != previousFileIndex || line.hunkIndex != previousHunkIndex);
+    expect(index.isHunkStart(itemId) == expectedHunkStart, "projection hunk-start metadata");
+    expectedHunkStarts += expectedHunkStart ? 1 : 0;
+    previousFileIndex = line.fileIndex;
+    previousHunkIndex = line.hunkIndex;
+  }
+  expect(expectedHunkStarts > 0, "projection fixture should contain hunks");
+}
+
 diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::string& fixturePath, bool showOnlyHunks = true) {
   std::vector<diffparser::DiffFileSummary> files;
   std::vector<diffparser::DiffRenderRow> rows;
@@ -591,6 +671,7 @@ int main(int argc, char** argv) {
     assertFileSummaries(parsed);
     assertRenderRows(parsed);
     assertSideBySideRows(parsed);
+    assertSideBySideProjection(parsed);
     assertInlineChangeRanges();
     assertIgnoreWhitespaceChanges();
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 1), parsed);

@@ -8,6 +8,7 @@
 
 #import "../cpp/DiffInlineChange.hpp"
 #import "../cpp/HybridDiffDocument.hpp"
+#import "../cpp/HybridDiffSideBySideProjection.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -122,6 +123,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @interface RNDiffNativeRowRenderConfig : NSObject
 @property(nonatomic, copy) NSString *configId;
 @property(nonatomic, assign) double documentId;
+@property(nonatomic, assign) double projectionId;
 @property(nonatomic, assign) double rowHeight;
 @property(nonatomic, assign) double changeBarWidth;
 @property(nonatomic, assign) double lineNumberWidth;
@@ -212,6 +214,7 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
   if (self = [super init]) {
     _configId = @"";
     _documentId = 0;
+    _projectionId = 0;
     _rowHeight = 18;
     _changeBarWidth = 3;
     _lineNumberWidth = 44;
@@ -859,6 +862,7 @@ static void RNDiffDrawHorizontalText(
 
 @interface RNDiffNativeRowContentView : NSView
 @property(nonatomic, copy) NSString *configId;
+@property(nonatomic, assign) double itemId;
 @property(nonatomic, assign) double rowIndex;
 @property(nonatomic, copy) NSString *adaptiveRender;
 @property(nonatomic, strong) NSMutableAttributedString *attributedTextScratch;
@@ -889,7 +893,10 @@ static void RNDiffDrawHorizontalText(
     auto document = getRegisteredDiffDocument(config.documentId);
     if (document) {
       if ([config.presentation isEqualToString:@"blocks"]) {
-        const auto row = document->getPlainSideBySideRow(self.rowIndex, [config collapsedFileIndexes]);
+        auto projection = getRegisteredDiffSideBySideProjection(config.projectionId);
+        const auto row = projection
+          ? projection->getPlainRowForItem(self.itemId, self.rowIndex)
+          : DiffSideBySideRenderRow();
         if (row.kind != "file-header") {
           if (row.newRowEqualsOldRow && row.oldRowVisible && row.newRowVisible) {
             label = RNDiffAccessibleLineDescription(row.oldRow, @"");
@@ -952,7 +959,11 @@ static void RNDiffDrawHorizontalText(
 {
   NSString *text = nil;
   if ([config.presentation isEqualToString:@"blocks"]) {
-    const auto row = document->getPlainSideBySideRow(rowIndex, [config collapsedFileIndexes]);
+    auto projection = getRegisteredDiffSideBySideProjection(config.projectionId);
+    const auto itemId = projection ? projection->getItemId(rowIndex) : -1;
+    const auto row = projection && itemId >= 0
+      ? projection->getPlainRowForItem(itemId, rowIndex)
+      : DiffSideBySideRenderRow();
     if (side == 0 && row.oldRowVisible && row.oldRow.kind == diffRowKindLine) {
       text = RNDiffStringFromStdString(row.oldRow.text);
     } else if (side == 1 && row.newRowVisible) {
@@ -1163,8 +1174,9 @@ static void RNDiffDrawHorizontalText(
   RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
   auto document = config ? getRegisteredDiffDocument(config.documentId) : nullptr;
   if (config && document) {
+    auto projection = getRegisteredDiffSideBySideProjection(config.projectionId);
     const double rowCount = [config.presentation isEqualToString:@"blocks"]
-      ? document->getSideBySideRowCount([config collapsedFileIndexes])
+      ? (projection ? projection->getRowCount() : 0)
       : document->getRowCount();
     if (rowCount > 0) {
       [config setSelectionAnchorRowIndex:0
@@ -1454,7 +1466,10 @@ static void RNDiffDrawHorizontalText(
 - (void)drawSideBySideDocument:(HybridDiffDocument *)document
                          config:(RNDiffNativeRowRenderConfig *)config
 {
-  const auto row = document->getPlainSideBySideRow(self.rowIndex, [config collapsedFileIndexes]);
+  auto projection = getRegisteredDiffSideBySideProjection(config.projectionId);
+  const auto row = projection
+    ? projection->getPlainRowForItem(self.itemId, self.rowIndex)
+    : DiffSideBySideRenderRow();
   if (row.kind == "file-header") {
     return;
   }
@@ -1911,7 +1926,10 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
     double rowStart = rowView.rowIndex;
     double rowEnd = rowStart + 1;
     if ([config.presentation isEqualToString:@"blocks"]) {
-      const auto row = document->getPlainSideBySideRow(rowView.rowIndex, [config collapsedFileIndexes]);
+      auto projection = getRegisteredDiffSideBySideProjection(config.projectionId);
+      const auto row = projection
+        ? projection->getPlainRowForItem(rowView.itemId, rowView.rowIndex)
+        : DiffSideBySideRenderRow();
       rowStart = row.sourceStart;
       rowEnd = row.sourceEnd;
     }
@@ -1954,6 +1972,7 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
     tokenizationOnlyUpdate = newProps.tokenizationVersion != previousProps.tokenizationVersion
       && newProps.configVersion == previousProps.configVersion
       && newProps.documentId == previousProps.documentId
+      && newProps.projectionId == previousProps.projectionId
       && newProps.horizontalViewportWidth == previousProps.horizontalViewportWidth
       && newProps.searchHighlightByRowIndex == previousProps.searchHighlightByRowIndex
       && newProps.activeSearchHighlightByRowIndex == previousProps.activeSearchHighlightByRowIndex;
@@ -1971,6 +1990,7 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
   config.configId = nextConfigId;
   config.horizontalScroller = [RNDiffHorizontalScrollerRegistry() objectForKey:nextConfigId];
   config.documentId = newProps.documentId;
+  config.projectionId = newProps.projectionId;
   config.rowHeight = newProps.rowHeight;
   config.changeBarWidth = newProps.changeBarWidth;
   config.lineNumberWidth = newProps.lineNumberWidth;
@@ -2056,6 +2076,7 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
   const auto &newProps = *std::static_pointer_cast<DiffNativeRowProps const>(props);
 #if TARGET_OS_OSX
   _contentView.configId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
+  _contentView.itemId = newProps.itemId;
   _contentView.rowIndex = newProps.rowIndex;
   _contentView.adaptiveRender = [NSString stringWithUTF8String:newProps.adaptiveRender.c_str()] ?: @"normal";
   [_contentView setNeedsDisplay:YES];
@@ -2070,6 +2091,7 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
 #if TARGET_OS_OSX
   _contentView.configId = @"";
   _contentView.rowIndex = -1;
+  _contentView.itemId = -1;
   _contentView.adaptiveRender = @"normal";
   [_contentView.attributedTextScratch.mutableString setString:@""];
   [_contentView setNeedsDisplay:YES];

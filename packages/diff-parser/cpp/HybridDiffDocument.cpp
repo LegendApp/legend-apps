@@ -1,6 +1,7 @@
 #include "HybridDiffDocument.hpp"
 
 #include "DiffParserCore.hpp"
+#include "HybridDiffSideBySideProjection.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <algorithm>
@@ -625,6 +626,15 @@ std::vector<double> HybridDiffDocument::getHunkRowIndexes() {
   return hunkRowIndexes_;
 }
 
+std::shared_ptr<HybridDiffSideBySideProjectionSpec> HybridDiffDocument::createSideBySideProjection(
+    const std::vector<double>& collapsedFileIndexes) {
+  auto index = getSideBySideIndexSnapshot();
+  return std::make_shared<HybridDiffSideBySideProjection>(
+      shared_cast<HybridDiffDocument>(),
+      index,
+      collapsedFileIndexes);
+}
+
 void HybridDiffDocument::appendStoredRowLocked(DiffRenderRow row) {
   const auto validSignedValue = [](double value) {
     return std::isfinite(value) &&
@@ -859,6 +869,8 @@ void HybridDiffDocument::ensureSideBySideLinesLocked(size_t minLineCount) {
   }
 
   bool shouldContinue = true;
+  int32_t firstChangedFileIndex = 0;
+  bool didRebuild = false;
   while (shouldContinue) {
     size_t rebuildStart = 0;
     if (sideBySideLinesReady_ && sideBySideSourceRowCount_ > 0 && !files_.empty()) {
@@ -887,6 +899,15 @@ void HybridDiffDocument::ensureSideBySideLinesLocked(size_t minLineCount) {
       sideBySideLines_.erase(eraseFrom, sideBySideLines_.end());
     }
 
+    for (const auto& file : files_) {
+      const auto fileStart = static_cast<size_t>(std::max(0.0, std::floor(file.rowStart)));
+      if (fileStart <= rebuildStart) {
+        firstChangedFileIndex = static_cast<int32_t>(std::max(0.0, std::floor(file.index)));
+      } else {
+        break;
+      }
+    }
+
     auto nextLines = createDiffSideBySideLines(renderRowsLocked(rebuildStart, targetRowCount));
     const auto indexOffset = sideBySideLines_.size();
     sideBySideLines_.reserve(indexOffset + nextLines.size());
@@ -896,6 +917,7 @@ void HybridDiffDocument::ensureSideBySideLinesLocked(size_t minLineCount) {
 
     sideBySideSourceRowCount_ = targetRowCount;
     sideBySideLinesReady_ = true;
+    didRebuild = true;
     shouldContinue =
         !requiresAllRows &&
         sideBySideLines_.size() < minLineCount &&
@@ -905,6 +927,12 @@ void HybridDiffDocument::ensureSideBySideLinesLocked(size_t minLineCount) {
           rowCount,
           std::max(targetRowCount + 1024, targetRowCount * 2));
     }
+  }
+  if (didRebuild) {
+    sideBySideIndex_.rebuild(
+        sideBySideLines_,
+        ++sideBySideIndexGeneration_,
+        firstChangedFileIndex);
   }
 }
 
@@ -1123,6 +1151,124 @@ double HybridDiffDocument::getSideBySideRowCount(const std::vector<double>& coll
     }
   }
   return static_cast<double>(count);
+}
+
+DiffSideBySideIndex HybridDiffDocument::getSideBySideIndexSnapshot() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
+  return sideBySideIndex_;
+}
+
+std::optional<size_t> HybridDiffDocument::findSideBySideItemIdForSourceRow(
+    double sourceRowIndex) {
+  const auto safeSourceRowIndex = static_cast<int32_t>(std::max(0.0, std::floor(sourceRowIndex)));
+  std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked();
+  const auto* file = sideBySideIndex_.fileForSourceRow(safeSourceRowIndex);
+  if (file != nullptr) {
+    const auto end = std::min(sideBySideLines_.size(), file->baseStart + file->baseCount);
+    for (size_t itemId = file->baseStart; itemId < end; itemId += 1) {
+      const auto& line = sideBySideLines_[itemId];
+      const auto sourceStart = getSideBySideSourceStart(
+          line.oldRowIndex,
+          line.newRowIndex,
+          static_cast<double>(itemId));
+      const auto sourceEnd = getSideBySideSourceEnd(
+          line.oldRowIndex,
+          line.newRowIndex,
+          static_cast<double>(itemId));
+      if (sourceStart <= safeSourceRowIndex && safeSourceRowIndex < sourceEnd) {
+        return itemId;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<DiffSideBySideLine> HybridDiffDocument::getSideBySideLineForItem(
+    size_t itemId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked(itemId + 1);
+  return itemId < sideBySideLines_.size()
+      ? std::optional<DiffSideBySideLine>(sideBySideLines_[itemId])
+      : std::nullopt;
+}
+
+DiffSideBySideRenderRow HybridDiffDocument::getSideBySideRowForItem(
+    size_t itemId,
+    double listIndex,
+    bool tokenizeRows) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ensureSideBySideLinesLocked(itemId + 1);
+  if (itemId < sideBySideLines_.size()) {
+    return createSideBySideRenderRow(
+        sideBySideLines_[itemId],
+        listIndex,
+        static_cast<double>(itemId),
+        tokenizeRows);
+  }
+  return DiffSideBySideRenderRow();
+}
+
+std::vector<DiffSideBySideRenderRow> HybridDiffDocument::getSideBySideRowsForItems(
+    const std::vector<size_t>& itemIds,
+    size_t listStart,
+    bool tokenizeRows) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!itemIds.empty()) {
+    ensureSideBySideLinesLocked(*std::max_element(itemIds.begin(), itemIds.end()) + 1);
+  }
+  std::vector<DiffSideBySideRenderRow> rows;
+  rows.reserve(itemIds.size());
+  for (size_t offset = 0; offset < itemIds.size(); offset += 1) {
+    const auto itemId = itemIds[offset];
+    if (itemId < sideBySideLines_.size()) {
+      rows.push_back(createSideBySideRenderRow(
+          sideBySideLines_[itemId],
+          static_cast<double>(listStart + offset),
+          static_cast<double>(itemId),
+          tokenizeRows));
+    }
+  }
+  return rows;
+}
+
+double HybridDiffDocument::requestTokenizedSideBySideItems(
+    const std::vector<size_t>& itemIds,
+    const std::string& reason) {
+  (void)reason;
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!itemIds.empty()) {
+    ensureSideBySideLinesLocked(*std::max_element(itemIds.begin(), itemIds.end()) + 1);
+  }
+  size_t requestedRowStart = rows_.size();
+  size_t requestedRowEnd = 0;
+  for (const auto itemId : itemIds) {
+    if (itemId < sideBySideLines_.size()) {
+      const auto& line = sideBySideLines_[itemId];
+      if (line.oldRowIndex >= 0) {
+        const auto rowIndex = static_cast<size_t>(line.oldRowIndex);
+        requestedRowStart = std::min(requestedRowStart, rowIndex);
+        requestedRowEnd = std::max(requestedRowEnd, rowIndex + 1);
+        enqueueTokenizationRangeLocked(rowIndex, rowIndex + 1, true);
+      }
+      if (line.newRowIndex >= 0 && line.newRowIndex != line.oldRowIndex) {
+        const auto rowIndex = static_cast<size_t>(line.newRowIndex);
+        requestedRowStart = std::min(requestedRowStart, rowIndex);
+        requestedRowEnd = std::max(requestedRowEnd, rowIndex + 1);
+        enqueueTokenizationRangeLocked(rowIndex, rowIndex + 1, true);
+      }
+    }
+  }
+  if (requestedRowStart < requestedRowEnd) {
+    retainTokenizedRowsNearLocked(requestedRowStart, requestedRowEnd);
+    startQueuedTokenizationLocked(
+        backgroundGeneration_.load(),
+        static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount),
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+            std::chrono::duration<double, std::milli>(defaultBackgroundTokenizeChunkBudgetMs)));
+  }
+  return getTokenizedRowVersion();
 }
 
 std::vector<DiffSideBySideFileHeader> HybridDiffDocument::getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) {
@@ -1559,6 +1705,8 @@ double HybridDiffDocument::releaseNativeResources() {
       clearVectorMemory(changedRemovedLineRuns_);
       clearVectorMemory(rowTokenized_);
       clearVectorMemory(sideBySideLines_);
+      sideBySideIndex_ = DiffSideBySideIndex();
+      sideBySideIndexGeneration_ = 0;
       sideBySideLinesReady_ = false;
       sideBySideSourceRowCount_ = 0;
       clearVectorMemory(fileSources_);

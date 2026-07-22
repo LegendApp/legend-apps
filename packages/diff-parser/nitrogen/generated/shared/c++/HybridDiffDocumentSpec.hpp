@@ -17,6 +17,8 @@
 namespace margelo::nitro::legendapps::diffparser { struct DiffCachedRow; }
 // Forward declaration of `DiffRenderRow` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { struct DiffRenderRow; }
+// Forward declaration of `HybridDiffSideBySideProjectionSpec` to properly resolve imports.
+namespace margelo::nitro::legendapps::diffparser { class HybridDiffSideBySideProjectionSpec; }
 // Forward declaration of `DiffSideBySideFileHeader` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { struct DiffSideBySideFileHeader; }
 // Forward declaration of `DiffSideBySideRenderRow` to properly resolve imports.
@@ -35,6 +37,8 @@ namespace margelo::nitro::legendapps::diffparser { struct DiffLoadTiming; }
 #include "DiffCachedRow.hpp"
 #include "DiffRenderRow.hpp"
 #include <vector>
+#include <memory>
+#include "HybridDiffSideBySideProjectionSpec.hpp"
 #include "DiffSideBySideFileHeader.hpp"
 #include "DiffSideBySideRenderRow.hpp"
 #include "DiffTokenizedRowRange.hpp"
@@ -83,6 +87,7 @@ namespace margelo::nitro::legendapps::diffparser {
       virtual std::vector<DiffRenderRow> getPlainRows(double start, double count) = 0;
       virtual std::vector<DiffRenderRow> getRows(double start, double count) = 0;
       virtual std::vector<double> getHunkRowIndexes() = 0;
+      virtual std::shared_ptr<HybridDiffSideBySideProjectionSpec> createSideBySideProjection(const std::vector<double>& collapsedFileIndexes) = 0;
       virtual double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) = 0;
       virtual std::vector<DiffSideBySideFileHeader> getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) = 0;
       virtual double getSideBySideListIndexForSourceRow(double sourceRowIndex, const std::vector<double>& collapsedFileIndexes) = 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../nitrogen/generated/shared/c++/HybridDiffDocumentSpec.hpp"
+#include "DiffSideBySideProjection.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -142,6 +143,8 @@ public:
   std::vector<DiffRenderRow> getPlainRows(double start, double count) override;
   std::vector<DiffRenderRow> getRows(double start, double count) override;
   std::vector<double> getHunkRowIndexes() override;
+  std::shared_ptr<HybridDiffSideBySideProjectionSpec> createSideBySideProjection(
+      const std::vector<double>& collapsedFileIndexes) override;
   double getSideBySideRowCount(const std::vector<double>& collapsedFileIndexes) override;
   std::vector<DiffSideBySideFileHeader> getSideBySideFileHeaders(const std::vector<double>& collapsedFileIndexes) override;
   double getSideBySideListIndexForSourceRow(double sourceRowIndex, const std::vector<double>& collapsedFileIndexes) override;
@@ -184,6 +187,21 @@ public:
       std::string workdirPath,
       std::string headTreeOid);
   void setProgressTiming(const DiffLoadTiming& timing);
+
+  DiffSideBySideIndex getSideBySideIndexSnapshot();
+  std::optional<size_t> findSideBySideItemIdForSourceRow(double sourceRowIndex);
+  std::optional<DiffSideBySideLine> getSideBySideLineForItem(size_t itemId);
+  DiffSideBySideRenderRow getSideBySideRowForItem(
+      size_t itemId,
+      double listIndex,
+      bool tokenizeRows);
+  std::vector<DiffSideBySideRenderRow> getSideBySideRowsForItems(
+      const std::vector<size_t>& itemIds,
+      size_t listStart,
+      bool tokenizeRows);
+  double requestTokenizedSideBySideItems(
+      const std::vector<size_t>& itemIds,
+      const std::string& reason);
 
 protected:
   size_t getExternalMemorySize() noexcept override;
@@ -255,6 +273,8 @@ private:
   std::vector<DiffChangedLineRun> changedRemovedLineRuns_;
   std::vector<uint8_t> rowTokenized_;
   std::vector<DiffSideBySideLine> sideBySideLines_;
+  DiffSideBySideIndex sideBySideIndex_;
+  uint64_t sideBySideIndexGeneration_ = 0;
   bool sideBySideLinesReady_ = false;
   size_t sideBySideSourceRowCount_ = 0;
   std::vector<DiffFileSources> fileSources_;

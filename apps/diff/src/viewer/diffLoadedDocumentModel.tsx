@@ -18,7 +18,7 @@ import {
 } from "@legend-apps/virtualized-document";
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { DiffSettingsFile } from "../diffSettings";
 import {
   diffProgressiveInitialPaintRowCount,
@@ -27,16 +27,14 @@ import {
 } from "./diffViewerConstants";
 import {
   createCollapsedFileIndexList,
-  createIdentityDiffRowIndexes,
   createSideBySideFileHeaderIndexes,
   createSideBySideListIndexByRowIndex,
   createVisibleDiffRowIndexes,
   findFileIndexForRow,
-  getBoundedSideBySideLayoutMetadata,
-  getBoundedSideBySideRowCount,
 } from "./diffLoadedDocumentIndexes";
 import type { DiffViewerState } from "./diffViewerModel";
 import { logDiffOpenTiming } from "./diffViewerSupport";
+import { DiffSideBySideDataSource } from "./diffSideBySideDataSource";
 
 export {
   createCollapsedFileIndexList,
@@ -78,23 +76,6 @@ export function getFilesForSourceRowRange(files: readonly DiffFileSummary[], sta
     const rowEnd = rowStart + Math.max(0, Math.floor(file.rowCount));
     return rowStart < rangeEnd && rowEnd > rangeStart;
   });
-}
-
-function getFilesForSideBySideRange(
-  document: DiffDocument,
-  files: readonly DiffFileSummary[],
-  start: number,
-  count: number,
-  collapsedFileIndexes: readonly number[],
-) {
-  const rows = document.getPlainSideBySideRows(start, count, [...collapsedFileIndexes]);
-  const fileIndexes = new Set<number>();
-  rows.forEach((row) => {
-    if (row.fileIndex >= 0) {
-      fileIndexes.add(row.fileIndex);
-    }
-  });
-  return files.filter((file) => fileIndexes.has(file.index));
 }
 
 function getDiffFileIndexes(files: readonly DiffFileSummary[]) {
@@ -352,14 +333,48 @@ export function useDiffLoadedModel({
     () => createCollapsedFileIndexList(collapsedFileIndexes),
     [collapsedFileIndexes],
   );
+  const sideBySideDataSource = useMemo(
+    () => state.status === "loaded" && viewMode !== "unified"
+      ? new DiffSideBySideDataSource(state.document, collapsedFileIndexList)
+      : null,
+    [state.status === "loaded" ? state.document : null, viewMode === "unified"],
+  );
+  useEffect(() => () => {
+    sideBySideDataSource?.dispose();
+  }, [sideBySideDataSource]);
+  const subscribeToSideBySideDataSource = useCallback(
+    (onStoreChange: () => void) => sideBySideDataSource?.subscribe(onStoreChange) ?? (() => {}),
+    [sideBySideDataSource],
+  );
+  const getSideBySideRevision = useCallback(
+    () => sideBySideDataSource?.getRevision() ?? 0,
+    [sideBySideDataSource],
+  );
+  const sideBySideRevision = useSyncExternalStore(
+    subscribeToSideBySideDataSource,
+    getSideBySideRevision,
+    getSideBySideRevision,
+  );
+  useLayoutEffect(() => {
+    if (sideBySideDataSource && state.status === "loaded") {
+      sideBySideDataSource.refresh();
+      for (const file of state.files) {
+        const collapsed = collapsedFileIndexes.has(file.index);
+        if (sideBySideDataSource.isFileCollapsed(file.index) !== collapsed) {
+          sideBySideDataSource.setFileCollapsed(file.index, collapsed);
+        }
+      }
+    }
+  }, [collapsedFileIndexes, sideBySideDataSource, state]);
   const sideBySideRowCount = useMemo(
     () => {
       const startedAt = nowMs();
       const isInitialCountLimited = initialItemCountLimit !== null && initialItemCountLimit !== undefined;
+      const fullCount = sideBySideDataSource?.getLength() ?? 0;
       const count = state.status === "loaded" && viewMode !== "unified"
         ? isInitialCountLimited
-          ? getBoundedSideBySideRowCount(state.document, initialItemCountLimit, collapsedFileIndexList)
-          : Math.max(0, Math.floor(state.document.getSideBySideRowCount(collapsedFileIndexList)))
+          ? Math.min(fullCount, initialItemCountLimit)
+          : fullCount
         : 0;
       if (state.status === "loaded") {
         logDiffOpenTiming("viewer.derive.sideBySideRowCount", () => ({
@@ -373,28 +388,31 @@ export function useDiffLoadedModel({
       }
       return count;
     },
-    [collapsedFileIndexList, initialItemCountLimit, state, viewMode],
-  );
-  const sideBySideItemIndexes = useMemo(
-    () => {
-      const startedAt = nowMs();
-      const indexes = createIdentityDiffRowIndexes(sideBySideRowCount);
-      if (state.status === "loaded") {
-        logDiffOpenTiming("viewer.derive.sideBySideItemIndexes", () => ({
-          durationMs: Number((nowMs() - startedAt).toFixed(1)),
-          items: indexes.length,
-          rows: state.document.rowCount,
-        }));
-      }
-      return indexes;
-    },
-    [sideBySideRowCount, state],
+    [initialItemCountLimit, sideBySideDataSource, sideBySideRevision, state, viewMode],
   );
   const sideBySideLayoutMetadata = useMemo(
     () => {
       const startedAt = nowMs();
-      const metadata = state.status === "loaded" && viewMode !== "unified"
-        ? getBoundedSideBySideLayoutMetadata(state.document, sideBySideRowCount, collapsedFileIndexList)
+      const metadata = state.status === "loaded" && viewMode !== "unified" && sideBySideDataSource
+        ? {
+            fileHeaders: state.files.flatMap((file) => {
+              const location = sideBySideDataSource.getFileLocation(file.index);
+              if (location.listIndex < 0 || location.listIndex >= sideBySideRowCount) {
+                return [];
+              }
+              const item = sideBySideDataSource.getItemMetadata(location.itemId);
+              return [{
+                fileIndex: file.index,
+                listIndex: location.listIndex,
+                sourceStart: item.sourceStart,
+              }];
+            }),
+            hunkHeaderIndexes: new Set(
+              sideBySideDataSource.getHunkLocations()
+                .map((location) => location.listIndex)
+                .filter((index) => index >= 0 && index < sideBySideRowCount),
+            ),
+          }
         : {
             fileHeaders: [],
             hunkHeaderIndexes: new Set<number>(),
@@ -412,7 +430,7 @@ export function useDiffLoadedModel({
       }
       return metadata;
     },
-    [collapsedFileIndexList, initialItemCountLimit, sideBySideRowCount, state, viewMode],
+    [initialItemCountLimit, sideBySideDataSource, sideBySideRevision, sideBySideRowCount, state, viewMode],
   );
   const sideBySideFileHeaders = sideBySideLayoutMetadata.fileHeaders;
   const sideBySideHunkHeaderIndexes = sideBySideLayoutMetadata.hunkHeaderIndexes;
@@ -479,7 +497,7 @@ export function useDiffLoadedModel({
     sideBySideFileHeaderIndexes,
     sideBySideFileHeaderByListIndex,
     sideBySideHunkHeaderIndexes,
-    sideBySideItemIndexes,
+    sideBySideDataSource,
     sideBySideListIndexByRowIndex,
     sideBySideRowCount,
     visibleItemIndexes,
@@ -488,21 +506,21 @@ export function useDiffLoadedModel({
 
 export function useDiffSideBySideRuntime({
   activeFileIndex$,
-  collapsedFileIndexes$,
   diffPaneHeight$,
   nativeSideBySideRows,
   rowHeight,
   sideBySideRowCount,
+  sideBySideDataSource,
   state$,
   syntaxHighlightingEnabled,
   viewMode,
 }: {
   activeFileIndex$: Observable<number | null>;
-  collapsedFileIndexes$: Observable<Set<number>>;
   diffPaneHeight$: Observable<number>;
   nativeSideBySideRows: boolean;
   rowHeight: number;
   sideBySideRowCount: number;
+  sideBySideDataSource: DiffSideBySideDataSource | null;
   state$: Observable<DiffViewerState>;
   syntaxHighlightingEnabled: boolean;
   viewMode: DiffSettingsFile["viewMode"];
@@ -512,42 +530,36 @@ export function useDiffSideBySideRuntime({
     document: DiffDocument;
     start: number;
   } | null>(null);
-  const getCurrentCollapsedFileIndexList = useCallback(
-    () => createCollapsedFileIndexList(collapsedFileIndexes$.peek()),
-    [collapsedFileIndexes$],
-  );
   const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
   const resetSideBySideRuntime = useCallback(() => {
     sideBySideVisibleRangeRef.current = null;
   }, []);
   const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
     const currentState = state$.peek();
-    if (!nativeSideBySideRows && currentState.status === "loaded" && options?.reason !== "scroll") {
+    if (currentState.status === "loaded" && options?.reason !== "scroll") {
       const start = Math.max(0, Math.floor(lineStart));
       const count = Math.max(0, Math.ceil(lineCount));
       if (count > 0) {
-        const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
-        currentState.document.getPlainSideBySideRows(start, count, collapsedFileIndexList);
+        sideBySideDataSource?.requestTokenizedRows(start, count, options?.reason ?? "initial");
       }
     }
     // Scroll-driven requests stay side-effect free so scrolling never updates React state.
-  }, [getCurrentCollapsedFileIndexList, nativeSideBySideRows, state$]);
-  const getSideBySideRow = useCallback((index: number) => {
+  }, [sideBySideDataSource, state$]);
+  const getSideBySideRow = useCallback((index: number, listIndex: number) => {
     const currentState = state$.peek();
     return !nativeSideBySideRows && currentState.status === "loaded"
-      ? currentState.document.getPlainSideBySideRow(index, getCurrentCollapsedFileIndexList())
+      ? sideBySideDataSource?.getPlainRow(index, listIndex)
       : undefined;
-  }, [getCurrentCollapsedFileIndexList, nativeSideBySideRows, state$]);
+  }, [nativeSideBySideRows, sideBySideDataSource, state$]);
   const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
     const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      const row = currentState.document.getPlainSideBySideRow(lineIndex, getCurrentCollapsedFileIndexList());
-      const nextFileIndex = findFileIndexForRow(currentState.files, row.sourceStart);
+    if (currentState.status === "loaded" && lineIndex >= 0) {
+      const nextFileIndex = sideBySideDataSource?.getItemMetadata(lineIndex).fileIndex ?? -1;
       if (activeFileIndex$.peek() !== nextFileIndex) {
         activeFileIndex$.set(nextFileIndex);
       }
     }
-  }, [activeFileIndex$, getCurrentCollapsedFileIndexList, state$]);
+  }, [activeFileIndex$, sideBySideDataSource, state$]);
   const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
     const currentState = state$.peek();
     if (currentState.status === "loaded") {
@@ -557,12 +569,18 @@ export function useDiffSideBySideRuntime({
         start,
       };
       if (syntaxHighlightingEnabled) {
-        const collapsedFileIndexList = getCurrentCollapsedFileIndexList();
-        const files = getFilesForSideBySideRange(currentState.document, currentState.files, start, count, collapsedFileIndexList);
+        const fileIndexes = new Set<number>();
+        for (let index = start; index < start + count; index += 1) {
+          const itemId = sideBySideDataSource?.getItem(index);
+          if (itemId !== undefined) {
+            fileIndexes.add(sideBySideDataSource?.getItemMetadata(itemId).fileIndex ?? -1);
+          }
+        }
+        const files = currentState.files.filter((file) => fileIndexes.has(file.index));
         scheduleVisibleFileTokenization(currentState.document, files, info);
       }
     }
-  }, [getCurrentCollapsedFileIndexList, scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
+  }, [scheduleVisibleFileTokenization, sideBySideDataSource, state$, syntaxHighlightingEnabled]);
 
   useObserveEffect(() => {
     const currentDiffPaneHeight = diffPaneHeight$.get();

@@ -3,6 +3,7 @@ import type {
   DiffFileSummary,
   DiffRenderRow,
   DiffSideBySideFileHeader,
+  DiffSideBySideProjectionItem,
   DiffSideBySideRenderRow,
 } from "@legend-apps/diff-parser";
 import { DiffNativeRow } from "@legend-apps/diff-parser";
@@ -114,6 +115,8 @@ type DiffSideBySideRowProps = {
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
+  itemMetadata?: DiffSideBySideProjectionItem;
+  listIndex?: number;
   nativeConfigId: string;
   nativeRowHeight: number;
   onToggleFileCollapsed: (fileIndex: number) => void;
@@ -382,6 +385,7 @@ function DiffNativeUnifiedLineRow({
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
       configId={nativeConfigId}
+      itemId={index}
       rowIndex={index}
       style={[styles.nativeDiffRow, { height: nativeRowHeight }]}
     />
@@ -391,11 +395,13 @@ function DiffNativeUnifiedLineRow({
 function DiffNativeSideBySideLineRow({
   adaptiveRender,
   index,
+  listIndex,
   nativeConfigId,
   nativeRowHeight,
 }: {
   adaptiveRender: "light" | "normal";
   index: number;
+  listIndex: number;
   nativeConfigId: string;
   nativeRowHeight: number;
 }) {
@@ -403,7 +409,8 @@ function DiffNativeSideBySideLineRow({
     <DiffNativeRow
       adaptiveRender={adaptiveRender}
       configId={nativeConfigId}
-      rowIndex={index}
+      itemId={index}
+      rowIndex={listIndex}
       style={[styles.nativeDiffRow, { height: nativeRowHeight }]}
     />
   );
@@ -600,6 +607,8 @@ export const DiffUnifiedRow = memo(function DiffUnifiedRow(props: DiffUnifiedRow
 const DiffSideBySideFileHeaderRow = memo(function DiffSideBySideFileHeaderRow({
   collapsedFileIndexes$,
   index,
+  itemMetadata,
+  listIndex = index,
   onToggleFileCollapsed,
   rowRender$,
   row,
@@ -616,10 +625,12 @@ const DiffSideBySideFileHeaderRow = memo(function DiffSideBySideFileHeaderRow({
   const fileHeaderAndFile = useValue(() => {
     const collapsedFileIndexList = rowRender$.document.collapsedFileIndexList.get();
     const document = rowRender$.document.current.get() as DiffDocument | null;
-    const displayRow = getCurrentPlainSideBySideRow(document, index, collapsedFileIndexList, row);
-    const fileHeader = displayRow?.kind === "file-header"
+    const displayRow = itemMetadata ? undefined : getCurrentPlainSideBySideRow(document, listIndex, collapsedFileIndexList, row);
+    const fileHeader = itemMetadata?.kind === "file-header"
+      ? { fileIndex: itemMetadata.fileIndex, sourceStart: itemMetadata.sourceStart }
+      : displayRow?.kind === "file-header"
       ? { fileIndex: displayRow.fileIndex, sourceStart: displayRow.sourceStart }
-      : rowRender$.document.sideBySideFileHeaderByListIndex.get().get(index);
+      : rowRender$.document.sideBySideFileHeaderByListIndex.get().get(listIndex);
     const file = fileHeader
       ? rowRender$.document.fileByIndex.get().get(fileHeader.fileIndex)
         ?? rowRender$.document.fileByRowStart.get().get(fileHeader.sourceStart)
@@ -649,6 +660,7 @@ const DiffSideBySideFileHeaderRow = memo(function DiffSideBySideFileHeaderRow({
 
 const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
   index,
+  listIndex = index,
   rowRender$,
   row,
 }: DiffSideBySideRowProps) {
@@ -656,13 +668,13 @@ const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
     const collapsedFileIndexList = rowRender$.document.collapsedFileIndexList.get();
     const document = rowRender$.document.current.get() as DiffDocument | null;
     const sideBySideRowCount = rowRender$.document.sideBySideRowCount.get();
-    const displayRow = getCurrentPlainSideBySideRow(document, index, collapsedFileIndexList, row);
+    const displayRow = getCurrentPlainSideBySideRow(document, listIndex, collapsedFileIndexList, row);
     return {
       borderColor: rowRender$.presentation.borderColor.get(),
       fontFamily: rowRender$.presentation.fontFamily.get(),
       fontSize: rowRender$.presentation.fontSize.get(),
       hunkHeaderBackgroundColor: rowRender$.presentation.hunkHeaderBackgroundColor.get(),
-      info: getDiffSideBySideHunkHeaderInfo(document, index, collapsedFileIndexList, sideBySideRowCount, displayRow),
+      info: getDiffSideBySideHunkHeaderInfo(document, listIndex, collapsedFileIndexList, sideBySideRowCount, displayRow),
       mutedColor: rowRender$.presentation.mutedColor.get(),
     };
   });
@@ -680,13 +692,14 @@ const DiffSideBySideHunkHeaderRow = memo(function DiffSideBySideHunkHeaderRow({
 });
 
 const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSideBySideLineRowProps) {
-  const { adaptiveRender, hasHunkHeader, index, nativeConfigId, nativeRowHeight } = props;
+  const { adaptiveRender, hasHunkHeader, index, listIndex = index, nativeConfigId, nativeRowHeight } = props;
   return (
     <>
       {hasHunkHeader ? <DiffSideBySideHunkHeaderRow {...props} /> : null}
       <DiffNativeSideBySideLineRow
         adaptiveRender={adaptiveRender}
         index={index}
+        listIndex={listIndex}
         nativeConfigId={nativeConfigId}
         nativeRowHeight={nativeRowHeight}
       />
@@ -695,19 +708,27 @@ const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSid
 });
 
 export const DiffSideBySideRow = memo(function DiffSideBySideRow(props: DiffSideBySideRowProps) {
-  const { index, row, rowRender$ } = props;
+  const { index, itemMetadata, listIndex = index, row, rowRender$ } = props;
   const rowPresentation = useValue(() => {
+    if (itemMetadata) {
+      if (itemMetadata.kind === "file-header") {
+        return diffSideBySidePresentationFileHeader;
+      }
+      return rowRender$.presentation.showOnlyHunks.get() && itemMetadata.hunkStart
+        ? diffSideBySidePresentationHunkHeader
+        : 0;
+    }
     const collapsedFileIndexList = rowRender$.document.collapsedFileIndexList.get();
     const document = rowRender$.document.current.get() as DiffDocument | null;
-    const displayRow = getCurrentPlainSideBySideRow(document, index, collapsedFileIndexList, row);
+    const displayRow = getCurrentPlainSideBySideRow(document, listIndex, collapsedFileIndexList, row);
     const isFileHeader = displayRow?.kind === "file-header"
-      || (!displayRow && rowRender$.document.sideBySideFileHeaderByListIndex.get().has(index));
+      || (!displayRow && rowRender$.document.sideBySideFileHeaderByListIndex.get().has(listIndex));
     if (isFileHeader) {
       return diffSideBySidePresentationFileHeader;
     }
 
     const hasHunkHeader = rowRender$.presentation.showOnlyHunks.get()
-      && isDiffSideBySideHunkStart(document, index, collapsedFileIndexList, displayRow);
+      && isDiffSideBySideHunkStart(document, listIndex, collapsedFileIndexList, displayRow);
     return hasHunkHeader ? diffSideBySidePresentationHunkHeader : 0;
   });
 

@@ -58,7 +58,7 @@ type CreateDiffInlineMergeListOptions = {
   viewMode: DiffViewMode;
 };
 
-function createInlineRowsForFile({
+export function createInlineRowsForFile({
   file,
   getMergeItemIndex,
   model,
@@ -91,7 +91,7 @@ function createInlineRowsForFile({
   return itemIndexes;
 }
 
-function getMergeFileForDiffFile(
+export function getMergeFileForDiffFile(
   mergeFileByPath: ReadonlyMap<string, DiffMergeConflictFile>,
   file: DiffFileSummary | undefined,
 ) {
