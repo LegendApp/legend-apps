@@ -19,6 +19,7 @@ import {
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -43,6 +44,9 @@ const settingsSidebarContentInset = {
 const settingsViewabilityConfig: ViewabilityConfig = {
   startOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
 };
+const settingsSidebarPressablePlatformProps = Platform.OS === "macos"
+  ? { enableFocusRing: false }
+  : {};
 const settingsPaneMetricsByWindowIdentifier = new Map<string, SidebarSplitViewPaneMetrics>();
 const SettingsRowGroupContext = createContext(false);
 
@@ -375,6 +379,7 @@ export function SettingsSidebar<PageId extends string = string>({
 
           return (
             <Pressable
+              {...settingsSidebarPressablePlatformProps}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
               className={cn(

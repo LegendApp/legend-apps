@@ -30,7 +30,7 @@ const diffWindowsConfig = {
   [diffSettingsWindowModuleName]: {
     identifier: diffSettingsWindowIdentifier,
     loadComponent: () => import("./SettingsWindow").then((module) => module.SettingsWindow),
-    options: createSettingsWindowOptions({ title: "Appearance" }),
+    options: createSettingsWindowOptions({ title: "Settings" }),
   },
 } satisfies WindowsConfig;
 
