@@ -189,6 +189,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   CGFloat _lastSidebarWidth;
   CGFloat _lastContentWidth;
   CGFloat _lastHeight;
+  BOOL _lastLayoutReady;
   NSString *_appearanceName;
   CGFloat _contentTitlebarHeight;
   NSString *_contentTitlebarMaterialName;
@@ -217,6 +218,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
     _lastHeight = -1;
+    _lastLayoutReady = NO;
     _appearanceName = @"system";
     _contentTitlebarHeight = 0;
     _contentTitlebarMaterialName = @"none";
@@ -262,7 +264,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
                   object:_splitViewController.splitView
                    queue:NSOperationQueue.mainQueue
               usingBlock:^(__unused NSNotification *notification) {
-                [self splitViewDidResize];
+                [self publishSplitViewLayoutAllowEstimatedReady:NO];
               }];
 
     [self addSubview:_splitViewController.view];
@@ -420,6 +422,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
                                   sidebarHeight:(CGFloat)sidebarHeight
                                   contentHeight:(CGFloat)contentHeight
                                          height:(CGFloat)height
+                                    layoutReady:(BOOL)layoutReady
 {
   const auto eventEmitter = std::static_pointer_cast<const SidebarSplitViewEventEmitter>(_eventEmitter);
   if (!eventEmitter) {
@@ -430,28 +433,32 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     return;
   }
 
+  BOOL panesReady = layoutReady && _sidebarReactView && _contentReactView;
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
-      fabs(height - _lastHeight) < 0.5) {
+      fabs(height - _lastHeight) < 0.5 &&
+      panesReady == _lastLayoutReady) {
     return;
   }
 
   _lastSidebarWidth = sidebarWidth;
   _lastContentWidth = contentWidth;
   _lastHeight = height;
+  _lastLayoutReady = panesReady;
 
   eventEmitter->onSplitViewDidResize(SidebarSplitViewEventEmitter::OnSplitViewDidResize{
     .contentHeight = contentHeight,
     .contentWidth = contentWidth,
     .contentX = contentX,
     .height = height,
+    .isLayoutReady = panesReady,
     .isVertical = true,
     .sidebarHeight = sidebarHeight,
     .sidebarWidth = sidebarWidth,
   });
 }
 
-- (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds
+- (BOOL)applyEstimatedSplitViewLayoutForBounds:(CGRect)bounds layoutReady:(BOOL)layoutReady
 {
   if (bounds.size.width <= 0 || bounds.size.height <= 0) {
     return NO;
@@ -488,12 +495,13 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
                                       contentX:contentX
                                  sidebarHeight:bounds.size.height
                                  contentHeight:bounds.size.height
-                                        height:bounds.size.height];
+                                        height:bounds.size.height
+                                   layoutReady:layoutReady];
 
   return YES;
 }
 
-- (void)splitViewDidResize
+- (void)publishSplitViewLayoutAllowEstimatedReady:(BOOL)allowEstimatedReady
 {
   CGFloat sidebarWidth = _sidebarContainer.bounds.size.width;
   CGFloat contentWidth = _contentContainer.bounds.size.width;
@@ -507,7 +515,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
       contentX < -0.5 ||
       contentX + contentWidth > bounds.size.width + 0.5 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
-    [self applyEstimatedSplitViewLayoutForBounds:bounds];
+    [self applyEstimatedSplitViewLayoutForBounds:bounds layoutReady:allowEstimatedReady];
     return;
   }
 
@@ -518,7 +526,8 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
                                       contentX:contentX
                                  sidebarHeight:sidebarHeight
                                  contentHeight:contentHeight
-                                        height:height];
+                                        height:height
+                                   layoutReady:YES];
 }
 
 - (CGRect)currentLayoutBounds
@@ -557,13 +566,13 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   if (_contentContainer.bounds.size.width <= 0 ||
       _contentContainer.bounds.size.height <= 0 ||
       fabs(_contentContainer.bounds.size.height - bounds.size.height) >= 0.5) {
-    [self applyEstimatedSplitViewLayoutForBounds:bounds];
+    [self applyEstimatedSplitViewLayoutForBounds:bounds layoutReady:NO];
   }
   [self applyDividerPositionForBounds:bounds];
   [_splitViewController.splitView adjustSubviews];
   [_splitViewController.view layoutSubtreeIfNeeded];
   [self layoutContentTitlebarMaterial];
-  [self splitViewDidResize];
+  [self publishSplitViewLayoutAllowEstimatedReady:YES];
 }
 
 - (void)updateEventEmitter:(const EventEmitter::Shared &)eventEmitter
@@ -571,7 +580,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   [super updateEventEmitter:eventEmitter];
 
   dispatch_async(dispatch_get_main_queue(), ^{
-    [self splitViewDidResize];
+    [self publishSplitViewLayoutAllowEstimatedReady:NO];
   });
 }
 #endif
@@ -587,14 +596,14 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     childComponentView.hidden = YES;
     [_sidebarContainer addSubview:childComponentView];
     if (_sidebarContainer.bounds.size.width <= 0 || _sidebarContainer.bounds.size.height <= 0) {
-      [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds]];
+      [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds] layoutReady:NO];
     } else {
       [self syncReactSubview:_sidebarReactView
                  nativeBounds:_sidebarContainer.bounds
         previousLayoutMetrics:&_sidebarReactLayoutMetrics];
     }
     dispatch_async(dispatch_get_main_queue(), ^{
-      [self splitViewDidResize];
+      [self publishSplitViewLayoutAllowEstimatedReady:NO];
     });
     return;
   }
@@ -606,14 +615,14 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     childComponentView.hidden = YES;
     [_contentContainer addSubview:childComponentView];
     if (_contentContainer.bounds.size.width <= 0 || _contentContainer.bounds.size.height <= 0) {
-      [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds]];
+      [self applyEstimatedSplitViewLayoutForBounds:[self currentLayoutBounds] layoutReady:NO];
     } else {
       [self syncReactSubview:_contentReactView
                  nativeBounds:_contentContainer.bounds
         previousLayoutMetrics:&_contentReactLayoutMetrics];
     }
     dispatch_async(dispatch_get_main_queue(), ^{
-      [self splitViewDidResize];
+      [self publishSplitViewLayoutAllowEstimatedReady:NO];
     });
     return;
   }
@@ -715,6 +724,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
     _lastHeight = -1;
+    _lastLayoutReady = NO;
     [self layoutSplitView];
   }
 #endif
@@ -796,6 +806,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   _lastSidebarWidth = -1;
   _lastContentWidth = -1;
   _lastHeight = -1;
+  _lastLayoutReady = NO;
   _appearanceName = @"system";
   _contentTitlebarHeight = 0;
   _contentTitlebarMaterialName = @"none";

@@ -5181,6 +5181,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       contentHeight: nextMetrics.contentHeight,
       contentWidth: nextMetrics.contentWidth,
       contentX: nextMetrics.contentX,
+      isLayoutReady: event.nativeEvent.isLayoutReady,
       previousDiffPaneHeight,
       previousContentHeight: splitPaneMetrics$.peek().contentHeight,
       previousContentWidth: splitPaneMetrics$.peek().contentWidth,
@@ -5198,7 +5199,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       nextMetrics.contentWidth > 0 &&
       (isSidebarCollapsed || nextMetrics.sidebarWidth > 0)
     ) {
-      showDeferredWindow("splitViewMetrics");
+      showDeferredWindow("splitViewReady");
     }
     const shouldSaveSidebarWidth =
       nextMetrics.sidebarWidth >= defaultDiffSidebarWidth &&

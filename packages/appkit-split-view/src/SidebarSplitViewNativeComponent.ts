@@ -7,6 +7,7 @@ export type SidebarSplitViewResizeEvent = Readonly<{
   contentWidth: Double;
   contentX: Double;
   height: Double;
+  isLayoutReady: boolean;
   isVertical: boolean;
   sidebarHeight: Double;
   sidebarWidth: Double;

@@ -8,7 +8,10 @@ const SETTINGS_WINDOW_DEFAULT_WIDTH = 820;
 const SETTINGS_WINDOW_MIN_HEIGHT = 500;
 const SETTINGS_WINDOW_MIN_WIDTH = 720;
 
-export type CreateSettingsWindowOptionsInput = Omit<WindowOptions, "windowStyle" | "transparentBackground"> & {
+export type CreateSettingsWindowOptionsInput = Omit<
+  WindowOptions,
+  "deferOrderFront" | "windowStyle" | "transparentBackground"
+> & {
   initialPage?: string;
   windowStyle?: WindowOptions["windowStyle"];
   transparentBackground?: boolean;
@@ -30,6 +33,7 @@ export function createSettingsWindowOptions({
 
   return {
     ...options,
+    deferOrderFront: true,
     initialProperties,
     title,
     transparentBackground,

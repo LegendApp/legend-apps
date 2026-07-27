@@ -102,7 +102,10 @@ export function SidebarSplitView({
       });
     }
 
-    onSplitViewDidResize?.(event);
+    // Provisional metrics stabilize the pane wrappers without exposing an incomplete layout to consumers.
+    if (event.nativeEvent.isLayoutReady) {
+      onSplitViewDidResize?.(event);
+    }
   }, [onSplitViewDidResize]);
 
   return createElement(

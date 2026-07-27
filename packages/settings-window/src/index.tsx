@@ -2,13 +2,17 @@ import {
   LegendList,
   type LegendListRef,
   type LegendListRenderItemProps,
+  type ViewabilityConfig,
 } from "@legendapp/list/react-native";
 import { cn } from "@legend-apps/classnames";
 import {
   SidebarSplitView,
   type SidebarSplitViewAppearance,
+  type SidebarSplitViewPaneMetrics,
+  type SidebarSplitViewResizeEvent,
 } from "@legend-apps/appkit-split-view";
 import {
+  showWindow,
   setWindowOptions,
   setWindowTitle,
 } from "@legend-apps/window-manager";
@@ -18,11 +22,28 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  type NativeSyntheticEvent,
   View,
 } from "react-native";
 
 const SETTINGS_SIDEBAR_TOP_INSET = 52;
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
+const settingsContentInset = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: SETTINGS_TITLEBAR_CONTENT_INSET,
+};
+const settingsSidebarContentInset = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: SETTINGS_SIDEBAR_TOP_INSET,
+};
+const settingsViewabilityConfig: ViewabilityConfig = {
+  startOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
+};
+const settingsPaneMetricsByWindowIdentifier = new Map<string, SidebarSplitViewPaneMetrics>();
 const SettingsRowGroupContext = createContext(false);
 
 export * from "./options";
@@ -61,11 +82,56 @@ type VirtualizedSettingsWindowProps<PageId extends string = string> = {
   initialPage?: string;
   pages: readonly VirtualizedSettingsWindowPage<PageId>[];
   sidebarMinWidth?: number;
-  windowIdentifier?: string;
+  windowIdentifier: string;
 };
 
 function reportSettingsWindowError(error: unknown) {
   console.error("Failed to update settings window", error);
+}
+
+function useSettingsSplitView(windowIdentifier: string, contentReadyInitially = true) {
+  const contentReadyRef = useRef(contentReadyInitially);
+  const [initialPaneMetrics] = useState(() => settingsPaneMetricsByWindowIdentifier.get(windowIdentifier) ?? null);
+  const splitReadyRef = useRef(false);
+  const windowShownRef = useRef(false);
+  const showWindowIfReady = useCallback(() => {
+    if (contentReadyRef.current && splitReadyRef.current && !windowShownRef.current) {
+      windowShownRef.current = true;
+      showWindow(windowIdentifier).catch((error: unknown) => {
+        windowShownRef.current = false;
+        reportSettingsWindowError(error);
+      });
+    }
+  }, [windowIdentifier]);
+  const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
+    const nextMetrics = {
+      contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
+      contentWidth: Math.round(event.nativeEvent.contentWidth),
+      sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
+      sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
+    };
+    const layoutReady =
+      nextMetrics.contentHeight > 0 &&
+      nextMetrics.contentWidth > 0 &&
+      nextMetrics.sidebarHeight > 0 &&
+      nextMetrics.sidebarWidth > 0;
+
+    if (layoutReady) {
+      settingsPaneMetricsByWindowIdentifier.set(windowIdentifier, nextMetrics);
+      splitReadyRef.current = true;
+      showWindowIfReady();
+    }
+  }, [showWindowIfReady, windowIdentifier]);
+  const markContentReady = useCallback(() => {
+    contentReadyRef.current = true;
+    showWindowIfReady();
+  }, [showWindowIfReady]);
+
+  return {
+    handleSplitViewResize,
+    initialPaneMetrics,
+    markContentReady,
+  };
 }
 
 export function SettingsWindow<PageId extends string = string>({
@@ -85,6 +151,7 @@ export function SettingsWindow<PageId extends string = string>({
   }, [defaultPageId, initialPage, pages]);
   const [selectedPage, setSelectedPage] = useState<PageId | undefined>(initialSelectedPage);
   const selectedPageConfig = pages.find((page) => page.id === selectedPage) ?? pages[0];
+  const { handleSplitViewResize, initialPaneMetrics } = useSettingsSplitView(windowIdentifier);
 
   useEffect(() => {
     if (selectedPageConfig) {
@@ -109,6 +176,8 @@ export function SettingsWindow<PageId extends string = string>({
       appearance={appearance}
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
+      initialPaneMetrics={initialPaneMetrics}
+      onSplitViewDidResize={handleSplitViewResize}
       sidebarMinWidth={sidebarMinWidth}
       style={styles.root}
     >
@@ -150,30 +219,43 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
   }, [defaultPageId, initialPage, pages]);
   const [selectedPage, setSelectedPage] = useState<PageId | undefined>(initialSelectedPage);
   const pageIndexById = useMemo(() => new Map(pages.map((page, index) => [page.id, index])), [pages]);
+  const initialIndex = initialSelectedPage ? pageIndexById.get(initialSelectedPage) : undefined;
+  const needsInitialScroll = initialIndex !== undefined && initialIndex > 0;
+  const { handleSplitViewResize, initialPaneMetrics, markContentReady } = useSettingsSplitView(
+    windowIdentifier,
+    !needsInitialScroll,
+  );
 
   useEffect(() => {
-    if (windowIdentifier) {
-      setWindowOptions(windowIdentifier, {
-        windowStyle: {
-          appearance,
-        },
-      }).catch(reportSettingsWindowError);
-    }
+    setWindowOptions(windowIdentifier, {
+      windowStyle: {
+        appearance,
+      },
+    }).catch(reportSettingsWindowError);
   }, [appearance, windowIdentifier]);
 
   useEffect(() => {
-    const initialIndex = initialSelectedPage ? pageIndexById.get(initialSelectedPage) : undefined;
-    if (initialIndex && initialIndex > 0) {
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToIndex({
+    if (needsInitialScroll) {
+      const animationFrame = requestAnimationFrame(() => {
+        const scrollPromise = listRef.current?.scrollToIndex({
           animated: false,
           index: initialIndex,
           viewOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
           viewPosition: 0,
-        }).catch(reportSettingsWindowError);
+        });
+        if (scrollPromise) {
+          scrollPromise
+            .catch(reportSettingsWindowError)
+            .finally(markContentReady);
+        } else {
+          markContentReady();
+        }
       });
+      return () => {
+        cancelAnimationFrame(animationFrame);
+      };
     }
-  }, [initialSelectedPage, pageIndexById]);
+  }, [initialIndex, markContentReady, needsInitialScroll]);
 
   const scrollToPage = useCallback((pageId: PageId) => {
     const index = pageIndexById.get(pageId);
@@ -208,6 +290,8 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
       appearance={appearance}
       className={cn("flex-1", backgroundClassName)}
       contentMinWidth={contentMinWidth}
+      initialPaneMetrics={initialPaneMetrics}
+      onSplitViewDidResize={handleSplitViewResize}
       sidebarMinWidth={sidebarMinWidth}
       style={styles.root}
     >
@@ -221,6 +305,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
       </View>
       <View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
         <LegendList
+          contentInset={settingsContentInset}
           contentContainerStyle={styles.virtualizedSettingsListContent}
           data={pages}
           estimatedItemSize={estimatedItemSize}
@@ -230,6 +315,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
           renderItem={renderSettingsPage}
           recycleItems
           style={styles.virtualizedSettingsList}
+          viewabilityConfig={settingsViewabilityConfig}
         />
         <SettingsToolbarBackground />
       </View>
@@ -280,6 +366,7 @@ export function SettingsSidebar<PageId extends string = string>({
     <View className="flex-1 min-h-0">
       <ScrollView
         className="flex-1"
+        contentInset={settingsSidebarContentInset}
         contentContainerStyle={styles.sidebarContent}
         showsVerticalScrollIndicator={false}
       >
@@ -323,7 +410,8 @@ export function SettingsPage({ actions, children, contentClassName }: SettingsPa
       {actions ? <View className="flex-row justify-end px-6 pt-4">{actions}</View> : null}
       <ScrollView
         className="flex-1"
-        contentContainerClassName={cn("w-full max-w-4xl flex-col self-center px-8 pb-7 pt-14", contentClassName)}
+        contentContainerClassName={cn("w-full max-w-4xl flex-col self-center px-8 pb-7", contentClassName)}
+        contentInset={settingsContentInset}
         horizontal={false}
       >
         {children}
@@ -473,7 +561,6 @@ const styles = StyleSheet.create({
     maxWidth: 896,
     paddingBottom: 28,
     paddingHorizontal: 32,
-    paddingTop: SETTINGS_TITLEBAR_CONTENT_INSET,
     width: "100%",
   },
   virtualizedSettingsListPageAfterFirst: {
@@ -484,7 +571,6 @@ const styles = StyleSheet.create({
   },
   sidebarContent: {
     paddingHorizontal: 8,
-    paddingTop: SETTINGS_SIDEBAR_TOP_INSET,
   },
   toolbarBackground: {
     height: SETTINGS_TITLEBAR_CONTENT_INSET,
