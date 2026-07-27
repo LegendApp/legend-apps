@@ -4947,7 +4947,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       : sideBySideListIndexByRowIndex.get(rowStart);
     if (listIndex !== undefined) {
       listRef.current?.scrollToIndex({
-        animated: true,
+        animated: false,
         index: listIndex,
         viewOffset: diffTitlebarTopInset,
         viewPosition: 0,
