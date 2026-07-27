@@ -1351,7 +1351,7 @@ const DiffSplitBody = memo(function DiffSplitBody({
         contentTitlebarHeight={diffTitlebarTopInset}
         contentTitlebarMaterial="glass"
         contentTitlebarOverlayColor={backgroundColor}
-        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0.72 : 0.82}
+        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0 : 0.1}
         initialPaneMetrics={splitPaneMetrics}
         onSplitViewDidResize={handleSplitViewResize}
         sidebarCollapsed={sidebarCollapsed}
