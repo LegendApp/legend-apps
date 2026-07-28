@@ -21,7 +21,7 @@ import {
   diffHotkeyDefinitions,
   resetDiffHotkeyBindings,
   setDiffHotkeyBindings,
-  useDiffHotkeyBindings,
+  useDiffHotkeyBindingsSnapshot,
 } from "./diffHotkeys";
 import {
   diffFontFamilyOptions,
@@ -195,11 +195,12 @@ function SyntaxSettingsContent() {
 }
 
 function HotkeysSettingsContent() {
-  const bindings = useDiffHotkeyBindings();
+  const bindings = useDiffHotkeyBindingsSnapshot();
 
   return (
     <SharedHotkeyBindingsSettingsContent
       definitions={diffHotkeyDefinitions}
+      maxBindingsPerCommand={1}
       onChange={setDiffHotkeyBindings}
       onResetAll={resetDiffHotkeyBindings}
       showTitle={false}

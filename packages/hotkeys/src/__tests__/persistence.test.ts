@@ -4,6 +4,7 @@ import {
   hotkeyFileVersion,
   normalizeHotkeyFile,
   serializeHotkeyFile,
+  serializeHotkeyFilePatch,
   type HotkeyDefinition,
 } from "../index";
 
@@ -65,6 +66,43 @@ describe("hotkey persistence", () => {
         save: [KeyCodes.KEY_S],
       },
       version: 1,
+    });
+  });
+
+  it("limits loaded and default bindings when a command supports one shortcut", () => {
+    expect(normalizeHotkeyFile({
+      bindings: {
+        open: ["KeyA", "KeyB"],
+      },
+      version: 1,
+    }, definitions, { maxBindingsPerCommand: 1 })).toEqual({
+      bindings: {
+        open: [`${KeyCodes.KEY_A}`],
+        save: [KeyCodes.KEY_S],
+      },
+      version: 1,
+    });
+  });
+
+  it("preserves the path of a partial binding update", () => {
+    expect(serializeHotkeyFilePatch({
+      bindings: {
+        save: [KeyCodes.KEY_A, KeyCodes.KEY_S],
+      },
+    }, definitions, { maxBindingsPerCommand: 1 })).toEqual({
+      bindings: {
+        save: ["KeyA"],
+      },
+    });
+
+    expect(serializeHotkeyFilePatch({
+      bindings: {
+        save: [],
+      },
+    }, definitions, { maxBindingsPerCommand: 1 })).toEqual({
+      bindings: {
+        save: [],
+      },
     });
   });
 

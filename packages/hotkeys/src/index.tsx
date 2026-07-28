@@ -47,6 +47,20 @@ export type SerializedHotkeyFile = {
   version: typeof hotkeyFileVersion;
 };
 
+export type HotkeyFilePatch<HotkeyId extends string = string> = {
+  bindings?: Partial<Record<HotkeyId, readonly HotkeyValue[]>>;
+  version?: number;
+};
+
+export type SerializedHotkeyFilePatch = {
+  bindings?: Record<string, readonly string[]>;
+  version?: typeof hotkeyFileVersion;
+};
+
+export type HotkeyBindingLimitOptions = {
+  maxBindingsPerCommand?: number;
+};
+
 export type HotkeyScope =
   | { kind: "application" }
   | { kind: "window"; windowId: string };
@@ -315,9 +329,19 @@ function normalizePersistedBindings(value: unknown): readonly HotkeyValue[] {
   return normalized;
 }
 
+function limitHotkeyBindings(
+  bindings: readonly HotkeyValue[],
+  maxBindingsPerCommand: number | undefined,
+) {
+  return maxBindingsPerCommand === undefined
+    ? bindings
+    : bindings.slice(0, Math.max(0, Math.floor(maxBindingsPerCommand)));
+}
+
 export function normalizeHotkeyFile<HotkeyId extends string>(
   value: unknown,
   definitions: readonly HotkeyDefinition<HotkeyId>[],
+  { maxBindingsPerCommand }: HotkeyBindingLimitOptions = {},
 ): HotkeyFile<HotkeyId> {
   const record = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -330,7 +354,7 @@ export function normalizeHotkeyFile<HotkeyId extends string>(
     const normalized = persisted === undefined
       ? getDefaultHotkeyBindings(definition)
       : normalizePersistedBindings(persisted);
-    return [definition.id, normalized];
+    return [definition.id, limitHotkeyBindings(normalized, maxBindingsPerCommand)];
   })) as Record<HotkeyId, readonly HotkeyValue[]>;
 
   return {
@@ -342,15 +366,42 @@ export function normalizeHotkeyFile<HotkeyId extends string>(
 export function serializeHotkeyFile<HotkeyId extends string>(
   value: HotkeyFile<HotkeyId>,
   definitions: readonly HotkeyDefinition<HotkeyId>[],
+  options: HotkeyBindingLimitOptions = {},
 ): SerializedHotkeyFile {
-  const normalized = normalizeHotkeyFile(value, definitions);
+  const serialized = serializeHotkeyFilePatch(value, definitions, options);
   return {
-    bindings: Object.fromEntries(Object.entries(normalized.bindings).map(([id, bindings]) => [
-      id,
-      (bindings as readonly HotkeyValue[]).map(serializeHotkeyForStorage),
-    ])),
+    bindings: serialized.bindings ?? {},
     version: hotkeyFileVersion,
   };
+}
+
+export function serializeHotkeyFilePatch<HotkeyId extends string>(
+  value: HotkeyFilePatch<HotkeyId>,
+  definitions: readonly HotkeyDefinition<HotkeyId>[],
+  { maxBindingsPerCommand }: HotkeyBindingLimitOptions = {},
+): SerializedHotkeyFilePatch {
+  const serialized: SerializedHotkeyFilePatch = {};
+
+  if (value.bindings !== undefined) {
+    const definitionIds = new Set<string>(definitions.map((definition) => definition.id));
+    serialized.bindings = Object.fromEntries(
+      Object.entries(value.bindings)
+        .filter(([id]) => definitionIds.has(id))
+        .map(([id, bindings]) => {
+          const normalized = limitHotkeyBindings(
+            normalizePersistedBindings(bindings),
+            maxBindingsPerCommand,
+          );
+          return [id, normalized.map(serializeHotkeyForStorage)];
+        }),
+    );
+  }
+
+  if (value.version !== undefined) {
+    serialized.version = hotkeyFileVersion;
+  }
+
+  return serialized;
 }
 
 function eventModifierCodes(event: KeyboardEvent, configuredModifiers: readonly number[] = []) {
@@ -875,7 +926,14 @@ export function HotkeyCapture({
           pressedCodesRef.current.delete(modifier);
         }
       }
-      updateCapture();
+      const hasPressedNonModifier = pressedCodesFromSet(pressedCodesRef.current).some(
+        (keyCode) => !isModifierKeyCode(keyCode),
+      );
+      if (lastValidCapture.current && !hasPressedNonModifier) {
+        handleCommit();
+      } else {
+        updateCapture();
+      }
       return true;
     });
 
@@ -943,6 +1001,7 @@ type HotkeysSettingsPageProps<HotkeyId extends string> = {
 
 type HotkeyBindingsSettingsPageProps<HotkeyId extends string> = {
   definitions: readonly HotkeyDefinition<HotkeyId>[];
+  maxBindingsPerCommand?: number;
   onCaptureChange?: (isCapturing: boolean) => void;
   onChange: (id: HotkeyId, values: readonly HotkeyValue[]) => void;
   onResetAll?: () => void;
@@ -978,6 +1037,7 @@ export function getHotkeyBindingConflicts<HotkeyId extends string>(
 
 export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
   definitions,
+  maxBindingsPerCommand,
   onCaptureChange,
   onChange,
   onResetAll,
@@ -989,8 +1049,11 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
   const conflicts = getHotkeyBindingConflicts(definitions, values);
   const titles = new Map(definitions.map((definition) => [definition.id, definition.title]));
   const hasCustomBindings = definitions.some((definition) => {
-    return !hotkeyBindingListsEqual(values[definition.id] ?? [], getDefaultHotkeyBindings(definition));
+    const bindings = limitHotkeyBindings(values[definition.id] ?? [], maxBindingsPerCommand);
+    const defaultBindings = limitHotkeyBindings(getDefaultHotkeyBindings(definition), maxBindingsPerCommand);
+    return !hotkeyBindingListsEqual(bindings, defaultBindings);
   });
+  const usesSingleBinding = maxBindingsPerCommand === 1;
 
   const resetAll = () => {
     setAddingBindingForId(null);
@@ -1024,9 +1087,18 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
         </View>
         <View className="overflow-hidden rounded-xl border border-border-primary bg-background-secondary/20">
           {definitions.map((definition, definitionIndex) => {
-            const bindings = values[definition.id] ?? getDefaultHotkeyBindings(definition);
-            const defaultBindings = getDefaultHotkeyBindings(definition);
+            const bindings = limitHotkeyBindings(
+              values[definition.id] ?? getDefaultHotkeyBindings(definition),
+              maxBindingsPerCommand,
+            );
+            const defaultBindings = limitHotkeyBindings(
+              getDefaultHotkeyBindings(definition),
+              maxBindingsPerCommand,
+            );
             const isCustom = !hotkeyBindingListsEqual(bindings, defaultBindings);
+            const binding = bindings[0] ?? null;
+            const canAddBinding = maxBindingsPerCommand === undefined ||
+              bindings.length < maxBindingsPerCommand;
             return (
               <View key={definition.id}>
                 {definitionIndex > 0 ? <View className="bg-border-primary" style={styles.rowSeparator} /> : null}
@@ -1054,7 +1126,40 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
                     })}
                   </View>
                   <View className="max-w-full flex-shrink flex-col items-end gap-2" style={styles.rowControl}>
-                    {bindings.map((binding, bindingIndex) => (
+                    {usesSingleBinding ? (
+                      <>
+                        <View className="flex-row items-center gap-2">
+                          <HotkeyCapture
+                            onCaptureChange={onCaptureChange}
+                            onChange={(value) => {
+                              if (value !== null) {
+                                onChange(definition.id, [value]);
+                              }
+                            }}
+                            value={binding}
+                          />
+                          {binding !== null ? (
+                            <Pressable
+                              accessibilityLabel={`Clear ${definition.title} shortcut ${formatHotkey(binding)}`}
+                              accessibilityRole="button"
+                              className="rounded-md px-2 py-1.5 hover:bg-background-primary"
+                              onPress={() => onChange(definition.id, [])}
+                            >
+                              <Text className="text-sm text-text-secondary">Remove</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                        {isCustom ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            className="rounded-md px-2 py-1.5 hover:bg-background-primary"
+                            onPress={() => onChange(definition.id, defaultBindings)}
+                          >
+                            <Text className="text-sm text-text-secondary">Reset</Text>
+                          </Pressable>
+                        ) : null}
+                      </>
+                    ) : bindings.map((binding, bindingIndex) => (
                       <View key={`${binding}-${bindingIndex}`} className="flex-row items-center gap-2">
                         <HotkeyCapture
                           onCaptureChange={onCaptureChange}
@@ -1080,7 +1185,7 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
                         </Pressable>
                       </View>
                     ))}
-                    {addingBindingForId === definition.id ? (
+                    {!usesSingleBinding && addingBindingForId === definition.id ? (
                       <View className="flex-row items-center gap-2">
                         <HotkeyCapture
                           onCaptureChange={(isCapturing) => {
@@ -1105,7 +1210,7 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
                           <Text className="text-sm text-text-secondary">Cancel</Text>
                         </Pressable>
                       </View>
-                    ) : (
+                    ) : !usesSingleBinding ? (
                       <View className="flex-row items-center gap-3">
                         {isCustom ? (
                           <Pressable
@@ -1116,15 +1221,17 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
                             <Text className="text-sm text-text-secondary">Reset</Text>
                           </Pressable>
                         ) : null}
-                        <Pressable
-                          accessibilityRole="button"
-                          className="rounded-md border border-border-primary bg-background-primary px-3 py-1.5"
-                          onPress={() => setAddingBindingForId(definition.id)}
-                        >
-                          <Text className="text-sm text-text-primary">Add Shortcut</Text>
-                        </Pressable>
+                        {canAddBinding ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            className="rounded-md border border-border-primary bg-background-primary px-3 py-1.5"
+                            onPress={() => setAddingBindingForId(definition.id)}
+                          >
+                            <Text className="text-sm text-text-primary">Add Shortcut</Text>
+                          </Pressable>
+                        ) : null}
                       </View>
-                    )}
+                    ) : null}
                   </View>
                 </View>
               </View>

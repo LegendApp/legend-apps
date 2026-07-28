@@ -129,14 +129,25 @@ export const diffApplicationHotkeyScope: HotkeyScope = { kind: "application" };
 export const diffHotkeys$ = createHotkeyStore({
   definitions: diffHotkeyDefinitions,
   filename: "hotkeys",
+  maxBindingsPerCommand: 1,
 });
 
 export function useDiffHotkeyBindings() {
   return useValue(diffHotkeys$.bindings);
 }
 
+export function useDiffHotkeyBindingsSnapshot() {
+  return useValue(() => {
+    const snapshot = {} as Record<DiffHotkeyId, readonly HotkeyValue[]>;
+    for (const definition of diffHotkeyDefinitions) {
+      snapshot[definition.id] = [...diffHotkeys$.bindings[definition.id].get()];
+    }
+    return snapshot;
+  });
+}
+
 export function setDiffHotkeyBindings(id: DiffHotkeyId, bindings: readonly HotkeyValue[]) {
-  diffHotkeys$.bindings[id].set([...bindings]);
+  diffHotkeys$.bindings[id].set(bindings.slice(0, 1));
 }
 
 export function resetDiffHotkeyBindings() {

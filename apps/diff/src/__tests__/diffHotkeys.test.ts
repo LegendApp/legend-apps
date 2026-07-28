@@ -1,7 +1,9 @@
 import { getDefaultHotkeyBindings, KeyCodes, type HotkeyValue } from "@legend-apps/hotkeys";
 import {
+  diffHotkeys$,
   diffHotkeyDefinitions,
   getDiffHotkeyMenuPatches,
+  setDiffHotkeyBindings,
   type DiffHotkeyId,
 } from "../diffHotkeys";
 
@@ -41,5 +43,16 @@ describe("Diff hotkeys", () => {
       id: "reload",
       shortcut: null,
     });
+  });
+
+  it("clears a configured shortcut in the observable store", () => {
+    const previousBindings = diffHotkeys$.bindings.reload.peek();
+
+    try {
+      setDiffHotkeyBindings("reload", []);
+      expect(diffHotkeys$.bindings.reload.peek()).toEqual([]);
+    } finally {
+      setDiffHotkeyBindings("reload", previousBindings);
+    }
   });
 });
