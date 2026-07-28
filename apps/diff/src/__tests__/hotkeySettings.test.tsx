@@ -117,11 +117,15 @@ describe("Diff hotkey settings", () => {
     }
 
     const view = await render(<Harness />);
-    await fireEvent.press(view.getByText("Remove"));
+    await fireEvent.press(view.getByLabelText("Clear Reload shortcut R"));
 
     expect(bindings$.reload.peek()).toEqual([]);
-    expect(view.queryByText("Remove")).toBeNull();
+    expect(view.queryByLabelText("Clear Reload shortcut R")).toBeNull();
     expect(view.getByText("Click to record")).toBeTruthy();
+    await fireEvent.press(view.getByLabelText("Restore Reload default shortcut"));
+    expect(bindings$.reload.peek()).toEqual([KeyCodes.KEY_R]);
+    expect(view.getByLabelText("Clear Reload shortcut R")).toBeTruthy();
+    expect(view.queryByLabelText("Restore Reload default shortcut")).toBeNull();
     await view.unmount();
   });
 });

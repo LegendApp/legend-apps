@@ -237,6 +237,7 @@ const diffListContentInset = {
   top: diffTitlebarTopInset,
 };
 const diffListViewabilityConfig = { startOffset: diffTitlebarTopInset };
+const emptyDiffListIndexByFileIndex: ReadonlyMap<number, number> = new Map();
 const emptyDiffItemIndexes: Array<number | undefined> = [];
 
 logDiffOpenTiming("viewer.module.evaluated", () => ({
@@ -638,6 +639,7 @@ type DiffLoadedBodyProps = {
   mergeState$: Observable<DiffMergeState>;
   nativeSideBySideRowConfig: DiffNativeRowConfigProps;
   nativeUnifiedRowConfig: DiffNativeRowConfigProps;
+  onInlineListIndexesChanged: (indexes: ReadonlyMap<number, number>) => void;
   adaptiveLightModeEnabled: boolean;
   mutedColor: string;
   noChangesBody: ReactElement;
@@ -1396,6 +1398,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   nativeSideBySideRowConfig,
   nativeUnifiedRowConfig,
   noChangesBody,
+  onInlineListIndexesChanged,
   renderRow,
   renderSideBySideRow,
   requestSideBySideRange,
@@ -1437,6 +1440,12 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     viewMode,
   });
   const inlineMergeModelRef = useRenderLatestRef(inlineMergeModel);
+  useLayoutEffect(() => {
+    onInlineListIndexesChanged(inlineMergeModel.listIndexByFileIndex);
+    return () => {
+      onInlineListIndexesChanged(emptyDiffListIndexByFileIndex);
+    };
+  }, [inlineMergeModel.listIndexByFileIndex, onInlineListIndexesChanged]);
   const nativeRowsRef = useRenderLatestRef({ nativeSideBySideRows, nativeUnifiedRows });
   const getItemSizeRef = useRenderLatestRef(getItemSize);
   const getItemTypeRef = useRenderLatestRef(getItemType);
@@ -2489,6 +2498,28 @@ function useDiffInlineMergeModel({
       viewMode,
     ],
   );
+  const listIndexByFileIndex = useMemo(() => {
+    if (!sideBySideDataSource || viewMode === "unified") {
+      return inlineList.listIndexByFileIndex;
+    }
+    const indexes = new Map<number, number>();
+    let outputOffset = 0;
+    for (let fileOrdinal = 0; fileOrdinal < files.length; fileOrdinal += 1) {
+      const file = files[fileOrdinal];
+      const location = sideBySideDataSource.getFileLocation(file.index);
+      if (location.listIndex >= 0) {
+        indexes.set(file.index, location.listIndex + outputOffset);
+        const mergeItems = sideBySideMergeItems.itemIndexesByFileIndex.get(file.index);
+        if (!location.collapsed && mergeItems) {
+          const nextFile = files[fileOrdinal + 1];
+          const nextLocation = nextFile ? sideBySideDataSource.getFileLocation(nextFile.index) : null;
+          const baseCount = (nextLocation && nextLocation.listIndex >= 0 ? nextLocation.listIndex : sideBySideDataSource.getLength()) - location.listIndex;
+          outputOffset += 1 + mergeItems.length - baseCount;
+        }
+      }
+    }
+    return indexes;
+  }, [files, inlineList.listIndexByFileIndex, sideBySideDataSource, sideBySideMergeItems.itemIndexesByFileIndex, viewMode]);
 
   const mergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
   const publishedMergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
@@ -2636,6 +2667,7 @@ function useDiffInlineMergeModel({
     getSideBySideDocumentIndex,
     sideBySideDataSource: sideBySideInlineDataSource,
     itemIndexes: inlineList.itemIndexes,
+    listIndexByFileIndex,
     renderMergeRow,
   };
 }
@@ -2973,6 +3005,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const unsavedMergeDraftFiles = useMemo(() => getUnsavedDiffMergeDraftFiles(mergeState), [mergeState]);
   const hasUnsavedMergeDrafts = unsavedMergeDraftFiles.length > 0;
   const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
+  const inlineListIndexByFileIndexRef = useRef<ReadonlyMap<number, number>>(emptyDiffListIndexByFileIndex);
   const urlInputRef = useRef<TextInput | null>(null);
   const loadRequestIdRef = useRef(0);
   const loadTraceRef = useRef<DiffLoadTrace | null>(null);
@@ -4942,9 +4975,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   const scrollToFile = useCallback((file: DiffFileSummary) => {
     const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const listIndex = viewMode === "unified"
+    const sourceListIndex = viewMode === "unified"
       ? getVisibleListIndex(rowStart)
       : sideBySideListIndexByRowIndex.get(rowStart);
+    const listIndex = inlineListIndexByFileIndexRef.current.get(file.index) ?? sourceListIndex;
     if (listIndex !== undefined) {
       listRef.current?.scrollToIndex({
         animated: false,
@@ -4956,6 +4990,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       });
     }
   }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
+  const handleInlineListIndexesChanged = useCallback((indexes: ReadonlyMap<number, number>) => {
+    inlineListIndexByFileIndexRef.current = indexes;
+  }, []);
 
   const scrollToSearchListIndex = useCallback((listIndex: number) => {
     listRef.current?.scrollToIndex({
@@ -5430,6 +5467,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                 visibleSourceLabel={visibleSourceLabel}
               />
             )}
+            onInlineListIndexesChanged={handleInlineListIndexesChanged}
             renderRow={renderRow}
             renderSideBySideRow={renderSideBySideRow}
             requestSideBySideRange={requestSideBySideRange}

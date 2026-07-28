@@ -13,6 +13,7 @@ export type DiffInlineMergeRow = {
 
 export type DiffInlineMergeList = {
   itemIndexes: Array<number | undefined>;
+  listIndexByFileIndex: ReadonlyMap<number, number>;
   rowByItemIndex: Map<number, DiffInlineMergeRow>;
   sourceRowByItemIndex: Map<number, number>;
 };
@@ -112,11 +113,13 @@ export function createDiffInlineMergeList({
   unifiedItemIndexes,
   viewMode,
 }: CreateDiffInlineMergeListOptions): DiffInlineMergeList {
+  const listIndexByFileIndex = new Map<number, number>();
   const rowByItemIndex = new Map<number, DiffInlineMergeRow>();
   const sourceRowByItemIndex = new Map<number, number>();
   if (mergeFileByPath.size === 0) {
     return {
       itemIndexes: viewMode === "unified" ? unifiedItemIndexes : sideBySideItemIndexes,
+      listIndexByFileIndex,
       rowByItemIndex,
       sourceRowByItemIndex,
     };
@@ -147,6 +150,9 @@ export function createDiffInlineMergeList({
       const rowStart = file ? Math.max(0, Math.floor(file.rowStart)) : -1;
       const rowEnd = file ? rowStart + Math.max(0, Math.floor(file.rowCount)) : -1;
       const mergeFile = getMergeFileForDiffFile(mergeFileByPath, file);
+      if (file && rowIndex === rowStart) {
+        listIndexByFileIndex.set(file.index, itemIndexes.length);
+      }
       if (file && mergeFile && rowIndex === rowStart) {
         itemIndexes.push(rowIndex);
         sourceRowByItemIndex.set(rowIndex, rowIndex);
@@ -179,6 +185,9 @@ export function createDiffInlineMergeList({
       const header = sideBySideFileHeaderByListIndex.get(listIndex);
       const file = header ? fileByIndex.get(header.fileIndex) : undefined;
       const mergeFile = getMergeFileForDiffFile(mergeFileByPath, file);
+      if (header) {
+        listIndexByFileIndex.set(header.fileIndex, itemIndexes.length);
+      }
       if (header && file && mergeFile && !collapsedFileIndexes.has(file.index)) {
         const nextHeader = headerListIndexes.find((headerIndex) => headerIndex > listIndex) ?? sideBySideItemIndexes.length;
         const rowIndex = sideBySideItemIndexes[listIndex] ?? listIndex;
@@ -203,6 +212,7 @@ export function createDiffInlineMergeList({
 
   return {
     itemIndexes,
+    listIndexByFileIndex,
     rowByItemIndex,
     sourceRowByItemIndex,
   };

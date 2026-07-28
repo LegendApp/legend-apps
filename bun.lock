@@ -378,6 +378,7 @@
         "@legend-apps/classnames": "0.0.0",
         "@legend-apps/keyboard-manager": "0.0.0",
         "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/sf-symbol": "0.0.0",
         "@legend-apps/storage": "0.0.0",
       },
       "peerDependencies": {

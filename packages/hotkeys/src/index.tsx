@@ -8,6 +8,7 @@ import {
 } from "@legend-apps/keyboard-manager";
 import { cn } from "@legend-apps/classnames";
 import type { NativeMenuShortcut } from "@legend-apps/native-menu";
+import { SFSymbol } from "@legend-apps/sf-symbol";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -1127,38 +1128,36 @@ export function HotkeyBindingsSettingsContent<HotkeyId extends string>({
                   </View>
                   <View className="max-w-full flex-shrink flex-col items-end gap-2" style={styles.rowControl}>
                     {usesSingleBinding ? (
-                      <>
-                        <View className="flex-row items-center gap-2">
-                          <HotkeyCapture
-                            onCaptureChange={onCaptureChange}
-                            onChange={(value) => {
-                              if (value !== null) {
-                                onChange(definition.id, [value]);
-                              }
-                            }}
-                            value={binding}
-                          />
-                          {binding !== null ? (
-                            <Pressable
-                              accessibilityLabel={`Clear ${definition.title} shortcut ${formatHotkey(binding)}`}
-                              accessibilityRole="button"
-                              className="rounded-md px-2 py-1.5 hover:bg-background-primary"
-                              onPress={() => onChange(definition.id, [])}
-                            >
-                              <Text className="text-sm text-text-secondary">Remove</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                        {isCustom ? (
+                      <View className="flex-row items-center gap-2">
+                        <HotkeyCapture
+                          onCaptureChange={onCaptureChange}
+                          onChange={(value) => {
+                            if (value !== null) {
+                              onChange(definition.id, [value]);
+                            }
+                          }}
+                          value={binding}
+                        />
+                        {binding !== null ? (
                           <Pressable
+                            accessibilityLabel={`Clear ${definition.title} shortcut ${formatHotkey(binding)}`}
                             accessibilityRole="button"
-                            className="rounded-md px-2 py-1.5 hover:bg-background-primary"
+                            className="h-8 w-8 items-center justify-center rounded-md hover:bg-background-primary"
+                            onPress={() => onChange(definition.id, [])}
+                          >
+                            <SFSymbol name="xmark" size={12} />
+                          </Pressable>
+                        ) : isCustom ? (
+                          <Pressable
+                            accessibilityLabel={`Restore ${definition.title} default shortcut`}
+                            accessibilityRole="button"
+                            className="h-8 w-8 items-center justify-center rounded-md hover:bg-background-primary"
                             onPress={() => onChange(definition.id, defaultBindings)}
                           >
-                            <Text className="text-sm text-text-secondary">Reset</Text>
+                            <SFSymbol name="arrow.counterclockwise" size={13} />
                           </Pressable>
                         ) : null}
-                      </>
+                      </View>
                     ) : bindings.map((binding, bindingIndex) => (
                       <View key={`${binding}-${bindingIndex}`} className="flex-row items-center gap-2">
                         <HotkeyCapture

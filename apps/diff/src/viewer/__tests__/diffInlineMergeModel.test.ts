@@ -86,9 +86,11 @@ describe("diffInlineMergeModel", () => {
     });
 
     expect(unifiedModel.itemIndexes).toBe(unifiedItemIndexes);
+    expect(unifiedModel.listIndexByFileIndex.size).toBe(0);
     expect(unifiedModel.rowByItemIndex.size).toBe(0);
     expect(unifiedModel.sourceRowByItemIndex.size).toBe(0);
     expect(sideBySideModel.itemIndexes).toBe(sideBySideItemIndexes);
+    expect(sideBySideModel.listIndexByFileIndex.size).toBe(0);
     expect(sideBySideModel.rowByItemIndex.size).toBe(0);
     expect(sideBySideModel.sourceRowByItemIndex.size).toBe(0);
   });
@@ -115,6 +117,7 @@ describe("diffInlineMergeModel", () => {
 
     // Bug caught: active file tracking jumps to the wrong file when inline merge rows replace source rows.
     expect(model.itemIndexes).toEqual([0, 1, 2, 3, -1, -2, 7, 8]);
+    expect([...model.listIndexByFileIndex]).toEqual([[0, 0], [1, 3], [2, 6]]);
     expect(model.rowByItemIndex.get(-1)?.sourceFileIndex).toBe(1);
     expect(model.rowByItemIndex.get(-1)?.sourceRowIndex).toBe(3);
     expect(model.sourceRowByItemIndex.get(3)).toBe(3);
@@ -143,6 +146,7 @@ describe("diffInlineMergeModel", () => {
 
     // Bug caught: collapsed conflicted files still render inline merge rows.
     expect(model.itemIndexes).toEqual([0, 1, 2, 3, 7, 8]);
+    expect([...model.listIndexByFileIndex]).toEqual([[0, 0], [1, 3], [2, 4]]);
     expect(model.rowByItemIndex.size).toBe(0);
   });
 
@@ -240,6 +244,7 @@ describe("diffInlineMergeModel", () => {
 
     // Bug caught: side-by-side inline merge rows report the wrong document row for scrolling and active file state.
     expect(model.itemIndexes).toEqual([10, -1, -2, 20, 21]);
+    expect([...model.listIndexByFileIndex]).toEqual([[0, 0], [1, 3]]);
     expect(model.rowByItemIndex.get(-1)?.sourceFileIndex).toBe(0);
     expect(model.rowByItemIndex.get(-1)?.sourceRowIndex).toBe(10);
     expect(model.sourceRowByItemIndex.has(11)).toBe(false);
