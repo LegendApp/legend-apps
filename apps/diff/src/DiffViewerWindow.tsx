@@ -154,6 +154,7 @@ import {
 } from "./viewer/diffInlineMergeModel";
 import type { DiffSideBySideDataSource } from "./viewer/diffSideBySideDataSource";
 import { DiffSideBySideInlineMergeDataSource } from "./viewer/diffSideBySideInlineMergeDataSource";
+import { DiffUnifiedInlineMergeDataSource } from "./viewer/diffUnifiedInlineMergeDataSource";
 import {
   createActiveDiffSearchHighlightMap,
   createDiffSearchHighlightMap,
@@ -1609,7 +1610,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
           dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
           debugName="diff-unified-list"
           estimatedItemSize={rowHeight}
-          itemIndexes={inlineMergeModel.itemIndexes}
+          dataSource={inlineMergeModel.unifiedDataSource}
           itemKeyVersion={state.document.documentId}
           getDocumentIndex={inlineMergeModel.getDocumentIndex}
           getItemSize={getUnifiedItemSize}
@@ -2468,25 +2469,18 @@ function useDiffInlineMergeModel({
   useLayoutEffect(() => {
     sideBySideInlineDataSource?.update(files, sideBySideMergeItems.itemIndexesByFileIndex);
   }, [files, sideBySideInlineDataSource, sideBySideMergeItems.itemIndexesByFileIndex]);
-  const inlineList = useMemo(
-    () => viewMode === "unified"
-      ? createDiffInlineMergeList({
-          collapsedFileIndexes,
-          files,
-          getMergeItemIndex,
-          mergeDisplayModelByPath,
-          mergeFileByPath,
-          sideBySideFileHeaderByListIndex,
-          sideBySideItemIndexes: emptyDiffItemIndexes,
-          unifiedItemIndexes,
-          viewMode,
-        })
-      : {
-          itemIndexes: emptyDiffItemIndexes,
-          listIndexByFileIndex: new Map<number, number>(),
-          rowByItemIndex: new Map<number, DiffInlineMergeRow>(),
-          sourceRowByItemIndex: new Map<number, number>(),
-        },
+  const unifiedInlineList = useMemo(
+    () => createDiffInlineMergeList({
+      collapsedFileIndexes,
+      files,
+      getMergeItemIndex,
+      mergeDisplayModelByPath,
+      mergeFileByPath,
+      sideBySideFileHeaderByListIndex,
+      sideBySideItemIndexes: emptyDiffItemIndexes,
+      unifiedItemIndexes,
+      viewMode: "unified",
+    }),
     [
       collapsedFileIndexes,
       files,
@@ -2495,8 +2489,32 @@ function useDiffInlineMergeModel({
       mergeFileByPath,
       sideBySideFileHeaderByListIndex,
       unifiedItemIndexes,
-      viewMode,
     ],
+  );
+  const unifiedDataSourceRef = useRef<{
+    documentId: number;
+    source: DiffUnifiedInlineMergeDataSource;
+  } | null>(null);
+  if (unifiedDataSourceRef.current?.documentId !== documentId) {
+    unifiedDataSourceRef.current = {
+      documentId,
+      source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
+    };
+  }
+  const unifiedDataSource = unifiedDataSourceRef.current.source;
+  useLayoutEffect(() => {
+    unifiedDataSource.update(unifiedInlineList.itemIndexes);
+  }, [unifiedDataSource, unifiedInlineList.itemIndexes]);
+  const inlineList = useMemo(
+    () => viewMode === "unified"
+      ? unifiedInlineList
+      : {
+          itemIndexes: emptyDiffItemIndexes,
+          listIndexByFileIndex: new Map<number, number>(),
+          rowByItemIndex: new Map<number, DiffInlineMergeRow>(),
+          sourceRowByItemIndex: new Map<number, number>(),
+        },
+    [unifiedInlineList, viewMode],
   );
   const listIndexByFileIndex = useMemo(() => {
     if (!sideBySideDataSource || viewMode === "unified") {
@@ -2666,7 +2684,7 @@ function useDiffInlineMergeModel({
     getItemType,
     getSideBySideDocumentIndex,
     sideBySideDataSource: sideBySideInlineDataSource,
-    itemIndexes: inlineList.itemIndexes,
+    unifiedDataSource,
     listIndexByFileIndex,
     renderMergeRow,
   };
