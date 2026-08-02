@@ -21,11 +21,12 @@ export function cancelPendingOpen() {
 }
 
 export type ChatProvider = "codex" | "claude";
-export type ChatRowKind = "user" | "assistant" | "tool";
+export type ChatRowKind = "user" | "assistant" | "tool" | "files";
 export type ChatToolStatus = "completed" | "failed" | "unknown";
 export type {
   ChatDocument,
   ChatDocumentTiming,
+  ChatFileChange,
   ChatRowMetadata,
   ChatSummary,
 } from "./ChatHistory.nitro";

@@ -32,6 +32,9 @@ public:
 
   std::optional<JsonRange> root(size_t start, size_t end) const;
   std::optional<JsonRange> member(const JsonRange& object, std::string_view key) const;
+  bool forEachObjectMember(
+      const JsonRange& object,
+      const std::function<bool(const JsonRange&, const JsonRange&)>& callback) const;
   bool forEachArrayValue(const JsonRange& array, const std::function<bool(const JsonRange&)>& callback) const;
   bool boolValue(const JsonRange& value, bool fallback = false) const;
   double numberValue(const JsonRange& value, double fallback = 0) const;

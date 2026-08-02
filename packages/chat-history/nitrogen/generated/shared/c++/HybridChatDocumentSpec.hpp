@@ -15,11 +15,14 @@
 
 // Forward declaration of `ChatRowMetadata` to properly resolve imports.
 namespace margelo::nitro::legendapps::chathistory { struct ChatRowMetadata; }
+// Forward declaration of `ChatFileChange` to properly resolve imports.
+namespace margelo::nitro::legendapps::chathistory { struct ChatFileChange; }
 // Forward declaration of `ChatDocumentTiming` to properly resolve imports.
 namespace margelo::nitro::legendapps::chathistory { struct ChatDocumentTiming; }
 
 #include <string>
 #include "ChatRowMetadata.hpp"
+#include "ChatFileChange.hpp"
 #include "ChatDocumentTiming.hpp"
 
 namespace margelo::nitro::legendapps::chathistory {
@@ -57,6 +60,7 @@ namespace margelo::nitro::legendapps::chathistory {
       // Methods
       virtual ChatRowMetadata getRowMetadata(double index) = 0;
       virtual std::string getToolPreview(double index, double maximumBytes) = 0;
+      virtual ChatFileChange getFileChange(double index, double fileIndex) = 0;
       virtual ChatDocumentTiming getTiming() = 0;
       virtual double releaseNativeResources() = 0;
 

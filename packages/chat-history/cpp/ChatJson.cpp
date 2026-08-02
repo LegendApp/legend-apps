@@ -200,6 +200,48 @@ std::optional<JsonRange> ChatJson::member(const JsonRange& object, std::string_v
   return result;
 }
 
+bool ChatJson::forEachObjectMember(
+    const JsonRange& object,
+    const std::function<bool(const JsonRange&, const JsonRange&)>& callback) const {
+  bool valid = object.kind == JsonValueKind::Object && object.end <= size_ && object.end > object.start + 1;
+  size_t cursor = valid ? object.start + 1 : object.end;
+  while (valid && cursor < object.end - 1) {
+    cursor = skipWhitespace(cursor, object.end);
+    if (cursor < object.end && data_[cursor] == '}') {
+      break;
+    }
+    const size_t keyStart = cursor;
+    const auto keyEnd = skipString(cursor, object.end);
+    if (!keyEnd) {
+      valid = false;
+    } else {
+      cursor = skipWhitespace(*keyEnd, object.end);
+      if (cursor >= object.end || data_[cursor] != ':') {
+        valid = false;
+      } else {
+        cursor = skipWhitespace(cursor + 1, object.end);
+        const auto valueEnd = skipValue(cursor, object.end);
+        if (!valueEnd) {
+          valid = false;
+        } else {
+          const JsonRange key{keyStart, *keyEnd, JsonValueKind::String};
+          const JsonRange value{cursor, *valueEnd, kindAt(cursor)};
+          if (!callback(key, value)) {
+            break;
+          }
+          cursor = skipWhitespace(*valueEnd, object.end);
+          if (cursor < object.end && data_[cursor] == ',') {
+            cursor += 1;
+          } else if (cursor >= object.end || data_[cursor] != '}') {
+            valid = false;
+          }
+        }
+      }
+    }
+  }
+  return valid;
+}
+
 bool ChatJson::forEachArrayValue(const JsonRange& array, const std::function<bool(const JsonRange&)>& callback) const {
   bool valid = array.kind == JsonValueKind::Array && array.end <= size_ && array.end > array.start + 1;
   size_t cursor = valid ? array.start + 1 : array.end;

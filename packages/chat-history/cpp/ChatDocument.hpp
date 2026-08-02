@@ -22,12 +22,19 @@ public:
 };
 
 struct ChatRow {
+  struct FileChange {
+    std::string path;
+    size_t additions = 0;
+    size_t deletions = 0;
+  };
+
   std::string kind;
   std::vector<JsonRange> markdownRanges;
   std::vector<JsonRange> previewRanges;
   std::string toolName;
   std::string toolStatus;
   std::string callId;
+  std::vector<FileChange> fileChanges;
   bool hasImagePlaceholder = false;
   double startedAtMs = 0;
   double endedAtMs = 0;

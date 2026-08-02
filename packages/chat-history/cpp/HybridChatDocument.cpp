@@ -90,6 +90,16 @@ size_t HybridChatDocument::checkedIndex(double index) const {
   return static_cast<size_t>(index);
 }
 
+size_t HybridChatDocument::checkedFileIndex(const ChatRow& row, double fileIndex) const {
+  if (!std::isfinite(fileIndex)
+      || fileIndex < 0
+      || std::floor(fileIndex) != fileIndex
+      || static_cast<size_t>(fileIndex) >= row.fileChanges.size()) {
+    throw std::out_of_range("Chat file index is out of range");
+  }
+  return static_cast<size_t>(fileIndex);
+}
+
 void HybridChatDocument::buildDisplayRows() {
   size_t index = 0;
   while (index < rows_.size()) {
@@ -180,9 +190,19 @@ ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
         workGroupLabel(displayRow),
         workGroupStatus(displayRow),
         true,
-        false);
+        false,
+        std::nullopt,
+        std::nullopt,
+        std::nullopt);
   }
   const bool hasMarkdown = !row.markdownRanges.empty();
+  size_t fileAdditions = 0;
+  size_t fileDeletions = 0;
+  for (const ChatRow::FileChange& file : row.fileChanges) {
+    fileAdditions += file.additions;
+    fileDeletions += file.deletions;
+  }
+  const bool hasFiles = !row.fileChanges.empty();
   return ChatRowMetadata(
       index,
       row.kind,
@@ -190,7 +210,10 @@ ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
       row.toolName.empty() ? std::nullopt : std::optional<std::string>(row.toolName),
       row.toolStatus.empty() ? std::nullopt : std::optional<std::string>(row.toolStatus),
       !row.previewRanges.empty(),
-      row.hasImagePlaceholder);
+      row.hasImagePlaceholder,
+      hasFiles ? std::optional<double>(row.fileChanges.size()) : std::nullopt,
+      hasFiles ? std::optional<double>(fileAdditions) : std::nullopt,
+      hasFiles ? std::optional<double>(fileDeletions) : std::nullopt);
 }
 
 std::string HybridChatDocument::decodeRanges(const std::vector<JsonRange>& ranges, size_t maximumBytes) const {
@@ -248,6 +271,16 @@ std::string HybridChatDocument::getToolPreview(double index, double maximumBytes
   return displayRow.isWorkGroup
       ? workGroupPreview(displayRow, boundedBytes)
       : decodeRanges(rows_[displayRow.firstRow].previewRanges, boundedBytes);
+}
+
+ChatFileChange HybridChatDocument::getFileChange(double index, double fileIndex) {
+  const ChatDisplayRow& displayRow = displayRows_[checkedIndex(index)];
+  const ChatRow& row = rows_[displayRow.firstRow];
+  const ChatRow::FileChange& file = row.fileChanges[checkedFileIndex(row, fileIndex)];
+  return ChatFileChange(
+      file.path,
+      static_cast<double>(file.additions),
+      static_cast<double>(file.deletions));
 }
 
 std::string HybridChatDocument::workGroupPreview(

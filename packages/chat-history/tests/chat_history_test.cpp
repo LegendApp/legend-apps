@@ -38,8 +38,8 @@ std::string decode(const ChatParseResult& result, const std::vector<JsonRange>& 
 void testCodex(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{1};
   ChatParseResult result = parseChatFile("codex", (fixtureRoot / "codex.jsonl").string(), 1, generation);
-  expect(result.recordCount == 11, "Codex record count should include the incomplete final record");
-  expect(result.rows.size() == 4, "Codex should produce message and generic tool rows");
+  expect(result.recordCount == 13, "Codex record count should include the incomplete final record");
+  expect(result.rows.size() == 5, "Codex should produce message, tool, and file rows");
   expect(result.rows[0].kind == "user", "Codex first row should be user");
   expect(decode(result, result.rows[0].markdownRanges) == "Hello ☺\nworld", "Codex text should decode on demand");
   expect(result.rows[0].hasImagePlaceholder, "Codex image should remain a placeholder");
@@ -49,16 +49,34 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   expect(result.rows[2].kind == "tool" && result.rows[2].hasImagePlaceholder, "Codex image generation should use a generic placeholder tool row");
   expect(result.rows[2].toolStatus == "completed", "Codex image result should complete its tool row");
   expect(result.rows[3].kind == "assistant", "Codex final visible row should be assistant");
+  expect(result.rows[4].kind == "files", "Codex patch events should follow the assistant as one file row");
+  expect(result.rows[4].fileChanges.size() == 3, "Codex repeated patches should merge by file");
+  expect(
+      result.rows[4].fileChanges[0].path == "apps/demo.ts"
+          && result.rows[4].fileChanges[0].additions == 3
+          && result.rows[4].fileChanges[0].deletions == 2,
+      "Codex should aggregate line totals and make paths relative to the turn cwd");
   expect(result.warningCount == 2, "Codex should warn for unknown relevant and malformed records");
 
-  ChatDocumentTiming timing(static_cast<double>(result.source->size()), 11, 3, 0, 0, 0, 0, 0);
+  ChatDocumentTiming timing(static_cast<double>(result.source->size()), 13, 4, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("codex-group", std::move(result), timing);
-  expect(document->getRowCount() == 3, "Codex adjacent tools should collapse into one display row");
+  expect(document->getRowCount() == 4, "Codex adjacent tools should collapse without hiding file changes");
   const ChatRowMetadata metadata = document->getRowMetadata(1);
   expect(metadata.kind == "tool" && metadata.toolName == "Worked for 4s", "Codex work row should expose its duration");
   expect(
       document->getToolPreview(1, 64 * 1024) == "Read files, created an image",
       "Codex work row should expand to a plain-text activity summary");
+  const ChatRowMetadata fileMetadata = document->getRowMetadata(3);
+  expect(
+      fileMetadata.kind == "files"
+          && fileMetadata.fileCount == 3
+          && fileMetadata.fileAdditions == 4
+          && fileMetadata.fileDeletions == 4,
+      "Codex file row should expose its aggregate summary");
+  const ChatFileChange firstFile = document->getFileChange(3, 0);
+  expect(
+      firstFile.path == "apps/demo.ts" && firstFile.additions == 3 && firstFile.deletions == 2,
+      "Codex file entries should remain index-addressable from native storage");
 }
 
 void testClaude(const std::filesystem::path& fixtureRoot) {
@@ -99,7 +117,7 @@ void testDocumentRelease(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{1};
   ChatParseResult result = parseChatFile("codex", (fixtureRoot / "codex.jsonl").string(), 1, generation);
   const double sourceBytes = static_cast<double>(result.source->size());
-  ChatDocumentTiming timing(sourceBytes, 11, 4, 0, 0, 0, 0, 0);
+  ChatDocumentTiming timing(sourceBytes, 13, 5, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("test", std::move(result), timing);
   ChatDocumentRegistry::shared().registerDocument("test", document);
   expect(document->markdownForRow(0) == "Hello ☺\nworld", "Native provider should decode a visible row");

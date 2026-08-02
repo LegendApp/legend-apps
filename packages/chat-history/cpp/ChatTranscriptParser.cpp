@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -78,6 +79,16 @@ struct ClaudeRecord {
   double timestampMs = 0;
 };
 
+struct PendingFileChanges {
+  std::string turnId;
+  ChatRow row;
+  std::unordered_map<std::string, size_t> indexByPath;
+
+  PendingFileChanges() {
+    row.kind = "files";
+  }
+};
+
 double elapsedMs(Clock::time_point start, Clock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
 }
@@ -139,6 +150,106 @@ std::optional<JsonRange> objectMember(const ChatJson& json, const std::optional<
 std::string stringMember(const ChatJson& json, const JsonRange& object, std::string_view key) {
   const auto value = json.member(object, key);
   return value ? json.stringValue(*value) : std::string();
+}
+
+std::string relativeFilePath(const std::string& path, const std::string& cwd) {
+  const std::string prefix = cwd.empty() || cwd.back() == '/' ? cwd : cwd + "/";
+  return !prefix.empty() && path.starts_with(prefix) ? path.substr(prefix.size()) : path;
+}
+
+std::pair<size_t, size_t> countUnifiedDiffLines(const std::string& diff) {
+  size_t additions = 0;
+  size_t deletions = 0;
+  size_t lineStart = 0;
+  bool inHunk = false;
+  while (lineStart < diff.size()) {
+    const size_t lineEnd = diff.find('\n', lineStart);
+    const size_t lineSize = (lineEnd == std::string::npos ? diff.size() : lineEnd) - lineStart;
+    if (lineSize >= 2 && diff.compare(lineStart, 2, "@@") == 0) {
+      inHunk = true;
+    } else if (inHunk && lineSize > 0 && diff[lineStart] == '+') {
+      additions += 1;
+    } else if (inHunk && lineSize > 0 && diff[lineStart] == '-') {
+      deletions += 1;
+    }
+    if (lineEnd == std::string::npos) {
+      break;
+    }
+    lineStart = lineEnd + 1;
+  }
+  return {additions, deletions};
+}
+
+size_t countContentLines(const std::string& content) {
+  return static_cast<size_t>(std::count(content.begin(), content.end(), '\n'))
+      + (!content.empty() && content.back() != '\n' ? 1 : 0);
+}
+
+void appendPendingFileChanges(std::vector<ChatRow>& rows, PendingFileChanges& pending) {
+  if (!pending.row.fileChanges.empty()) {
+    rows.push_back(std::move(pending.row));
+  }
+  pending = PendingFileChanges();
+}
+
+void collectCodexFileChanges(
+    const ChatJson& json,
+    const JsonRange& payload,
+    const std::string& cwd,
+    std::vector<ChatRow>& rows,
+    PendingFileChanges& pending,
+    size_t& warningCount) {
+  const auto success = json.member(payload, "success");
+  const auto changes = json.member(payload, "changes");
+  if (!success || !json.boolValue(*success) || !changes || changes->kind != JsonValueKind::Object) {
+    return;
+  }
+
+  const std::string turnId = stringMember(json, payload, "turn_id");
+  if (!pending.turnId.empty() && !turnId.empty() && pending.turnId != turnId) {
+    appendPendingFileChanges(rows, pending);
+  }
+  pending.turnId = turnId;
+  const bool valid = json.forEachObjectMember(*changes, [&](const JsonRange& pathRange, const JsonRange& change) {
+    if (change.kind == JsonValueKind::Object) {
+      const std::string path = relativeFilePath(json.stringValue(pathRange), cwd);
+      const std::string changeType = stringMember(json, change, "type");
+      const auto unifiedDiff = json.member(change, "unified_diff");
+      const auto content = json.member(change, "content");
+      size_t additions = 0;
+      size_t deletions = 0;
+      bool supported = false;
+      if (changeType == "update" && unifiedDiff && unifiedDiff->kind == JsonValueKind::String) {
+        std::tie(additions, deletions) = countUnifiedDiffLines(json.stringValue(*unifiedDiff));
+        supported = true;
+      } else if ((changeType == "add" || changeType == "delete") && content && content->kind == JsonValueKind::String) {
+        const size_t contentLines = countContentLines(json.stringValue(*content));
+        additions = changeType == "add" ? contentLines : 0;
+        deletions = changeType == "delete" ? contentLines : 0;
+        supported = true;
+      }
+
+      if (!supported) {
+        warningCount += 1;
+        return true;
+      }
+      const auto found = pending.indexByPath.find(path);
+      if (found == pending.indexByPath.end()) {
+        pending.indexByPath[path] = pending.row.fileChanges.size();
+        pending.row.fileChanges.push_back(ChatRow::FileChange{path, additions, deletions});
+      } else {
+        ChatRow::FileChange& file = pending.row.fileChanges[found->second];
+        file.additions += additions;
+        file.deletions += deletions;
+      }
+    } else {
+      warningCount += 1;
+    }
+    return true;
+  });
+  if (!valid) {
+    warningCount += 1;
+  }
 }
 
 void appendMessageRow(
@@ -255,6 +366,8 @@ ChatParseResult parseCodex(
   result.recordCount = lines.size();
   const ChatJson json(result.source->data(), result.source->size());
   std::unordered_map<std::string, size_t> toolRows;
+  PendingFileChanges pendingFileChanges;
+  std::string cwd;
 
   for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex += 1) {
     if ((lineIndex & 0xff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
@@ -265,11 +378,30 @@ ChatParseResult parseCodex(
       result.warningCount += 1;
       continue;
     }
-    const auto type = json.member(*root, "type");
-    if (!type || !json.stringEquals(*type, "response_item")) {
+    const std::string recordType = stringMember(json, *root, "type");
+    const auto payload = json.member(*root, "payload");
+    if ((recordType == "session_meta" || recordType == "turn_context") && payload && payload->kind == JsonValueKind::Object) {
+      const std::string nextCwd = stringMember(json, *payload, "cwd");
+      if (!nextCwd.empty()) {
+        cwd = nextCwd;
+      }
       continue;
     }
-    const auto payload = json.member(*root, "payload");
+    if (recordType == "event_msg" && payload && payload->kind == JsonValueKind::Object) {
+      if (stringMember(json, *payload, "type") == "patch_apply_end") {
+        collectCodexFileChanges(
+            json,
+            *payload,
+            cwd,
+            result.rows,
+            pendingFileChanges,
+            result.warningCount);
+      }
+      continue;
+    }
+    if (recordType != "response_item") {
+      continue;
+    }
     if (!payload || payload->kind != JsonValueKind::Object) {
       result.warningCount += 1;
       continue;
@@ -278,6 +410,9 @@ ChatParseResult parseCodex(
     const double timestampMs = parseIsoTime(stringMember(json, *root, "timestamp"));
     const std::string payloadType = stringMember(json, *payload, "type");
     if (payloadType == "message") {
+      if (stringMember(json, *payload, "role") == "user") {
+        appendPendingFileChanges(result.rows, pendingFileChanges);
+      }
       parseCodexMessage(json, *payload, result.rows, result.warningCount, timestampMs);
     } else if (payloadType == "function_call" || payloadType == "custom_tool_call" || payloadType == "local_shell_call") {
       std::vector<JsonRange> previews;
@@ -324,6 +459,7 @@ ChatParseResult parseCodex(
       result.warningCount += 1;
     }
   }
+  appendPendingFileChanges(result.rows, pendingFileChanges);
   result.normalizedMs = elapsedMs(startedAt, Clock::now());
   return result;
 }

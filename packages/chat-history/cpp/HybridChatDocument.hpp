@@ -24,6 +24,7 @@ public:
   double getWarningCount() override;
   ChatRowMetadata getRowMetadata(double index) override;
   std::string getToolPreview(double index, double maximumBytes) override;
+  ChatFileChange getFileChange(double index, double fileIndex) override;
   ChatDocumentTiming getTiming() override;
   double releaseNativeResources() override;
 
@@ -40,6 +41,7 @@ private:
   std::string workGroupPreview(const ChatDisplayRow& displayRow, size_t maximumBytes) const;
   std::string workGroupStatus(const ChatDisplayRow& displayRow) const;
   size_t checkedIndex(double index) const;
+  size_t checkedFileIndex(const ChatRow& row, double fileIndex) const;
 
   std::string documentId_;
   mutable std::mutex mutex_;
