@@ -77,20 +77,16 @@ function ImagePlaceholder() {
 function MessageRow({ metadata }: { metadata: ChatRowMetadata }) {
   const isUser = metadata.kind === "user";
   return (
-    <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-2"}>
+    <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-3"}>
       <View
         className={isUser
-          ? "max-w-[82%] rounded-xl border border-blue-200 bg-blue-50 px-4 py-3"
-          : "max-w-[92%] rounded-xl border border-border bg-surface px-4 py-3"}
-        style={styles.messageBubble}
+          ? "max-w-[82%] self-end rounded-2xl bg-gray-200 px-4 py-3"
+          : "w-full max-w-[92%]"}
       >
-        <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          {isUser ? "You" : "Assistant"}
-        </Text>
         {metadata.markdownBlockId ? (
           <EnrichedMarkdownText
             allowTrailingMargin={false}
-            containerStyle={styles.markdown}
+            containerStyle={isUser ? styles.userMarkdown : styles.assistantMarkdown}
             flavor="github"
             markdownStyle={markdownStyle}
             nativeMarkdownBlockId={metadata.markdownBlockId}
@@ -230,10 +226,10 @@ export function TranscriptRow({ document, index }: { document: ChatDocument; ind
 }
 
 const styles = StyleSheet.create({
-  markdown: {
+  assistantMarkdown: {
     alignSelf: "stretch",
   },
-  messageBubble: {
-    minWidth: 140,
+  userMarkdown: {
+    alignSelf: "flex-start",
   },
 });

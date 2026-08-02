@@ -3086,3 +3086,25 @@ index 11f876c..1943ff1 100644
 +  windowX: number;
 +  windowY: number;
 +}
+diff --git a/ios/utils/ENRMTextViewSetup.h b/ios/utils/ENRMTextViewSetup.h
+--- a/ios/utils/ENRMTextViewSetup.h
++++ b/ios/utils/ENRMTextViewSetup.h
+@@ -43,2 +43,17 @@ static inline CGSize ENRMMeasureMarkdownText(ENRMPlatformTextView *textView, CGF
+-  CGFloat measuredWidth = layout.usedRect.size.width;
++  NSLayoutManager *layoutManager = textView.layoutManager;
++  NSRange glyphRange = [layoutManager glyphRangeForTextContainer:textView.textContainer];
++  CGFloat measuredWidth = 0;
++  NSUInteger glyphIndex = glyphRange.location;
++  const NSUInteger glyphRangeEnd = NSMaxRange(glyphRange);
++  while (glyphIndex < glyphRangeEnd) {
++    NSRange lineGlyphRange;
++    CGRect lineUsedRect = [layoutManager lineFragmentUsedRectForGlyphAtIndex:glyphIndex
++                                                              effectiveRange:&lineGlyphRange];
++    measuredWidth = MAX(measuredWidth, CGRectGetMaxX(lineUsedRect));
++    const NSUInteger nextGlyphIndex = NSMaxRange(lineGlyphRange);
++    if (nextGlyphIndex <= glyphIndex) {
++      break;
++    }
++    glyphIndex = nextGlyphIndex;
++  }
+   CGFloat measuredHeight = layout.usedRect.size.height;
