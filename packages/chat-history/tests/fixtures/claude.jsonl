@@ -1,0 +1,8 @@
+{"type":"user","uuid":"u1","parentUuid":null,"isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"Start here"}]}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"I will check."},{"type":"thinking","thinking":"hidden"},{"type":"tool_use","id":"tool-1","name":"Read","input":{"file_path":"demo.md"}}]}}
+{"type":"assistant","uuid":"branch","parentUuid":"u1","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"Abandoned branch"}]}}
+{"type":"user","uuid":"u2","parentUuid":"a1","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","content":[{"type":"text","text":"file contents"}],"is_error":false}]}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"Latest answer"},{"type":"image","source":{"type":"base64","data":"omitted"}}]}}
+{"type":"assistant","uuid":"side","parentUuid":"a2","isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"Sidechain answer"}]}}
+{"type":"file-history-snapshot","uuid":"snapshot","parentUuid":"a2","isSidechain":false,"snapshot":{}}
+{"type":"assistant","uuid":"broken","parentUuid":"snapshot","isSidechain":false,"message":{"content":[{"type":"text","text":"truncated"}]}

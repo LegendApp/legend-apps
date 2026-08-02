@@ -24,6 +24,19 @@
         "typescript": "~7.0.2",
       },
     },
+    "apps/chat-history": {
+      "name": "@legend-apps/app-chat-history",
+      "version": "0.0.1",
+      "dependencies": {
+        "@legend-apps/appkit-split-view": "0.0.0",
+        "@legend-apps/chat-history": "workspace:*",
+        "@legend-apps/sidebar": "0.0.0",
+        "@legend-apps/storage": "0.0.0",
+        "@legendapp/list": "catalog:",
+        "react-native-enriched-markdown": "^0.5.0",
+        "uniwind": "^1.6.3",
+      },
+    },
     "apps/code": {
       "name": "@legend-apps/app-code",
       "version": "0.0.1",
@@ -246,6 +259,18 @@
     "packages/auto-updater": {
       "name": "@legend-apps/auto-updater",
       "version": "0.0.0",
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/chat-history": {
+      "name": "@legend-apps/chat-history",
+      "version": "0.0.0",
+      "devDependencies": {
+        "nitrogen": "0.35.6",
+        "react-native-nitro-modules": "0.35.6",
+      },
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
@@ -996,6 +1021,8 @@
 
     "@legend-apps/ai": ["@legend-apps/ai@workspace:packages/ai"],
 
+    "@legend-apps/app-chat-history": ["@legend-apps/app-chat-history@workspace:apps/chat-history"],
+
     "@legend-apps/app-code": ["@legend-apps/app-code@workspace:apps/code"],
 
     "@legend-apps/app-diff": ["@legend-apps/app-diff@workspace:apps/diff"],
@@ -1015,6 +1042,8 @@
     "@legend-apps/audio-player": ["@legend-apps/audio-player@workspace:packages/audio-player"],
 
     "@legend-apps/auto-updater": ["@legend-apps/auto-updater@workspace:packages/auto-updater"],
+
+    "@legend-apps/chat-history": ["@legend-apps/chat-history@workspace:packages/chat-history"],
 
     "@legend-apps/classnames": ["@legend-apps/classnames@workspace:packages/classnames"],
 

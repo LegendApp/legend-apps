@@ -10,6 +10,7 @@
     "packages/*"
   ],
   "scripts": {
+    "chat-history": "bun scripts/run-app.ts chat-history",
     "code": "bun scripts/run-app.ts code",
     "diff": "bun scripts/run-app.ts diff",
     "diff:package:arm": "bun scripts/package-macos-app.ts diff arm",
@@ -53,6 +54,7 @@
     "test:markdown-editing": "bun run test:markdown-parser && bun run test:markdown-document && bun run test:markdown-toolbar",
     "test:markdown-editing:all": "bun run test:markdown-editing && bun run test:markdown-e2e && bun run test:markdown-e2e:ui-smoke && bun run test:markdown-e2e:selection-smoke && bun run test:markdown-e2e:soft-wrap-selection && bun run test:markdown-e2e:code-block-smoke && bun run test:markdown-e2e:navigation-smoke && bun run test:markdown-e2e:edit-navigation-smoke && bun run test:markdown-e2e:theme-reflow-smoke",
     "test:markdown-parser": "bash packages/markdown-parser/tests/run.sh",
+    "test:chat-history:native": "bash packages/chat-history/tests/run-native.sh",
     "test:markdown-toolbar": "jest --config apps/markdown/jest.config.cjs",
     "typecheck": "tsc --noEmit",
     "verify:react-compiler": "bun scripts/verify-react-compiler.ts"

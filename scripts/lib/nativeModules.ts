@@ -8,6 +8,11 @@ export type NativeGraphMode = "dev" | "release";
 
 export const nativePackages: NativePackage[] = [
   {
+    name: "@legend-apps/chat-history",
+    root: path.join(packagesDir, "chat-history"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/app-exit",
     root: path.join(packagesDir, "app-exit"),
     platforms: ["macos", "ios", "android"],

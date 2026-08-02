@@ -1,0 +1,510 @@
+#include "ChatDocument.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <fcntl.h>
+#include <stdexcept>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace margelo::nitro::legendapps::chathistory {
+
+namespace {
+
+using Clock = std::chrono::steady_clock;
+
+struct MappedChatSource final : ChatSource {
+  MappedChatSource(int descriptor, const char* mappedData, size_t mappedSize)
+      : descriptor_(descriptor), data_(mappedData), size_(mappedSize) {}
+
+  ~MappedChatSource() override {
+    if (data_ != nullptr && size_ > 0) {
+      munmap(const_cast<char*>(data_), size_);
+    }
+    if (descriptor_ >= 0) {
+      close(descriptor_);
+    }
+  }
+
+  const char* data() const noexcept override {
+    return data_;
+  }
+
+  size_t size() const noexcept override {
+    return size_;
+  }
+
+  size_t externalMemorySize() const noexcept override {
+    return size_;
+  }
+
+private:
+  int descriptor_ = -1;
+  const char* data_ = nullptr;
+  size_t size_ = 0;
+};
+
+struct EmptyChatSource final : ChatSource {
+  const char* data() const noexcept override {
+    return "";
+  }
+
+  size_t size() const noexcept override {
+    return 0;
+  }
+
+  size_t externalMemorySize() const noexcept override {
+    return 0;
+  }
+};
+
+struct LineRange {
+  size_t start = 0;
+  size_t end = 0;
+};
+
+struct ClaudeRecord {
+  JsonRange root;
+  std::string uuid;
+  std::string parentUuid;
+  std::string type;
+  bool sidechain = false;
+};
+
+double elapsedMs(Clock::time_point start, Clock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+std::vector<LineRange> scanLines(
+    const ChatSource& source,
+    uint64_t generation,
+    const std::atomic<uint64_t>& activeGeneration) {
+  std::vector<LineRange> lines;
+  size_t lineStart = 0;
+  for (size_t position = 0; position < source.size(); position += 1) {
+    if ((position & 0x3ffff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
+      throw std::runtime_error("Chat open cancelled");
+    }
+    if (source.data()[position] == '\n') {
+      size_t lineEnd = position;
+      if (lineEnd > lineStart && source.data()[lineEnd - 1] == '\r') {
+        lineEnd -= 1;
+      }
+      if (lineEnd > lineStart) {
+        lines.push_back(LineRange{lineStart, lineEnd});
+      }
+      lineStart = position + 1;
+    }
+  }
+  if (lineStart < source.size()) {
+    lines.push_back(LineRange{lineStart, source.size()});
+  }
+  return lines;
+}
+
+std::optional<JsonRange> objectMember(const ChatJson& json, const std::optional<JsonRange>& object, std::string_view key) {
+  return object ? json.member(*object, key) : std::nullopt;
+}
+
+std::string stringMember(const ChatJson& json, const JsonRange& object, std::string_view key) {
+  const auto value = json.member(object, key);
+  return value ? json.stringValue(*value) : std::string();
+}
+
+void appendMessageRow(
+    std::vector<ChatRow>& rows,
+    std::string kind,
+    std::vector<JsonRange> markdownRanges,
+    bool hasImagePlaceholder) {
+  if (!markdownRanges.empty() || hasImagePlaceholder) {
+    ChatRow row;
+    row.kind = std::move(kind);
+    row.markdownRanges = std::move(markdownRanges);
+    row.hasImagePlaceholder = hasImagePlaceholder;
+    rows.push_back(std::move(row));
+  }
+}
+
+size_t appendToolRow(
+    std::vector<ChatRow>& rows,
+    std::unordered_map<std::string, size_t>& toolRows,
+    std::string callId,
+    std::string name,
+    std::vector<JsonRange> previews = {}) {
+  ChatRow row;
+  row.kind = "tool";
+  row.callId = std::move(callId);
+  row.toolName = name.empty() ? "Tool" : std::move(name);
+  row.toolStatus = "unknown";
+  row.previewRanges = std::move(previews);
+  rows.push_back(std::move(row));
+  const size_t index = rows.size() - 1;
+  if (!rows[index].callId.empty()) {
+    toolRows[rows[index].callId] = index;
+  }
+  return index;
+}
+
+void applyToolResult(
+    std::vector<ChatRow>& rows,
+    std::unordered_map<std::string, size_t>& toolRows,
+    const std::string& callId,
+    std::vector<JsonRange> previews,
+    bool failed) {
+  size_t index = rows.size();
+  const auto found = toolRows.find(callId);
+  if (found != toolRows.end()) {
+    index = found->second;
+  } else {
+    index = appendToolRow(rows, toolRows, callId, "Tool");
+  }
+  rows[index].toolStatus = failed ? "failed" : "completed";
+  if (!previews.empty()) {
+    rows[index].previewRanges = std::move(previews);
+  }
+}
+
+void parseCodexMessage(
+    const ChatJson& json,
+    const JsonRange& payload,
+    std::vector<ChatRow>& rows,
+    size_t& warningCount) {
+  const std::string role = stringMember(json, payload, "role");
+  if (role != "user" && role != "assistant") {
+    return;
+  }
+
+  std::vector<JsonRange> textRanges;
+  bool hasImage = false;
+  const auto content = json.member(payload, "content");
+  if (content && content->kind == JsonValueKind::Array) {
+    const bool valid = json.forEachArrayValue(*content, [&](const JsonRange& block) {
+      if (block.kind == JsonValueKind::Object) {
+        const std::string blockType = stringMember(json, block, "type");
+        if (blockType == "input_text" || blockType == "output_text" || blockType == "text") {
+          const auto text = json.member(block, "text");
+          if (text && text->kind == JsonValueKind::String) {
+            textRanges.push_back(*text);
+          }
+        } else if (blockType == "input_image" || blockType == "image") {
+          hasImage = true;
+        } else if (!blockType.empty()) {
+          warningCount += 1;
+        }
+      }
+      return true;
+    });
+    if (!valid) {
+      warningCount += 1;
+    }
+  } else if (content && content->kind == JsonValueKind::String) {
+    textRanges.push_back(*content);
+  } else if (content) {
+    warningCount += 1;
+  }
+  appendMessageRow(rows, role, std::move(textRanges), hasImage);
+}
+
+ChatParseResult parseCodex(
+    std::shared_ptr<const ChatSource> source,
+    const std::vector<LineRange>& lines,
+    uint64_t generation,
+    const std::atomic<uint64_t>& activeGeneration) {
+  const auto startedAt = Clock::now();
+  ChatParseResult result;
+  result.source = std::move(source);
+  result.recordCount = lines.size();
+  const ChatJson json(result.source->data(), result.source->size());
+  std::unordered_map<std::string, size_t> toolRows;
+
+  for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex += 1) {
+    if ((lineIndex & 0xff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
+      throw std::runtime_error("Chat open cancelled");
+    }
+    const auto root = json.root(lines[lineIndex].start, lines[lineIndex].end);
+    if (!root || root->kind != JsonValueKind::Object) {
+      result.warningCount += 1;
+      continue;
+    }
+    const auto type = json.member(*root, "type");
+    if (!type || !json.stringEquals(*type, "response_item")) {
+      continue;
+    }
+    const auto payload = json.member(*root, "payload");
+    if (!payload || payload->kind != JsonValueKind::Object) {
+      result.warningCount += 1;
+      continue;
+    }
+
+    const std::string payloadType = stringMember(json, *payload, "type");
+    if (payloadType == "message") {
+      parseCodexMessage(json, *payload, result.rows, result.warningCount);
+    } else if (payloadType == "function_call" || payloadType == "custom_tool_call" || payloadType == "local_shell_call") {
+      std::vector<JsonRange> previews;
+      const auto arguments = json.member(*payload, payloadType == "custom_tool_call" ? "input" : "arguments");
+      if (arguments && arguments->kind == JsonValueKind::String) {
+        previews.push_back(*arguments);
+      }
+      appendToolRow(
+          result.rows,
+          toolRows,
+          stringMember(json, *payload, "call_id"),
+          stringMember(json, *payload, "name"),
+          std::move(previews));
+    } else if (payloadType == "function_call_output" || payloadType == "custom_tool_call_output") {
+      std::vector<JsonRange> previews;
+      const auto output = json.member(*payload, "output");
+      if (output && output->kind == JsonValueKind::String) {
+        previews.push_back(*output);
+      }
+      applyToolResult(
+          result.rows,
+          toolRows,
+          stringMember(json, *payload, "call_id"),
+          std::move(previews),
+          false);
+    } else if (payloadType == "image_generation_call") {
+      const std::string callId = stringMember(json, *payload, "id");
+      size_t rowIndex = result.rows.size();
+      const auto found = toolRows.find(callId);
+      if (found != toolRows.end()) {
+        rowIndex = found->second;
+      } else {
+        rowIndex = appendToolRow(result.rows, toolRows, callId, "Image generation");
+      }
+      const auto imageResult = json.member(*payload, "result");
+      const bool hasResult = imageResult && imageResult->kind == JsonValueKind::String && imageResult->end > imageResult->start + 2;
+      const std::string status = stringMember(json, *payload, "status");
+      result.rows[rowIndex].toolStatus = status == "failed" ? "failed" : hasResult ? "completed" : "unknown";
+      result.rows[rowIndex].hasImagePlaceholder = result.rows[rowIndex].hasImagePlaceholder || hasResult;
+    } else if (payloadType != "reasoning" && !payloadType.empty()) {
+      result.warningCount += 1;
+    }
+  }
+  result.normalizedMs = elapsedMs(startedAt, Clock::now());
+  return result;
+}
+
+void collectClaudeToolResultRanges(
+    const ChatJson& json,
+    const JsonRange& content,
+    std::vector<JsonRange>& previews,
+    bool& imagePlaceholder,
+    size_t& warningCount) {
+  if (content.kind == JsonValueKind::String) {
+    previews.push_back(content);
+  } else if (content.kind == JsonValueKind::Array) {
+    const bool valid = json.forEachArrayValue(content, [&](const JsonRange& block) {
+      if (block.kind == JsonValueKind::String) {
+        previews.push_back(block);
+      } else if (block.kind == JsonValueKind::Object) {
+        const std::string type = stringMember(json, block, "type");
+        const auto text = json.member(block, "text");
+        if (type == "text" && text && text->kind == JsonValueKind::String) {
+          previews.push_back(*text);
+        } else if (type == "image") {
+          imagePlaceholder = true;
+        } else if (type != "text") {
+          warningCount += 1;
+        }
+      }
+      return true;
+    });
+    if (!valid) {
+      warningCount += 1;
+    }
+  }
+}
+
+void parseClaudeMessage(
+    const ChatJson& json,
+    const ClaudeRecord& record,
+    std::vector<ChatRow>& rows,
+    std::unordered_map<std::string, size_t>& toolRows,
+    size_t& warningCount) {
+  const auto message = json.member(record.root, "message");
+  const auto content = objectMember(json, message, "content");
+  if (!message || message->kind != JsonValueKind::Object || !content) {
+    warningCount += 1;
+    return;
+  }
+
+  if (content->kind == JsonValueKind::String) {
+    appendMessageRow(rows, record.type, {*content}, false);
+    return;
+  }
+  if (content->kind != JsonValueKind::Array) {
+    warningCount += 1;
+    return;
+  }
+
+  std::vector<JsonRange> textRanges;
+  bool hasImage = false;
+  std::vector<std::function<void()>> deferredTools;
+  const bool valid = json.forEachArrayValue(*content, [&](const JsonRange& block) {
+    if (block.kind != JsonValueKind::Object) {
+      warningCount += 1;
+      return true;
+    }
+    const std::string blockType = stringMember(json, block, "type");
+    if (blockType == "text") {
+      const auto text = json.member(block, "text");
+      if (text && text->kind == JsonValueKind::String) {
+        textRanges.push_back(*text);
+      }
+    } else if (blockType == "image" || blockType == "document") {
+      hasImage = true;
+    } else if (blockType == "tool_use") {
+      const std::string callId = stringMember(json, block, "id");
+      const std::string name = stringMember(json, block, "name");
+      deferredTools.push_back([&, callId, name]() {
+        appendToolRow(rows, toolRows, callId, name);
+      });
+    } else if (blockType == "tool_result") {
+      const std::string callId = stringMember(json, block, "tool_use_id");
+      const auto resultContent = json.member(block, "content");
+      std::vector<JsonRange> previews;
+      bool resultImage = false;
+      if (resultContent) {
+        collectClaudeToolResultRanges(json, *resultContent, previews, resultImage, warningCount);
+      }
+      const auto isError = json.member(block, "is_error");
+      const bool failed = isError && json.boolValue(*isError);
+      deferredTools.push_back([&, callId, previews = std::move(previews), failed, resultImage]() mutable {
+        applyToolResult(rows, toolRows, callId, std::move(previews), failed);
+        const auto found = toolRows.find(callId);
+        if (resultImage && found != toolRows.end()) {
+          rows[found->second].hasImagePlaceholder = true;
+        }
+      });
+    } else if (blockType != "thinking") {
+      warningCount += 1;
+    }
+    return true;
+  });
+  if (!valid) {
+    warningCount += 1;
+  }
+  appendMessageRow(rows, record.type, std::move(textRanges), hasImage);
+  for (auto& appendTool : deferredTools) {
+    appendTool();
+  }
+}
+
+ChatParseResult parseClaude(
+    std::shared_ptr<const ChatSource> source,
+    const std::vector<LineRange>& lines,
+    uint64_t generation,
+    const std::atomic<uint64_t>& activeGeneration) {
+  const auto startedAt = Clock::now();
+  ChatParseResult result;
+  result.source = std::move(source);
+  result.recordCount = lines.size();
+  const ChatJson json(result.source->data(), result.source->size());
+  std::vector<ClaudeRecord> records;
+  records.reserve(lines.size());
+  std::unordered_map<std::string, size_t> recordById;
+  std::string leafId;
+
+  for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex += 1) {
+    if ((lineIndex & 0xff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
+      throw std::runtime_error("Chat open cancelled");
+    }
+    const auto root = json.root(lines[lineIndex].start, lines[lineIndex].end);
+    if (!root || root->kind != JsonValueKind::Object) {
+      result.warningCount += 1;
+      continue;
+    }
+    ClaudeRecord record;
+    record.root = *root;
+    record.uuid = stringMember(json, *root, "uuid");
+    record.parentUuid = stringMember(json, *root, "parentUuid");
+    record.type = stringMember(json, *root, "type");
+    const auto sidechain = json.member(*root, "isSidechain");
+    record.sidechain = sidechain && json.boolValue(*sidechain);
+    records.push_back(std::move(record));
+    if (!records.back().uuid.empty() && !records.back().sidechain) {
+      recordById[records.back().uuid] = records.size() - 1;
+      leafId = records.back().uuid;
+    }
+  }
+
+  std::unordered_set<std::string> mainChain;
+  std::string cursor = leafId;
+  while (!cursor.empty() && mainChain.insert(cursor).second) {
+    const auto found = recordById.find(cursor);
+    if (found == recordById.end()) {
+      result.warningCount += 1;
+      break;
+    }
+    cursor = records[found->second].parentUuid;
+  }
+
+  std::unordered_map<std::string, size_t> toolRows;
+  for (const ClaudeRecord& record : records) {
+    const bool onMainChain = !record.sidechain && !record.uuid.empty() && mainChain.contains(record.uuid);
+    if (onMainChain && (record.type == "user" || record.type == "assistant")) {
+      parseClaudeMessage(json, record, result.rows, toolRows, result.warningCount);
+    }
+  }
+  result.normalizedMs = elapsedMs(startedAt, Clock::now());
+  return result;
+}
+
+} // namespace
+
+std::shared_ptr<const ChatSource> mapChatFile(const std::string& filePath) {
+  const int descriptor = open(filePath.c_str(), O_RDONLY);
+  if (descriptor < 0) {
+    throw std::runtime_error("Failed to open transcript");
+  }
+
+  struct stat fileStat {};
+  if (fstat(descriptor, &fileStat) != 0) {
+    close(descriptor);
+    throw std::runtime_error("Failed to stat transcript");
+  }
+  if (fileStat.st_size <= 0) {
+    close(descriptor);
+    return std::make_shared<EmptyChatSource>();
+  }
+
+  void* data = mmap(nullptr, static_cast<size_t>(fileStat.st_size), PROT_READ, MAP_PRIVATE, descriptor, 0);
+  if (data == MAP_FAILED) {
+    close(descriptor);
+    throw std::runtime_error("Failed to map transcript");
+  }
+  return std::make_shared<MappedChatSource>(
+      descriptor,
+      static_cast<const char*>(data),
+      static_cast<size_t>(fileStat.st_size));
+}
+
+ChatParseResult parseChatFile(
+    const std::string& provider,
+    const std::string& filePath,
+    uint64_t generation,
+    const std::atomic<uint64_t>& activeGeneration) {
+  const auto mapStartedAt = Clock::now();
+  auto source = mapChatFile(filePath);
+  const auto mappedAt = Clock::now();
+  const auto lines = scanLines(*source, generation, activeGeneration);
+  const auto scannedAt = Clock::now();
+
+  ChatParseResult result;
+  if (provider == "codex") {
+    result = parseCodex(std::move(source), lines, generation, activeGeneration);
+  } else if (provider == "claude") {
+    result = parseClaude(std::move(source), lines, generation, activeGeneration);
+  } else {
+    throw std::runtime_error("Unsupported chat provider");
+  }
+  result.mappedMs = elapsedMs(mapStartedAt, mappedAt);
+  result.scannedMs = elapsedMs(mappedAt, scannedAt);
+  return result;
+}
+
+} // namespace margelo::nitro::legendapps::chathistory
