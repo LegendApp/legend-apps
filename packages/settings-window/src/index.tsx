@@ -35,12 +35,6 @@ const settingsContentInset = {
   right: 0,
   top: SETTINGS_TITLEBAR_CONTENT_INSET,
 };
-const settingsSidebarContentInset = {
-  bottom: 0,
-  left: 0,
-  right: 0,
-  top: SETTINGS_SIDEBAR_TOP_INSET,
-};
 const settingsViewabilityConfig: ViewabilityConfig = {
   startOffset: SETTINGS_TITLEBAR_CONTENT_INSET,
 };
@@ -370,7 +364,6 @@ export function SettingsSidebar<PageId extends string = string>({
     <View className="flex-1 min-h-0">
       <ScrollView
         className="flex-1"
-        contentInset={settingsSidebarContentInset}
         contentContainerStyle={styles.sidebarContent}
         showsVerticalScrollIndicator={false}
       >
@@ -576,6 +569,7 @@ const styles = StyleSheet.create({
   },
   sidebarContent: {
     paddingHorizontal: 8,
+    paddingTop: SETTINGS_SIDEBAR_TOP_INSET,
   },
   sidebarToolbarBackground: {
     height: SETTINGS_SIDEBAR_TOP_INSET,
