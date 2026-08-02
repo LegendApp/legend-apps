@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <fcntl.h>
 #include <iomanip>
@@ -120,25 +121,41 @@ std::vector<LineRange> scanLines(
     const ChatSource& source,
     uint64_t generation,
     const std::atomic<uint64_t>& activeGeneration) {
+  constexpr size_t cancellationCheckBytes = 0x40000;
   std::vector<LineRange> lines;
+  const char* data = source.data();
+  const size_t sourceSize = source.size();
   size_t lineStart = 0;
-  for (size_t position = 0; position < source.size(); position += 1) {
-    if ((position & 0x3ffff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
-      throw std::runtime_error("Chat open cancelled");
+  size_t searchStart = 0;
+  size_t cancellationBoundary = 0;
+  while (searchStart < sourceSize) {
+    if (searchStart >= cancellationBoundary) {
+      if (activeGeneration.load(std::memory_order_relaxed) != generation) {
+        throw std::runtime_error("Chat open cancelled");
+      }
+      cancellationBoundary = searchStart + std::min(cancellationCheckBytes, sourceSize - searchStart);
     }
-    if (source.data()[position] == '\n') {
+    const void* newline = std::memchr(
+        data + searchStart,
+        '\n',
+        cancellationBoundary - searchStart);
+    if (newline != nullptr) {
+      const size_t position = static_cast<const char*>(newline) - data;
       size_t lineEnd = position;
-      if (lineEnd > lineStart && source.data()[lineEnd - 1] == '\r') {
+      if (lineEnd > lineStart && data[lineEnd - 1] == '\r') {
         lineEnd -= 1;
       }
       if (lineEnd > lineStart) {
         lines.push_back(LineRange{lineStart, lineEnd});
       }
       lineStart = position + 1;
+      searchStart = lineStart;
+    } else {
+      searchStart = cancellationBoundary;
     }
   }
-  if (lineStart < source.size()) {
-    lines.push_back(LineRange{lineStart, source.size()});
+  if (lineStart < sourceSize) {
+    lines.push_back(LineRange{lineStart, sourceSize});
   }
   return lines;
 }
