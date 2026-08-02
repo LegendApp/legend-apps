@@ -27,7 +27,7 @@ import {
   View,
 } from "react-native";
 
-const SETTINGS_SIDEBAR_TOP_INSET = 52;
+const SETTINGS_SIDEBAR_TOP_INSET = 40;
 const SETTINGS_TITLEBAR_CONTENT_INSET = 56;
 const settingsContentInset = {
   bottom: 0,
@@ -191,14 +191,14 @@ export function SettingsWindow<PageId extends string = string>({
           pages={pages}
           selectedPage={selectedPage}
         />
-        <SettingsToolbarBackground />
+        <SettingsToolbarBackground variant="sidebar" />
       </View>
       <View
         className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)}
         style={styles.pane}
       >
         {selectedPageConfig.render()}
-        <SettingsToolbarBackground />
+        <SettingsToolbarBackground variant="content" />
       </View>
     </SidebarSplitView>
   );
@@ -305,7 +305,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
           pages={pages}
           selectedPage={selectedPage}
         />
-        <SettingsToolbarBackground />
+        <SettingsToolbarBackground variant="sidebar" />
       </View>
       <View className={cn("min-w-0 flex-1 overflow-hidden", contentBackgroundClassName)} style={styles.pane}>
         <LegendList
@@ -321,7 +321,7 @@ export function VirtualizedSettingsWindow<PageId extends string = string>({
           style={styles.virtualizedSettingsList}
           viewabilityConfig={settingsViewabilityConfig}
         />
-        <SettingsToolbarBackground />
+        <SettingsToolbarBackground variant="content" />
       </View>
     </SidebarSplitView>
   );
@@ -345,12 +345,12 @@ function VirtualizedSettingsListPageRow<PageId extends string>({
   );
 }
 
-function SettingsToolbarBackground() {
+function SettingsToolbarBackground({ variant }: { variant: "content" | "sidebar" }) {
   return (
     <View
       className="absolute left-0 right-0 top-0 bg-gradient-to-b from-background-primary from-60% to-background-primary/0"
       pointerEvents="none"
-      style={styles.toolbarBackground}
+      style={[styles.toolbarBackground, variant === "sidebar" ? styles.sidebarToolbarBackground : undefined]}
     />
   );
 }
@@ -576,6 +576,9 @@ const styles = StyleSheet.create({
   },
   sidebarContent: {
     paddingHorizontal: 8,
+  },
+  sidebarToolbarBackground: {
+    height: SETTINGS_SIDEBAR_TOP_INSET,
   },
   toolbarBackground: {
     height: SETTINGS_TITLEBAR_CONTENT_INSET,
