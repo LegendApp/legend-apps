@@ -116,6 +116,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
         contentContainerStyle={styles.listContent}
         dataKey={document.documentId}
         dataSource={dataSource}
+        estimatedItemSize={500}
         getItemType={getItemType}
         initialScrollAtEnd
         recycleItems
