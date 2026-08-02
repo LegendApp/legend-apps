@@ -12,3 +12,12 @@ index 485912d..121a80c 100644
    }
  
   private:
+diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+--- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+@@ -309,5 +309,4 @@
+   _contentInset = contentInset;
+   _scrollView.contentInset = contentInset;
+-  _scrollView.scrollIndicatorInsets = contentInset;
+ }
+ #endif // macOS]
