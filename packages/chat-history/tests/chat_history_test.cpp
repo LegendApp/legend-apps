@@ -50,6 +50,15 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   expect(result.rows[2].toolStatus == "completed", "Codex image result should complete its tool row");
   expect(result.rows[3].kind == "assistant", "Codex final visible row should be assistant");
   expect(result.warningCount == 2, "Codex should warn for unknown relevant and malformed records");
+
+  ChatDocumentTiming timing(static_cast<double>(result.source->size()), 11, 3, 0, 0, 0, 0, 0);
+  auto document = std::make_shared<HybridChatDocument>("codex-group", std::move(result), timing);
+  expect(document->getRowCount() == 3, "Codex adjacent tools should collapse into one display row");
+  const ChatRowMetadata metadata = document->getRowMetadata(1);
+  expect(metadata.kind == "tool" && metadata.toolName == "Worked for 4s", "Codex work row should expose its duration");
+  expect(
+      document->getToolPreview(1, 64 * 1024) == "Read files, created an image",
+      "Codex work row should expand to a plain-text activity summary");
 }
 
 void testClaude(const std::filesystem::path& fixtureRoot) {
@@ -64,6 +73,15 @@ void testClaude(const std::filesystem::path& fixtureRoot) {
   expect(decode(result, result.rows[3].markdownRanges) == "Latest answer", "Claude should select the latest main chain");
   expect(result.rows[3].hasImagePlaceholder, "Claude embedded image should remain a placeholder");
   expect(result.warningCount == 1, "Claude should warn for the malformed final record");
+
+  ChatDocumentTiming timing(static_cast<double>(result.source->size()), 8, 3, 0, 0, 0, 0, 0);
+  auto document = std::make_shared<HybridChatDocument>("claude-group", std::move(result), timing);
+  expect(document->getRowCount() == 3, "Claude progress text and tools should collapse into one display row");
+  const ChatRowMetadata metadata = document->getRowMetadata(1);
+  expect(metadata.kind == "tool" && metadata.toolName == "Worked for 3s", "Claude work row should expose its duration");
+  expect(
+      document->getToolPreview(1, 64 * 1024) == "I will check.\n\nRead files",
+      "Claude work row should expand to progress text and a plain-text activity summary");
 }
 
 void testCancellation(const std::filesystem::path& fixtureRoot) {

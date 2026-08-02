@@ -47,14 +47,14 @@ std::shared_ptr<Promise<std::shared_ptr<HybridChatDocumentSpec>>> HybridChatHist
     const std::string documentId = makeChatDocumentId();
     const double sourceBytes = static_cast<double>(result.source ? result.source->size() : 0);
     const double recordCount = static_cast<double>(result.recordCount);
-    const double rowCount = static_cast<double>(result.rows.size());
     const double mappedMs = result.mappedMs;
     const double scannedMs = result.scannedMs;
     const double normalizedMs = result.normalizedMs;
     auto document = std::make_shared<HybridChatDocument>(
         documentId,
         std::move(result),
-        ChatDocumentTiming(sourceBytes, recordCount, rowCount, 0, 0, 0, 0, 0));
+        ChatDocumentTiming(sourceBytes, recordCount, 0, 0, 0, 0, 0, 0));
+    const double rowCount = document->getRowCount();
     ChatDocumentRegistry::shared().registerDocument(documentId, document);
     const auto finishedAt = Clock::now();
     document->setTiming(ChatDocumentTiming(

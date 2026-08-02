@@ -3,7 +3,7 @@ import { useRecyclingState } from "@legendapp/list/react-native";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 
-const TOOL_PREVIEW_BYTES = 16 * 1024;
+const TOOL_PREVIEW_BYTES = 64 * 1024;
 
 const markdownStyle: MarkdownStyle = {
   blockquote: {
@@ -110,37 +110,36 @@ function ToolRow({ document, index, metadata }: {
 }) {
   const [expanded, setExpanded] = useRecyclingState(false);
   const [preview, setPreview] = useRecyclingState<string | undefined>(undefined);
-  const status = metadata.toolStatus ?? "unknown";
+  const canExpand = metadata.hasToolPreview;
 
   const toggleExpanded = () => {
-    const nextExpanded = !expanded;
-    if (nextExpanded && preview === undefined && metadata.hasToolPreview) {
-      setPreview(document.getToolPreview(index, TOOL_PREVIEW_BYTES));
+    if (canExpand) {
+      const nextExpanded = !expanded;
+      if (nextExpanded && preview === undefined && metadata.hasToolPreview) {
+        setPreview(document.getToolPreview(index, TOOL_PREVIEW_BYTES));
+      }
+      setExpanded(nextExpanded);
     }
-    setExpanded(nextExpanded);
   };
 
   return (
-    <View className="px-5 py-1.5">
+    <View className="px-5 py-2">
       <Pressable
-        className="rounded-lg border border-border bg-surface-muted px-3 py-2"
-        disabled={!metadata.hasToolPreview && !metadata.hasImagePlaceholder}
+        className="border-b border-border py-3"
+        disabled={!canExpand}
         onPress={toggleExpanded}
       >
-        <View className="flex-row items-center justify-between gap-3">
-          <Text className="min-w-0 flex-1 text-xs font-semibold text-foreground" numberOfLines={1}>
-            {metadata.toolName ?? "Tool"}
+        <View className="flex-row items-center gap-2">
+          <Text className="text-sm font-medium text-muted">
+            {metadata.toolName ?? "Worked"}
           </Text>
-          <Text className={status === "failed" ? "text-[11px] text-danger" : "text-[11px] text-muted"}>
-            {status}
-          </Text>
+          <Text className="text-lg leading-5 text-muted">{expanded ? "⌄" : "›"}</Text>
         </View>
         {expanded && preview ? (
-          <Text className="mt-2 font-mono text-xs leading-4 text-foreground" selectable>
+          <Text className="mt-4 text-sm leading-6 text-foreground" selectable>
             {preview}
           </Text>
         ) : null}
-        {expanded && metadata.hasImagePlaceholder ? <ImagePlaceholder /> : null}
       </Pressable>
     </View>
   );

@@ -29,6 +29,8 @@ struct ChatRow {
   std::string toolStatus;
   std::string callId;
   bool hasImagePlaceholder = false;
+  double startedAtMs = 0;
+  double endedAtMs = 0;
 };
 
 struct ChatParseResult {

@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <fcntl.h>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -72,10 +75,34 @@ struct ClaudeRecord {
   std::string parentUuid;
   std::string type;
   bool sidechain = false;
+  double timestampMs = 0;
 };
 
 double elapsedMs(Clock::time_point start, Clock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+double parseIsoTime(const std::string& value) {
+  double milliseconds = 0;
+  if (value.size() >= 19) {
+    std::tm time {};
+    std::istringstream stream(value.substr(0, 19));
+    stream >> std::get_time(&time, "%Y-%m-%dT%H:%M:%S");
+    if (!stream.fail()) {
+      milliseconds = static_cast<double>(timegm(&time)) * 1000;
+      const size_t dot = value.find('.', 19);
+      if (dot != std::string::npos) {
+        size_t cursor = dot + 1;
+        double scale = 100;
+        while (cursor < value.size() && scale >= 1 && value[cursor] >= '0' && value[cursor] <= '9') {
+          milliseconds += static_cast<double>(value[cursor] - '0') * scale;
+          scale /= 10;
+          cursor += 1;
+        }
+      }
+    }
+  }
+  return milliseconds;
 }
 
 std::vector<LineRange> scanLines(
@@ -118,12 +145,15 @@ void appendMessageRow(
     std::vector<ChatRow>& rows,
     std::string kind,
     std::vector<JsonRange> markdownRanges,
-    bool hasImagePlaceholder) {
+    bool hasImagePlaceholder,
+    double timestampMs) {
   if (!markdownRanges.empty() || hasImagePlaceholder) {
     ChatRow row;
     row.kind = std::move(kind);
     row.markdownRanges = std::move(markdownRanges);
     row.hasImagePlaceholder = hasImagePlaceholder;
+    row.startedAtMs = timestampMs;
+    row.endedAtMs = timestampMs;
     rows.push_back(std::move(row));
   }
 }
@@ -133,13 +163,16 @@ size_t appendToolRow(
     std::unordered_map<std::string, size_t>& toolRows,
     std::string callId,
     std::string name,
-    std::vector<JsonRange> previews = {}) {
+    std::vector<JsonRange> previews,
+    double timestampMs) {
   ChatRow row;
   row.kind = "tool";
   row.callId = std::move(callId);
   row.toolName = name.empty() ? "Tool" : std::move(name);
   row.toolStatus = "unknown";
   row.previewRanges = std::move(previews);
+  row.startedAtMs = timestampMs;
+  row.endedAtMs = timestampMs;
   rows.push_back(std::move(row));
   const size_t index = rows.size() - 1;
   if (!rows[index].callId.empty()) {
@@ -153,15 +186,17 @@ void applyToolResult(
     std::unordered_map<std::string, size_t>& toolRows,
     const std::string& callId,
     std::vector<JsonRange> previews,
-    bool failed) {
+    bool failed,
+    double timestampMs) {
   size_t index = rows.size();
   const auto found = toolRows.find(callId);
   if (found != toolRows.end()) {
     index = found->second;
   } else {
-    index = appendToolRow(rows, toolRows, callId, "Tool");
+    index = appendToolRow(rows, toolRows, callId, "Tool", {}, timestampMs);
   }
   rows[index].toolStatus = failed ? "failed" : "completed";
+  rows[index].endedAtMs = std::max(rows[index].endedAtMs, timestampMs);
   if (!previews.empty()) {
     rows[index].previewRanges = std::move(previews);
   }
@@ -171,7 +206,8 @@ void parseCodexMessage(
     const ChatJson& json,
     const JsonRange& payload,
     std::vector<ChatRow>& rows,
-    size_t& warningCount) {
+    size_t& warningCount,
+    double timestampMs) {
   const std::string role = stringMember(json, payload, "role");
   if (role != "user" && role != "assistant") {
     return;
@@ -205,7 +241,7 @@ void parseCodexMessage(
   } else if (content) {
     warningCount += 1;
   }
-  appendMessageRow(rows, role, std::move(textRanges), hasImage);
+  appendMessageRow(rows, role, std::move(textRanges), hasImage, timestampMs);
 }
 
 ChatParseResult parseCodex(
@@ -239,9 +275,10 @@ ChatParseResult parseCodex(
       continue;
     }
 
+    const double timestampMs = parseIsoTime(stringMember(json, *root, "timestamp"));
     const std::string payloadType = stringMember(json, *payload, "type");
     if (payloadType == "message") {
-      parseCodexMessage(json, *payload, result.rows, result.warningCount);
+      parseCodexMessage(json, *payload, result.rows, result.warningCount, timestampMs);
     } else if (payloadType == "function_call" || payloadType == "custom_tool_call" || payloadType == "local_shell_call") {
       std::vector<JsonRange> previews;
       const auto arguments = json.member(*payload, payloadType == "custom_tool_call" ? "input" : "arguments");
@@ -253,7 +290,8 @@ ChatParseResult parseCodex(
           toolRows,
           stringMember(json, *payload, "call_id"),
           stringMember(json, *payload, "name"),
-          std::move(previews));
+          std::move(previews),
+          timestampMs);
     } else if (payloadType == "function_call_output" || payloadType == "custom_tool_call_output") {
       std::vector<JsonRange> previews;
       const auto output = json.member(*payload, "output");
@@ -265,7 +303,8 @@ ChatParseResult parseCodex(
           toolRows,
           stringMember(json, *payload, "call_id"),
           std::move(previews),
-          false);
+          false,
+          timestampMs);
     } else if (payloadType == "image_generation_call") {
       const std::string callId = stringMember(json, *payload, "id");
       size_t rowIndex = result.rows.size();
@@ -273,13 +312,14 @@ ChatParseResult parseCodex(
       if (found != toolRows.end()) {
         rowIndex = found->second;
       } else {
-        rowIndex = appendToolRow(result.rows, toolRows, callId, "Image generation");
+        rowIndex = appendToolRow(result.rows, toolRows, callId, "Image generation", {}, timestampMs);
       }
       const auto imageResult = json.member(*payload, "result");
       const bool hasResult = imageResult && imageResult->kind == JsonValueKind::String && imageResult->end > imageResult->start + 2;
       const std::string status = stringMember(json, *payload, "status");
       result.rows[rowIndex].toolStatus = status == "failed" ? "failed" : hasResult ? "completed" : "unknown";
       result.rows[rowIndex].hasImagePlaceholder = result.rows[rowIndex].hasImagePlaceholder || hasResult;
+      result.rows[rowIndex].endedAtMs = std::max(result.rows[rowIndex].endedAtMs, timestampMs);
     } else if (payloadType != "reasoning" && !payloadType.empty()) {
       result.warningCount += 1;
     }
@@ -333,7 +373,7 @@ void parseClaudeMessage(
   }
 
   if (content->kind == JsonValueKind::String) {
-    appendMessageRow(rows, record.type, {*content}, false);
+    appendMessageRow(rows, record.type, {*content}, false, record.timestampMs);
     return;
   }
   if (content->kind != JsonValueKind::Array) {
@@ -361,7 +401,7 @@ void parseClaudeMessage(
       const std::string callId = stringMember(json, block, "id");
       const std::string name = stringMember(json, block, "name");
       deferredTools.push_back([&, callId, name]() {
-        appendToolRow(rows, toolRows, callId, name);
+        appendToolRow(rows, toolRows, callId, name, {}, record.timestampMs);
       });
     } else if (blockType == "tool_result") {
       const std::string callId = stringMember(json, block, "tool_use_id");
@@ -374,7 +414,7 @@ void parseClaudeMessage(
       const auto isError = json.member(block, "is_error");
       const bool failed = isError && json.boolValue(*isError);
       deferredTools.push_back([&, callId, previews = std::move(previews), failed, resultImage]() mutable {
-        applyToolResult(rows, toolRows, callId, std::move(previews), failed);
+        applyToolResult(rows, toolRows, callId, std::move(previews), failed, record.timestampMs);
         const auto found = toolRows.find(callId);
         if (resultImage && found != toolRows.end()) {
           rows[found->second].hasImagePlaceholder = true;
@@ -388,7 +428,7 @@ void parseClaudeMessage(
   if (!valid) {
     warningCount += 1;
   }
-  appendMessageRow(rows, record.type, std::move(textRanges), hasImage);
+  appendMessageRow(rows, record.type, std::move(textRanges), hasImage, record.timestampMs);
   for (auto& appendTool : deferredTools) {
     appendTool();
   }
@@ -423,6 +463,7 @@ ChatParseResult parseClaude(
     record.uuid = stringMember(json, *root, "uuid");
     record.parentUuid = stringMember(json, *root, "parentUuid");
     record.type = stringMember(json, *root, "type");
+    record.timestampMs = parseIsoTime(stringMember(json, *root, "timestamp"));
     const auto sidechain = json.member(*root, "isSidechain");
     record.sidechain = sidechain && json.boolValue(*sidechain);
     records.push_back(std::move(record));
