@@ -113,13 +113,6 @@ function TranscriptList({ document }: { document: ChatDocument }) {
 
   return (
     <View className="flex-1 bg-background">
-      {document.warningCount > 0 ? (
-        <View className="border-b border-amber-200 bg-amber-50 px-5 py-2">
-          <Text className="text-xs text-amber-900">
-            Some unsupported or malformed transcript records were skipped.
-          </Text>
-        </View>
-      ) : null}
       <LegendList
         contentContainerStyle={styles.listContent}
         dataKey={document.documentId}
