@@ -33,7 +33,6 @@ const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
 type TranscriptState = {
   document?: ChatDocument;
   error?: string;
-  loading: boolean;
 };
 
 function errorMessage(error: unknown) {
@@ -137,14 +136,6 @@ function TranscriptList({ document }: { document: ChatDocument }) {
 }
 
 function TranscriptPane({ state }: { state: TranscriptState }) {
-  if (state.loading) {
-    return (
-      <View className="flex-1 items-center justify-center gap-3 bg-background">
-        <ActivityIndicator />
-        <Text className="text-sm text-muted">Loading transcript…</Text>
-      </View>
-    );
-  }
   if (state.error) {
     return (
       <View className="flex-1 items-center justify-center bg-background px-10">
@@ -167,7 +158,7 @@ export function ChatHistoryWindow() {
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [transcriptState, setTranscriptState] = useState<TranscriptState>({ loading: false });
+  const [transcriptState, setTranscriptState] = useState<TranscriptState>({});
   const loadGenerationRef = useRef(0);
 
   useEffect(() => {
@@ -203,18 +194,17 @@ export function ChatHistoryWindow() {
       loadGenerationRef.current = generation;
       cancelPendingOpen();
       writeSelectedChatId(selected.id);
-      setTranscriptState({ loading: true });
       void openChat(selected.provider as ChatProvider, selected.path)
         .then((document) => {
           if (loadGenerationRef.current === generation) {
-            setTranscriptState({ document, loading: false });
+            setTranscriptState({ document });
           } else {
             document.releaseNativeResources();
           }
         })
         .catch((error) => {
           if (loadGenerationRef.current === generation) {
-            setTranscriptState({ error: errorMessage(error), loading: false });
+            setTranscriptState({ error: errorMessage(error) });
           }
         });
     }
