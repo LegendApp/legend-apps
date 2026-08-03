@@ -9,12 +9,18 @@ const manifest = {
     macos: "so.legend.chathistory.macos",
   },
   androidPackage: "so.legend.chathistory",
+  hostWindow: {
+    macos: {
+      hidden: true,
+    },
+  },
   nativeModules: {
     macos: [
       "@legend-apps/appkit-split-view",
       "@legend-apps/chat-history",
       "@legend-apps/sidebar",
       "@legend-apps/storage",
+      "@legend-apps/window-manager",
       "react-native-enriched-markdown",
     ],
     ios: [],

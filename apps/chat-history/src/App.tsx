@@ -8,6 +8,12 @@ import {
   type ChatSummary,
 } from "@legend-apps/chat-history";
 import { Sidebar, SidebarItem } from "@legend-apps/sidebar";
+import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
+import {
+  createUnifiedToolbarWindowStyle,
+  createWindowsNavigator,
+  type WindowsConfig,
+} from "@legend-apps/windows";
 import {
   LegendList,
   type LegendListDataSourceRenderItemProps,
@@ -21,6 +27,9 @@ import { TranscriptRow } from "./TranscriptRow";
 
 Uniwind.setTheme("light");
 
+const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
+const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
+const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
 type TranscriptState = {
   document?: ChatDocument;
   error?: string;
@@ -153,7 +162,7 @@ function TranscriptPane({ state }: { state: TranscriptState }) {
   );
 }
 
-export function App() {
+export function ChatHistoryWindow() {
   const [summaries, setSummaries] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [catalogError, setCatalogError] = useState<string | undefined>();
@@ -225,8 +234,8 @@ export function App() {
     <SidebarSplitView
       appearance="light"
       contentMinWidth={420}
-      contentTitlebarHeight={38}
-      contentTitlebarMaterial="titlebar"
+      contentTitlebarHeight={CHAT_HISTORY_TITLEBAR_HEIGHT}
+      contentTitlebarMaterial="glass"
       sidebarMinWidth={220}
       sidebarWidth={260}
       style={styles.root}
@@ -244,6 +253,58 @@ export function App() {
       )}
     </SidebarSplitView>
   );
+}
+
+const chatHistoryWindowsConfig = {
+  [CHAT_HISTORY_WINDOW_MODULE_NAME]: {
+    component: ChatHistoryWindow,
+    identifier: CHAT_HISTORY_WINDOW_IDENTIFIER,
+    options: {
+      title: "Legend Chat History",
+      transparentBackground: true,
+      windowStyle: {
+        ...createUnifiedToolbarWindowStyle({
+          appearance: "light",
+          backgroundColor: "#f5f6f8",
+          frame: {
+            width: 1280,
+            height: 720,
+            minWidth: 640,
+            minHeight: 460,
+          },
+          includeFrame: true,
+          miniaturizable: true,
+        }),
+        contentLayoutMode: "fullSize",
+        titleVisibility: "hidden",
+        titlebarControls: [],
+      },
+    },
+  },
+} satisfies WindowsConfig;
+
+const ChatHistoryWindowsNavigator = createWindowsNavigator(chatHistoryWindowsConfig);
+
+function openChatHistoryWindow() {
+  return ChatHistoryWindowsNavigator.open(CHAT_HISTORY_WINDOW_MODULE_NAME);
+}
+
+function reportChatHistoryWindowError(error: unknown) {
+  console.error(`[ChatHistoryWindow] ${errorMessage(error)}`);
+}
+
+export function App() {
+  useEffect(() => {
+    openChatHistoryWindow().catch(reportChatHistoryWindowError);
+    const reopenSubscription = addApplicationReopenRequestedListener(({ hasVisibleWindows }) => {
+      if (!hasVisibleWindows) {
+        openChatHistoryWindow().catch(reportChatHistoryWindowError);
+      }
+    });
+    return () => reopenSubscription.remove();
+  }, []);
+
+  return null;
 }
 
 export default App;
