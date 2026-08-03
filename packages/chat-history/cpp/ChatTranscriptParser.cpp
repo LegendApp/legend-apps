@@ -169,6 +169,18 @@ std::string stringMember(const ChatJson& json, const JsonRange& object, std::str
   return value ? json.stringValue(*value) : std::string();
 }
 
+bool arrayHasValue(const ChatJson& json, const JsonRange& object, std::string_view key) {
+  bool hasValue = false;
+  const auto array = json.member(object, key);
+  if (array && array->kind == JsonValueKind::Array) {
+    json.forEachArrayValue(*array, [&](const JsonRange&) {
+      hasValue = true;
+      return false;
+    });
+  }
+  return hasValue;
+}
+
 std::string relativeFilePath(const std::string& path, const std::string& cwd) {
   const std::string prefix = cwd.empty() || cwd.back() == '/' ? cwd : cwd + "/";
   return !prefix.empty() && path.starts_with(prefix) ? path.substr(prefix.size()) : path;
@@ -330,14 +342,14 @@ void applyToolResult(
   }
 }
 
-void parseCodexMessage(
+void parseCodexAssistantMessage(
     const ChatJson& json,
     const JsonRange& payload,
     std::vector<ChatRow>& rows,
     size_t& warningCount,
     double timestampMs) {
   const std::string role = stringMember(json, payload, "role");
-  if (role != "user" && role != "assistant") {
+  if (role != "assistant") {
     return;
   }
 
@@ -405,7 +417,25 @@ ChatParseResult parseCodex(
       continue;
     }
     if (recordType == "event_msg" && payload && payload->kind == JsonValueKind::Object) {
-      if (stringMember(json, *payload, "type") == "patch_apply_end") {
+      const std::string eventType = stringMember(json, *payload, "type");
+      if (eventType == "user_message") {
+        appendPendingFileChanges(result.rows, pendingFileChanges);
+        std::vector<JsonRange> textRanges;
+        const auto message = json.member(*payload, "message");
+        if (message && message->kind == JsonValueKind::String) {
+          textRanges.push_back(*message);
+        } else {
+          result.warningCount += 1;
+        }
+        const bool hasImage = arrayHasValue(json, *payload, "local_images")
+            || arrayHasValue(json, *payload, "images");
+        appendMessageRow(
+            result.rows,
+            "user",
+            std::move(textRanges),
+            hasImage,
+            parseIsoTime(stringMember(json, *root, "timestamp")));
+      } else if (eventType == "patch_apply_end") {
         collectCodexFileChanges(
             json,
             *payload,
@@ -427,10 +457,7 @@ ChatParseResult parseCodex(
     const double timestampMs = parseIsoTime(stringMember(json, *root, "timestamp"));
     const std::string payloadType = stringMember(json, *payload, "type");
     if (payloadType == "message") {
-      if (stringMember(json, *payload, "role") == "user") {
-        appendPendingFileChanges(result.rows, pendingFileChanges);
-      }
-      parseCodexMessage(json, *payload, result.rows, result.warningCount, timestampMs);
+      parseCodexAssistantMessage(json, *payload, result.rows, result.warningCount, timestampMs);
     } else if (payloadType == "function_call" || payloadType == "custom_tool_call" || payloadType == "local_shell_call") {
       std::vector<JsonRange> previews;
       const auto arguments = json.member(*payload, payloadType == "custom_tool_call" ? "input" : "arguments");

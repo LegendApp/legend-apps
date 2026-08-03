@@ -41,7 +41,9 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   expect(result.recordCount == 13, "Codex record count should include the incomplete final record");
   expect(result.rows.size() == 5, "Codex should produce message, tool, and file rows");
   expect(result.rows[0].kind == "user", "Codex first row should be user");
-  expect(decode(result, result.rows[0].markdownRanges) == "Hello ☺\nworld", "Codex text should decode on demand");
+  expect(
+      decode(result, result.rows[0].markdownRanges) == "Hello ☺\nworld",
+      "Codex should use canonical user events and exclude injected response-item context");
   expect(result.rows[0].hasImagePlaceholder, "Codex image should remain a placeholder");
   expect(result.rows[1].kind == "tool" && result.rows[1].toolName == "read_file", "Codex tool call should normalize");
   expect(result.rows[1].toolStatus == "completed", "Codex tool output should pair with its call");
