@@ -184,6 +184,10 @@ static NSUserInterfaceItemIdentifier const RNSidebarDataCellIdentifier = @"RNSid
       [_sidebar sidebarItemDidChange:self];
     }
   }
+
+  if (_sidebar && [self.superview isKindOfClass:NSTableCellView.class]) {
+    self.frame = self.superview.bounds;
+  }
 #endif
 }
 
