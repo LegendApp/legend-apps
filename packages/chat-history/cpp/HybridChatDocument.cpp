@@ -1,6 +1,7 @@
 #include "HybridChatDocument.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <sstream>
@@ -26,6 +27,77 @@ std::string visibleUserMarkdown(const ChatRow& row, std::string markdown) {
       }
       markdown.erase(0, content);
     }
+  }
+  return markdown;
+}
+
+std::string_view trimmedLine(std::string_view line) {
+  const size_t first = line.find_first_not_of(" \t\r");
+  if (first == std::string_view::npos) {
+    return {};
+  }
+  const size_t last = line.find_last_not_of(" \t\r");
+  return line.substr(first, last - first + 1);
+}
+
+bool isApplicationDirective(std::string_view line) {
+  constexpr std::array<std::string_view, 7> prefixes = {
+      "::git-stage{",
+      "::git-commit{",
+      "::git-create-branch{",
+      "::git-push{",
+      "::git-create-pr{",
+      "::created-thread{",
+      "::code-comment{"};
+  const std::string_view trimmed = trimmedLine(line);
+  return std::any_of(prefixes.begin(), prefixes.end(), [trimmed](std::string_view prefix) {
+    return trimmed.starts_with(prefix);
+  });
+}
+
+bool isMarkdownFence(std::string_view line) {
+  const std::string_view trimmed = trimmedLine(line);
+  return trimmed.starts_with("```") || trimmed.starts_with("~~~");
+}
+
+std::string visibleAssistantMarkdown(const ChatRow& row, std::string markdown) {
+  if (row.kind == "assistant") {
+    std::string visible;
+    bool insideMemoryCitation = false;
+    bool insideCodeFence = false;
+    size_t lineStart = 0;
+    while (lineStart <= markdown.size()) {
+      const size_t lineEnd = markdown.find('\n', lineStart);
+      const bool hasNewline = lineEnd != std::string::npos;
+      const size_t contentEnd = hasNewline ? lineEnd : markdown.size();
+      const std::string_view line(markdown.data() + lineStart, contentEnd - lineStart);
+      const std::string_view trimmed = trimmedLine(line);
+
+      if (!insideCodeFence && trimmed.starts_with("<oai-mem-citation>")) {
+        insideMemoryCitation = trimmed.find("</oai-mem-citation>") == std::string_view::npos;
+      } else if (insideMemoryCitation) {
+        insideMemoryCitation = trimmed.find("</oai-mem-citation>") == std::string_view::npos;
+      } else if (insideCodeFence || !isApplicationDirective(line)) {
+        visible.append(line);
+        if (hasNewline) {
+          visible.push_back('\n');
+        }
+      }
+
+      if (!insideMemoryCitation && isMarkdownFence(line)) {
+        insideCodeFence = !insideCodeFence;
+      }
+
+      if (!hasNewline) {
+        break;
+      }
+      lineStart = lineEnd + 1;
+    }
+
+    while (!visible.empty() && (visible.back() == '\n' || visible.back() == '\r')) {
+      visible.pop_back();
+    }
+    markdown = std::move(visible);
   }
   return markdown;
 }
@@ -284,7 +356,7 @@ std::string HybridChatDocument::markdownForRow(size_t index) {
   std::string markdown;
   if (index < displayRows_.size()) {
     const ChatRow& row = rows_[displayRows_[index].firstRow];
-    markdown = visibleUserMarkdown(row, decodeRanges(row.markdownRanges));
+    markdown = visibleAssistantMarkdown(row, visibleUserMarkdown(row, decodeRanges(row.markdownRanges)));
   }
   return markdown;
 }

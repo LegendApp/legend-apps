@@ -77,6 +77,9 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   expect(
       document->getToolPreview(1, 64 * 1024) == "Read files, created an image",
       "Codex work row should expand to a plain-text activity summary");
+  expect(
+      document->markdownForRow(2) == "Done **quickly**.\n\n```text\n::git-commit{example}\n```",
+      "Codex assistant rows should hide application metadata without altering fenced examples");
   const ChatRowMetadata fileMetadata = document->getRowMetadata(3);
   expect(
       fileMetadata.kind == "files"
