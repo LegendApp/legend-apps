@@ -42,9 +42,12 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   expect(result.rows.size() == 5, "Codex should produce message, tool, and file rows");
   expect(result.rows[0].kind == "user", "Codex first row should be user");
   expect(
-      decode(result, result.rows[0].markdownRanges) == "Hello ☺\nworld",
+      decode(result, result.rows[0].markdownRanges).find("<skill>injected context</skill>") == std::string::npos,
       "Codex should use canonical user events and exclude injected response-item context");
-  expect(result.rows[0].hasImagePlaceholder, "Codex image should remain a placeholder");
+  expect(
+      result.rows[0].imageSources == std::vector<std::string>{"/tmp/image.png"}
+          && !result.rows[0].hasImagePlaceholder,
+      "Codex local images should remain addressable instead of becoming placeholders");
   expect(result.rows[1].kind == "tool" && result.rows[1].toolName == "read_file", "Codex tool call should normalize");
   expect(result.rows[1].toolStatus == "completed", "Codex tool output should pair with its call");
   expect(decode(result, result.rows[1].previewRanges) == "first line\nsecond line", "Codex tool preview should use canonical output");
@@ -63,6 +66,12 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   ChatDocumentTiming timing(static_cast<double>(result.source->size()), 13, 4, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("codex-group", std::move(result), timing);
   expect(document->getRowCount() == 4, "Codex adjacent tools should collapse without hiding file changes");
+  const ChatRowMetadata userMetadata = document->getRowMetadata(0);
+  expect(
+      userMetadata.imageCount == 1
+          && document->getImageSource(0, 0) == "/tmp/image.png"
+          && document->markdownForRow(0) == "Hello ☺\nworld\n",
+      "Codex attachment wrappers should become an indexed image and the visible request");
   const ChatRowMetadata metadata = document->getRowMetadata(1);
   expect(metadata.kind == "tool" && metadata.toolName == "Worked for 4s", "Codex work row should expose its duration");
   expect(
@@ -122,7 +131,7 @@ void testDocumentRelease(const std::filesystem::path& fixtureRoot) {
   ChatDocumentTiming timing(sourceBytes, 13, 5, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("test", std::move(result), timing);
   ChatDocumentRegistry::shared().registerDocument("test", document);
-  expect(document->markdownForRow(0) == "Hello ☺\nworld", "Native provider should decode a visible row");
+  expect(document->markdownForRow(0) == "Hello ☺\nworld\n", "Native provider should decode a visible row");
   expect(document->releaseNativeResources() == sourceBytes, "Release should report unmapped bytes");
   expect(document->releaseNativeResources() == 0, "Release should be idempotent");
   expect(document->markdownForRow(0).empty(), "Released document should not expose source content");

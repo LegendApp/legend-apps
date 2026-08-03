@@ -47,13 +47,14 @@ namespace margelo::nitro::legendapps::chathistory {
     std::optional<std::string> toolStatus     SWIFT_PRIVATE;
     bool hasToolPreview     SWIFT_PRIVATE;
     bool hasImagePlaceholder     SWIFT_PRIVATE;
+    double imageCount     SWIFT_PRIVATE;
     std::optional<double> fileCount     SWIFT_PRIVATE;
     std::optional<double> fileAdditions     SWIFT_PRIVATE;
     std::optional<double> fileDeletions     SWIFT_PRIVATE;
 
   public:
     ChatRowMetadata() = default;
-    explicit ChatRowMetadata(double index, std::string kind, std::optional<std::string> markdownBlockId, std::optional<std::string> toolName, std::optional<std::string> toolStatus, bool hasToolPreview, bool hasImagePlaceholder, std::optional<double> fileCount, std::optional<double> fileAdditions, std::optional<double> fileDeletions): index(index), kind(kind), markdownBlockId(markdownBlockId), toolName(toolName), toolStatus(toolStatus), hasToolPreview(hasToolPreview), hasImagePlaceholder(hasImagePlaceholder), fileCount(fileCount), fileAdditions(fileAdditions), fileDeletions(fileDeletions) {}
+    explicit ChatRowMetadata(double index, std::string kind, std::optional<std::string> markdownBlockId, std::optional<std::string> toolName, std::optional<std::string> toolStatus, bool hasToolPreview, bool hasImagePlaceholder, double imageCount, std::optional<double> fileCount, std::optional<double> fileAdditions, std::optional<double> fileDeletions): index(index), kind(kind), markdownBlockId(markdownBlockId), toolName(toolName), toolStatus(toolStatus), hasToolPreview(hasToolPreview), hasImagePlaceholder(hasImagePlaceholder), imageCount(imageCount), fileCount(fileCount), fileAdditions(fileAdditions), fileDeletions(fileDeletions) {}
 
   public:
     friend bool operator==(const ChatRowMetadata& lhs, const ChatRowMetadata& rhs) = default;
@@ -76,6 +77,7 @@ namespace margelo::nitro {
         JSIConverter<std::optional<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "toolStatus"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "hasToolPreview"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "hasImagePlaceholder"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "imageCount"))),
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileCount"))),
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileAdditions"))),
         JSIConverter<std::optional<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileDeletions")))
@@ -90,6 +92,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "toolStatus"), JSIConverter<std::optional<std::string>>::toJSI(runtime, arg.toolStatus));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "hasToolPreview"), JSIConverter<bool>::toJSI(runtime, arg.hasToolPreview));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "hasImagePlaceholder"), JSIConverter<bool>::toJSI(runtime, arg.hasImagePlaceholder));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "imageCount"), JSIConverter<double>::toJSI(runtime, arg.imageCount));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "fileCount"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.fileCount));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "fileAdditions"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.fileAdditions));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "fileDeletions"), JSIConverter<std::optional<double>>::toJSI(runtime, arg.fileDeletions));
@@ -110,6 +113,7 @@ namespace margelo::nitro {
       if (!JSIConverter<std::optional<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "toolStatus")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "hasToolPreview")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "hasImagePlaceholder")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "imageCount")))) return false;
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileCount")))) return false;
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileAdditions")))) return false;
       if (!JSIConverter<std::optional<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "fileDeletions")))) return false;

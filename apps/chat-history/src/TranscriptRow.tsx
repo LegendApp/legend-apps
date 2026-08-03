@@ -1,6 +1,7 @@
 import type { ChatDocument, ChatFileChange, ChatRowMetadata } from "@legend-apps/chat-history";
 import { useRecyclingState } from "@legendapp/list/react-native";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 
 const TOOL_PREVIEW_BYTES = 64 * 1024;
@@ -74,8 +75,59 @@ function ImagePlaceholder() {
   );
 }
 
-function MessageRow({ metadata }: { metadata: ChatRowMetadata }) {
+function imageUri(source: string) {
+  if (/^[a-z][a-z\d+.-]*:/i.test(source)) {
+    return source;
+  }
+  return `file://${source.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function MessageImage({ source }: { source: string }) {
+  const uri = imageUri(source);
+  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (active && width > 0 && height > 0) {
+          setAspectRatio(width / height);
+        }
+      },
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, [uri]);
+
+  let image = (
+    <Image
+      accessibilityLabel="Attached image"
+      onError={() => setFailed(true)}
+      resizeMode="contain"
+      source={{ uri }}
+      style={[styles.messageImage, { aspectRatio }]}
+    />
+  );
+  if (failed) {
+    image = <ImagePlaceholder />;
+  }
+  return image;
+}
+
+function MessageRow({ document, index, metadata }: {
+  document: ChatDocument;
+  index: number;
+  metadata: ChatRowMetadata;
+}) {
   const isUser = metadata.kind === "user";
+  const imageSources = Array.from(
+    { length: metadata.imageCount },
+    (_, imageIndex) => document.getImageSource(index, imageIndex),
+  );
   return (
     <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-3"}>
       <View
@@ -83,6 +135,9 @@ function MessageRow({ metadata }: { metadata: ChatRowMetadata }) {
           ? "max-w-[82%] self-end rounded-2xl bg-gray-200 px-4 py-3"
           : "w-full max-w-[92%]"}
       >
+        {imageSources.map((source, imageIndex) => (
+          <MessageImage key={`${source}:${imageIndex}`} source={source} />
+        ))}
         {metadata.markdownBlockId ? (
           <EnrichedMarkdownText
             allowTrailingMargin={false}
@@ -216,7 +271,7 @@ function FileChangesRow({ document, index, metadata }: {
 
 export function TranscriptRow({ document, index }: { document: ChatDocument; index: number }) {
   const metadata = document.getRowMetadata(index);
-  let row = <MessageRow metadata={metadata} />;
+  let row = <MessageRow document={document} index={index} metadata={metadata} />;
   if (metadata.kind === "tool") {
     row = <ToolRow document={document} index={index} metadata={metadata} />;
   } else if (metadata.kind === "files") {
@@ -231,5 +286,11 @@ const styles = StyleSheet.create({
   },
   userMarkdown: {
     alignSelf: "flex-start",
+  },
+  messageImage: {
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: "100%",
+    width: 300,
   },
 });

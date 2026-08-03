@@ -16,6 +16,7 @@ export interface ChatRowMetadata {
   toolStatus?: string;
   hasToolPreview: boolean;
   hasImagePlaceholder: boolean;
+  imageCount: number;
   fileCount?: number;
   fileAdditions?: number;
   fileDeletions?: number;
@@ -44,6 +45,7 @@ export interface ChatDocument extends HybridObject<{ ios: "c++" }> {
   readonly warningCount: number;
   getRowMetadata(index: number): ChatRowMetadata;
   getToolPreview(index: number, maximumBytes: number): string;
+  getImageSource(index: number, imageIndex: number): string;
   getFileChange(index: number, fileIndex: number): ChatFileChange;
   getTiming(): ChatDocumentTiming;
   releaseNativeResources(): number;

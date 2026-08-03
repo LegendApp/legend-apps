@@ -34,6 +34,7 @@ struct ChatRow {
   std::string toolName;
   std::string toolStatus;
   std::string callId;
+  std::vector<std::string> imageSources;
   std::vector<FileChange> fileChanges;
   bool hasImagePlaceholder = false;
   double startedAtMs = 0;

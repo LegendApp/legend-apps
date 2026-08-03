@@ -60,6 +60,7 @@ namespace margelo::nitro::legendapps::chathistory {
       // Methods
       virtual ChatRowMetadata getRowMetadata(double index) = 0;
       virtual std::string getToolPreview(double index, double maximumBytes) = 0;
+      virtual std::string getImageSource(double index, double imageIndex) = 0;
       virtual ChatFileChange getFileChange(double index, double fileIndex) = 0;
       virtual ChatDocumentTiming getTiming() = 0;
       virtual double releaseNativeResources() = 0;

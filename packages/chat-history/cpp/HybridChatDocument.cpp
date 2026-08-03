@@ -10,6 +10,26 @@ namespace margelo::nitro::legendapps::chathistory {
 
 namespace {
 
+std::string visibleUserMarkdown(const ChatRow& row, std::string markdown) {
+  constexpr std::string_view filesHeading = "# Files mentioned by the user:";
+  constexpr std::string_view requestHeading = "## My request for Codex:";
+  const size_t firstContent = markdown.find_first_not_of("\r\n");
+  if (row.kind == "user"
+      && (!row.imageSources.empty() || row.hasImagePlaceholder)
+      && firstContent != std::string::npos
+      && markdown.compare(firstContent, filesHeading.size(), filesHeading) == 0) {
+    const size_t request = markdown.find(requestHeading, firstContent + filesHeading.size());
+    if (request != std::string::npos) {
+      size_t content = request + requestHeading.size();
+      while (content < markdown.size() && (markdown[content] == '\r' || markdown[content] == '\n')) {
+        content += 1;
+      }
+      markdown.erase(0, content);
+    }
+  }
+  return markdown;
+}
+
 std::string toolActivityLabel(const ChatRow& row) {
   std::string name = row.toolName;
   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char character) {
@@ -98,6 +118,16 @@ size_t HybridChatDocument::checkedFileIndex(const ChatRow& row, double fileIndex
     throw std::out_of_range("Chat file index is out of range");
   }
   return static_cast<size_t>(fileIndex);
+}
+
+size_t HybridChatDocument::checkedImageIndex(const ChatRow& row, double imageIndex) const {
+  if (!std::isfinite(imageIndex)
+      || imageIndex < 0
+      || std::floor(imageIndex) != imageIndex
+      || static_cast<size_t>(imageIndex) >= row.imageSources.size()) {
+    throw std::out_of_range("Chat image index is out of range");
+  }
+  return static_cast<size_t>(imageIndex);
 }
 
 void HybridChatDocument::buildDisplayRows() {
@@ -191,6 +221,7 @@ ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
         workGroupStatus(displayRow),
         true,
         false,
+        0,
         std::nullopt,
         std::nullopt,
         std::nullopt);
@@ -211,6 +242,7 @@ ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
       row.toolStatus.empty() ? std::nullopt : std::optional<std::string>(row.toolStatus),
       !row.previewRanges.empty(),
       row.hasImagePlaceholder,
+      static_cast<double>(row.imageSources.size()),
       hasFiles ? std::optional<double>(row.fileChanges.size()) : std::nullopt,
       hasFiles ? std::optional<double>(fileAdditions) : std::nullopt,
       hasFiles ? std::optional<double>(fileDeletions) : std::nullopt);
@@ -249,9 +281,12 @@ std::string HybridChatDocument::decodeRanges(const std::vector<JsonRange>& range
 }
 
 std::string HybridChatDocument::markdownForRow(size_t index) {
-  return index < displayRows_.size()
-      ? decodeRanges(rows_[displayRows_[index].firstRow].markdownRanges)
-      : std::string();
+  std::string markdown;
+  if (index < displayRows_.size()) {
+    const ChatRow& row = rows_[displayRows_[index].firstRow];
+    markdown = visibleUserMarkdown(row, decodeRanges(row.markdownRanges));
+  }
+  return markdown;
 }
 
 void HybridChatDocument::setTiming(ChatDocumentTiming timing) {
@@ -271,6 +306,12 @@ std::string HybridChatDocument::getToolPreview(double index, double maximumBytes
   return displayRow.isWorkGroup
       ? workGroupPreview(displayRow, boundedBytes)
       : decodeRanges(rows_[displayRow.firstRow].previewRanges, boundedBytes);
+}
+
+std::string HybridChatDocument::getImageSource(double index, double imageIndex) {
+  const ChatDisplayRow& displayRow = displayRows_[checkedIndex(index)];
+  const ChatRow& row = rows_[displayRow.firstRow];
+  return row.imageSources[checkedImageIndex(row, imageIndex)];
 }
 
 ChatFileChange HybridChatDocument::getFileChange(double index, double fileIndex) {

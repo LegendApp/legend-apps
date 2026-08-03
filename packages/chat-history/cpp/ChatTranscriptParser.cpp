@@ -6,6 +6,7 @@
 #include <ctime>
 #include <fcntl.h>
 #include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <sys/mman.h>
@@ -169,16 +170,31 @@ std::string stringMember(const ChatJson& json, const JsonRange& object, std::str
   return value ? json.stringValue(*value) : std::string();
 }
 
-bool arrayHasValue(const ChatJson& json, const JsonRange& object, std::string_view key) {
-  bool hasValue = false;
+std::vector<std::string> stringArrayMember(
+    const ChatJson& json,
+    const JsonRange& object,
+    std::string_view key,
+    size_t maximumEncodedBytes = 0,
+    bool* hasOmittedValue = nullptr) {
+  std::vector<std::string> values;
   const auto array = json.member(object, key);
   if (array && array->kind == JsonValueKind::Array) {
-    json.forEachArrayValue(*array, [&](const JsonRange&) {
-      hasValue = true;
-      return false;
+    json.forEachArrayValue(*array, [&](const JsonRange& value) {
+      if (value.kind == JsonValueKind::String
+          && (maximumEncodedBytes == 0 || value.end - value.start <= maximumEncodedBytes)) {
+        std::string decoded = json.stringValue(value);
+        if (!decoded.empty()) {
+          values.push_back(std::move(decoded));
+        } else if (hasOmittedValue) {
+          *hasOmittedValue = true;
+        }
+      } else if (hasOmittedValue) {
+        *hasOmittedValue = true;
+      }
+      return true;
     });
   }
-  return hasValue;
+  return values;
 }
 
 std::string relativeFilePath(const std::string& path, const std::string& cwd) {
@@ -285,12 +301,14 @@ void appendMessageRow(
     std::vector<ChatRow>& rows,
     std::string kind,
     std::vector<JsonRange> markdownRanges,
+    std::vector<std::string> imageSources,
     bool hasImagePlaceholder,
     double timestampMs) {
-  if (!markdownRanges.empty() || hasImagePlaceholder) {
+  if (!markdownRanges.empty() || !imageSources.empty() || hasImagePlaceholder) {
     ChatRow row;
     row.kind = std::move(kind);
     row.markdownRanges = std::move(markdownRanges);
+    row.imageSources = std::move(imageSources);
     row.hasImagePlaceholder = hasImagePlaceholder;
     row.startedAtMs = timestampMs;
     row.endedAtMs = timestampMs;
@@ -381,7 +399,7 @@ void parseCodexAssistantMessage(
   } else if (content) {
     warningCount += 1;
   }
-  appendMessageRow(rows, role, std::move(textRanges), hasImage, timestampMs);
+  appendMessageRow(rows, role, std::move(textRanges), {}, hasImage, timestampMs);
 }
 
 ChatParseResult parseCodex(
@@ -427,13 +445,24 @@ ChatParseResult parseCodex(
         } else {
           result.warningCount += 1;
         }
-        const bool hasImage = arrayHasValue(json, *payload, "local_images")
-            || arrayHasValue(json, *payload, "images");
+        bool hasImagePlaceholder = false;
+        std::vector<std::string> imageSources = stringArrayMember(json, *payload, "local_images");
+        std::vector<std::string> remoteImages = stringArrayMember(
+            json,
+            *payload,
+            "images",
+            8 * 1024,
+            &hasImagePlaceholder);
+        imageSources.insert(
+            imageSources.end(),
+            std::make_move_iterator(remoteImages.begin()),
+            std::make_move_iterator(remoteImages.end()));
         appendMessageRow(
             result.rows,
             "user",
             std::move(textRanges),
-            hasImage,
+            std::move(imageSources),
+            hasImagePlaceholder,
             parseIsoTime(stringMember(json, *root, "timestamp")));
       } else if (eventType == "patch_apply_end") {
         collectCodexFileChanges(
@@ -553,7 +582,7 @@ void parseClaudeMessage(
   }
 
   if (content->kind == JsonValueKind::String) {
-    appendMessageRow(rows, record.type, {*content}, false, record.timestampMs);
+    appendMessageRow(rows, record.type, {*content}, {}, false, record.timestampMs);
     return;
   }
   if (content->kind != JsonValueKind::Array) {
@@ -608,7 +637,7 @@ void parseClaudeMessage(
   if (!valid) {
     warningCount += 1;
   }
-  appendMessageRow(rows, record.type, std::move(textRanges), hasImage, record.timestampMs);
+  appendMessageRow(rows, record.type, std::move(textRanges), {}, hasImage, record.timestampMs);
   for (auto& appendTool : deferredTools) {
     appendTool();
   }
