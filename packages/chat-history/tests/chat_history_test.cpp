@@ -3,6 +3,7 @@
 #include "../cpp/ChatJson.hpp"
 #include "../cpp/HybridChatDocument.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -155,6 +156,19 @@ void testCatalogIndexes() {
       << "{\"id\":\"" << codexId
       << "\",\"thread_name\":\"Indexed Codex\",\"updated_at\":\"2026-01-01T10:00:00Z\"}\n";
 
+  const std::string unindexedId = "33333333-3333-3333-3333-333333333333";
+  const std::filesystem::path unindexedPath = codexRoot / ("rollout-2026-01-03-" + unindexedId + ".jsonl");
+  std::ofstream(unindexedPath)
+      << "{\"type\":\"session_meta\",\"payload\":{\"id\":\"" << unindexedId
+      << "\",\"source\":\"cli\"}}\n";
+
+  const std::string subagentId = "44444444-4444-4444-4444-444444444444";
+  const std::filesystem::path subagentPath = codexRoot / ("rollout-2026-01-04-" + subagentId + ".jsonl");
+  std::ofstream(subagentPath)
+      << "{\"type\":\"session_meta\",\"payload\":{\"id\":\"" << subagentId
+      << "\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\""
+      << codexId << "\"}}}}}\n";
+
   const std::string claudeId = "22222222-2222-2222-2222-222222222222";
   const std::filesystem::path claudePath = claudeRoot / (claudeId + ".jsonl");
   std::ofstream(claudePath) << "{\"body\":\"also not catalog data\"}\n";
@@ -167,6 +181,7 @@ void testCatalogIndexes() {
   const std::string previousHome = previousHomeValue ? previousHomeValue : "";
   setenv("HOME", testHome.c_str(), 1);
   const std::vector<ChatSummary> summaries = getRecentChatCatalog(20);
+  const std::vector<ChatSummary> limitedSummaries = getRecentChatCatalog(2);
   if (previousHomeValue) {
     setenv("HOME", previousHome.c_str(), 1);
   } else {
@@ -174,9 +189,31 @@ void testCatalogIndexes() {
   }
   std::filesystem::remove_all(testHome);
 
-  expect(summaries.size() == 2, "Catalog should discover both standard provider roots");
-  expect(summaries[0].provider == "claude" && summaries[0].title == "Indexed Claude", "Claude index should supply title and recency");
-  expect(summaries[1].provider == "codex" && summaries[1].title == "Indexed Codex", "Codex index should supply title and recency");
+  expect(summaries.size() == 3, "Catalog should include indexed and unindexed top-level sessions");
+  expect(
+      std::none_of(summaries.begin(), summaries.end(), [&](const ChatSummary& summary) {
+        return summary.id == "codex:" + subagentId;
+      }),
+      "Catalog should exclude Codex subagent transcripts");
+  expect(
+      std::any_of(summaries.begin(), summaries.end(), [&](const ChatSummary& summary) {
+        return summary.id == "codex:" + unindexedId && summary.title.starts_with("Codex chat — ");
+      }),
+      "Catalog should preserve legitimate unindexed Codex sessions with fallback titles");
+  expect(
+      std::any_of(summaries.begin(), summaries.end(), [](const ChatSummary& summary) {
+        return summary.provider == "codex" && summary.title == "Indexed Codex";
+      })
+          && std::any_of(summaries.begin(), summaries.end(), [](const ChatSummary& summary) {
+            return summary.provider == "claude" && summary.title == "Indexed Claude";
+          }),
+      "Catalog should retain provider index titles");
+  expect(
+      limitedSummaries.size() == 2
+          && std::none_of(limitedSummaries.begin(), limitedSummaries.end(), [&](const ChatSummary& summary) {
+            return summary.id == "codex:" + subagentId;
+          }),
+      "Catalog should skip subagents while filling the requested visible limit");
 }
 
 } // namespace

@@ -26,6 +26,11 @@ struct CatalogMetadata {
   double updatedAt = 0;
 };
 
+struct CatalogCandidate {
+  ChatSummary summary;
+  bool requiresSourceProbe = false;
+};
+
 std::string readFile(const fs::path& path) {
   std::ifstream input(path, std::ios::binary);
   std::ostringstream buffer;
@@ -159,11 +164,23 @@ bool pathContainsComponent(const fs::path& path, std::string_view component) {
   });
 }
 
+bool isCodexSubagent(const std::string& path) {
+  std::ifstream input(path, std::ios::binary);
+  std::string firstRecord;
+  std::getline(input, firstRecord);
+  const ChatJson json(firstRecord.data(), firstRecord.size());
+  const auto root = json.root(0, firstRecord.size());
+  const auto payload = member(json, root, "payload");
+  const auto source = member(json, payload, "source");
+  const auto subagent = member(json, source, "subagent");
+  return subagent && subagent->kind == JsonValueKind::Object;
+}
+
 void addProviderFiles(
     const fs::path& root,
     const std::string& provider,
     const std::unordered_map<std::string, CatalogMetadata>& metadata,
-    std::vector<ChatSummary>& summaries) {
+    std::vector<CatalogCandidate>& candidates) {
   std::error_code error;
   if (fs::exists(root, error)) {
     const auto options = fs::directory_options::skip_permission_denied;
@@ -193,12 +210,14 @@ void addProviderFiles(
       if (title.empty()) {
         title = fallbackTitle(provider, updatedAt);
       }
-      summaries.emplace_back(
-          provider + ":" + sessionId,
-          provider,
-          std::move(title),
-          updatedAt,
-          pathText);
+      candidates.push_back(CatalogCandidate{
+          ChatSummary(
+              provider + ":" + sessionId,
+              provider,
+              std::move(title),
+              updatedAt,
+              pathText),
+          provider == "codex" && found == metadata.end()});
     }
   }
 }
@@ -227,22 +246,29 @@ std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
       }
     }
 
-    addProviderFiles(home / ".codex" / "sessions", "codex", codexMetadata, summaries);
-    addProviderFiles(home / ".codex" / "archived_sessions", "codex", codexMetadata, summaries);
-    addProviderFiles(claudeRoot, "claude", claudeMetadata, summaries);
-    std::sort(summaries.begin(), summaries.end(), [](const ChatSummary& left, const ChatSummary& right) {
-      if (left.updatedAt != right.updatedAt) {
-        return left.updatedAt > right.updatedAt;
+    std::vector<CatalogCandidate> candidates;
+    addProviderFiles(home / ".codex" / "sessions", "codex", codexMetadata, candidates);
+    addProviderFiles(home / ".codex" / "archived_sessions", "codex", codexMetadata, candidates);
+    addProviderFiles(claudeRoot, "claude", claudeMetadata, candidates);
+    std::sort(candidates.begin(), candidates.end(), [](const CatalogCandidate& left, const CatalogCandidate& right) {
+      if (left.summary.updatedAt != right.summary.updatedAt) {
+        return left.summary.updatedAt > right.summary.updatedAt;
       }
-      return left.id < right.id;
+      return left.summary.id < right.summary.id;
     });
+
+    summaries.reserve(std::min(limit, candidates.size()));
     std::unordered_set<std::string> seenIds;
-    const auto uniqueEnd = std::remove_if(summaries.begin(), summaries.end(), [&](const ChatSummary& summary) {
-      return !seenIds.insert(summary.id).second;
-    });
-    summaries.erase(uniqueEnd, summaries.end());
-    if (summaries.size() > limit) {
-      summaries.resize(limit);
+    for (CatalogCandidate& candidate : candidates) {
+      const bool firstOccurrence = seenIds.insert(candidate.summary.id).second;
+      const bool visible = firstOccurrence
+          && (!candidate.requiresSourceProbe || !isCodexSubagent(candidate.summary.path));
+      if (visible) {
+        summaries.push_back(std::move(candidate.summary));
+        if (summaries.size() == limit) {
+          break;
+        }
+      }
     }
   }
   return summaries;
