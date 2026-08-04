@@ -81,7 +81,7 @@ export class TranscriptDataSource implements LegendListDataSource<TranscriptList
           type: "update",
           index: this.document.rowCount + demoIndex,
           count: 1,
-          layout: "invalidate",
+          layout: "preserve",
         }]);
       }
     }
