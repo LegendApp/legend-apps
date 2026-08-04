@@ -387,7 +387,7 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
     materialHeight);
 
   if (!_sidebarTitlebarMaterialView) {
-    _sidebarTitlebarMaterialView = RNSidebarSplitViewCreateBackgroundBlurView(materialFrame, 16);
+    _sidebarTitlebarMaterialView = RNSidebarSplitViewCreateBackgroundBlurView(materialFrame, 2);
     RNSidebarSplitViewApplySoftBottomEdgeMask(_sidebarTitlebarMaterialView);
   } else {
     _sidebarTitlebarMaterialView.frame = materialFrame;
