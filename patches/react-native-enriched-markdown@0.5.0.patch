@@ -3108,3 +3108,12 @@ diff --git a/ios/utils/ENRMTextViewSetup.h b/ios/utils/ENRMTextViewSetup.h
 +    glyphIndex = nextGlyphIndex;
 +  }
    CGFloat measuredHeight = layout.usedRect.size.height;
+diff --git a/ios/utils/CodeBlockBackground.m b/ios/utils/CodeBlockBackground.m
+--- a/ios/utils/CodeBlockBackground.m
++++ b/ios/utils/CodeBlockBackground.m
+@@ -65,2 +65,5 @@ - (void)drawCodeBlockBackgroundForRange:(NSRange)range
+   CGRect insetRect = CGRectInset(blockRect, inset, inset);
++  if (isLastCodeBlock) {
++    insetRect.size.height = MAX(0, insetRect.size.height - borderWidth);
++  }
+   UIBezierPath *path = UIBezierPathWithRoundedRect(insetRect, MAX(0, borderRadius - inset));
