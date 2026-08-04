@@ -17,12 +17,19 @@ import {
 import {
   LegendList,
   type LegendListDataSourceRenderItemProps,
+  type LegendListRef,
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Uniwind } from "uniwind";
+import { ChatComposer } from "./ChatComposer";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
-import { TranscriptDataSource } from "./TranscriptDataSource";
+import { DemoTranscriptRow } from "./DemoTranscriptRow";
+import {
+  isDemoTranscriptMessage,
+  TranscriptDataSource,
+  type TranscriptListItem,
+} from "./TranscriptDataSource";
 import { TranscriptRow } from "./TranscriptRow";
 
 Uniwind.setTheme("light");
@@ -30,6 +37,9 @@ Uniwind.setTheme("light");
 const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
 const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
 const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
+const DEMO_STREAM_START_DELAY_MS = 400;
+const DEMO_STREAM_WORD_DELAY_MS = 45;
+const DEMO_STREAM_RESPONSE = "This is a fake streamed response. Nothing was sent to a model or saved to the transcript. LegendList is keeping your test message anchored at the top while this local response grows underneath it.";
 type TranscriptState = {
   document?: ChatDocument;
   error?: string;
@@ -95,25 +105,102 @@ function ChatSidebar({
 }
 
 function TranscriptList({ document }: { document: ChatDocument }) {
+  const listRef = useRef<LegendListRef>(null);
+  const demoMessageSequenceRef = useRef(0);
+  const pendingAnchorIndexRef = useRef<number | undefined>(undefined);
+  const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
+  const [anchor, setAnchor] = useState<{ documentId: string; index: number } | undefined>(undefined);
+  const [streamingDocumentId, setStreamingDocumentId] = useState<string | undefined>(undefined);
   const dataSource = useMemo(() => new TranscriptDataSource(document), [document]);
+  const anchorIndex = anchor?.documentId === document.documentId ? anchor.index : undefined;
+  const isStreaming = streamingDocumentId === document.documentId;
   const renderItem = useCallback(
-    ({ item }: LegendListDataSourceRenderItemProps<number>) => (
-      item === undefined ? null : <TranscriptRow document={document} index={item} />
-    ),
+    ({ item }: LegendListDataSourceRenderItemProps<TranscriptListItem>) => {
+      let row = null;
+      if (item !== undefined) {
+        row = isDemoTranscriptMessage(item)
+          ? <DemoTranscriptRow message={item} />
+          : <TranscriptRow document={document} index={item} />;
+      }
+      return row;
+    },
     [document],
   );
   const getItemType = useCallback(
-    (index: number) => document.getRowMetadata(index).kind,
+    (item: TranscriptListItem) => isDemoTranscriptMessage(item)
+      ? `demo-${item.role}`
+      : document.getRowMetadata(item).kind,
     [document],
   );
+  const schedule = useCallback((callback: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      activeTimers.delete(timer);
+      callback();
+    }, delay);
+    activeTimers.add(timer);
+  }, [activeTimers]);
+  const handleAnchorReady = useCallback(({
+    anchorIndex: readyAnchorIndex,
+  }: {
+    anchorIndex: number | undefined;
+  }) => {
+    if (readyAnchorIndex !== undefined && pendingAnchorIndexRef.current === readyAnchorIndex) {
+      pendingAnchorIndexRef.current = undefined;
+      void listRef.current?.scrollToEnd({ animated: true });
+    }
+  }, []);
+  const anchoredEndSpace = useMemo(() => anchorIndex === undefined
+    ? undefined
+    : {
+      anchorIndex,
+      onReady: handleAnchorReady,
+    }, [anchorIndex, handleAnchorReady]);
+  const streamDemoResponse = useCallback(() => {
+    const id = `${document.documentId}:demo-assistant:${++demoMessageSequenceRef.current}`;
+    const words = DEMO_STREAM_RESPONSE.split(" ");
+    let wordCount = 1;
+    dataSource.appendDemoMessage({
+      id,
+      role: "assistant",
+      text: words[0],
+    });
+
+    const streamNextWord = () => {
+      wordCount += 1;
+      dataSource.updateDemoMessage(id, words.slice(0, wordCount).join(" "));
+      if (wordCount < words.length) {
+        schedule(streamNextWord, DEMO_STREAM_WORD_DELAY_MS);
+      } else {
+        setStreamingDocumentId(undefined);
+      }
+    };
+    schedule(streamNextWord, DEMO_STREAM_WORD_DELAY_MS);
+  }, [dataSource, document.documentId, schedule]);
+  const handleSendDemoMessage = useCallback((text: string) => {
+    if (!isStreaming) {
+      const userIndex = dataSource.appendDemoMessage({
+        id: `${document.documentId}:demo-user:${++demoMessageSequenceRef.current}`,
+        role: "user",
+        text,
+      });
+      pendingAnchorIndexRef.current = userIndex;
+      setAnchor({ documentId: document.documentId, index: userIndex });
+      setStreamingDocumentId(document.documentId);
+      schedule(streamDemoResponse, DEMO_STREAM_START_DELAY_MS);
+    }
+  }, [dataSource, document.documentId, isStreaming, schedule, streamDemoResponse]);
 
   useEffect(() => () => {
+    activeTimers.forEach(clearTimeout);
+    activeTimers.clear();
+    pendingAnchorIndexRef.current = undefined;
     document.releaseNativeResources();
-  }, [document]);
+  }, [activeTimers, document]);
 
   return (
     <View className="flex-1 bg-background">
       <LegendList
+        anchoredEndSpace={anchoredEndSpace}
         contentContainerStyle={styles.listContent}
         dataKey={document.documentId}
         dataSource={dataSource}
@@ -121,9 +208,11 @@ function TranscriptList({ document }: { document: ChatDocument }) {
         getItemType={getItemType}
         initialScrollAtEnd
         recycleItems
+        ref={listRef}
         renderItem={renderItem}
         style={styles.list}
       />
+      <ChatComposer disabled={isStreaming} onSend={handleSendDemoMessage} />
     </View>
   );
 }
