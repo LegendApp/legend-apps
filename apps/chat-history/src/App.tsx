@@ -37,6 +37,8 @@ Uniwind.setTheme("light");
 const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
 const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
 const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
+const CHAT_COMPOSER_ESTIMATED_HEIGHT = 80;
+const CHAT_COMPOSER_CONTENT_GAP = 24;
 const DEMO_STREAM_START_DELAY_MS = 400;
 const DEMO_STREAM_WORD_DELAY_MS = 30;
 const DEMO_STREAM_RESPONSE = [
@@ -119,6 +121,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
   const pendingAnchorIndexRef = useRef<number | undefined>(undefined);
   const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
   const [anchor, setAnchor] = useState<{ documentId: string; index: number } | undefined>(undefined);
+  const [composerHeight, setComposerHeight] = useState(CHAT_COMPOSER_ESTIMATED_HEIGHT);
   const [streamingDocumentId, setStreamingDocumentId] = useState<string | undefined>(undefined);
   const dataSource = useMemo(() => new TranscriptDataSource(document), [document]);
   const anchorIndex = anchor?.documentId === document.documentId ? anchor.index : undefined;
@@ -164,6 +167,10 @@ function TranscriptList({ document }: { document: ChatDocument }) {
       anchorIndex,
       onReady: handleAnchorReady,
     }, [anchorIndex, handleAnchorReady]);
+  const listContentStyle = useMemo(() => [
+    styles.listContent,
+    { paddingBottom: composerHeight + CHAT_COMPOSER_CONTENT_GAP },
+  ], [composerHeight]);
   const streamDemoResponse = useCallback(() => {
     const id = `${document.documentId}:demo-assistant:${++demoMessageSequenceRef.current}`;
     const words = DEMO_STREAM_RESPONSE.split(" ");
@@ -210,7 +217,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
     <View className="flex-1 bg-background">
       <LegendList
         anchoredEndSpace={anchoredEndSpace}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={listContentStyle}
         dataKey={document.documentId}
         dataSource={dataSource}
         estimatedItemSize={500}
@@ -221,7 +228,13 @@ function TranscriptList({ document }: { document: ChatDocument }) {
         renderItem={renderItem}
         style={styles.list}
       />
-      <ChatComposer disabled={isStreaming} onSend={handleSendDemoMessage} />
+      <View pointerEvents="box-none" style={styles.composerOverlay}>
+        <ChatComposer
+          disabled={isStreaming}
+          onHeightChange={setComposerHeight}
+          onSend={handleSendDemoMessage}
+        />
+      </View>
     </View>
   );
 }
@@ -395,8 +408,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingBottom: 24,
     paddingTop: 12,
+  },
+  composerOverlay: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    zIndex: 1,
   },
   root: {
     flex: 1,

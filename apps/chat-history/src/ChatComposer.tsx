@@ -9,9 +9,11 @@ const composerInputPlatformProps = Platform.OS === "macos"
 
 export function ChatComposer({
   disabled,
+  onHeightChange,
   onSend,
 }: {
   disabled: boolean;
+  onHeightChange: (height: number) => void;
   onSend: (text: string) => void;
 }) {
   const [text, setText] = useState("");
@@ -27,7 +29,11 @@ export function ChatComposer({
   };
 
   return (
-    <View className="bg-background px-5 pb-4 pt-2">
+    <View
+      className="px-5 pb-4 pt-2"
+      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
+      pointerEvents="box-none"
+    >
       <View className="mx-auto w-full max-w-[900px] flex-row items-end rounded-3xl border border-border bg-surface px-4 py-3">
         <TextInput
           {...composerInputPlatformProps}
