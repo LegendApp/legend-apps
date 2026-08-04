@@ -6,6 +6,7 @@
 #import <react/renderer/components/RNAppKitSplitViewSpec/RCTComponentViewHelpers.h>
 
 #if TARGET_OS_OSX
+#import <CoreImage/CoreImage.h>
 #import <QuartzCore/QuartzCore.h>
 #endif
 
@@ -157,6 +158,38 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   effectView.layer.backgroundColor = NSColor.clearColor.CGColor;
   return RNSidebarSplitViewCreateMaterialContainer(frame, effectView, overlayColor, overlayOpacity);
 }
+
+static NSView *RNSidebarSplitViewCreateBackgroundBlurView(NSRect frame, CGFloat radius)
+{
+  RNSidebarSplitViewTitlebarMaterialContainerView *blurView =
+    [[RNSidebarSplitViewTitlebarMaterialContainerView alloc] initWithFrame:frame];
+  blurView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  blurView.wantsLayer = YES;
+  blurView.layerUsesCoreImageFilters = YES;
+  blurView.layer.backgroundColor = NSColor.clearColor.CGColor;
+
+  CIFilter *blurFilter = [CIFilter filterWithName:@"CIGaussianBlur"];
+  [blurFilter setDefaults];
+  [blurFilter setValue:@(radius) forKey:kCIInputRadiusKey];
+  blurView.layer.backgroundFilters = @[blurFilter];
+  return blurView;
+}
+
+static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
+{
+  CAGradientLayer *maskLayer = [CAGradientLayer layer];
+  maskLayer.frame = view.bounds;
+  maskLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  maskLayer.colors = @[
+    (id)NSColor.whiteColor.CGColor,
+    (id)NSColor.whiteColor.CGColor,
+    (id)NSColor.clearColor.CGColor,
+  ];
+  maskLayer.locations = @[@0, @0.7, @1];
+  maskLayer.startPoint = CGPointMake(0.5, 1);
+  maskLayer.endPoint = CGPointMake(0.5, 0);
+  view.layer.mask = maskLayer;
+}
 #endif
 
 #if TARGET_OS_OSX
@@ -196,6 +229,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   NSString *_contentTitlebarOverlayColorValue;
   CGFloat _contentTitlebarOverlayOpacity;
   NSView *_contentTitlebarMaterialView;
+  NSView *_sidebarTitlebarMaterialView;
 #else
   UIView *_sidebarContainer;
   UIView *_contentContainer;
@@ -327,6 +361,46 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   _contentTitlebarMaterialView = nil;
 }
 
+- (void)removeSidebarTitlebarMaterial
+{
+  [_sidebarTitlebarMaterialView removeFromSuperview];
+  _sidebarTitlebarMaterialView = nil;
+}
+
+- (void)layoutSidebarTitlebarMaterialWithHeight:(CGFloat)titlebarHeight
+{
+  NSRect splitFrameInSidebar = [_splitViewController.view convertRect:_splitViewController.view.bounds
+                                                               toView:_sidebarContainer];
+  if (titlebarHeight <= 0 || NSWidth(splitFrameInSidebar) <= 0) {
+    [self removeSidebarTitlebarMaterial];
+    return;
+  }
+
+  CGFloat materialHeight = MIN(titlebarHeight + 10, NSHeight(splitFrameInSidebar));
+  CGFloat materialY = _sidebarContainer.isFlipped
+    ? NSMinY(splitFrameInSidebar)
+    : NSMaxY(splitFrameInSidebar) - materialHeight;
+  NSRect materialFrame = NSMakeRect(
+    NSMinX(splitFrameInSidebar),
+    materialY,
+    NSWidth(splitFrameInSidebar),
+    materialHeight);
+
+  if (!_sidebarTitlebarMaterialView) {
+    _sidebarTitlebarMaterialView = RNSidebarSplitViewCreateBackgroundBlurView(materialFrame, 16);
+    RNSidebarSplitViewApplySoftBottomEdgeMask(_sidebarTitlebarMaterialView);
+  } else {
+    _sidebarTitlebarMaterialView.frame = materialFrame;
+  }
+
+  if (_sidebarTitlebarMaterialView.superview != _sidebarContainer) {
+    [_sidebarTitlebarMaterialView removeFromSuperview];
+  }
+  [_sidebarContainer addSubview:_sidebarTitlebarMaterialView
+                     positioned:NSWindowAbove
+                     relativeTo:_sidebarReactView];
+}
+
 - (void)layoutContentTitlebarMaterial
 {
   if (_contentTitlebarHeight <= 0 ||
@@ -334,6 +408,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
       [_contentTitlebarMaterialName isEqualToString:@"none"] ||
       !_contentContainer.superview) {
     [self removeContentTitlebarMaterial];
+    [self removeSidebarTitlebarMaterial];
     return;
   }
 
@@ -341,6 +416,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   CGFloat materialHeight = MIN(_contentTitlebarHeight, NSHeight(splitFrameInContent));
   if (materialHeight <= 0 || NSWidth(splitFrameInContent) <= 0) {
     [self removeContentTitlebarMaterial];
+    [self removeSidebarTitlebarMaterial];
     return;
   }
 
@@ -367,6 +443,8 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   } else {
     [_contentContainer addSubview:_contentTitlebarMaterialView positioned:NSWindowAbove relativeTo:_contentReactView];
   }
+
+  [self layoutSidebarTitlebarMaterialWithHeight:materialHeight];
 
   _sidebarContainer.layer.zPosition = 10;
   _contentContainer.layer.zPosition = 0;
@@ -813,6 +891,7 @@ static NSView *RNSidebarSplitViewCreateTitlebarMaterialView(NSString *materialNa
   _contentTitlebarOverlayColorValue = nil;
   _contentTitlebarOverlayOpacity = 0;
   [self removeContentTitlebarMaterial];
+  [self removeSidebarTitlebarMaterial];
   [self applyAppearance];
   [self updateSidebarCollapsed];
   [self updateSplitItemSizing];
