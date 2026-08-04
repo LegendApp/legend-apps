@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
 const PLACEHOLDER = "Send a test message that doesn't actually do anything";
+const composerInputPlatformProps = Platform.OS === "macos"
+  ? { enableFocusRing: false }
+  : {};
 
 export function ChatComposer({
   disabled,
@@ -27,6 +30,7 @@ export function ChatComposer({
     <View className="bg-background px-5 pb-4 pt-2">
       <View className="mx-auto w-full max-w-[900px] flex-row items-end rounded-3xl border border-border bg-surface px-4 py-3">
         <TextInput
+          {...composerInputPlatformProps}
           accessibilityLabel={PLACEHOLDER}
           className="text-foreground"
           editable={!disabled}
