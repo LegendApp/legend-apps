@@ -1920,7 +1920,7 @@ diff --git a/ios/utils/CodeBackground.m b/ios/utils/CodeBackground.m
 index 5e5d5bf..8f2ac63 100644
 --- a/ios/utils/CodeBackground.m
 +++ b/ios/utils/CodeBackground.m
-@@ -4,8 +4,9 @@
+@@ -4,8 +4,12 @@
 
  NSString *const CodeAttributeName = @"Code";
 
@@ -1928,13 +1928,20 @@ index 5e5d5bf..8f2ac63 100644
 +static const CGFloat kCodeBackgroundCornerRadius = 6.0;
  static const CGFloat kCodeBackgroundBorderWidth = 0.5;
 +static const CGFloat kCodeBackgroundHorizontalPadding = 3.0;
++#if TARGET_OS_OSX
++static const CGFloat kCodeBackgroundVerticalOffset = 4.0;
++#endif
 
  @implementation CodeBackground {
    StyleConfig *_config;
-@@ -100,6 +101,14 @@ - (void)drawCodeBackgroundForRange:(NSRange)range
+@@ -100,6 +104,18 @@ - (void)drawCodeBackgroundForRange:(NSRange)range
                                     finalRect.size.height = referenceHeight;
                                   }
 
++#if TARGET_OS_OSX
++                                 finalRect.origin.y += kCodeBackgroundVerticalOffset;
++#endif
++
 +                                 if (isFirst) {
 +                                   finalRect.origin.x -= kCodeBackgroundHorizontalPadding;
 +                                   finalRect.size.width += kCodeBackgroundHorizontalPadding;
@@ -1946,7 +1953,7 @@ index 5e5d5bf..8f2ac63 100644
                                   [self drawBackgroundAndBorders:finalRect
                                                  backgroundColor:backgroundColor
                                                      borderColor:borderColor
-@@ -120,14 +129,6 @@ - (void)drawBackgroundAndBorders:(CGRect)rect
+@@ -120,14 +136,6 @@ - (void)drawBackgroundAndBorders:(CGRect)rect
    [backgroundColor setFill];
    [path fill];
 
