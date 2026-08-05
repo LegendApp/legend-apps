@@ -23,6 +23,11 @@ export type { SidebarSplitViewResizeEvent };
 export type SidebarSplitViewAppearance = "system" | "light" | "dark";
 export type SidebarSplitViewTitlebarMaterial = "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
 
+export const sidebarSplitViewTitlebarMetrics = {
+  contentInsetTop: 52,
+  sidebarInsetTop: 42,
+} as const;
+
 export type SidebarSplitViewPaneMetrics = {
   contentHeight: number;
   contentWidth: number;
@@ -55,6 +60,35 @@ export interface SidebarSplitViewProps extends ViewProps {
   sidebarTitlebarOverlayColor?: string;
   sidebarTitlebarOverlayOpacity?: number;
   sidebarWidth?: number;
+}
+
+type SidebarSplitViewTitlebarChromeProps = Pick<
+  SidebarSplitViewProps,
+  | "contentTitlebarHeight"
+  | "contentTitlebarMaterial"
+  | "contentTitlebarOverlayColor"
+  | "contentTitlebarOverlayOpacity"
+  | "sidebarTitlebarOverlayColor"
+  | "sidebarTitlebarOverlayOpacity"
+>;
+
+export function createSidebarSplitViewTitlebarChrome({
+  colorScheme,
+  contentBackgroundColor,
+  sidebarBackgroundColor,
+}: {
+  colorScheme: "dark" | "light";
+  contentBackgroundColor: string;
+  sidebarBackgroundColor: string;
+}): SidebarSplitViewTitlebarChromeProps {
+  return {
+    contentTitlebarHeight: sidebarSplitViewTitlebarMetrics.contentInsetTop,
+    contentTitlebarMaterial: "glass",
+    contentTitlebarOverlayColor: contentBackgroundColor,
+    contentTitlebarOverlayOpacity: colorScheme === "dark" ? 0 : 0.1,
+    sidebarTitlebarOverlayColor: sidebarBackgroundColor,
+    sidebarTitlebarOverlayOpacity: 0.75,
+  };
 }
 
 export function SidebarSplitView({

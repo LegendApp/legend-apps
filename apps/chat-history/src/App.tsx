@@ -1,4 +1,8 @@
-import { SidebarSplitView } from "@legend-apps/appkit-split-view";
+import {
+  createSidebarSplitViewTitlebarChrome,
+  SidebarSplitView,
+  sidebarSplitViewTitlebarMetrics,
+} from "@legend-apps/appkit-split-view";
 import {
   cancelPendingOpen,
   getRecentChats,
@@ -38,8 +42,8 @@ Uniwind.setTheme("system");
 
 const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
 const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
-const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
-const CHAT_HISTORY_SIDEBAR_TOP_INSET = 42;
+const CHAT_HISTORY_TITLEBAR_HEIGHT = sidebarSplitViewTitlebarMetrics.contentInsetTop;
+const CHAT_HISTORY_SIDEBAR_TOP_INSET = sidebarSplitViewTitlebarMetrics.sidebarInsetTop;
 const CHAT_COMPOSER_ESTIMATED_HEIGHT = 80;
 const CHAT_COMPOSER_CONTENT_GAP = 24;
 const CHAT_PROVIDER_SECTIONS = [
@@ -463,18 +467,18 @@ export function ChatHistoryWindow() {
     : catalogError
       ? catalogError
       : "No local Codex or Claude transcripts found.";
+  const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
+    colorScheme: theme === "dark" ? "dark" : "light",
+    contentBackgroundColor: displayTheme.colors.background,
+    sidebarBackgroundColor: displayTheme.colors.surfaceMuted,
+  });
 
   return (
     <SidebarSplitView
+      {...titlebarChromeProps}
       appearance="system"
       contentMinWidth={420}
-      contentTitlebarHeight={CHAT_HISTORY_TITLEBAR_HEIGHT}
-      contentTitlebarMaterial="glass"
-      contentTitlebarOverlayColor={displayTheme.colors.background}
-      contentTitlebarOverlayOpacity={theme === "dark" ? 0 : 0.1}
       sidebarMinWidth={220}
-      sidebarTitlebarOverlayColor={displayTheme.colors.surfaceMuted}
-      sidebarTitlebarOverlayOpacity={0.75}
       sidebarWidth={260}
       style={styles.root}
     >

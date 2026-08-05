@@ -1,4 +1,8 @@
-import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-apps/appkit-split-view";
+import {
+  createSidebarSplitViewTitlebarChrome,
+  SidebarSplitView,
+  type SidebarSplitViewResizeEvent,
+} from "@legend-apps/appkit-split-view";
 import { commandRunner } from "@legend-apps/command-runner";
 import {
   DiffHorizontalScroller,
@@ -1279,23 +1283,22 @@ const DiffSplitBody = memo(function DiffSplitBody({
   syntaxAppearance,
 }: DiffSplitBodyProps) {
   const splitPaneMetrics = useValue(splitPaneMetrics$);
-
+  const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
+    colorScheme: syntaxAppearance,
+    contentBackgroundColor: backgroundColor,
+    sidebarBackgroundColor,
+  });
 
   return (
     <View style={styles.loadedRoot}>
       <SidebarSplitView
+        {...titlebarChromeProps}
         appearance={syntaxAppearance}
         contentMinWidth={diffContentMinWidth}
-        contentTitlebarHeight={diffTitlebarTopInset}
-        contentTitlebarMaterial="glass"
-        contentTitlebarOverlayColor={backgroundColor}
-        contentTitlebarOverlayOpacity={syntaxAppearance === "dark" ? 0 : 0.1}
         initialPaneMetrics={splitPaneMetrics}
         onSplitViewDidResize={handleSplitViewResize}
         sidebarCollapsed={sidebarCollapsed}
         sidebarMinWidth={defaultDiffSidebarWidth}
-        sidebarTitlebarOverlayColor={sidebarBackgroundColor}
-        sidebarTitlebarOverlayOpacity={0.75}
         sidebarWidth={sidebarWidth}
         style={styles.content}
       >
