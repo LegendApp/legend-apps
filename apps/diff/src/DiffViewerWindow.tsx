@@ -626,7 +626,9 @@ type DiffLoadedSidebarPaneProps = Pick<
   | "sidebarCollapsed"
   | "splitPaneMetrics$"
   | "state"
->;
+> & {
+  backgroundColor: string;
+};
 
 type DiffLoadedContentPaneProps = Omit<
   DiffLoadedBodyProps,
@@ -1591,6 +1593,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
 });
 
 const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
+  backgroundColor,
   collapsedSidebarFolders,
   handleSidebarListLayout,
   mutedColor,
@@ -1617,6 +1620,7 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
       style={[
         styles.sidebar,
         {
+          backgroundColor,
           height: splitPaneMetrics.sidebarHeight || undefined,
           minHeight: splitPaneMetrics.sidebarHeight || undefined,
           width: splitPaneMetrics.sidebarWidth || undefined,
@@ -5016,6 +5020,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         handleSplitViewResize={handleSplitViewResize}
         sidebar={(
           <DiffLoadedSidebarPane
+            backgroundColor={diffPalette.sidebarBackground}
             collapsedSidebarFolders={collapsedSidebarFolders}
             handleSidebarListLayout={handleSidebarListLayout}
             mutedColor={mutedColor}
@@ -5049,7 +5054,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         }}
         handleSplitViewResize={handleSplitViewResize}
         sidebar={(
-          <View style={styles.sidebar}>
+          <View style={[styles.sidebar, { backgroundColor: diffPalette.sidebarBackground }]}>
             <View style={styles.sidebarList} />
           </View>
         )}
