@@ -134,6 +134,7 @@ export function createDiffViewerWindowStyle({
   return {
     ...windowStyle,
     contentLayoutMode: "fullSize" as const,
+    titlebarSeparatorStyle: "shadow" as const,
     titleVisibility: getDiffViewerWindowTitleVisibility(showViewModeToolbar),
     titlebarControls: [],
     ...(includeToolbarItems
