@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -18,7 +17,6 @@
 
 #ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
-#include <os/log.h>
 #endif
 
 namespace margelo::nitro::legendapps::syntaxparser {
@@ -29,21 +27,6 @@ constexpr uint32_t fontStyleMask = 0b00000000000000000111100000000000u;
 constexpr uint32_t foregroundMask = 0b00000000111111111000000000000000u;
 constexpr int fontStyleOffset = 11;
 constexpr int foregroundOffset = 15;
-
-#ifdef __APPLE__
-os_log_t syntaxMemoryLog() {
-  static os_log_t log = os_log_create("so.legend.diff.macos", "memory");
-  return log;
-}
-#endif
-
-void logSyntaxMemoryMessage(const std::string& message) {
-#ifdef __APPLE__
-  os_log_with_type(syntaxMemoryLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
-#else
-  std::fprintf(stderr, "%s\n", message.c_str());
-#endif
-}
 
 struct GrammarConfig {
   std::string scopeName;
@@ -682,14 +665,6 @@ std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
       if (entry->failed) {
         throw std::runtime_error(entry->error);
       }
-      {
-        std::ostringstream message;
-        message
-            << "[DiffMemory] syntax.cacheHit"
-            << " key=" << key
-            << " contextCount=" << contextCache.size();
-        logSyntaxMemoryMessage(message.str());
-      }
       return entry->context;
     }
 
@@ -700,23 +675,14 @@ std::shared_ptr<TextMateHighlighterContext> getHighlighterContext(
 
   if (shouldLoad) {
     try {
-      const auto startedAt = SyntaxClock::now();
       const auto grammarsRoot = syntaxAssetRoots("RNSyntaxParserGrammars", "grammars");
       const auto themesRoot = syntaxAssetRoots("RNSyntaxParserThemes", "themes");
       auto context = createHighlighterContext(getGrammarConfig(language), theme, grammarsRoot, themesRoot);
-      const auto finishedAt = SyntaxClock::now();
 
       {
         std::lock_guard<std::mutex> lock(cacheMutex);
         entry->context = context;
         entry->ready = true;
-        std::ostringstream message;
-        message
-            << "[DiffMemory] syntax.cacheStore"
-            << " key=" << key
-            << " contextMs=" << elapsedSyntaxMs(startedAt, finishedAt)
-            << " contextCount=" << contextCache.size();
-        logSyntaxMemoryMessage(message.str());
       }
       entry->cv.notify_all();
       return context;

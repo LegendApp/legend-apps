@@ -1,6 +1,4 @@
-import "./settingsStorageImportStartupMarker";
 import { createObservableSettings } from "@legend-apps/storage";
-import "./settingsSyntaxSettingsImportStartupMarker";
 import {
   normalizeBooleanSetting,
   normalizeSourceFontFamily,
@@ -9,22 +7,14 @@ import {
   sourceFontSizeOptions,
   type SourceFontFamilySetting,
 } from "@legend-apps/syntax-settings/values";
-import "./settingsSyntaxParserImportStartupMarker";
 import {
   defaultSyntaxThemeName,
   getSyntaxTheme,
   normalizeSyntaxThemeName,
   type SyntaxTheme,
 } from "@legend-apps/syntax-parser";
-import "./settingsStateReactImportStartupMarker";
 import { useValue } from "@legendapp/state/react";
-import { logDiffOpenTiming } from "./diffInstrumentation";
 
-function settingsNowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-logDiffOpenTiming("startup.settings.moduleBody.start", () => ({}));
 
 export type DiffSettingsFile = {
   adaptiveLightModeEnabled?: boolean;
@@ -88,7 +78,6 @@ export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
   return typeof viewMode === "string" && diffViewModeOptions.some((option) => option.value === viewMode);
 }
 
-const createDiffSettingsStartedAt = settingsNowMs();
 const diffSettings = createObservableSettings({
   fields: {
     adaptiveLightModeEnabled: {
@@ -146,10 +135,6 @@ const diffSettings = createObservableSettings({
   },
   filename: "settings",
 });
-logDiffOpenTiming("startup.settings.createObservable.finish", () => ({
-  durationMs: Number((settingsNowMs() - createDiffSettingsStartedAt).toFixed(3)),
-}));
-const createDiffSettingFieldsStartedAt = settingsNowMs();
 const adaptiveLightModeEnabledSetting = diffSettings.field("adaptiveLightModeEnabled");
 const fontFamilySetting = diffSettings.field("fontFamily");
 const fontSizeSetting = diffSettings.field("fontSize");
@@ -163,9 +148,6 @@ const showOnlyHunksSetting = diffSettings.field("showOnlyHunks");
 const showStatisticsPanelSetting = diffSettings.field("showStatisticsPanel");
 const sidebarWidthSetting = diffSettings.field("sidebarWidth");
 const viewModeSetting = diffSettings.field("viewMode");
-logDiffOpenTiming("startup.settings.createFields.finish", () => ({
-  durationMs: Number((settingsNowMs() - createDiffSettingFieldsStartedAt).toFixed(3)),
-}));
 export const diffSettings$ = diffSettings.settings$;
 
 export function getDiffAdaptiveLightModeEnabledSetting(): boolean {
@@ -177,14 +159,7 @@ export function getDiffSyntaxThemeSetting(): string {
 }
 
 export function getDiffSyntaxTheme(): SyntaxTheme {
-  const startedAt = globalThis.performance?.now?.() ?? Date.now();
-  const syntaxTheme = getSyntaxTheme(getDiffSyntaxThemeSetting());
-  logDiffOpenTiming("startup.syntaxTheme.resolve", () => ({
-    callSite: "imperative",
-    durationMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - startedAt).toFixed(3)),
-    theme: syntaxTheme.name,
-  }));
-  return syntaxTheme;
+  return getSyntaxTheme(getDiffSyntaxThemeSetting());
 }
 
 export function getDiffFontFamilySetting(): DiffFontFamilySetting {
@@ -271,14 +246,7 @@ export function useDiffSyntaxThemeSetting(): string {
 
 export function useDiffSyntaxTheme(): SyntaxTheme {
   const syntaxThemeSetting = useDiffSyntaxThemeSetting();
-  const startedAt = globalThis.performance?.now?.() ?? Date.now();
-  const syntaxTheme = getSyntaxTheme(syntaxThemeSetting);
-  logDiffOpenTiming("startup.syntaxTheme.resolve", () => ({
-    callSite: "hook",
-    durationMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - startedAt).toFixed(3)),
-    theme: syntaxTheme.name,
-  }));
-  return syntaxTheme;
+  return getSyntaxTheme(syntaxThemeSetting);
 }
 
 export function useDiffViewModeSetting(): DiffViewMode {

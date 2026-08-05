@@ -26,6 +26,5 @@ module.exports = {
   loadGitFolderDiff: jest.fn(),
   loadUnifiedDiff: jest.fn(),
   loadUnifiedDiffFromUrl: jest.fn(),
-  logDiffTimingMark: jest.fn(),
   startGitFolderDiff: jest.fn(),
 };

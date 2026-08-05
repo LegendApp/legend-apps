@@ -35,7 +35,6 @@ struct DiffGitCompareOptions {
 
 struct DiffProgressiveCallbacks {
   std::function<bool()> shouldCancel;
-  std::function<void(const std::string& phase)> onPhase;
   std::function<void(DiffRepositoryMetadata metadata)> onRepositoryMetadata;
   std::function<void(std::vector<DiffFileSummary> files, std::vector<DiffFileSources> fileSources)> onFilesDiscovered;
   std::function<void(const DiffFileSummary& file, const DiffFileSources& fileSources, const DiffRenderRow& headerRow)> onFile;

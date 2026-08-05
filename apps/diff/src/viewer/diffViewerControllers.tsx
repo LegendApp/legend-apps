@@ -45,7 +45,6 @@ import {
   diffToolbarModelsEqual,
   getDiffWindowToolbarModel,
   getErrorMessage,
-  logDiffOpenTiming,
   sourcesMatch,
   type DiffWindowToolbarModel,
 } from "./diffViewerSupport";
@@ -272,12 +271,6 @@ export function DiffWindowChromeController({
     if (!diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel) || lastCompareRepoStateKeyRef.current !== compareRepoStateKey) {
       lastToolbarModelRef.current = toolbarModel;
       lastCompareRepoStateKeyRef.current = compareRepoStateKey;
-      const startedAt = nowMs();
-      logDiffOpenTiming("viewer.toolbarOptions.start", () => ({
-        hasCompareRepoState: compareRepoState !== null,
-        observe,
-        source: toolbarModel.source,
-      }));
       setDiffViewerWindowToolbarOptions({
         compareRepoState,
         hasUnsavedMergeDrafts: toolbarModel.hasUnsavedMergeDrafts,
@@ -288,16 +281,9 @@ export function DiffWindowChromeController({
         title: toolbarModel.title,
         viewMode: toolbarModel.viewMode,
         windowIdentifier,
-      })
-        .then(() => {
-          logDiffOpenTiming("viewer.toolbarOptions.finish", () => ({
-            source: toolbarModel.source,
-            setOptionsMs: Number((nowMs() - startedAt).toFixed(1)),
-          }));
-        })
-        .catch((error: unknown) => {
-          console.error(error instanceof Error ? error.message : String(error));
-        });
+      }).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
     }
   }, [compareRepoState, hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
 
@@ -458,19 +444,6 @@ export function DiffLoadCompletionController({
             setStateToFrameMs,
           };
           setLoadStatisticsValue(statistics);
-          logDiffOpenTiming("viewer.ui.loaded", () => ({
-            effectToFrameMs: Number(elapsedMs(effectAt, frameAt).toFixed(1)),
-            effectToMicrotaskMs: Number(elapsedMs(effectAt, microtaskAt).toFixed(1)),
-            effectToSecondFrameMs: Number(elapsedMs(effectAt, secondFrameAt).toFixed(1)),
-            effectToTimeoutMs: Number(elapsedMs(effectAt, timeoutAt).toFixed(1)),
-            loadToEffectMs: Number(elapsedMs(trace.loadStartedAt, effectAt).toFixed(1)),
-            loadToFrameMs,
-            loadToNativeMs: Number(elapsedMs(trace.loadStartedAt, trace.nativeResolvedAt).toFixed(1)),
-            loadToSecondFrameMs: Number(elapsedMs(trace.loadStartedAt, secondFrameAt).toFixed(1)),
-            nativeToSetStateMs: Number(elapsedMs(trace.nativeResolvedAt, trace.setStateAt).toFixed(1)),
-            setStateToEffectMs: Number(elapsedMs(trace.setStateAt, effectAt).toFixed(1)),
-            statistics,
-          }));
         });
       } else if (currentStatistics.requestId === trace.requestId) {
         setLoadStatisticsValue({
@@ -520,13 +493,6 @@ export function DiffLaunchController({
   useLayoutEffect(() => {
     const initialSource = normalizeDiffOpenSource(source ?? folderPath);
     if (initialSource) {
-      logDiffOpenTiming("viewer.launchSource.effect", () => ({
-        source: initialSource,
-        phase: "layout",
-      }));
-      logDiffOpenTiming("viewer.launchSource.loadImmediate", () => ({
-        source: initialSource,
-      }));
       loadSource(initialSource, { reason: "launch" }).catch((error: unknown) => {
         console.error(getErrorMessage(error));
       });

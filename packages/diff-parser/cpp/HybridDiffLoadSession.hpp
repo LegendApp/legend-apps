@@ -43,7 +43,6 @@ private:
   void runGitFolder();
   void runUnifiedDiffUrl();
   void joinWorker();
-  void noteRowsAvailable();
   void setError(std::string error);
 
   Kind kind_;
@@ -56,9 +55,6 @@ private:
   std::thread workerThread_;
   std::atomic<bool> cancelled_{false};
   std::atomic<bool> complete_{false};
-  std::atomic<bool> firstFilesLogged_{false};
-  std::atomic<bool> firstRowsLogged_{false};
-  std::atomic<bool> initialRowsLogged_{false};
   std::atomic<uint64_t> rowVersion_{0};
   std::atomic<uint64_t> fileVersion_{0};
   std::mutex errorMutex_;

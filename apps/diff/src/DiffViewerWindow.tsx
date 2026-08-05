@@ -43,7 +43,7 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import { batch, computed, type Observable } from "@legendapp/state";
-import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
@@ -216,10 +216,6 @@ import {
   createRefreshError,
   getDiffVisibleSourceModel,
   getErrorMessage,
-  getDiffLoadTimingPayload,
-  logDiffMemoryMark,
-  logDiffLoadTiming,
-  logDiffOpenTiming,
   shouldPrepareMergeDraftsForSourceChange,
   sourcesMatch,
 } from "./viewer/diffViewerSupport";
@@ -247,71 +243,6 @@ const diffSidebarContentInset = {
 const emptyDiffListIndexByFileIndex: ReadonlyMap<number, number> = new Map();
 const emptyDiffItemIndexes: Array<number | undefined> = [];
 
-logDiffOpenTiming("viewer.module.evaluated", () => ({
-  nativeRows: true,
-}));
-
-function DiffListStartupProbe({
-  height,
-  itemCount,
-  viewMode,
-}: {
-  height: number;
-  itemCount: number;
-  viewMode: DiffSettingsFile["viewMode"];
-}) {
-  const renderedAtRef = useRef(nowMs());
-  const initialPayloadRef = useRef({ height, itemCount, viewMode });
-
-  useLayoutEffect(() => {
-    logDiffOpenTiming("viewer.list.layoutEffect.first", () => ({
-      elapsedSinceRenderMs: Number((nowMs() - renderedAtRef.current).toFixed(1)),
-      ...initialPayloadRef.current,
-    }));
-  }, []);
-
-  useEffect(() => {
-    const effectAt = nowMs();
-    logDiffOpenTiming("viewer.list.passiveEffect.first", () => ({
-      elapsedSinceRenderMs: Number((effectAt - renderedAtRef.current).toFixed(1)),
-      ...initialPayloadRef.current,
-    }));
-    const timeoutHandle = setTimeout(() => {
-      const timeoutAt = nowMs();
-      logDiffOpenTiming("viewer.list.timeout.first", () => ({
-        elapsedSinceEffectMs: Number((timeoutAt - effectAt).toFixed(1)),
-        elapsedSinceRenderMs: Number((timeoutAt - renderedAtRef.current).toFixed(1)),
-        ...initialPayloadRef.current,
-      }));
-    }, 0);
-    let secondFrameHandle: number | undefined;
-    const firstFrameHandle = requestAnimationFrame(() => {
-      const firstFrameAt = nowMs();
-      logDiffOpenTiming("viewer.list.frame.first", () => ({
-        elapsedSinceEffectMs: Number((firstFrameAt - effectAt).toFixed(1)),
-        elapsedSinceRenderMs: Number((firstFrameAt - renderedAtRef.current).toFixed(1)),
-        ...initialPayloadRef.current,
-      }));
-      secondFrameHandle = requestAnimationFrame(() => {
-        const secondFrameAt = nowMs();
-        logDiffOpenTiming("viewer.list.frame.second", () => ({
-          elapsedSinceFirstFrameMs: Number((secondFrameAt - firstFrameAt).toFixed(1)),
-          elapsedSinceRenderMs: Number((secondFrameAt - renderedAtRef.current).toFixed(1)),
-          ...initialPayloadRef.current,
-        }));
-      });
-    });
-    return () => {
-      clearTimeout(timeoutHandle);
-      cancelAnimationFrame(firstFrameHandle);
-      if (secondFrameHandle !== undefined) {
-        cancelAnimationFrame(secondFrameHandle);
-      }
-    };
-  }, []);
-
-  return null;
-}
 
 type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
@@ -1347,12 +1278,6 @@ const DiffSplitBody = memo(function DiffSplitBody({
 }: DiffSplitBodyProps) {
   const splitPaneMetrics = useValue(splitPaneMetrics$);
 
-  logDiffOpenTiming("viewer.body.splitView.mount", () => ({
-    sidebarCollapsed,
-    sidebarHeight: splitPaneMetrics.sidebarHeight,
-    sidebarWidth: splitPaneMetrics.sidebarWidth,
-    ...debugPayload,
-  }));
 
   return (
     <View style={styles.loadedRoot}>
@@ -1425,7 +1350,6 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   viewMode,
   visibleItemIndexes,
 }: DiffLoadedContentPaneProps) {
-  const bodyStartedAt = nowMs();
   const diffPaneHeight = useValue(diffPaneHeight$);
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const diffContentHeight = diffPaneHeight;
@@ -1557,56 +1481,11 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     [inlineMergeModelRef, renderSideBySideRowRef],
   );
 
-  logDiffOpenTiming("viewer.body.start", () => ({
-    activeItemCount,
-    diffListHeight,
-    diffPaneHeight,
-    isRenderingInitialLoadedFrame,
-    loadingSource,
-    rows: state.document.rowCount,
-    sidebarLayoutReady: isSidebarLayoutReady,
-    sidebarHeight: splitPaneMetrics.sidebarHeight,
-    sidebarListHeight,
-    sidebarWidth: splitPaneMetrics.sidebarWidth,
-    source: state.source,
-    viewMode,
-  }));
-
-  const logBodyFinish = (path: string, extra?: Record<string, unknown>) => {
-    logDiffOpenTiming("viewer.body.finish", () => ({
-      activeItemCount,
-      diffListHeight,
-      diffPaneHeight,
-      durationMs: Number((nowMs() - bodyStartedAt).toFixed(1)),
-      isRenderingInitialLoadedFrame,
-      path,
-      rows: state.document.rowCount,
-      sidebarLayoutReady: isSidebarLayoutReady,
-      sidebarHeight: splitPaneMetrics.sidebarHeight,
-      sidebarListHeight,
-      sidebarWidth: splitPaneMetrics.sidebarWidth,
-      viewMode,
-      ...extra,
-    }));
-  };
 
   let diffContent: ReactElement;
   if (diffListHeight <= 0) {
-    logDiffOpenTiming("viewer.body.diffList.deferred", () => ({
-      activeItemCount,
-      diffPaneHeight,
-      isRenderingInitialLoadedFrame,
-      rows: state.document.rowCount,
-      viewMode,
-    }));
     diffContent = <View style={styles.diffPaneContent} />;
   } else {
-    logDiffOpenTiming("viewer.body.diffList.mount", () => ({
-      activeItemCount,
-      diffListHeight,
-      rows: state.document.rowCount,
-      viewMode,
-    }));
     let contentBody: ReactElement;
     if (shouldShowNoChanges) {
       contentBody = noChangesBody;
@@ -1691,14 +1570,6 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
             syntaxTokenizationState$={syntaxTokenizationState$}
           />
         ) : null}
-        {!shouldShowNoChanges ? (
-          <DiffListStartupProbe
-            key={`${state.document.documentId}:${viewMode}`}
-            height={diffListHeight}
-            itemCount={activeItemCount}
-            viewMode={viewMode}
-          />
-        ) : null}
         {contentBody}
         {nativeRowConfig && !shouldShowNoChanges ? (
           <DiffHorizontalScroller
@@ -1711,7 +1582,6 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     );
   }
 
-  logBodyFinish("content");
   return (
     <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
       {diffContent}
@@ -2940,14 +2810,6 @@ function DiffCompareRefPrompt({
 export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
   const safeProps = props ?? {};
 
-  useEffect(() => {
-    logDiffOpenTiming("viewer.window.effect.mount", () => ({
-      focusUrlInput: typeof safeProps.focusUrlInputRequestId === "number",
-      hasFolderPath: Boolean(safeProps.folderPath),
-      hasSource: Boolean(safeProps.source),
-    }));
-  }, []);
-
   return (
     <DiffViewerModelProvider initialSplitPaneMetrics={safeProps.initialSplitPaneMetrics}>
       <DiffViewerWindowContent {...safeProps} />
@@ -2960,8 +2822,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   // React Compiler does not yet support the async try/finally workflows in this controller.
 
   const windowIdentifier = useWindowId();
-  const renderCountRef = useRef(0);
-  const loggedFirstContentRenderRef = useRef(false);
   const windowShownAfterSplitMetricsRef = useRef(false);
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
@@ -2981,15 +2841,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const nativeDiffRows = true;
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
-  if (!loggedFirstContentRenderRef.current) {
-    loggedFirstContentRenderRef.current = true;
-    logDiffOpenTiming("viewer.content.render.first", () => ({
-      focusUrlInput: typeof focusUrlInputRequestId === "number",
-      hasFolderPath: Boolean(folderPath),
-      hasSource: Boolean(source),
-      windowIdentifier,
-    }));
-  }
   const {
     activeFileIndex$,
     collapsedFileIndexes$,
@@ -3018,14 +2869,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     urlInputError$,
   } = model;
 
-  useEffect(() => {
-    logDiffOpenTiming("viewer.content.effect.mount", () => ({
-      focusUrlInput: typeof focusUrlInputRequestId === "number",
-      hasFolderPath: Boolean(folderPath),
-      hasSource: Boolean(source),
-      windowIdentifier,
-    }));
-  }, [focusUrlInputRequestId, folderPath, source, windowIdentifier]);
   const state = useValue(state$);
   const documentError = useValue(documentError$);
   const loadingSource = useValue(loadingSource$);
@@ -3043,9 +2886,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const activeProgressiveSessionRef = useRef<DiffLoadSession | null>(null);
   const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
   const preserveActiveFilePathRef = useRef<string | null>(null);
-  const loggedFirstSidebarFileRenderRef = useRef(false);
-  const loggedFirstUnifiedRowRenderRef = useRef(false);
-  const loggedFirstSideBySideRowRenderRef = useRef(false);
   const mergeDraftsRef = useRef(new Map<string, DiffMergeDraftFile>());
   const mergeDraftsSourceKeyRef = useRef<string | null>(null);
   const savingMergeDraftsRef = useRef(false);
@@ -3127,7 +2967,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     state.status === "loaded" &&
     sourcesMatch(loadingSource, state.source);
   const renderViewMode = viewMode;
-  const loggedInitialLoadedFrameRef = useRef<boolean | null>(null);
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
   const compareRepoPath = toolbarSource?.kind === "folder"
@@ -3152,29 +2991,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         secondFrameId = requestAnimationFrame(() => {
           if (!cancelled) {
             const startedAt = nowMs();
-            logDiffOpenTiming("viewer.compareRepoState.start", () => ({
-              repoPath: compareRepoPath,
-            }));
             loadDiffCompareRepoState(compareRepoPath)
               .then((nextState) => {
                 if (!cancelled) {
-                  logDiffOpenTiming("viewer.compareRepoState.finish", () => ({
-                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                    localBranches: nextState.localBranches.length,
-                    remoteBranches: nextState.remoteBranches.length,
-                    remoteNames: nextState.remoteNames.length,
-                    repoPath: compareRepoPath,
-                  }));
                   setCompareRepoState(nextState);
                 }
               })
               .catch((error: unknown) => {
                 if (!cancelled) {
-                  logDiffOpenTiming("viewer.compareRepoState.error", () => ({
-                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                    message: getErrorMessage(error),
-                    repoPath: compareRepoPath,
-                  }));
                   console.error(`Unable to load diff compare targets: ${getErrorMessage(error)}`);
                   setCompareRepoState({
                     currentBranch: null,
@@ -3243,23 +3067,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     setCollapsedSidebarFolders(new Set());
   }, [loadedDocumentId]);
-
-  useObserveEffect(() => {
-    const currentState = state$.get();
-    const currentLoadingSource = loadingSource$.get();
-    const currentIsRenderingInitialLoadedFrame =
-      currentState.status === "loaded" &&
-      sourcesMatch(currentLoadingSource, currentState.source);
-    if (currentState.status === "loaded" && loggedInitialLoadedFrameRef.current !== currentIsRenderingInitialLoadedFrame) {
-      logDiffOpenTiming("viewer.initialLoadedFrame.state", () => ({
-        isRenderingInitialLoadedFrame: currentIsRenderingInitialLoadedFrame,
-        loadingSource: currentLoadingSource,
-        rows: currentState.document.rowCount,
-        source: currentState.source,
-      }));
-    }
-    loggedInitialLoadedFrameRef.current = currentIsRenderingInitialLoadedFrame;
-  });
 
   const {
     collapsedFileIndexList,
@@ -3384,13 +3191,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             documentId,
             limit: nextLimit,
           };
-          logDiffOpenTiming("viewer.itemCountLimit.expand", () => ({
-            currentLimit,
-            documentId,
-            nextLimit,
-            reason,
-            rows: loadedDocumentRowCount,
-          }));
         }
       }
       return nextState;
@@ -3430,29 +3230,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                     backgroundPlan.rowLimit,
                     backgroundPlan.sourceLineCount,
                   );
-                  logDiffMemoryMark("viewer.syntaxTokenization.start", () => ({
-                    durationMs: Number((nowMs() - startedAt).toFixed(1)),
-                    files: backgroundFiles.length,
-                    rowLimit: backgroundPlan.rowLimit,
-                    rows: document.rowCount,
-                    scopes: document.scopeCount,
-                    sourceLineBudget: diffBackgroundTokenizeMaxSourceLineCount,
-                    sourceLines: backgroundPlan.sourceLineCount,
-                  }));
                 }
               })
               .catch((error: unknown) => {
                 console.error(getErrorMessage(error));
               });
           } else {
-            logDiffMemoryMark("viewer.syntaxTokenization.skipBackgroundBudget", () => ({
-              durationMs: Number((nowMs() - startedAt).toFixed(1)),
-              fileBudget: diffBackgroundTokenizeMaxFileCount,
-              files: state.files.length,
-              rows: document.rowCount,
-              scopes: document.scopeCount,
-              sourceLineBudget: diffBackgroundTokenizeMaxSourceLineCount,
-            }));
           }
         }, diffBackgroundTokenizeStartDelayMs);
         return () => {
@@ -3496,9 +3279,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   useEffect(() => {
     resetSideBySideRuntime();
     if (state.status === "loaded") {
-      loggedFirstSidebarFileRenderRef.current = false;
-      loggedFirstUnifiedRowRenderRef.current = false;
-      loggedFirstSideBySideRowRenderRef.current = false;
       const preserveActiveFilePath = preserveActiveFilePathRef.current;
       preserveActiveFilePathRef.current = null;
       if (preserveActiveFilePath) {
@@ -3536,17 +3316,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, [activeFileIndex$, state$]);
 
-  useEffect(() => {
-    renderCountRef.current += 1;
-    logDiffOpenTiming("viewer.renderCommitted", () => ({
-      dataVersion: diffRows.dataVersion,
-      itemCount: diffRows.itemIndexes.length,
-      renderCount: renderCountRef.current,
-      state: state.status,
-      visibleItemCount: visibleItemIndexes.length,
-    }));
-  });
-
   const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
     const stateBeforeTransition = state$.peek();
     const hasPendingMergeDraftWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
@@ -3576,18 +3345,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     activeProgressiveSessionRef.current?.cancel();
     activeProgressiveSessionRef.current = null;
     const loadStartedAt = nowMs();
-    logDiffOpenTiming("viewer.load.invoke", () => ({
-      reason: options?.reason ?? "manual",
-      requestId,
-      source: nextSource,
-    }));
-    const savedWindowUpdateStartedAt = nowMs();
     updateSavedDiffWindowSource(windowIdentifier, nextSource);
-    logDiffOpenTiming("viewer.load.savedWindowSource.finish", () => ({
-      elapsedSinceInvokeMs: Number((nowMs() - loadStartedAt).toFixed(1)),
-      requestId,
-      savedWindowSourceMs: Number((nowMs() - savedWindowUpdateStartedAt).toFixed(1)),
-    }));
     const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
     const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
     const loadIgnoreWhitespaceChanges = getDiffIgnoreWhitespaceChangesSetting();
@@ -3643,18 +3401,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         loadComplete: cachedEntry.loadComplete,
         timing: cachedEntry.loaded.timing,
       });
-      logDiffOpenTiming("viewer.load.cacheHit", () => ({
-        requestId,
-        rows: cachedEntry.loaded.document.rowCount,
-        showOnlyHunks: loadShowOnlyHunks,
-        source: nextSource,
-      }));
       addRecentDiffSource(nextSource);
-      logDiffOpenTiming("viewer.recentSource.noted", () => ({
-        cacheHit: true,
-        requestId,
-        sourceKind: nextSource.kind,
-      }));
       return;
     }
 
@@ -3689,52 +3436,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       } else {
         setOpenErrorValue(null);
       }
-      logDiffOpenTiming("viewer.load.loadingState.finish", () => ({
-        deferredForNativeStart: shouldStartNativeBeforeLoadingState,
-        requestId,
-        sourceKind: nextSource.kind,
-      }));
     };
     if (!isBackgroundWatchRefresh && !shouldStartNativeBeforeLoadingState) {
       publishLoadingState();
     }
-    logDiffOpenTiming("viewer.load.start", () => ({
-      preNativeMs: Number((nowMs() - loadStartedAt).toFixed(1)),
-      source: nextSource,
-      requestId,
-    }));
-    logDiffMemoryMark("viewer.load.start", () => ({
-      requestId,
-      reason: options?.reason ?? "manual",
-      source: nextSource,
-    }));
 
     const schedulePostLoadSideEffects = (loaded: DiffLoadedPayload) => {
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (loadRequestIdRef.current === requestId) {
             addRecentDiffSource(nextSource);
-            logDiffOpenTiming("viewer.recentSource.noted", () => ({
-              requestId,
-              sourceKind: nextSource.kind,
-            }));
             const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
             if (recentDocumentPath) {
-              const recentStartedAt = nowMs();
               noteRecentDocument(recentDocumentPath);
-              logDiffOpenTiming("viewer.recentDocument.noted", () => ({
-                durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
-                requestId,
-              }));
-              logDiffMemoryMark("viewer.recentDocument.noted", () => ({
-                durationMs: Number((nowMs() - recentStartedAt).toFixed(1)),
-                requestId,
-              }));
-            } else {
-              logDiffOpenTiming("viewer.recentDocument.skipped", () => ({
-                requestId,
-                sourceKind: nextSource.kind,
-              }));
             }
             if (nextSource.kind === "folder") {
               loadDiffMergeState(nextSource.value)
@@ -3742,11 +3456,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                   const currentState = state$.peek();
                   if (loadRequestIdRef.current === requestId && currentState.status === "loaded" && sourcesMatch(currentState.source, nextSource)) {
                     setMergeStateValue(applyDiffMergeDraftsToState(nextMergeState, mergeDraftsRef.current));
-                    logDiffOpenTiming("viewer.mergeState.loaded", () => ({
-                      files: nextMergeState.status === "ready" ? nextMergeState.conflictFileCount : 0,
-                      requestId,
-                      status: nextMergeState.status,
-                    }));
                   }
                 })
                 .catch((error: unknown) => {
@@ -3802,22 +3511,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         }
         setLoadProgressValue(emptyDiffLoadProgressState);
       }
-      logDiffMemoryMark("viewer.statePublished", () => ({
-        files: loaded.files.length,
-        initialRows: loaded.initialRows.length,
-        loadComplete,
-        reason,
-        requestId,
-        rows: loaded.document.rowCount,
-        scopes: loaded.document.scopeCount,
-      }));
-      logDiffOpenTiming("viewer.load.setLoaded", () => ({
-        loadComplete,
-        reason,
-        requestId,
-        statePayloadMs: Number((statePayloadFinishedAt - statePayloadStartedAt).toFixed(1)),
-        setStateCallMs: Number((nowMs() - statePayloadFinishedAt).toFixed(1)),
-      }));
     };
 
     let loadError: unknown = null;
@@ -3826,13 +3519,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       const nativeStartedAt = nowMs();
       let result: DiffLoadedPayload | null = null;
       if (nextSource.kind === "github") {
-        logDiffOpenTiming("viewer.native.start", () => ({
-          diffUrl: nextSource.diffUrl,
-          initialRowCount,
-          requestId,
-          sourceLabel: nextSource.label,
-          sourceKind: nextSource.kind,
-        }));
         if (loadIgnoreWhitespaceChanges) {
           if (shouldStartNativeBeforeLoadingState) {
             publishLoadingState();
@@ -3865,26 +3551,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             loadError = new Error(progress.error);
           } else {
             result = progress;
-            logDiffOpenTiming("viewer.native.initialProgress", () => ({
-              ...getDiffLoadTimingPayload(progress.timing),
-              complete: progress.complete,
-              files: progress.files.length,
-              initialRows: progress.initialRows.length,
-              nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-              requestId,
-              rowVersion: progress.rowVersion,
-              rows: progress.document.rowCount,
-              sourceKind: nextSource.kind,
-            }));
           }
         }
       } else if (nextSource.kind === "git") {
-        logDiffOpenTiming("viewer.git.start", () => ({
-          args: nextSource.args,
-          cwd: nextSource.cwd,
-          requestId,
-          sourceKind: nextSource.kind,
-        }));
         const commandResult = await commandRunner.runCommand({
           args: ["diff", ...(loadIgnoreWhitespaceChanges ? ["--ignore-all-space"] : []), ...nextSource.args],
           command: "git",
@@ -3894,75 +3563,29 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         if (commandResult.exitCode !== 0) {
           loadError = createGitDiffCommandError(commandResult);
         } else {
-          logDiffOpenTiming("viewer.git.finish", () => ({
-            requestId,
-            stderrLength: commandResult.stderr.length,
-            stdoutLength: commandResult.stdout.length,
-            timedOut: commandResult.timedOut,
-          }));
           result = await loadUnifiedDiff(
             commandResult.stdout,
             nextSource.label,
             initialRowCount,
             loadIgnoreWhitespaceChanges,
           );
-          const loadedResult = result;
-          logDiffOpenTiming("viewer.native.finish", () => ({
-            ...getDiffLoadTimingPayload(loadedResult.timing),
-            files: loadedResult.files.length,
-            initialRows: loadedResult.initialRows.length,
-            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
-            requestId,
-            rows: loadedResult.document.rowCount,
-            sourceKind: nextSource.kind,
-            scopes: loadedResult.document.scopeCount,
-          }));
         }
       } else if (nextSource.kind === "filePair") {
         const diffCommand = createFilePairDiffCommand(nextSource, loadIgnoreWhitespaceChanges);
-        logDiffOpenTiming("viewer.filePair.start", () => ({
-          args: diffCommand.args,
-          requestId,
-          sourceKind: nextSource.kind,
-        }));
         const commandResult = await commandRunner.runCommand(diffCommand);
         if (commandResult.timedOut) {
           loadError = new Error("File comparison timed out. The files may be too large to compare.");
         } else if (commandResult.exitCode !== 0 && commandResult.exitCode !== 1) {
           loadError = new Error(commandResult.stderr || `diff exited with code ${commandResult.exitCode}.`);
         } else {
-          logDiffOpenTiming("viewer.filePair.finish", () => ({
-            requestId,
-            stderrLength: commandResult.stderr.length,
-            stdoutLength: commandResult.stdout.length,
-            timedOut: commandResult.timedOut,
-          }));
           result = await loadUnifiedDiff(
             createFilePairUnifiedDiff(nextSource, commandResult),
             nextSource.label,
             initialRowCount,
             loadIgnoreWhitespaceChanges,
           );
-          const loadedResult = result;
-          logDiffOpenTiming("viewer.native.finish", () => ({
-            ...getDiffLoadTimingPayload(loadedResult.timing),
-            files: loadedResult.files.length,
-            initialRows: loadedResult.initialRows.length,
-            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
-            requestId,
-            rows: loadedResult.document.rowCount,
-            sourceKind: nextSource.kind,
-            scopes: loadedResult.document.scopeCount,
-          }));
         }
       } else if (nextSource.kind === "diffFile") {
-        logDiffOpenTiming("viewer.diffFile.start", () => ({
-          path: nextSource.value,
-          requestId,
-          sourceKind: nextSource.kind,
-        }));
         const commandResult = await commandRunner.runCommand({
           args: [nextSource.value],
           command: "/bin/cat",
@@ -3973,39 +3596,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         } else if (commandResult.exitCode !== 0) {
           loadError = new Error(commandResult.stderr || `cat exited with code ${commandResult.exitCode}.`);
         } else {
-          logDiffOpenTiming("viewer.diffFile.finish", () => ({
-            requestId,
-            stderrLength: commandResult.stderr.length,
-            stdoutLength: commandResult.stdout.length,
-            timedOut: commandResult.timedOut,
-          }));
           result = await loadUnifiedDiff(
             commandResult.stdout,
             nextSource.label,
             initialRowCount,
             loadIgnoreWhitespaceChanges,
           );
-          const loadedResult = result;
-          logDiffOpenTiming("viewer.native.finish", () => ({
-            ...getDiffLoadTimingPayload(loadedResult.timing),
-            files: loadedResult.files.length,
-            initialRows: loadedResult.initialRows.length,
-            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
-            requestId,
-            rows: loadedResult.document.rowCount,
-            sourceKind: nextSource.kind,
-            scopes: loadedResult.document.scopeCount,
-          }));
         }
       } else {
-        logDiffOpenTiming("viewer.native.start", () => ({
-          folderPath: nextSource.value,
-          initialRowCount,
-          requestId,
-          showOnlyHunks: loadShowOnlyHunks,
-          sourceKind: nextSource.kind,
-        }));
         progressiveSession = startGitFolderDiff(nextSource.value, {
           ...getDiffGitFolderLoadCompareOptions(nextSource),
           ignoreWhitespaceChanges: loadIgnoreWhitespaceChanges,
@@ -4031,18 +3629,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           loadError = new Error(progress.error);
         } else {
           result = progress;
-          logDiffOpenTiming("viewer.native.initialProgress", () => ({
-            ...getDiffLoadTimingPayload(progress.timing),
-            complete: progress.complete,
-            files: progress.files.length,
-            initialRows: progress.initialRows.length,
-            nativeAwaitMs: Number((nowMs() - nativeStartedAt).toFixed(1)),
-            requestId,
-            rowVersion: progress.rowVersion,
-            rows: progress.document.rowCount,
-            showOnlyHunks: loadShowOnlyHunks,
-            sourceKind: nextSource.kind,
-          }));
         }
       }
 
@@ -4052,19 +3638,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           result = null;
           const nativeResolvedAt = nowMs();
           trace.nativeResolvedAt = nativeResolvedAt;
-          logDiffOpenTiming("viewer.load.nativeResolved", () => ({
-            ...getDiffLoadTimingPayload(loadedResult.timing),
-            files: loadedResult.files.length,
-            grammarEnsureMs: 0,
-            initialRows: loadedResult.initialRows.length,
-            jsAwaitMs: Number((nativeResolvedAt - nativeStartedAt).toFixed(1)),
-            nativeTotalMs: Number(loadedResult.timing.nativeTotalMs.toFixed(1)),
-            requestId,
-            rows: loadedResult.document.rowCount,
-            scopes: loadedResult.document.scopeCount,
-            unaccountedJsMs: Number((nativeResolvedAt - nativeStartedAt - loadedResult.timing.nativeTotalMs).toFixed(1)),
-          }));
-          logDiffLoadTiming(nextSource.value, loadedResult.timing);
           if (loadRequestIdRef.current === requestId) {
             const initialLoadComplete = "complete" in loadedResult ? loadedResult.complete : true;
             if (isBackgroundWatchRefresh && progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
@@ -4126,10 +3699,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             }
           } else {
             progressiveSession?.cancel();
-            logDiffOpenTiming("viewer.load.stale", () => ({
-              activeRequestId: loadRequestIdRef.current,
-              requestId,
-            }));
           }
         }
       }
@@ -4163,10 +3732,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         setOpenErrorValue(createOpenError(nextSource, message));
         setViewerState(emptyDiffViewerState);
       }
-      logDiffOpenTiming("viewer.load.error", () => ({
-        error: message,
-        requestId,
-      }));
     }
   }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$, windowIdentifier]);
 
@@ -4478,15 +4043,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       try {
         setOpenErrorValue(null);
         setDocumentErrorValue(null);
-        const dialogStartedAt = nowMs();
-        logDiffOpenTiming("viewer.dialog.start", () => ({
-          currentFolderPath: currentState.folderPath,
-        }));
         const path = await openDiffFolderDialog();
-        logDiffOpenTiming("viewer.dialog.finish", () => ({
-          dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
-          path,
-        }));
         if (path) {
           const nextSource = normalizeDiffOpenSource(path);
           if (nextSource) {
@@ -4514,15 +4071,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       try {
         setOpenErrorValue(null);
         setDocumentErrorValue(null);
-        const dialogStartedAt = nowMs();
-        logDiffOpenTiming("viewer.filePairDialog.start", () => ({
-          currentSource: currentState.source,
-        }));
         const nextSource = await openDiffFilePairDialog();
-        logDiffOpenTiming("viewer.filePairDialog.finish", () => ({
-          dialogMs: Number((nowMs() - dialogStartedAt).toFixed(1)),
-          source: nextSource,
-        }));
         if (nextSource) {
           await loadSource(nextSource);
         }
@@ -5191,14 +4740,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       );
     } else {
       const file = item.file;
-      if (!loggedFirstSidebarFileRenderRef.current) {
-        loggedFirstSidebarFileRenderRef.current = true;
-        logDiffOpenTiming("viewer.sidebarFile.render.first", () => ({
-          fileIndex: file.index,
-          filePath: file.path,
-        }));
-      }
-
       row = (
         <DiffSidebarFileRow
           activeFileIndex$={activeFileIndex$}
@@ -5219,10 +4760,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
 
     windowShownAfterSplitMetricsRef.current = true;
-    logDiffOpenTiming("viewer.window.show", () => ({
-      reason,
-      windowIdentifier,
-    }));
     showDiffViewerWindow(windowIdentifier).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[DiffViewerWindow] Unable to show window after split metrics: ${message}`);
@@ -5244,20 +4781,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
     };
     const previousDiffPaneHeight = diffPaneHeight$.peek();
-    logDiffOpenTiming("viewer.splitView.resize", () => ({
-      contentHeight: nextMetrics.contentHeight,
-      contentWidth: nextMetrics.contentWidth,
-      contentX: nextMetrics.contentX,
-      isLayoutReady: event.nativeEvent.isLayoutReady,
-      previousDiffPaneHeight,
-      previousContentHeight: splitPaneMetrics$.peek().contentHeight,
-      previousContentWidth: splitPaneMetrics$.peek().contentWidth,
-      previousContentX: splitPaneMetrics$.peek().contentX,
-      previousSidebarHeight: splitPaneMetrics$.peek().sidebarHeight,
-      previousSidebarWidth: splitPaneMetrics$.peek().sidebarWidth,
-      sidebarHeight: nextMetrics.sidebarHeight,
-      sidebarWidth: nextMetrics.sidebarWidth,
-    }));
     setSplitPaneMetricsValue(nextMetrics);
     const isSidebarCollapsed = sidebarCollapsed$.peek();
     if (
@@ -5283,12 +4806,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
     const previousHeight = diffPaneHeight$.peek();
-    logDiffOpenTiming("viewer.diffPane.layout", () => ({
-      height: nextHeight,
-      previousHeight,
-      rawHeight: Number(event.nativeEvent.layout.height.toFixed(1)),
-      width: Number(event.nativeEvent.layout.width.toFixed(1)),
-    }));
     if (nextHeight > 0 || previousHeight === 0) {
       setDiffPaneHeightValue(nextHeight);
     }
@@ -5296,12 +4813,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
     const currentState = state$.peek();
-    logDiffOpenTiming("viewer.sidebarList.layout", () => ({
-      fileCount: currentState.status === "loaded" ? currentState.files.length : 0,
-      height: Number(event.nativeEvent.layout.height.toFixed(1)),
-      status: currentState.status,
-      width: Number(event.nativeEvent.layout.width.toFixed(1)),
-    }));
   }, [state$]);
 
   const getItemType = useCallback((index: number) => (
@@ -5323,14 +4834,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
 
   const renderRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
-      if (!loggedFirstUnifiedRowRenderRef.current) {
-        loggedFirstUnifiedRowRenderRef.current = true;
-        logDiffOpenTiming("viewer.unifiedRow.render.first", () => ({
-          hasRow: row !== undefined,
-          index,
-          rowKind: row?.kind,
-        }));
-      }
       return (
         <DiffUnifiedRow
           adaptiveRender={adaptiveRender}
@@ -5368,14 +4871,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
       const itemMetadata = sideBySideDataSource?.getItemMetadata(index);
       const sourceListIndex = sideBySideDataSource?.getItemLocation(index).listIndex ?? index;
-      if (!loggedFirstSideBySideRowRenderRef.current) {
-        loggedFirstSideBySideRowRenderRef.current = true;
-        logDiffOpenTiming("viewer.sideBySideRow.render.first", () => ({
-          hasRow: row !== undefined,
-          index,
-          rowKind: row?.kind,
-        }));
-      }
       return (
         <DiffSideBySideRow
           adaptiveRender={adaptiveRender}

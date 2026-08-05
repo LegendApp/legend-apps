@@ -83,7 +83,6 @@
         "@legend-apps/file-system-watcher": "0.0.0",
         "@legend-apps/glass-effect-view": "0.0.0",
         "@legend-apps/hotkeys": "workspace:*",
-        "@legend-apps/instrumentation": "workspace:*",
         "@legend-apps/keyboard-manager": "0.0.0",
         "@legend-apps/native-menu": "0.0.0",
         "@legend-apps/native-select": "workspace:*",

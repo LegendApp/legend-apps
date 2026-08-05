@@ -34,14 +34,6 @@ const cloneInitialProperties = (initialProperties?: Record<string, unknown>) => 
   return { ...initialProperties };
 };
 
-function logWindowOpenTiming(event: string, payload: Record<string, unknown>) {
-  console.info(`${Date.now()} [WindowOpenTiming] ${event} ${JSON.stringify(payload)}`);
-}
-
-function initialPropertyKeys(initialProperties?: Record<string, unknown>) {
-  return initialProperties ? Object.keys(initialProperties) : [];
-}
-
 const normalizeWindowOptions = (moduleName: string, identifier: string, entry?: WindowConfigEntry): WindowOptions => {
   const baseOptions = entry?.options ? { ...entry.options } : {};
   const baseWindowStyle = baseOptions.windowStyle ? { ...baseOptions.windowStyle } : undefined;
@@ -106,19 +98,10 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
 
     const resolveComponent = async (): Promise<ComponentType<any>> => {
       if (cachedComponent) {
-        logWindowOpenTiming("navigator.resolveComponent.cached", {
-          identifier,
-          moduleName,
-        });
         return cachedComponent;
       }
 
       if (!componentPromise) {
-        logWindowOpenTiming("navigator.resolveComponent.load.start", {
-          identifier,
-          moduleName,
-        });
-        const loadStartedAt = globalThis.performance?.now?.() ?? Date.now();
         componentPromise = (async () => {
           const loaded = await entry.loadComponent!();
 
@@ -140,11 +123,6 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
           }
 
           cachedComponent = withWindowProvider(resolved, identifier);
-          logWindowOpenTiming("navigator.resolveComponent.load.finish", {
-            elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - loadStartedAt).toFixed(1)),
-            identifier,
-            moduleName,
-          });
           return cachedComponent;
         })();
       }
@@ -157,10 +135,6 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
     };
 
     AppRegistry.registerComponent(moduleName, () => {
-      logWindowOpenTiming("navigator.appRegistry.factory", {
-        identifier,
-        moduleName,
-      });
       const LazyWindow = (props: any) => {
         const [componentWrapper, setComponentWrapper] = useState<{ component: ComponentType<any> } | null>(
           cachedComponent ? { component: cachedComponent } : null,
@@ -168,20 +142,9 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
 
         useMount(() => {
           let mounted = true;
-          logWindowOpenTiming("navigator.lazy.mount", {
-            hasCachedComponent: Boolean(cachedComponent),
-            hasComponentWrapper: Boolean(componentWrapper),
-            identifier,
-            moduleName,
-            propKeys: Object.keys(props ?? {}),
-          });
           if (!componentWrapper) {
             resolveComponent().then((resolved) => {
               if (mounted) {
-                logWindowOpenTiming("navigator.lazy.componentReady", {
-                  identifier,
-                  moduleName,
-                });
                 setComponentWrapper({ component: resolved });
               }
             });
@@ -193,20 +156,10 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
         });
 
         if (!componentWrapper) {
-          logWindowOpenTiming("navigator.lazy.renderPlaceholder", {
-            identifier,
-            moduleName,
-            propKeys: Object.keys(props ?? {}),
-          });
           return null;
         }
 
         const Component = componentWrapper.component;
-        logWindowOpenTiming("navigator.lazy.renderComponent", {
-          identifier,
-          moduleName,
-          propKeys: Object.keys(props ?? {}),
-        });
         return <Component {...props} />;
       };
 
@@ -232,52 +185,21 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
 
   const open = async (windowKey: keyof TConfig, overrides?: WindowOpenOverrides) => {
     const registration = ensureRegistration(windowKey);
-    const openStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const {
       loadComponentBeforeNativeOpen = true,
       ...windowOverrides
     } = overrides ?? {};
-    logWindowOpenTiming("navigator.open.start", {
-      identifier: registration.identifier,
-      initialPropertyKeys: initialPropertyKeys(overrides?.initialProperties),
-      loadComponentBeforeNativeOpen,
-      window: String(windowKey),
-    });
     const componentReadyPromise = registration.ensureComponent();
     if (loadComponentBeforeNativeOpen) {
       await componentReadyPromise;
-      logWindowOpenTiming("navigator.open.ensureComponent.finish", {
-        elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
-        identifier: registration.identifier,
-        phase: "beforeNativeOpen",
-        window: String(windowKey),
-      });
     }
     const { options } = registration;
     const mergedOptions = mergeWindowOptions(options, windowOverrides);
 
-    logWindowOpenTiming("navigator.open.native.start", {
-      identifier: registration.identifier,
-      initialPropertyKeys: initialPropertyKeys(mergedOptions.initialProperties),
-      moduleName: mergedOptions.moduleName,
-      window: String(windowKey),
-    });
     const result = await nativeOpenWindow(mergedOptions);
     if (!loadComponentBeforeNativeOpen) {
       await componentReadyPromise;
-      logWindowOpenTiming("navigator.open.ensureComponent.finish", {
-        elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
-        identifier: registration.identifier,
-        phase: "afterNativeOpen",
-        window: String(windowKey),
-      });
     }
-    logWindowOpenTiming("navigator.open.native.finish", {
-      elapsedMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - openStartedAt).toFixed(1)),
-      identifier: registration.identifier,
-      success: result?.success === true,
-      window: String(windowKey),
-    });
     if (!result?.success) {
       throw new Error(`Failed to open window '${String(windowKey)}'.`);
     }

@@ -5,32 +5,7 @@
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
-#import <os/log.h>
 
-static void LegendCommandRunnerTiming(NSString *event, NSDictionary *payload)
-{
-#if DEBUG
-  if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"so.legend.diff.macos"]) {
-    return;
-  }
-
-  static os_log_t log = os_log_create("so.legend.diff.macos", "startup-diagnosis");
-  static NSUInteger sequence = 0;
-  sequence += 1;
-  NSData *jsonData = [NSJSONSerialization dataWithJSONObject:(payload ?: @{}) options:0 error:nil];
-  NSString *json = jsonData ? [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] : @"{}";
-  const long long timestamp = (long long)(NSDate.date.timeIntervalSince1970 * 1000.0);
-  NSString *message = [NSString stringWithFormat:@"%lld [DEBUG diff-startup-boundaries-v2] %@ {\"seq\":%lu,\"data\":%@}",
-                       timestamp,
-                       event,
-                       (unsigned long)sequence,
-                       json ?: @"{}"];
-  os_log_with_type(log, OS_LOG_TYPE_DEFAULT, "%{public}@", message);
-#else
-  (void)event;
-  (void)payload;
-#endif
-}
 #endif
 
 @implementation RNCommandRunner {
@@ -131,20 +106,9 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   NSString *input = [params[@"input"] isKindOfClass:[NSString class]] ? params[@"input"] : nil;
   NSString *cwd = [params[@"cwd"] isKindOfClass:[NSString class]] ? params[@"cwd"] : nil;
   NSNumber *timeoutMs = [params[@"timeoutMs"] isKindOfClass:[NSNumber class]] ? params[@"timeoutMs"] : nil;
-  static NSUInteger commandSequence = 0;
-  NSUInteger commandId = ++commandSequence;
-  CFAbsoluteTime enqueuedAt = CFAbsoluteTimeGetCurrent();
-  LegendCommandRunnerTiming(@"native.command.enqueued", @{
-    @"args": args,
-    @"command": command ?: @"",
-    @"commandId": @(commandId),
-  });
-
   return @{
     @"args": args,
-    @"commandId": @(commandId),
     @"cwd": cwd ?: NSNull.null,
-    @"enqueuedAt": @(enqueuedAt),
     @"input": input ?: NSNull.null,
     @"resolvedPath": resolvedPath,
     @"timeoutMs": timeoutMs ?: NSNull.null,
@@ -157,18 +121,10 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
                                       error:(NSError **)commandError
 {
   NSArray<NSString *> *args = params[@"args"];
-  NSNumber *commandId = params[@"commandId"];
   NSString *cwd = [params[@"cwd"] isKindOfClass:NSString.class] ? params[@"cwd"] : nil;
-  NSNumber *enqueuedAt = params[@"enqueuedAt"];
   NSString *input = [params[@"input"] isKindOfClass:NSString.class] ? params[@"input"] : nil;
   NSString *resolvedPath = params[@"resolvedPath"];
   NSNumber *timeoutMs = [params[@"timeoutMs"] isKindOfClass:NSNumber.class] ? params[@"timeoutMs"] : nil;
-  CFAbsoluteTime queueStartedAt = CFAbsoluteTimeGetCurrent();
-  LegendCommandRunnerTiming(@"native.command.queue.start", @{
-    @"commandId": commandId,
-    @"queueWaitMs": @((queueStartedAt - enqueuedAt.doubleValue) * 1000.0),
-  });
-
   NSTask *task = [[NSTask alloc] init];
   task.executableURL = [NSURL fileURLWithPath:resolvedPath];
   task.arguments = args;
@@ -228,12 +184,6 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   }
 
   [task waitUntilExit];
-  CFAbsoluteTime taskFinishedAt = CFAbsoluteTimeGetCurrent();
-  LegendCommandRunnerTiming(@"native.command.task.finish", @{
-    @"commandId": commandId,
-    @"taskMs": @((taskFinishedAt - queueStartedAt) * 1000.0),
-  });
-
   NSData *stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
   NSData *stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
   NSString *stdout = [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"";

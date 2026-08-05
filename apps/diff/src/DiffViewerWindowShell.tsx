@@ -1,9 +1,6 @@
-import { markViewerShellModuleEvaluated } from "./viewerDependenciesStartupMarker";
 import type { DiffOpenSource } from "./diffFiles";
 import DiffViewerWindowComponent from "./DiffViewerWindow";
 import { getLastDiffViewerShellSplitMetrics } from "./diffViewerShellMetrics";
-
-markViewerShellModuleEvaluated();
 
 type DiffViewerWindowShellProps = {
   focusUrlInputRequestId?: number;

@@ -8,7 +8,6 @@ class HybridDiffParser final : public HybridDiffParserSpec {
 public:
   HybridDiffParser();
 
-  double logTimingMark(const std::string& message) override;
   std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(
       const std::string& folderPath,
       bool showOnlyHunks,

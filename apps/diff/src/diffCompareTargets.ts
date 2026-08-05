@@ -1,5 +1,4 @@
 import { commandRunner } from "@legend-apps/command-runner";
-import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";
@@ -281,19 +280,11 @@ export function parseDiffCompareRepoRefs(value: string | null) {
 }
 
 export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCompareRepoState> {
-  const startedAt = globalThis.performance?.now?.() ?? Date.now();
   const commands = [
     { args: ["for-each-ref", `--format=${gitRefFormat}`, "refs/heads", "refs/remotes"], command: "git", cwd: repoPath, timeoutMs: 5_000 },
     { args: ["remote"], command: "git", cwd: repoPath, timeoutMs: 5_000 },
   ];
-  logDiffOpenTiming("viewer.compareRepoState.batch.start", () => ({
-    commandCount: commands.length,
-  }));
   const [refsResult, remotesResult] = await commandRunner.runCommands(commands);
-  logDiffOpenTiming("viewer.compareRepoState.batch.finish", () => ({
-    commandCount: commands.length,
-    durationMs: Number(((globalThis.performance?.now?.() ?? Date.now()) - startedAt).toFixed(1)),
-  }));
   const refsValue = refsResult.exitCode === 0 ? refsResult.stdout.trim() || null : null;
   const remoteNames = remotesResult.exitCode === 0
     ? remotesResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean)

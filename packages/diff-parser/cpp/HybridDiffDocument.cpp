@@ -8,7 +8,6 @@
 #include <chrono>
 #include <cctype>
 #include <cmath>
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include "git2.h"
@@ -22,7 +21,6 @@
 
 #ifdef __APPLE__
 #include <malloc/malloc.h>
-#include <os/log.h>
 #endif
 
 namespace margelo::nitro::legendapps::diffparser {
@@ -73,11 +71,6 @@ void clearStringMemory(std::string& value) {
 }
 
 #ifdef __APPLE__
-os_log_t diffMemoryLog() {
-  static os_log_t log = os_log_create("so.legend.diff.macos", "memory");
-  return log;
-}
-
 void requestMallocPressureRelief() {
 #if DEBUG
   malloc_zone_pressure_relief(nullptr, 0);
@@ -87,16 +80,6 @@ void requestMallocPressureRelief() {
 void requestMallocPressureRelief() {}
 #endif
 
-void logDiffMemoryMessage(const std::string& message) {
-  (void)message;
-#if DEBUG
-#ifdef __APPLE__
-  os_log_with_type(diffMemoryLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
-#else
-  std::fprintf(stderr, "%s\n", message.c_str());
-#endif
-#endif
-}
 
 struct GitRepositoryDeleter {
   void operator()(git_repository* repo) const {
@@ -523,7 +506,6 @@ HybridDiffDocument::HybridDiffDocument(
   for (auto& row : rows) {
     appendStoredRowLocked(std::move(row));
   }
-  logMemorySnapshot("document.constructed");
 }
 
 HybridDiffDocument::~HybridDiffDocument() {
@@ -1011,12 +993,10 @@ void HybridDiffDocument::startQueuedTokenizationLocked(
 
     if (document->backgroundGeneration_.load() == generation) {
       document->backgroundTokenizationRunning_.store(false);
-      document->logMemorySnapshot("background.beforeSourceRelease");
       {
         std::lock_guard<std::mutex> lock(document->mutex_);
         document->releaseCompletedSourceCaches();
       }
-      document->logMemorySnapshot("background.complete");
     }
   });
 }
@@ -1737,7 +1717,6 @@ double HybridDiffDocument::releaseNativeResources() {
       diffDocumentRegistry.erase(documentId_);
     }
     requestMallocPressureRelief();
-    logMemorySnapshot("document.disposed");
   }
 
   return getTokenizedRowVersion();
@@ -1774,7 +1753,6 @@ double HybridDiffDocument::startDefaultBackgroundTokenization() {
 }
 
 double HybridDiffDocument::stopBackgroundTokenization() {
-  const auto wasRunning = backgroundTokenizationRunning_.load();
   backgroundGeneration_.fetch_add(1);
   backgroundTokenizationRunning_.store(false);
 
@@ -1791,9 +1769,6 @@ double HybridDiffDocument::stopBackgroundTokenization() {
     backgroundTokenizeRanges_.clear();
   }
 
-  if (wasRunning) {
-    logMemorySnapshot("background.stop");
-  }
   return getTokenizedRowVersion();
 }
 
@@ -1943,104 +1918,6 @@ size_t HybridDiffDocument::getExternalMemorySize() noexcept {
   return getExternalMemorySizeLocked();
 }
 
-void HybridDiffDocument::logMemorySnapshot(const std::string& reason) noexcept {
-  (void)reason;
-#if DEBUG
-  try {
-    std::lock_guard<std::mutex> lock(mutex_);
-    size_t rowTextBytes = 0;
-    size_t rowTokenRuns = 0;
-    size_t filePathBytes = 0;
-    size_t loadedSourceCount = 0;
-    size_t sourceLineCount = 0;
-    size_t sourceTextBytes = 0;
-    size_t sourceTokenCacheSlots = 0;
-    size_t sourceTokenRuns = 0;
-    size_t sourceTokenizedLines = 0;
-    size_t tokenizedRowCount = 0;
-
-    rowTextBytes = rowText_.capacity();
-    for (const auto tokenized : rowTokenized_) {
-      if (tokenized) {
-        tokenizedRowCount += 1;
-      }
-    }
-    for (const auto& file : files_) {
-      filePathBytes += file.path.capacity() + file.oldPath.capacity() + file.status.capacity();
-    }
-
-    auto addSourceStats = [&](const DiffTokenizedSource& source) {
-      loadedSourceCount += source.enabled || !source.lines.empty() || !source.language.empty() ? 1 : 0;
-      sourceLineCount += source.lines.size();
-      sourceTokenCacheSlots += source.tokenCache.size();
-      sourceTokenizedLines += source.tokenizedLineCount;
-      for (const auto& line : source.lines) {
-        sourceTextBytes += line.capacity();
-      }
-      for (const auto& tokens : source.tokenCache) {
-        if (tokens.has_value()) {
-          sourceTokenRuns += tokens->capacity();
-        }
-      }
-    };
-
-    for (const auto& sources : fileSources_) {
-      {
-        std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
-        addSourceStats(sources.oldSource);
-      }
-      {
-        std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
-        addSourceStats(sources.newSource);
-      }
-    }
-
-    size_t scopeGroupCount = 0;
-    size_t scopeStringCount = 0;
-    size_t scopeBytes = 0;
-    {
-      std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
-      scopeGroupCount = syntaxState_->scopeState.scopes.size();
-      for (const auto& scopes : syntaxState_->scopeState.scopes) {
-        scopeStringCount += scopes.size();
-        scopeBytes += scopes.capacity() * sizeof(std::string);
-        for (const auto& scope : scopes) {
-          scopeBytes += scope.capacity();
-        }
-      }
-    }
-
-    std::ostringstream message;
-    message
-        << "[DiffMemory] " << reason
-        << " externalBytes=" << getExternalMemorySizeLocked()
-        << " files=" << files_.size()
-        << " rows=" << rows_.size()
-        << " rowCapacity=" << rows_.capacity()
-        << " rowTextBytes=" << rowTextBytes
-        << " rowTokenRuns=" << rowTokenRuns
-        << " sideBySideRows=" << sideBySideLines_.size()
-        << " sideBySideCapacity=" << sideBySideLines_.capacity()
-        << " filePathBytes=" << filePathBytes
-        << " loadedSources=" << loadedSourceCount
-        << " sourceLines=" << sourceLineCount
-        << " sourceTextBytes=" << sourceTextBytes
-        << " sourceTokenCacheSlots=" << sourceTokenCacheSlots
-        << " sourceTokenizedLines=" << sourceTokenizedLines
-        << " sourceTokenRuns=" << sourceTokenRuns
-        << " tokenizedRows=" << tokenizedRowCount
-        << " tokenizedMaxRow=" << backgroundTokenizeRowIndex_
-        << " tokenizedNextRow=" << backgroundTokenizeNextRowIndex_
-        << " tokenizationQueuedRanges=" << backgroundTokenizeRanges_.size()
-        << " scopeGroups=" << scopeGroupCount
-        << " scopeStrings=" << scopeStringCount
-        << " scopeBytes=" << scopeBytes;
-    logDiffMemoryMessage(message.str());
-  } catch (...) {
-    logDiffMemoryMessage("[DiffMemory] snapshot.failed");
-  }
-#endif
-}
 
 std::vector<DiffSyntaxTokenRun> HybridDiffDocument::cachedTokensForRowLocked(const DiffRenderRow& row) {
   if (row.kind != diffRowKindLine) {

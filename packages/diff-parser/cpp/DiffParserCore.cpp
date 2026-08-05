@@ -1,5 +1,4 @@
 #include "DiffParserCore.hpp"
-#include "DiffStartupDiagnostics.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -9,10 +8,8 @@
 #include <cstdint>
 #include "git2.h"
 #include <limits>
-#include <initializer_list>
 #include <memory>
 #include <mutex>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -42,20 +39,6 @@ double elapsedDiffMs(DiffClock::time_point start, DiffClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-std::string startupMetrics(std::initializer_list<std::pair<std::string_view, double>> metrics) {
-  std::ostringstream payload;
-  payload << "{";
-  bool first = true;
-  for (const auto& [name, value] : metrics) {
-    if (!first) {
-      payload << ",";
-    }
-    first = false;
-    payload << "\"" << name << "\":" << value;
-  }
-  payload << "}";
-  return payload.str();
-}
 
 std::string normalizeFolderPath(const std::string& folderPath) {
   constexpr auto prefix = std::string_view("file://");
@@ -1403,22 +1386,13 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
     bool showOnlyHunks,
     DiffGitCompareOptions compareOptions) {
   const auto loadStartedAt = DiffClock::now();
-  if (callbacks.onPhase) {
-    callbacks.onPhase("beforeLibGitInit");
-  }
   ensureLibGit2Initialized();
-  if (callbacks.onPhase) {
-    callbacks.onPhase("afterLibGitInit");
-  }
   git_repository* rawRepo = nullptr;
   const std::string normalizedPath = normalizeFolderPath(folderPath);
   if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
   }
   const auto repoOpenedAt = DiffClock::now();
-  if (callbacks.onPhase) {
-    callbacks.onPhase("afterRepoOpen");
-  }
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
 
   git_diff_options options = {};
@@ -1434,9 +1408,6 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
   }
 
   const auto compareBase = resolveCompareBase(repo.get(), compareOptions);
-  if (callbacks.onPhase) {
-    callbacks.onPhase("afterHeadTree");
-  }
   const char* rawRepositoryPath = git_repository_path(repo.get());
   const char* rawWorkdirPath = git_repository_workdir(repo.get());
   std::string repositoryPath = rawRepositoryPath != nullptr ? std::string(rawRepositoryPath) : std::string();
@@ -1506,39 +1477,16 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   }
 
   const auto loadStartedAt = DiffClock::now();
-  logDiffStartupDiagnostic("native.progressive.start", startupMetrics({
-    { "showOnlyHunks", showOnlyHunks ? 1.0 : 0.0 },
-  }));
-  if (callbacks.onPhase) {
-    callbacks.onPhase("beforeLibGitInit");
-  }
   ensureLibGit2Initialized();
-  if (callbacks.onPhase) {
-    callbacks.onPhase("afterLibGitInit");
-  }
   git_repository* rawRepo = nullptr;
   const std::string normalizedPath = normalizeFolderPath(folderPath);
-  const auto repoOpenStartedAt = DiffClock::now();
   if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
     throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
   }
   const auto repoOpenedAt = DiffClock::now();
-  logDiffStartupDiagnostic("native.repoOpen.finish", startupMetrics({
-    { "durationMs", elapsedDiffMs(repoOpenStartedAt, repoOpenedAt) },
-  }));
-  if (callbacks.onPhase) {
-    callbacks.onPhase("afterRepoOpen");
-  }
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo(rawRepo);
 
-  const auto compareBaseStartedAt = DiffClock::now();
   const auto compareBase = resolveCompareBase(repo.get(), compareOptions);
-  logDiffStartupDiagnostic("native.compareBase.finish", startupMetrics({
-    { "durationMs", elapsedDiffMs(compareBaseStartedAt, DiffClock::now()) },
-  }));
-  if (callbacks.onPhase) {
-    callbacks.onPhase("afterHeadTree");
-  }
   const char* rawRepositoryPath = git_repository_path(repo.get());
   const char* rawWorkdirPath = git_repository_workdir(repo.get());
   std::string repositoryPath = rawRepositoryPath != nullptr ? std::string(rawRepositoryPath) : std::string();
@@ -1574,10 +1522,6 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   std::vector<DiffFileSummary> files;
   std::vector<DiffFileSources> fileSources;
   ProgressiveDiffBuildState state{ .callbacks = callbacks };
-  size_t pathDiffCount = 0;
-  double pathDiffTotalMs = 0;
-  double pathDiffMaxMs = 0;
-
   auto appendDiscoveredFile = [&](const StatusPathSummary& summary) {
     const auto fileIndex = static_cast<double>(files.size());
     auto file = createStatusFileSummary(summary, fileIndex);
@@ -1593,7 +1537,6 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   };
 
   auto generatePathDiff = [&](const DiffFileSummary& file) {
-    const auto pathDiffStartedAt = DiffClock::now();
     auto path = file.status == "deleted" && !file.oldPath.empty() ? file.oldPath : file.path;
     char* pathspecString = path.data();
     diffOptions.pathspec.strings = &pathspecString;
@@ -1615,28 +1558,13 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     if (git_diff_foreach(diff.get(), onProgressiveGitFile, nullptr, onProgressiveGitHunk, onProgressiveGitLine, &state) != 0 && !state.cancelled) {
       throw std::runtime_error(gitErrorMessage("Failed to read path diff"));
     }
-    const auto pathDiffMs = elapsedDiffMs(pathDiffStartedAt, DiffClock::now());
-    pathDiffCount += 1;
-    pathDiffTotalMs += pathDiffMs;
-    pathDiffMaxMs = std::max(pathDiffMaxMs, pathDiffMs);
-    if (pathDiffCount == 1) {
-      logDiffStartupDiagnostic("native.pathDiff.first.finish", startupMetrics({
-        { "durationMs", pathDiffMs },
-      }));
-    }
   };
 
   StatusPathCollectState firstStatusState{
       .callbacks = callbacks,
       .stopAfterFirst = true,
   };
-  const auto firstStatusStartedAt = DiffClock::now();
   const auto firstStatusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &firstStatusState);
-  const auto firstStatusFinishedAt = DiffClock::now();
-  logDiffStartupDiagnostic("native.status.first.finish", startupMetrics({
-    { "durationMs", elapsedDiffMs(firstStatusStartedAt, firstStatusFinishedAt) },
-    { "paths", static_cast<double>(firstStatusState.paths.size()) },
-  }));
   if (firstStatusResult < 0 || (firstStatusResult > 0 && !firstStatusState.stoppedAfterFirst && !firstStatusState.cancelled)) {
     throw std::runtime_error(gitErrorMessage("Failed to read first git status"));
   }
@@ -1654,16 +1582,11 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
 
   statusOptions.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS | GIT_STATUS_OPT_NO_REFRESH;
   StatusPathCollectState statusState{ .callbacks = callbacks };
-  const auto fullStatusStartedAt = DiffClock::now();
   const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
   if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
     throw std::runtime_error(gitErrorMessage("Failed to read git status"));
   }
   const auto statusCreatedAt = DiffClock::now();
-  logDiffStartupDiagnostic("native.status.full.finish", startupMetrics({
-    { "durationMs", elapsedDiffMs(fullStatusStartedAt, statusCreatedAt) },
-    { "paths", static_cast<double>(statusState.paths.size()) },
-  }));
 
   const auto firstPath = !files.empty() ? files.front().path : std::string();
   for (const auto& statusPath : statusState.paths) {
@@ -1694,16 +1617,6 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
 
   state.finishCurrentFile();
   const auto diffWalkedAt = DiffClock::now();
-  logDiffStartupDiagnostic("native.pathDiff.summary", startupMetrics({
-    { "count", static_cast<double>(pathDiffCount) },
-    { "maxMs", pathDiffMaxMs },
-    { "totalMs", pathDiffTotalMs },
-  }));
-  logDiffStartupDiagnostic("native.progressive.finish", startupMetrics({
-    { "durationMs", elapsedDiffMs(loadStartedAt, diffWalkedAt) },
-    { "files", static_cast<double>(files.size()) },
-    { "rows", state.rowCount },
-  }));
 
   DiffLoadTiming timing;
   timing.openRepoMs = elapsedDiffMs(loadStartedAt, repoOpenedAt);

@@ -1,6 +1,4 @@
-import type { DiffLoadTiming } from "@legend-apps/diff-parser";
 import { getDiffFolderCompareBaseKey, getDiffSourceLabel, type DiffOpenSource } from "../diffFiles";
-import { logDiffMemoryMark, logDiffOpenTiming } from "../diffInstrumentation";
 import { getDiffViewModeSetting } from "../diffSettings";
 import { diffViewerWindowTitle } from "../diffWindowTitle";
 import type { DiffRecoverableError, DiffViewerState } from "./diffViewerModel";
@@ -43,31 +41,6 @@ export function shouldPrepareMergeDraftsForSourceChange(
 ) {
   return hasPendingMergeDraftWork && currentSource !== null && !sourcesMatch(currentSource, nextSource);
 }
-
-export function getDiffLoadTimingPayload(timing: DiffLoadTiming) {
-  return {
-    copyFilesMs: Number(timing.copyFilesMs.toFixed(1)),
-    copyInitialRowsMs: Number(timing.copyInitialRowsMs.toFixed(1)),
-    createDiffMs: Number(timing.createDiffMs.toFixed(1)),
-    diffMs: Number(timing.diffMs.toFixed(1)),
-    documentMs: Number(timing.documentMs.toFixed(1)),
-    fetchMs: Number(timing.fetchMs.toFixed(1)),
-    fileCount: timing.fileCount,
-    nativeTotalMs: Number(timing.nativeTotalMs.toFixed(1)),
-    openRepoMs: Number(timing.openRepoMs.toFixed(1)),
-    rowCount: timing.rowCount,
-    walkDiffMs: Number(timing.walkDiffMs.toFixed(1)),
-  };
-}
-
-export function logDiffLoadTiming(folderPath: string, timing: DiffLoadTiming) {
-  logDiffOpenTiming("viewer.native.loaded", () => ({
-    ...getDiffLoadTimingPayload(timing),
-    folderPath,
-  }));
-}
-
-export { logDiffMemoryMark, logDiffOpenTiming };
 
 export function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);

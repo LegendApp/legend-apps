@@ -1,16 +1,12 @@
 #include "HybridDiffLoadSession.hpp"
 
 #include "DiffParserCore.hpp"
-#include "DiffStartupDiagnostics.hpp"
 #include "HybridDiffUrlLoader.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <exception>
-#include <initializer_list>
-#include <sstream>
-#include <string_view>
 #include <utility>
 
 namespace margelo::nitro::legendapps::diffparser {
@@ -23,20 +19,6 @@ double elapsedSessionMs(DiffClock::time_point start, DiffClock::time_point end) 
   return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-std::string startupMetrics(std::initializer_list<std::pair<std::string_view, double>> metrics) {
-  std::ostringstream payload;
-  payload << "{";
-  bool first = true;
-  for (const auto& [name, value] : metrics) {
-    if (!first) {
-      payload << ",";
-    }
-    first = false;
-    payload << "\"" << name << "\":" << value;
-  }
-  payload << "}";
-  return payload.str();
-}
 
 DiffLoadTiming createEmptyTiming() {
   DiffLoadTiming timing;
@@ -147,9 +129,6 @@ size_t HybridDiffLoadSession::getExternalMemorySize() noexcept {
 }
 
 void HybridDiffLoadSession::start() {
-  logDiffStartupDiagnostic("native.session.start", kind_ == Kind::GitFolder
-    ? "{\"kind\":\"folder\"}"
-    : "{\"kind\":\"url\"}");
   workerThread_ = std::thread([this] {
     run();
   });
@@ -165,8 +144,6 @@ void HybridDiffLoadSession::run() {
 
 void HybridDiffLoadSession::runGitFolder() {
   const auto startedAt = DiffClock::now();
-  logDiffStartupDiagnostic("native.session.worker.start", "{\"kind\":\"folder\"}");
-  document_->logMemorySnapshot("progressive.runStart");
   try {
     DiffLoadTiming timing;
     if (compareOptions_.ignoreWhitespace) {
@@ -194,7 +171,6 @@ void HybridDiffLoadSession::runGitFolder() {
           }
           rowVersion_.fetch_add(rowEnd - rowStart);
           fileVersion_.fetch_add(1);
-          noteRowsAvailable();
         }
       }
       timing = parsed.timing;
@@ -203,22 +179,15 @@ void HybridDiffLoadSession::runGitFolder() {
         .shouldCancel = [this] {
           return cancelled_.load();
         },
-        .onPhase = [this](const std::string& phase) {
-          document_->logMemorySnapshot("progressive." + phase);
-        },
         .onRepositoryMetadata = [this](DiffRepositoryMetadata metadata) {
           document_->setProgressRepositoryMetadata(
               std::move(metadata.repositoryPath),
               std::move(metadata.workdirPath),
               std::move(metadata.headTreeOid));
-          document_->logMemorySnapshot("progressive.repositoryMetadata");
         },
         .onFilesDiscovered = [this](std::vector<DiffFileSummary> files, std::vector<DiffFileSources> fileSources) {
           document_->setProgressFiles(std::move(files), std::move(fileSources));
           fileVersion_.fetch_add(1);
-          if (!firstFilesLogged_.load() && document_->getFileCount() > 0 && !firstFilesLogged_.exchange(true)) {
-            document_->logMemorySnapshot("progressive.firstFiles");
-          }
         },
         .onFile = [this](const DiffFileSummary& file, const DiffFileSources& fileSources, const DiffRenderRow& headerRow) {
           if (file.index < document_->getFileCount()) {
@@ -229,12 +198,10 @@ void HybridDiffLoadSession::runGitFolder() {
           }
           rowVersion_.fetch_add(1);
           fileVersion_.fetch_add(1);
-          noteRowsAvailable();
         },
         .onRow = [this](const DiffRenderRow& row) {
           document_->appendProgressRow(row);
           rowVersion_.fetch_add(1);
-          noteRowsAvailable();
         },
         .onFileFinished = [this](const DiffFileSummary& file) {
           document_->updateProgressFile(file);
@@ -254,17 +221,10 @@ void HybridDiffLoadSession::runGitFolder() {
   complete_.store(true);
   rowVersion_.fetch_add(1);
   fileVersion_.fetch_add(1);
-  logDiffStartupDiagnostic("native.session.worker.finish", startupMetrics({
-    { "durationMs", elapsedSessionMs(startedAt, DiffClock::now()) },
-    { "files", static_cast<double>(document_->getFileCount()) },
-    { "rows", static_cast<double>(document_->getRowCount()) },
-  }));
-  document_->logMemorySnapshot("progressive.complete");
 }
 
 void HybridDiffLoadSession::runUnifiedDiffUrl() {
   const auto startedAt = DiffClock::now();
-  document_->logMemorySnapshot("progressiveUrl.runStart");
   try {
     UnifiedDiffStreamParser parser(DiffProgressiveCallbacks{
         .shouldCancel = [this] {
@@ -274,15 +234,10 @@ void HybridDiffLoadSession::runUnifiedDiffUrl() {
           document_->appendProgressFile(file, fileSources, headerRow);
           rowVersion_.fetch_add(1);
           fileVersion_.fetch_add(1);
-          if (!firstFilesLogged_.load() && document_->getFileCount() > 0 && !firstFilesLogged_.exchange(true)) {
-            document_->logMemorySnapshot("progressiveUrl.firstFiles");
-          }
-          noteRowsAvailable();
         },
         .onRow = [this](const DiffRenderRow& row) {
           document_->appendProgressRow(row);
           rowVersion_.fetch_add(1);
-          noteRowsAvailable();
         },
         .onFileFinished = [this](const DiffFileSummary& file) {
           document_->updateProgressFile(file);
@@ -311,7 +266,6 @@ void HybridDiffLoadSession::runUnifiedDiffUrl() {
   complete_.store(true);
   rowVersion_.fetch_add(1);
   fileVersion_.fetch_add(1);
-  document_->logMemorySnapshot("progressiveUrl.complete");
 }
 
 void HybridDiffLoadSession::joinWorker() {
@@ -321,18 +275,6 @@ void HybridDiffLoadSession::joinWorker() {
     } else {
       workerThread_.join();
     }
-  }
-}
-
-void HybridDiffLoadSession::noteRowsAvailable() {
-  if (!firstRowsLogged_.load() && document_->getRowCount() > 0 && !firstRowsLogged_.exchange(true)) {
-    logDiffStartupDiagnostic("native.session.firstRows", startupMetrics({
-      { "rows", static_cast<double>(document_->getRowCount()) },
-    }));
-    document_->logMemorySnapshot("progressive.firstRows");
-  }
-  if (!initialRowsLogged_.load() && document_->getRowCount() >= 160 && !initialRowsLogged_.exchange(true)) {
-    document_->logMemorySnapshot("progressive.initialRows");
   }
 }
 

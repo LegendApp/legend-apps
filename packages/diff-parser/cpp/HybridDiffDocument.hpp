@@ -172,7 +172,6 @@ public:
   double startBackgroundTokenization(double chunkRowCount, double chunkBudgetMs, double maxRowCount, double maxSourceLineCount) override;
   double stopBackgroundTokenization() override;
   double startDefaultBackgroundTokenization();
-  void logMemorySnapshot(const std::string& reason) noexcept;
   void appendProgressFile(
       DiffFileSummary file,
       DiffFileSources fileSources,

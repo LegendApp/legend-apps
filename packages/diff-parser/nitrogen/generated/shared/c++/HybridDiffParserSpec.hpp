@@ -18,9 +18,9 @@ namespace margelo::nitro::legendapps::diffparser { class HybridDiffLoadSessionSp
 // Forward declaration of `DiffLoadResult` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { struct DiffLoadResult; }
 
-#include <string>
 #include <memory>
 #include "HybridDiffLoadSessionSpec.hpp"
+#include <string>
 #include "DiffLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
 
@@ -55,7 +55,6 @@ namespace margelo::nitro::legendapps::diffparser {
 
     public:
       // Methods
-      virtual double logTimingMark(const std::string& message) = 0;
       virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges) = 0;

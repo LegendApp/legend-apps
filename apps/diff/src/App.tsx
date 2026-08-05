@@ -1,23 +1,15 @@
-import "./startupDiagnosticsMarker";
-
-import "./platformDependenciesStartupMarker";
 import { AutoUpdater } from "@legend-apps/auto-updater";
 import { commandRunner } from "@legend-apps/command-runner";
-import "./documentDependenciesStartupMarker";
 import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
 import { useRoutedHotkeys } from "@legend-apps/hotkeys";
 import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/native-menu";
 import { addWindowFocusedListener } from "@legend-apps/window-manager";
-import "./reactDependenciesStartupMarker";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Linking, LogBox } from "react-native";
-import "./diffCoreDependenciesStartupMarker";
 import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
 import { installDiffAppExitHandler } from "./diffAppExit";
-import { logDiffOpenTiming } from "./diffInstrumentation";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
-import "./hotkeysDependenciesStartupMarker";
 import {
   diffApplicationHotkeyScope,
   diffHotkeyDefinitions,
@@ -25,7 +17,6 @@ import {
   getDiffHotkeyMenuPatches,
   useDiffHotkeyBindings,
 } from "./diffHotkeys";
-import "./settingsStoreDependenciesStartupMarker";
 import {
   getDiffShowOnlyHunksSetting,
   getDiffRestoreWindowsOnStartupSetting,
@@ -33,16 +24,9 @@ import {
   setDiffViewModeSetting,
 } from "./diffSettings";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
-import "./restorationDependenciesStartupMarker";
 import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
-import "./windowsDependenciesStartupMarker";
 import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
 
-function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-logDiffOpenTiming("app.module.body.start", () => ({}));
 
 LogBox.ignoreLogs([
   "Open debugger to view warnings.",
@@ -51,26 +35,9 @@ LogBox.ignoreLogs([
 ]);
 
 registerDiffWindows();
-const initialUrlStartedAt = nowMs();
 const initialUrlPromise = Linking.getInitialURL();
-void initialUrlPromise
-  .then((url) => {
-    logDiffOpenTiming("startup.initialUrl.finish", () => ({
-      durationMs: Number((nowMs() - initialUrlStartedAt).toFixed(3)),
-      hasUrl: Boolean(url),
-    }));
-  })
-  .catch(() => undefined);
-const viewerPrefetchStartedAt = nowMs();
-prefetchDiffViewerWindow()
-  .then(() => {
-    logDiffOpenTiming("startup.viewerPrefetch.finish", () => ({
-      durationMs: Number((nowMs() - viewerPrefetchStartedAt).toFixed(3)),
-    }));
-  })
-  .catch(reportDiffAppControllerError);
+prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
 configureDiffAutoUpdates().catch(reportDiffAppControllerError);
-logDiffOpenTiming("app.module.body.finish", () => ({}));
 
 type DiffAppProps = {
   launchArguments?: string[];
@@ -82,29 +49,11 @@ function reportDiffAppControllerError(error: unknown) {
 }
 
 async function configureDiffAutoUpdates() {
-  const startedAt = nowMs();
-  logDiffOpenTiming("startup.autoUpdater.configure.start", () => ({}));
-  const availabilityStartedAt = nowMs();
   const available = AutoUpdater.isAvailable();
-  logDiffOpenTiming("startup.autoUpdater.available.finish", () => ({
-    available,
-    durationMs: Number((nowMs() - availabilityStartedAt).toFixed(3)),
-  }));
   if (available) {
-    const automaticChecksStartedAt = nowMs();
     await AutoUpdater.setAutomaticallyChecksForUpdates(true);
-    logDiffOpenTiming("startup.autoUpdater.automaticChecks.finish", () => ({
-      durationMs: Number((nowMs() - automaticChecksStartedAt).toFixed(3)),
-    }));
-    const intervalStartedAt = nowMs();
     await AutoUpdater.setUpdateCheckInterval(60 * 60 * 24);
-    logDiffOpenTiming("startup.autoUpdater.interval.finish", () => ({
-      durationMs: Number((nowMs() - intervalStartedAt).toFixed(3)),
-    }));
   }
-  logDiffOpenTiming("startup.autoUpdater.configure.finish", () => ({
-    durationMs: Number((nowMs() - startedAt).toFixed(3)),
-  }));
 }
 
 async function openDiffViewerForSelectedFolder(controller: DocumentAppController) {
@@ -243,20 +192,11 @@ async function openRecentDiffFolder(path: string, controller: DocumentAppControl
 }
 
 async function openInitialDiffViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
-  const startedAt = nowMs();
-  logDiffOpenTiming("startup.initialOpen.start", () => ({
-    launchArgumentCount: launchArguments?.length ?? 0,
-  }));
   let source = getLaunchDiffSource(launchArguments?.slice(1));
-  let initialUrl: string | null = null;
   if (!source) {
-    initialUrl = await initialUrlPromise;
+    const initialUrl = await initialUrlPromise;
     source = getDiffSourceFromOpenUrl(initialUrl ?? "");
   }
-  logDiffOpenTiming("startup.initialOpen.sourceResolved", () => ({
-    durationMs: Number((nowMs() - startedAt).toFixed(3)),
-    sourceKind: source?.kind ?? null,
-  }));
 
   let restoredWindowCount = 0;
   if (source) {
@@ -271,10 +211,6 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
     }
     controller.setDocumentWindowOpen(true);
   }
-  logDiffOpenTiming("startup.initialOpen.finish", () => ({
-    durationMs: Number((nowMs() - startedAt).toFixed(3)),
-    restoredWindowCount,
-  }));
 }
 
 export function App({ launchArguments }: DiffAppProps) {
@@ -291,14 +227,6 @@ export function App({ launchArguments }: DiffAppProps) {
     windowIdentifier: diffViewerWindowIdentifier,
   });
   const controllerRef = useRef(controller);
-
-  useLayoutEffect(() => {
-    logDiffOpenTiming("app.layoutEffect.first", () => ({}));
-  }, []);
-
-  useEffect(() => {
-    logDiffOpenTiming("app.passiveEffect.first", () => ({}));
-  }, []);
 
   useEffect(() => {
     controllerRef.current = controller;

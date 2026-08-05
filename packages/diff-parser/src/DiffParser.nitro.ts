@@ -223,7 +223,6 @@ export interface DiffParser
   extends HybridObject<{
     ios: "c++";
   }> {
-  logTimingMark(message: string): number;
   startGitFolderDiff(folderPath: string, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean): DiffLoadSession;
   startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string): DiffLoadSession;
   loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;

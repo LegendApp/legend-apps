@@ -47,14 +47,6 @@ export function startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string) {
   return getDiffParser().startUnifiedDiffFromUrl(diffUrl, sourceLabel);
 }
 
-export function logDiffTimingMark(message: string) {
-  try {
-    getDiffParser().logTimingMark(message);
-  } catch {
-    // Timing diagnostics must not affect app startup or rendering.
-  }
-}
-
 export function loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount = 200, ignoreWhitespaceChanges = false) {
   return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, initialRowCount, ignoreWhitespaceChanges);
 }

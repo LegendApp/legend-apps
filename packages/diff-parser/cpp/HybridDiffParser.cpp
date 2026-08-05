@@ -8,36 +8,13 @@
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <chrono>
-#include <cstdio>
 #include <string>
-
-#ifdef __APPLE__
-#include <os/log.h>
-#endif
 
 namespace margelo::nitro::legendapps::diffparser {
 
 namespace {
 
 using DiffClock = std::chrono::steady_clock;
-
-#ifdef __APPLE__
-os_log_t diffTimingLog() {
-  static os_log_t log = os_log_create("so.legend.diff.macos", "memory");
-  return log;
-}
-#endif
-
-void logDiffTimingMessage(const std::string& message) {
-  (void)message;
-#if DEBUG
-#ifdef __APPLE__
-  os_log_with_type(diffTimingLog(), OS_LOG_TYPE_DEFAULT, "%{public}s", message.c_str());
-#else
-  std::fprintf(stderr, "%s\n", message.c_str());
-#endif
-#endif
-}
 
 double elapsedDiffMs(DiffClock::time_point start, DiffClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
@@ -95,11 +72,6 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(
 
 HybridDiffParser::HybridDiffParser() : HybridObject(TAG) {}
 
-double HybridDiffParser::logTimingMark(const std::string& message) {
-  logDiffTimingMessage(message);
-  return 1;
-}
-
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
     const std::string& folderPath,
     bool showOnlyHunks,
@@ -137,7 +109,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
         folderPath,
         showOnlyHunks,
         createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
-    document->logMemorySnapshot("loadGitFolderDiff.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -146,7 +117,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const auto filesFinishedAt = DiffClock::now();
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getPlainRows(0, initialRowCount);
-    document->logMemorySnapshot("loadGitFolderDiff.afterInitialRows");
     const auto rowsFinishedAt = DiffClock::now();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
@@ -166,7 +136,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
   return Promise<DiffLoadResult>::async([diffText, sourceLabel, initialRowCount, ignoreWhitespaceChanges]() -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
     auto document = loadUnifiedDiffDocument(diffText, sourceLabel, ignoreWhitespaceChanges);
-    document->logMemorySnapshot("loadUnifiedDiff.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -175,7 +144,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     const auto filesFinishedAt = DiffClock::now();
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getPlainRows(0, initialRowCount);
-    document->logMemorySnapshot("loadUnifiedDiff.afterInitialRows");
     const auto rowsFinishedAt = DiffClock::now();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
@@ -196,7 +164,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     const auto startedAt = DiffClock::now();
     const auto diff = loadDiffUrlText(diffUrl);
     auto document = loadUnifiedDiffDocument(diff.text, sourceLabel, ignoreWhitespaceChanges);
-    document->logMemorySnapshot("loadUnifiedDiffFromUrl.afterDocument");
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -205,7 +172,6 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     const auto filesFinishedAt = DiffClock::now();
     const auto rowsStartedAt = DiffClock::now();
     result.initialRows = document->getPlainRows(0, initialRowCount);
-    document->logMemorySnapshot("loadUnifiedDiffFromUrl.afterInitialRows");
     const auto rowsFinishedAt = DiffClock::now();
     auto timing = document->getTiming();
     timing.fetchMs = diff.fetchMs;
