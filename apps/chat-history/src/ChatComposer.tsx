@@ -1,4 +1,4 @@
-import { GlassEffectView } from "@legend-apps/glass-effect-view";
+import { GlassSurface } from "@legend-apps/glass-effect-view";
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
@@ -38,12 +38,11 @@ export function ChatComposer({
       pointerEvents="box-none"
     >
       <View className="mx-auto w-full max-w-[860px]" style={styles.shadow}>
-        <View className="overflow-hidden rounded-[26px] border border-border">
-          <GlassEffectView
-            glassStyle="regular"
-            style={styles.glass}
-            tintColor={glassTintColor}
-          />
+        <GlassSurface
+          className="rounded-[26px] border border-border"
+          glassStyle="regular"
+          tintColor={glassTintColor}
+        >
           <View className="flex-row items-end px-4 py-3">
             <TextInput
               {...composerInputPlatformProps}
@@ -76,7 +75,7 @@ export function ChatComposer({
               <Text className="text-lg font-semibold text-primary-foreground" style={styles.sendIcon}>↑</Text>
             </Pressable>
           </View>
-        </View>
+        </GlassSurface>
       </View>
     </View>
   );
@@ -86,9 +85,6 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.3,
     shadowOpacity: 0,
-  },
-  glass: {
-    ...StyleSheet.absoluteFillObject,
   },
   input: {
     flex: 1,

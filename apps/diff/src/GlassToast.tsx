@@ -1,4 +1,4 @@
-import { GlassEffectView } from "@legend-apps/glass-effect-view";
+import { GlassSurface } from "@legend-apps/glass-effect-view";
 import { Pressable, StyleSheet, Text, View, type ColorValue, type StyleProp, type ViewStyle } from "react-native";
 
 export type GlassToastAction = {
@@ -23,8 +23,12 @@ export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000
   return (
     <View className="items-center" style={style}>
       <View style={[styles.shadow, maxWidthStyle]}>
-        <View className="min-h-10 overflow-hidden rounded-lg" style={maxWidthStyle}>
-          <GlassEffectView glassStyle="regular" tintColor={tintColor} style={styles.glass} />
+        <GlassSurface
+          className="min-h-10 rounded-lg"
+          glassStyle="regular"
+          style={maxWidthStyle}
+          tintColor={tintColor}
+        >
           <View className="min-h-10 flex-row items-center gap-3 px-3" style={maxWidthStyle}>
             <View className="min-w-0 max-w-56">
               <Text className="text-sm font-bold leading-5 text-white" numberOfLines={1}>
@@ -59,17 +63,13 @@ export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000
               </View>
             ) : null}
           </View>
-        </View>
+        </GlassSurface>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  glass: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 8,
-  },
   primaryButton: {
     backgroundColor: "#ffffff24",
   },
