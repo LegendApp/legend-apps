@@ -643,6 +643,7 @@
       "name": "@legend-apps/virtualized-document",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-apps/instrumentation": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
       },

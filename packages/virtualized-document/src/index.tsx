@@ -1,4 +1,9 @@
 import {
+  createInstrumentationLogger,
+  instrumentationNowMs,
+  type InstrumentationLogger,
+} from "@legend-apps/instrumentation";
+import {
   LegendList,
   type AdaptiveRender,
   type AdaptiveRenderConfig,
@@ -17,13 +22,6 @@ import type {
 } from "react-native";
 
 declare const __DEV__: boolean | undefined;
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __LEGEND_INSTRUMENTATION_ENABLED__: boolean | Record<string, boolean> | undefined;
-  // eslint-disable-next-line no-var
-  var __LEGEND_BENCHMARK_LOG_URL__: boolean | string | undefined;
-}
 
 export type VirtualizedFixedDocumentListRef = LegendListRef;
 
@@ -134,103 +132,31 @@ export type VirtualizedFixedDocumentListProps<TRow> = {
   style?: StyleProp<ViewStyle>;
 };
 
-const debugPrefix = "[DEBUG-code-cold-v1]";
-let debugSequence = 0;
+const debugTimingLabel = "DEBUG-code-cold-v1";
+const debugLoggers = new Map<string, InstrumentationLogger>();
 
-function debugNowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-function isDev() {
-  return typeof __DEV__ !== "undefined" && __DEV__;
-}
-
-function getEnvValue(name: string) {
-  const processValue = (globalThis as typeof globalThis & {
-    process?: { env?: Record<string, string | undefined> };
-  }).process;
-  return processValue?.env?.[name];
-}
-
-function isTruthyFlag(value: string) {
-  const normalized = value.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-}
-
-function isFalseyFlag(value: string) {
-  const normalized = value.trim().toLowerCase();
-  return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
-}
-
-function isNamespaceEnabled(namespace: string, value: string) {
-  const normalized = value.trim().toLowerCase();
-  if (isTruthyFlag(normalized) || normalized === "all" || normalized === "*") {
-    return true;
+function getDebugLogger(debugName: string | undefined) {
+  let logger: InstrumentationLogger | undefined;
+  if (debugName) {
+    logger = debugLoggers.get(debugName);
+    if (!logger) {
+      logger = createInstrumentationLogger({
+        debugId: debugName,
+        namespace: debugName,
+        timingLabel: debugTimingLabel,
+      });
+      debugLoggers.set(debugName, logger);
+    }
   }
-  if (isFalseyFlag(normalized)) {
-    return false;
-  }
-  return normalized
-    .split(/[\s,]+/)
-    .filter(Boolean)
-    .includes(namespace.toLowerCase());
-}
-
-function isDebugLogEnabled(debugName: string | undefined) {
-  if (!isDev() || !debugName) {
-    return false;
-  }
-
-  const globalValue = globalThis.__LEGEND_INSTRUMENTATION_ENABLED__;
-  if (typeof globalValue === "boolean") {
-    return globalValue;
-  }
-  if (globalValue && typeof globalValue === "object") {
-    return Boolean(globalValue[debugName]);
-  }
-
-  const envValue = getEnvValue("EXPO_PUBLIC_LEGEND_INSTRUMENTATION") ?? getEnvValue("LEGEND_INSTRUMENTATION");
-  return envValue !== undefined ? isNamespaceEnabled(debugName, envValue) : false;
-}
-
-function getBenchmarkLogUrl() {
-  const globalValue = globalThis.__LEGEND_BENCHMARK_LOG_URL__;
-  if (typeof globalValue === "string") {
-    return globalValue;
-  }
-  if (globalValue === true) {
-    return "http://127.0.0.1:19395/log";
-  }
-
-  const envValue = getEnvValue("EXPO_PUBLIC_LEGEND_BENCHMARK_LOG_URL") ?? getEnvValue("LEGEND_BENCHMARK_LOG_URL");
-  if (!envValue || isFalseyFlag(envValue)) {
-    return null;
-  }
-  return isTruthyFlag(envValue) ? "http://127.0.0.1:19395/log" : envValue;
-}
-
-function sendBenchmarkLog(message: string) {
-  const url = getBenchmarkLogUrl();
-  if (url) {
-    fetch(url, {
-      body: message,
-      method: "POST",
-    }).catch(() => {});
-  }
+  return logger;
 }
 
 function debugLog(debugName: string | undefined, event: string, payload: Record<string, unknown>) {
-  if (isDebugLogEnabled(debugName)) {
-    debugSequence += 1;
-    const message = `${debugPrefix} ${event} ${JSON.stringify({
-      debugName,
-      seq: debugSequence,
-      t: Number(debugNowMs().toFixed(1)),
-      ...payload,
-    })}`;
-    console.info(message);
-    sendBenchmarkLog(message);
-  }
+  getDebugLogger(debugName)?.timing(event, () => ({
+    debugName,
+    t: Number(instrumentationNowMs().toFixed(1)),
+    ...payload,
+  }));
 }
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
@@ -307,7 +233,7 @@ function recordCallbackDebug(debugName: string | undefined, event: string, batch
     batch.count += 1;
     batch.first = batch.first === null ? index : Math.min(batch.first, index);
     batch.last = batch.last === null ? index : Math.max(batch.last, index);
-    batch.totalMs += debugNowMs() - startedAt;
+    batch.totalMs += instrumentationNowMs() - startedAt;
 
     if (batch.count === 1) {
       requestAnimationFrame(() => {
@@ -453,7 +379,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
     const loadedRowsState = rowsStateRef.current;
     if (loadedRowsState.document && requestRows) {
-      const requestStartedAt = debugNowMs();
+      const requestStartedAt = instrumentationNowMs();
       const safeStart = Math.max(0, Math.floor(start));
       const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
 
@@ -461,7 +387,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
         const result = requestRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
         debugLog(debugName, "rows.request", {
           count: safeEnd - safeStart,
-          durationMs: Number((debugNowMs() - requestStartedAt).toFixed(1)),
+          durationMs: Number((instrumentationNowMs() - requestStartedAt).toFixed(1)),
           force: options?.force === true,
           reason: options?.reason ?? "unknown",
           start: safeStart,
@@ -548,7 +474,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   );
   const hasRequestedInitialRangeRef = useRef(false);
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountStartedAtRef = useRef(debugNowMs());
+  const mountStartedAtRef = useRef(instrumentationNowMs());
   const hasLoggedFirstCommitRef = useRef(false);
   const hasLoggedFirstLegendListRef = useRef(false);
   const hasLoggedFirstLayoutRef = useRef(false);
@@ -595,7 +521,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     renderCountRef.current += 1;
     debugLog(debugName, "list.renderCommitted", {
       dataVersion,
-      elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+      elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
       itemCount,
       renderCount: renderCountRef.current,
     });
@@ -606,13 +532,13 @@ export function VirtualizedFixedDocumentList<TRow>({
       hasLoggedFirstCommitRef.current = true;
       debugLog(debugName, "list.commit.first", {
         dataVersion,
-        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
         itemCount,
       });
     } else {
       debugLog(debugName, "list.commit", {
         dataVersion,
-        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
         itemCount,
         renderCount: renderCountRef.current,
       });
@@ -631,12 +557,12 @@ export function VirtualizedFixedDocumentList<TRow>({
     if (list && !hasLoggedFirstLegendListRef.current) {
       hasLoggedFirstLegendListRef.current = true;
       debugLog(debugName, "list.legendRef.first", {
-        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
         itemCount,
       });
     } else {
       debugLog(debugName, "list.legendRef", {
-        elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+        elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
         hasRef: list !== null,
         itemCount,
       });
@@ -759,14 +685,14 @@ export function VirtualizedFixedDocumentList<TRow>({
     hasLoggedFirstLayoutRef.current = true;
     debugLog(debugName, "list.layout", {
       dataVersion,
-      elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+      elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
       itemCount,
     });
     debugLog(debugName, eventName, {
       dataVersion,
-      elapsedSinceMountMs: Number((debugNowMs() - mountStartedAtRef.current).toFixed(1)),
+      elapsedSinceMountMs: Number((instrumentationNowMs() - mountStartedAtRef.current).toFixed(1)),
       height,
       initialAlreadyRequested: hasRequestedInitialRangeRef.current,
       itemCount,
@@ -800,7 +726,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { debugName, requestRangesOnScroll } = latestPropsRef.current;
     const { contentOffset, layoutMeasurement } = event.nativeEvent;
-    const timestamp = debugNowMs();
+    const timestamp = instrumentationNowMs();
     const previousSample = lastScrollSampleRef.current;
     const elapsedMs = previousSample ? Math.max(1, timestamp - previousSample.timestamp) : 0;
     const scrollVelocity = previousSample ? Math.abs(contentOffset.y - previousSample.offsetY) / elapsedMs : 0;
@@ -832,7 +758,7 @@ export function VirtualizedFixedDocumentList<TRow>({
         getRow,
         renderRow,
       } = latestPropsRef.current;
-      const renderItemStartedAt = debugNowMs();
+      const renderItemStartedAt = instrumentationNowMs();
       const index = item ?? listIndex;
       if (!hasLoggedFirstRenderItemRef.current) {
         hasLoggedFirstRenderItemRef.current = true;
@@ -861,7 +787,7 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const getFixedItemSize = useCallback((item: number | undefined, listIndex: number) => {
     const { debugName, getItemSize, rowHeight } = latestPropsRef.current;
-    const startedAt = debugNowMs();
+    const startedAt = instrumentationNowMs();
     const index = item ?? listIndex;
     if (!hasLoggedFirstGetItemSizeRef.current) {
       hasLoggedFirstGetItemSizeRef.current = true;
@@ -878,7 +804,7 @@ export function VirtualizedFixedDocumentList<TRow>({
 
   const getLegendItemType = useCallback((item: number | undefined, listIndex: number) => {
     const { debugName, getItemType } = latestPropsRef.current;
-    const startedAt = debugNowMs();
+    const startedAt = instrumentationNowMs();
     const index = item ?? listIndex;
     if (!hasLoggedFirstGetItemTypeRef.current) {
       hasLoggedFirstGetItemTypeRef.current = true;
@@ -897,7 +823,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     const { dataKey, dataVersion, debugName, itemKeyVersion } = latestPropsRef.current;
     const keyVersion = itemKeyVersion ?? dataVersion;
     const dataKeyPrefix = dataKey === undefined ? "" : `${dataKey}:`;
-    const startedAt = debugNowMs();
+    const startedAt = instrumentationNowMs();
     const rowIndex = item ?? index;
     const key = keyVersion === undefined
       ? `${dataKeyPrefix}${rowIndex}`

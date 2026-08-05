@@ -27,6 +27,10 @@ export type CreateInstrumentationLoggerOptions = {
   timingLabel?: string;
 };
 
+export function instrumentationNowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
 function isDev() {
   return typeof __DEV__ !== "undefined" && __DEV__;
 }
