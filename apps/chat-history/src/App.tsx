@@ -60,6 +60,15 @@ const DEMO_STREAM_RESPONSE = [
   "The response continues for another paragraph to make the test unambiguous on large displays. While reading it, notice that the content itself is ordinary selectable text and that the composer remains visible below the list. The demo is still intentionally inert: sending only mutates the temporary in-memory data source used by this screen. Switching chats or reopening the application discards the generated turn, and no provider session, local transcript, or remote model is affected.",
   "This is the final portion of the fake response. By now the assistant row should be at least one screen tall, and on most window sizes it should be considerably taller. The final sentence marks the true end of the generated content so it is easy to identify whether LegendList stops at the correct location: this line should be the end, with only the normal small amount of bottom spacing after it.",
 ].join("\n\n");
+const chatHistoryListContentInset = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: CHAT_HISTORY_TITLEBAR_HEIGHT,
+};
+const chatHistoryListViewabilityConfig = {
+  startOffset: CHAT_HISTORY_TITLEBAR_HEIGHT,
+};
 const chatSidebarContentInset = {
   bottom: 0,
   left: 0,
@@ -230,7 +239,7 @@ function ChatSidebar({
 function TranscriptList({ document }: { document: ChatDocument }) {
   const listRef = useRef<LegendListRef>(null);
   const demoMessageSequenceRef = useRef(0);
-  const pendingAnchorIndexRef = useRef<number | undefined>(undefined);
+  const streamingDocumentIdRef = useRef<string | undefined>(undefined);
   const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
   const [anchor, setAnchor] = useState<{ documentId: string; index: number } | undefined>(undefined);
   const [composerHeight, setComposerHeight] = useState(CHAT_COMPOSER_ESTIMATED_HEIGHT);
@@ -263,22 +272,12 @@ function TranscriptList({ document }: { document: ChatDocument }) {
     }, delay);
     activeTimers.add(timer);
   }, [activeTimers]);
-  const handleAnchorReady = useCallback(({
-    anchorIndex: readyAnchorIndex,
-  }: {
-    anchorIndex: number | undefined;
-  }) => {
-    if (readyAnchorIndex !== undefined && pendingAnchorIndexRef.current === readyAnchorIndex) {
-      pendingAnchorIndexRef.current = undefined;
-      void listRef.current?.scrollToEnd({ animated: true });
-    }
-  }, []);
   const anchoredEndSpace = useMemo(() => anchorIndex === undefined
     ? undefined
     : {
       anchorIndex,
-      onReady: handleAnchorReady,
-    }, [anchorIndex, handleAnchorReady]);
+      anchorOffset: CHAT_HISTORY_TITLEBAR_HEIGHT,
+    }, [anchorIndex]);
   const listContentStyle = useMemo(() => [
     styles.listContent,
     { paddingBottom: composerHeight + CHAT_COMPOSER_CONTENT_GAP },
@@ -290,38 +289,44 @@ function TranscriptList({ document }: { document: ChatDocument }) {
     dataSource.appendDemoMessage({
       id,
       role: "assistant",
+      streaming: true,
       text: words[0],
     });
 
     const streamNextWord = () => {
       wordCount += 1;
+      const streamContinues = wordCount < words.length;
       dataSource.updateDemoMessage(id, words.slice(0, wordCount).join(" "));
-      if (wordCount < words.length) {
+      if (streamContinues) {
         schedule(streamNextWord, DEMO_STREAM_WORD_DELAY_MS);
       } else {
+        dataSource.finishDemoMessage(id);
+        streamingDocumentIdRef.current = undefined;
         setStreamingDocumentId(undefined);
       }
     };
     schedule(streamNextWord, DEMO_STREAM_WORD_DELAY_MS);
   }, [dataSource, document.documentId, schedule]);
   const handleSendDemoMessage = useCallback((text: string) => {
-    if (!isStreaming) {
+    if (streamingDocumentIdRef.current === undefined) {
+      streamingDocumentIdRef.current = document.documentId;
       const userIndex = dataSource.appendDemoMessage({
         id: `${document.documentId}:demo-user:${++demoMessageSequenceRef.current}`,
         role: "user",
         text,
       });
-      pendingAnchorIndexRef.current = userIndex;
       setAnchor({ documentId: document.documentId, index: userIndex });
       setStreamingDocumentId(document.documentId);
+      requestAnimationFrame(() => {
+        void listRef.current?.scrollToEnd({ animated: true });
+      });
       schedule(streamDemoResponse, DEMO_STREAM_START_DELAY_MS);
     }
-  }, [dataSource, document.documentId, isStreaming, schedule, streamDemoResponse]);
-
+  }, [dataSource, document.documentId, schedule, streamDemoResponse]);
   useEffect(() => () => {
     activeTimers.forEach(clearTimeout);
     activeTimers.clear();
-    pendingAnchorIndexRef.current = undefined;
+    streamingDocumentIdRef.current = undefined;
     document.releaseNativeResources();
   }, [activeTimers, document]);
 
@@ -330,6 +335,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
       <LegendList
         anchoredEndSpace={anchoredEndSpace}
         contentContainerStyle={listContentStyle}
+        contentInset={chatHistoryListContentInset}
         dataKey={document.documentId}
         dataSource={dataSource}
         estimatedItemSize={500}
@@ -339,6 +345,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
         ref={listRef}
         renderItem={renderItem}
         style={styles.list}
+        viewabilityConfig={chatHistoryListViewabilityConfig}
       />
       <View pointerEvents="box-none" style={styles.composerOverlay}>
         <ChatComposer
