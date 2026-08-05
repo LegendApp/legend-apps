@@ -10,6 +10,7 @@ type MutationListener = (batch: DataSourceMutationBatch) => void;
 export type DemoTranscriptMessage = {
   id: string;
   role: "assistant" | "user";
+  streaming?: boolean;
   text: string;
 };
 
@@ -77,6 +78,22 @@ export class TranscriptDataSource implements LegendListDataSource<TranscriptList
       const message = this.demoMessages[demoIndex];
       if (message.text !== text) {
         this.demoMessages[demoIndex] = { ...message, text };
+        this.publish(this.getLength(), [{
+          type: "update",
+          index: this.document.rowCount + demoIndex,
+          count: 1,
+          layout: "preserve",
+        }]);
+      }
+    }
+  }
+
+  finishDemoMessage(id: string) {
+    const demoIndex = this.demoMessages.findIndex((message) => message.id === id);
+    if (demoIndex >= 0) {
+      const message = this.demoMessages[demoIndex];
+      if (message.streaming) {
+        this.demoMessages[demoIndex] = { ...message, streaming: false };
         this.publish(this.getLength(), [{
           type: "update",
           index: this.document.rowCount + demoIndex,

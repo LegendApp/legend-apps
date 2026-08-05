@@ -10,7 +10,7 @@ export function DemoTranscriptRow({ message }: { message: DemoTranscriptMessage 
           ? "max-w-[82%] self-end rounded-2xl bg-surface-muted px-4 py-3"
           : "w-full max-w-[92%]"}
       >
-        <Text className="text-[15px] leading-[22px] text-foreground" selectable>
+        <Text className="text-[15px] leading-[22px] text-foreground" selectable={!message.streaming}>
           {message.text}
         </Text>
       </View>
