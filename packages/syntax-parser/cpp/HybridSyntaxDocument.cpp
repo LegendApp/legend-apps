@@ -2,135 +2,25 @@
 
 #include <algorithm>
 #include <chrono>
-#include <fstream>
-#include <sstream>
 #include <stdexcept>
-#include <string_view>
 #include <thread>
-
-#if defined(__unix__) || defined(__APPLE__)
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#endif
 
 namespace margelo::nitro::legendapps::syntaxparser {
 
 namespace {
 
-class StringSyntaxSource final : public SyntaxSource {
-public:
-  explicit StringSyntaxSource(std::string source) : source_(std::move(source)) {}
-
-  const char* data() const noexcept override {
-    return source_.data();
-  }
-
-  size_t size() const noexcept override {
-    return source_.size();
-  }
-
-  size_t externalMemorySize() const noexcept override {
-    return source_.capacity();
-  }
-
-private:
-  std::string source_;
-};
-
-#if defined(__unix__) || defined(__APPLE__)
-class MappedSyntaxSource final : public SyntaxSource {
-public:
-  MappedSyntaxSource(int fd, const char* data, size_t size) : fd_(fd), data_(data), size_(size) {}
-
-  ~MappedSyntaxSource() override {
-    if (data_ != nullptr && size_ > 0) {
-      munmap(const_cast<char*>(data_), size_);
-    }
-    if (fd_ >= 0) {
-      close(fd_);
-    }
-  }
-
-  const char* data() const noexcept override {
-    return data_;
-  }
-
-  size_t size() const noexcept override {
-    return size_;
-  }
-
-  size_t externalMemorySize() const noexcept override {
-    return size_;
-  }
-
-private:
-  int fd_ = -1;
-  const char* data_ = nullptr;
-  size_t size_ = 0;
-};
-#endif
-
-std::shared_ptr<const SyntaxSource> makeStringSource(std::string source) {
-  return std::make_shared<StringSyntaxSource>(std::move(source));
-}
-
 std::string normalizeFilePath(const std::string& filePath) {
-  constexpr auto prefix = std::string_view("file://");
-  if (filePath.starts_with(prefix)) {
-    return filePath.substr(prefix.size());
-  }
-  return filePath;
+  return ::legendapps::nativetextsource::normalizeTextFilePath(filePath);
 }
-
-#if !defined(__unix__) && !defined(__APPLE__)
-std::string readFile(const std::string& filePath) {
-  std::ifstream input(normalizeFilePath(filePath), std::ios::binary);
-  if (!input) {
-    throw std::runtime_error("Failed to read syntax file: " + filePath);
-  }
-  std::ostringstream buffer;
-  buffer << input.rdbuf();
-  return buffer.str();
-}
-#endif
-
-#if defined(__unix__) || defined(__APPLE__)
-std::shared_ptr<const SyntaxSource> mapFileSource(const std::string& filePath) {
-  const std::string normalizedPath = normalizeFilePath(filePath);
-  const int fd = open(normalizedPath.c_str(), O_RDONLY);
-  if (fd < 0) {
-    throw std::runtime_error("Failed to read syntax file: " + filePath);
-  }
-
-  struct stat fileStat {};
-  if (fstat(fd, &fileStat) != 0) {
-    close(fd);
-    throw std::runtime_error("Failed to stat syntax file: " + filePath);
-  }
-
-  if (fileStat.st_size <= 0) {
-    close(fd);
-    return makeStringSource("");
-  }
-
-  void* data = mmap(nullptr, static_cast<size_t>(fileStat.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
-  if (data == MAP_FAILED) {
-    close(fd);
-    throw std::runtime_error("Failed to map syntax file: " + filePath);
-  }
-
-  return std::make_shared<MappedSyntaxSource>(fd, static_cast<const char*>(data), static_cast<size_t>(fileStat.st_size));
-}
-#endif
 
 std::shared_ptr<const SyntaxSource> readFileSource(const std::string& filePath) {
-#if defined(__unix__) || defined(__APPLE__)
-  return mapFileSource(filePath);
-#else
-  return makeStringSource(readFile(filePath));
-#endif
+  return ::legendapps::nativetextsource::readTextFileSource(
+      filePath,
+      {
+          "Failed to read syntax file: " + filePath,
+          "Failed to stat syntax file: " + filePath,
+          "Failed to map syntax file: " + filePath,
+      });
 }
 
 std::vector<SyntaxLineRange> indexLines(const SyntaxSource& source) {

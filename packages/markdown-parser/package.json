@@ -4,6 +4,9 @@
   "private": true,
   "main": "src/index.ts",
   "react-native": "src/index.ts",
+  "dependencies": {
+    "@legend-apps/native-text-source": "workspace:*"
+  },
   "peerDependencies": {
     "react": "catalog:",
     "react-native": "catalog:"

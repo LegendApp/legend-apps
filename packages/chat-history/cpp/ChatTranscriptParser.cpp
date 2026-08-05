@@ -4,12 +4,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <fcntl.h>
 #include <iterator>
 #include <stdexcept>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -19,51 +15,6 @@ namespace margelo::nitro::legendapps::chathistory {
 namespace {
 
 using Clock = std::chrono::steady_clock;
-
-struct MappedChatSource final : ChatSource {
-  MappedChatSource(int descriptor, const char* mappedData, size_t mappedSize)
-      : descriptor_(descriptor), data_(mappedData), size_(mappedSize) {}
-
-  ~MappedChatSource() override {
-    if (data_ != nullptr && size_ > 0) {
-      munmap(const_cast<char*>(data_), size_);
-    }
-    if (descriptor_ >= 0) {
-      close(descriptor_);
-    }
-  }
-
-  const char* data() const noexcept override {
-    return data_;
-  }
-
-  size_t size() const noexcept override {
-    return size_;
-  }
-
-  size_t externalMemorySize() const noexcept override {
-    return size_;
-  }
-
-private:
-  int descriptor_ = -1;
-  const char* data_ = nullptr;
-  size_t size_ = 0;
-};
-
-struct EmptyChatSource final : ChatSource {
-  const char* data() const noexcept override {
-    return "";
-  }
-
-  size_t size() const noexcept override {
-    return 0;
-  }
-
-  size_t externalMemorySize() const noexcept override {
-    return 0;
-  }
-};
 
 struct LineRange {
   size_t start = 0;
@@ -719,30 +670,9 @@ ChatParseResult parseClaude(
 } // namespace
 
 std::shared_ptr<const ChatSource> mapChatFile(const std::string& filePath) {
-  const int descriptor = open(filePath.c_str(), O_RDONLY);
-  if (descriptor < 0) {
-    throw std::runtime_error("Failed to open transcript");
-  }
-
-  struct stat fileStat {};
-  if (fstat(descriptor, &fileStat) != 0) {
-    close(descriptor);
-    throw std::runtime_error("Failed to stat transcript");
-  }
-  if (fileStat.st_size <= 0) {
-    close(descriptor);
-    return std::make_shared<EmptyChatSource>();
-  }
-
-  void* data = mmap(nullptr, static_cast<size_t>(fileStat.st_size), PROT_READ, MAP_PRIVATE, descriptor, 0);
-  if (data == MAP_FAILED) {
-    close(descriptor);
-    throw std::runtime_error("Failed to map transcript");
-  }
-  return std::make_shared<MappedChatSource>(
-      descriptor,
-      static_cast<const char*>(data),
-      static_cast<size_t>(fileStat.st_size));
+  return ::legendapps::nativetextsource::readTextFileSource(
+      filePath,
+      {"Failed to open transcript", "Failed to stat transcript", "Failed to map transcript"});
 }
 
 ChatParseResult parseChatFile(

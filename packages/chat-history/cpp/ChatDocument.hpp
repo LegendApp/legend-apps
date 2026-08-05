@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChatJson.hpp"
+#include "NativeTextSource.hpp"
 
 #include "../nitrogen/generated/shared/c++/ChatDocumentTiming.hpp"
 
@@ -13,13 +14,7 @@
 
 namespace margelo::nitro::legendapps::chathistory {
 
-class ChatSource {
-public:
-  virtual ~ChatSource() = default;
-  virtual const char* data() const noexcept = 0;
-  virtual size_t size() const noexcept = 0;
-  virtual size_t externalMemorySize() const noexcept = 0;
-};
+using ChatSource = ::legendapps::nativetextsource::NativeTextSource;
 
 struct ChatRow {
   struct FileChange {

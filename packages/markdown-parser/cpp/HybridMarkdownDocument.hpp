@@ -1,5 +1,7 @@
 #pragma once
 
+#include "NativeTextSource.hpp"
+
 #include "../nitrogen/generated/shared/c++/HybridMarkdownDocumentSpec.hpp"
 #include "../nitrogen/generated/shared/c++/MarkdownBlockMetadata.hpp"
 #include "../nitrogen/generated/shared/c++/MarkdownRenderBlock.hpp"
@@ -16,13 +18,7 @@ class HybridMarkdownDocument;
 
 void registerMarkdownDocument(std::shared_ptr<HybridMarkdownDocument> document);
 
-class MarkdownSource {
-public:
-  virtual ~MarkdownSource() = default;
-  virtual const char* data() const noexcept = 0;
-  virtual size_t size() const noexcept = 0;
-  virtual size_t externalMemorySize() const noexcept = 0;
-};
+using MarkdownSource = ::legendapps::nativetextsource::NativeTextSource;
 
 enum class MarkdownBlockType {
   Document,

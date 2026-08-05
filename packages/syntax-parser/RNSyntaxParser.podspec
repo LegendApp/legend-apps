@@ -32,6 +32,7 @@ Pod::Spec.new do |s|
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/packages/tml-cpp/build",
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/packages/tml-cpp/build/oniguruma/include",
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/thirdparty/rapidjson/include",
+      "$(PODS_TARGET_SRCROOT)/../native-text-source/cpp",
     ].join(" "),
   }
   s.dependency "React-Core"

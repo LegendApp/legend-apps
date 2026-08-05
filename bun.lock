@@ -269,6 +269,9 @@
     "packages/chat-history": {
       "name": "@legend-apps/chat-history",
       "version": "0.0.0",
+      "dependencies": {
+        "@legend-apps/native-text-source": "workspace:*",
+      },
       "devDependencies": {
         "nitrogen": "0.35.6",
         "react-native-nitro-modules": "0.35.6",
@@ -457,6 +460,9 @@
     "packages/markdown-parser": {
       "name": "@legend-apps/markdown-parser",
       "version": "0.0.0",
+      "dependencies": {
+        "@legend-apps/native-text-source": "workspace:*",
+      },
       "devDependencies": {
         "nitrogen": "0.35.6",
         "react-native-nitro-modules": "0.35.6",
@@ -501,6 +507,10 @@
         "react": "catalog:",
         "react-native": "catalog:",
       },
+    },
+    "packages/native-text-source": {
+      "name": "@legend-apps/native-text-source",
+      "version": "0.0.0",
     },
     "packages/recent-documents": {
       "name": "@legend-apps/recent-documents",
@@ -592,6 +602,7 @@
       "name": "@legend-apps/syntax-parser",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-apps/native-text-source": "workspace:*",
         "@legend-apps/storage": "workspace:*",
         "expo-file-system": "~19.0.21",
       },
@@ -1093,6 +1104,8 @@
     "@legend-apps/native-menu": ["@legend-apps/native-menu@workspace:packages/native-menu"],
 
     "@legend-apps/native-select": ["@legend-apps/native-select@workspace:packages/native-select"],
+
+    "@legend-apps/native-text-source": ["@legend-apps/native-text-source@workspace:packages/native-text-source"],
 
     "@legend-apps/recent-documents": ["@legend-apps/recent-documents@workspace:packages/recent-documents"],
 

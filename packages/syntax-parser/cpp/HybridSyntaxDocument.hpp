@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NativeTextSource.hpp"
 #include "SyntaxHighlighter.hpp"
 
 #include "../nitrogen/generated/shared/c++/HybridSyntaxDocumentSpec.hpp"
@@ -14,13 +15,7 @@
 
 namespace margelo::nitro::legendapps::syntaxparser {
 
-class SyntaxSource {
-public:
-  virtual ~SyntaxSource() = default;
-  virtual const char* data() const noexcept = 0;
-  virtual size_t size() const noexcept = 0;
-  virtual size_t externalMemorySize() const noexcept = 0;
-};
+using SyntaxSource = ::legendapps::nativetextsource::NativeTextSource;
 
 struct SyntaxLineRange {
   size_t start = 0;

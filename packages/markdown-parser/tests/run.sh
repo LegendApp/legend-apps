@@ -12,6 +12,7 @@ clang++ \
   -Werror \
   -I"$ROOT_DIR/packages/markdown-parser/tests/stubs" \
   -I"$ROOT_DIR/packages/markdown-parser/nitrogen/generated/shared/c++" \
+  -I"$ROOT_DIR/packages/native-text-source/cpp" \
   "$ROOT_DIR/packages/markdown-parser/tests/markdown_document_transactions_test.cpp" \
   "$ROOT_DIR/packages/markdown-parser/cpp/MarkdownBlockParser.cpp" \
   "$ROOT_DIR/packages/markdown-parser/cpp/HybridMarkdownDocument.cpp" \

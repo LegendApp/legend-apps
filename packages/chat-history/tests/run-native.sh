@@ -12,6 +12,7 @@ clang++ \
   -Werror \
   -I"$ROOT_DIR/packages/markdown-parser/tests/stubs" \
   -I"$ROOT_DIR/packages/chat-history/nitrogen/generated/shared/c++" \
+  -I"$ROOT_DIR/packages/native-text-source/cpp" \
   "$ROOT_DIR/packages/chat-history/tests/chat_history_test.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatJson.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatCatalog.cpp" \

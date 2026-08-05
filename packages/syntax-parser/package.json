@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "dependencies": {
+    "@legend-apps/native-text-source": "workspace:*",
     "@legend-apps/storage": "workspace:*",
     "expo-file-system": "~19.0.21"
   },
