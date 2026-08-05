@@ -238,6 +238,12 @@ const diffListContentInset = {
   top: diffTitlebarTopInset,
 };
 const diffListViewabilityConfig = { startOffset: diffTitlebarTopInset };
+const diffSidebarContentInset = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: diffSidebarTopInset,
+};
 const emptyDiffListIndexByFileIndex: ReadonlyMap<number, number> = new Map();
 const emptyDiffItemIndexes: Array<number | undefined> = [];
 
@@ -667,6 +673,7 @@ type DiffLoadedBodyProps = {
 type DiffLoadingSplitBodyProps = {
   backgroundColor: string;
   handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
+  sidebarBackgroundColor: string;
   splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
@@ -1332,6 +1339,7 @@ const DiffSplitBody = memo(function DiffSplitBody({
   debugPayload,
   handleSplitViewResize,
   sidebar,
+  sidebarBackgroundColor,
   splitPaneMetrics$,
   sidebarCollapsed,
   sidebarWidth,
@@ -1359,6 +1367,8 @@ const DiffSplitBody = memo(function DiffSplitBody({
         onSplitViewDidResize={handleSplitViewResize}
         sidebarCollapsed={sidebarCollapsed}
         sidebarMinWidth={defaultDiffSidebarWidth}
+        sidebarTitlebarOverlayColor={sidebarBackgroundColor}
+        sidebarTitlebarOverlayOpacity={0.75}
         sidebarWidth={sidebarWidth}
         style={styles.content}
       >
@@ -1721,7 +1731,7 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
 }: DiffLoadedSidebarPaneProps) {
   const splitPaneMetrics = useValue(splitPaneMetrics$);
   const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset) : 0;
+  const sidebarListHeight = isSidebarLayoutReady ? splitPaneMetrics.sidebarHeight : 0;
   const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
   const sidebarListStyle = useMemo(
     () => [styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }],
@@ -1746,6 +1756,8 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
       {shouldRenderSidebarList ? (
         state.files.length > 0 ? (
           <LegendList
+            contentContainerStyle={styles.sidebarContent}
+            contentInset={diffSidebarContentInset}
             data={sidebarEntries}
             estimatedItemSize={diffSidebarFileRowHeight}
             getFixedItemSize={getDiffSidebarItemSize}
@@ -5518,6 +5530,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             state={state}
           />
         )}
+        sidebarBackgroundColor={diffPalette.sidebarBackground}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
         splitPaneMetrics$={splitPaneMetrics$}
@@ -5545,6 +5558,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             <View style={styles.sidebarList} />
           </View>
         )}
+        sidebarBackgroundColor={diffPalette.sidebarBackground}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
         splitPaneMetrics$={splitPaneMetrics$}
@@ -5856,8 +5870,9 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     flex: 1,
+  },
+  sidebarContent: {
     paddingBottom: 8,
-    paddingTop: diffSidebarTopInset,
   },
   sidebarFile: {
     borderColor: "transparent",
