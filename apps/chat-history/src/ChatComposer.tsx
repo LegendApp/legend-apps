@@ -40,7 +40,7 @@ export function ChatComposer({
           accessibilityLabel={PLACEHOLDER}
           className="text-foreground"
           editable={!disabled}
-          multiline
+          multiline={false}
           onChangeText={setText}
           onSubmitEditing={send}
           placeholder={PLACEHOLDER}
@@ -55,7 +55,8 @@ export function ChatComposer({
           accessibilityRole="button"
           className="ml-3 h-8 w-8 items-center justify-center rounded-full bg-primary"
           disabled={!canSend}
-          onPress={send}
+          focusable={false}
+          onPressIn={send}
           style={!canSend ? styles.disabledButton : undefined}
         >
           <Text className="text-base font-semibold text-primary-foreground">↑</Text>
