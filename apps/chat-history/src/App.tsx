@@ -38,6 +38,7 @@ Uniwind.setTheme("system");
 const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
 const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
 const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
+const CHAT_HISTORY_SIDEBAR_TOP_INSET = 42;
 const CHAT_COMPOSER_ESTIMATED_HEIGHT = 80;
 const CHAT_COMPOSER_CONTENT_GAP = 24;
 const DEMO_STREAM_START_DELAY_MS = 400;
@@ -91,6 +92,7 @@ function ChatSidebar({
     <View className="flex-1 bg-surface-muted pt-10">
       <Text className="px-3 pb-3 text-lg font-bold text-foreground">Chat History</Text>
       <Sidebar
+        contentInsetTop={CHAT_HISTORY_SIDEBAR_TOP_INSET}
         defaultRowHeight={54}
         onSidebarSelectionChange={(event) => {
           onSelect(event.nativeEvent.id);
