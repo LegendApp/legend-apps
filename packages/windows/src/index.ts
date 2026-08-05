@@ -6,6 +6,10 @@ export {
 export type { WindowConfigEntry, WindowsConfig } from "./types";
 export { useWindowFocusEffect } from "./useWindowFocusEffect";
 export {
+  usePrimaryWindowLifecycle,
+  type UsePrimaryWindowLifecycleOptions,
+} from "./usePrimaryWindowLifecycle";
+export {
   createBorderlessOverlayWindowStyle,
   createDocumentWindowStyle,
   createUnifiedToolbarWindowStyle,

@@ -2,8 +2,8 @@ import { openFileDialog } from "@legend-apps/file-dialog";
 import { watchFiles } from "@legend-apps/file-system-watcher";
 import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } from "@legend-apps/native-menu";
 import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
-import { addApplicationReopenRequestedListener, addWindowClosedListener } from "@legend-apps/window-manager";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePrimaryWindowLifecycle } from "@legend-apps/windows";
+import { useEffect, useMemo, useState } from "react";
 
 export type DocumentAppController = {
   isDocumentWindowOpen: () => boolean;
@@ -139,7 +139,6 @@ export function useDocumentAppController({
   reportError,
   windowIdentifier,
 }: UseDocumentAppControllerOptions) {
-  const didOpenDocumentWindowRef = useRef(false);
   const [isDocumentWindowOpen, setDocumentWindowOpen] = useState(false);
   const controller = useMemo<DocumentAppController>(() => ({
     isDocumentWindowOpen: () => isDocumentWindowOpen,
@@ -168,44 +167,13 @@ export function useDocumentAppController({
     return undefined;
   }, [controller, onRecentDocumentOpen, reportError]);
 
-  useEffect(() => {
-    if (onReopenRequested) {
-      const subscription = addApplicationReopenRequestedListener((event) => {
-        if (!event.hasVisibleWindows) {
-          Promise.resolve(onReopenRequested(controller)).catch(reportError);
-        }
-      });
-
-      return () => {
-        subscription.remove();
-      };
-    }
-
-    return undefined;
-  }, [controller, onReopenRequested, reportError]);
-
-  useEffect(() => {
-    if (windowIdentifier) {
-      const subscription = addWindowClosedListener((event) => {
-        if (event.identifier === windowIdentifier) {
-          controller.setDocumentWindowOpen(false);
-        }
-      });
-
-      return () => {
-        subscription.remove();
-      };
-    }
-
-    return undefined;
-  }, [controller, windowIdentifier]);
-
-  useEffect(() => {
-    if (!didOpenDocumentWindowRef.current) {
-      didOpenDocumentWindowRef.current = true;
-      Promise.resolve(onInitialOpen(launchArguments, controller)).catch(reportError);
-    }
-  }, [controller, launchArguments, onInitialOpen, reportError]);
+  usePrimaryWindowLifecycle({
+    onInitialOpen: () => onInitialOpen(launchArguments, controller),
+    onReopenRequested: onReopenRequested ? () => onReopenRequested(controller) : undefined,
+    onWindowClosed: windowIdentifier ? () => controller.setDocumentWindowOpen(false) : undefined,
+    reportError,
+    windowIdentifier,
+  });
 
   return controller;
 }

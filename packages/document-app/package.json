@@ -8,6 +8,6 @@
     "@legend-apps/file-system-watcher": "0.0.0",
     "@legend-apps/native-menu": "0.0.0",
     "@legend-apps/recent-documents": "0.0.0",
-    "@legend-apps/window-manager": "0.0.0"
+    "@legend-apps/windows": "0.0.0"
   }
 }

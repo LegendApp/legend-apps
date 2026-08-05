@@ -12,11 +12,12 @@ import {
   type ChatSummary,
 } from "@legend-apps/chat-history";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { addApplicationReopenRequestedListener, setWindowOptions } from "@legend-apps/window-manager";
+import { setWindowOptions } from "@legend-apps/window-manager";
 import {
   createUnifiedToolbarWindowStyle,
   createWindowsNavigator,
   type WindowsConfig,
+  usePrimaryWindowLifecycle,
   useWindowId,
 } from "@legend-apps/windows";
 import {
@@ -540,15 +541,11 @@ function reportChatHistoryWindowError(error: unknown) {
 }
 
 export function App() {
-  useEffect(() => {
-    openChatHistoryWindow().catch(reportChatHistoryWindowError);
-    const reopenSubscription = addApplicationReopenRequestedListener(({ hasVisibleWindows }) => {
-      if (!hasVisibleWindows) {
-        openChatHistoryWindow().catch(reportChatHistoryWindowError);
-      }
-    });
-    return () => reopenSubscription.remove();
-  }, []);
+  usePrimaryWindowLifecycle({
+    onInitialOpen: openChatHistoryWindow,
+    onReopenRequested: openChatHistoryWindow,
+    reportError: reportChatHistoryWindowError,
+  });
 
   return null;
 }
