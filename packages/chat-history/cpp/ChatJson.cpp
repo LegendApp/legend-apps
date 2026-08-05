@@ -77,6 +77,23 @@ std::optional<size_t> ChatJson::skipString(size_t position, size_t end) const {
   return std::nullopt;
 }
 
+std::optional<size_t> ChatJson::memberValueStart(
+    size_t position,
+    size_t end,
+    std::string_view key) const {
+  position = skipWhitespace(position, end);
+  const size_t keyStart = position;
+  const auto keyEnd = skipString(position, end);
+  if (!keyEnd || !stringEquals(JsonRange{keyStart, *keyEnd, JsonValueKind::String}, key)) {
+    return std::nullopt;
+  }
+  position = skipWhitespace(*keyEnd, end);
+  if (position >= end || data_[position] != ':') {
+    return std::nullopt;
+  }
+  return skipWhitespace(position + 1, end);
+}
+
 std::optional<size_t> ChatJson::skipValue(size_t position, size_t end) const {
   const size_t boundedEnd = std::min(end, size_);
   position = skipWhitespace(position, boundedEnd);
@@ -177,19 +194,53 @@ std::optional<JsonRange> ChatJson::topLevelObject(size_t start, size_t end) cons
   return std::nullopt;
 }
 
-bool ChatJson::topLevelStringMemberEquals(
-    size_t start,
-    size_t end,
-    std::string_view key,
-    std::string_view expected) const {
-  const size_t position = skipWhitespace(start, end);
-  bool matches = false;
-  const auto object = topLevelObject(position, end);
-  if (object) {
-    const auto value = member(*object, key);
-    matches = value && stringEquals(*value, expected);
+std::optional<JsonRange> ChatJson::orderedMember(
+    const JsonRange& object,
+    size_t& cursor,
+    std::string_view key) const {
+  std::optional<JsonRange> result;
+  if (object.kind == JsonValueKind::Object && object.end <= size_) {
+    const auto valueStart = memberValueStart(cursor, object.end, key);
+    const auto valueEnd = valueStart ? skipValue(*valueStart, object.end) : std::nullopt;
+    if (valueStart && valueEnd) {
+      const size_t separator = skipWhitespace(*valueEnd, object.end);
+      if (separator < object.end && data_[separator] == ',') {
+        result = JsonRange{*valueStart, *valueEnd, kindAt(*valueStart)};
+        cursor = separator + 1;
+      }
+    }
   }
-  return matches;
+  return result;
+}
+
+std::optional<JsonRange> ChatJson::orderedTrailingMember(
+    const JsonRange& object,
+    size_t cursor,
+    std::string_view key) const {
+  std::optional<JsonRange> result;
+  if (object.kind == JsonValueKind::Object && object.end <= size_ && object.end > object.start + 1) {
+    const auto valueStart = memberValueStart(cursor, object.end, key);
+    size_t valueEnd = object.end - 1;
+    while (valueStart && valueEnd > *valueStart) {
+      const char value = data_[valueEnd - 1];
+      if (value != ' ' && value != '\t' && value != '\r' && value != '\n') {
+        break;
+      }
+      valueEnd -= 1;
+    }
+    if (valueStart && valueEnd > *valueStart) {
+      const JsonValueKind kind = kindAt(*valueStart);
+      const char last = data_[valueEnd - 1];
+      const bool matchingEnd = (kind == JsonValueKind::Object && last == '}')
+          || (kind == JsonValueKind::Array && last == ']')
+          || (kind == JsonValueKind::String && last == '"')
+          || kind == JsonValueKind::Primitive;
+      if (matchingEnd) {
+        result = JsonRange{*valueStart, valueEnd, kind};
+      }
+    }
+  }
+  return result;
 }
 
 std::optional<JsonRange> ChatJson::member(const JsonRange& object, std::string_view key) const {

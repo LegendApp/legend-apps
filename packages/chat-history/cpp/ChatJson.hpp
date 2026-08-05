@@ -32,11 +32,14 @@ public:
 
   std::optional<JsonRange> root(size_t start, size_t end) const;
   std::optional<JsonRange> topLevelObject(size_t start, size_t end) const;
-  bool topLevelStringMemberEquals(
-      size_t start,
-      size_t end,
-      std::string_view key,
-      std::string_view expected) const;
+  std::optional<JsonRange> orderedMember(
+      const JsonRange& object,
+      size_t& cursor,
+      std::string_view key) const;
+  std::optional<JsonRange> orderedTrailingMember(
+      const JsonRange& object,
+      size_t cursor,
+      std::string_view key) const;
   std::optional<JsonRange> member(const JsonRange& object, std::string_view key) const;
   bool forEachObjectMember(
       const JsonRange& object,
@@ -49,6 +52,7 @@ public:
 
 private:
   size_t skipWhitespace(size_t position, size_t end) const;
+  std::optional<size_t> memberValueStart(size_t position, size_t end, std::string_view key) const;
   std::optional<size_t> skipString(size_t position, size_t end) const;
   std::optional<size_t> skipValue(size_t position, size_t end) const;
   JsonValueKind kindAt(size_t position) const;

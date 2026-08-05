@@ -420,13 +420,6 @@ ChatParseResult parseCodex(
     if ((lineIndex & 0xff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
       throw std::runtime_error("Chat open cancelled");
     }
-    if (json.topLevelStringMemberEquals(
-            lines[lineIndex].start,
-            lines[lineIndex].end,
-            "type",
-            "compacted")) {
-      continue;
-    }
     const auto root = json.topLevelObject(lines[lineIndex].start, lines[lineIndex].end);
     if (!root || root->kind != JsonValueKind::Object) {
       result.warningCount += 1;
@@ -435,20 +428,36 @@ ChatParseResult parseCodex(
     std::string recordType;
     std::optional<JsonRange> payload;
     std::optional<JsonRange> timestamp;
-    const bool validRecord = json.forEachObjectMember(
-        *root,
-        [&](const JsonRange& key, const JsonRange& value) {
-          if (json.stringEquals(key, "type")) {
-            recordType = json.stringValue(value);
-          } else if (json.stringEquals(key, "payload")) {
-            payload = value;
-          } else if (json.stringEquals(key, "timestamp")) {
-            timestamp = value;
-          }
-          return true;
-        });
+    size_t cursor = root->start + 1;
+    timestamp = json.orderedMember(*root, cursor, "timestamp");
+    const auto recordTypeRange = timestamp
+        ? json.orderedMember(*root, cursor, "type")
+        : std::nullopt;
+    payload = recordTypeRange
+        ? json.orderedTrailingMember(*root, cursor, "payload")
+        : std::nullopt;
+    bool validRecord = timestamp && recordTypeRange && payload;
+    if (validRecord) {
+      recordType = json.stringValue(*recordTypeRange);
+    } else {
+      validRecord = json.forEachObjectMember(
+          *root,
+          [&](const JsonRange& key, const JsonRange& value) {
+            if (json.stringEquals(key, "type")) {
+              recordType = json.stringValue(value);
+            } else if (json.stringEquals(key, "payload")) {
+              payload = value;
+            } else if (json.stringEquals(key, "timestamp")) {
+              timestamp = value;
+            }
+            return true;
+          });
+    }
     if (!validRecord) {
       result.warningCount += 1;
+      continue;
+    }
+    if (recordType == "compacted") {
       continue;
     }
     if ((recordType == "session_meta" || recordType == "turn_context") && payload && payload->kind == JsonValueKind::Object) {
