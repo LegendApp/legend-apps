@@ -23,6 +23,8 @@ export interface NativeProps extends ViewProps {
   onSplitViewDidResize?: DirectEventHandler<SidebarSplitViewResizeEvent>;
   sidebarCollapsed?: boolean;
   sidebarMinWidth?: Double;
+  sidebarTitlebarOverlayColor?: string;
+  sidebarTitlebarOverlayOpacity?: Double;
   sidebarWidth?: Double;
 }
 

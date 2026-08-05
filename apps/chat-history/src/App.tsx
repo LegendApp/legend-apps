@@ -8,6 +8,7 @@ import {
   type ChatSummary,
 } from "@legend-apps/chat-history";
 import { Sidebar, SidebarItem } from "@legend-apps/sidebar";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
 import {
   createUnifiedToolbarWindowStyle,
@@ -21,7 +22,7 @@ import {
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { Uniwind } from "uniwind";
+import { Uniwind, useUniwind } from "uniwind";
 import { ChatComposer } from "./ChatComposer";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
@@ -32,7 +33,7 @@ import {
 } from "./TranscriptDataSource";
 import { TranscriptRow } from "./TranscriptRow";
 
-Uniwind.setTheme("light");
+Uniwind.setTheme("system");
 
 const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
 const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
@@ -258,12 +259,14 @@ function TranscriptPane({ state }: { state: TranscriptState }) {
 }
 
 export function ChatHistoryWindow() {
+  const { theme } = useUniwind();
   const [summaries, setSummaries] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({});
   const loadGenerationRef = useRef(0);
+  const displayTheme = getLegendDisplayTheme(theme === "dark" ? "dark" : "light");
 
   useEffect(() => {
     let active = true;
@@ -326,11 +329,13 @@ export function ChatHistoryWindow() {
 
   return (
     <SidebarSplitView
-      appearance="light"
+      appearance="system"
       contentMinWidth={420}
       contentTitlebarHeight={CHAT_HISTORY_TITLEBAR_HEIGHT}
       contentTitlebarMaterial="glass"
       sidebarMinWidth={220}
+      sidebarTitlebarOverlayColor={displayTheme.colors.surfaceMuted}
+      sidebarTitlebarOverlayOpacity={0.75}
       sidebarWidth={260}
       style={styles.root}
     >

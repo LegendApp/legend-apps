@@ -190,6 +190,17 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
   maskLayer.endPoint = CGPointMake(0.5, 0);
   view.layer.mask = maskLayer;
 }
+
+static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CGFloat opacity)
+{
+  if (color && opacity > 0) {
+    CALayer *overlayLayer = [CALayer layer];
+    overlayLayer.frame = view.bounds;
+    overlayLayer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+    overlayLayer.backgroundColor = [color colorWithAlphaComponent:opacity].CGColor;
+    [view.layer addSublayer:overlayLayer];
+  }
+}
 #endif
 
 #if TARGET_OS_OSX
@@ -229,6 +240,8 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
   NSString *_contentTitlebarOverlayColorValue;
   CGFloat _contentTitlebarOverlayOpacity;
   NSView *_contentTitlebarMaterialView;
+  NSString *_sidebarTitlebarOverlayColorValue;
+  CGFloat _sidebarTitlebarOverlayOpacity;
   NSView *_sidebarTitlebarMaterialView;
 #else
   UIView *_sidebarContainer;
@@ -257,6 +270,7 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
     _contentTitlebarHeight = 0;
     _contentTitlebarMaterialName = @"none";
     _contentTitlebarOverlayOpacity = 0;
+    _sidebarTitlebarOverlayOpacity = 0;
     _sidebarContainer = [NSView new];
     _contentContainer = [NSView new];
     _sidebarContainer.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -389,6 +403,10 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
   if (!_sidebarTitlebarMaterialView) {
     _sidebarTitlebarMaterialView = RNSidebarSplitViewCreateBackgroundBlurView(materialFrame, 2);
     RNSidebarSplitViewApplySoftBottomEdgeMask(_sidebarTitlebarMaterialView);
+    RNSidebarSplitViewApplyColorOverlay(
+      _sidebarTitlebarMaterialView,
+      RNSidebarSplitViewColorFromHexString(_sidebarTitlebarOverlayColorValue),
+      _sidebarTitlebarOverlayOpacity);
   } else {
     _sidebarTitlebarMaterialView.frame = materialFrame;
   }
@@ -770,11 +788,21 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
     nextContentTitlebarOverlayColorValue = nil;
   }
   CGFloat nextContentTitlebarOverlayOpacity = RNSidebarSplitViewClampedUnitValue(newProps.contentTitlebarOverlayOpacity);
+  NSString *nextSidebarTitlebarOverlayColorValue = [NSString stringWithUTF8String:newProps.sidebarTitlebarOverlayColor.c_str()];
+  if (nextSidebarTitlebarOverlayColorValue.length == 0) {
+    nextSidebarTitlebarOverlayColorValue = nil;
+  }
+  CGFloat nextSidebarTitlebarOverlayOpacity = RNSidebarSplitViewClampedUnitValue(newProps.sidebarTitlebarOverlayOpacity);
   BOOL shouldRecreateContentTitlebarMaterial =
     ![_contentTitlebarMaterialName isEqualToString:nextContentTitlebarMaterialName] ||
     !((_contentTitlebarOverlayColorValue == nextContentTitlebarOverlayColorValue) ||
       [_contentTitlebarOverlayColorValue isEqualToString:nextContentTitlebarOverlayColorValue]) ||
     fabs(_contentTitlebarOverlayOpacity - nextContentTitlebarOverlayOpacity) >= 0.001 ||
+    fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
+  BOOL shouldRecreateSidebarTitlebarMaterial =
+    !((_sidebarTitlebarOverlayColorValue == nextSidebarTitlebarOverlayColorValue) ||
+      [_sidebarTitlebarOverlayColorValue isEqualToString:nextSidebarTitlebarOverlayColorValue]) ||
+    fabs(_sidebarTitlebarOverlayOpacity - nextSidebarTitlebarOverlayOpacity) >= 0.001 ||
     fabs(_contentTitlebarHeight - newProps.contentTitlebarHeight) >= 0.5;
   _sidebarMinWidth = newProps.sidebarMinWidth;
   _sidebarWidth = newProps.sidebarWidth;
@@ -784,8 +812,13 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
   _contentTitlebarMaterialName = nextContentTitlebarMaterialName;
   _contentTitlebarOverlayColorValue = nextContentTitlebarOverlayColorValue;
   _contentTitlebarOverlayOpacity = nextContentTitlebarOverlayOpacity;
+  _sidebarTitlebarOverlayColorValue = nextSidebarTitlebarOverlayColorValue;
+  _sidebarTitlebarOverlayOpacity = nextSidebarTitlebarOverlayOpacity;
   if (shouldRecreateContentTitlebarMaterial) {
     [self removeContentTitlebarMaterial];
+  }
+  if (shouldRecreateSidebarTitlebarMaterial) {
+    [self removeSidebarTitlebarMaterial];
   }
   if (![_appearanceName isEqualToString:nextAppearanceName]) {
     _appearanceName = nextAppearanceName;
@@ -798,7 +831,7 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
   [super updateProps:props oldProps:oldProps];
 
 #if TARGET_OS_OSX
-  if (shouldRelayout || shouldRecreateContentTitlebarMaterial) {
+  if (shouldRelayout || shouldRecreateContentTitlebarMaterial || shouldRecreateSidebarTitlebarMaterial) {
     _lastSidebarWidth = -1;
     _lastContentWidth = -1;
     _lastHeight = -1;
@@ -890,6 +923,8 @@ static void RNSidebarSplitViewApplySoftBottomEdgeMask(NSView *view)
   _contentTitlebarMaterialName = @"none";
   _contentTitlebarOverlayColorValue = nil;
   _contentTitlebarOverlayOpacity = 0;
+  _sidebarTitlebarOverlayColorValue = nil;
+  _sidebarTitlebarOverlayOpacity = 0;
   [self removeContentTitlebarMaterial];
   [self removeSidebarTitlebarMaterial];
   [self applyAppearance];

@@ -52,6 +52,8 @@ export interface SidebarSplitViewProps extends ViewProps {
   onSplitViewDidResize?: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void | Promise<void>;
   sidebarCollapsed?: boolean;
   sidebarMinWidth?: number;
+  sidebarTitlebarOverlayColor?: string;
+  sidebarTitlebarOverlayOpacity?: number;
   sidebarWidth?: number;
 }
 
@@ -67,6 +69,8 @@ export function SidebarSplitView({
   onSplitViewDidResize,
   sidebarCollapsed = false,
   sidebarMinWidth = 180,
+  sidebarTitlebarOverlayColor,
+  sidebarTitlebarOverlayOpacity = 0,
   sidebarWidth,
   style,
   ...props
@@ -120,6 +124,8 @@ export function SidebarSplitView({
       onSplitViewDidResize: handleSplitViewResize,
       sidebarCollapsed,
       sidebarMinWidth,
+      sidebarTitlebarOverlayColor,
+      sidebarTitlebarOverlayOpacity,
       sidebarWidth,
       style: [styles.root, style],
       ...props,
