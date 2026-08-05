@@ -1,6 +1,7 @@
 #include "ChatCatalog.hpp"
 
 #include "ChatJson.hpp"
+#include "ChatTime.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -47,29 +48,6 @@ std::optional<JsonRange> member(const ChatJson& json, const std::optional<JsonRa
 std::string stringMember(const ChatJson& json, const JsonRange& object, std::string_view key) {
   const auto value = json.member(object, key);
   return value ? json.stringValue(*value) : std::string();
-}
-
-double parseIsoTime(const std::string& value) {
-  double milliseconds = 0;
-  if (value.size() >= 19) {
-    std::tm time {};
-    std::istringstream stream(value.substr(0, 19));
-    stream >> std::get_time(&time, "%Y-%m-%dT%H:%M:%S");
-    if (!stream.fail()) {
-      milliseconds = static_cast<double>(timegm(&time)) * 1000;
-      const size_t dot = value.find('.', 19);
-      if (dot != std::string::npos) {
-        size_t cursor = dot + 1;
-        double scale = 100;
-        while (cursor < value.size() && scale >= 1 && value[cursor] >= '0' && value[cursor] <= '9') {
-          milliseconds += static_cast<double>(value[cursor] - '0') * scale;
-          scale /= 10;
-          cursor += 1;
-        }
-      }
-    }
-  }
-  return milliseconds;
 }
 
 double fileModifiedAt(const fs::path& path) {
@@ -121,7 +99,7 @@ void loadCodexIndex(const fs::path& path, std::unordered_map<std::string, Catalo
         if (!id.empty()) {
           CatalogMetadata value;
           value.title = stringMember(json, *root, "thread_name");
-          value.updatedAt = parseIsoTime(stringMember(json, *root, "updated_at"));
+          value.updatedAt = parseIsoTimestampMilliseconds(stringMember(json, *root, "updated_at"));
           metadata[id] = std::move(value);
         }
       }
@@ -145,7 +123,7 @@ void loadClaudeIndex(const fs::path& path, std::unordered_map<std::string, Catal
           if (value.title.empty()) {
             value.title = stringMember(json, entry, "firstPrompt");
           }
-          value.updatedAt = parseIsoTime(stringMember(json, entry, "modified"));
+          value.updatedAt = parseIsoTimestampMilliseconds(stringMember(json, entry, "modified"));
           if (value.updatedAt == 0) {
             const auto fileMtime = json.member(entry, "fileMtime");
             value.updatedAt = fileMtime ? json.numberValue(*fileMtime) : 0;

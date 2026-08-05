@@ -1,6 +1,7 @@
 #include "../cpp/ChatDocument.hpp"
 #include "../cpp/ChatCatalog.hpp"
 #include "../cpp/ChatJson.hpp"
+#include "../cpp/ChatTime.hpp"
 #include "../cpp/HybridChatDocument.hpp"
 
 #include <algorithm>
@@ -128,6 +129,21 @@ void testCancellation(const std::filesystem::path& fixtureRoot) {
   expect(cancelled, "Parser should observe a superseded open generation");
 }
 
+void testIsoTimestamps() {
+  expect(
+      parseIsoTimestampMilliseconds("1970-01-01T00:00:00Z") == 0,
+      "Unix epoch should parse without locale or timezone APIs");
+  expect(
+      parseIsoTimestampMilliseconds("2026-01-02T03:04:05.678Z") == 1767323045678.0,
+      "ISO timestamps should retain millisecond precision");
+  expect(
+      parseIsoTimestampMilliseconds("2024-02-29T00:00:00Z") == 1709164800000.0,
+      "ISO timestamps should accept leap days");
+  expect(
+      parseIsoTimestampMilliseconds("2025-02-29T00:00:00Z") == 0,
+      "ISO timestamps should reject invalid calendar dates");
+}
+
 void testDocumentRelease(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{1};
   ChatParseResult result = parseChatFile("codex", (fixtureRoot / "codex.jsonl").string(), 1, generation);
@@ -250,6 +266,7 @@ int main(int argc, char** argv) {
     testCodex(fixtureRoot);
     testClaude(fixtureRoot);
     testCancellation(fixtureRoot);
+    testIsoTimestamps();
     testDocumentRelease(fixtureRoot);
     testCatalogIndexes();
     std::cout << "chat history native tests passed\n";
