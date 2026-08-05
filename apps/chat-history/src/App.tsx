@@ -11,7 +11,7 @@ import {
   type ChatProvider,
   type ChatSummary,
 } from "@legend-apps/chat-history";
-import { getLegendDisplayTheme } from "@legend-apps/theme";
+import { getSystemLegendDisplayTheme, useSystemLegendDisplayTheme } from "@legend-apps/theme";
 import { setWindowOptions } from "@legend-apps/window-manager";
 import {
   createUnifiedToolbarWindowStyle,
@@ -27,8 +27,8 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Appearance, Pressable, StyleSheet, Text, View } from "react-native";
-import { Uniwind, useUniwind } from "uniwind";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Uniwind } from "uniwind";
 import { ChatComposer } from "./ChatComposer";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
@@ -93,10 +93,6 @@ type ChatSidebarEntry =
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
-}
-
-function getSystemDisplayTheme() {
-  return getLegendDisplayTheme(Appearance.getColorScheme() === "dark" ? "dark" : "light");
 }
 
 function relativeDate(timestamp: number) {
@@ -388,7 +384,7 @@ function TranscriptPane({ state }: { state: TranscriptState }) {
 
 export function ChatHistoryWindow() {
   const windowIdentifier = useWindowId();
-  const { theme } = useUniwind();
+  const displayTheme = useSystemLegendDisplayTheme();
   const [summaries, setSummaries] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [catalogError, setCatalogError] = useState<string | undefined>();
@@ -396,7 +392,6 @@ export function ChatHistoryWindow() {
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({});
   const loadGenerationRef = useRef(0);
   const selectedTitle = summaries.find((summary) => summary.id === selectedId)?.title;
-  const displayTheme = getLegendDisplayTheme(theme === "dark" ? "dark" : "light");
 
   useEffect(() => {
     setWindowOptions(windowIdentifier, {
@@ -469,7 +464,7 @@ export function ChatHistoryWindow() {
       ? catalogError
       : "No local Codex or Claude transcripts found.";
   const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
-    colorScheme: theme === "dark" ? "dark" : "light",
+    colorScheme: displayTheme.appearance ?? "light",
     contentBackgroundColor: displayTheme.colors.background,
     sidebarBackgroundColor: displayTheme.colors.surfaceMuted,
   });
@@ -531,7 +526,7 @@ const ChatHistoryWindowsNavigator = createWindowsNavigator(chatHistoryWindowsCon
 function openChatHistoryWindow() {
   return ChatHistoryWindowsNavigator.open(CHAT_HISTORY_WINDOW_MODULE_NAME, {
     windowStyle: {
-      backgroundColor: getSystemDisplayTheme().colors.windowBackground,
+      backgroundColor: getSystemLegendDisplayTheme().colors.windowBackground,
     },
   });
 }

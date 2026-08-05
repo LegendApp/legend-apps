@@ -1,3 +1,5 @@
+import { Appearance, type ColorSchemeName, useColorScheme } from "react-native";
+
 import { generatedDisplayThemeFiles, generatedMarkdownLayoutThemeFiles } from "./generatedThemes";
 import type {
   LegendDisplayTheme,
@@ -571,6 +573,18 @@ export function loadUserMarkdownLayoutThemeFilesSync({
 
 export function getLegendDisplayTheme(themeName: string | null | undefined): LegendDisplayTheme {
   return legendDisplayThemeMap.get((themeName ?? "") as LegendDisplayThemeName) ?? legendDisplayThemeMap.get("light") as LegendDisplayTheme;
+}
+
+export function getLegendDisplayThemeForColorScheme(colorScheme: ColorSchemeName): LegendDisplayTheme {
+  return getLegendDisplayTheme(colorScheme === "dark" ? "dark" : "light");
+}
+
+export function getSystemLegendDisplayTheme(): LegendDisplayTheme {
+  return getLegendDisplayThemeForColorScheme(Appearance.getColorScheme());
+}
+
+export function useSystemLegendDisplayTheme(): LegendDisplayTheme {
+  return getLegendDisplayThemeForColorScheme(useColorScheme());
 }
 
 export function getMarkdownLayoutTheme(themeName: string | null | undefined): MarkdownLayoutTheme {
