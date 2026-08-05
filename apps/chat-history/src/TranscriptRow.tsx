@@ -1,66 +1,60 @@
 import type { ChatDocument, ChatFileChange, ChatRowMetadata } from "@legend-apps/chat-history";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useRecyclingState } from "@legendapp/list/react-native";
 import { useEffect, useState } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
+import { useUniwind } from "uniwind";
 
 const TOOL_PREVIEW_BYTES = 64 * 1024;
 const COLLAPSED_FILE_COUNT = 3;
 
-const markdownStyle: MarkdownStyle = {
-  blockquote: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#93c5fd",
-    borderWidth: 3,
-    color: "#1e3a8a",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  code: {
-    backgroundColor: "#e2e8f0",
-    color: "#0f172a",
-    fontFamily: "Menlo",
-    fontSize: 13,
-  },
-  codeBlock: {
-    backgroundColor: "#0f172a",
-    borderColor: "#1e293b",
-    borderRadius: 7,
-    borderWidth: 1,
-    color: "#e2e8f0",
-    fontFamily: "Menlo",
-    fontSize: 12,
-    lineHeight: 18,
-    padding: 12,
-  },
-  h1: {
-    color: "#0f172a",
-    fontSize: 22,
-    fontWeight: "700",
-    lineHeight: 28,
-  },
-  h2: {
-    color: "#0f172a",
-    fontSize: 19,
-    fontWeight: "700",
-    lineHeight: 25,
-  },
-  link: {
-    color: "#2563eb",
-    underline: true,
-  },
-  list: {
-    color: "#1e293b",
-    fontSize: 15,
-    gapWidth: 8,
-    lineHeight: 22,
-    markerColor: "#475569",
-  },
-  paragraph: {
-    color: "#1e293b",
-    fontSize: 15,
-    lineHeight: 22,
-  },
+function createChatMarkdownStyle(appearance: "light" | "dark"): MarkdownStyle {
+  const sharedStyle = getLegendDisplayTheme(appearance).markdownStyle;
+  return {
+    ...sharedStyle,
+    blockquote: {
+      ...sharedStyle.blockquote,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    code: {
+      ...sharedStyle.code,
+      fontSize: 13,
+    },
+    codeBlock: {
+      ...sharedStyle.codeBlock,
+      borderRadius: 7,
+      fontSize: 12,
+      lineHeight: 18,
+      padding: 12,
+    },
+    h1: {
+      ...sharedStyle.h1,
+      fontSize: 22,
+      lineHeight: 28,
+    },
+    h2: {
+      ...sharedStyle.h2,
+      fontSize: 19,
+      lineHeight: 25,
+    },
+    list: {
+      ...sharedStyle.list,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    paragraph: {
+      ...sharedStyle.paragraph,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+  };
+}
+
+const markdownStyleByAppearance = {
+  dark: createChatMarkdownStyle("dark"),
+  light: createChatMarkdownStyle("light"),
 };
 
 function openLink({ url }: { url: string }) {
@@ -124,6 +118,8 @@ function MessageRow({ document, index, metadata }: {
   metadata: ChatRowMetadata;
 }) {
   const isUser = metadata.kind === "user";
+  const { theme } = useUniwind();
+  const markdownStyle = markdownStyleByAppearance[theme === "dark" ? "dark" : "light"];
   const imageSources = Array.from(
     { length: metadata.imageCount },
     (_, imageIndex) => document.getImageSource(index, imageIndex),
@@ -132,7 +128,7 @@ function MessageRow({ document, index, metadata }: {
     <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-3"}>
       <View
         className={isUser
-          ? "max-w-[82%] self-end rounded-2xl bg-gray-200 px-4 py-3"
+          ? "max-w-[82%] self-end rounded-2xl bg-surface-muted px-4 py-3"
           : "w-full max-w-[92%]"}
       >
         {imageSources.map((source, imageIndex) => (
@@ -208,8 +204,8 @@ function FileChangeLine({ file }: { file: ChatFileChange }) {
         <Text className="text-foreground">{name}</Text>
       </Text>
       <View className="flex-row items-center gap-1.5">
-        <Text className="text-sm font-medium text-green-600">+{file.additions}</Text>
-        <Text className="text-sm font-medium text-red-600">-{file.deletions}</Text>
+        <Text className="text-sm font-medium text-green-600 dark:text-green-400">+{file.additions}</Text>
+        <Text className="text-sm font-medium text-red-600 dark:text-red-400">-{file.deletions}</Text>
       </View>
     </View>
   );
@@ -243,8 +239,8 @@ function FileChangesRow({ document, index, metadata }: {
               Edited {fileCount} {fileCount === 1 ? "file" : "files"}
             </Text>
             <View className="mt-1 flex-row items-center gap-2">
-              <Text className="text-sm font-medium text-green-600">+{metadata.fileAdditions ?? 0}</Text>
-              <Text className="text-sm font-medium text-red-600">-{metadata.fileDeletions ?? 0}</Text>
+              <Text className="text-sm font-medium text-green-600 dark:text-green-400">+{metadata.fileAdditions ?? 0}</Text>
+              <Text className="text-sm font-medium text-red-600 dark:text-red-400">-{metadata.fileDeletions ?? 0}</Text>
             </View>
           </View>
         </View>

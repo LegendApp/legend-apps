@@ -8,11 +8,12 @@ import {
   type ChatSummary,
 } from "@legend-apps/chat-history";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
+import { addApplicationReopenRequestedListener, setWindowOptions } from "@legend-apps/window-manager";
 import {
   createUnifiedToolbarWindowStyle,
   createWindowsNavigator,
   type WindowsConfig,
+  useWindowId,
 } from "@legend-apps/windows";
 import {
   LegendList,
@@ -21,7 +22,7 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Appearance, Pressable, StyleSheet, Text, View } from "react-native";
 import { Uniwind, useUniwind } from "uniwind";
 import { ChatComposer } from "./ChatComposer";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
@@ -87,6 +88,10 @@ type ChatSidebarEntry =
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getSystemDisplayTheme() {
+  return getLegendDisplayTheme(Appearance.getColorScheme() === "dark" ? "dark" : "light");
 }
 
 function relativeDate(timestamp: number) {
@@ -377,6 +382,7 @@ function TranscriptPane({ state }: { state: TranscriptState }) {
 }
 
 export function ChatHistoryWindow() {
+  const windowIdentifier = useWindowId();
   const { theme } = useUniwind();
   const [summaries, setSummaries] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -384,7 +390,19 @@ export function ChatHistoryWindow() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({});
   const loadGenerationRef = useRef(0);
+  const selectedTitle = summaries.find((summary) => summary.id === selectedId)?.title;
   const displayTheme = getLegendDisplayTheme(theme === "dark" ? "dark" : "light");
+
+  useEffect(() => {
+    setWindowOptions(windowIdentifier, {
+      title: selectedTitle ?? "Legend Chat History",
+      windowStyle: {
+        appearance: "system",
+        backgroundColor: displayTheme.colors.windowBackground,
+        titlebarSeparatorStyle: "shadow",
+      },
+    }).catch(reportChatHistoryWindowError);
+  }, [displayTheme.colors.windowBackground, selectedTitle, windowIdentifier]);
 
   useEffect(() => {
     let active = true;
@@ -452,6 +470,8 @@ export function ChatHistoryWindow() {
       contentMinWidth={420}
       contentTitlebarHeight={CHAT_HISTORY_TITLEBAR_HEIGHT}
       contentTitlebarMaterial="glass"
+      contentTitlebarOverlayColor={displayTheme.colors.background}
+      contentTitlebarOverlayOpacity={theme === "dark" ? 0 : 0.1}
       sidebarMinWidth={220}
       sidebarTitlebarOverlayColor={displayTheme.colors.surfaceMuted}
       sidebarTitlebarOverlayOpacity={0.75}
@@ -482,8 +502,7 @@ const chatHistoryWindowsConfig = {
       transparentBackground: true,
       windowStyle: {
         ...createUnifiedToolbarWindowStyle({
-          appearance: "light",
-          backgroundColor: "#f5f6f8",
+          appearance: "system",
           frame: {
             width: 1280,
             height: 720,
@@ -494,7 +513,8 @@ const chatHistoryWindowsConfig = {
           miniaturizable: true,
         }),
         contentLayoutMode: "fullSize",
-        titleVisibility: "hidden",
+        titlebarSeparatorStyle: "shadow",
+        titleVisibility: "visible",
         titlebarControls: [],
       },
     },
@@ -504,7 +524,11 @@ const chatHistoryWindowsConfig = {
 const ChatHistoryWindowsNavigator = createWindowsNavigator(chatHistoryWindowsConfig);
 
 function openChatHistoryWindow() {
-  return ChatHistoryWindowsNavigator.open(CHAT_HISTORY_WINDOW_MODULE_NAME);
+  return ChatHistoryWindowsNavigator.open(CHAT_HISTORY_WINDOW_MODULE_NAME, {
+    windowStyle: {
+      backgroundColor: getSystemDisplayTheme().colors.windowBackground,
+    },
+  });
 }
 
 function reportChatHistoryWindowError(error: unknown) {
