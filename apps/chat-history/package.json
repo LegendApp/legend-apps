@@ -6,7 +6,6 @@
   "dependencies": {
     "@legend-apps/appkit-split-view": "0.0.0",
     "@legend-apps/chat-history": "workspace:*",
-    "@legend-apps/sidebar": "0.0.0",
     "@legend-apps/storage": "0.0.0",
     "@legend-apps/theme": "workspace:*",
     "@legend-apps/window-manager": "0.0.0",

@@ -18,7 +18,6 @@ const manifest = {
     macos: [
       "@legend-apps/appkit-split-view",
       "@legend-apps/chat-history",
-      "@legend-apps/sidebar",
       "@legend-apps/storage",
       "@legend-apps/window-manager",
       "react-native-enriched-markdown",

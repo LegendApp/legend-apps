@@ -7,7 +7,6 @@ import {
   type ChatProvider,
   type ChatSummary,
 } from "@legend-apps/chat-history";
-import { Sidebar, SidebarItem } from "@legend-apps/sidebar";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
 import {
@@ -19,9 +18,10 @@ import {
   LegendList,
   type LegendListDataSourceRenderItemProps,
   type LegendListRef,
+  type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Uniwind, useUniwind } from "uniwind";
 import { ChatComposer } from "./ChatComposer";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
@@ -41,6 +41,13 @@ const CHAT_HISTORY_TITLEBAR_HEIGHT = 52;
 const CHAT_HISTORY_SIDEBAR_TOP_INSET = 42;
 const CHAT_COMPOSER_ESTIMATED_HEIGHT = 80;
 const CHAT_COMPOSER_CONTENT_GAP = 24;
+const CHAT_PROVIDER_SECTIONS = [
+  { provider: "codex", title: "Codex" },
+  { provider: "claude", title: "Claude" },
+] as const satisfies readonly { provider: ChatProvider; title: string }[];
+const CHAT_SIDEBAR_CHAT_ROW_HEIGHT = 34;
+const CHAT_SIDEBAR_SECTION_ROW_HEIGHT = 40;
+const CHAT_SIDEBAR_SECTION_SPACER_HEIGHT = 12;
 const DEMO_STREAM_START_DELAY_MS = 400;
 const DEMO_STREAM_WORD_DELAY_MS = 30;
 const DEMO_STREAM_RESPONSE = [
@@ -53,10 +60,21 @@ const DEMO_STREAM_RESPONSE = [
   "The response continues for another paragraph to make the test unambiguous on large displays. While reading it, notice that the content itself is ordinary selectable text and that the composer remains visible below the list. The demo is still intentionally inert: sending only mutates the temporary in-memory data source used by this screen. Switching chats or reopening the application discards the generated turn, and no provider session, local transcript, or remote model is affected.",
   "This is the final portion of the fake response. By now the assistant row should be at least one screen tall, and on most window sizes it should be considerably taller. The final sentence marks the true end of the generated content so it is easy to identify whether LegendList stops at the correct location: this line should be the end, with only the normal small amount of bottom spacing after it.",
 ].join("\n\n");
+const chatSidebarContentInset = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: CHAT_HISTORY_SIDEBAR_TOP_INSET,
+};
 type TranscriptState = {
   document?: ChatDocument;
   error?: string;
 };
+
+type ChatSidebarEntry =
+  | { id: string; summary: ChatSummary; type: "chat" }
+  | { id: string; title: string; type: "section" }
+  | { id: string; type: "spacer" };
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -79,6 +97,85 @@ function relativeDate(timestamp: number) {
   return days < 7 ? `${days}d` : new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function sortChatsNewestFirst(first: ChatSummary, second: ChatSummary) {
+  return second.updatedAt - first.updatedAt;
+}
+
+function getChatSidebarItemKey(entry: ChatSidebarEntry) {
+  return entry.id;
+}
+
+function getChatSidebarItemType(entry: ChatSidebarEntry) {
+  return entry.type;
+}
+
+function getChatSidebarItemSize(entry: ChatSidebarEntry) {
+  let size = CHAT_SIDEBAR_CHAT_ROW_HEIGHT;
+  if (entry.type === "section") {
+    size = CHAT_SIDEBAR_SECTION_ROW_HEIGHT;
+  } else if (entry.type === "spacer") {
+    size = CHAT_SIDEBAR_SECTION_SPACER_HEIGHT;
+  }
+  return size;
+}
+
+function ChatSidebarRow({
+  entry,
+  onSelect,
+  selectedId,
+}: {
+  entry: ChatSidebarEntry;
+  onSelect: (id: string) => void;
+  selectedId?: string;
+}) {
+  const handlePress = useCallback(() => {
+    if (entry.type === "chat") {
+      onSelect(entry.summary.id);
+    }
+  }, [entry, onSelect]);
+
+  let row;
+  if (entry.type === "section") {
+    row = (
+      <View className="justify-center px-4" style={styles.sidebarSection}>
+        <Text className="text-[13px] font-bold text-muted">{entry.title}</Text>
+      </View>
+    );
+  } else if (entry.type === "spacer") {
+    row = <View style={styles.sidebarSectionSpacer} />;
+  } else {
+    const selected = entry.summary.id === selectedId;
+    row = (
+      <View className="px-2" style={styles.sidebarItem}>
+        <Pressable
+          accessibilityLabel={entry.summary.title}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+          className={selected
+            ? "flex-1 flex-row items-center gap-1 rounded-lg bg-primary px-2"
+            : "flex-1 flex-row items-center gap-1 rounded-lg px-2"}
+          onPress={handlePress}
+          style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
+        >
+          <Text
+            className={selected
+              ? "min-w-0 flex-1 text-[13px] font-semibold text-white"
+              : "min-w-0 flex-1 text-[13px] font-semibold text-foreground"}
+            numberOfLines={1}
+          >
+            {entry.summary.title}
+          </Text>
+          <Text className={selected ? "shrink-0 text-[11px] text-white/70" : "shrink-0 text-[11px] text-muted"}>
+            {relativeDate(entry.summary.updatedAt)}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return row;
+}
+
 function ChatSidebar({
   summaries,
   selectedId,
@@ -88,32 +185,44 @@ function ChatSidebar({
   selectedId?: string;
   onSelect: (id: string) => void;
 }) {
+  const entries = useMemo(() => {
+    const nextEntries: ChatSidebarEntry[] = [];
+    for (const section of CHAT_PROVIDER_SECTIONS) {
+      if (section.provider === "claude") {
+        nextEntries.push({ id: "provider-section-spacer:claude", type: "spacer" });
+      }
+      nextEntries.push({
+        id: `provider-section:${section.provider}`,
+        title: section.title,
+        type: "section",
+      });
+      for (const summary of summaries) {
+        if (summary.provider === section.provider) {
+          nextEntries.push({ id: summary.id, summary, type: "chat" });
+        }
+      }
+    }
+    return nextEntries;
+  }, [summaries]);
+  const renderItem = useCallback(({ item }: LegendListRenderItemProps<ChatSidebarEntry>) => (
+    <ChatSidebarRow entry={item} onSelect={onSelect} selectedId={selectedId} />
+  ), [onSelect, selectedId]);
+
   return (
-    <View className="flex-1 bg-surface-muted pt-10">
-      <Text className="px-3 pb-3 text-lg font-bold text-foreground">Chat History</Text>
-      <Sidebar
-        contentInsetTop={CHAT_HISTORY_SIDEBAR_TOP_INSET}
-        defaultRowHeight={54}
-        onSidebarSelectionChange={(event) => {
-          onSelect(event.nativeEvent.id);
-        }}
-        selectedId={selectedId}
+    <View className="flex-1 bg-surface-muted">
+      <LegendList
+        contentContainerStyle={styles.sidebarContent}
+        contentInset={chatSidebarContentInset}
+        data={entries}
+        estimatedItemSize={CHAT_SIDEBAR_CHAT_ROW_HEIGHT}
+        extraData={selectedId}
+        getFixedItemSize={getChatSidebarItemSize}
+        getItemType={getChatSidebarItemType}
+        keyExtractor={getChatSidebarItemKey}
+        recycleItems
+        renderItem={renderItem}
         style={styles.sidebar}
-      >
-        {summaries.map((summary) => (
-          <SidebarItem itemId={summary.id} key={summary.id} rowHeight={54} style={styles.sidebarItem}>
-            <View className="min-w-0 flex-1 justify-center px-2">
-              <Text className="text-[13px] font-semibold text-foreground" numberOfLines={1}>
-                {summary.title}
-              </Text>
-              <View className="mt-0.5 flex-row items-center justify-between gap-2">
-                <Text className="text-[11px] capitalize text-muted">{summary.provider}</Text>
-                <Text className="text-[11px] text-muted">{relativeDate(summary.updatedAt)}</Text>
-              </View>
-            </View>
-          </SidebarItem>
-        ))}
-      </Sidebar>
+      />
     </View>
   );
 }
@@ -275,11 +384,12 @@ export function ChatHistoryWindow() {
     void getRecentChats(20)
       .then((recentChats) => {
         if (active) {
+          const sortedChats = [...recentChats].sort(sortChatsNewestFirst);
           const restoredId = readSelectedChatId();
-          const initialId = recentChats.some((summary) => summary.id === restoredId)
+          const initialId = sortedChats.some((summary) => summary.id === restoredId)
             ? restoredId
-            : recentChats[0]?.id;
-          setSummaries(recentChats);
+            : sortedChats[0]?.id;
+          setSummaries(sortedChats);
           setSelectedId(initialId);
           setCatalogLoading(false);
         }
@@ -430,7 +540,16 @@ const styles = StyleSheet.create({
   sidebar: {
     flex: 1,
   },
+  sidebarContent: {
+    paddingBottom: 8,
+  },
   sidebarItem: {
-    height: 54,
+    height: 34,
+  },
+  sidebarSection: {
+    height: 40,
+  },
+  sidebarSectionSpacer: {
+    height: 12,
   },
 });
