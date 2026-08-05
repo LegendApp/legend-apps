@@ -31,6 +31,12 @@ public:
   ChatJson(const char* data, size_t size) : data_(data), size_(size) {}
 
   std::optional<JsonRange> root(size_t start, size_t end) const;
+  std::optional<JsonRange> topLevelObject(size_t start, size_t end) const;
+  bool topLevelStringMemberEquals(
+      size_t start,
+      size_t end,
+      std::string_view key,
+      std::string_view expected) const;
   std::optional<JsonRange> member(const JsonRange& object, std::string_view key) const;
   bool forEachObjectMember(
       const JsonRange& object,

@@ -39,7 +39,7 @@ std::string decode(const ChatParseResult& result, const std::vector<JsonRange>& 
 void testCodex(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{1};
   ChatParseResult result = parseChatFile("codex", (fixtureRoot / "codex.jsonl").string(), 1, generation);
-  expect(result.recordCount == 13, "Codex record count should include the incomplete final record");
+  expect(result.recordCount == 14, "Codex record count should include compacted and incomplete records");
   expect(result.rows.size() == 5, "Codex should produce message, tool, and file rows");
   expect(result.rows[0].kind == "user", "Codex first row should be user");
   expect(
@@ -64,7 +64,7 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
       "Codex should aggregate line totals and make paths relative to the turn cwd");
   expect(result.warningCount == 2, "Codex should warn for unknown relevant and malformed records");
 
-  ChatDocumentTiming timing(static_cast<double>(result.source->size()), 13, 4, 0, 0, 0, 0, 0);
+  ChatDocumentTiming timing(static_cast<double>(result.source->size()), 14, 4, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("codex-group", std::move(result), timing);
   expect(document->getRowCount() == 4, "Codex adjacent tools should collapse without hiding file changes");
   const ChatRowMetadata userMetadata = document->getRowMetadata(0);
@@ -132,7 +132,7 @@ void testDocumentRelease(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{1};
   ChatParseResult result = parseChatFile("codex", (fixtureRoot / "codex.jsonl").string(), 1, generation);
   const double sourceBytes = static_cast<double>(result.source->size());
-  ChatDocumentTiming timing(sourceBytes, 13, 5, 0, 0, 0, 0, 0);
+  ChatDocumentTiming timing(sourceBytes, 14, 5, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("test", std::move(result), timing);
   ChatDocumentRegistry::shared().registerDocument("test", document);
   expect(document->markdownForRow(0) == "Hello ☺\nworld\n", "Native provider should decode a visible row");

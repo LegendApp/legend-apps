@@ -9,5 +9,6 @@
 {"timestamp":"2026-01-01T00:00:05.400Z","type":"event_msg","payload":{"type":"patch_apply_end","turn_id":"turn-1","success":true,"status":"completed","changes":{"/workspace/apps/demo.ts":{"type":"update","unified_diff":"@@ -4 +4 @@\n-before\n+after\n"}}}}
 {"timestamp":"2026-01-01T00:00:06.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done **quickly**.\n\n```text\n::git-commit{example}\n```\n\n::git-commit{cwd=\"/workspace\"}\n::git-push{cwd=\"/workspace\" branch=\"main\"}\n\n<oai-mem-citation>\n<citation_entries>\nMEMORY.md:1-2|note=[hidden metadata]\n</citation_entries>\n<rollout_ids>\n019fbe7f-afbd-7663-9cd1-79ce3803e317\n</rollout_ids>\n</oai-mem-citation>"}]}}
 {"timestamp":"2026-01-01T00:00:06.000Z","type":"response_item","payload":{"type":"reasoning","summary":[]}}
+{"timestamp":"2026-01-01T00:00:06.000Z","type":"compacted","payload":{"replacement_history":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"This compacted history must not become a visible row."}]}]}}
 {"timestamp":"2026-01-01T00:00:06.000Z","type":"response_item","payload":{"type":"future_visible_record"}}
 {"timestamp":"2026-01-01T00:00:07.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"truncated"}]}

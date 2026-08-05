@@ -161,6 +161,37 @@ std::optional<JsonRange> ChatJson::root(size_t start, size_t end) const {
   return result;
 }
 
+std::optional<JsonRange> ChatJson::topLevelObject(size_t start, size_t end) const {
+  const size_t position = skipWhitespace(start, end);
+  size_t boundedEnd = std::min(end, size_);
+  while (boundedEnd > position) {
+    const char value = data_[boundedEnd - 1];
+    if (value != ' ' && value != '\t' && value != '\r' && value != '\n') {
+      break;
+    }
+    boundedEnd -= 1;
+  }
+  if (position < boundedEnd && data_[position] == '{' && data_[boundedEnd - 1] == '}') {
+    return JsonRange{position, boundedEnd, JsonValueKind::Object};
+  }
+  return std::nullopt;
+}
+
+bool ChatJson::topLevelStringMemberEquals(
+    size_t start,
+    size_t end,
+    std::string_view key,
+    std::string_view expected) const {
+  const size_t position = skipWhitespace(start, end);
+  bool matches = false;
+  const auto object = topLevelObject(position, end);
+  if (object) {
+    const auto value = member(*object, key);
+    matches = value && stringEquals(*value, expected);
+  }
+  return matches;
+}
+
 std::optional<JsonRange> ChatJson::member(const JsonRange& object, std::string_view key) const {
   std::optional<JsonRange> result;
   if (object.kind == JsonValueKind::Object && object.end <= size_ && object.end > object.start + 1) {

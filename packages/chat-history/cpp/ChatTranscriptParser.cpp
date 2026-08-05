@@ -420,13 +420,37 @@ ChatParseResult parseCodex(
     if ((lineIndex & 0xff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
       throw std::runtime_error("Chat open cancelled");
     }
-    const auto root = json.root(lines[lineIndex].start, lines[lineIndex].end);
+    if (json.topLevelStringMemberEquals(
+            lines[lineIndex].start,
+            lines[lineIndex].end,
+            "type",
+            "compacted")) {
+      continue;
+    }
+    const auto root = json.topLevelObject(lines[lineIndex].start, lines[lineIndex].end);
     if (!root || root->kind != JsonValueKind::Object) {
       result.warningCount += 1;
       continue;
     }
-    const std::string recordType = stringMember(json, *root, "type");
-    const auto payload = json.member(*root, "payload");
+    std::string recordType;
+    std::optional<JsonRange> payload;
+    std::optional<JsonRange> timestamp;
+    const bool validRecord = json.forEachObjectMember(
+        *root,
+        [&](const JsonRange& key, const JsonRange& value) {
+          if (json.stringEquals(key, "type")) {
+            recordType = json.stringValue(value);
+          } else if (json.stringEquals(key, "payload")) {
+            payload = value;
+          } else if (json.stringEquals(key, "timestamp")) {
+            timestamp = value;
+          }
+          return true;
+        });
+    if (!validRecord) {
+      result.warningCount += 1;
+      continue;
+    }
     if ((recordType == "session_meta" || recordType == "turn_context") && payload && payload->kind == JsonValueKind::Object) {
       const std::string nextCwd = stringMember(json, *payload, "cwd");
       if (!nextCwd.empty()) {
@@ -463,7 +487,9 @@ ChatParseResult parseCodex(
             std::move(textRanges),
             std::move(imageSources),
             hasImagePlaceholder,
-            parseIsoTime(stringMember(json, *root, "timestamp")));
+            timestamp && timestamp->kind == JsonValueKind::String
+                ? parseIsoTime(json.stringValue(*timestamp))
+                : 0);
       } else if (eventType == "patch_apply_end") {
         collectCodexFileChanges(
             json,
@@ -483,7 +509,9 @@ ChatParseResult parseCodex(
       continue;
     }
 
-    const double timestampMs = parseIsoTime(stringMember(json, *root, "timestamp"));
+    const double timestampMs = timestamp && timestamp->kind == JsonValueKind::String
+        ? parseIsoTime(json.stringValue(*timestamp))
+        : 0;
     const std::string payloadType = stringMember(json, *payload, "type");
     if (payloadType == "message") {
       parseCodexAssistantMessage(json, *payload, result.rows, result.warningCount, timestampMs);
