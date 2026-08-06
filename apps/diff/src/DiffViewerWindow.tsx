@@ -50,7 +50,7 @@ import {
 import { batch, computed, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { AccessibilityInfo, ActivityIndicator, Animated, Easing, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 import { registerDiffWindowExitPreparation } from "./diffAppExit";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
@@ -227,7 +227,7 @@ import {
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
-const diffLoadingPulseAccentColor = "#7c83ff";
+const diffLoadingAccentColor = "#72b7ff";
 const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
 const diffUnsavedMergeBannerHeight = 48;
 const diffActiveSearchHighlightColor = "#ff7a00d9";
@@ -1333,90 +1333,12 @@ function DiffDownloadingBody({
   );
 }
 
-const DiffLoadingPulseGlow = memo(function DiffLoadingPulseGlow() {
-  const pulseProgress = useRef(new Animated.Value(0)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    const handleReduceMotionChanged = (enabled: boolean) => {
-      if (mounted) {
-        setReduceMotion(enabled);
-      }
-    };
-    void AccessibilityInfo.isReduceMotionEnabled().then(handleReduceMotionChanged);
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", handleReduceMotionChanged);
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    let animation: Animated.CompositeAnimation | undefined;
-    pulseProgress.stopAnimation();
-
-    if (!reduceMotion) {
-      pulseProgress.setValue(0);
-      animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseProgress, {
-            duration: 900,
-            easing: Easing.inOut(Easing.quad),
-            isInteraction: false,
-            toValue: 1,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseProgress, {
-            duration: 900,
-            easing: Easing.inOut(Easing.quad),
-            isInteraction: false,
-            toValue: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-        { iterations: -1 },
-      );
-      animation.start();
-    } else {
-      pulseProgress.setValue(0.35);
-    }
-
-    return () => {
-      animation?.stop();
-    };
-  }, [pulseProgress, reduceMotion]);
-
-  const pulseOpacity = pulseProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.18, 1],
-  });
-  const pulseScale = pulseProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.055],
-  });
-
-  return (
-    <Animated.View
-      style={[
-        styles.progressiveLoadingPulseGlow,
-        {
-          opacity: pulseOpacity,
-          transform: [{ scale: pulseScale }],
-        },
-      ]}
-    />
-  );
-});
-
 function DiffProgressiveLoadingBanner({
-  borderColor,
   foregroundColor,
   mutedColor,
   source,
   surfaceColor,
 }: {
-  borderColor: string;
   foregroundColor: string;
   mutedColor: string;
   source: DiffOpenSource;
@@ -1428,20 +1350,17 @@ function DiffProgressiveLoadingBanner({
 
   return visible ? (
     <View pointerEvents="none" style={styles.progressiveLoadingBanner}>
-      <View style={styles.progressiveLoadingShadow}>
-        <DiffLoadingPulseGlow />
-        <View
-          accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
-          accessibilityRole="progressbar"
-          style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor, borderColor }]}
-        >
-          <ActivityIndicator color={foregroundColor} size="small" />
-          <View style={styles.progressiveLoadingText}>
-            <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading…</Text>
-            <Text style={[styles.loadingDetail, { color: mutedColor }]}>
-              {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
-            </Text>
-          </View>
+      <View
+        accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
+        accessibilityRole="progressbar"
+        style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor }]}
+      >
+        <ActivityIndicator color={foregroundColor} size="small" />
+        <View style={styles.progressiveLoadingText}>
+          <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading…</Text>
+          <Text style={[styles.loadingDetail, { color: mutedColor }]}>
+            {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
+          </Text>
         </View>
       </View>
     </View>
@@ -1726,7 +1645,6 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
       {diffContent}
       <DiffProgressiveLoadingBanner
-        borderColor={rowConfig.borderColor}
         foregroundColor={rowConfig.foregroundColor}
         mutedColor={rowConfig.mutedColor}
         source={state.source}
@@ -5508,35 +5426,20 @@ const styles = StyleSheet.create({
     top: diffTitlebarTopInset + 10,
     zIndex: 35,
   },
-  progressiveLoadingShadow: {
-    borderRadius: 10,
-    shadowColor: "#000000",
-    shadowOffset: { height: 10, width: 0 },
-    shadowOpacity: 0.34,
-    shadowRadius: 20,
-  },
-  progressiveLoadingPulseGlow: {
-    borderColor: diffLoadingPulseAccentColor,
-    borderRadius: 12,
-    borderWidth: 2,
-    bottom: -3,
-    left: -3,
-    position: "absolute",
-    right: -3,
-    shadowColor: diffLoadingPulseAccentColor,
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    top: -3,
-  },
   progressiveLoadingSurface: {
     alignItems: "center",
+    borderColor: diffLoadingAccentColor,
     borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     flexDirection: "row",
     gap: 11,
     minHeight: 48,
     paddingHorizontal: 16,
     paddingVertical: 7,
+    shadowColor: diffLoadingAccentColor,
+    shadowOffset: { height: 0, width: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
   },
   progressiveLoadingText: {
     gap: 1,
