@@ -15,11 +15,14 @@
 
 // Forward declaration of `HybridDiffDocumentSpec` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { class HybridDiffDocumentSpec; }
+// Forward declaration of `DiffLoadStatus` to properly resolve imports.
+namespace margelo::nitro::legendapps::diffparser { struct DiffLoadStatus; }
 // Forward declaration of `DiffLoadProgress` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { struct DiffLoadProgress; }
 
 #include <memory>
 #include "HybridDiffDocumentSpec.hpp"
+#include "DiffLoadStatus.hpp"
 #include "DiffLoadProgress.hpp"
 
 namespace margelo::nitro::legendapps::diffparser {
@@ -54,6 +57,7 @@ namespace margelo::nitro::legendapps::diffparser {
     public:
       // Methods
       virtual std::shared_ptr<HybridDiffDocumentSpec> getDocument() = 0;
+      virtual DiffLoadStatus getProgress() = 0;
       virtual DiffLoadProgress consumeChanges(double initialRowCount) = 0;
       virtual double cancel() = 0;
 

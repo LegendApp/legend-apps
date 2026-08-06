@@ -472,6 +472,7 @@ const styles = StyleSheet.create({
     left: 48,
     position: "absolute",
     right: 48,
+    zIndex: 10,
   },
   openFolderButton: {
     alignItems: "center",

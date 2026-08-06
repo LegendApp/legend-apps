@@ -65,6 +65,7 @@ export type {
   DiffFileSummary,
   DiffGitFolderLoadOptions,
   DiffLoadProgress,
+  DiffLoadStatus,
   DiffLoadResult,
   DiffLoadSession,
   DiffLoadTiming,

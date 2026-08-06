@@ -11,6 +11,7 @@ namespace {
 
 using UrlClock = std::chrono::steady_clock;
 constexpr NSUInteger diffUrlParserChunkBytes = 16 * 1024;
+constexpr NSUInteger diffUrlCacheDiskBytes = 2ULL * 1024 * 1024 * 1024;
 
 double elapsedUrlMs(UrlClock::time_point start, UrlClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
@@ -39,10 +40,37 @@ NSURL* createUrl(const std::string& diffUrl) {
 NSMutableURLRequest* createDiffUrlRequest(const std::string& diffUrl) {
   NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:createUrl(diffUrl)];
   request.HTTPMethod = @"GET";
-  request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+  request.cachePolicy = NSURLRequestUseProtocolCachePolicy;
   request.timeoutInterval = 60;
   [request setValue:@"Legend Diff" forHTTPHeaderField:@"User-Agent"];
   return request;
+}
+
+NSURLCache* diffUrlCache() {
+  static NSURLCache* cache = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    NSURL* cacheRoot = [[NSFileManager defaultManager] URLForDirectory:NSCachesDirectory
+                                                              inDomain:NSUserDomainMask
+                                                     appropriateForURL:nil
+                                                                create:YES
+                                                                 error:nil];
+    NSURL* cacheDirectory = [cacheRoot URLByAppendingPathComponent:@"Legend Diff/Remote Diffs"
+                                                        isDirectory:YES];
+    cache = [[NSURLCache alloc] initWithMemoryCapacity:0
+                                          diskCapacity:diffUrlCacheDiskBytes
+                                          directoryURL:cacheDirectory];
+  });
+  return cache;
+}
+
+NSURLSessionConfiguration* createDiffUrlSessionConfiguration() {
+  NSURLSessionConfiguration* configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
+  configuration.URLCache = diffUrlCache();
+  configuration.requestCachePolicy = NSURLRequestUseProtocolCachePolicy;
+  configuration.timeoutIntervalForRequest = 60;
+  configuration.timeoutIntervalForResource = 60;
+  return configuration;
 }
 
 } // namespace
@@ -167,7 +195,8 @@ DiffUrlLoadResult loadDiffUrlText(const std::string& diffUrl) {
   __block NSURLResponse* urlResponse = nil;
   __block NSError* requestError = nil;
 
-  NSURLSessionDataTask* task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+  NSURLSession* session = [NSURLSession sessionWithConfiguration:createDiffUrlSessionConfiguration()];
+  NSURLSessionDataTask* task = [session dataTaskWithRequest:request
                                                                completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
     responseData = data;
     urlResponse = response;
@@ -176,6 +205,7 @@ DiffUrlLoadResult loadDiffUrlText(const std::string& diffUrl) {
   }];
   [task resume];
   dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  [session finishTasksAndInvalidate];
 
   const auto finishedAt = UrlClock::now();
 
@@ -212,11 +242,7 @@ double loadDiffUrlChunks(
                                                                          shouldCancel:shouldCancel];
   NSOperationQueue* delegateQueue = [NSOperationQueue new];
   delegateQueue.maxConcurrentOperationCount = 1;
-  NSURLSessionConfiguration* configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
-  configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
-  configuration.timeoutIntervalForRequest = 60;
-  configuration.timeoutIntervalForResource = 60;
-  NSURLSession* session = [NSURLSession sessionWithConfiguration:configuration
+  NSURLSession* session = [NSURLSession sessionWithConfiguration:createDiffUrlSessionConfiguration()
                                                        delegate:delegate
                                                   delegateQueue:delegateQueue];
   NSURLSessionDataTask* task = [session dataTaskWithRequest:request];

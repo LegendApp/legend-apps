@@ -26,6 +26,7 @@ public:
   ~HybridDiffLoadSession() override;
 
   std::shared_ptr<HybridDiffDocumentSpec> getDocument() override;
+  DiffLoadStatus getProgress() override;
   DiffLoadProgress consumeChanges(double initialRowCount) override;
   double cancel() override;
 

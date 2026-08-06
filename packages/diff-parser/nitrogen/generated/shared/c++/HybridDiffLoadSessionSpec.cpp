@@ -15,6 +15,7 @@ namespace margelo::nitro::legendapps::diffparser {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("getDocument", &HybridDiffLoadSessionSpec::getDocument);
+      prototype.registerHybridMethod("getProgress", &HybridDiffLoadSessionSpec::getProgress);
       prototype.registerHybridMethod("consumeChanges", &HybridDiffLoadSessionSpec::consumeChanges);
       prototype.registerHybridMethod("cancel", &HybridDiffLoadSessionSpec::cancel);
     });

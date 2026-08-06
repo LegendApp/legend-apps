@@ -141,6 +141,16 @@ export interface DiffLoadProgress {
   error: string;
 }
 
+export interface DiffLoadStatus {
+  rowCount: number;
+  fileCount: number;
+  rowVersion: number;
+  fileVersion: number;
+  complete: boolean;
+  cancelled: boolean;
+  error: string;
+}
+
 export interface DiffGitFolderLoadOptions {
   compareBaseKind: string;
   compareBaseRef: string;
@@ -215,6 +225,7 @@ export interface DiffLoadSession
     ios: "c++";
   }> {
   getDocument(): DiffDocument;
+  getProgress(): DiffLoadStatus;
   consumeChanges(initialRowCount: number): DiffLoadProgress;
   cancel(): number;
 }

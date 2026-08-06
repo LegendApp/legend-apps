@@ -96,6 +96,23 @@ std::shared_ptr<HybridDiffDocumentSpec> HybridDiffLoadSession::getDocument() {
   return document_;
 }
 
+DiffLoadStatus HybridDiffLoadSession::getProgress() {
+  std::string error;
+  {
+    std::lock_guard<std::mutex> lock(errorMutex_);
+    error = error_;
+  }
+
+  return DiffLoadStatus(
+      document_->getRowCount(),
+      document_->getFileCount(),
+      static_cast<double>(rowVersion_.load()),
+      static_cast<double>(fileVersion_.load()),
+      complete_.load(),
+      cancelled_.load(),
+      std::move(error));
+}
+
 DiffLoadProgress HybridDiffLoadSession::consumeChanges(double initialRowCount) {
   std::string error;
   {

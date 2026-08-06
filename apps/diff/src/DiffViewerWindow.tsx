@@ -17,6 +17,7 @@ import {
   type DiffLoadProgress,
   type DiffLoadResult,
   type DiffLoadSession,
+  type DiffLoadStatus,
   type DiffLoadTiming,
   type DiffRenderRow,
   type DiffSideBySideFileHeader,
@@ -49,7 +50,7 @@ import {
 import { batch, computed, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Animated, Easing, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 import { registerDiffWindowExitPreparation } from "./diffAppExit";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
@@ -226,6 +227,7 @@ import {
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
+const diffLoadingPulseAccentColor = "#7c83ff";
 const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
 const diffUnsavedMergeBannerHeight = 48;
 const diffActiveSearchHighlightColor = "#ff7a00d9";
@@ -350,12 +352,12 @@ function waitForDiffProgressPoll(delayMs = diffProgressiveLoadPollMs) {
   });
 }
 
-function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCount: number, elapsedMs: number) {
-  if (progress.complete || progress.error || progress.initialRows.length > 0) {
+function shouldPublishInitialProgress(progress: DiffLoadStatus, initialRowCount: number, elapsedMs: number) {
+  if (progress.complete || progress.error || (initialRowCount > 0 && progress.rowCount > 0)) {
     return true;
   }
 
-  if (initialRowCount <= 0 && progress.files.length > 0) {
+  if (initialRowCount <= 0 && progress.fileCount > 0) {
     const rowCount = Math.max(0, Math.floor(progress.rowCount));
     return rowCount >= diffProgressiveInitialPaintRowCount ||
       elapsedMs >= diffProgressiveInitialPaintMaxDelayMs;
@@ -367,7 +369,7 @@ function shouldPublishInitialProgress(progress: DiffLoadProgress, initialRowCoun
 function getDiffLoadProgressState(
   source: DiffOpenSource,
   requestId: number,
-  progress: DiffLoadProgress,
+  progress: DiffLoadStatus,
 ): DiffLoadProgressState {
   return {
     complete: progress.complete,
@@ -1037,6 +1039,7 @@ function DiffErrorPanel({
   onOpenExternalUrl,
   onOpenSystemSettings,
   onRetry,
+  surfaceColor,
 }: {
   borderColor: string;
   chooseFolderLabel?: string;
@@ -1049,13 +1052,14 @@ function DiffErrorPanel({
   onOpenExternalUrl?: (url: string) => void;
   onOpenSystemSettings?: () => void;
   onRetry?: () => void;
+  surfaceColor: string;
 }) {
   const recoverySteps = "recoverySteps" in error ? error.recoverySteps : undefined;
   const externalUrl = "externalUrl" in error ? error.externalUrl : undefined;
   const externalUrlLabel = ("externalUrlLabel" in error ? error.externalUrlLabel : undefined) ?? "Open in Browser";
   const canOpenExternalUrl = Boolean(onOpenExternalUrl && externalUrl);
   return (
-    <View style={[styles.errorPanel, { borderColor }]}>
+    <View style={[styles.errorPanel, { backgroundColor: surfaceColor, borderColor }]}>
       <View style={[styles.errorPanelAccent, { backgroundColor: dangerColor }]} />
       <View style={styles.errorPanelBody}>
         <Text style={[styles.errorPanelTitle, { color: foregroundColor }]}>
@@ -1117,6 +1121,7 @@ function DiffDocumentErrorBody({
   onOpenExternalUrl,
   onOpenSystemSettings,
   onRetry,
+  surfaceColor,
 }: {
   borderColor: string;
   dangerColor: string;
@@ -1127,6 +1132,7 @@ function DiffDocumentErrorBody({
   onOpenExternalUrl: (url: string) => void;
   onOpenSystemSettings: () => void;
   onRetry: () => boolean;
+  surfaceColor: string;
 }) {
   return documentError ? (
     <View style={styles.documentError}>
@@ -1141,6 +1147,7 @@ function DiffDocumentErrorBody({
         onOpenExternalUrl={onOpenExternalUrl}
         onOpenSystemSettings={documentError.kind === "permission" ? onOpenSystemSettings : undefined}
         onRetry={documentError.kind !== "permission" && documentError.source ? onRetry : undefined}
+        surfaceColor={surfaceColor}
       />
     </View>
   ) : null;
@@ -1226,6 +1233,7 @@ function DiffFatalBody({
   foregroundColor,
   mutedColor,
   onChooseFolder,
+  surfaceColor,
 }: {
   borderColor: string;
   dangerColor: string;
@@ -1233,6 +1241,7 @@ function DiffFatalBody({
   foregroundColor: string;
   mutedColor: string;
   onChooseFolder: () => void;
+  surfaceColor: string;
 }) {
   return (
     <View style={styles.empty}>
@@ -1243,6 +1252,7 @@ function DiffFatalBody({
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         onChooseFolder={onChooseFolder}
+        surfaceColor={surfaceColor}
       />
     </View>
   );
@@ -1332,14 +1342,86 @@ function DiffDownloadingBody({
   );
 }
 
+const DiffLoadingPulseGlow = memo(function DiffLoadingPulseGlow() {
+  const pulseProgress = useRef(new Animated.Value(0)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const handleReduceMotionChanged = (enabled: boolean) => {
+      if (mounted) {
+        setReduceMotion(enabled);
+      }
+    };
+    void AccessibilityInfo.isReduceMotionEnabled().then(handleReduceMotionChanged);
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", handleReduceMotionChanged);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | undefined;
+    let stopped = false;
+    pulseProgress.stopAnimation();
+
+    const startPulse = () => {
+      pulseProgress.setValue(0);
+      animation = Animated.timing(pulseProgress, {
+        duration: 1_400,
+        easing: Easing.linear,
+        isInteraction: false,
+        toValue: 1,
+        useNativeDriver: true,
+      });
+      animation.start(({ finished }) => {
+        if (finished && !stopped) {
+          startPulse();
+        }
+      });
+    };
+
+    if (!reduceMotion) {
+      startPulse();
+    } else {
+      pulseProgress.setValue(0.5);
+    }
+
+    return () => {
+      stopped = true;
+      animation?.stop();
+    };
+  }, [pulseProgress, reduceMotion]);
+
+  const pulseOpacity = pulseProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 0.9, 0],
+  });
+  const pulseScale = pulseProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.035, 1],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.progressiveLoadingPulseGlow,
+        {
+          opacity: pulseOpacity,
+          transform: [{ scale: pulseScale }],
+        },
+      ]}
+    />
+  );
+});
+
 function DiffProgressiveLoadingBanner({
-  borderColor,
   foregroundColor,
   mutedColor,
   source,
   surfaceColor,
 }: {
-  borderColor: string;
   foregroundColor: string;
   mutedColor: string;
   source: DiffOpenSource;
@@ -1351,17 +1433,22 @@ function DiffProgressiveLoadingBanner({
 
   return visible ? (
     <View pointerEvents="none" style={styles.progressiveLoadingBanner}>
-      <View
-        accessibilityLabel={`Loading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
-        accessibilityRole="progressbar"
-        style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor, borderColor }]}
-      >
-        <ActivityIndicator color={foregroundColor} size="small" />
-        <View style={styles.progressiveLoadingText}>
-          <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Loading changes…</Text>
-          <Text style={[styles.loadingDetail, { color: mutedColor }]}>
-            {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
-          </Text>
+      <View style={styles.progressiveLoadingShadow}>
+        <DiffLoadingPulseGlow />
+        <View style={[styles.progressiveLoadingFrame, { backgroundColor: diffLoadingPulseAccentColor }]}>
+          <View
+            accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
+            accessibilityRole="progressbar"
+            style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor }]}
+          >
+            <ActivityIndicator color={foregroundColor} size="small" />
+            <View style={styles.progressiveLoadingText}>
+              <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading…</Text>
+              <Text style={[styles.loadingDetail, { color: mutedColor }]}>
+                {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
     </View>
@@ -1646,7 +1733,6 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
       {diffContent}
       <DiffProgressiveLoadingBanner
-        borderColor={rowConfig.borderColor}
         foregroundColor={rowConfig.foregroundColor}
         mutedColor={rowConfig.mutedColor}
         source={state.source}
@@ -3601,22 +3687,22 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           if (shouldStartNativeBeforeLoadingState) {
             publishLoadingState();
           }
-          let progress = progressiveSession.consumeChanges(initialRowCount);
-          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+          let progressStatus = progressiveSession.getProgress();
+          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
           while (
             loadRequestIdRef.current === requestId &&
-            !shouldPublishInitialProgress(progress, initialRowCount, nowMs() - nativeStartedAt)
+            !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)
           ) {
             await waitForDiffProgressPoll();
-            progress = progressiveSession.consumeChanges(initialRowCount);
-            setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+            progressStatus = progressiveSession.getProgress();
+            setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
           }
           if (loadRequestIdRef.current !== requestId) {
             progressiveSession.cancel();
-          } else if (progress.error) {
-            loadError = new Error(progress.error);
+          } else if (progressStatus.error) {
+            loadError = new Error(progressStatus.error);
           } else {
-            result = progress;
+            result = progressiveSession.consumeChanges(initialRowCount);
           }
         }
       } else if (nextSource.kind === "git") {
@@ -3679,22 +3765,22 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         if (shouldStartNativeBeforeLoadingState) {
           publishLoadingState();
         }
-        let progress = progressiveSession.consumeChanges(initialRowCount);
-        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+        let progressStatus = progressiveSession.getProgress();
+        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
         while (
           loadRequestIdRef.current === requestId &&
-          !shouldPublishInitialProgress(progress, initialRowCount, nowMs() - nativeStartedAt)
+          !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)
         ) {
           await waitForDiffProgressPoll();
-          progress = progressiveSession.consumeChanges(initialRowCount);
-          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+          progressStatus = progressiveSession.getProgress();
+          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
         }
         if (loadRequestIdRef.current !== requestId) {
           progressiveSession.cancel();
-        } else if (progress.error) {
-          loadError = new Error(progress.error);
+        } else if (progressStatus.error) {
+          loadError = new Error(progressStatus.error);
         } else {
-          result = progress;
+          result = progressiveSession.consumeChanges(initialRowCount);
         }
       }
 
@@ -3707,49 +3793,51 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           if (loadRequestIdRef.current === requestId) {
             const initialLoadComplete = "complete" in loadedResult ? loadedResult.complete : true;
             if (isBackgroundWatchRefresh && progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
-              let progress = loadedResult;
-              setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
-              while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
+              let progressStatus: DiffLoadStatus = loadedResult;
+              setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+              while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
                 await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
-                progress = progressiveSession.consumeChanges(0);
-                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
+                progressStatus = progressiveSession.getProgress();
+                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
               }
               if (loadRequestIdRef.current !== requestId) {
                 progressiveSession.cancel();
-              } else if (progress.error) {
-                throw new Error(progress.error);
+              } else if (progressStatus.error) {
+                throw new Error(progressStatus.error);
               } else {
-                publishLoadedState(progress, progress.complete, "complete");
-                schedulePostLoadSideEffects(progress);
+                const completedProgress = progressiveSession.consumeChanges(0);
+                publishLoadedState(completedProgress, completedProgress.complete, "complete");
+                schedulePostLoadSideEffects(completedProgress);
               }
             } else {
               publishLoadedState(loadedResult, initialLoadComplete, "initial");
               if (progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
                 let lastFileVersion = loadedResult.fileVersion;
                 let lastRowVersion = loadedResult.rowVersion;
-                let progress = loadedResult;
+                let progressStatus: DiffLoadStatus = loadedResult;
                 await waitForDiffProgressPoll(diffProgressivePostInitialLoadResumeMs);
-                while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
+                while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
                   await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
-                  progress = progressiveSession.consumeChanges(0);
+                  progressStatus = progressiveSession.getProgress();
                   const hasChanges =
-                    progress.rowVersion !== lastRowVersion ||
-                    progress.fileVersion !== lastFileVersion ||
-                    progress.complete ||
-                    !!progress.error;
+                    progressStatus.rowVersion !== lastRowVersion ||
+                    progressStatus.fileVersion !== lastFileVersion ||
+                    progressStatus.complete ||
+                    !!progressStatus.error;
                   if (hasChanges && loadRequestIdRef.current === requestId) {
-                    setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
-                    lastFileVersion = progress.fileVersion;
-                    lastRowVersion = progress.rowVersion;
+                    setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+                    lastFileVersion = progressStatus.fileVersion;
+                    lastRowVersion = progressStatus.rowVersion;
                   }
                 }
                 if (loadRequestIdRef.current !== requestId) {
                   progressiveSession.cancel();
-                } else if (progress.error) {
-                  throw new Error(progress.error);
+                } else if (progressStatus.error) {
+                  throw new Error(progressStatus.error);
                 } else {
-                  publishLoadedState(progress, true, "complete");
-                  schedulePostLoadSideEffects(progress);
+                  const completedProgress = progressiveSession.consumeChanges(0);
+                  publishLoadedState(completedProgress, true, "complete");
+                  schedulePostLoadSideEffects(completedProgress);
                 }
               } else {
                 schedulePostLoadSideEffects(loadedResult);
@@ -4970,6 +5058,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       onOpenExternalUrl={openExternalErrorUrl}
       onOpenSystemSettings={openPermissionSettings}
       onRetry={reloadCurrentSource}
+      surfaceColor={diffPalette.surface}
     />
   );
   const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (
@@ -4995,6 +5084,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       onOpenExternalUrl={openExternalErrorUrl}
       onOpenSystemSettings={startScreenController.openError.kind === "permission" ? openPermissionSettings : undefined}
       onRetry={startScreenController.openError.kind !== "permission" && startScreenController.openError.source ? startScreenController.retryOpenError : undefined}
+      surfaceColor={diffPalette.surface}
     />
   ) : null;
   let body: ReactNode;
@@ -5010,6 +5100,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
         onChooseFolder={openFolder}
+        surfaceColor={diffPalette.surface}
       />
     );
   } else if (state.status === "loaded") {
@@ -5426,19 +5517,39 @@ const styles = StyleSheet.create({
     top: diffTitlebarTopInset + 10,
     zIndex: 35,
   },
+  progressiveLoadingFrame: {
+    borderRadius: 11,
+    overflow: "hidden",
+    padding: 2,
+  },
+  progressiveLoadingShadow: {
+    borderRadius: 11,
+    shadowColor: "#000000",
+    shadowOffset: { height: 10, width: 0 },
+    shadowOpacity: 0.34,
+    shadowRadius: 20,
+  },
+  progressiveLoadingPulseGlow: {
+    borderColor: diffLoadingPulseAccentColor,
+    borderRadius: 13,
+    borderWidth: 2,
+    bottom: -2,
+    left: -2,
+    position: "absolute",
+    right: -2,
+    shadowColor: diffLoadingPulseAccentColor,
+    shadowOpacity: 0.95,
+    shadowRadius: 14,
+    top: -2,
+  },
   progressiveLoadingSurface: {
     alignItems: "center",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 9,
     flexDirection: "row",
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    shadowColor: "#000000",
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.24,
-    shadowRadius: 16,
+    gap: 11,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
   },
   progressiveLoadingText: {
     gap: 1,
