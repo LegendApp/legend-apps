@@ -1354,44 +1354,46 @@ const DiffLoadingPulseGlow = memo(function DiffLoadingPulseGlow() {
 
   useEffect(() => {
     let animation: Animated.CompositeAnimation | undefined;
-    let stopped = false;
     pulseProgress.stopAnimation();
 
-    const startPulse = () => {
-      pulseProgress.setValue(0);
-      animation = Animated.timing(pulseProgress, {
-        duration: 1_400,
-        easing: Easing.linear,
-        isInteraction: false,
-        toValue: 1,
-        useNativeDriver: true,
-      });
-      animation.start(({ finished }) => {
-        if (finished && !stopped) {
-          startPulse();
-        }
-      });
-    };
-
     if (!reduceMotion) {
-      startPulse();
+      pulseProgress.setValue(0);
+      animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseProgress, {
+            duration: 900,
+            easing: Easing.inOut(Easing.quad),
+            isInteraction: false,
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseProgress, {
+            duration: 900,
+            easing: Easing.inOut(Easing.quad),
+            isInteraction: false,
+            toValue: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+        { iterations: -1 },
+      );
+      animation.start();
     } else {
-      pulseProgress.setValue(0.5);
+      pulseProgress.setValue(0.35);
     }
 
     return () => {
-      stopped = true;
       animation?.stop();
     };
   }, [pulseProgress, reduceMotion]);
 
   const pulseOpacity = pulseProgress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.9, 0],
+    inputRange: [0, 1],
+    outputRange: [0.18, 1],
   });
   const pulseScale = pulseProgress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [1, 1.035, 1],
+    inputRange: [0, 1],
+    outputRange: [1, 1.055],
   });
 
   return (
@@ -1408,11 +1410,13 @@ const DiffLoadingPulseGlow = memo(function DiffLoadingPulseGlow() {
 });
 
 function DiffProgressiveLoadingBanner({
+  borderColor,
   foregroundColor,
   mutedColor,
   source,
   surfaceColor,
 }: {
+  borderColor: string;
   foregroundColor: string;
   mutedColor: string;
   source: DiffOpenSource;
@@ -1426,19 +1430,17 @@ function DiffProgressiveLoadingBanner({
     <View pointerEvents="none" style={styles.progressiveLoadingBanner}>
       <View style={styles.progressiveLoadingShadow}>
         <DiffLoadingPulseGlow />
-        <View style={[styles.progressiveLoadingFrame, { backgroundColor: diffLoadingPulseAccentColor }]}>
-          <View
-            accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
-            accessibilityRole="progressbar"
-            style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor }]}
-          >
-            <ActivityIndicator color={foregroundColor} size="small" />
-            <View style={styles.progressiveLoadingText}>
-              <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading…</Text>
-              <Text style={[styles.loadingDetail, { color: mutedColor }]}>
-                {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
-              </Text>
-            </View>
+        <View
+          accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
+          accessibilityRole="progressbar"
+          style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor, borderColor }]}
+        >
+          <ActivityIndicator color={foregroundColor} size="small" />
+          <View style={styles.progressiveLoadingText}>
+            <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading…</Text>
+            <Text style={[styles.loadingDetail, { color: mutedColor }]}>
+              {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
+            </Text>
           </View>
         </View>
       </View>
@@ -1724,6 +1726,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
     <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
       {diffContent}
       <DiffProgressiveLoadingBanner
+        borderColor={rowConfig.borderColor}
         foregroundColor={rowConfig.foregroundColor}
         mutedColor={rowConfig.mutedColor}
         source={state.source}
@@ -5505,13 +5508,8 @@ const styles = StyleSheet.create({
     top: diffTitlebarTopInset + 10,
     zIndex: 35,
   },
-  progressiveLoadingFrame: {
-    borderRadius: 11,
-    overflow: "hidden",
-    padding: 2,
-  },
   progressiveLoadingShadow: {
-    borderRadius: 11,
+    borderRadius: 10,
     shadowColor: "#000000",
     shadowOffset: { height: 10, width: 0 },
     shadowOpacity: 0.34,
@@ -5519,20 +5517,21 @@ const styles = StyleSheet.create({
   },
   progressiveLoadingPulseGlow: {
     borderColor: diffLoadingPulseAccentColor,
-    borderRadius: 13,
+    borderRadius: 12,
     borderWidth: 2,
-    bottom: -2,
-    left: -2,
+    bottom: -3,
+    left: -3,
     position: "absolute",
-    right: -2,
+    right: -3,
     shadowColor: diffLoadingPulseAccentColor,
-    shadowOpacity: 0.95,
-    shadowRadius: 14,
-    top: -2,
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    top: -3,
   },
   progressiveLoadingSurface: {
     alignItems: "center",
-    borderRadius: 9,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 11,
     minHeight: 48,
