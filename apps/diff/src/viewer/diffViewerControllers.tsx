@@ -418,7 +418,7 @@ export function DiffLoadCompletionController({
     const currentState = state$.get();
     const trace = loadTraceRef.current;
     if (currentState.status === "loaded" && trace?.document === currentState.document) {
-      const currentStatistics = loadStatistics$.get();
+      const currentStatistics = loadStatistics$.peek();
       const downloadMs = Number(Math.max(0, currentState.timing.fetchMs).toFixed(1));
       const nativeTotalMs = Number(Math.max(0, currentState.timing.nativeTotalMs).toFixed(1));
 
