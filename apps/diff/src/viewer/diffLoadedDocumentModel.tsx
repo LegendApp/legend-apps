@@ -434,7 +434,7 @@ export function useDiffSideBySideRuntime({
   }, []);
   const requestSideBySideRange = useCallback((lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => {
     const currentState = state$.peek();
-    if (currentState.status === "loaded" && options?.reason !== "scroll") {
+    if (currentState.status === "loaded" && currentState.loadComplete !== false && options?.reason !== "scroll") {
       const start = Math.max(0, Math.floor(lineStart));
       const count = Math.max(0, Math.ceil(lineCount));
       if (count > 0) {
@@ -460,7 +460,7 @@ export function useDiffSideBySideRuntime({
   }, [activeFileIndex$, sideBySideDataSource, state$]);
   const handleSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
     const currentState = state$.peek();
-    if (currentState.status === "loaded") {
+    if (currentState.status === "loaded" && currentState.loadComplete !== false) {
       sideBySideVisibleRangeRef.current = {
         count,
         document: currentState.document,
@@ -483,7 +483,7 @@ export function useDiffSideBySideRuntime({
   useObserveEffect(() => {
     const currentDiffPaneHeight = diffPaneHeight$.get();
     const currentState = state$.get();
-    if (!nativeSideBySideRows && currentState.status === "loaded" && viewMode !== "unified" && currentDiffPaneHeight > 0 && sideBySideRowCount > 0) {
+    if (!nativeSideBySideRows && currentState.status === "loaded" && currentState.loadComplete !== false && viewMode !== "unified" && currentDiffPaneHeight > 0 && sideBySideRowCount > 0) {
       const initialCount = Math.min(sideBySideRowCount, Math.max(1, Math.ceil(currentDiffPaneHeight / rowHeight)));
       requestSideBySideRange(0, initialCount, { force: true, reason: "initial" });
     }

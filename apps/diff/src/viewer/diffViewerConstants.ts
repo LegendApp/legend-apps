@@ -4,7 +4,6 @@ export const diffInitialRowCount = 160;
 export const diffProgressiveLoadPollMs = 16;
 export const diffProgressivePostInitialLoadPollMs = 500;
 export const diffProgressivePostInitialLoadResumeMs = 250;
-export const diffProgressiveLoadedStatePublishMs = 120;
 export const diffProgressiveInitialPaintRowCount = 1_000;
 export const diffProgressiveItemCountExpandChunkRowCount = 5_000;
 export const diffProgressiveItemCountExpandThresholdRows = 240;

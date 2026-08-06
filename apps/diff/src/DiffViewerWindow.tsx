@@ -49,7 +49,7 @@ import {
 import { batch, computed, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 import { registerDiffWindowExitPreparation } from "./diffAppExit";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
@@ -130,7 +130,6 @@ import {
   diffProgressiveInitialPaintRowCount,
   diffProgressiveItemCountExpandChunkRowCount,
   diffProgressiveItemCountExpandThresholdRows,
-  diffProgressiveLoadedStatePublishMs,
   diffProgressiveLoadPollMs,
   diffProgressivePostInitialLoadPollMs,
   diffProgressivePostInitialLoadResumeMs,
@@ -227,6 +226,7 @@ import {
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
+const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
 const diffUnsavedMergeBannerHeight = 48;
 const diffActiveSearchHighlightColor = "#ff7a00d9";
 const diffActiveSearchRowHighlightColor = "#ff950038";
@@ -573,10 +573,8 @@ type DiffLoadedBodyProps = {
   handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
   handleTopItemChanged: (rowIndex: number) => void;
   handleVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
-  isRenderingInitialLoadedFrame: boolean;
   rowConfig: DiffRowConfig;
   listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
-  loadingSource: DiffOpenSource | null;
   mergeState: DiffMergeState;
   mergeState$: Observable<DiffMergeState>;
   nativeSideBySideRowConfig: DiffNativeRowConfigProps;
@@ -655,6 +653,7 @@ type DiffRowConfig = {
   fontFamily: string;
   fontSize: number;
   foregroundColor: string;
+  mutedColor: string;
   showOnlyHunks: boolean;
   syntaxHighlightingEnabled: boolean;
   syntaxTheme: DiffSettingsFile["syntaxTheme"];
@@ -1311,6 +1310,64 @@ const DiffSplitBody = memo(function DiffSplitBody({
   );
 });
 
+function DiffDownloadingBody({
+  foregroundColor,
+  mutedColor,
+  source,
+}: {
+  foregroundColor: string;
+  mutedColor: string;
+  source: DiffOpenSource;
+}) {
+  return (
+    <View
+      accessibilityLabel={`Downloading diff for ${source.label}`}
+      accessibilityRole="progressbar"
+      style={styles.downloadingBody}
+    >
+      <ActivityIndicator color={foregroundColor} size="small" />
+      <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading diff…</Text>
+      <Text numberOfLines={1} style={[styles.loadingDetail, { color: mutedColor }]}>{source.label}</Text>
+    </View>
+  );
+}
+
+function DiffProgressiveLoadingBanner({
+  borderColor,
+  foregroundColor,
+  mutedColor,
+  source,
+  surfaceColor,
+}: {
+  borderColor: string;
+  foregroundColor: string;
+  mutedColor: string;
+  source: DiffOpenSource;
+  surfaceColor: string;
+}) {
+  const { loadProgress$ } = useDiffViewerModel();
+  const progress = useValue(loadProgress$);
+  const visible = progress.visible && progress.source !== null && sourcesMatch(progress.source, source);
+
+  return visible ? (
+    <View pointerEvents="none" style={styles.progressiveLoadingBanner}>
+      <View
+        accessibilityLabel={`Loading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
+        accessibilityRole="progressbar"
+        style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor, borderColor }]}
+      >
+        <ActivityIndicator color={foregroundColor} size="small" />
+        <View style={styles.progressiveLoadingText}>
+          <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Loading changes…</Text>
+          <Text style={[styles.loadingDetail, { color: mutedColor }]}>
+            {formatStatNumber(progress.fileCount)} files · {formatStatNumber(progress.rowCount)} lines
+          </Text>
+        </View>
+      </View>
+    </View>
+  ) : null;
+}
+
 const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   activeFileIndex$,
   activeItemCount,
@@ -1330,10 +1387,8 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   handleSideBySideVisibleRowsRequested,
   handleTopItemChanged,
   handleVisibleRowsRequested,
-  isRenderingInitialLoadedFrame,
   rowConfig,
   listRef,
-  loadingSource,
   mergeState,
   mergeState$,
   nativeSideBySideRowConfig,
@@ -1590,6 +1645,13 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
   return (
     <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
       {diffContent}
+      <DiffProgressiveLoadingBanner
+        borderColor={rowConfig.borderColor}
+        foregroundColor={rowConfig.foregroundColor}
+        mutedColor={rowConfig.mutedColor}
+        source={state.source}
+        surfaceColor={rowConfig.fileHeaderBackgroundColor}
+      />
       {floatingDocumentBanner}
     </View>
   );
@@ -2641,7 +2703,7 @@ function DiffDropSurface({
 }
 
 function formatStatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(Math.max(0, Math.floor(value)));
+  return diffStatNumberFormatter.format(Math.max(0, Math.floor(value)));
 }
 
 function formatStatTime(value: number) {
@@ -2970,9 +3032,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     }
   }, []);
   const isLoading = loadingSource !== null;
-  const isRenderingInitialLoadedFrame =
-    state.status === "loaded" &&
-    sourcesMatch(loadingSource, state.source);
   const renderViewMode = viewMode;
   const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
   const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
@@ -3302,7 +3361,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
     maybeExpandItemCountLimitForVisibleRange(start, count, info, "unified");
     const currentState = state$.peek();
-    if (syntaxHighlightingEnabled && currentState.status === "loaded") {
+    if (syntaxHighlightingEnabled && currentState.status === "loaded" && currentState.loadComplete !== false) {
       const files = getFilesForSourceRowRange(currentState.files, start, count);
       scheduleVisibleFileTokenization(currentState.document, files, info);
     }
@@ -3668,7 +3727,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
               if (progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
                 let lastFileVersion = loadedResult.fileVersion;
                 let lastRowVersion = loadedResult.rowVersion;
-                let lastStatePublishedAt = nowMs();
                 let progress = loadedResult;
                 await waitForDiffProgressPoll(diffProgressivePostInitialLoadResumeMs);
                 while (loadRequestIdRef.current === requestId && !progress.complete && !progress.error) {
@@ -3680,17 +3738,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                     progress.complete ||
                     !!progress.error;
                   if (hasChanges && loadRequestIdRef.current === requestId) {
-                    const shouldPublishLoadedState =
-                      progress.complete ||
-                      progress.error ||
-                      nowMs() - lastStatePublishedAt >= diffProgressiveLoadedStatePublishMs;
                     setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progress));
                     lastFileVersion = progress.fileVersion;
                     lastRowVersion = progress.rowVersion;
-                    if (shouldPublishLoadedState) {
-                      lastStatePublishedAt = nowMs();
-                      publishLoadedState(progress, progress.complete, progress.complete ? "complete" : "progress");
-                    }
                   }
                 }
                 if (loadRequestIdRef.current !== requestId) {
@@ -3698,6 +3748,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
                 } else if (progress.error) {
                   throw new Error(progress.error);
                 } else {
+                  publishLoadedState(progress, true, "complete");
                   schedulePostLoadSideEffects(progress);
                 }
               } else {
@@ -4354,6 +4405,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontFamily,
       fontSize,
       foregroundColor,
+      mutedColor,
       showOnlyHunks,
       syntaxHighlightingEnabled,
       syntaxTheme: listSyntaxTheme,
@@ -4366,6 +4418,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       fontSize,
       foregroundColor,
       listSyntaxTheme,
+      mutedColor,
       showOnlyHunks,
       syntaxHighlightingEnabled,
     ],
@@ -4984,10 +5037,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
             handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested}
             handleTopItemChanged={handleTopItemChanged}
             handleVisibleRowsRequested={handleVisibleRowsRequested}
-            isRenderingInitialLoadedFrame={isRenderingInitialLoadedFrame}
             rowConfig={rowConfig}
             listRef={listRef}
-            loadingSource={loadingSource}
             mergeState={mergeState}
             mergeState$={mergeState$}
             nativeSideBySideRowConfig={nativeSideBySideRowConfig}
@@ -5048,6 +5099,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           <View style={styles.diffPane}>
             <View style={styles.diffPaneContent}>
               <View style={styles.diffTitlebarSpacer} />
+              <DiffDownloadingBody
+                foregroundColor={foregroundColor}
+                mutedColor={mutedColor}
+                source={emptyLoadingSource}
+              />
             </View>
           </View>
         )}
@@ -5342,6 +5398,50 @@ const styles = StyleSheet.create({
   },
   diffTitlebarSpacer: {
     height: diffTitlebarTopInset,
+  },
+  downloadingBody: {
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+    justifyContent: "center",
+    paddingBottom: diffTitlebarTopInset,
+    paddingHorizontal: 24,
+  },
+  loadingDetail: {
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+    lineHeight: 16,
+  },
+  loadingTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  progressiveLoadingBanner: {
+    alignItems: "center",
+    left: 0,
+    paddingHorizontal: 20,
+    position: "absolute",
+    right: 0,
+    top: diffTitlebarTopInset + 10,
+    zIndex: 35,
+  },
+  progressiveLoadingSurface: {
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    shadowColor: "#000000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+  },
+  progressiveLoadingText: {
+    gap: 1,
   },
   dropOverlay: {
     alignItems: "center",
