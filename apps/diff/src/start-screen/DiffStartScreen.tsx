@@ -468,10 +468,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   openError: {
-    bottom: 28,
-    left: 48,
+    alignItems: "center",
+    bottom: 24,
+    left: 0,
+    paddingHorizontal: 32,
     position: "absolute",
-    right: 48,
+    right: 0,
     zIndex: 10,
   },
   openFolderButton: {

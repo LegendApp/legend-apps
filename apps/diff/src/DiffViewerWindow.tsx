@@ -1029,7 +1029,6 @@ function getDiffLineRowHeight(fontSize: number) {
 
 function DiffErrorPanel({
   borderColor,
-  dangerColor,
   error,
   foregroundColor,
   mutedColor,
@@ -1043,7 +1042,6 @@ function DiffErrorPanel({
 }: {
   borderColor: string;
   chooseFolderLabel?: string;
-  dangerColor: string;
   error: DiffRecoverableError | DiffFatalError;
   foregroundColor: string;
   mutedColor: string;
@@ -1060,7 +1058,6 @@ function DiffErrorPanel({
   const canOpenExternalUrl = Boolean(onOpenExternalUrl && externalUrl);
   return (
     <View style={[styles.errorPanel, { backgroundColor: surfaceColor, borderColor }]}>
-      <View style={[styles.errorPanelAccent, { backgroundColor: dangerColor }]} />
       <View style={styles.errorPanelBody}>
         <Text style={[styles.errorPanelTitle, { color: foregroundColor }]}>
           {error.title}
@@ -1113,7 +1110,6 @@ function DiffErrorPanel({
 
 function DiffDocumentErrorBody({
   borderColor,
-  dangerColor,
   documentError,
   foregroundColor,
   mutedColor,
@@ -1124,7 +1120,6 @@ function DiffDocumentErrorBody({
   surfaceColor,
 }: {
   borderColor: string;
-  dangerColor: string;
   documentError: DiffRecoverableError | null;
   foregroundColor: string;
   mutedColor: string;
@@ -1139,7 +1134,6 @@ function DiffDocumentErrorBody({
       <DiffErrorPanel
         borderColor={borderColor}
         chooseFolderLabel={documentError.kind === "permission" ? "Choose Another Folder" : undefined}
-        dangerColor={dangerColor}
         error={documentError}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
@@ -1228,7 +1222,6 @@ function DiffNativeMenuSavingStateController({
 
 function DiffFatalBody({
   borderColor,
-  dangerColor,
   error,
   foregroundColor,
   mutedColor,
@@ -1236,7 +1229,6 @@ function DiffFatalBody({
   surfaceColor,
 }: {
   borderColor: string;
-  dangerColor: string;
   error: DiffFatalError;
   foregroundColor: string;
   mutedColor: string;
@@ -1247,7 +1239,6 @@ function DiffFatalBody({
     <View style={styles.empty}>
       <DiffErrorPanel
         borderColor={borderColor}
-        dangerColor={dangerColor}
         error={error}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
@@ -5050,7 +5041,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
   const documentErrorBody = (
     <DiffDocumentErrorBody
       borderColor={diffPalette.border}
-      dangerColor={diffPalette.danger}
       documentError={documentError}
       foregroundColor={foregroundColor}
       mutedColor={mutedColor}
@@ -5075,7 +5065,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     <DiffErrorPanel
       borderColor={diffPalette.border}
       chooseFolderLabel={startScreenController.openError.kind === "permission" ? "Choose Another Folder" : undefined}
-      dangerColor={diffPalette.danger}
       error={startScreenController.openError}
       foregroundColor={foregroundColor}
       mutedColor={mutedColor}
@@ -5095,7 +5084,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     body = (
       <DiffFatalBody
         borderColor={diffPalette.border}
-        dangerColor={diffPalette.danger}
         error={state.error}
         foregroundColor={foregroundColor}
         mutedColor={mutedColor}
@@ -5412,29 +5400,29 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   errorPanel: {
-    borderRadius: 6,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    maxWidth: 620,
-    overflow: "hidden",
+    maxWidth: 560,
+    shadowColor: "#000000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     width: "100%",
   },
-  errorPanelAccent: {
-    width: 3,
-  },
   errorPanelActions: {
+    alignItems: "center",
     flexDirection: "row",
     gap: 8,
-    paddingTop: 8,
+    justifyContent: "flex-end",
+    paddingTop: 10,
   },
   errorPanelBody: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   errorPanelButton: {
-    paddingRight: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   errorPanelButtonText: {
     fontSize: 12,
@@ -5443,7 +5431,7 @@ const styles = StyleSheet.create({
   },
   errorPanelMessage: {
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   errorPanelStep: {
     fontSize: 12,
@@ -5454,9 +5442,9 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   errorPanelTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
-    lineHeight: 18,
+    lineHeight: 20,
   },
   diffPane: {
     flex: 1,
