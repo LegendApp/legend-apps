@@ -30,6 +30,6 @@
     "@legend-apps/window-controls": "0.0.0",
     "@legend-apps/window-manager": "0.0.0",
     "@legendapp/list": "catalog:",
-    "react-native-enriched-markdown": "^0.5.0"
+    "react-native-enriched-markdown": "^0.7.4"
   }
 }

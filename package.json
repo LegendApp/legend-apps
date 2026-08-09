@@ -80,7 +80,7 @@
   },
   "patchedDependencies": {
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
-    "react-native-enriched-markdown@0.5.0": "patches/react-native-enriched-markdown@0.5.0.patch",
+    "react-native-enriched-markdown@0.7.4": "patches/react-native-enriched-markdown@0.7.4.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch"
   },
   "catalog": {

@@ -36,7 +36,7 @@
         "@legend-apps/window-manager": "0.0.0",
         "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
-        "react-native-enriched-markdown": "^0.5.0",
+        "react-native-enriched-markdown": "^0.7.4",
         "uniwind": "^1.6.3",
       },
     },
@@ -132,7 +132,7 @@
         "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "0.5.0",
+        "react-native-enriched-markdown": "0.7.4",
         "uniwind": "^1.6.3",
       },
     },
@@ -207,7 +207,7 @@
         "@legend-apps/window-controls": "0.0.0",
         "@legend-apps/window-manager": "0.0.0",
         "@legendapp/list": "catalog:",
-        "react-native-enriched-markdown": "^0.5.0",
+        "react-native-enriched-markdown": "^0.7.4",
       },
     },
     "packages/ai": {
@@ -450,7 +450,7 @@
         "@legend-apps/markdown-parser": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "0.5.0",
+        "react-native-enriched-markdown": "0.7.4",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -642,7 +642,7 @@
       "dependencies": {
         "@legend-apps/markdown-document": "workspace:*",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "0.5.0",
+        "react-native-enriched-markdown": "0.7.4",
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
@@ -719,7 +719,7 @@
     },
   },
   "patchedDependencies": {
-    "react-native-enriched-markdown@0.5.0": "patches/react-native-enriched-markdown@0.5.0.patch",
+    "react-native-enriched-markdown@0.7.4": "patches/react-native-enriched-markdown@0.7.4.patch",
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
   },
@@ -2097,7 +2097,7 @@
 
     "react-native-css-interop": ["react-native-css-interop@0.2.4", "", { "dependencies": { "@babel/helper-module-imports": "^7.22.15", "@babel/traverse": "^7.23.0", "@babel/types": "^7.23.0", "debug": "^4.3.7", "lightningcss": "~1.27.0", "semver": "^7.6.3" }, "peerDependencies": { "react": ">=18", "react-native": "*", "react-native-reanimated": ">=3.6.2", "react-native-safe-area-context": "*", "react-native-svg": "*", "tailwindcss": "~3" }, "optionalPeers": ["react-native-safe-area-context", "react-native-svg"] }, "sha512-ATP3BACxGM4h/l8cisFauGMGxnXpu8Bcp4Bc3O7iNZpq7j0VJjc1RRRBUSBY4C4WuI7VA/xvp3puijVS9d95rg=="],
 
-    "react-native-enriched-markdown": ["react-native-enriched-markdown@0.5.0", "", { "peerDependencies": { "@expo/config-plugins": ">=50.0.0", "katex": ">=0.16.0", "react": "*", "react-native": "*" }, "optionalPeers": ["@expo/config-plugins", "katex"] }, "sha512-CYihNlcg8IjsrVbmypDjFHsDF6Z6vYO0yraw6CkR30SDsg99J6fcBrOkyWOItO8PIDD21jw8yD1eYP/0LBOCdA=="],
+    "react-native-enriched-markdown": ["react-native-enriched-markdown@0.7.4", "", { "peerDependencies": { "@expo/config-plugins": ">=50.0.0", "katex": ">=0.16.0", "react": "*", "react-native": "*" }, "optionalPeers": ["@expo/config-plugins", "katex"] }, "sha512-NXkqZL4d5vM6wOBwYwx0r1Xyw2h+E8SyobrS8nKnbpjYOyKZj6zIdOq1KJFrlenJNu/tXpbJ8jtQagaA4Wj4cg=="],
 
     "react-native-is-edge-to-edge": ["react-native-is-edge-to-edge@1.3.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-NIXU/iT5+ORyCc7p0z2nnlkouYKX425vuU1OEm6bMMtWWR9yvb+Xg5AZmImTKoF9abxCPqrKC3rOZsKzUYgYZA=="],
 
