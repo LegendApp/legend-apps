@@ -1768,18 +1768,19 @@ index 48f0dcd..858b273 100644
      [mockView renderMarkdownSynchronously:markdown];
    }
 
-@@ -58,7 +56,9 @@
+@@ -58,7 +56,10 @@
 
    CGFloat fontScale = typedProps.allowFontScaling ? RCTFontSizeMultiplier() : 1.0;
 
 -  if (!typedProps.markdown.empty()) {
 +  const BOOL usesNativeMarkdown = !typedProps.nativeMarkdownBlockId.empty();
++  const BOOL hasMarkdown = usesNativeMarkdown || !typedProps.markdown.empty();
 +
-+  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
++  if (hasMarkdown) {
      auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::GitHub);
      CachedSize cached;
      if (MeasurementCache::shared().get(cacheKey, cached)) {
-@@ -76,15 +76,21 @@
+@@ -76,15 +77,21 @@
        (RCTInternalGenericWeakWrapper *)unwrapManagedObject(getStateData().getComponentViewRef());
    EnrichedMarkdown *view = weakWrapper ? (EnrichedMarkdown *)weakWrapper.object : nil;
 
@@ -1804,12 +1805,12 @@ index 48f0dcd..858b273 100644
        size = [mockView measureSize:maxWidth];
      }
    };
-@@ -95,7 +101,7 @@
+@@ -95,7 +102,7 @@
      dispatch_sync(dispatch_get_main_queue(), measureBlock);
    }
 
 -  if (!typedProps.markdown.empty()) {
-+  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
++  if (hasMarkdown) {
      auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::GitHub);
      MeasurementCache::shared().set(cacheKey, {size.width, size.height});
    }
@@ -1856,18 +1857,19 @@ index 417c39d..8c5b8ed 100644
      [mockView renderMarkdownSynchronously:markdown];
    }
 
-@@ -61,7 +60,9 @@
+@@ -61,7 +60,10 @@
    // This avoids the expensive mock view + synchronous md4c parse path for repeated content.
    CGFloat fontScale = typedProps.allowFontScaling ? RCTFontSizeMultiplier() : 1.0;
 
 -  if (!typedProps.markdown.empty()) {
 +  const BOOL usesNativeMarkdown = !typedProps.nativeMarkdownBlockId.empty();
++  const BOOL hasMarkdown = usesNativeMarkdown || !typedProps.markdown.empty();
 +
-+  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
++  if (hasMarkdown) {
      auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::CommonMark);
      CachedSize cached;
      if (MeasurementCache::shared().get(cacheKey, cached)) {
-@@ -79,15 +80,21 @@
+@@ -79,15 +81,21 @@
        (RCTInternalGenericWeakWrapper *)unwrapManagedObject(getStateData().getComponentViewRef());
    EnrichedMarkdownText *view = weakWrapper ? (EnrichedMarkdownText *)weakWrapper.object : nil;
 
@@ -1892,15 +1894,57 @@ index 417c39d..8c5b8ed 100644
        size = [mockView measureSize:maxWidth];
      }
    };
-@@ -98,7 +105,7 @@
+@@ -98,7 +106,7 @@
      dispatch_sync(dispatch_get_main_queue(), measureBlock);
    }
 
 -  if (!typedProps.markdown.empty()) {
-+  if (!typedProps.markdown.empty() && !usesNativeMarkdown) {
++  if (hasMarkdown) {
      auto cacheKey = buildMeasurementCacheKey(typedProps, maxWidth, fontScale, MarkdownFlavor::CommonMark);
      MeasurementCache::shared().set(cacheKey, {size.width, size.height});
    }
+diff --git a/ios/internals/MeasurementCache.h b/ios/internals/MeasurementCache.h
+index e669d6c..5099a87 100644
+--- a/ios/internals/MeasurementCache.h
++++ b/ios/internals/MeasurementCache.h
+@@ -32,3 +32,5 @@ struct MeasurementCacheKey {
+ struct MeasurementCacheKey {
+   std::string markdown;
++  std::string nativeMarkdownBlockId;
++  double nativeMarkdownRevision;
+   CGFloat maxWidth;
+@@ -44,9 +46,11 @@ struct MeasurementCacheKey {
+   bool operator==(const MeasurementCacheKey &other) const
+   {
+-    return std::tie(markdown, maxWidth, allowTrailingMargin, allowFontScaling, maxFontSizeMultiplier,
+-                    md4cFlagsUnderline, md4cFlagsLatexMath, styleFingerprint, fontScale, flavor) ==
+-           std::tie(other.markdown, other.maxWidth, other.allowTrailingMargin, other.allowFontScaling,
+-                    other.maxFontSizeMultiplier, other.md4cFlagsUnderline, other.md4cFlagsLatexMath,
+-                    other.styleFingerprint, other.fontScale, other.flavor);
++    return std::tie(markdown, nativeMarkdownBlockId, nativeMarkdownRevision, maxWidth, allowTrailingMargin,
++                    allowFontScaling, maxFontSizeMultiplier, md4cFlagsUnderline, md4cFlagsLatexMath,
++                    styleFingerprint, fontScale, flavor) ==
++           std::tie(other.markdown, other.nativeMarkdownBlockId, other.nativeMarkdownRevision, other.maxWidth,
++                    other.allowTrailingMargin, other.allowFontScaling, other.maxFontSizeMultiplier,
++                    other.md4cFlagsUnderline, other.md4cFlagsLatexMath, other.styleFingerprint, other.fontScale,
++                    other.flavor);
+   }
+ };
+@@ -55,5 +59,7 @@ struct MeasurementCacheKeyHash {
+   size_t operator()(const MeasurementCacheKey &key) const
+   {
+     size_t h = 0;
+     HashUtils::hash_one(h, key.markdown);
++    HashUtils::hash_one(h, key.nativeMarkdownBlockId);
++    HashUtils::hash_one(h, key.nativeMarkdownRevision);
+     HashUtils::hash_one(h, key.maxWidth);
+@@ -134,4 +140,6 @@ inline MeasurementCacheKey buildMeasurementCacheKey(const PropsType &props, CGFl
+ {
+   return MeasurementCacheKey{
+       .markdown = props.markdown,
++      .nativeMarkdownBlockId = props.nativeMarkdownBlockId,
++      .nativeMarkdownRevision = props.nativeMarkdownRevision,
+       .maxWidth = maxWidth,
 diff --git a/ios/renderer/CodeRenderer.m b/ios/renderer/CodeRenderer.m
 index e52a35c..358f27c 100644
 --- a/ios/renderer/CodeRenderer.m
