@@ -1346,7 +1346,10 @@ function DiffProgressiveLoadingBanner({
 }) {
   const { loadProgress$ } = useDiffViewerModel();
   const progress = useValue(loadProgress$);
-  const visible = progress.visible && progress.source !== null && sourcesMatch(progress.source, source);
+  const visible = source.kind === "github" &&
+    progress.visible &&
+    progress.source !== null &&
+    sourcesMatch(progress.source, source);
 
   return visible ? (
     <View pointerEvents="none" style={styles.progressiveLoadingBanner}>
