@@ -4,7 +4,7 @@ import React
 @objc(RNGlassEffectView)
 class RNGlassEffectView: RCTViewManager {
     override func view() -> NSView! {
-        return GlassEffectView()
+        return GlassEffectView(frame: .zero)
     }
 
     override static func requiresMainQueueSetup() -> Bool {
@@ -12,7 +12,7 @@ class RNGlassEffectView: RCTViewManager {
     }
 }
 
-class GlassEffectView: NSView {
+class GlassEffectView: RCTView {
     private let contentContainer = NSView()
     private var glassEffectView: NSView?
 
