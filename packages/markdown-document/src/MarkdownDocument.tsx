@@ -1760,7 +1760,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             markdown: mergedMarkdown,
           });
           validateTransactionResult(result);
-          applyTransactionResult(result);
+          applyTransactionResult(result, previousBlock.id);
 
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];

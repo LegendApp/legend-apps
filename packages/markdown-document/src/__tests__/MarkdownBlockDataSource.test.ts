@@ -102,4 +102,22 @@ describe("MarkdownBlockDataSource", () => {
       layout: "invalidate",
     }]);
   });
+
+  it("retains the previous row while deleting the merged following row", () => {
+    const blocks = [block("a", 0), block("b", 1), block("c", 2)];
+    const adapter = {} as MarkdownDocumentAdapter;
+    const dataSource = new MarkdownBlockDataSource(adapter, "d1", snapshot(blocks));
+    const batches: DataSourceMutationBatch[] = [];
+    dataSource.subscribe((batch) => batches.push(batch));
+
+    dataSource.applyTransactionResult(result(0, 2, [block("a", 0, "ab")]), "a");
+
+    expect(dataSource.getLength()).toBe(2);
+    expect(dataSource.getItem(0)).toBe("a");
+    expect(dataSource.getItem(1)).toBe("c");
+    expect(batches[0]?.operations).toEqual([
+      { type: "update", index: 0, count: 1, layout: "invalidate" },
+      { type: "splice", index: 1, deleteCount: 1, insertCount: 0 },
+    ]);
+  });
 });
