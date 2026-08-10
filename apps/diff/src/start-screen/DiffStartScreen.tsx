@@ -264,6 +264,7 @@ export function DiffStartScreen({
         </View>
       </View>
       <ScrollView
+        automaticallyAdjustContentInsets={false}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         style={styles.scroller}
@@ -412,12 +413,9 @@ const styles = StyleSheet.create({
   },
   brandTitlebar: {
     alignItems: "center",
+    flexShrink: 0,
     height: diffStartScreenBrandTitlebarHeight,
     justifyContent: "center",
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
   },
   brandTitlebarContent: {
     alignItems: "center",
@@ -555,7 +553,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 34,
     paddingHorizontal: 48,
-    paddingTop: diffStartScreenBrandTitlebarHeight + 16,
+    paddingTop: 16,
   },
   segmentedControl: {
     height: 28,
