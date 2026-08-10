@@ -48,6 +48,11 @@ static SEL selectedRangeSelector()
   return NSSelectorFromString(@"selectedRange");
 }
 
+static SEL markdownSplitAtSelectedRangeSelector()
+{
+  return NSSelectorFromString(@"markdownSplitAtSelectedRange");
+}
+
 static SEL measureSizeSelector()
 {
   return NSSelectorFromString(@"measureSize:");
@@ -180,6 +185,22 @@ static NSRange callSelectedRange(id target)
 
   NSRange (*send)(id, SEL) = (NSRange (*)(id, SEL))[target methodForSelector:selector];
   return send(target, selector);
+}
+
+static NSArray<NSString *> *callMarkdownSplitAtSelectedRange(id target)
+{
+  SEL selector = markdownSplitAtSelectedRangeSelector();
+  if (![target respondsToSelector:selector]) {
+    return nil;
+  }
+
+  NSArray<NSString *> *(*send)(id, SEL) =
+      (NSArray<NSString *> *(*)(id, SEL))[target methodForSelector:selector];
+  NSArray<NSString *> *parts = send(target, selector);
+  if (parts.count != 2 || ![parts[0] isKindOfClass:NSString.class] || ![parts[1] isKindOfClass:NSString.class]) {
+    return nil;
+  }
+  return parts;
 }
 
 static CGFloat measuredInputHeight(id target, CGFloat width)
@@ -563,9 +584,9 @@ static void registerNativeMarkdownProvider()
   });
 }
 
-- (void)emitEnterPressedWithSelection:(NSRange)selection
+- (void)emitEnterPressedWithMarkdownParts:(NSArray<NSString *> *)markdownParts
 {
-  if (_activeBlockId.length == 0) {
+  if (_activeBlockId.length == 0 || markdownParts.count != 2) {
     return;
   }
 
@@ -575,9 +596,9 @@ static void registerNativeMarkdownProvider()
   }
 
   eventEmitter->onEnterPressed({
+    .afterMarkdown = std::string([markdownParts[1] UTF8String] ?: ""),
     .blockId = std::string([_activeBlockId UTF8String] ?: ""),
-    .selectionEnd = (double)NSMaxRange(selection),
-    .selectionStart = (double)selection.location,
+    .beforeMarkdown = std::string([markdownParts[0] UTF8String] ?: ""),
   });
 }
 
@@ -621,8 +642,11 @@ static void registerNativeMarkdownProvider()
       selection.length == 0 &&
       shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)
     ) {
-      [strongSelf emitEnterPressedWithSelection:selection];
-      return nil;
+      NSArray<NSString *> *markdownParts = callMarkdownSplitAtSelectedRange(editorInput);
+      if (markdownParts != nil) {
+        [strongSelf emitEnterPressedWithMarkdownParts:markdownParts];
+        return nil;
+      }
     }
 
     return event;

@@ -3,23 +3,34 @@ import type { BlockLayout, BlockSelectionState } from "./internalTypes";
 export type GetBlockLayout = (blockId: string, index: number) => BlockLayout | undefined;
 
 export function findBlockIdAtContentY({
-  blockIds,
   direction,
+  endIndex,
+  getBlockCount,
+  getBlockIdAtIndex,
   getBlockLayout,
+  startIndex = 0,
   y,
 }: {
-  blockIds: string[];
   direction?: "down" | "up";
+  endIndex?: number;
+  getBlockCount: () => number;
+  getBlockIdAtIndex: (index: number) => string | undefined;
   getBlockLayout: GetBlockLayout;
+  startIndex?: number;
   y: number;
 }) {
-  const layouts = blockIds
-    .map((blockId, index) => {
+  const layouts: { blockId: string; layout: BlockLayout }[] = [];
+  const finalIndex = Math.min(endIndex ?? getBlockCount() - 1, getBlockCount() - 1);
+  for (let index = Math.max(0, startIndex); index <= finalIndex; index += 1) {
+    const blockId = getBlockIdAtIndex(index);
+    if (blockId) {
       const layout = getBlockLayout(blockId, index);
-      return layout ? { blockId, layout } : undefined;
-    })
-    .filter((entry): entry is { blockId: string; layout: BlockLayout } => entry !== undefined)
-    .sort((a, b) => a.layout.y - b.layout.y);
+      if (layout) {
+        layouts.push({ blockId, layout });
+      }
+    }
+  }
+  layouts.sort((a, b) => a.layout.y - b.layout.y);
 
   for (let index = 0; index < layouts.length; index += 1) {
     const entry = layouts[index];
@@ -53,12 +64,14 @@ export function findBlockIdAtContentY({
 }
 
 export function getBlockSelectionRects({
-  blockIds,
   blockSelection,
+  getBlockIdAtIndex,
+  getBlockIndexById,
   getBlockLayout,
 }: {
-  blockIds: string[];
   blockSelection: BlockSelectionState | null;
+  getBlockIdAtIndex: (index: number) => string | undefined;
+  getBlockIndexById: (blockId: string) => number;
   getBlockLayout: GetBlockLayout;
 }) {
   const rects: { blockId: string; height: number; y: number }[] = [];
@@ -66,8 +79,8 @@ export function getBlockSelectionRects({
     return rects;
   }
 
-  const anchorIndex = blockIds.indexOf(blockSelection.anchorBlockId);
-  const focusIndex = blockIds.indexOf(blockSelection.focusBlockId);
+  const anchorIndex = getBlockIndexById(blockSelection.anchorBlockId);
+  const focusIndex = getBlockIndexById(blockSelection.focusBlockId);
   if (anchorIndex < 0 || focusIndex < 0) {
     return rects;
   }
@@ -75,7 +88,7 @@ export function getBlockSelectionRects({
   const startIndex = Math.min(anchorIndex, focusIndex);
   const endIndex = Math.max(anchorIndex, focusIndex);
   for (let index = startIndex; index <= endIndex; index += 1) {
-    const blockId = blockIds[index];
+    const blockId = getBlockIdAtIndex(index);
     const layout = blockId ? getBlockLayout(blockId, index) : undefined;
     if (blockId && layout) {
       rects.push({

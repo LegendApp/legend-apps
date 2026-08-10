@@ -7,19 +7,23 @@ const layoutsByBlockId = new Map<string, BlockLayout>([
   ["c", { y: 120, height: 40 }],
 ]);
 const getBlockLayout = (blockId: string) => layoutsByBlockId.get(blockId);
+const blockIds = ["a", "b", "c"];
+const blockSequence = {
+  getBlockCount: () => blockIds.length,
+  getBlockIdAtIndex: (index: number) => blockIds[index],
+  getBlockIndexById: (blockId: string) => blockIds.indexOf(blockId),
+};
 
 describe("blockSelection", () => {
   it("hit-tests content coordinates", () => {
-    const blockIds = ["a", "b", "c"];
-
     expect(findBlockIdAtContentY({
-      blockIds,
+      ...blockSequence,
       getBlockLayout,
       y: 72,
     })).toBe("b");
 
     expect(findBlockIdAtContentY({
-      blockIds,
+      ...blockSequence,
       getBlockLayout,
       y: 132,
     })).toBe("c");
@@ -27,7 +31,7 @@ describe("blockSelection", () => {
 
   it("does not switch downward selection to the next block while the pointer is still in the gap above it", () => {
     expect(findBlockIdAtContentY({
-      blockIds: ["a", "b", "c"],
+      ...blockSequence,
       direction: "down",
       getBlockLayout,
       y: 50,
@@ -36,7 +40,7 @@ describe("blockSelection", () => {
 
   it("does not switch upward selection to the previous block while the pointer is still in the gap below it", () => {
     expect(findBlockIdAtContentY({
-      blockIds: ["a", "b", "c"],
+      ...blockSequence,
       direction: "up",
       getBlockLayout,
       y: 110,
@@ -45,7 +49,8 @@ describe("blockSelection", () => {
 
   it("returns block selection rects in document content coordinates", () => {
     expect(getBlockSelectionRects({
-      blockIds: ["a", "b", "c"],
+      getBlockIdAtIndex: blockSequence.getBlockIdAtIndex,
+      getBlockIndexById: blockSequence.getBlockIndexById,
       blockSelection: { anchorBlockId: "b", focusBlockId: "c" },
       getBlockLayout,
     })).toEqual([

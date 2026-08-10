@@ -75,6 +75,8 @@ export type MarkdownTransactionResult = {
 export type MarkdownDocumentAdapter = {
   load(filename: string): Promise<MarkdownDocumentSnapshot>;
   getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot>;
+  getBlockIdAtIndexSync?: (documentId: string, index: number) => string | undefined;
+  getBlockIndexForIdSync?: (documentId: string, blockId: string) => number;
   getBlockAtIndexSync?: (documentId: string, index: number) => MarkdownBlockMetadata | undefined;
   getBlockIds?: (documentId: string, startIndex: number, count: number) => Promise<string[]>;
   getBlockMetadata?: (documentId: string, startIndex: number, count: number) => Promise<MarkdownBlockMetadata[]>;
@@ -85,7 +87,7 @@ export type MarkdownDocumentAdapter = {
   applyTransaction?: (
     documentId: string,
     transaction: MarkdownTransaction,
-  ) => Promise<MarkdownTransactionResult>;
+  ) => MarkdownTransactionResult | Promise<MarkdownTransactionResult>;
 };
 
 export type MarkdownDocumentCommands = {

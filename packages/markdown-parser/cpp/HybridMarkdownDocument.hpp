@@ -7,14 +7,13 @@
 #include "../nitrogen/generated/shared/c++/MarkdownRenderBlock.hpp"
 
 #include <memory>
-#include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace margelo::nitro::legendapps::markdownparser {
 
 class HybridMarkdownDocument;
+class MarkdownBlockSequence;
 
 void registerMarkdownDocument(std::shared_ptr<HybridMarkdownDocument> document);
 
@@ -59,6 +58,7 @@ public:
       std::shared_ptr<const MarkdownSource> source,
       std::vector<MarkdownBlockRange> blocks,
       MarkdownDocumentTiming timing);
+  ~HybridMarkdownDocument() override;
 
   void setDocumentDurationMs(double durationMs);
 
@@ -82,10 +82,8 @@ protected:
   size_t getExternalMemorySize() noexcept override;
 
 private:
-  MarkdownBlockMetadata metadataForBlock(const MarkdownBlockRange& block) const;
-  MarkdownRenderBlock renderBlockForBlock(size_t storageIndex, const MarkdownBlockRange& block) const;
-  const std::string& markdownForBlock(size_t storageIndex, const MarkdownBlockRange& block) const;
-  std::string sourceString(size_t start, size_t end) const;
+  MarkdownBlockMetadata metadataForBlock(size_t index) const;
+  MarkdownRenderBlock renderBlockForBlock(size_t index) const;
   size_t findBlockIndex(const std::string& blockId) const;
   MarkdownTransactionResult updateBlockMarkdown(const MarkdownTransaction& transaction);
   MarkdownTransactionResult splitBlock(const MarkdownTransaction& transaction);
@@ -96,21 +94,15 @@ private:
       size_t deleteCount,
       const std::vector<size_t>& changedBlockIndices,
       std::vector<std::string> retiredBlockIds = {}) const;
-  void replaceSourceRange(size_t start, size_t end, const std::string& markdown);
   void writeToFilePath(const std::string& filePath) const;
-  void shiftBlocksAfter(size_t startIndex, long long delta);
-  void renumberBlocks(size_t startIndex);
-  void rebuildBlockIndex();
+  void resetDocument(std::string source, std::vector<MarkdownBlockRange> blocks);
   std::string nextBlockId();
 
   std::string filePath_;
-  std::string sourceText_;
   std::string lineEnding_;
-  std::vector<MarkdownBlockRange> blocks_;
-  mutable std::vector<std::optional<std::string>> markdownCache_;
+  std::unique_ptr<MarkdownBlockSequence> blockSequence_;
   MarkdownDocumentTiming timing_;
   std::string documentId_;
-  std::unordered_map<std::string, size_t> blockIndexById_;
   size_t nextBlockNumber_ = 0;
   size_t revision_ = 0;
 };

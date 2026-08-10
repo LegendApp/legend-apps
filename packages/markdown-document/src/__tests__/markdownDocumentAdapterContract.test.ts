@@ -107,7 +107,11 @@ class MarkdownAdapterHarness {
   }
 
   apply(transaction: MarkdownTransaction) {
-    return this.adapter.applyTransaction?.(this.snapshot.documentId, transaction).then((result) => {
+    const transactionResult = this.adapter.applyTransaction?.(this.snapshot.documentId, transaction);
+    return Promise.resolve(transactionResult).then((result) => {
+      if (!result) {
+        throw new Error("Markdown adapter does not support transactions");
+      }
       this.revision = result.revision;
       this.state = applyMarkdownTransactionResultToBlockState(this.state, result);
     });

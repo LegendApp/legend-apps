@@ -548,6 +548,29 @@ void testLargeDocumentFarDownTransactions() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testRepeatedLeadingSplitsKeepSuffixAddressable() {
+  constexpr size_t initialBlockCount = 2048;
+  constexpr size_t splitCount = 64;
+  LoadedDocument loaded(repeatedParagraphs(initialBlockCount));
+  const auto initialBlocks = blocksFor(loaded.document);
+  const std::string tailBlockId = initialBlocks.back().id;
+
+  for (size_t index = 0; index < splitCount; index += 1) {
+    const std::string firstBlockId = loaded.document->getBlockKey(0);
+    loaded.document->applyTransaction(splitBlock(firstBlockId, "Leading", "Inserted"));
+  }
+
+  expectEqual(
+      static_cast<size_t>(loaded.document->getIndexForBlockId(tailBlockId)),
+      initialBlockCount + splitCount - 1,
+      "repeated leading splits keep suffix rank current");
+  expectEqual(
+      loaded.document->getBlockKey(initialBlockCount + splitCount - 1),
+      tailBlockId,
+      "repeated leading splits preserve suffix lookup");
+  expectDocumentInvariants(loaded.document);
+}
+
 class DeterministicRandom {
 public:
   explicit DeterministicRandom(uint32_t seed) : state_(seed) {}
@@ -654,6 +677,7 @@ int main() {
       {"move block range moves multiple blocks across target", testMoveBlockRangeMovesMultipleBlocksAcrossTarget},
       {"move block range preserves mixed block types", testMoveBlockRangePreservesMixedBlockTypes},
       {"large document far down transactions", testLargeDocumentFarDownTransactions},
+      {"repeated leading splits keep suffix addressable", testRepeatedLeadingSplitsKeepSuffixAddressable},
       {"randomized transaction sequence", testRandomizedTransactionSequence},
   };
 

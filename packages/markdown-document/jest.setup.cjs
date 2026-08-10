@@ -49,6 +49,9 @@ jest.mock("@legendapp/list/react-native", () => {
     },
     LegendList: React.forwardRef(function LegendList({
       data,
+      dataSource,
+      extraData,
+      getItemType,
       renderItem,
       onLoad,
       style,
@@ -56,12 +59,23 @@ jest.mock("@legendapp/list/react-native", () => {
       ListFooterComponent,
       ListFooterComponentStyle,
     }, ref) {
+      const subscribe = React.useCallback(
+        (listener) => dataSource ? dataSource.subscribe(listener) : () => undefined,
+        [dataSource],
+      );
+      const getSnapshot = React.useCallback(
+        () => dataSource ? dataSource.getRevision() : 0,
+        [dataSource],
+      );
+      React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+      const itemCount = dataSource ? dataSource.getLength() : data.length;
+
       React.useImperativeHandle(ref, () => ({
         clearCaches,
         getState: () => ({
-          elementAtIndex: (index) => (index >= 0 && index < data.length ? {} : undefined),
-          end: data.length - 1,
-          endBuffered: data.length - 1,
+          elementAtIndex: (index) => (index >= 0 && index < itemCount ? {} : undefined),
+          end: itemCount - 1,
+          endBuffered: itemCount - 1,
           positionAtIndex: (index) => index * 25,
           scroll: 0,
           scrollLength: 400,
@@ -72,7 +86,7 @@ jest.mock("@legendapp/list/react-native", () => {
         scrollToIndex: jest.fn(async () => undefined),
         scrollToOffset: jest.fn(async () => undefined),
         setItemSize,
-      }), [data]);
+      }), [itemCount]);
 
       React.useEffect(() => {
         onLoad?.();
@@ -84,11 +98,21 @@ jest.mock("@legendapp/list/react-native", () => {
         React.createElement(
           View,
           { style: contentContainerStyle },
-          data.map((item, index) => React.createElement(
-            React.Fragment,
-            { key: item },
-            renderItem({ item, index }),
-          )),
+          Array.from({ length: itemCount }, (_, index) => {
+            const item = dataSource ? dataSource.getItem(index) : data[index];
+            const key = dataSource ? dataSource.getKey(index) : item;
+            return React.createElement(
+              React.Fragment,
+              { key },
+              renderItem({
+                dataSource,
+                extraData,
+                index,
+                item,
+                type: getItemType?.(item, index, extraData),
+              }),
+            );
+          }),
           ListFooterComponent ? React.createElement(
             View,
             { style: ListFooterComponentStyle, testID: "legend-list-footer" },

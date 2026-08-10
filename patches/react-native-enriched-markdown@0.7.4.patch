@@ -961,6 +961,18 @@ index 55e6a5a0e35316f2a9534e7d8e0cf9a9a12d5b40..b7d86bc07cacf70537d2e828249758f4
  - (NSMenu *)menuForEvent:(NSEvent *)event
  {
    NSMenu *menu = [super menuForEvent:event];
+diff --git a/ios/input/EnrichedMarkdownTextInput.h b/ios/input/EnrichedMarkdownTextInput.h
+index 4717f74fbd0bf56fbcf95684dfd59a24c8ff126d..872707201c7d8bf5a7fc3e63bcd81f098503ef93 100644
+--- a/ios/input/EnrichedMarkdownTextInput.h
++++ b/ios/input/EnrichedMarkdownTextInput.h
+@@ -10,6 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
+ @property (nonatomic, assign) BOOL blockEmitting;
+ - (CGSize)measureSize:(CGFloat)maxWidth;
+ - (nullable NSString *)markdownForSelectedRange;
++- (NSArray<NSString *> *)markdownSplitAtSelectedRange;
+ - (void)copyToClipboard;
+ - (void)pasteMarkdown:(NSString *)markdown;
+ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput+Internal.h b/ios/input/EnrichedMarkdownTextInput+Internal.h
 index 2f50d3f789ba443d6bbc298cd777e5fe0e0ff361..5bb3946e29994dc4da45652c5a951a5c8f002ba2 100644
 --- a/ios/input/EnrichedMarkdownTextInput+Internal.h
@@ -1498,7 +1510,84 @@ index 4cd71776ad375f94b23308e78bc7c4a6b03ea6f6..cb96afa7eeb9ac201973c60e11dd66d2
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -969,11 +1321,22 @@ - (CGRect)computeCaretRect
+@@ -899,36 +1251,53 @@ - (void)showLinkPrompt
+   ENRMShowLinkPrompt(self, existingURL, ^(NSString *url) { [weakSelf setLink:url]; });
+ }
+-
++
+-- (nullable NSString *)markdownForSelectedRange
++- (NSString *)markdownForPlainTextRange:(NSRange)range
+ {
+-  NSRange selection = _textView.selectedRange;
+-  if (selection.length == 0) {
+-    return nil;
+-  }
+-
+   NSString *fullText = ENRMGetPlainText(_textView);
+-  NSString *selectedText = [fullText substringWithRange:selection];
+-  NSUInteger selEnd = NSMaxRange(selection);
++  NSUInteger rangeStart = MIN(range.location, fullText.length);
++  NSUInteger rangeEnd = MIN(NSMaxRange(range), fullText.length);
++  NSRange clampedRange = NSMakeRange(rangeStart, rangeEnd - rangeStart);
++  NSString *selectedText = [fullText substringWithRange:clampedRange];
+-
++
+   NSMutableArray<ENRMFormattingRange *> *clippedRanges = [NSMutableArray array];
+-  for (ENRMFormattingRange *range in [self allRangesIncludingTransient]) {
+-    NSUInteger rangeStart = range.range.location;
+-    NSUInteger rangeEnd = NSMaxRange(range.range);
++  for (ENRMFormattingRange *formattingRange in [self allRangesIncludingTransient]) {
++    NSUInteger formattingStart = formattingRange.range.location;
++    NSUInteger formattingEnd = NSMaxRange(formattingRange.range);
+-
++
+-    if (rangeEnd <= selection.location || rangeStart >= selEnd) {
++    if (formattingEnd <= rangeStart || formattingStart >= rangeEnd) {
+       continue;
+     }
+-
++
+-    NSUInteger clippedStart = MAX(rangeStart, selection.location);
+-    NSUInteger clippedEnd = MIN(rangeEnd, selEnd);
+-    NSRange shifted = NSMakeRange(clippedStart - selection.location, clippedEnd - clippedStart);
++    NSUInteger clippedStart = MAX(formattingStart, rangeStart);
++    NSUInteger clippedEnd = MIN(formattingEnd, rangeEnd);
++    NSRange shifted = NSMakeRange(clippedStart - rangeStart, clippedEnd - clippedStart);
+-
++
+-    [clippedRanges addObject:[ENRMFormattingRange rangeWithType:range.type range:shifted url:range.url]];
++    [clippedRanges addObject:[ENRMFormattingRange rangeWithType:formattingRange.type
++                                                         range:shifted
++                                                           url:formattingRange.url]];
+   }
+-
++
+   return [ENRMMarkdownSerializer serializePlainText:selectedText ranges:clippedRanges];
+ }
+-
++
++- (nullable NSString *)markdownForSelectedRange
++{
++  NSRange selection = _textView.selectedRange;
++  return selection.length > 0 ? [self markdownForPlainTextRange:selection] : nil;
++}
++
++- (NSArray<NSString *> *)markdownSplitAtSelectedRange
++{
++  NSString *fullText = ENRMGetPlainText(_textView);
++  NSRange selection = _textView.selectedRange;
++  NSUInteger selectionStart = selection.location == NSNotFound ? fullText.length : MIN(selection.location, fullText.length);
++  NSUInteger selectionLength = MIN(selection.length, fullText.length - selectionStart);
++  NSUInteger selectionEnd = selectionStart + selectionLength;
++  NSString *beforeMarkdown = [self markdownForPlainTextRange:NSMakeRange(0, selectionStart)];
++  NSString *afterMarkdown = [self markdownForPlainTextRange:NSMakeRange(selectionEnd, fullText.length - selectionEnd)];
++  return @[ beforeMarkdown, afterMarkdown ];
++}
++
+ - (void)copyToClipboard
+ {
+   NSString *plainText = ENRMGetPlainText(_textView);
+@@ -969,11 +1338,22 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -1526,7 +1615,7 @@ index 4cd71776ad375f94b23308e78bc7c4a6b03ea6f6..cb96afa7eeb9ac201973c60e11dd66d2
    }
  #endif
    return caretRect;
-@@ -1233,6 +1596,33 @@ - (void)emitOnChangeSelection
+@@ -1233,6 +1613,33 @@ - (void)emitOnChangeSelection
    });
  }
  
@@ -1560,7 +1649,7 @@ index 4cd71776ad375f94b23308e78bc7c4a6b03ea6f6..cb96afa7eeb9ac201973c60e11dd66d2
  - (void)emitOnChangeState
  {
    auto emitter = [self getEventEmitter];
-@@ -1263,12 +1653,12 @@ - (void)emitOnChangeState
+@@ -1263,12 +1670,12 @@ - (void)emitOnChangeState
    _prevState.initialized = YES;
  
    emitter->onChangeState({
@@ -1579,7 +1668,7 @@ index 4cd71776ad375f94b23308e78bc7c4a6b03ea6f6..cb96afa7eeb9ac201973c60e11dd66d2
    });
  }
  
-@@ -1347,12 +1737,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
+@@ -1347,12 +1754,12 @@ - (void)emitContextMenuItemPress:(NSString *)itemText
        .selectionEnd = static_cast<int>(NSMaxRange(selectedRange)),
        .styleState =
            {
@@ -1598,7 +1687,7 @@ index 4cd71776ad375f94b23308e78bc7c4a6b03ea6f6..cb96afa7eeb9ac201973c60e11dd66d2
            },
    });
  }
-@@ -1496,7 +1886,13 @@ - (void)handleTextChanged
+@@ -1496,7 +1903,13 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -1612,7 +1701,7 @@ index 4cd71776ad375f94b23308e78bc7c4a6b03ea6f6..cb96afa7eeb9ac201973c60e11dd66d2
  
    NSUInteger clampedEditLocation = MIN(editLocation, newLength);
    NSUInteger clampedInsertedLength = MIN(insertedLength, newLength - clampedEditLocation);
-@@ -1558,6 +1954,12 @@ - (void)manageSelectionBasedChanges
+@@ -1558,6 +1971,12 @@ - (void)manageSelectionBasedChanges
          NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
          attrs[NSFontAttributeName] = _formatterStyle.baseFont;
          attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;

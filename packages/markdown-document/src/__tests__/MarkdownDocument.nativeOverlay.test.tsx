@@ -712,9 +712,9 @@ describe("MarkdownDocument native row editor", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it("splits the active block from native enter without first inserting a newline", async () => {
+  it("splits formatted markdown using the native editor's serialized halves", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
-      block("d1:b0", 0, "First line"),
+      block("d1:b0", 0, "First **bold** line"),
     ]));
     const onError = jest.fn();
     let renderer: TestRenderer.ReactTestRenderer;
@@ -737,7 +737,7 @@ describe("MarkdownDocument native row editor", () => {
         nativeEvent: {
           blockId: "d1:b0",
           height: 24,
-          markdown: "First line",
+          markdown: "First **bold** line",
           rowHeight: 43.2,
           width: 640,
           x: 40,
@@ -749,9 +749,9 @@ describe("MarkdownDocument native row editor", () => {
     await act(async () => {
       host.props.onEnterPressed({
         nativeEvent: {
+          afterMarkdown: " line",
           blockId: "d1:b0",
-          selectionEnd: "First".length,
-          selectionStart: "First".length,
+          beforeMarkdown: "First **bold**",
         },
       });
     });
@@ -760,13 +760,14 @@ describe("MarkdownDocument native row editor", () => {
     expect(adapter.applyTransactions).toEqual([
       {
         afterMarkdown: " line",
-        beforeMarkdown: "First",
+        beforeMarkdown: "First **bold**",
         blockId: "d1:b0",
         type: "splitBlock",
       },
     ]);
-    expect(adapter.sourceMarkdown).toBe("First\n\n line");
+    expect(adapter.sourceMarkdown).toBe("First **bold**\n\n line");
     expect(nativeHost(renderer!).props.activeBlockId).toBe("d1:b100");
+    expect(__enrichedMarkdownTestHooks.inputInstances().at(-1)?.setSelection).toHaveBeenCalledWith(0, 0);
     expect(flattenStyle(activationView(renderer!, "d1:b100").props.style).minHeight).toBeCloseTo(62.4);
     expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();

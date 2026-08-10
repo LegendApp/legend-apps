@@ -1,4 +1,4 @@
-import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
+import type { LegendListDataSourceRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { MarkdownBlockActivationView, MarkdownBlockRenderer } from "@legend-apps/markdown-block-editor";
@@ -255,7 +255,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   selectionOverlayStyle,
   item: blockId,
   index,
-}: LegendListRenderItemProps<string> & {
+}: Omit<LegendListDataSourceRenderItemProps<string>, "item"> & {
+  item: string;
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
   getBlockCount: () => number;
   getBlockIdAtIndex: (index: number) => string | undefined;

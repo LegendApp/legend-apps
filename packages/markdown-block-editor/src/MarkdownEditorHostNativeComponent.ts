@@ -19,9 +19,9 @@ export interface NativeProps extends ViewProps {
   onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
   onBackspaceAtStart?: DirectEventHandler<Readonly<{ blockId: string }>>;
   onEnterPressed?: DirectEventHandler<Readonly<{
+    afterMarkdown: string;
     blockId: string;
-    selectionEnd: Double;
-    selectionStart: Double;
+    beforeMarkdown: string;
   }>>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }

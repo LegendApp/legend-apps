@@ -108,7 +108,6 @@ export type MarkdownBlockRowRenderState = {
 
 export type MarkdownDocumentRenderState = {
   activeBlocksById: Map<string, ActiveBlockRenderState>;
-  blockIds: string[];
   blockSelection: BlockSelectionState | null;
   rowStatesById: Map<string, MarkdownBlockRowRenderState>;
   selectedBlocksById: Map<string, boolean>;

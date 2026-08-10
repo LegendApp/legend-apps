@@ -134,6 +134,18 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     return getBlockAtIndex(session, index);
   },
 
+  getBlockIdAtIndexSync(documentId: string, index: number): string | undefined {
+    const session = getSession(documentId);
+    return index >= 0 && index < session.nativeDocument.blockCount
+      ? session.nativeDocument.getBlockKey(index)
+      : undefined;
+  },
+
+  getBlockIndexForIdSync(documentId: string, blockId: string): number {
+    const session = getSession(documentId);
+    return session.nativeDocument.getIndexForBlockId(blockId);
+  },
+
   async getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot> {
     const session = getSession(documentId);
     return toBlockSnapshot(session.nativeDocument.getRenderBlockById(blockId));
@@ -178,7 +190,7 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     sessions.delete(documentId);
   },
 
-  async applyTransaction(documentId: string, transaction: MarkdownTransaction): Promise<MarkdownTransactionResult> {
+  applyTransaction(documentId: string, transaction: MarkdownTransaction): MarkdownTransactionResult {
     const session = getSession(documentId);
     const nativeTransaction =
       transaction.type === "replaceBlockRange"
@@ -197,7 +209,6 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
             afterMarkdown: transaction.placement,
           }
         : transaction;
-    const result = toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
-    return result;
+    return toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
   },
 };
