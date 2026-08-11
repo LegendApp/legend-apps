@@ -432,6 +432,22 @@
         "react-native": "catalog:",
       },
     },
+    "packages/legend-list-sparse-layout": {
+      "name": "@legendapp/list",
+      "version": "3.3.5-sparse-layout.94dfeeda",
+      "dependencies": {
+        "use-sync-external-store": "^1.5.0",
+      },
+      "peerDependencies": {
+        "react": "*",
+        "react-dom": "*",
+        "react-native": "*",
+      },
+      "optionalPeers": [
+        "react-dom",
+        "react-native",
+      ],
+    },
     "packages/markdown-block-editor": {
       "name": "@legend-apps/markdown-block-editor",
       "version": "0.0.0",
@@ -724,7 +740,7 @@
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
   },
   "catalog": {
-    "@legendapp/list": "3.3.1",
+    "@legendapp/list": "3.3.5-sparse-layout.94dfeeda",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
     "react": "19.1.4",
@@ -1139,7 +1155,7 @@
 
     "@legend-apps/windows": ["@legend-apps/windows@workspace:packages/windows"],
 
-    "@legendapp/list": ["@legendapp/list@3.3.1", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*", "react-dom": "*", "react-native": "*" }, "optionalPeers": ["react-dom", "react-native"] }, "sha512-qBzrjRB5fkza2dFjbB6p9pn70vgHjiISKt2NgW8AGEeGt7d69rtPPDgp4FsbF7sATc34tPPeaToW57pM/8vc9w=="],
+    "@legendapp/list": ["@legendapp/list@workspace:packages/legend-list-sparse-layout"],
 
     "@legendapp/motion": ["@legendapp/motion@2.5.3", "", { "dependencies": { "@legendapp/tools": "2.0.1" }, "peerDependencies": { "nativewind": ">=4.0.0", "react": ">=16", "react-native": "*" } }, "sha512-IcNiStiK3qG5LaIPLC8fVV0BHIrkf7EY5HfOv3xbuMH0z4D945yaaEDafP5bboHf/uj9XRjTQHVTtZgwpMNlHw=="],
 

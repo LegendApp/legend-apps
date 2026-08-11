@@ -1,0 +1,334 @@
+## 3.3.5
+
+- Fix: Changing `dataKey` no longer leaves the new dataset invisible. #519
+- Fix: `maintainScrollAtEnd` stays pinned as newly inserted rows are measured, and scroll corrections preserve `anchoredEndSpace` padding. #520
+- Fix: Programmatic scrolls no longer throw in browsers, get lost when they replace unfinished initial scrolling, or stop working after a previous request is canceled. #518
+
+## 3.3.4
+
+- Feat: `getState().indexByKey(key)` looks up an item’s current index by key.
+- Feat: `anchoredEndSpace` now works with standard React Native `LegendList`, including horizontal and RTL lists, and stays accurate after content measurements change. It supports single-column lists only.
+- Fix: `maintainScrollAtEnd` continues following content growth unless the user scrolls away.
+- Fix: Changing `dataKey` no longer briefly displays stale rows from the previous dataset.
+- Fix: Initial scrolling and `scrollToIndex` correctly account for padding, direction, and final-item gaps.
+- Fix: Web content-container sizing remains correct when callers provide padding or `content-box` styles.
+- Fix: `useRecyclingEffect` and `useRecyclingState` no longer crash outside a `LegendList`. #498
+- Fix: Programmatic scrolls settle reliably when superseded, already aligned on iOS, or interrupted by unmounting. #508
+-
+## 3.3.3
+
+- Fix: Row measurements are applied together in a batch, so item positions don't sometimes move after rendering.
+- Fix: `onStartReached` and `onEndReached` no longer bounce between opposite edges during the same scroll gesture after data changes, MVCP adjustments, or residual scroll events.
+- Fix: Prepending items with `maintainVisibleContentPosition` was sometimes flashing the wrong items for one frame
+- Fix: SectionList sticky headers follow their current positions after section data changes. #445
+- Fix: `LegendList` can now be wrapped with `Animated.createAnimatedComponent`.
+- Fix: Horizontal web lists keep their calculated content width, so item containers do not shrink when the content is wider than the viewport.
+- Perf: Lists reuse inactive containers across item types before creating more, preventing the container pool from growing for every previously seen item type.
+- Perf: Reanimated lists skip scroll-offset tracking when neither shared scroll values nor sticky headers need it.
+
+## 3.3.2
+
+- Perf: Recycled rows update their current item without changing the container context, so recycling hooks avoid extra rerenders during scroll.
+- Perf: Internal signal hooks recreate subscriptions less often
+
+## 3.3.1
+
+- Perf: Animated `scrollToIndex` and `scrollToOffset` calls now mount the destination rows before native scrolling starts, so long programmatic jumps are less likely to show blank space at the target.
+- Perf: Fast scrolling shifts more of the render buffer in the direction of travel and settles back after scrolling stops, so rows ahead of the user are ready sooner without keeping the buffer displaced afterward.
+- Perf: Scroll velocity favors recent movement and ignores stale samples, preventing old scroll events from keeping the render buffer pointed in the wrong direction after scrolling slows or stops.
+- Perf: On Fabric, row measurements wait for all expected layout-effect measurements before recalculating positions, reducing the number of computations while scrolling quickly.
+
+## 3.3.0
+
+- Feat: Add `dataKey` so apps can tell the list when the current array represents a different dataset, such as switching conversations or feeds without remounting `LegendList`.
+- Feat: `experimental_adaptiveRender.onChange` now receives a reason (`initial`, `ready`, or `scroll`) so item components can tell why the render mode changed.
+- Fix: Large user scroll jumps render the visible rows first and fill the normal draw distance on the next frame, making long jumps less likely to land on a blank range.
+- Fix: `maintainScrollAtEnd` reruns a pending keep-at-end request after the current one settles, so a footer resize and a new message arriving together keep chat-style lists pinned to the end.
+- Fix: Replacing data after clearing the list, or changing `dataKey` for a non-empty replacement, resets layout readiness and uses the latest initial scroll target for the new dataset.
+
+## 3.2.0
+
+- Feat: Add `onFirstVisibleItemChanged` so apps can track the item at the top of the viewport without setting up full viewability callbacks.
+- Feat: Add `experimental_adaptiveRender.initialMode` for choosing whether adaptive rendering starts in `normal` or `light` mode before the list is ready.
+- Perf: On Fabric, replacement container measurements are batched into the same layout pass, so scroll anchoring and item positioning recalculate once instead of once per pending row.
+
+## 3.1.2
+
+- Fix: On Android, end-aligned lists could double apply scroll clamping during MVCP and be slightly underscrolled
+
+## 3.1.1
+
+- Fix: `maintainScrollAtEnd` now stays pinned when a `ListFooterComponent` appears, disappears, or changes size, so chat typing indicators and other dynamic footers do not leave the list slightly above the end. If you use an explicit `maintainScrollAtEnd.on` config, add `footerLayout` to opt into footer size changes.
+
+## 3.1.0
+
+- Feat: Add `experimental_adaptiveRender` prop, with `useAdaptiveRender` and `useAdaptiveRenderChange` hooks, so item components can render a lighter version while the list is moving quickly and return to normal after scrolling slows.
+- Feat: Add `setItemSize` to the list ref for updating a known item's measured size directly when its content changes outside normal layout measurement.
+- Fix: Web maintainVisibleContentPosition keeps the intended anchor when headers change, browser scroll anchoring runs, or an animated `scrollToEnd` is already in progress. #468 #463
+- Fix: `initialScrollIndex` and `initialScrollAtEnd` use the latest initial scroll props when data starts empty and loads later, so lists do not scroll to an old startup target.
+- Fix: Changing `gap` now refreshes cached item measurements, and fixed-size rows include the gap in their positions.
+- Fix: SectionList sticky headers update after the section data changes. #445
+- Fix: Horizontal lists with end alignment now place items at the end instead of ignoring the alignment. #472
+- Fix: Lists clear scheduled timers on unmount, preventing delayed adaptive-render or scroll work from running after the list is gone.
+- Perf: The first render starts with a smaller draw distance and expands shortly after, reducing offscreen work before the initial content appears.
+- Perf: `alignItemsAtEnd` spacer updates cause fewer ScrollView rerenders.
+- Types: Export `AdaptiveRender` and `AdaptiveRenderConfig` from the React Native and web type entrypoints.
+
+## 3.0.6
+
+- Fix: KeyboardAwareLegendList now accounts for bottom insets when alignItemsAtEnd is used, so short chat-style lists stay pinned above the keyboard or safe area instead of being pushed too low or leaving extra scroll space.
+
+## 3.0.5
+
+- Fix: clearCaches now rechecks the rows that are already on screen, so resetting the size cache does not leave items stuck in old positions.
+- Perf: Scrolling through content that is already rendered now updates viewability with less work.
+- Perf: Trimmed repeated work during scrolls, especially around recycled containers, sticky headers, size checks, and viewability.
+- Perf: Large and fast scrolls now reuse more of the same scroll state instead of recalculating it in multiple places.
+
+## 3.0.4
+
+- Fix: scrollToEnd now waits for newly committed data before targeting the final item, improving chat-style append-and-scroll flows.
+- Fix: Anchored end space waits for measured or fixed tail sizes before reporting readiness, avoiding stale end-space values during append flows.
+- Feat: Add anchoredEndSpace.onReady to notify when the anchored tail has authoritative sizing.
+
+## 3.0.3
+
+- Fix: MVCP was getting batched to improve big jumps, but was making scroll worse
+- Fix: On native, ignore one-physical-pixel layout measurement noise, preventing unnecessary item size updates from Fabric and native onLayout rounding differences.
+- Fix: Average item sizes update correctly when getFixedItemSize returns undefined for only some item types.
+
+## 3.0.2
+
+- Fix: Using viewability was causing scrolling to end to sometimes not update items in view if the JS thread was slammed
+
+## 3.0.1
+
+- Feat: SectionList now supports getFixedItemSize for items, headers, footers, and separators.
+- Fix: Non-animated scrollTo calls now precompute the target range before scrolling, preventing temporary blank content around the destination.
+- Fix: scrollToIndex was landing at the wrong location on iOS in some scenarios
+
+## 3.0.0
+
+- Feat: Web support
+- Breaking: Some of the maintainVisibleContentPosition behavior for preventing jumping while scrolling is now core behavior, and the behavior for maintaining scroll position when adding data is controlled by the prop, which is now disabled by default.
+- See https://legendapp.com/open-source/list/v3/migration/
+
+## 2.0.18
+- Improvement: KeyboardAvoidingLegendList now supports KeyboardGestureArea with improved interactive behavior
+
+## 2.0.17
+- Feat: Add stickyHeaderOffset property to control sticky header positioning
+- Feat: Add sticky header backdrop component support
+- Fix: Improve KeyboardAvoidingLegendList quality by using animated contentOffset y instead of reanimated scrollTo
+- Fix: Initial scroll could sometimes be out of range beyond the ScrollView if some items are much larger than the estimated size
+- Fix: Item layout updates now work correctly when container is the exact same size as previous item on old arch
+
+## 2.0.16
+- Feat: Add KeyboardAvoidingLegendList component for better keyboard handling integration
+- Fix: Stale containers are not being removed and overlap with new data when using getItemType #335
+- Fix: Suppress keyExtractor warning when using lazy list mode #330
+
+## 2.0.15
+- Fix: Container allocation for sticky headers could duplicate containers, causing rendering issues
+- Fix: Sticky positioned components scrolling out of viewport after scrolling distance exceeded 5000
+
+## 2.0.14
+- Feat: Add dataVersion prop to trigger re-render when mutating the data array in place
+
+## 2.0.13
+- Feat: Allow returning undefined in getFixedItemSize to fall back to estimated size
+- Fix: scrollToIndex viewOffset was being subtracted twice, causing incorrect scroll positioning
+- Fix: Initial container allocation was not applying maintainVisibleContentPosition calculations
+- Fix: updateItemSize was providing full data array to getEstimatedItemSize and getFixedItemSize instead of individual item
+
+## 2.0.12
+- Fix: Scroll velocity calculation was sometimes incorrect when item sizes were very different from estimate
+- Fix: onScroll while scrolling was updating positions without maintainVisibleContentPosition calculations, which was breaking scroll position maintenance
+
+## 2.0.11
+- Fix: Missing React import in a file
+
+## 2.0.10
+- Feat: Add onStickyHeaderChange callback for sticky headers
+- Fix: Items with a falsy value like 0 were not rendering
+- Fix: Column positions sometimes not calculating correctly
+- Perf: updateItemsPositions was not breaking early sometimes
+- Perf: Changed idCache to be an array instead of a Map for better performance
+- Perf: Speed up container reuse lookups
+
+## 2.0.9
+- Fix: Improve initialScrollIndex accuracy and reliability
+
+## 2.0.8
+- Fix: Data changing sometimes left blank spaces because it was ignoring scroll
+- Fix: Toggling between empty and non-empty causing maintainVisibleContentPosition issues
+
+## 2.0.7
+- Fix: Layout not working on react-native-macos because of transform instead of position
+
+## 2.0.6
+- Fix: updateItemPositions edge case with items multiple screen heights long was breaking the loop too early
+
+## 2.0.5
+- Perf: Change updateAllPositions to constrain processing to the scroll range
+- Fix: Crash when using snapTo in some environments
+- Perf: Change Separator to use useIsLastItem which should reduce the number of times it runs
+
+## 2.0.4
+- Fix: Possible crash if refScroller is undefined
+
+## 2.0.3
+- Feat: Set activeStickyIndex for usage in getState()
+- Revert changes from 2.0.1 and 2.0.2 which were buggy in an edge case
+
+## 2.0.2
+- Fix: Performance improvement in 2.0.1 caused a bug in an edge case
+
+## 2.0.1
+- Perf: Improve performance in very long lists (bad release)
+
+## 2.0.0
+Major version release with significant performance improvements and architectural changes:
+- Feat: Complete rewrite of virtualization algorithm for better performance
+- Feat: Add sticky headers support via stickyIndices prop
+- Feat: Add snapToIndices prop for snap-to behavior
+- Feat: Add getItemType prop for better item type handling
+- Feat: Add getFixedItemSize prop for items with known fixed sizes
+- Feat: Add itemsAreEqual prop to reduce re-rendering when data changes
+- Feat: Expose positions in getState()
+- Feat: Add enableAverages prop to control average size calculations
+- Feat: Add viewOffset option to scrollToEnd
+- Feat: Improve maintainScrollAtEnd with more granular options
+- Feat: Add ref function to enable/disable scroll processing
+- Feat: Support lazy rendering directly in LegendList component
+- Perf: Optimize container positioning using transform instead of absolute positioning
+- Perf: Improve scroll buffering algorithm with directional bias
+- Perf: Enable batched updates for better rendering performance
+- Perf: Optimize container allocation and reuse algorithms
+- Perf: Improve average item size calculations
+- Fix: Improve maintainVisibleContentPosition reliability
+- Fix: Better handling of data changes and scroll position maintenance
+- Fix: Improve initial scroll positioning accuracy
+- Fix: Better handling of padding changes
+- Fix: Resolve various edge cases with container recycling
+- Fix: Improve viewability calculations
+
+## 1.1.4
+- Feat: Add sizes to getState()
+
+## 1.1.3
+- Fix: scrollToEnd was not always setting `viewPosition: 1` correctly
+
+## 1.1.2
+- Fix: Adding items in a list with item separators had a small layout jump as the previously last item re-rendered with a separator
+
+## 1.1.1
+- Fix: scrollTo accuracy when paddingTop changes
+
+## 1.1.0
+- Feat: Add LazyLegendList component for virtualizing regular children
+- Feat: Support initialScrollIndex with viewOffset and viewPosition
+- Feat: Add estimatedListSize prop for better initial size estimation
+
+## 1.0.20
+- Types: Fix type of ref in Reanimated LegendList
+
+## 1.0.19
+- Fix: scrollToEnd not including footerSize
+
+## 1.0.18
+- Feat: Add a useListScrollSize hook
+- Fix: Support renderItem being a function component
+- Fix: scrollToEnd being incorrect by the amount of the bottom padding
+
+## 1.0.17
+- Fix: initialScrollIndex not taking header component size into account
+- Fix: PaddingAndAdjust for ListHeaderComponent
+- Fix: ignore alignItemsAtEnd when the list is empty
+
+## 1.0.16
+- Fix: isAtEnd was going to false when overscrolling
+- Fix: refreshControl not being top padded correctly
+- Fix: type of useLastItem hook
+- Fix: header component was not displaying if a list had no data
+- Fix: scrollToIndex logic that fixes scroll after items layout was not using viewPosition/viewOffset
+- Fix: Improve scrollToIndex accuracy
+- Fix: Improve scrollToEnd accuracy
+
+## 1.0.15
+- Feat: Add a useIsLastItem hook
+- Feat: Support horizontal lists without an intrinsic height, it takes the maximum height of list items
+- Feat: Add onLoad prop
+- Fix: maintainVisibleContentPosition not working on horizontal lists
+- Perf: scrollForNextCalculateItemsInView was not taking drawDistance into account correctly
+- Perf: Improved the algorithm for allocating containers to items
+- Perf: Use useLayoutEffect in LegendList if available to get the outer ScrollView layout as soon as possible
+
+## 1.0.14
+- Fix: A container changing size while inactive but not yet recycled could potentially overlap with elements onscreen if large enough
+
+## 1.0.13
+- Fix: Missing React import in ListHeaderComponentContainer crashing some environments
+- Fix: `initialScrollIndex` was off by padding if using "padding" or "paddingVertical" props
+
+## 1.0.12
+- Fix: Initial scroll index and scrollTo were not compensating for top padding
+- Fix: Removed an overly aggressive optimization that was sometimes causing blank spaces after scrolling
+- Fix: Adding a lot of items to the end with maintainScrollAtEnd could result in a large blank space
+- Fix: ListHeaderComponent sometimes not positioned correctly with maintainVisibleContentPosition
+- Fix: Gap styles not working with maintainVisibleContentPosition
+
+## 1.0.11
+- Fix: scrollTo was sometimes showing gaps at the bottom or bottom after reaching the destination
+
+## 1.0.10
+- Fix: Removed an optimization that only checked newly visible items, which could sometimes cause gaps in lists
+- Fix: Scroll history resets properly during scroll operations, which was causing gaps after scroll
+- Fix: Made scroll buffer calculations and scroll jump handling more reliable
+
+## 1.0.9
+- Fix: Use the `use-sync-external-store` shim to support older versions of react
+- Fix: Lists sometimes leaving some gaps when reordering a list
+- Fix: Sometimes precomputing next scroll position for calculation incorrectly
+
+## 1.0.8
+- Perf: The scroll buffering algorithm is smarter and adjusts based on scroll direction for better performance
+- Perf: The container-finding logic keeps index order, reducing gaps in rendering
+- Perf: Combine multiple hooks in Container to a single `useArray$` hook
+
+## 1.0.7
+- Fix: Containers that move out of view are handled better
+
+## 1.0.6
+- Fix: Average item size calculations are more accurate while scrolling
+- Fix: Items in view are handled better when data changes
+- Fix: Scroll position is maintained more accurately during updates
+
+## 1.0.5
+- Fix: Fast scrolling sometimes caused elements to disappear
+- Fix: Out-of-range `scrollToIndex` calls are handled better
+
+## 1.0.4
+- Fix: Container allocation is more efficient
+- Fix: Bidirectional infinite lists scroll better on the old architecture
+- Fix: Item size updates are handled more reliably
+- Fix: Container reuse logic is more accurate
+- Fix: Zero-size layouts are handled better in the old architecture
+
+## 1.0.3
+- Fix: Items that are larger than the estimated size are handled correctly
+
+## 1.0.2
+- Fix: Initial layout works better in the old architecture
+- Fix: Average size calculations are more accurate for bidirectional scrolling
+- Fix: Initial scroll index behavior is more precise
+- Fix: Item size calculations are more accurate overall
+
+## 1.0.1
+- Fix: Total size calculations are correct when using average sizes
+- Fix: Keyboard avoiding behavior is improved for a smoother experience
+
+## 1.0.0
+Initial release! Major changes if you're coming from a beta version:
+
+- Item hooks like `useRecyclingState` are no longer render props, but can be imported directly from `@legendapp/list`.

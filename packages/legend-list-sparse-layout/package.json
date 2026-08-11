@@ -1,0 +1,90 @@
+{
+  "name": "@legendapp/list",
+  "version": "3.3.5-sparse-layout.94dfeeda",
+  "description": "Legend List is a drop-in replacement for FlatList with much better performance and supporting dynamically sized items.",
+  "sideEffects": false,
+  "private": true,
+  "exports": {
+    "./animated": {
+      "types": "./animated.d.ts",
+      "import": "./animated.mjs",
+      "require": "./animated.js",
+      "default": "./animated.js"
+    },
+    "./keyboard": {
+      "types": "./keyboard.d.ts",
+      "import": "./keyboard.mjs",
+      "require": "./keyboard.js",
+      "default": "./keyboard.js"
+    },
+    "./keyboard-legacy": {
+      "types": "./keyboard-legacy.d.ts",
+      "import": "./keyboard-legacy.mjs",
+      "require": "./keyboard-legacy.js",
+      "default": "./keyboard-legacy.js"
+    },
+    "./reanimated": {
+      "types": "./reanimated.d.ts",
+      "import": "./reanimated.mjs",
+      "require": "./reanimated.js",
+      "default": "./reanimated.js"
+    },
+    "./react-native": {
+      "types": "./react-native.d.ts",
+      "browser": {
+        "import": "./react-native.web.mjs",
+        "require": "./react-native.web.js",
+        "default": "./react-native.web.js"
+      },
+      "react-native": {
+        "import": "./react-native.mjs",
+        "require": "./react-native.js",
+        "default": "./react-native.js"
+      },
+      "import": "./react-native.web.mjs",
+      "require": "./react-native.web.js",
+      "default": "./react-native.web.js"
+    },
+    "./section-list": {
+      "types": "./section-list.d.ts",
+      "import": "./section-list.mjs",
+      "require": "./section-list.js",
+      "default": "./section-list.js"
+    },
+    "./react": {
+      "types": "./react.d.ts",
+      "import": "./react.mjs",
+      "require": "./react.js",
+      "default": "./react.js"
+    }
+  },
+  "files": [
+    "**"
+  ],
+  "peerDependencies": {
+    "react": "*"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  },
+  "author": "Legend <contact@legendapp.com> (https://github.com/LegendApp)",
+  "keywords": [
+    "react",
+    "react-native",
+    "list"
+  ],
+  "repository": "github:LegendApp/legend-list",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/LegendApp/legend-list/issues"
+  },
+  "homepage": "https://github.com/LegendApp/legend-list#readme",
+  "dependencies": {
+    "use-sync-external-store": "^1.5.0"
+  }
+}
