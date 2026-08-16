@@ -81,10 +81,11 @@ const chatSidebarContentInset = {
   right: 0,
   top: CHAT_HISTORY_SIDEBAR_TOP_INSET,
 };
-type TranscriptState = {
-  document?: ChatDocument;
-  error?: string;
-};
+type TranscriptState =
+  | { status: "idle" }
+  | { selectedId: string; status: "loading" }
+  | { document: ChatDocument; selectedId: string; status: "ready" }
+  | { error: string; selectedId: string; status: "error" };
 
 type ChatSidebarEntry =
   | { id: string; summary: ChatSummary; type: "chat" }
@@ -364,16 +365,20 @@ function TranscriptList({ document }: { document: ChatDocument }) {
   );
 }
 
-function TranscriptPane({ state }: { state: TranscriptState }) {
-  if (state.error) {
+function TranscriptPane({ selectedId, state }: { selectedId?: string; state: TranscriptState }) {
+  const isCurrentSelection = "selectedId" in state && state.selectedId === selectedId;
+  if (isCurrentSelection && state.status === "error") {
     return (
       <View className="flex-1 items-center justify-center bg-background px-10">
         <Text className="text-sm text-danger">{state.error}</Text>
       </View>
     );
   }
-  if (state.document) {
+  if (isCurrentSelection && state.status === "ready") {
     return <TranscriptList document={state.document} />;
+  }
+  if (selectedId !== undefined) {
+    return <View className="flex-1 bg-background" />;
   }
   return (
     <View className="flex-1 items-center justify-center bg-background">
@@ -389,7 +394,7 @@ export function ChatHistoryWindow() {
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [transcriptState, setTranscriptState] = useState<TranscriptState>({});
+  const [transcriptState, setTranscriptState] = useState<TranscriptState>({ status: "idle" });
   const loadGenerationRef = useRef(0);
   const selectedTitle = summaries.find((summary) => summary.id === selectedId)?.title;
 
@@ -438,17 +443,18 @@ export function ChatHistoryWindow() {
       loadGenerationRef.current = generation;
       cancelPendingOpen();
       writeSelectedChatId(selected.id);
+      setTranscriptState({ selectedId: selected.id, status: "loading" });
       void openChat(selected.provider as ChatProvider, selected.path)
         .then((document) => {
           if (loadGenerationRef.current === generation) {
-            setTranscriptState({ document });
+            setTranscriptState({ document, selectedId: selected.id, status: "ready" });
           } else {
             document.releaseNativeResources();
           }
         })
         .catch((error) => {
           if (loadGenerationRef.current === generation) {
-            setTranscriptState({ error: errorMessage(error) });
+            setTranscriptState({ error: errorMessage(error), selectedId: selected.id, status: "error" });
           }
         });
     }
@@ -480,7 +486,7 @@ export function ChatHistoryWindow() {
     >
       <ChatSidebar summaries={summaries} selectedId={selectedId} onSelect={handleSelect} />
       {summaries.length > 0 ? (
-        <TranscriptPane state={transcriptState} />
+        <TranscriptPane selectedId={selectedId} state={transcriptState} />
       ) : (
         <View className="flex-1 items-center justify-center bg-background px-10">
           {catalogLoading ? <ActivityIndicator /> : null}
