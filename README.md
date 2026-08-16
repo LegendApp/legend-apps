@@ -210,5 +210,5 @@ release scripts. App versions come from `apps/<app>/package.json`; build and
 Sparkle metadata come from the app manifest. See [RELEASING.md](RELEASING.md)
 for the complete release workflow.
 
-[pre-release-badge]: https://img.shields.io/badge/status-PRE--RELEASE-E6A23C?style=flat-square
-[demo-app-badge]: https://img.shields.io/badge/type-DEMO%20APP-6F42C1?style=flat-square
+[pre-release-badge]: https://img.shields.io/badge/-PRE--RELEASE-B45309?style=flat-square
+[demo-app-badge]: https://img.shields.io/badge/-DEMO%20APP-4F46E5?style=flat-square
