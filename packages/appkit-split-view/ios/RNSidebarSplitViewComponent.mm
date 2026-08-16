@@ -547,7 +547,7 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
     .contentWidth = contentWidth,
     .contentX = contentX,
     .height = height,
-    .isLayoutReady = panesReady,
+    .isLayoutReady = static_cast<bool>(panesReady),
     .isVertical = true,
     .sidebarHeight = sidebarHeight,
     .sidebarWidth = sidebarWidth,
