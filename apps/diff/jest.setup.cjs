@@ -8,14 +8,22 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 jest.mock("@legendapp/list/react-native", () => {
   const React = require("react");
   const { View } = require("react-native");
+  const renderItems = [];
 
   return {
     __esModule: true,
+    __legendListTestHooks: {
+      renderItems,
+      reset: () => {
+        renderItems.length = 0;
+      },
+    },
     LegendList: React.forwardRef(function LegendList({
       data = [],
       renderItem,
       style,
     }, ref) {
+      renderItems.push(renderItem);
       React.useImperativeHandle(ref, () => ({
         clearCaches: jest.fn(),
         getState: () => ({

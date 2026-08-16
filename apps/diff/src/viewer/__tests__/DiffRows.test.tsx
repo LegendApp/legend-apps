@@ -5,6 +5,7 @@ import React from "react";
 import {
   DiffSideBySideRow,
   DiffUnifiedRow,
+  createDiffUnifiedHunkRowIndexSet,
   getDiffSideBySideHunkHeaderInfo,
   getDiffUnifiedHunkHeaderInfo,
   type DiffRowRenderState,
@@ -419,6 +420,25 @@ describe("DiffRows", () => {
       lineLabel: "Lines 1-5000",
     });
     expect(getPlainRows).toHaveBeenCalledTimes(5_000);
+  });
+
+  it("uses document hunk indexes without materializing native-rendered rows", () => {
+    const getHunkRowIndexes = jest.fn(() => [1, 8]);
+    const getPlainRows = jest.fn(() => {
+      throw new Error("Native-rendered rows should not be materialized");
+    });
+    const document = {
+      getHunkRowIndexes,
+      getPlainRows,
+    } as unknown as DiffDocument;
+
+    const hunkRowIndexSet = createDiffUnifiedHunkRowIndexSet(document);
+
+    expect(hunkRowIndexSet.has(1)).toBe(true);
+    expect(hunkRowIndexSet.has(7)).toBe(false);
+    expect(hunkRowIndexSet.has(8)).toBe(true);
+    expect(getHunkRowIndexes).toHaveBeenCalledTimes(1);
+    expect(getPlainRows).not.toHaveBeenCalled();
   });
 
   it("caches side-by-side hunk ranges for the active collapse state", () => {

@@ -183,7 +183,7 @@ import {
   diffUnifiedChangeBarWidth,
   diffUnifiedLineNumberWidth,
   diffUnifiedMarkerWidth,
-  isDiffUnifiedHunkStart,
+  createDiffUnifiedHunkRowIndexSet,
   getDiffRowPalette,
   getSideBySideDividerColor,
   type DiffRowRenderState,
@@ -3157,6 +3157,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     state,
     viewMode: renderViewMode,
   });
+  // Progressive documents append hunk indexes without changing identity, so row count invalidates this snapshot.
+  const unifiedHunkRowIndexSet = useMemo(
+    () => createDiffUnifiedHunkRowIndexSet(renderViewMode === "unified" ? loadedDocument : null),
+    [loadedDocument, loadedDocumentRowCount, renderViewMode],
+  );
   const searchResults = useMemo(
     () => state.status === "loaded"
       ? createDiffSearchResults(state.document, state.files, searchQuery)
@@ -4574,7 +4579,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     let indexes: number[] = [];
     if (loadedDocument) {
       if (viewMode === "unified") {
-        indexes = loadedDocument.getHunkRowIndexes()
+        indexes = [...unifiedHunkRowIndexSet]
           .map((rowIndex) => getVisibleListIndex(rowIndex))
           .filter((index): index is number => index !== undefined);
       } else {
@@ -4582,7 +4587,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       }
     }
     return indexes;
-  }, [getVisibleListIndex, loadedDocument, sideBySideHunkHeaderIndexes, viewMode]);
+  }, [getVisibleListIndex, loadedDocument, sideBySideHunkHeaderIndexes, unifiedHunkRowIndexSet, viewMode]);
 
   const navigateToHunk = useCallback((direction: -1 | 1) => {
     const list = listRef.current;
@@ -4891,9 +4896,8 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
       return rowHeight;
     }
 
-    const row = loadedDocument?.getPlainRows(index, 1)[0];
-    return rowHeight + (isDiffUnifiedHunkStart(loadedDocument, index, row) ? diffHunkHeaderHeight : 0);
-  }, [getItemType, loadedDocument, rowHeight, showOnlyHunks]);
+    return rowHeight + (unifiedHunkRowIndexSet.has(index) ? diffHunkHeaderHeight : 0);
+  }, [getItemType, rowHeight, showOnlyHunks, unifiedHunkRowIndexSet]);
 
   const renderRow = useCallback(
     ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
@@ -4901,7 +4905,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         <DiffUnifiedRow
           adaptiveRender={adaptiveRender}
           collapsedFileIndexes$={collapsedFileIndexes$}
-          hasHunkHeader={showOnlyHunks && isDiffUnifiedHunkStart(loadedDocument, index, row)}
+          hasHunkHeader={showOnlyHunks && unifiedHunkRowIndexSet.has(index)}
           index={index}
           isFileHeader={getItemType(index) === "file-header"}
           nativeConfigId={nativeUnifiedRowConfig.configId}
@@ -4912,7 +4916,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         />
       );
     },
-    [collapsedFileIndexes$, getItemType, loadedDocument, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed],
+    [collapsedFileIndexes$, getItemType, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed, unifiedHunkRowIndexSet],
   );
 
   const getSideBySideItemType = useCallback((index: number) => {

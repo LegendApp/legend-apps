@@ -12,7 +12,7 @@ import {
   type ViewabilityConfig,
   useAdaptiveRender,
 } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
 import type {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -88,14 +88,19 @@ export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
 };
 
 type VirtualizedFixedDocumentListRowProps<TRow> = {
-  adaptiveRenderEnabled: boolean;
-  debugName?: string;
-  getRow?: (index: number, listIndex: number) => TRow | undefined;
   index: number;
   listIndex: number;
   renderItemBatchRef: { current: RenderItemDebugBatch | null };
+};
+
+type VirtualizedFixedDocumentListRowRenderer<TRow> = {
+  adaptiveRenderEnabled: boolean;
+  debugName?: string;
+  getRow?: (index: number, listIndex: number) => TRow | undefined;
   renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<TRow>) => ReactElement;
 };
+
+const VirtualizedFixedDocumentListRowRendererContext = createContext<VirtualizedFixedDocumentListRowRenderer<never> | null>(null);
 
 type VirtualizedFixedDocumentListDocumentIndexMapper = (index: number, listIndex: number) => number | undefined;
 
@@ -266,17 +271,24 @@ function createRowsState<TDocument, TRow, TStyle, TTiming>(
 }
 
 function VirtualizedFixedDocumentListRowContent<TRow>({
-  adaptiveRenderEnabled,
-  debugName,
-  getRow,
   index,
   listIndex,
   renderItemBatchRef,
-  renderRow,
 }: VirtualizedFixedDocumentListRowProps<TRow>) {
+  const rowRenderer = useContext(VirtualizedFixedDocumentListRowRendererContext) as VirtualizedFixedDocumentListRowRenderer<TRow> | null;
+  if (!rowRenderer) {
+    throw new Error("VirtualizedFixedDocumentList rows require a row renderer");
+  }
+
+  const {
+    adaptiveRenderEnabled,
+    debugName,
+    getRow,
+    renderRow,
+  } = rowRenderer;
   const adaptiveRender = useAdaptiveRender();
   const effectiveAdaptiveRender = adaptiveRenderEnabled ? adaptiveRender : "normal";
-  const row = useMemo(() => getRow?.(index, listIndex), [getRow, index, listIndex]);
+  const row = getRow?.(index, listIndex);
   recordRenderItemDebug(debugName, renderItemBatchRef, index, row !== undefined);
   return renderRow({
     adaptiveRender: effectiveAdaptiveRender,
@@ -467,6 +479,7 @@ export function VirtualizedFixedDocumentList<TRow>({
   style,
   viewabilityConfig,
 }: VirtualizedFixedDocumentListProps<TRow>) {
+  const adaptiveRenderEnabled = adaptiveRender !== undefined;
   const itemCount = dataSource?.getLength() ?? itemIndexes?.length ?? 0;
   const getItemIndex = useCallback(
     (index: number) => dataSource?.getItem(index) ?? itemIndexes?.[index],
@@ -492,14 +505,12 @@ export function VirtualizedFixedDocumentList<TRow>({
   const lastScrollSampleRef = useRef<{ offsetY: number; timestamp: number } | null>(null);
   const lastTopItemRef = useRef<{ index: number; listIndex: number } | null>(null);
   const latestPropsRef = useLatestValueRef({
-    adaptiveRenderEnabled: adaptiveRender !== undefined,
     dataKey,
     dataVersion,
     debugName,
     getDocumentIndex,
     getItemSize,
     getItemType,
-    getRow,
     initialRequestRowCount,
     itemCount,
     getItemIndex,
@@ -514,7 +525,6 @@ export function VirtualizedFixedDocumentList<TRow>({
     overscanRequestDelayMs,
     requestRange,
     requestRangesOnScroll,
-    renderRow,
     rowHeight,
   });
   useEffect(() => {
@@ -750,36 +760,34 @@ export function VirtualizedFixedDocumentList<TRow>({
     emitTopItemChanged(info.index, info.item);
   }, [emitTopItemChanged]);
 
+  const rowRenderer = useMemo<VirtualizedFixedDocumentListRowRenderer<TRow>>(() => ({
+    adaptiveRenderEnabled,
+    debugName,
+    getRow,
+    renderRow,
+  }), [adaptiveRenderEnabled, debugName, getRow, renderRow]);
+
   const renderItem = useCallback(
     ({ index: listIndex, item }: { index: number; item: number | undefined }) => {
-      const {
-        adaptiveRenderEnabled,
-        debugName,
-        getRow,
-        renderRow,
-      } = latestPropsRef.current;
       const renderItemStartedAt = instrumentationNowMs();
       const index = item ?? listIndex;
+      const { debugName: currentDebugName } = latestPropsRef.current;
       if (!hasLoggedFirstRenderItemRef.current) {
         hasLoggedFirstRenderItemRef.current = true;
-        debugLog(debugName, "list.renderItemCallback.first", {
+        debugLog(currentDebugName, "list.renderItemCallback.first", {
           elapsedSinceMountMs: Number((renderItemStartedAt - mountStartedAtRef.current).toFixed(1)),
           index,
           listIndex,
         });
       }
       const rowProps = {
-        adaptiveRenderEnabled,
-        debugName,
-        getRow,
         index,
         listIndex,
         renderItemBatchRef,
-        renderRow,
       };
 
       const renderedItem = <VirtualizedFixedDocumentListRowContent {...rowProps} />;
-      recordCallbackDebug(debugName, "list.renderItemCallbackFrame", renderItemCallbackBatchRef, index, renderItemStartedAt);
+      recordCallbackDebug(currentDebugName, "list.renderItemCallbackFrame", renderItemCallbackBatchRef, index, renderItemStartedAt);
       return renderedItem;
     },
     [latestPropsRef],
@@ -859,16 +867,20 @@ export function VirtualizedFixedDocumentList<TRow>({
     style,
     viewabilityConfig,
   };
-  return dataSource ? (
-    <LegendList
-      {...sharedProps}
-      dataSource={dataSource}
-    />
-  ) : (
-    <LegendList
-      {...sharedProps}
-      data={itemIndexes ?? []}
-      keyExtractor={keyExtractor}
-    />
+  return (
+    <VirtualizedFixedDocumentListRowRendererContext.Provider value={rowRenderer as unknown as VirtualizedFixedDocumentListRowRenderer<never>}>
+      {dataSource ? (
+        <LegendList
+          {...sharedProps}
+          dataSource={dataSource}
+        />
+      ) : (
+        <LegendList
+          {...sharedProps}
+          data={itemIndexes ?? []}
+          keyExtractor={keyExtractor}
+        />
+      )}
+    </VirtualizedFixedDocumentListRowRendererContext.Provider>
   );
 }

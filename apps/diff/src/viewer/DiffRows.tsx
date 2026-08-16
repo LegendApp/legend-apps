@@ -160,6 +160,10 @@ export function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? "#ffffff14" : "#1118271a";
 }
 
+export function createDiffUnifiedHunkRowIndexSet(document: DiffDocument | null) {
+  return new Set(document?.getHunkRowIndexes() ?? []);
+}
+
 function getPlainUnifiedRow(document: DiffDocument, index: number) {
   return document.getPlainRows(index, 1)[0];
 }
@@ -168,7 +172,7 @@ function isRenderableHunkRow(row: DiffRenderRow | DiffSideBySideRenderRow | unde
   return row !== undefined && row.kind !== diffRowKindFileHeader && row.kind !== "file-header" && row.hunkIndex >= 0;
 }
 
-export function isDiffUnifiedHunkStart(document: DiffDocument | null, index: number, row?: DiffRenderRow) {
+export function isDiffUnifiedHunkStart(document: DiffDocument | null, index: number, row: DiffRenderRow) {
   if (!document || !isRenderableHunkRow(row)) {
     return false;
   }
