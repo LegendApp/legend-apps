@@ -7,6 +7,7 @@
 #include "../nitrogen/generated/shared/c++/MarkdownRenderBlock.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -88,12 +89,18 @@ private:
   MarkdownTransactionResult updateBlockMarkdown(const MarkdownTransaction& transaction);
   MarkdownTransactionResult splitBlock(const MarkdownTransaction& transaction);
   MarkdownTransactionResult replaceBlockRange(const MarkdownTransaction& transaction);
+  MarkdownTransactionResult replaceBlockRangeIncrementally(
+      size_t rangeStartIndex,
+      size_t rangeEndIndex,
+      const std::optional<std::string>& replacementMarkdown,
+      bool preservesEmptyReplacementBlock);
   MarkdownTransactionResult moveBlockRange(const MarkdownTransaction& transaction);
   MarkdownTransactionResult makeTransactionResult(
       size_t startBlockIndex,
       size_t deleteCount,
       const std::vector<size_t>& changedBlockIndices,
-      std::vector<std::string> retiredBlockIds = {}) const;
+      std::vector<std::string> retiredBlockIds = {},
+      bool retainsFirstChangedBlock = false) const;
   void writeToFilePath(const std::string& filePath) const;
   void resetDocument(std::string source, std::vector<MarkdownBlockRange> blocks);
   std::string nextBlockId();

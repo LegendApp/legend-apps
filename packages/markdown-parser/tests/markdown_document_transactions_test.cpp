@@ -267,6 +267,7 @@ void testUpdateParagraphPreservesId() {
   expectEqual(after[0].id, before[0].id, "paragraph update preserves id");
   expectEqual(after[0].markdown, "Updated paragraph", "paragraph update markdown");
   expectEqual(result.changedRange.deleteCount, 1, "paragraph update delete count");
+  expect(result.changedRange.retainsFirstChangedBlock, "paragraph update reports retained first block");
   expectTransactionResultInvariants(before, after, result, source);
   expectDocumentInvariants(loaded.document);
 }
@@ -296,6 +297,7 @@ void testSplitBlockCreatesSecondBlock() {
   expectEqual(after[1].markdown, "world", "split second markdown");
   expectEqual(result.changedRange.deleteCount, 1, "split delete count");
   expectEqual(result.changedRange.blockIds.size(), 2, "split inserted block ids");
+  expect(result.changedRange.retainsFirstChangedBlock, "split reports retained first block");
   expectTransactionResultInvariants(before, after, result, savedSourceFor(loaded.document));
   expectDocumentInvariants(loaded.document);
 }
@@ -448,6 +450,7 @@ void testMoveBlockRangeMovesSingleBlockUp() {
   const std::string source = savedSourceFor(loaded.document);
 
   expectEqual(source, "Second\n\nFirst\n\nThird\n", "move single block up source");
+  expect(!result.changedRange.retainsFirstChangedBlock, "move reports changed range as a splice");
   expectEqual(after[0].id, before[1].id, "move up first id");
   expectEqual(after[1].id, before[0].id, "move up second id");
   expectEqual(after[2].id, before[2].id, "move up suffix id");

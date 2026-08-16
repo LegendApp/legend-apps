@@ -43,10 +43,11 @@ namespace margelo::nitro::legendapps::markdownparser {
     double startBlockIndex     SWIFT_PRIVATE;
     double deleteCount     SWIFT_PRIVATE;
     std::vector<std::string> blockIds     SWIFT_PRIVATE;
+    bool retainsFirstChangedBlock     SWIFT_PRIVATE;
 
   public:
     MarkdownChangedRange() = default;
-    explicit MarkdownChangedRange(double startBlockIndex, double deleteCount, std::vector<std::string> blockIds): startBlockIndex(startBlockIndex), deleteCount(deleteCount), blockIds(blockIds) {}
+    explicit MarkdownChangedRange(double startBlockIndex, double deleteCount, std::vector<std::string> blockIds, bool retainsFirstChangedBlock): startBlockIndex(startBlockIndex), deleteCount(deleteCount), blockIds(blockIds), retainsFirstChangedBlock(retainsFirstChangedBlock) {}
 
   public:
     friend bool operator==(const MarkdownChangedRange& lhs, const MarkdownChangedRange& rhs) = default;
@@ -64,7 +65,8 @@ namespace margelo::nitro {
       return margelo::nitro::legendapps::markdownparser::MarkdownChangedRange(
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "startBlockIndex"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "deleteCount"))),
-        JSIConverter<std::vector<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockIds")))
+        JSIConverter<std::vector<std::string>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockIds"))),
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "retainsFirstChangedBlock")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::markdownparser::MarkdownChangedRange& arg) {
@@ -72,6 +74,7 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "startBlockIndex"), JSIConverter<double>::toJSI(runtime, arg.startBlockIndex));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "deleteCount"), JSIConverter<double>::toJSI(runtime, arg.deleteCount));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "blockIds"), JSIConverter<std::vector<std::string>>::toJSI(runtime, arg.blockIds));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "retainsFirstChangedBlock"), JSIConverter<bool>::toJSI(runtime, arg.retainsFirstChangedBlock));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -85,6 +88,7 @@ namespace margelo::nitro {
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "startBlockIndex")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "deleteCount")))) return false;
       if (!JSIConverter<std::vector<std::string>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "blockIds")))) return false;
+      if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "retainsFirstChangedBlock")))) return false;
       return true;
     }
   };

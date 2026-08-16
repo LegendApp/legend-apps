@@ -1009,6 +1009,60 @@ describe("MarkdownDocument native row editor", () => {
     expect(mergedInput?.setSelection).toHaveBeenCalledWith("First".length, "First".length);
   });
 
+  it("merges the next block into the active block on native delete at the editable end", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+    ]));
+    let renderer: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument
+          adapter={adapter}
+          filename="test.md"
+          savePolicy={{ autosave: false }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const host = nativeHost(renderer!);
+    await act(async () => {
+      host.props.onBeginEditing({
+        nativeEvent: {
+          blockId: "d1:b0",
+          height: 25,
+          markdown: "First",
+          rowHeight: 25,
+          width: 640,
+          x: 40,
+          y: 80,
+        },
+      });
+    });
+
+    const activeInput = __enrichedMarkdownTestHooks.inputInstances().at(-1);
+    activeInput?.setSelection.mockClear();
+
+    await act(async () => {
+      host.props.onDeleteAtEnd({
+        nativeEvent: {
+          blockId: "d1:b0",
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(adapter.applyTransactions.at(-1)).toEqual({
+      endBlockId: "d1:b1",
+      markdown: "FirstSecond",
+      startBlockId: "d1:b0",
+      type: "replaceBlockRange",
+    });
+    expect(activeInput?.setSelection).toHaveBeenCalledWith("First".length, "First".length);
+  });
+
   it("uses native event markdown for row editor font metrics while the full block loads", async () => {
     const adapter = new NativeOverlayAdapter(
       snapshot([

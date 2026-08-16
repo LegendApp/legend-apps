@@ -38,15 +38,18 @@ function result(
   startBlockIndex: number,
   deleteCount: number,
   changedBlocks: MarkdownBlockSnapshot[],
+  retiredBlockIds: string[] = [],
+  retainsFirstChangedBlock?: boolean,
 ): MarkdownTransactionResult {
   return {
     changedBlocks,
     changedRange: {
       blockIds: changedBlocks.map((changedBlock) => changedBlock.id),
       deleteCount,
+      retainsFirstChangedBlock,
       startBlockIndex,
     },
-    retiredBlockIds: [],
+    retiredBlockIds,
     revision: 1,
     sourceLength: 100,
   };
@@ -68,7 +71,7 @@ describe("MarkdownBlockDataSource", () => {
     dataSource.subscribe((batch) => batches.push(batch));
 
     nativeBlockIds.splice(1, 1, "b", "inserted");
-    dataSource.applyTransactionResult(result(1, 1, [block("b", 1), block("inserted", 2)]), "b");
+    dataSource.applyTransactionResult(result(1, 1, [block("b", 1), block("inserted", 2)]));
 
     expect(dataSource.getLength()).toBe(4);
     expect(dataSource.getItem(3)).toBe("c");
@@ -110,7 +113,7 @@ describe("MarkdownBlockDataSource", () => {
     const batches: DataSourceMutationBatch[] = [];
     dataSource.subscribe((batch) => batches.push(batch));
 
-    dataSource.applyTransactionResult(result(0, 2, [block("a", 0, "ab")]), "a");
+    dataSource.applyTransactionResult(result(0, 2, [block("a", 0, "ab")], ["b"]));
 
     expect(dataSource.getLength()).toBe(2);
     expect(dataSource.getItem(0)).toBe("a");
@@ -119,5 +122,28 @@ describe("MarkdownBlockDataSource", () => {
       { type: "update", index: 0, count: 1, layout: "invalidate" },
       { type: "splice", index: 1, deleteCount: 1, insertCount: 0 },
     ]);
+  });
+
+  it("uses explicit native retention metadata for reordered rows", () => {
+    const blocks = [block("a", 0), block("b", 1), block("c", 2)];
+    const adapter = {} as MarkdownDocumentAdapter;
+    const dataSource = new MarkdownBlockDataSource(adapter, "d1", snapshot(blocks));
+    const batches: DataSourceMutationBatch[] = [];
+    dataSource.subscribe((batch) => batches.push(batch));
+
+    dataSource.applyTransactionResult(result(
+      0,
+      2,
+      [block("b", 0), block("a", 1)],
+      [],
+      false,
+    ));
+
+    expect(batches[0]?.operations).toEqual([{
+      type: "splice",
+      index: 0,
+      deleteCount: 2,
+      insertCount: 2,
+    }]);
   });
 });

@@ -81,6 +81,7 @@ function toTransactionResult(result: NativeMarkdownTransactionResult): MarkdownT
       startBlockIndex: result.changedRange.startBlockIndex,
       deleteCount: result.changedRange.deleteCount,
       blockIds: result.changedRange.blockIds,
+      retainsFirstChangedBlock: result.changedRange.retainsFirstChangedBlock,
     },
     changedBlocks: result.changedBlocks.map(toBlockSnapshot),
     retiredBlockIds: result.retiredBlockIds,
@@ -144,6 +145,13 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
   getBlockIndexForIdSync(documentId: string, blockId: string): number {
     const session = getSession(documentId);
     return session.nativeDocument.getIndexForBlockId(blockId);
+  },
+
+  getBlockSync(documentId: string, blockId: string): MarkdownBlockSnapshot | undefined {
+    const session = getSession(documentId);
+    return session.nativeDocument.getIndexForBlockId(blockId) >= 0
+      ? toBlockSnapshot(session.nativeDocument.getRenderBlockById(blockId))
+      : undefined;
   },
 
   async getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot> {

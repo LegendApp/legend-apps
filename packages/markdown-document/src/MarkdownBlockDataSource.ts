@@ -165,16 +165,10 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
     }
   }
 
-  applyTransactionResult(result: MarkdownTransactionResult, preservedFirstBlockId?: string) {
+  applyTransactionResult(result: MarkdownTransactionResult) {
     this.validateTransactionResult(result);
     const { blockIds, deleteCount, startBlockIndex } = result.changedRange;
     const previousLength = this.length;
-    if (
-      preservedFirstBlockId !== undefined &&
-      (deleteCount === 0 || blockIds[0] !== preservedFirstBlockId || result.retiredBlockIds.includes(preservedFirstBlockId))
-    ) {
-      throw new Error(`Markdown transaction did not preserve the expected first block id: ${preservedFirstBlockId}`);
-    }
 
     if (!this.indexedAdapter) {
       this.blockIds.splice(startBlockIndex, deleteCount, ...blockIds);
@@ -182,10 +176,11 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
     }
     this.length = previousLength - deleteCount + blockIds.length;
 
-    const preservesFirstBlock = preservedFirstBlockId !== undefined || (
-      deleteCount === 1 &&
-      blockIds.length === 1 &&
-      result.retiredBlockIds.length === 0
+    // Legacy adapters do not report retention explicitly. Their editing
+    // transactions retain at most the first replaced row; multi-row moves do not.
+    const preservesFirstBlock = result.changedRange.retainsFirstChangedBlock ?? (
+      blockIds.length > 0 &&
+      deleteCount === result.retiredBlockIds.length + 1
     );
     const operations: DataSourceOperation[] = preservesFirstBlock
       ? [{ type: "update", index: startBlockIndex, count: 1, layout: "invalidate" }]

@@ -67,6 +67,7 @@ export type MarkdownTransactionResult = {
     startBlockIndex: number;
     deleteCount: number;
     blockIds: string[];
+    retainsFirstChangedBlock?: boolean;
   };
   changedBlocks: MarkdownBlockSnapshot[];
   retiredBlockIds: string[];
@@ -75,6 +76,7 @@ export type MarkdownTransactionResult = {
 export type MarkdownDocumentAdapter = {
   load(filename: string): Promise<MarkdownDocumentSnapshot>;
   getBlock(documentId: string, blockId: string): Promise<MarkdownBlockSnapshot>;
+  getBlockSync?: (documentId: string, blockId: string) => MarkdownBlockSnapshot | undefined;
   getBlockIdAtIndexSync?: (documentId: string, index: number) => string | undefined;
   getBlockIndexForIdSync?: (documentId: string, blockId: string) => number;
   getBlockAtIndexSync?: (documentId: string, index: number) => MarkdownBlockMetadata | undefined;

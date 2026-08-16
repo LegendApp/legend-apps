@@ -49,6 +49,7 @@ export interface MarkdownChangedRange {
   startBlockIndex: number;
   deleteCount: number;
   blockIds: string[];
+  retainsFirstChangedBlock: boolean;
 }
 
 export interface MarkdownTransactionResult {

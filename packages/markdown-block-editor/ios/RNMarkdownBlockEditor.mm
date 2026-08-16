@@ -584,6 +584,22 @@ static void registerNativeMarkdownProvider()
   });
 }
 
+- (void)emitDeleteAtEnd
+{
+  if (_activeBlockId.length == 0) {
+    return;
+  }
+
+  auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
+  if (!eventEmitter) {
+    return;
+  }
+
+  eventEmitter->onDeleteAtEnd({
+    .blockId = std::string([_activeBlockId UTF8String] ?: ""),
+  });
+}
+
 - (void)emitEnterPressedWithMarkdownParts:(NSArray<NSString *> *)markdownParts
 {
   if (_activeBlockId.length == 0 || markdownParts.count != 2) {
@@ -631,6 +647,15 @@ static void registerNativeMarkdownProvider()
 
       [strongSelf emitBackspaceAtStart];
       return nil;
+    }
+
+    if (event.keyCode == 117 && selection.length == 0) {
+      NSArray<NSString *> *markdownParts = callMarkdownSplitAtSelectedRange(editorInput);
+      BOOL isAtEnd = markdownParts != nil && [markdownParts[1] length] == 0;
+      if (isAtEnd) {
+        [strongSelf emitDeleteAtEnd];
+        return nil;
+      }
     }
 
     BOOL isPlainEnter = (event.keyCode == 36 || event.keyCode == 76) &&

@@ -234,6 +234,25 @@ public:
     return nodeAt(index)->markdown.value(backingSource_);
   }
 
+  size_t sourceSpanSizeAt(size_t index) const {
+    const Node* node = nodeAt(index);
+    return node->markdown.size() + node->separatorAfter.size();
+  }
+
+  std::string sourceForRange(size_t startIndex, size_t count) const {
+    if (startIndex > size() || count > size() - startIndex) {
+      throw std::out_of_range("Markdown source range is out of bounds.");
+    }
+
+    std::string source;
+    for (size_t index = startIndex; index < startIndex + count; index += 1) {
+      const Node* node = nodeAt(index);
+      node->markdown.appendTo(source, backingSource_);
+      node->separatorAfter.appendTo(source, backingSource_);
+    }
+    return source;
+  }
+
   size_t sourceStartAt(size_t index) const {
     return sourcePrefix_.size() + sourceBytesBefore(nodeAt(index));
   }
@@ -287,6 +306,58 @@ public:
         std::move(newBlock),
         TextSegment::owned(std::move(afterMarkdown)),
         std::move(trailingSeparator));
+  }
+
+  void replaceRange(
+      size_t startIndex,
+      size_t deleteCount,
+      const std::string& replacementSource,
+      std::vector<MarkdownBlockRange> replacementBlocks) {
+    if (startIndex > size() || deleteCount > size() - startIndex) {
+      throw std::out_of_range("Markdown replacement range is out of bounds.");
+    }
+
+    auto [before, rangeAndAfter] = split(std::move(root_), startIndex);
+    auto [removed, after] = split(std::move(rangeAndAfter), deleteCount);
+    eraseNodeIds(removed.get());
+    root_ = merge(std::move(before), std::move(after));
+
+    const size_t leadingLength = replacementBlocks.empty()
+        ? replacementSource.size()
+        : std::min(replacementBlocks.front().markdownStart, replacementSource.size());
+    const std::string leadingSource = replacementSource.substr(0, leadingLength);
+    if (startIndex == 0) {
+      std::string prefix = sourcePrefix_.value(backingSource_);
+      prefix += leadingSource;
+      sourcePrefix_ = TextSegment::owned(std::move(prefix));
+    } else {
+      Node* previousNode = nodeAt(startIndex - 1);
+      std::string separator = previousNode->separatorAfter.value(backingSource_);
+      separator += leadingSource;
+      previousNode->separatorAfter = TextSegment::owned(std::move(separator));
+      updateAncestors(previousNode);
+    }
+
+    for (size_t offset = 0; offset < replacementBlocks.size(); offset += 1) {
+      MarkdownBlockRange block = std::move(replacementBlocks[offset]);
+      const size_t markdownStart = std::min(block.markdownStart, replacementSource.size());
+      const size_t markdownEnd = std::min(std::max(markdownStart, block.markdownEnd), replacementSource.size());
+      const size_t nextStart = offset + 1 < replacementBlocks.size()
+          ? std::min(std::max(markdownEnd, replacementBlocks[offset + 1].markdownStart), replacementSource.size())
+          : replacementSource.size();
+      const size_t contentStart = std::min(std::max(markdownStart, block.contentStart), markdownEnd);
+      const size_t contentEnd = std::min(std::max(contentStart, block.contentEnd), markdownEnd);
+      block.index = 0;
+      block.markdownStart = 0;
+      block.markdownEnd = markdownEnd - markdownStart;
+      block.contentStart = contentStart - markdownStart;
+      block.contentEnd = contentEnd - markdownStart;
+      insert(
+          startIndex + offset,
+          std::move(block),
+          TextSegment::owned(replacementSource.substr(markdownStart, markdownEnd - markdownStart)),
+          TextSegment::owned(replacementSource.substr(markdownEnd, nextStart - markdownEnd)));
+    }
   }
 
   std::vector<MarkdownBlockRange> materializeBlocks() const {
@@ -392,6 +463,14 @@ private:
 
   static size_t sourceBytes(const Node* node) noexcept {
     return node ? node->subtreeSourceBytes : 0;
+  }
+
+  void eraseNodeIds(const Node* node) {
+    if (node) {
+      eraseNodeIds(node->left.get());
+      nodeById_.erase(node->block.id);
+      eraseNodeIds(node->right.get());
+    }
   }
 
   static void updateNode(Node* node) noexcept {
@@ -840,91 +919,7 @@ MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const Mark
   }
 
   const size_t blockIndex = findBlockIndex(transaction.blockId);
-  const std::vector<MarkdownBlockRange> oldBlocks = blockSequence_->materializeBlocks();
-  const std::vector<std::string> oldMarkdown = blockSequence_->materializeMarkdown();
-  std::string sourceText = blockSequence_->materializeSource();
-
-  const size_t sourceStart = oldBlocks[blockIndex].markdownStart;
-  const size_t sourceEnd = oldBlocks[blockIndex].markdownEnd;
-  sourceText.replace(sourceStart, sourceEnd - sourceStart, *transaction.markdown);
-
-  std::vector<MarkdownBlockRange> newBlocks = parseMarkdownBlocks(sourceText);
-  std::vector<std::string> newMarkdown;
-  newMarkdown.reserve(newBlocks.size());
-  for (const auto& block : newBlocks) {
-    newMarkdown.push_back(sourceText.substr(block.markdownStart, block.markdownEnd - block.markdownStart));
-  }
-  if (isWhitespaceOnly(*transaction.markdown)) {
-    MarkdownBlockRange emptyBlock;
-    emptyBlock.index = blockIndex;
-    emptyBlock.markdownStart = sourceStart;
-    emptyBlock.markdownEnd = sourceStart;
-    emptyBlock.contentStart = sourceStart;
-    emptyBlock.contentEnd = sourceStart;
-    updateBlockSyntax(emptyBlock, "");
-    const size_t insertIndex = std::min(blockIndex, newBlocks.size());
-    newBlocks.insert(newBlocks.begin() + static_cast<long long>(insertIndex), emptyBlock);
-    newMarkdown.insert(newMarkdown.begin() + static_cast<long long>(insertIndex), "");
-  }
-
-  size_t prefixCount = 0;
-  while (
-      prefixCount < blockIndex &&
-      prefixCount < oldBlocks.size() &&
-      prefixCount < newBlocks.size() &&
-      oldMarkdown[prefixCount] == newMarkdown[prefixCount]) {
-    newBlocks[prefixCount].id = oldBlocks[prefixCount].id;
-    newBlocks[prefixCount].textRevision = oldBlocks[prefixCount].textRevision;
-    prefixCount += 1;
-  }
-
-  size_t suffixCount = 0;
-  while (
-      oldBlocks.size() > prefixCount + suffixCount &&
-      newBlocks.size() > prefixCount + suffixCount &&
-      oldBlocks.size() - suffixCount - 1 > blockIndex &&
-      oldMarkdown[oldBlocks.size() - suffixCount - 1] == newMarkdown[newBlocks.size() - suffixCount - 1]) {
-    const size_t oldIndex = oldBlocks.size() - suffixCount - 1;
-    const size_t newIndex = newBlocks.size() - suffixCount - 1;
-    newBlocks[newIndex].id = oldBlocks[oldIndex].id;
-    newBlocks[newIndex].textRevision = oldBlocks[oldIndex].textRevision;
-    suffixCount += 1;
-  }
-
-  const size_t deleteCount = oldBlocks.size() - prefixCount - suffixCount;
-  const size_t insertCount = newBlocks.size() - prefixCount - suffixCount;
-  const bool preservesEditedBlockId = deleteCount > 0 && insertCount > 0;
-  std::vector<std::string> retiredBlockIds;
-  retiredBlockIds.reserve(deleteCount);
-
-  for (size_t index = prefixCount; index < oldBlocks.size() - suffixCount; index += 1) {
-    if (preservesEditedBlockId && index == blockIndex) {
-      continue;
-    }
-    retiredBlockIds.push_back(oldBlocks[index].id);
-  }
-
-  for (size_t offset = 0; offset < insertCount; offset += 1) {
-    auto& block = newBlocks[prefixCount + offset];
-    if (offset == 0 && preservesEditedBlockId) {
-      block.id = oldBlocks[blockIndex].id;
-      block.textRevision = oldBlocks[blockIndex].textRevision + 1;
-    } else {
-      block.id = nextBlockId();
-      block.textRevision = revision_ + 1;
-    }
-  }
-
-  resetDocument(std::move(sourceText), std::move(newBlocks));
-  revision_ += 1;
-  timing_.sourceBytes = static_cast<double>(blockSequence_->sourceSize());
-
-  std::vector<size_t> changedBlockIndices;
-  changedBlockIndices.reserve(insertCount);
-  for (size_t offset = 0; offset < insertCount; offset += 1) {
-    changedBlockIndices.push_back(prefixCount + offset);
-  }
-  return makeTransactionResult(prefixCount, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
+  return replaceBlockRangeIncrementally(blockIndex, blockIndex, transaction.markdown, true);
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTransaction& transaction) {
@@ -948,7 +943,7 @@ MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTrans
       lineEnding_);
   revision_ += 1;
   timing_.sourceBytes = static_cast<double>(blockSequence_->sourceSize());
-  return makeTransactionResult(blockIndex, 1, {blockIndex, blockIndex + 1});
+  return makeTransactionResult(blockIndex, 1, {blockIndex, blockIndex + 1}, {}, true);
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const MarkdownTransaction& transaction) {
@@ -960,107 +955,194 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
   const size_t secondIndex = findBlockIndex(*transaction.beforeMarkdown);
   const size_t rangeStartIndex = std::min(firstIndex, secondIndex);
   const size_t rangeEndIndex = std::max(firstIndex, secondIndex);
-  const bool hasReplacement = transaction.markdown.has_value();
+  return replaceBlockRangeIncrementally(rangeStartIndex, rangeEndIndex, transaction.markdown, false);
+}
+
+MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRangeIncrementally(
+    size_t rangeStartIndex,
+    size_t rangeEndIndex,
+    const std::optional<std::string>& replacementMarkdown,
+    bool preservesEmptyReplacementBlock) {
+  const size_t blockCount = blockSequence_->size();
+  const bool hasReplacement = replacementMarkdown.has_value();
   const bool hasPreviousBlock = rangeStartIndex > 0;
-  const bool hasNextBlock = rangeEndIndex + 1 < blockSequence_->size();
-  const std::vector<MarkdownBlockRange> oldBlocks = blockSequence_->materializeBlocks();
-  const std::vector<std::string> oldMarkdown = blockSequence_->materializeMarkdown();
-  std::string sourceText = blockSequence_->materializeSource();
+  const bool hasNextBlock = rangeEndIndex + 1 < blockCount;
+  // Include the previous block because a removed separator can join it to the
+  // replacement. Two following blocks are enough to prove the scanner has
+  // re-entered the unchanged suffix for lookahead constructs such as tables.
+  const size_t parseStartIndex = hasPreviousBlock ? rangeStartIndex - 1 : rangeStartIndex;
+  size_t parseEndIndex = std::min(blockCount - 1, rangeEndIndex + 2);
 
-  size_t sourceStart = oldBlocks[rangeStartIndex].markdownStart;
-  size_t sourceEnd = oldBlocks[rangeEndIndex].markdownEnd;
-  std::string replacementSource;
-  if (hasReplacement) {
-    replacementSource = *transaction.markdown;
-    if (hasNextBlock) {
-      sourceEnd = std::min(sourceText.size(), sourceEnd + lineEnding_.size());
-      replacementSource += lineEnding_;
+  std::vector<MarkdownBlockRange> oldWindowBlocks;
+  std::vector<std::string> oldWindowMarkdown;
+  std::vector<MarkdownBlockRange> newWindowBlocks;
+  std::vector<std::string> newWindowMarkdown;
+  std::string newWindowSource;
+
+  while (true) {
+    const size_t windowBlockCount = parseEndIndex - parseStartIndex + 1;
+    oldWindowBlocks.clear();
+    oldWindowMarkdown.clear();
+    oldWindowBlocks.reserve(windowBlockCount);
+    oldWindowMarkdown.reserve(windowBlockCount);
+    for (size_t index = parseStartIndex; index <= parseEndIndex; index += 1) {
+      oldWindowBlocks.push_back(blockSequence_->blockAt(index));
+      oldWindowMarkdown.push_back(blockSequence_->markdownAt(index));
     }
-  } else if (hasNextBlock) {
-    sourceEnd = std::min(sourceText.size(), sourceEnd + lineEnding_.size());
-  } else if (hasPreviousBlock) {
-    sourceStart = sourceStart >= lineEnding_.size() ? sourceStart - lineEnding_.size() : 0;
+
+    newWindowSource = blockSequence_->sourceForRange(parseStartIndex, windowBlockCount);
+    size_t sourceStart = 0;
+    for (size_t index = parseStartIndex; index < rangeStartIndex; index += 1) {
+      sourceStart += blockSequence_->sourceSpanSizeAt(index);
+    }
+    size_t sourceEnd = sourceStart;
+    for (size_t index = rangeStartIndex; index < rangeEndIndex; index += 1) {
+      sourceEnd += blockSequence_->sourceSpanSizeAt(index);
+    }
+    sourceEnd += blockSequence_->markdownAt(rangeEndIndex).size();
+
+    std::string replacementSource;
+    if (hasReplacement) {
+      replacementSource = *replacementMarkdown;
+      if (hasNextBlock) {
+        sourceEnd = std::min(newWindowSource.size(), sourceEnd + lineEnding_.size());
+        replacementSource += lineEnding_;
+      }
+    } else if (hasNextBlock) {
+      sourceEnd = std::min(newWindowSource.size(), sourceEnd + lineEnding_.size());
+    } else if (hasPreviousBlock) {
+      sourceStart = sourceStart >= lineEnding_.size() ? sourceStart - lineEnding_.size() : 0;
+    }
+    newWindowSource.replace(sourceStart, sourceEnd - sourceStart, replacementSource);
+
+    newWindowBlocks = parseMarkdownBlocks(newWindowSource);
+    newWindowMarkdown.clear();
+    newWindowMarkdown.reserve(newWindowBlocks.size());
+    for (const auto& block : newWindowBlocks) {
+      newWindowMarkdown.push_back(newWindowSource.substr(block.markdownStart, block.markdownEnd - block.markdownStart));
+    }
+
+    if (
+        hasReplacement &&
+        isWhitespaceOnly(*replacementMarkdown) &&
+        (preservesEmptyReplacementBlock || !replacementMarkdown->empty())) {
+      MarkdownBlockRange emptyBlock;
+      emptyBlock.markdownStart = sourceStart;
+      emptyBlock.markdownEnd = sourceStart;
+      emptyBlock.contentStart = sourceStart;
+      emptyBlock.contentEnd = sourceStart;
+      updateBlockSyntax(emptyBlock, "");
+      const size_t targetOffset = rangeStartIndex - parseStartIndex;
+      const size_t insertIndex = std::min(targetOffset, newWindowBlocks.size());
+      newWindowBlocks.insert(newWindowBlocks.begin() + static_cast<long long>(insertIndex), emptyBlock);
+      newWindowMarkdown.insert(newWindowMarkdown.begin() + static_cast<long long>(insertIndex), "");
+    }
+
+    size_t stableSuffixCount = 0;
+    while (
+        stableSuffixCount < oldWindowBlocks.size() &&
+        stableSuffixCount < newWindowBlocks.size()) {
+      const size_t oldIndex = oldWindowBlocks.size() - stableSuffixCount - 1;
+      const size_t newIndex = newWindowBlocks.size() - stableSuffixCount - 1;
+      if (
+          parseStartIndex + oldIndex <= rangeEndIndex ||
+          oldWindowMarkdown[oldIndex] != newWindowMarkdown[newIndex] ||
+          oldWindowBlocks[oldIndex].type != newWindowBlocks[newIndex].type) {
+        break;
+      }
+      stableSuffixCount += 1;
+    }
+
+    const size_t availableSuffixCount = parseEndIndex - rangeEndIndex;
+    const size_t requiredStableSuffixCount = std::min<size_t>(2, availableSuffixCount);
+    if (parseEndIndex + 1 == blockCount || stableSuffixCount >= requiredStableSuffixCount) {
+      break;
+    }
+
+    // An opened fence or a changed paragraph boundary can consume the initial
+    // suffix. Grow geometrically so contextual edits stay correct without
+    // making ordinary edits depend on total document size.
+    const size_t expandedWindowBlockCount = parseEndIndex - parseStartIndex + 1;
+    parseEndIndex = std::min(blockCount - 1, parseStartIndex + expandedWindowBlockCount * 2 - 1);
   }
 
-  sourceText.replace(sourceStart, sourceEnd - sourceStart, replacementSource);
-
-  std::vector<MarkdownBlockRange> newBlocks = parseMarkdownBlocks(sourceText);
-  std::vector<std::string> newMarkdown;
-  newMarkdown.reserve(newBlocks.size());
-  for (const auto& block : newBlocks) {
-    newMarkdown.push_back(sourceText.substr(block.markdownStart, block.markdownEnd - block.markdownStart));
-  }
-  if (hasReplacement && !transaction.markdown->empty() && isWhitespaceOnly(*transaction.markdown)) {
-    MarkdownBlockRange emptyBlock;
-    emptyBlock.index = rangeStartIndex;
-    emptyBlock.markdownStart = sourceStart;
-    emptyBlock.markdownEnd = sourceStart;
-    emptyBlock.contentStart = sourceStart;
-    emptyBlock.contentEnd = sourceStart;
-    updateBlockSyntax(emptyBlock, "");
-    const size_t insertIndex = std::min(rangeStartIndex, newBlocks.size());
-    newBlocks.insert(newBlocks.begin() + static_cast<long long>(insertIndex), emptyBlock);
-    newMarkdown.insert(newMarkdown.begin() + static_cast<long long>(insertIndex), "");
-  }
-
+  const size_t editedWindowStart = rangeStartIndex - parseStartIndex;
+  const size_t editedWindowEnd = rangeEndIndex - parseStartIndex;
   size_t prefixCount = 0;
   while (
-      prefixCount < rangeStartIndex &&
-      prefixCount < oldBlocks.size() &&
-      prefixCount < newBlocks.size() &&
-      oldMarkdown[prefixCount] == newMarkdown[prefixCount]) {
-    newBlocks[prefixCount].id = oldBlocks[prefixCount].id;
-    newBlocks[prefixCount].textRevision = oldBlocks[prefixCount].textRevision;
+      prefixCount < editedWindowStart &&
+      prefixCount < oldWindowBlocks.size() &&
+      prefixCount < newWindowBlocks.size() &&
+      oldWindowMarkdown[prefixCount] == newWindowMarkdown[prefixCount] &&
+      oldWindowBlocks[prefixCount].type == newWindowBlocks[prefixCount].type) {
+    newWindowBlocks[prefixCount].id = oldWindowBlocks[prefixCount].id;
+    newWindowBlocks[prefixCount].textRevision = oldWindowBlocks[prefixCount].textRevision;
     prefixCount += 1;
   }
 
   size_t suffixCount = 0;
   while (
-      oldBlocks.size() > prefixCount + suffixCount &&
-      newBlocks.size() > prefixCount + suffixCount &&
-      oldBlocks.size() - suffixCount - 1 > rangeEndIndex &&
-      oldMarkdown[oldBlocks.size() - suffixCount - 1] == newMarkdown[newBlocks.size() - suffixCount - 1]) {
-    const size_t oldIndex = oldBlocks.size() - suffixCount - 1;
-    const size_t newIndex = newBlocks.size() - suffixCount - 1;
-    newBlocks[newIndex].id = oldBlocks[oldIndex].id;
-    newBlocks[newIndex].textRevision = oldBlocks[oldIndex].textRevision;
+      oldWindowBlocks.size() > prefixCount + suffixCount &&
+      newWindowBlocks.size() > prefixCount + suffixCount &&
+      oldWindowBlocks.size() - suffixCount - 1 > editedWindowEnd) {
+    const size_t oldIndex = oldWindowBlocks.size() - suffixCount - 1;
+    const size_t newIndex = newWindowBlocks.size() - suffixCount - 1;
+    if (
+        oldWindowMarkdown[oldIndex] != newWindowMarkdown[newIndex] ||
+        oldWindowBlocks[oldIndex].type != newWindowBlocks[newIndex].type) {
+      break;
+    }
+    newWindowBlocks[newIndex].id = oldWindowBlocks[oldIndex].id;
+    newWindowBlocks[newIndex].textRevision = oldWindowBlocks[oldIndex].textRevision;
     suffixCount += 1;
   }
 
-  const size_t deleteCount = oldBlocks.size() - prefixCount - suffixCount;
-  const size_t insertCount = newBlocks.size() - prefixCount - suffixCount;
-  const bool preservesFirstSelectedBlockId = deleteCount > 0 && insertCount > 0;
+  const size_t deleteCount = oldWindowBlocks.size() - prefixCount - suffixCount;
+  const size_t insertCount = newWindowBlocks.size() - prefixCount - suffixCount;
+  const bool preservesFirstEditedBlockId = deleteCount > 0 && insertCount > 0;
+  const size_t preservedOldIndex = rangeStartIndex - parseStartIndex;
   std::vector<std::string> retiredBlockIds;
   retiredBlockIds.reserve(deleteCount);
 
-  for (size_t index = prefixCount; index < oldBlocks.size() - suffixCount; index += 1) {
-    if (preservesFirstSelectedBlockId && index == rangeStartIndex) {
+  for (size_t index = prefixCount; index < oldWindowBlocks.size() - suffixCount; index += 1) {
+    if (preservesFirstEditedBlockId && index == preservedOldIndex) {
       continue;
     }
-    retiredBlockIds.push_back(oldBlocks[index].id);
+    retiredBlockIds.push_back(oldWindowBlocks[index].id);
   }
 
   for (size_t offset = 0; offset < insertCount; offset += 1) {
-    auto& block = newBlocks[prefixCount + offset];
-    if (offset == 0 && preservesFirstSelectedBlockId) {
-      block.id = oldBlocks[rangeStartIndex].id;
-      block.textRevision = oldBlocks[rangeStartIndex].textRevision + 1;
+    auto& block = newWindowBlocks[prefixCount + offset];
+    if (offset == 0 && preservesFirstEditedBlockId) {
+      block.id = oldWindowBlocks[preservedOldIndex].id;
+      block.textRevision = oldWindowBlocks[preservedOldIndex].textRevision + 1;
     } else {
       block.id = nextBlockId();
       block.textRevision = revision_ + 1;
     }
   }
 
-  resetDocument(std::move(sourceText), std::move(newBlocks));
+  blockSequence_->replaceRange(
+      parseStartIndex,
+      oldWindowBlocks.size(),
+      newWindowSource,
+      std::move(newWindowBlocks));
   revision_ += 1;
   timing_.sourceBytes = static_cast<double>(blockSequence_->sourceSize());
 
+  const size_t changedStartIndex = parseStartIndex + prefixCount;
   std::vector<size_t> changedBlockIndices;
   changedBlockIndices.reserve(insertCount);
   for (size_t offset = 0; offset < insertCount; offset += 1) {
-    changedBlockIndices.push_back(prefixCount + offset);
+    changedBlockIndices.push_back(changedStartIndex + offset);
   }
-  return makeTransactionResult(prefixCount, deleteCount, changedBlockIndices, std::move(retiredBlockIds));
+  const bool retainsFirstChangedBlock = preservesFirstEditedBlockId && preservedOldIndex == prefixCount;
+  return makeTransactionResult(
+      changedStartIndex,
+      deleteCount,
+      changedBlockIndices,
+      std::move(retiredBlockIds),
+      retainsFirstChangedBlock);
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::moveBlockRange(const MarkdownTransaction& transaction) {
@@ -1168,7 +1250,8 @@ MarkdownTransactionResult HybridMarkdownDocument::makeTransactionResult(
     size_t startBlockIndex,
     size_t deleteCount,
     const std::vector<size_t>& changedBlockIndices,
-    std::vector<std::string> retiredBlockIds) const {
+    std::vector<std::string> retiredBlockIds,
+    bool retainsFirstChangedBlock) const {
   std::vector<std::string> blockIds;
   std::vector<MarkdownRenderBlock> changedBlocks;
   blockIds.reserve(changedBlockIndices.size());
@@ -1183,7 +1266,11 @@ MarkdownTransactionResult HybridMarkdownDocument::makeTransactionResult(
   return MarkdownTransactionResult(
       static_cast<double>(revision_),
       static_cast<double>(blockSequence_->sourceSize()),
-      MarkdownChangedRange(static_cast<double>(startBlockIndex), static_cast<double>(deleteCount), std::move(blockIds)),
+      MarkdownChangedRange(
+          static_cast<double>(startBlockIndex),
+          static_cast<double>(deleteCount),
+          std::move(blockIds),
+          retainsFirstChangedBlock),
       std::move(changedBlocks),
       std::move(retiredBlockIds));
 }

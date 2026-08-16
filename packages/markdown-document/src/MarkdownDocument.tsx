@@ -227,6 +227,12 @@ type NativeBackspaceAtStartEvent = {
   };
 };
 
+type NativeDeleteAtEndEvent = {
+  nativeEvent: {
+    blockId: string;
+  };
+};
+
 type NativeEnterPressedEvent = {
   nativeEvent: {
     afterMarkdown: string;
@@ -261,6 +267,7 @@ type MarkdownNativeEditorHostProps = {
   markdownLayoutConfigJson?: string;
   onBeginEditing: (event: NativeEditorFrameEvent) => void;
   onBackspaceAtStart: (event: NativeBackspaceAtStartEvent) => void;
+  onDeleteAtEnd: (event: NativeDeleteAtEndEvent) => void;
   onEnterPressed: (event: NativeEnterPressedEvent) => void;
   onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
@@ -275,6 +282,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   markdownLayoutConfigJson,
   onBeginEditing,
   onBackspaceAtStart,
+  onDeleteAtEnd,
   onEnterPressed,
   onEditorFrameChange,
   onLayout,
@@ -288,6 +296,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
       markdownLayoutConfigJson={markdownLayoutConfigJson}
       onBeginEditing={onBeginEditing}
       onBackspaceAtStart={onBackspaceAtStart}
+      onDeleteAtEnd={onDeleteAtEnd}
       onEnterPressed={onEnterPressed}
       onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
@@ -446,10 +455,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       sourceBlockId: string;
     } | null>(null);
     const pendingMergeRef = useRef<{
-      currentMarkdown: string;
+      leadingMarkdown: string;
       mergedMarkdown: string;
-      previousMarkdown: string;
       sourceBlockId: string;
+      trailingMarkdown: string;
     } | null>(null);
     const focusAdjacentBlockQueueRef = useRef<FocusAdjacentBlockRequest[]>([]);
     const focusAdjacentBlockInFlightRef = useRef(false);
@@ -832,7 +841,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return activeBlock;
       }
 
-      return adapter.getBlock(documentState.snapshot.documentId, blockId);
+      return adapter.getBlockSync?.(documentState.snapshot.documentId, blockId) ??
+        adapter.getBlock(documentState.snapshot.documentId, blockId);
     }, [adapter, documentState]);
 
     const loadBlocksForRange = useCallback(async (startIndex: number, count: number) => {
@@ -855,12 +865,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockDataSourceRef.current?.validateTransactionResult(result);
     }, []);
 
-    const applyTransactionResult = useCallback((result: MarkdownTransactionResult, preservedFirstBlockId?: string) => {
+    const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
       const dataSource = blockDataSourceRef.current;
       if (!dataSource) {
         throw new Error("Markdown block data source is not loaded.");
       }
-      dataSource.applyTransactionResult(result, preservedFirstBlockId);
+      dataSource.applyTransactionResult(result);
       currentRevisionRef.current = result.revision;
       bumpTransactionRowRenderRevisions(result);
 
@@ -1272,7 +1282,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const transactionResult = adapter.applyTransaction(documentState.snapshot.documentId, transaction);
           const result = transactionResult instanceof Promise ? await transactionResult : transactionResult;
           validateTransactionResult(result);
-          applyTransactionResult(result, block.id);
+          applyTransactionResult(result);
 
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
@@ -1426,8 +1436,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         const pendingMerge = pendingMergeRef.current;
         if (pendingMerge?.sourceBlockId === block.id) {
-          pendingMerge.currentMarkdown = markdown;
-          pendingMerge.mergedMarkdown = `${pendingMerge.previousMarkdown}${markdown}`;
+          pendingMerge.mergedMarkdown = `${pendingMerge.leadingMarkdown}${markdown}${pendingMerge.trailingMarkdown}`;
           return;
         }
 
@@ -1725,42 +1734,50 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       ],
     );
 
-    const mergeActiveBlockIntoPrevious = useCallback(
-      async (block: MarkdownBlockSnapshot) => {
+    const mergeActiveBlockWithAdjacent = useCallback(
+      async (block: MarkdownBlockSnapshot, direction: "next" | "previous") => {
         if (documentState.status !== "loaded" || !adapter.applyTransaction) {
           return;
         }
 
         const blockIndex = getBlockIndexById(block.id);
-        const previousBlockId = getBlockIdAtIndex(blockIndex - 1);
-        const previousBlock = await loadBlockAtIndex(previousBlockId, blockIndex - 1);
-        if (blockIndex <= 0 || !previousBlock) {
+        const adjacentBlockIndex = direction === "previous" ? blockIndex - 1 : blockIndex + 1;
+        const adjacentBlockId = getBlockIdAtIndex(adjacentBlockIndex);
+        const adjacentBlock = adjacentBlockId
+          ? adapter.getBlockSync?.(documentState.snapshot.documentId, adjacentBlockId) ??
+            await loadBlockAtIndex(adjacentBlockId, adjacentBlockIndex)
+          : undefined;
+        if (!adjacentBlock) {
           return;
         }
 
         const currentMarkdown = draftMarkdownRef.current;
-        const previousMarkdown = previousBlock.markdown;
-        const mergedMarkdown = `${previousMarkdown}${currentMarkdown}`;
-        const originalRangeMarkdown = `${previousMarkdown}\n\n${currentMarkdown}`;
-        const joinSelection = previousMarkdown.length;
+        const leadingMarkdown = direction === "previous" ? adjacentBlock.markdown : "";
+        const trailingMarkdown = direction === "next" ? adjacentBlock.markdown : "";
+        const mergedMarkdown = `${leadingMarkdown}${currentMarkdown}${trailingMarkdown}`;
+        const originalRangeMarkdown = direction === "previous"
+          ? `${adjacentBlock.markdown}\n\n${currentMarkdown}`
+          : `${currentMarkdown}\n\n${adjacentBlock.markdown}`;
+        const joinSelection = direction === "previous" ? adjacentBlock.markdown.length : currentMarkdown.length;
         const pendingMerge = {
-          currentMarkdown,
+          leadingMarkdown,
           mergedMarkdown,
-          previousMarkdown,
           sourceBlockId: block.id,
+          trailingMarkdown,
         };
         pendingMergeRef.current = pendingMerge;
 
         try {
           clearTypingHistoryGroup();
-          const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
+          const transactionResult = adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "replaceBlockRange",
-            startBlockId: previousBlock.id,
-            endBlockId: block.id,
+            startBlockId: direction === "previous" ? adjacentBlock.id : block.id,
+            endBlockId: direction === "previous" ? block.id : adjacentBlock.id,
             markdown: mergedMarkdown,
           });
+          const result = transactionResult instanceof Promise ? await transactionResult : transactionResult;
           validateTransactionResult(result);
-          applyTransactionResult(result, previousBlock.id);
+          applyTransactionResult(result);
 
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
@@ -1866,11 +1883,21 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               : setParagraphMarkdown(draftMarkdownRef.current);
             replaceActiveBlockMarkdown(markdown).catch(reportAsyncError);
           } else {
-            mergeActiveBlockIntoPrevious(activeBlock).catch(reportAsyncError);
+            mergeActiveBlockWithAdjacent(activeBlock, "previous").catch(reportAsyncError);
           }
         }
       },
-      [mergeActiveBlockIntoPrevious, replaceActiveBlockMarkdown, reportAsyncError],
+      [mergeActiveBlockWithAdjacent, replaceActiveBlockMarkdown, reportAsyncError],
+    );
+
+    const handleNativeDeleteAtEnd = useCallback(
+      (event: NativeDeleteAtEndEvent) => {
+        const activeBlock = activeBlockSnapshotRef.current;
+        if (activeBlock && activeBlock.id === event.nativeEvent.blockId) {
+          mergeActiveBlockWithAdjacent(activeBlock, "next").catch(reportAsyncError);
+        }
+      },
+      [mergeActiveBlockWithAdjacent, reportAsyncError],
     );
 
     const handleNativeEnterPressed = useCallback(
@@ -3294,6 +3321,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownLayoutConfigJson={nativeMarkdownLayoutConfigJson}
           onBeginEditing={handleNativeBeginEditing}
           onBackspaceAtStart={handleNativeBackspaceAtStart}
+          onDeleteAtEnd={handleNativeDeleteAtEnd}
           onEnterPressed={handleNativeEnterPressed}
           onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}
