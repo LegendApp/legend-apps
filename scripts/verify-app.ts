@@ -127,7 +127,7 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
   if (manifest.release?.macos) {
     assertContains(
       infoPlist,
-      `<key>SUFeedURL</key>\n\t<string>${getMacOSSparkleFeedUrl(manifest)}</string>`,
+      `<key>SUFeedURL</key>\n\t<string>${getMacOSSparkleFeedUrl(manifest, "arm")}</string>`,
       `${manifest.id}/macos Info.plist has wrong Sparkle feed URL`,
     );
     assertContains(

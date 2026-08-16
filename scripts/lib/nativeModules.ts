@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
 import { writeMacOSInfoPlist } from "./macosInfoPlist";
-import type { AppManifest, NativePackage, Platform } from "./types";
+import type { AppManifest, MacOSReleaseArch, NativePackage, Platform } from "./types";
 
 export type NativeGraphMode = "dev" | "release";
 
@@ -191,6 +191,7 @@ export function writeGeneratedConfig(
   manifest: AppManifest,
   platform: Platform,
   mode: NativeGraphMode = "release",
+  macOSReleaseArch: MacOSReleaseArch = "arm",
 ) {
   const dir = generatedDir(manifest.id, platform, mode);
   const appPackage = loadAppPackageMetadata(manifest.id);
@@ -231,7 +232,7 @@ export function writeGeneratedConfig(
   );
 
   const macosInfoPlistPath = platform === "macos"
-    ? writeMacOSInfoPlist(manifest, appPackage, dir, mode)
+    ? writeMacOSInfoPlist(manifest, appPackage, dir, mode, macOSReleaseArch)
     : undefined;
 
   return {

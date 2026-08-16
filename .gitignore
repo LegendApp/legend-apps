@@ -3,6 +3,7 @@ node_modules/
 .artifacts/
 dist/
 .DS_Store
+.env
 
 shell/.legend/
 shell/ios/

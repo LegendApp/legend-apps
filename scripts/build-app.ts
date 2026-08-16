@@ -13,9 +13,7 @@ import {
 import { getMacOSAppWrapperName, macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
-import type { Platform } from "./lib/types";
-
-type MacOSBuildArch = "arm" | "x86";
+import type { MacOSReleaseArch, Platform } from "./lib/types";
 
 function parseMacOSBuildArch(args: string[]) {
   const arch = args[0] ?? "arm";
@@ -31,7 +29,7 @@ function parseMacOSBuildArch(args: string[]) {
   return arch;
 }
 
-function getXcodeArch(arch: MacOSBuildArch) {
+function getXcodeArch(arch: MacOSReleaseArch) {
   return arch === "arm" ? "arm64" : "x86_64";
 }
 
@@ -136,10 +134,10 @@ function copyMissingMacOSMetroAssets(appPath: string) {
 async function buildOne(appId: string, platform: Platform, args: string[] = []) {
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
-  const generated = writeGeneratedConfig(manifest, platform, "release");
 
   if (platform === "macos") {
     const arch = parseMacOSBuildArch(args);
+    const generated = writeGeneratedConfig(manifest, platform, "release", arch);
     const appRoot = getMacOSReleaseAppRootDir(appId);
     const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
     const derivedDataPath = getMacOSReleaseDerivedDataPath(workspaceDir, arch);
@@ -182,6 +180,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
     throw new Error(`Unexpected build arguments for ${platform}: ${args.join(" ")}`);
   }
 
+  const generated = writeGeneratedConfig(manifest, platform, "release");
   runPlatformCommand(appId, platform, "release", [], {
     LEGEND_APP_CONFIG: generated.configPath,
     LEGEND_NATIVE_CONFIG: generated.configPath,

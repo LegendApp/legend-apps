@@ -20,13 +20,13 @@ import {
   getReleaseAssetStem,
 } from "./lib/release";
 import { validateMacOSReleaseArchive } from "./lib/macosReleaseValidation";
+import type { MacOSReleaseArch } from "./lib/types";
 
-type MacOSBuildArch = "arm" | "x86";
-type MacOSReleaseArch = MacOSBuildArch | "all";
+type MacOSReleaseSelection = MacOSReleaseArch | "all";
 
 type ReleaseOptions = {
   allowDirty: boolean;
-  arch: MacOSReleaseArch;
+  arch: MacOSReleaseSelection;
   notesFile?: string;
   verifyOnly: boolean;
 };
@@ -79,7 +79,7 @@ function parseOptions(args: string[]): ReleaseOptions {
   return options;
 }
 
-function getReleaseArchitectures(arch: MacOSReleaseArch): MacOSBuildArch[] {
+function getReleaseArchitectures(arch: MacOSReleaseSelection): MacOSReleaseArch[] {
   return arch === "all" ? ["arm", "x86"] : [arch];
 }
 
@@ -102,7 +102,10 @@ function assertCleanGitStatus(options: ReleaseOptions) {
   }
 }
 
-function assertReleaseStatePublished(manifest: Awaited<ReturnType<typeof loadAppManifest>>) {
+function assertReleaseStatePublished(
+  manifest: Awaited<ReturnType<typeof loadAppManifest>>,
+  architectures: MacOSReleaseArch[],
+) {
   const branch = runCommand("git", ["branch", "--show-current"], { cwd: rootDir, capture: true }).trim();
   if (branch !== "main") {
     throw new Error(`Releases must be created from main; current branch is ${branch || "detached HEAD"}.`);
@@ -115,22 +118,24 @@ function assertReleaseStatePublished(manifest: Awaited<ReturnType<typeof loadApp
     throw new Error("Release HEAD is not published on origin/main. Push main before creating the release.");
   }
 
-  const appcastPath = getMacOSSparkleAppcastPath(manifest);
-  const relativeAppcastPath = path.relative(rootDir, appcastPath).split(path.sep).join("/");
-  if (!fs.existsSync(appcastPath)) {
-    throw new Error(`Missing Sparkle appcast at ${relativeAppcastPath}. Package, commit, and push it before creating the release.`);
-  }
-  const localAppcast = fs.readFileSync(appcastPath, "utf8");
-  const publishedAppcast = runCommand("gh", [
-    "api",
-    "-H",
-    "Accept: application/vnd.github.raw+json",
-    `repos/${repository}/contents/${relativeAppcastPath}?ref=main`,
-  ], {
-    capture: true,
-  });
-  if (localAppcast !== publishedAppcast) {
-    throw new Error(`Sparkle appcast ${relativeAppcastPath} does not match origin/main. Commit and push it before creating the release.`);
+  for (const arch of architectures) {
+    const appcastPath = getMacOSSparkleAppcastPath(manifest, arch);
+    const relativeAppcastPath = path.relative(rootDir, appcastPath).split(path.sep).join("/");
+    if (!fs.existsSync(appcastPath)) {
+      throw new Error(`Missing Sparkle appcast at ${relativeAppcastPath}. Package, commit, and push it before creating the release.`);
+    }
+    const localAppcast = fs.readFileSync(appcastPath, "utf8");
+    const publishedAppcast = runCommand("gh", [
+      "api",
+      "-H",
+      "Accept: application/vnd.github.raw+json",
+      `repos/${repository}/contents/${relativeAppcastPath}?ref=main`,
+    ], {
+      capture: true,
+    });
+    if (localAppcast !== publishedAppcast) {
+      throw new Error(`Sparkle appcast ${relativeAppcastPath} does not match origin/main. Commit and push it before creating the release.`);
+    }
   }
 }
 
@@ -248,24 +253,25 @@ function assertReleaseArchives(archivePaths: string[]) {
 function assertAppcastReferencesArchives(
   manifest: Awaited<ReturnType<typeof loadAppManifest>>,
   appPackage: ReturnType<typeof loadAppPackageMetadata>,
-  archiveNames: string[],
+  architectures: MacOSReleaseArch[],
 ) {
-  const appcastPath = getMacOSSparkleAppcastPath(manifest);
-  if (!fs.existsSync(appcastPath)) {
-    throw new Error(`Missing Sparkle appcast at ${appcastPath}. Run bun scripts/package-macos-app.ts ${manifest.id} all first.`);
-  }
-
-  const appcast = fs.readFileSync(appcastPath, "utf8");
-  const missingArchiveName = archiveNames.find((archiveName) => !appcast.includes(archiveName));
-  if (missingArchiveName) {
-    throw new Error(
-      `Sparkle appcast ${path.relative(rootDir, appcastPath)} does not reference ${missingArchiveName}. Run bun scripts/package-macos-app.ts ${manifest.id} all again.`,
-    );
-  }
-
   const version = getMacOSReleaseVersion(appPackage);
-  if (!appcast.includes(version)) {
-    throw new Error(`Sparkle appcast ${path.relative(rootDir, appcastPath)} does not reference version ${version}.`);
+  for (const arch of architectures) {
+    const appcastPath = getMacOSSparkleAppcastPath(manifest, arch);
+    if (!fs.existsSync(appcastPath)) {
+      throw new Error(`Missing Sparkle appcast at ${appcastPath}. Run bun scripts/package-macos-app.ts ${manifest.id} all first.`);
+    }
+
+    const appcast = fs.readFileSync(appcastPath, "utf8");
+    const archiveName = getMacOSReleaseArchiveName(manifest, appPackage, arch);
+    if (!appcast.includes(archiveName)) {
+      throw new Error(
+        `Sparkle appcast ${path.relative(rootDir, appcastPath)} does not reference ${archiveName}. Run bun scripts/package-macos-app.ts ${manifest.id} all again.`,
+      );
+    }
+    if (!appcast.includes(version)) {
+      throw new Error(`Sparkle appcast ${path.relative(rootDir, appcastPath)} does not reference version ${version}.`);
+    }
   }
 }
 
@@ -288,6 +294,7 @@ async function main() {
   const options = parseOptions(args);
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, "macos");
+  const releaseArchitectures = getReleaseArchitectures(options.arch);
 
   const appPackage = loadAppPackageMetadata(appId);
   assertStableReleaseVersion(appPackage);
@@ -302,15 +309,11 @@ async function main() {
   assertGitHubCli();
   assertGitHubAuth();
   assertCleanGitStatus(options);
-  assertReleaseStatePublished(manifest);
+  assertReleaseStatePublished(manifest, releaseArchitectures);
 
   const distDir = getMacOSReleaseDistDir(manifest);
-  const releaseArchitectures = getReleaseArchitectures(options.arch);
   const archivePaths = releaseArchitectures.map((arch) =>
     path.join(distDir, getMacOSReleaseArchiveName(manifest, appPackage, arch))
-  );
-  const archiveNames = releaseArchitectures.map((arch) =>
-    getMacOSReleaseArchiveName(manifest, appPackage, arch)
   );
   assertReleaseArchives(archivePaths);
   archivePaths.forEach((archivePath, index) => {
@@ -321,7 +324,7 @@ async function main() {
       manifest,
     });
   });
-  assertAppcastReferencesArchives(manifest, appPackage, archiveNames);
+  assertAppcastReferencesArchives(manifest, appPackage, releaseArchitectures);
 
   const tagName = getGitHubReleaseTag(manifest, appPackage);
   assertVersionIncremented(manifest, appPackage);

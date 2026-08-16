@@ -8,7 +8,7 @@ import {
   getMacOSSparkleFeedUrl,
   getMacOSSparklePublicEdKey,
 } from "./release";
-import type { AppManifest, AppPackageMetadata, MacOSDocumentType } from "./types";
+import type { AppManifest, AppPackageMetadata, MacOSDocumentType, MacOSReleaseArch } from "./types";
 
 const baseInfoPlistPath = path.join(shellDir, "macos", macOSDefaultInfoPlistPath);
 
@@ -106,14 +106,14 @@ function replacePlistString(plist: string, key: string, value: string) {
   });
 }
 
-function renderSparkleMetadata(manifest: AppManifest, mode: "dev" | "release") {
+function renderSparkleMetadata(manifest: AppManifest, mode: "dev" | "release", arch: MacOSReleaseArch) {
   if (mode !== "release" || !manifest.release?.macos) {
     return "";
   }
 
   return [
     "\t<key>SUFeedURL</key>",
-    `\t<string>${escapePlistString(getMacOSSparkleFeedUrl(manifest))}</string>`,
+    `\t<string>${escapePlistString(getMacOSSparkleFeedUrl(manifest, arch))}</string>`,
     "\t<key>SUPublicEDKey</key>",
     `\t<string>${escapePlistString(getMacOSSparklePublicEdKey(manifest))}</string>`,
   ].join("\n");
@@ -124,6 +124,7 @@ export function writeMacOSInfoPlist(
   appPackage: AppPackageMetadata,
   outputDir: string,
   mode: "dev" | "release",
+  arch: MacOSReleaseArch,
 ) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
   const urlSchemes = manifest.urlSchemes?.macos?.filter(Boolean) ?? [];
@@ -145,7 +146,7 @@ export function writeMacOSInfoPlist(
     "\t<key>LegendHostWindowHidden</key>",
     hostWindowHidden ? "\t<true/>" : "\t<false/>",
   ].join("\n");
-  const sparkleMetadata = renderSparkleMetadata(manifest, mode);
+  const sparkleMetadata = renderSparkleMetadata(manifest, mode, arch);
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",
     `\n${appMetadata}${mode === "dev" ? `\n${renderDevAppTransportSecurity()}` : ""}${sparkleMetadata ? `\n${sparkleMetadata}` : ""}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,

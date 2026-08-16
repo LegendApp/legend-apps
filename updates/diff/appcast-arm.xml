@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Legend Diff</title>
+        <item>
+            <title>0.0.1</title>
+            <pubDate>Tue, 11 Aug 2026 10:07:43 -0700</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.1/Legend-Diff-0.0.1-arm.zip" length="10811263" type="application/octet-stream" sparkle:edSignature="HgiYAWg1gSlbKYkxkaBAR/FE+plqMK/oFjrW/04pn2//ul7FGtK0X5FPEPQKHUQ68ywDxu3n1lJFGPhePP8LDQ=="/>
+        </item>
+    </channel>
+</rss>

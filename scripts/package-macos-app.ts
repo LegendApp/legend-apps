@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   assertSupportedPlatform,
@@ -19,11 +20,12 @@ import {
   getMacOSReleaseArchiveName,
   getMacOSReleaseDistDir,
   getMacOSSparkleAppcastPath,
+  getReleaseAssetStem,
 } from "./lib/release";
-import { validateMacOSReleaseApp } from "./lib/macosReleaseValidation";
+import { validateMacOSReleaseApp, validateMacOSReleaseArchive } from "./lib/macosReleaseValidation";
+import type { MacOSReleaseArch } from "./lib/types";
 
-type MacOSBuildArch = "arm" | "x86";
-type MacOSPackageArch = MacOSBuildArch | "all";
+type MacOSPackageArch = MacOSReleaseArch | "all";
 
 type PackageOptions = {
   arch: MacOSPackageArch;
@@ -34,7 +36,6 @@ type PackageOptions = {
 };
 
 function runCommand(command: string, args: string[], options: { cwd?: string } = {}) {
-  console.log(`$ ${[command, ...args].join(" ")}`);
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     env: process.env,
@@ -78,7 +79,7 @@ function parseOptions(args: string[]): PackageOptions {
   return options;
 }
 
-function getPackageArchitectures(arch: MacOSPackageArch): MacOSBuildArch[] {
+function getPackageArchitectures(arch: MacOSPackageArch): MacOSReleaseArch[] {
   return arch === "all" ? ["arm", "x86"] : [arch];
 }
 
@@ -145,7 +146,7 @@ function notarizeApp(appPath: string, safeAppName: string, options: PackageOptio
 
   const notaryZipPath = path.join("/tmp", `${safeAppName}-notarize.zip`);
   fs.rmSync(notaryZipPath, { force: true });
-  runCommand("ditto", ["-c", "-k", "--keepParent", appPath, notaryZipPath]);
+  runCommand("ditto", ["-c", "-k", "-rsrc", "--sequesterRsrc", "--keepParent", appPath, notaryZipPath]);
 
   const keychainProfile = process.env.LEGEND_NOTARY_KEYCHAIN_PROFILE;
   if (keychainProfile) {
@@ -210,7 +211,7 @@ function packageArchitecture(
   manifest: Awaited<ReturnType<typeof loadAppManifest>>,
   appPackage: ReturnType<typeof loadAppPackageMetadata>,
   options: PackageOptions,
-  arch: MacOSBuildArch,
+  arch: MacOSReleaseArch,
 ) {
   if (!options.skipBuild) {
     runCommand("bun", ["scripts/build-app.ts", appId, "macos", arch], { cwd: rootDir });
@@ -232,7 +233,7 @@ function packageArchitecture(
 
   fs.mkdirSync(distDir, { recursive: true });
   fs.rmSync(distAppPath, { recursive: true, force: true });
-  fs.cpSync(builtAppPath, distAppPath, { recursive: true });
+  runCommand("ditto", [builtAppPath, distAppPath]);
 
   signApp(distAppPath, entitlementsPath, options);
   notarizeApp(distAppPath, `${manifest.id}-${arch}`, options);
@@ -254,8 +255,71 @@ function packageArchitecture(
     distAppPath,
     archivePath,
   ]);
+  if (!options.skipSign && !options.skipNotarize) {
+    validateMacOSReleaseArchive({
+      appPackage,
+      archivePath,
+      arch,
+      manifest,
+    });
+  }
 
   console.log(`Packaged ${manifest.displayName} ${arch} at ${archivePath}`);
+}
+
+function generateArchitectureAppcast(
+  appId: string,
+  manifest: Awaited<ReturnType<typeof loadAppManifest>>,
+  appPackage: ReturnType<typeof loadAppPackageMetadata>,
+  arch: MacOSReleaseArch,
+) {
+  const distDir = getMacOSReleaseDistDir(manifest);
+  const appcastPath = getMacOSSparkleAppcastPath(manifest, arch);
+  const appcastName = path.basename(appcastPath);
+  const archiveSuffix = `-${arch}.zip`;
+  const archiveNames = fs.readdirSync(distDir).filter((name) => name.endsWith(archiveSuffix));
+  const expectedArchiveName = getMacOSReleaseArchiveName(manifest, appPackage, arch);
+  if (!archiveNames.includes(expectedArchiveName)) {
+    throw new Error(`Missing ${arch} release archive at ${path.join(distDir, expectedArchiveName)}.`);
+  }
+
+  const temporaryDir = fs.mkdtempSync(path.join(os.tmpdir(), `${manifest.id}-appcast-${arch}-`));
+  try {
+    for (const archiveName of archiveNames) {
+      fs.copyFileSync(path.join(distDir, archiveName), path.join(temporaryDir, archiveName));
+    }
+    if (fs.existsSync(appcastPath)) {
+      fs.copyFileSync(appcastPath, path.join(temporaryDir, appcastName));
+    }
+
+    runCommand(getGenerateAppcastPath(appId), [
+      temporaryDir,
+      "--account",
+      "LegendApp",
+      "--download-url-prefix",
+      getGitHubReleaseDownloadUrlPrefix(manifest, appPackage),
+    ]);
+
+    const generatedAppcastPath = path.join(temporaryDir, appcastName);
+    if (!fs.existsSync(generatedAppcastPath)) {
+      throw new Error(`Sparkle did not generate ${appcastName}.`);
+    }
+
+    let appcast = fs.readFileSync(generatedAppcastPath, "utf8");
+    const assetStem = getReleaseAssetStem(manifest);
+    for (const deltaName of fs.readdirSync(temporaryDir).filter((name) => name.endsWith(".delta"))) {
+      const releaseDeltaName = `${assetStem}-${arch}-${deltaName}`;
+      fs.copyFileSync(path.join(temporaryDir, deltaName), path.join(distDir, releaseDeltaName));
+      appcast = appcast
+        .replaceAll(encodeURIComponent(deltaName), encodeURIComponent(releaseDeltaName))
+        .replaceAll(deltaName, releaseDeltaName);
+    }
+
+    fs.mkdirSync(path.dirname(appcastPath), { recursive: true });
+    fs.writeFileSync(appcastPath, appcast);
+  } finally {
+    fs.rmSync(temporaryDir, { force: true, recursive: true });
+  }
 }
 
 async function main() {
@@ -276,28 +340,21 @@ async function main() {
   }
 
   const appPackage = loadAppPackageMetadata(appId);
-  for (const arch of getPackageArchitectures(options.arch)) {
+  const architectures = getPackageArchitectures(options.arch);
+  for (const arch of architectures) {
     packageArchitecture(appId, manifest, appPackage, options, arch);
   }
 
   if (!options.skipAppcast) {
     const distDir = getMacOSReleaseDistDir(manifest);
-    const appcastPath = getMacOSSparkleAppcastPath(manifest);
-    const distAppcastPath = path.join(distDir, "appcast.xml");
-    if (fs.existsSync(appcastPath)) {
-      fs.copyFileSync(appcastPath, distAppcastPath);
+    const deltaPrefixes = architectures.map((arch) => `${getReleaseAssetStem(manifest)}-${arch}-`);
+    for (const name of fs.readdirSync(distDir)) {
+      if (name.endsWith(".delta") && deltaPrefixes.some((prefix) => name.startsWith(prefix))) {
+        fs.rmSync(path.join(distDir, name));
+      }
     }
-
-    runCommand(getGenerateAppcastPath(appId), [
-      distDir,
-      "--account",
-      "LegendApp",
-      "--download-url-prefix",
-      getGitHubReleaseDownloadUrlPrefix(manifest, appPackage),
-    ]);
-
-    fs.mkdirSync(path.dirname(appcastPath), { recursive: true });
-    fs.copyFileSync(distAppcastPath, appcastPath);
+    fs.rmSync(path.join(distDir, "appcast.xml"), { force: true });
+    architectures.forEach((arch) => generateArchitectureAppcast(appId, manifest, appPackage, arch));
   }
 }
 

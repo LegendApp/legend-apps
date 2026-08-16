@@ -3,9 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getMacOSReleaseBuild, getMacOSReleaseVersion, getMacOSSparkleFeedUrl } from "./release";
-import type { AppManifest, AppPackageMetadata } from "./types";
-
-export type MacOSReleaseArch = "arm" | "x86";
+import type { AppManifest, AppPackageMetadata, MacOSReleaseArch } from "./types";
 
 type ValidateMacOSReleaseAppOptions = {
   appPackage: AppPackageMetadata;
@@ -78,7 +76,7 @@ export function validateMacOSReleaseApp({
   assertValue("CFBundleIdentifier", readPlistValue(infoPlistPath, "CFBundleIdentifier"), manifest.bundleIds.macos);
   assertValue("CFBundleShortVersionString", readPlistValue(infoPlistPath, "CFBundleShortVersionString"), getMacOSReleaseVersion(appPackage));
   assertValue("CFBundleVersion", readPlistValue(infoPlistPath, "CFBundleVersion"), getMacOSReleaseBuild(manifest, appPackage));
-  assertValue("SUFeedURL", readPlistValue(infoPlistPath, "SUFeedURL"), getMacOSSparkleFeedUrl(manifest));
+  assertValue("SUFeedURL", readPlistValue(infoPlistPath, "SUFeedURL"), getMacOSSparkleFeedUrl(manifest, arch));
 }
 
 export function validateMacOSReleaseArchive({

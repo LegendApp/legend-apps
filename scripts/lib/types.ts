@@ -1,5 +1,7 @@
 export type Platform = "macos" | "ios" | "android";
 
+export type MacOSReleaseArch = "arm" | "x86";
+
 export type MacOSDocumentType = {
   name: string;
   role?: "Editor" | "Viewer" | "Shell" | "None";

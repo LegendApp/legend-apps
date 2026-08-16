@@ -1,6 +1,6 @@
 import path from "node:path";
 import { rootDir } from "./apps";
-import type { AppManifest, AppPackageMetadata } from "./types";
+import type { AppManifest, AppPackageMetadata, MacOSReleaseArch } from "./types";
 
 export const githubOwner = "LegendApp";
 export const githubRepo = "legend-apps";
@@ -28,12 +28,15 @@ export function getMacOSReleaseBuild(manifest: AppManifest, appPackage: AppPacka
   throw new Error(`${manifest.id}/macos release build "${build}" must be one to three dot-separated numeric segments.`);
 }
 
-export function getMacOSSparkleFeedPath(manifest: AppManifest) {
-  return manifest.release?.macos?.sparkle.feedPath ?? `updates/${manifest.id}/appcast.xml`;
+export function getMacOSSparkleFeedPath(manifest: AppManifest, arch: MacOSReleaseArch) {
+  const configuredPath = manifest.release?.macos?.sparkle.feedPath ?? `updates/${manifest.id}/appcast.xml`;
+  const extension = path.extname(configuredPath);
+  const basePath = extension ? configuredPath.slice(0, -extension.length) : configuredPath;
+  return `${basePath}-${arch}${extension || ".xml"}`;
 }
 
-export function getMacOSSparkleFeedUrl(manifest: AppManifest) {
-  return `https://raw.githubusercontent.com/${githubOwner}/${githubRepo}/${githubBranch}/${getMacOSSparkleFeedPath(manifest)}`;
+export function getMacOSSparkleFeedUrl(manifest: AppManifest, arch: MacOSReleaseArch) {
+  return `https://raw.githubusercontent.com/${githubOwner}/${githubRepo}/${githubBranch}/${getMacOSSparkleFeedPath(manifest, arch)}`;
 }
 
 export function getMacOSSparklePublicEdKey(manifest: AppManifest) {
@@ -65,6 +68,6 @@ export function getMacOSReleaseDistDir(manifest: AppManifest) {
   return path.join(rootDir, "dist", manifest.id, "macos");
 }
 
-export function getMacOSSparkleAppcastPath(manifest: AppManifest) {
-  return path.join(rootDir, getMacOSSparkleFeedPath(manifest));
+export function getMacOSSparkleAppcastPath(manifest: AppManifest, arch: MacOSReleaseArch) {
+  return path.join(rootDir, getMacOSSparkleFeedPath(manifest, arch));
 }

@@ -1,7 +1,8 @@
 # Releasing macOS Apps
 
-Each macOS app has an independent Sparkle feed at `updates/<app>/appcast.xml`
-and an independent GitHub release tag named `<app>-v<version>`.
+Each macOS app has architecture-specific Sparkle feeds at
+`updates/<app>/appcast-arm.xml` and `updates/<app>/appcast-x86.xml`, plus an
+independent GitHub release tag named `<app>-v<version>`.
 
 The Sparkle public key is committed in each app manifest. The matching private
 key is stored in the local macOS Keychain under the Sparkle account `LegendApp`.
@@ -38,18 +39,18 @@ export LEGEND_TEAM_ID="TEAMID1234"
 ## Package
 
 ```sh
-bun run diff package macos
+bun run diff package macos all
 ```
 
 For a local unsigned package/appcast check:
 
 ```sh
-bun run diff package macos --skip-sign --skip-notarize
+bun run diff package macos all --skip-sign --skip-notarize
 ```
 
 The package command builds the app, signs and notarizes the copied app, creates
-`dist/<app>/macos/<asset>.zip`, runs Sparkle `generate_appcast`, and writes the
-feed to `updates/<app>/appcast.xml`.
+`dist/<app>/macos/<asset>.zip`, runs Sparkle `generate_appcast` separately for
+each architecture, and writes both feeds under `updates/<app>/`.
 
 ## Publish
 
@@ -60,13 +61,13 @@ notarized, stapled, Gatekeeper-approved, and built for the expected
 architecture. Then run:
 
 ```sh
-bun run diff githubrelease macos
+bun run diff githubrelease macos all
 ```
 
 To run the complete publication preflight without creating a tag or release:
 
 ```sh
-bun run diff githubrelease macos --verify-only
+bun run diff githubrelease macos all --verify-only
 ```
 
 The publish command creates the app-prefixed tag and GitHub release at the
