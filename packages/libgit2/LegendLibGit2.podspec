@@ -17,6 +17,8 @@ Pod::Spec.new do |s|
     set -euo pipefail
     cmake -S . -B build \\
       -DCMAKE_BUILD_TYPE=Release \\
+      "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \\
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \\
       -DBUILD_SHARED_LIBS=OFF \\
       -DBUILD_TESTS=OFF \\
       -DBUILD_CLI=OFF \\
