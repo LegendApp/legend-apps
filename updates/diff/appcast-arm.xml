@@ -3,6 +3,14 @@
     <channel>
         <title>Legend Diff</title>
         <item>
+            <title>0.0.2</title>
+            <pubDate>Tue, 18 Aug 2026 16:24:50 +0200</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.0.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.2/Legend-Diff-0.0.2-arm.zip" length="10811587" type="application/octet-stream" sparkle:edSignature="1GJrCT5AdXv23lk2SZ74oSDqIZZIcgM3CT8ABEiLidsctKfDjigAslbVQnDMnDV1CBRByYVXN2slr2QoDkwwAw=="/>
+        </item>
+        <item>
             <title>0.0.1</title>
             <pubDate>Tue, 11 Aug 2026 10:07:43 -0700</pubDate>
             <sparkle:version>1</sparkle:version>
