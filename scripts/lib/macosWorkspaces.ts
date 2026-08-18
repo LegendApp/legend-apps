@@ -58,10 +58,12 @@ export function getMacOSReleaseDerivedDataPath(workspaceDir: string, arch: "arm"
 export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: string) {
   const workspaceDir = getMacOSReleaseWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
-  ensureReleaseWorkspaceLinks();
-  ensureReleaseAppRoot(manifest, configPath);
+  const didUpdateWorkspaceLinks = ensureReleaseWorkspaceLinks();
+  const didUpdateAppLinks = ensureReleaseAppRoot(manifest, configPath);
+  clearRelocatedDerivedData(workspaceDir, didUpdateWorkspaceLinks || didUpdateAppLinks);
   copyMacOSTemplate(workspaceDir);
   copyAppMacOSTemplate(workspaceDir, manifest);
+  removeStaleNodeBinaryOverride(workspaceDir);
   patchMacOSProjectForApp(workspaceDir, manifest);
   return workspaceDir;
 }
@@ -69,10 +71,12 @@ export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: s
 export function ensureMacOSDevWorkspace(manifest: AppManifest) {
   const workspaceDir = getMacOSAppDevWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
-  ensureDevWorkspaceLinks();
-  ensureDevAppRoot(manifest);
+  const didUpdateWorkspaceLinks = ensureDevWorkspaceLinks();
+  const didUpdateAppLinks = ensureDevAppRoot(manifest);
+  clearRelocatedDerivedData(workspaceDir, didUpdateWorkspaceLinks || didUpdateAppLinks);
   copyMacOSTemplate(workspaceDir);
   copyAppMacOSTemplate(workspaceDir, manifest);
+  removeStaleNodeBinaryOverride(workspaceDir);
   patchMacOSProjectForApp(workspaceDir, manifest);
   return workspaceDir;
 }
@@ -101,44 +105,111 @@ function copyAppMacOSTemplate(workspaceDir: string, manifest: AppManifest) {
 }
 
 function ensureReleaseWorkspaceLinks() {
-  ensureWorkspaceLinks(path.join(workspaceRoot, "release"));
+  return ensureWorkspaceLinks(path.join(workspaceRoot, "release"));
 }
 
 function ensureDevWorkspaceLinks() {
-  ensureWorkspaceLinks(path.join(workspaceRoot, "dev"));
+  return ensureWorkspaceLinks(path.join(workspaceRoot, "dev"));
 }
 
 function ensureWorkspaceLinks(root: string) {
-  ensureSymlink(path.join(rootDir, "node_modules"), path.join(root, "node_modules"), "dir");
-  ensureSymlink(path.join(rootDir, "packages"), path.join(root, "packages"), "dir");
+  const didUpdateNodeModules = ensureSymlink(
+    path.join(rootDir, "node_modules"),
+    path.join(root, "node_modules"),
+    "dir",
+  );
+  const didUpdatePackages = ensureSymlink(
+    path.join(rootDir, "packages"),
+    path.join(root, "packages"),
+    "dir",
+  );
+  return didUpdateNodeModules || didUpdatePackages;
 }
 
 function ensureSymlink(targetPath: string, linkPath: string, type: fs.symlink.Type) {
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+  const relativeTarget = path.relative(path.dirname(linkPath), targetPath);
+  const existing = fs.lstatSync(linkPath, { throwIfNoEntry: false });
+  let shouldCreate = existing === undefined;
 
-  if (fs.existsSync(linkPath)) {
-    return;
+  if (existing?.isSymbolicLink()) {
+    if (fs.readlinkSync(linkPath) !== relativeTarget) {
+      fs.unlinkSync(linkPath);
+      shouldCreate = true;
+    }
+  } else if (existing) {
+    throw new Error(`Expected generated workspace link at ${linkPath}`);
   }
 
-  fs.symlinkSync(targetPath, linkPath, type);
+  if (shouldCreate) {
+    fs.symlinkSync(relativeTarget, linkPath, type);
+  }
+
+  return shouldCreate;
+}
+
+function clearRelocatedDerivedData(workspaceDir: string, didUpdateLinks: boolean) {
+  const buildDir = path.join(workspaceDir, "build");
+
+  if (didUpdateLinks && fs.existsSync(buildDir)) {
+    console.log(`Clearing relocated Xcode build data at ${path.relative(rootDir, buildDir)}`);
+    fs.rmSync(buildDir, { force: true, recursive: true });
+  }
+}
+
+function removeStaleNodeBinaryOverride(workspaceDir: string) {
+  const localEnvPath = path.join(workspaceDir, ".xcode.env.local");
+
+  if (fs.existsSync(localEnvPath)) {
+    const localEnv = fs.readFileSync(localEnvPath, "utf8");
+    const match = localEnv.match(/^export NODE_BINARY=(?:"([^"]+)"|'([^']+)'|(\S+))$/m);
+    const nodeBinary = match?.[1] ?? match?.[2] ?? match?.[3];
+
+    if (nodeBinary && path.isAbsolute(nodeBinary) && !fs.existsSync(nodeBinary)) {
+      console.log(`Removing stale Node override at ${path.relative(rootDir, localEnvPath)}`);
+      fs.rmSync(localEnvPath);
+    }
+  }
 }
 
 function ensureReleaseAppRoot(manifest: AppManifest, configPath: string) {
   const appRoot = getMacOSReleaseAppRootDir(manifest.id);
 
   fs.mkdirSync(appRoot, { recursive: true });
-  ensureSymlink(path.join(shellDir, "app.config.ts"), path.join(appRoot, "app.config.ts"), "file");
-  ensureSymlink(path.join(shellDir, "react-native.config.js"), path.join(appRoot, "react-native.config.js"), "file");
+  const didUpdateAppConfig = ensureSymlink(
+    path.join(shellDir, "app.config.ts"),
+    path.join(appRoot, "app.config.ts"),
+    "file",
+  );
+  const didUpdateReactNativeConfig = ensureSymlink(
+    path.join(shellDir, "react-native.config.js"),
+    path.join(appRoot, "react-native.config.js"),
+    "file",
+  );
   writeReleasePackageJson(manifest, configPath, appRoot);
+  return didUpdateAppConfig || didUpdateReactNativeConfig;
 }
 
 function ensureDevAppRoot(manifest: AppManifest) {
   const appRoot = path.join(workspaceRoot, "dev", manifest.id);
 
   fs.mkdirSync(appRoot, { recursive: true });
-  ensureSymlink(path.join(shellDir, "app.config.ts"), path.join(appRoot, "app.config.ts"), "file");
-  ensureSymlink(path.join(shellDir, "react-native.config.js"), path.join(appRoot, "react-native.config.js"), "file");
-  ensureSymlink(path.join(shellDir, "package.json"), path.join(appRoot, "package.json"), "file");
+  const didUpdateAppConfig = ensureSymlink(
+    path.join(shellDir, "app.config.ts"),
+    path.join(appRoot, "app.config.ts"),
+    "file",
+  );
+  const didUpdateReactNativeConfig = ensureSymlink(
+    path.join(shellDir, "react-native.config.js"),
+    path.join(appRoot, "react-native.config.js"),
+    "file",
+  );
+  const didUpdatePackage = ensureSymlink(
+    path.join(shellDir, "package.json"),
+    path.join(appRoot, "package.json"),
+    "file",
+  );
+  return didUpdateAppConfig || didUpdateReactNativeConfig || didUpdatePackage;
 }
 
 export function installMacOSPods(
@@ -309,6 +380,8 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
     activeNativePackages: config.activeNativePackages?.map((pkg) => pkg.root).sort() ?? [],
     nativeGraphMode: config.nativeGraphMode,
     platform: config.platform,
+    // CocoaPods and Xcode generated state contains absolute paths and must be rebuilt after a move.
+    rootDir,
   }));
   addFile(hash, path.join(rootDir, "bun.lock"));
   addFile(hash, path.join(rootDir, "package.json"));
