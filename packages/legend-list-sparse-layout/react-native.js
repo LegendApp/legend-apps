@@ -405,7 +405,9 @@ var IsNewArchitecture = f !== void 0 && f != null;
 // src/core/containerItemMetadata.ts
 function createContainerItemMetadata(state, itemIndex, itemData, itemType) {
   return {
+    data: state.props.data,
     dataChangeEpoch: state.dataChangeEpoch,
+    dataSource: state.props.dataSource,
     getFixedItemSize: state.props.getFixedItemSize,
     getItemType: state.props.getItemType,
     itemData,
@@ -413,25 +415,29 @@ function createContainerItemMetadata(state, itemIndex, itemData, itemType) {
     itemType
   };
 }
-function resolveContainerItemMetadata(state, containerId, itemIndex, itemData) {
-  var _a3, _b;
-  const { getFixedItemSize, getItemType } = state.props;
+function updateContainerItemMetadata(state, containerId, itemIndex, itemData, itemType) {
+  var _a3;
+  const { getItemType } = state.props;
   const previousMetadata = state.containerItemMetadata.get(containerId);
-  let metadata;
   if ((previousMetadata == null ? void 0 : previousMetadata.dataChangeEpoch) === state.dataChangeEpoch && previousMetadata.getItemType === getItemType && previousMetadata.itemData === itemData && previousMetadata.itemIndex === itemIndex) {
-    metadata = previousMetadata;
-  } else {
-    const itemType = getItemType ? (_a3 = getItemType(itemData, itemIndex)) != null ? _a3 : "" : void 0;
-    metadata = createContainerItemMetadata(state, itemIndex, itemData, itemType);
-    state.containerItemMetadata.set(containerId, metadata);
+    return previousMetadata;
   }
+  const resolvedItemType = getItemType ? (_a3 = getItemType(itemData, itemIndex)) != null ? _a3 : "" : void 0;
+  const metadata = createContainerItemMetadata(state, itemIndex, itemData, resolvedItemType);
+  state.containerItemMetadata.set(containerId, metadata);
+  return metadata;
+}
+function resolveContainerItemMetadata(state, containerId, itemIndex, itemData) {
+  var _a3;
+  const { getFixedItemSize } = state.props;
+  const metadata = updateContainerItemMetadata(state, containerId, itemIndex, itemData);
   if (metadata.getFixedItemSize !== getFixedItemSize) {
     metadata.didResolveFixedItemSize = false;
     metadata.fixedItemSize = void 0;
     metadata.getFixedItemSize = getFixedItemSize;
   }
   if (getFixedItemSize && !metadata.didResolveFixedItemSize) {
-    metadata.fixedItemSize = getFixedItemSize(itemData, itemIndex, (_b = metadata.itemType) != null ? _b : "");
+    metadata.fixedItemSize = getFixedItemSize(itemData, itemIndex, (_a3 = metadata.itemType) != null ? _a3 : "");
     metadata.didResolveFixedItemSize = true;
   }
   return metadata;
@@ -4784,6 +4790,7 @@ function syncMountedContainer(ctx, containerIndex, itemIndex, options) {
     return { didChangePosition: false, didRefreshData: false };
   }
   const itemKey = (_a3 = state.idCache[itemIndex]) != null ? _a3 : getId(state, itemIndex);
+  const metadata = updateContainerItemMetadata(state, containerIndex, itemIndex, item);
   const updateLayout = (_b = options == null ? void 0 : options.updateLayout) != null ? _b : true;
   let didChangePosition = false;
   let didRefreshData = false;
@@ -4795,7 +4802,7 @@ function syncMountedContainer(ctx, containerIndex, itemIndex, options) {
       return { didChangePosition: false, didRefreshData: false };
     }
     const logicalPosition = (positionValue || 0) - ((_c = options == null ? void 0 : options.scrollAdjustPending) != null ? _c : 0);
-    const itemSize = (_d = layout ? layout.getSize(itemIndex) : getLayoutSize(ctx, itemIndex)) != null ? _d : getItemSize(ctx, itemKey, itemIndex, item);
+    const itemSize = (_d = layout ? layout.getSize(itemIndex) : getLayoutSize(ctx, itemIndex)) != null ? _d : getItemSize(ctx, itemKey, itemIndex, item, void 0, void 0, void 0, metadata);
     const position = toPhysicalHorizontalItemPosition(state, logicalPosition, itemSize, peek$(ctx, "totalSize"));
     const column = (layout ? layout.getColumn(itemIndex) : getLayoutColumn(ctx, itemIndex)) || 1;
     const span = (layout ? layout.getSpan(itemIndex) : getLayoutSpan(ctx, itemIndex)) || 1;
@@ -6027,13 +6034,13 @@ function calculateItemsInView(ctx, params = {}) {
           }
           const item = indexedData.getItem(i);
           indexByKey.set(id, i);
-          set$(ctx, `containerItemKey${containerIndex}`, id);
-          set$(ctx, `containerItemIndex${containerIndex}`, i);
-          set$(ctx, `containerItemData${containerIndex}`, item);
           state.containerItemMetadata.set(
             containerIndex,
             createContainerItemMetadata(state, i, item, allocation.itemType)
           );
+          set$(ctx, `containerItemKey${containerIndex}`, id);
+          set$(ctx, `containerItemIndex${containerIndex}`, i);
+          set$(ctx, `containerItemData${containerIndex}`, item);
           containerItemKeys.set(id, containerIndex);
           (_p = state.userScrollAnchorReset) == null ? void 0 : _p.keys.add(id);
           const containerSticky = `containerSticky${containerIndex}`;
@@ -7177,7 +7184,7 @@ var Container = typedMemo(function Container2({
     ]
   );
   const renderedItemInfo = React2.useMemo(
-    () => itemKey !== void 0 ? getRenderedItem2(itemKey) : null,
+    () => itemKey !== void 0 ? getRenderedItem2(itemKey, id) : null,
     [itemKey, data, dataVersion, extraData]
   );
   const { renderedItem } = renderedItemInfo || {};
@@ -8904,8 +8911,8 @@ function getAlwaysRenderIndices(config, data, keyExtractor, anchoredEndSpaceAnch
 }
 
 // src/utils/getRenderedItem.ts
-function getRenderedItem(ctx, key) {
-  var _a3;
+function getRenderedItem(ctx, key, containerId) {
+  var _a3, _b, _c;
   const state = ctx.state;
   if (!state) {
     return null;
@@ -8913,27 +8920,30 @@ function getRenderedItem(ctx, key) {
   if (!state.props.dataSource && !state.props.data) {
     throw new TypeError("LegendList data is unavailable");
   }
+  const metadata = containerId === void 0 ? void 0 : state.containerItemMetadata.get(containerId);
+  const useAssignedGeneration = metadata !== void 0 && metadata.dataChangeEpoch !== state.dataChangeEpoch;
   const {
     indexByKey,
     props: { dataSource, getItemType, renderItem }
   } = state;
-  const index = indexByKey.get(key);
+  const index = (_a3 = metadata == null ? void 0 : metadata.itemIndex) != null ? _a3 : indexByKey.get(key);
   if (index === void 0) {
     return null;
   }
   let renderedItem = null;
   const extraData = peek$(ctx, "extraData");
   const indexedData = getIndexedData(state);
-  const item = getDataItem(state, index);
-  const shouldRender = indexedData.kind === "dataSource" || !isNullOrUndefined(item);
+  const item = useAssignedGeneration ? metadata.itemData : getDataItem(state, index);
+  const assignedDataSource = useAssignedGeneration ? metadata.dataSource : dataSource;
+  const shouldRender = assignedDataSource !== void 0 || !isNullOrUndefined(item);
   if (renderItem && shouldRender) {
     const sharedItemProps = {
       extraData,
       index,
       item,
-      type: item !== void 0 && getItemType ? (_a3 = getItemType(item, index)) != null ? _a3 : "" : ""
+      type: useAssignedGeneration ? (_b = metadata.itemType) != null ? _b : "" : item !== void 0 && getItemType ? (_c = getItemType(item, index)) != null ? _c : "" : ""
     };
-    const itemProps = indexedData.kind === "dataSource" ? { ...sharedItemProps, dataSource } : { ...sharedItemProps, data: indexedData.getLegacyData() };
+    const itemProps = assignedDataSource ? { ...sharedItemProps, dataSource: assignedDataSource } : { ...sharedItemProps, data: useAssignedGeneration ? metadata.data : indexedData.getLegacyData() };
     renderedItem = renderItem(itemProps);
   }
   return { index, item, renderedItem };
@@ -9781,7 +9791,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   }, [ctx, usesBootstrapInitialScroll]);
   const fns = React2.useMemo(
     () => ({
-      getRenderedItem: (key) => getRenderedItem(ctx, key),
+      getRenderedItem: (key, containerId) => getRenderedItem(ctx, key, containerId),
       onMomentumScrollEnd: (event) => {
         checkFinishedScrollFallback(ctx);
         if (state.props.onMomentumScrollEnd) {
