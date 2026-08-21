@@ -1,87 +1,83 @@
 import { PortalProvider } from "@gorhom/portal";
 import { useValue } from "@legendapp/state/react";
-import { useCallback, useState } from "react";
-import type { LayoutChangeEvent, NativeSyntheticEvent } from "react-native";
-import { Platform, View } from "react-native";
+import {
+    createSidebarSplitViewTitlebarChrome,
+    SidebarSplitView,
+    sidebarSplitViewTitlebarMetrics,
+} from "@legend-apps/appkit-split-view";
+import { showWindow } from "@legend-apps/window-manager";
+import { useCallback, useRef } from "react";
+import type { LayoutChangeEvent } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { DragDropProvider } from "../components/dnd";
 import { MediaLibraryView } from "../components/MediaLibrary";
 import { MediaLibrarySidebar } from "../components/MediaLibrary/Sidebar";
 import { TrackList } from "../components/MediaLibrary/TrackList";
 import { TooltipProvider } from "../components/TooltipProvider";
-import { SidebarSplitView, type SidebarSplitViewResizeEvent } from "@legend-apps/appkit-split-view";
 import { HiddenTextInput } from "../systems/keyboard/HookKeyboard";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { stateSaved$ } from "../systems/State";
 import { ThemeProvider } from "../theme/ThemeProvider";
-import { getMusicThemeAppearance } from "../theme/musicThemes";
-import { WindowProvider } from "../windows";
+import { getMusicTheme } from "../theme/musicThemes";
+import { WindowProvider, WindowsNavigator } from "../windows";
 
-const MEDIA_LIBRARY_WINDOW_ID = "media-library";
+const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getIdentifier("MediaLibraryWindow");
 
 export default function MediaLibraryWindow() {
     const isMacOS = Platform.OS === "macos";
     const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const splitViewAppearance = getMusicThemeAppearance(appearanceSettings.theme);
-    const [paneWidths, setPaneWidths] = useState({ content: 0, sidebar: 0 });
-    const [height, setHeight] = useState(0);
+    const musicTheme = getMusicTheme(appearanceSettings.theme);
+    const windowShownRef = useRef(false);
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const { width, height } = event.nativeEvent.layout;
         if (width > 0 && height > 0) {
             stateSaved$.libraryWindowSize.set({ width: Math.round(width), height: Math.round(height) });
-            setHeight(Math.round(height));
         }
     }, []);
-    const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
-        const nextContentWidth = Math.round(event.nativeEvent.contentWidth);
-        const nextSidebarWidth = Math.round(event.nativeEvent.sidebarWidth);
-        if (nextContentWidth > 0 || nextSidebarWidth > 0) {
-            setPaneWidths((current) => {
-                const next = {
-                    content: nextContentWidth > 0 ? nextContentWidth : current.content,
-                    sidebar: nextSidebarWidth > 0 ? nextSidebarWidth : current.sidebar,
-                };
-                return current.content === next.content && current.sidebar === next.sidebar ? current : next;
+    const handleSplitViewReady = useCallback(() => {
+        if (!windowShownRef.current) {
+            windowShownRef.current = true;
+            showWindow(MEDIA_LIBRARY_WINDOW_ID).catch((error: unknown) => {
+                windowShownRef.current = false;
+                console.error("Failed to show media library window:", error);
             });
         }
     }, []);
+    const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
+        colorScheme: musicTheme.appearance,
+        contentBackgroundColor: musicTheme.colors.background.primary,
+        sidebarBackgroundColor: musicTheme.colors.background.secondary,
+    });
 
     return (
         <WindowProvider id={MEDIA_LIBRARY_WINDOW_ID}>
             <ThemeProvider>
                 <HiddenTextInput />
                 <PortalProvider>
-                    {/* <View className="flex-1 bg-background-primary/60 min-h-full" onLayout={handleLayout}> */}
                     <TooltipProvider>
                         <DragDropProvider>
                             {isMacOS ? (
                                 <SidebarSplitView
-                                    appearance={splitViewAppearance}
+                                    {...titlebarChromeProps}
+                                    appearance={musicTheme.appearance}
                                     className="flex-1 bg-background-primary"
                                     contentMinWidth={360}
                                     onLayout={handleLayout}
-                                    onSplitViewDidResize={handleSplitViewResize}
+                                    onSplitViewDidResize={handleSplitViewReady}
                                     sidebarMinWidth={220}
-                                    style={{ flex: 1 }}
+                                    style={styles.root}
                                 >
                                     <View
-                                        className="flex-1"
-                                        style={{ flex: 1, minWidth: 0, width: paneWidths.sidebar || undefined }}
+                                        className="min-w-0 flex-1 bg-background-secondary"
+                                        style={styles.sidebarPane}
                                     >
                                         <MediaLibrarySidebar />
                                     </View>
                                     <View
-                                        className="flex-1"
-                                        style={{ flex: 1, minWidth: 0, width: paneWidths.content || undefined }}
+                                        className="min-w-0 flex-1 bg-background-primary"
+                                        style={styles.contentPane}
                                     >
-                                        <View
-                                            className="flex-1"
-                                            style={{
-                                                height: height ? height : undefined,
-                                                minHeight: height ? height : undefined,
-                                            }}
-                                        >
-                                            <TrackList />
-                                        </View>
+                                        <TrackList />
                                     </View>
                                 </SidebarSplitView>
                             ) : (
@@ -89,9 +85,20 @@ export default function MediaLibraryWindow() {
                             )}
                         </DragDropProvider>
                     </TooltipProvider>
-                    {/* </View> */}
                 </PortalProvider>
             </ThemeProvider>
         </WindowProvider>
     );
 }
+
+const styles = StyleSheet.create({
+    contentPane: {
+        paddingTop: sidebarSplitViewTitlebarMetrics.contentInsetTop,
+    },
+    root: {
+        flex: 1,
+    },
+    sidebarPane: {
+        paddingTop: sidebarSplitViewTitlebarMetrics.sidebarInsetTop,
+    },
+});

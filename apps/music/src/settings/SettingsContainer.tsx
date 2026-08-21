@@ -4,7 +4,6 @@ import {
     VirtualizedSettingsWindow,
     type VirtualizedSettingsWindowPage,
 } from "@legend-apps/settings-window";
-import { StyleSheet, View } from "react-native";
 import { TooltipProvider } from "../components/TooltipProvider";
 import { AccountSettingsContent } from "./AccountSettings";
 import { CustomizeUISettingsContent } from "./CustomizeUISettings";
@@ -19,10 +18,11 @@ import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { getMusicThemeAppearance } from "../theme/musicThemes";
 import { ax } from "../utils/ax";
+import { WindowsNavigator } from "../windows";
 
 export type SettingsPage = "general" | "hotkeys" | "library" | "overlay" | "theme" | "ui-customize" | "account" | "open-source";
 
-const SETTINGS_WINDOW_IDENTIFIER = "settings";
+const SETTINGS_WINDOW_IDENTIFIER = WindowsNavigator.getIdentifier("SettingsWindow");
 
 const SETTING_PAGES: VirtualizedSettingsWindowPage<SettingsPage>[] = ax([
     { id: "general", title: "General", renderContent: () => <GeneralSettingsContent /> },
@@ -45,28 +45,20 @@ export default function SettingsContainer({ initialPage }: { initialPage?: strin
     const splitViewAppearance = getMusicThemeAppearance(appearanceSettings.theme);
 
     return (
-        <View className="flex-1" style={styles.root}>
-            <ThemeProvider>
-                <PortalProvider>
-                    <TooltipProvider>
-                        <VirtualizedSettingsWindow
-                            appearance={splitViewAppearance}
-                            backgroundClassName="bg-background-primary"
-                            contentBackgroundClassName="bg-background-primary"
-                            estimatedItemSize={520}
-                            initialPage={initialSettingsPage}
-                            pages={SETTING_PAGES}
-                            windowIdentifier={SETTINGS_WINDOW_IDENTIFIER}
-                        />
-                    </TooltipProvider>
-                </PortalProvider>
-            </ThemeProvider>
-        </View>
+        <ThemeProvider>
+            <PortalProvider>
+                <TooltipProvider>
+                    <VirtualizedSettingsWindow
+                        appearance={splitViewAppearance}
+                        backgroundClassName="bg-background-primary"
+                        contentBackgroundClassName="bg-background-primary"
+                        estimatedItemSize={520}
+                        initialPage={initialSettingsPage}
+                        pages={SETTING_PAGES}
+                        windowIdentifier={SETTINGS_WINDOW_IDENTIFIER}
+                    />
+                </TooltipProvider>
+            </PortalProvider>
+        </ThemeProvider>
     );
 }
-
-const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-    },
-});

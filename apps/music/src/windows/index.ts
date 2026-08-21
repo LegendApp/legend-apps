@@ -17,6 +17,7 @@ const windowsConfig = {
         loadComponent: () => import("../media-library/MediaLibraryWindow"),
         identifier: "media-library",
         options: {
+            deferOrderFront: true,
             title: "",
             transparentBackground: true,
             windowStyle: createUnifiedToolbarWindowStyle({
