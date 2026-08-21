@@ -15,7 +15,7 @@ index 3e13bf94e80f8662a06c068fdc85ff06364fac0f..29a5f123d3fadd340105f672bc1fe3da
  @property (nonatomic, strong) StyleConfig *config;
  - (CGSize)measureSize:(CGFloat)maxWidth;
 diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
-index 7ad95d7f654904b28f341ff3adac61003d708f95..ca44612abd3218e0444b0b8408a8f5a4692d7629 100644
+index 7ad95d7f654904b28f341ff3adac61003d708f95..f8ec0a9caa479d5ddd6f5679f738038b9b9ba653 100644
 --- a/ios/EnrichedMarkdown.mm
 +++ b/ios/EnrichedMarkdown.mm
 @@ -64,6 +64,39 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
@@ -108,8 +108,16 @@ index 7ad95d7f654904b28f341ff3adac61003d708f95..ca44612abd3218e0444b0b8408a8f5a4
      [self renderMarkdownContent:markdownString];
      _dirtyFlags &= ~ENRMDirtyRender;
    }
+@@ -1049,5 +1098,6 @@ - (void)emitTaskListItemPress:(NSInteger)index checked:(BOOL)checked text:(NSStr
+ {
+   auto emitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(_eventEmitter);
+   if (emitter)
+-    emitter->onTaskListItemPress({.index = (int)index, .checked = checked, .text = std::string(text.UTF8String ?: "")});
++    emitter->onTaskListItemPress(
++        {.index = (int)index, .checked = static_cast<bool>(checked), .text = std::string(text.UTF8String ?: "")});
+ }
 diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
-index 1dc1097549f90ef8bcaff83526a808104de4d986..d4d8be9d8e7eaa73d046e69d56e802fec47c2513 100644
+index 1dc1097549f90ef8bcaff83526a808104de4d986..89d1a59328b675b9af43cc391342f12bf29a2c98 100644
 --- a/ios/EnrichedMarkdownText.mm
 +++ b/ios/EnrichedMarkdownText.mm
 @@ -6,6 +6,7 @@
@@ -185,6 +193,14 @@ index 1dc1097549f90ef8bcaff83526a808104de4d986..d4d8be9d8e7eaa73d046e69d56e802fe
      [self renderMarkdownContent:markdownString];
      _dirtyFlags &= ~ENRMDirtyRender;
    }
+@@ -686,5 +711,6 @@ - (void)emitTaskListItemPress:(NSInteger)index checked:(BOOL)checked text:(NSStr
+ {
+   auto emitter = std::static_pointer_cast<EnrichedMarkdownTextEventEmitter const>(_eventEmitter);
+   if (emitter)
+-    emitter->onTaskListItemPress({.index = (int)index, .checked = checked, .text = std::string(text.UTF8String ?: "")});
++    emitter->onTaskListItemPress(
++        {.index = (int)index, .checked = static_cast<bool>(checked), .text = std::string(text.UTF8String ?: "")});
+ }
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 index 8d30370e6ee7775b8bd72b7cb6619b880db89fc6..9779537571c68ec63aded19e68574b90b2851acb 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
