@@ -43,6 +43,7 @@ EOF
 cat > "$GIT_FIXTURE/src/Whitespace.ts" <<'EOF'
 export const spaced = true;
 EOF
+printf 'before' > "$GIT_FIXTURE/src/NoNewline.txt"
 printf '\x00\x01\x02\x03' > "$GIT_FIXTURE/assets/logo.bin"
 
 git -C "$GIT_FIXTURE" init --quiet
@@ -80,6 +81,7 @@ EOF
 cat > "$GIT_FIXTURE/src/Whitespace.ts" <<'EOF'
 export   const   spaced = true;
 EOF
+printf 'after' > "$GIT_FIXTURE/src/NoNewline.txt"
 rm "$GIT_FIXTURE/src/Deleted.ts"
 printf '\xff\x00\xfe\x01' > "$GIT_FIXTURE/assets/logo.bin"
 

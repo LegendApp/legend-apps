@@ -167,6 +167,21 @@ bool rowTextExistsForFile(
   return false;
 }
 
+void assertNoNewlineMarkerRows(const diffparser::DiffParsedDocument& parsed, const std::string& prefix) {
+  const auto& file = findFile(parsed, "src/NoNewline.txt");
+  const auto start = static_cast<size_t>(file.rowStart);
+  const auto end = start + static_cast<size_t>(file.rowCount);
+  size_t markerCount = 0;
+  for (size_t index = start; index < end && index < parsed.rows.size(); index += 1) {
+    const auto& text = parsed.rows[index].text;
+    if (text.find("No newline at end of file") != std::string::npos) {
+      expectEqual(text, "\\ No newline at end of file", prefix + " EOF marker text");
+      markerCount += 1;
+    }
+  }
+  expectEqual(static_cast<double>(markerCount), 2, prefix + " EOF marker count");
+}
+
 diffparser::DiffParsedDocument parseUnifiedDiffStreamForTest(const std::string& diffText, size_t chunkSize) {
   std::vector<diffparser::DiffFileSummary> files;
   std::vector<diffparser::DiffRenderRow> rows;
@@ -534,8 +549,8 @@ diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::st
 
 void assertGitRepositoryDiff(const std::string& fixturePath) {
   const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath);
-  expectEqual(static_cast<double>(parsed.files.size()), 6, "git file count");
-  expectEqual(parsed.timing.fileCount, 6, "git timing file count");
+  expectEqual(static_cast<double>(parsed.files.size()), 7, "git file count");
+  expectEqual(parsed.timing.fileCount, 7, "git timing file count");
   expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git timing row count");
   expect(!parsed.repositoryPath.empty(), "git repository path should be set");
   expect(!parsed.workdirPath.empty(), "git workdir path should be set");
@@ -586,7 +601,9 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
   const auto& conflictBranchRow = findRowTextForFile(parsed, conflicted, "export const side = \"branch\";");
   expectEqual(conflictBranchRow.changeType, diffChangeTypeAdd, "git conflicted branch row type");
 
-  expectEqual(static_cast<double>(parsed.fileSources.size()), 6, "git file source count");
+  assertNoNewlineMarkerRows(parsed, "git");
+
+  expectEqual(static_cast<double>(parsed.fileSources.size()), 7, "git file source count");
   for (const auto& sources : parsed.fileSources) {
     const auto& file = fileAt(parsed, static_cast<size_t>(sources.fileIndex));
     expectEqual(sources.oldPath, file.oldPath, "git file source old path");
@@ -599,8 +616,8 @@ void assertGitRepositoryDiff(const std::string& fixturePath) {
 
 void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
   const auto parsed = parseGitRepositoryDiffByFileForTest(fixturePath);
-  expectEqual(static_cast<double>(parsed.files.size()), 6, "git by-file file count");
-  expectEqual(parsed.timing.fileCount, 6, "git by-file timing file count");
+  expectEqual(static_cast<double>(parsed.files.size()), 7, "git by-file file count");
+  expectEqual(parsed.timing.fileCount, 7, "git by-file timing file count");
   expectEqual(parsed.timing.rowCount, static_cast<double>(parsed.rows.size()), "git by-file timing row count");
 
   const auto& modified = findFile(parsed, "src/App.tsx");
@@ -625,6 +642,7 @@ void assertGitRepositoryDiffByFile(const std::string& fixturePath) {
   const auto fullParsed = parseGitRepositoryDiffByFileForTest(fixturePath, false);
   const auto& fullModified = findFile(fullParsed, "src/App.tsx");
   expect(rowTextExistsForFile(fullParsed, fullModified, "export const outsideFullFileContext = \"base\";"), "git by-file full mode should include distant context");
+  assertNoNewlineMarkerRows(parsed, "git by-file");
 }
 
 void assertGitRepositoryDiffAgainstCompareBase(const std::string& fixturePath) {
@@ -655,7 +673,7 @@ void assertGitRepositoryDiffIgnoresWhitespace(const std::string& fixturePath) {
   const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath, true, diffparser::DiffGitCompareOptions{
       .ignoreWhitespace = true,
   });
-  expectEqual(static_cast<double>(parsed.files.size()), 5, "git ignore-whitespace file count");
+  expectEqual(static_cast<double>(parsed.files.size()), 6, "git ignore-whitespace file count");
   const bool hasWhitespaceFile = std::any_of(parsed.files.begin(), parsed.files.end(), [](const auto& file) {
     return file.path == "src/Whitespace.ts";
   });

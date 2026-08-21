@@ -401,16 +401,24 @@ int onStatusPath(const char* rawPath, unsigned int status, void* payload) {
   return 0;
 }
 
-std::string trimDiffLine(const char* content, size_t contentLength) {
+std::string trimDiffLine(const char* content, size_t contentLength, bool trimLeadingNewline) {
   if (content == nullptr || contentLength <= 0) {
     return "";
   }
 
+  size_t start = 0;
+  if (trimLeadingNewline) {
+    if (contentLength >= 2 && content[0] == '\r' && content[1] == '\n') {
+      start = 2;
+    } else if (content[0] == '\n' || content[0] == '\r') {
+      start = 1;
+    }
+  }
   size_t length = contentLength;
-  while (length > 0 && (content[length - 1] == '\n' || content[length - 1] == '\r')) {
+  while (length > start && (content[length - 1] == '\n' || content[length - 1] == '\r')) {
     length -= 1;
   }
-  return std::string(content, length);
+  return std::string(content + start, length - start);
 }
 
 DiffSideBySideLine createSideBySideLine(
@@ -911,6 +919,8 @@ int onProgressiveGitLine(
   double changeType = diffChangeTypeContext;
   double oldLineNumber = line->old_lineno >= 0 ? static_cast<double>(line->old_lineno) : -1;
   double newLineNumber = line->new_lineno >= 0 ? static_cast<double>(line->new_lineno) : -1;
+  // libgit2 prefixes EOF marker payloads with a structural newline. Keep it out of the fixed-height row text.
+  const bool isEofMarker = line->origin == GIT_DIFF_LINE_ADD_EOFNL || line->origin == GIT_DIFF_LINE_DEL_EOFNL;
   if (line->origin == GIT_DIFF_LINE_ADDITION) {
     changeType = diffChangeTypeAdd;
     state->currentNewLine += 1;
@@ -936,7 +946,7 @@ int onProgressiveGitLine(
   row.oldLineNumber = oldLineNumber;
   row.newLineNumber = newLineNumber;
   row.changeType = changeType;
-  row.text = trimDiffLine(line->content, line->content_len);
+  row.text = trimDiffLine(line->content, line->content_len, isEofMarker);
   row.tokens = {};
   state->rowCount += 1;
 
