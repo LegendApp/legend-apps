@@ -79,12 +79,13 @@ function App(): React.JSX.Element {
                 <AppMenuController />
                 <MusicBackground onLayout={handleFirstLayout}>
                     <PortalProvider>
-                        <ToastProvider />
-                        <TooltipProvider>
-                            <DragDropProvider>
-                                <MainContainer />
-                            </DragDropProvider>
-                        </TooltipProvider>
+                        <ToastProvider>
+                            <TooltipProvider>
+                                <DragDropProvider>
+                                    <MainContainer />
+                                </DragDropProvider>
+                            </TooltipProvider>
+                        </ToastProvider>
                     </PortalProvider>
                 </MusicBackground>
                 <TitleBar />

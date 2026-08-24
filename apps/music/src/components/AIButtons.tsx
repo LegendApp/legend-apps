@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import { Button } from "./Button";
-import { showToast } from "./Toast";
+import { useToast } from "./Toast";
 import { generatePlaylistExtension } from "../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import type { LocalTrack } from "../systems/LocalMusicState";
@@ -32,6 +32,7 @@ function errorMessage(error: unknown) {
 }
 
 export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
+    const showToast = useToast();
     const [isPromptOpen, setIsPromptOpen] = useState(false);
     const [prompt, setPrompt] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
@@ -50,7 +51,7 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
     }
 
     const canGenerate = unavailableMessage === null && !isGenerating;
-    const canAutoGenerate = canGenerate && playlist.trackPaths.length > 0;
+    const canAutoGenerate = canGenerate;
     const canPromptGenerate = canGenerate;
 
     const autoDisabledReason = unavailableMessage ?? (
@@ -156,6 +157,17 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
         void handleGenerate(trimmedPrompt);
     }, [handleGenerate, trimmedPrompt]);
 
+    const handleAutoGenerate = useCallback(() => {
+        if (playlist.trackPaths.length === 0) {
+            const message = "Add at least one seed track for Auto, or use Prompt.";
+            setGenerationError(message);
+            showToast(message, "error");
+            return;
+        }
+
+        void handleGenerate();
+    }, [handleGenerate, playlist.trackPaths.length]);
+
     return (
         <>
             <View className="px-3 py-2 flex-row items-center justify-end gap-2 border-t border-border-primary">
@@ -174,7 +186,7 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                     accessibilityHint={autoDisabledReason}
                     disabled={!canAutoGenerate}
                     className={!canAutoGenerate ? "opacity-50" : undefined}
-                    onClick={() => void handleGenerate()}
+                    onClick={handleAutoGenerate}
                 >
                     {isGenerating ? "Generating..." : "Auto"}
                 </Button>

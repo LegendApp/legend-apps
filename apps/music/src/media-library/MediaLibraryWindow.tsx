@@ -55,7 +55,6 @@ export default function MediaLibraryWindow() {
             <ThemeProvider>
                 <HiddenTextInput />
                 <PortalProvider>
-                    <ToastProvider />
                     <TooltipProvider>
                         <DragDropProvider>
                             {isMacOS ? (
@@ -79,7 +78,9 @@ export default function MediaLibraryWindow() {
                                         className="min-w-0 flex-1 bg-background-primary"
                                         style={styles.contentPane}
                                     >
-                                        <TrackList />
+                                        <ToastProvider>
+                                            <TrackList />
+                                        </ToastProvider>
                                     </View>
                                 </SidebarSplitView>
                             ) : (

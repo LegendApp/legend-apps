@@ -1,7 +1,15 @@
 import { observable } from "@legendapp/state";
-import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { useMemo, useRef } from "react";
-import { Animated, Easing, Text, View } from "react-native";
+import { useValue } from "@legendapp/state/react";
+import {
+    createContext,
+    type PropsWithChildren,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+} from "react";
+import { Text, View } from "react-native";
 
 import { Button } from "./Button";
 import { cn } from "@legend-apps/classnames";
@@ -29,6 +37,10 @@ const toast$ = observable<ToastState>({
     id: 0,
 });
 
+type ShowToast = (message: string, type?: ToastType, action?: ToastAction) => void;
+
+const ToastContext = createContext<ShowToast>(showToast);
+
 export function showToast(message: string, type: ToastType = "info", action?: ToastAction) {
     if (!message) {
         return;
@@ -43,68 +55,54 @@ export function showToast(message: string, type: ToastType = "info", action?: To
     });
 }
 
-export function ToastProvider() {
-    const toast = useValue(toast$);
-    const opacity = useMemo(() => new Animated.Value(0), []);
-    const translateY = useMemo(() => new Animated.Value(8), []);
+export function useToast() {
+    return useContext(ToastContext);
+}
+
+export function ToastProvider({ children }: PropsWithChildren) {
+    const globalToast = useValue(toast$);
+    const [localToast, setLocalToast] = useState<ToastState | null>(null);
+    const toast = localToast ?? globalToast;
     const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    useObserveEffect(() => {
-        const { visible, action } = toast$.get();
-        if (visible) {
-            if (hideTimeout.current) {
-                clearTimeout(hideTimeout.current);
-            }
+    const showLocalToast = useCallback<ShowToast>((message, type = "info", action) => {
+        if (!message) {
+            return;
+        }
+        setLocalToast({
+            message,
+            type,
+            action: action ?? null,
+            visible: true,
+            id: Date.now(),
+        });
+    }, []);
 
-            Animated.parallel([
-                Animated.timing(opacity, {
-                    toValue: 1,
-                    duration: 160,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true,
-                }),
-                Animated.timing(translateY, {
-                    toValue: 0,
-                    duration: 160,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true,
-                }),
-            ]).start();
+    const dismissToast = useCallback(() => {
+        if (localToast) {
+            setLocalToast(null);
+        } else {
+            toast$.visible.set(false);
+        }
+    }, [localToast]);
 
-            hideTimeout.current = setTimeout(
-                () => {
-                    toast$.visible.set(false);
-                },
-                action ? 5000 : toast.type === "error" ? 8000 : 3000,
-            );
-
-            return () => {
-                if (hideTimeout.current) {
-                    clearTimeout(hideTimeout.current);
-                    hideTimeout.current = null;
-                }
-            };
+    useEffect(() => {
+        if (!toast.visible) {
+            return;
         }
 
-        Animated.parallel([
-            Animated.timing(opacity, {
-                toValue: 0,
-                duration: 140,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
-            }),
-            Animated.timing(translateY, {
-                toValue: 8,
-                duration: 140,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
-            }),
-        ]).start();
-    });
+        hideTimeout.current = setTimeout(
+            dismissToast,
+            toast.action ? 5000 : toast.type === "error" ? 8000 : 3000,
+        );
 
-    if (!toast.visible) {
-        return null;
-    }
+        return () => {
+            if (hideTimeout.current) {
+                clearTimeout(hideTimeout.current);
+                hideTimeout.current = null;
+            }
+        };
+    }, [dismissToast, toast.action, toast.id, toast.type, toast.visible]);
 
     const containerClass = cn(
         "px-3 py-2 rounded-lg border shadow-lg max-w-xl",
@@ -112,44 +110,42 @@ export function ToastProvider() {
     );
 
     return (
-        <View pointerEvents="box-none" className="absolute bottom-4 left-0 right-0 items-center z-50">
-            <Animated.View
-                style={{
-                    opacity,
-                    transform: [{ translateY }],
-                }}
-                className={containerClass}
-                pointerEvents="auto"
-            >
-                <View className="flex-row items-center gap-3">
-                    <Text
-                        className={cn(
-                            "text-xs font-medium flex-shrink",
-                            toast.type === "error" ? "text-red-50" : "text-emerald-50",
-                        )}
-                        numberOfLines={2}
-                    >
-                        {toast.message}
-                    </Text>
-                    {toast.action ? (
-                        <Button
-                            size="small"
-                            className="rounded-md bg-white/15 hover:bg-white/25"
-                            accessibilityLabel={toast.action.label}
-                            onClick={() => {
-                                if (hideTimeout.current) {
-                                    clearTimeout(hideTimeout.current);
-                                    hideTimeout.current = null;
-                                }
-                                toast$.visible.set(false);
-                                toast.action?.onPress();
-                            }}
-                        >
-                            <Text className="text-white text-xs font-semibold">{toast.action.label}</Text>
-                        </Button>
-                    ) : null}
+        <ToastContext.Provider value={showLocalToast}>
+            {children}
+            {toast.visible ? (
+                <View pointerEvents="box-none" className="absolute bottom-4 left-0 right-0 items-center z-50">
+                    <View className={containerClass} pointerEvents="auto">
+                        <View className="flex-row items-center gap-3">
+                            <Text
+                                className={cn(
+                                    "text-xs font-medium flex-shrink",
+                                    toast.type === "error" ? "text-red-50" : "text-emerald-50",
+                                )}
+                                numberOfLines={2}
+                            >
+                                {toast.message}
+                            </Text>
+                            {toast.action ? (
+                                <Button
+                                    size="small"
+                                    className="rounded-md bg-white/15 hover:bg-white/25"
+                                    accessibilityLabel={toast.action.label}
+                                    onClick={() => {
+                                        if (hideTimeout.current) {
+                                            clearTimeout(hideTimeout.current);
+                                            hideTimeout.current = null;
+                                        }
+                                        dismissToast();
+                                        toast.action?.onPress();
+                                    }}
+                                >
+                                    <Text className="text-white text-xs font-semibold">{toast.action.label}</Text>
+                                </Button>
+                            ) : null}
+                        </View>
+                    </View>
                 </View>
-            </Animated.View>
-        </View>
+            ) : null}
+        </ToastContext.Provider>
     );
 }

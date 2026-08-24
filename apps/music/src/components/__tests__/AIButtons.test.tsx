@@ -15,6 +15,7 @@ jest.mock("@legend-apps/codex", () => ({
 jest.mock("../Toast", () => ({
     __esModule: true,
     showToast: jest.fn(),
+    useToast: () => mockShowToast,
 }));
 
 jest.mock("../TooltipProvider", () => ({
@@ -195,14 +196,24 @@ describe("AIButtons", () => {
         });
     });
 
-    it("disables Auto but keeps Prompt available for an empty playlist", async () => {
+    it("shows an actionable error when Auto is used on an empty playlist", async () => {
         const renderer = await renderAIButtons({
             playlist: createPlaylist({ trackPaths: [], tracks: [], trackCount: 0 }),
         });
 
-        expect(findButton(renderer, "Auto").props.disabled).toBe(true);
+        expect(findButton(renderer, "Auto").props.disabled).toBe(false);
         expect(findButton(renderer, "Prompt").props.disabled).toBe(false);
         expect(getText(renderer.root)).toContain("Add a seed track for Auto");
+
+        act(() => {
+            findButton(renderer, "Auto").props.onPress({ nativeEvent: { button: 0 } });
+        });
+
+        expect(mockGeneratePlaylistExtension).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith(
+            "Add at least one seed track for Auto, or use Prompt.",
+            "error",
+        );
 
         act(() => {
             renderer.unmount();
