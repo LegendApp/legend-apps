@@ -128,6 +128,18 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   NSTask *task = [[NSTask alloc] init];
   task.executableURL = [NSURL fileURLWithPath:resolvedPath];
   task.arguments = args;
+  NSMutableDictionary<NSString *, NSString *> *environment =
+      [[[NSProcessInfo processInfo] environment] mutableCopy];
+  for (NSString *key in @[
+         @"CODEX_CI",
+         @"CODEX_INTERNAL_ORIGINATOR_OVERRIDE",
+         @"CODEX_SESSION_ID",
+         @"CODEX_SHELL",
+         @"CODEX_THREAD_ID",
+       ]) {
+    [environment removeObjectForKey:key];
+  }
+  task.environment = environment;
   if (cwd.length > 0) {
     NSString *expandedCwd = [cwd stringByExpandingTildeInPath];
     BOOL isDirectory = NO;
@@ -138,6 +150,8 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
       return nil;
     }
     task.currentDirectoryURL = [NSURL fileURLWithPath:expandedCwd isDirectory:YES];
+  } else {
+    task.currentDirectoryURL = [NSURL fileURLWithPath:NSHomeDirectory() isDirectory:YES];
   }
 
   NSPipe *stdoutPipe = [NSPipe pipe];
@@ -149,6 +163,8 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   if (input != nil) {
     stdinPipe = [NSPipe pipe];
     task.standardInput = stdinPipe;
+  } else {
+    task.standardInput = [NSFileHandle fileHandleWithNullDevice];
   }
 
   NSError *error = nil;
@@ -160,11 +176,21 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
     return nil;
   }
 
-  if (input != nil && stdinPipe != nil) {
+  if (input != nil) {
     NSData *inputData = [input dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
     [[stdinPipe fileHandleForWriting] writeData:inputData];
     [[stdinPipe fileHandleForWriting] closeFile];
   }
+
+  dispatch_group_t outputGroup = dispatch_group_create();
+  __block NSData *stdoutData = nil;
+  __block NSData *stderrData = nil;
+  dispatch_group_async(outputGroup, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
+  });
+  dispatch_group_async(outputGroup, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
+  });
 
   NSTimeInterval timeoutSeconds = timeoutMs != nil ? timeoutMs.doubleValue / 1000.0 : 0;
   BOOL hasTimeout = timeoutSeconds > 0;
@@ -184,8 +210,7 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
   }
 
   [task waitUntilExit];
-  NSData *stdoutData = [[stdoutPipe fileHandleForReading] readDataToEndOfFile];
-  NSData *stderrData = [[stderrPipe fileHandleForReading] readDataToEndOfFile];
+  dispatch_group_wait(outputGroup, DISPATCH_TIME_FOREVER);
   NSString *stdout = [[NSString alloc] initWithData:stdoutData encoding:NSUTF8StringEncoding] ?: @"";
   NSString *stderr = [[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding] ?: @"";
 
@@ -294,7 +319,11 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
     return [[NSFileManager defaultManager] isExecutableFileAtPath:expandedCommand] ? expandedCommand : nil;
   }
 
+  NSString *homeDirectory = NSHomeDirectory();
   NSArray<NSString *> *fallbackPaths = @[
+    [homeDirectory stringByAppendingPathComponent:@".local/bin"],
+    [homeDirectory stringByAppendingPathComponent:@".bun/bin"],
+    [homeDirectory stringByAppendingPathComponent:@"bin"],
     @"/opt/homebrew/bin",
     @"/usr/local/bin",
     @"/usr/bin",

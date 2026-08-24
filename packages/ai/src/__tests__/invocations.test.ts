@@ -13,13 +13,15 @@ describe("buildAIInvocation", () => {
       command: "codex",
       args: [
         "exec",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
         "--skip-git-repo-check",
-        "--model",
-        "gpt-5.2",
         "--config",
-        "model_reasoning_effort=medium",
-        "make a list",
+        "model_reasoning_effort=low",
+        "-",
       ],
+      input: "make a list",
     });
   });
 
@@ -32,13 +34,17 @@ describe("buildAIInvocation", () => {
       command: "codex",
       args: [
         "exec",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
         "--skip-git-repo-check",
         "--model",
         "gpt-test",
         "--config",
         "model_reasoning_effort=low",
-        "make a list",
+        "-",
       ],
+      input: "make a list",
     });
   });
 });
