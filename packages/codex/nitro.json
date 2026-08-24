@@ -1,0 +1,21 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["legendapps", "codex"],
+  "ios": {
+    "iosModuleName": "RNCodex"
+  },
+  "android": {
+    "androidNamespace": ["legendapps", "codex"],
+    "androidCxxLibName": "RNCodex"
+  },
+  "autolinking": {
+    "CodexAppServer": {
+      "ios": {
+        "language": "c++",
+        "implementationClassName": "HybridCodexAppServer"
+      }
+    }
+  },
+  "ignorePaths": ["**/node_modules"],
+  "gitAttributesGeneratedFlag": true
+}

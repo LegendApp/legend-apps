@@ -115,6 +115,14 @@ export function TrackList(_props: TrackListProps) {
         playlistSort === "playlist-order" &&
         playlistSortDirection === "asc" &&
         searchQuery.trim().length === 0;
+    let playlistAIUnavailableReason: string | undefined;
+    if (selectedPlaylist?.source !== "cache") {
+        playlistAIUnavailableReason = "Import this playlist before editing it with AI.";
+    } else if (searchQuery.trim().length > 0) {
+        playlistAIUnavailableReason = "Clear the search before editing this playlist with AI.";
+    } else if (playlistSort !== "playlist-order" || playlistSortDirection !== "asc") {
+        playlistAIUnavailableReason = "Sort by playlist order, ascending, before editing this playlist with AI.";
+    }
 
     const handleAddAITracksToPlaylist = useCallback(
         async (tracksToAdd: LocalTrack[]): Promise<AIButtonsAddResult> => {
@@ -405,6 +413,7 @@ export function TrackList(_props: TrackListProps) {
             {selectedView === "playlist" && selectedPlaylist ? (
                 <AIButtons
                     canUseAI={isPlaylistEditable}
+                    disabledReason={playlistAIUnavailableReason}
                     libraryTracks={libraryTracks}
                     onAddTracks={handleAddAITracksToPlaylist}
                     playlist={selectedPlaylist}

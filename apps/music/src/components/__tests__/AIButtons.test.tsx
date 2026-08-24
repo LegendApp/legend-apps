@@ -5,11 +5,11 @@ import { showToast } from "../Toast";
 import { generatePlaylistExtension } from "../../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../../systems/ai/playlistContext";
 import type { LocalTrack } from "../../systems/LocalMusicState";
-import { getAICommandAvailability } from "@legend-apps/ai";
+import { getCodexAvailability } from "@legend-apps/codex";
 
-jest.mock("@legend-apps/ai", () => ({
+jest.mock("@legend-apps/codex", () => ({
     __esModule: true,
-    getAICommandAvailability: jest.fn(),
+    getCodexAvailability: jest.fn(),
 }));
 
 jest.mock("../Toast", () => ({
@@ -32,7 +32,7 @@ jest.mock("../../systems/ai/playlistGeneration", () => ({
 
 import { AIButtons } from "../AIButtons";
 
-const mockGetAICommandAvailability = getAICommandAvailability as jest.MockedFunction<typeof getAICommandAvailability>;
+const mockGetCodexAvailability = getCodexAvailability as jest.MockedFunction<typeof getCodexAvailability>;
 const mockGeneratePlaylistExtension = generatePlaylistExtension as jest.MockedFunction<typeof generatePlaylistExtension>;
 const mockShowToast = showToast as jest.MockedFunction<typeof showToast>;
 
@@ -79,10 +79,14 @@ function findButton(renderer: ReactTestRenderer, text: string): ReactTestInstanc
 
 async function renderAIButtons({
     canUseAI = true,
+    disabledReason,
+    libraryTracks = [createTrack("a"), createTrack("b")],
     onAddTracks = jest.fn(() => ({ addedCount: 0 })),
     playlist = createPlaylist(),
 }: {
     canUseAI?: boolean;
+    disabledReason?: string;
+    libraryTracks?: LocalTrack[];
     onAddTracks?: (tracks: LocalTrack[]) => { addedCount: number; targetName?: string; undo?: () => void };
     playlist?: PlaylistAIContext;
 } = {}) {
@@ -92,7 +96,8 @@ async function renderAIButtons({
         renderer = create(
             <AIButtons
                 canUseAI={canUseAI}
-                libraryTracks={[createTrack("a"), createTrack("b")]}
+                disabledReason={disabledReason}
+                libraryTracks={libraryTracks}
                 onAddTracks={onAddTracks}
                 playlist={playlist}
             />,
@@ -109,29 +114,81 @@ async function renderAIButtons({
 describe("AIButtons", () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockGetAICommandAvailability.mockResolvedValue({
-            claude: true,
-            codex: false,
-            preferredTool: "claude",
+        mockGetCodexAvailability.mockResolvedValue({
+            available: true,
+            codexPath: "/usr/bin/codex",
+            message: "Codex is ready.",
+            userAgent: "codex-test",
         });
         mockGeneratePlaylistExtension.mockResolvedValue({
-            rawResult: { stdout: "{}", stderr: "", exitCode: 0, timedOut: false, output: "{}", tool: "claude" },
+            rawResult: {
+                model: "test-model",
+                output: "{}",
+                threadId: "thread-1",
+                turnId: "turn-1",
+                userAgent: "codex-test",
+            },
             tracks: [createTrack("b")],
             unresolvedCount: 0,
         });
     });
 
     it("disables both buttons when no AI command is available", async () => {
-        mockGetAICommandAvailability.mockResolvedValue({
-            claude: false,
-            codex: false,
-            preferredTool: null,
+        mockGetCodexAvailability.mockResolvedValue({
+            available: false,
+            codexPath: "",
+            message: "Codex CLI was not found. Install Codex, then reopen the app.",
+            userAgent: "",
         });
 
         const renderer = await renderAIButtons();
 
         expect(findButton(renderer, "Auto").props.disabled).toBe(true);
         expect(findButton(renderer, "Prompt").props.disabled).toBe(true);
+        expect(getText(renderer.root)).toContain("Codex CLI was not found");
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("shows why AI is unavailable for the current playlist", async () => {
+        const renderer = await renderAIButtons({
+            canUseAI: false,
+            disabledReason: "Clear the search before editing this playlist with AI.",
+        });
+
+        expect(findButton(renderer, "Auto").props.disabled).toBe(true);
+        expect(findButton(renderer, "Prompt").props.disabled).toBe(true);
+        expect(getText(renderer.root)).toContain("Clear the search before editing this playlist with AI.");
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("shows command availability errors", async () => {
+        mockGetCodexAvailability.mockRejectedValue(new Error("native app-server unavailable"));
+
+        const renderer = await renderAIButtons();
+
+        expect(getText(renderer.root)).toContain(
+            "Could not start Codex: native app-server unavailable",
+        );
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("shows when the local library is empty", async () => {
+        const renderer = await renderAIButtons({ libraryTracks: [] });
+
+        expect(findButton(renderer, "Auto").props.disabled).toBe(true);
+        expect(findButton(renderer, "Prompt").props.disabled).toBe(true);
+        expect(getText(renderer.root)).toContain(
+            "No library songs are available. Add or re-authorize a folder in Settings, then rescan.",
+        );
 
         act(() => {
             renderer.unmount();
@@ -145,6 +202,41 @@ describe("AIButtons", () => {
 
         expect(findButton(renderer, "Auto").props.disabled).toBe(true);
         expect(findButton(renderer, "Prompt").props.disabled).toBe(false);
+        expect(getText(renderer.root)).toContain("Add a seed track for Auto");
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("exposes the AI controls as labeled buttons", async () => {
+        const renderer = await renderAIButtons();
+
+        expect(findButton(renderer, "Auto").props).toMatchObject({
+            accessibilityLabel: "Auto",
+            accessibilityRole: "button",
+        });
+        expect(findButton(renderer, "Prompt").props).toMatchObject({
+            accessibilityLabel: "Prompt",
+            accessibilityRole: "button",
+        });
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("keeps generation errors visible after the toast", async () => {
+        mockGeneratePlaylistExtension.mockRejectedValue(new Error("Run `codex login` in Terminal."));
+        const renderer = await renderAIButtons();
+
+        await act(async () => {
+            findButton(renderer, "Auto").props.onPress({ nativeEvent: { button: 0 } });
+            await Promise.resolve();
+        });
+
+        expect(getText(renderer.root)).toContain("Run `codex login` in Terminal.");
+        expect(mockShowToast).toHaveBeenCalledWith("Run `codex login` in Terminal.", "error");
 
         act(() => {
             renderer.unmount();

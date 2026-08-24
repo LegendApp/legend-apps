@@ -14,7 +14,7 @@ const manifest = {
       "@legend-apps/app-exit",
       "@legend-apps/audio-player",
       "@legend-apps/auto-updater",
-      "@legend-apps/command-runner",
+      "@legend-apps/codex",
       "@legend-apps/context-menu",
       "@legend-apps/drag-drop",
       "@legend-apps/file-dialog",

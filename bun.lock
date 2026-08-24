@@ -147,7 +147,7 @@
         "@legend-apps/audio-player": "0.0.0",
         "@legend-apps/auto-updater": "0.0.0",
         "@legend-apps/classnames": "0.0.0",
-        "@legend-apps/command-runner": "0.0.0",
+        "@legend-apps/codex": "0.0.0",
         "@legend-apps/context-menu": "0.0.0",
         "@legend-apps/drag-drop": "0.0.0",
         "@legend-apps/file-dialog": "0.0.0",
@@ -287,6 +287,18 @@
       "dependencies": {
         "clsx": "^2.1.1",
         "tailwind-merge": "^3.4.0",
+      },
+    },
+    "packages/codex": {
+      "name": "@legend-apps/codex",
+      "version": "0.0.0",
+      "devDependencies": {
+        "nitrogen": "0.35.6",
+        "react-native-nitro-modules": "0.35.6",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
       },
     },
     "packages/command-runner": {
@@ -1076,6 +1088,8 @@
     "@legend-apps/chat-history": ["@legend-apps/chat-history@workspace:packages/chat-history"],
 
     "@legend-apps/classnames": ["@legend-apps/classnames@workspace:packages/classnames"],
+
+    "@legend-apps/codex": ["@legend-apps/codex@workspace:packages/codex"],
 
     "@legend-apps/command-runner": ["@legend-apps/command-runner@workspace:packages/command-runner"],
 
