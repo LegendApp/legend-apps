@@ -6,13 +6,11 @@ import { libraryUI$ } from "../../systems/LibraryState";
 
 interface MediaLibrarySearchBarProps {
     searchInputRef: RefObject<TextInputSearchRef | null>;
-    query: string;
-    width?: number;
 }
 
-export function MediaLibrarySearchBar({ searchInputRef, query, width }: MediaLibrarySearchBarProps) {
+export function MediaLibrarySearchBar({ searchInputRef }: MediaLibrarySearchBarProps) {
     return (
-        <View className="-ml-1.5" style={{ width }}>
+        <View className="px-2 pb-2">
             <TextInputSearch
                 ref={searchInputRef}
                 value$={libraryUI$.searchQuery}

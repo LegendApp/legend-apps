@@ -13,6 +13,7 @@ import { DragDropProvider } from "../components/dnd";
 import { MediaLibraryView } from "../components/MediaLibrary";
 import { MediaLibrarySidebar } from "../components/MediaLibrary/Sidebar";
 import { TrackList } from "../components/MediaLibrary/TrackList";
+import { ToastProvider } from "../components/Toast";
 import { TooltipProvider } from "../components/TooltipProvider";
 import { HiddenTextInput } from "../systems/keyboard/HookKeyboard";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
@@ -54,6 +55,7 @@ export default function MediaLibraryWindow() {
             <ThemeProvider>
                 <HiddenTextInput />
                 <PortalProvider>
+                    <ToastProvider />
                     <TooltipProvider>
                         <DragDropProvider>
                             {isMacOS ? (

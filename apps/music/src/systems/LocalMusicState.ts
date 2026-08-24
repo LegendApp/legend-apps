@@ -981,6 +981,10 @@ export async function scanLocalMusic(): Promise<void> {
             localMusicState$.error.set(
                 `Scan completed with ${scanErrors.length} metadata errors. Try rescanning or check file permissions.`,
             );
+        } else if (dedupedTracks.length === 0) {
+            localMusicState$.error.set(
+                "No supported audio files were found. Check the folder and file formats; for Downloads, use Add Library Folder to re-authorize access, then rescan.",
+            );
         }
 
         loadLocalPlaylists();

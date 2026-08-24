@@ -51,7 +51,6 @@ export function MediaLibrarySidebar() {
     perfCount("MediaLibrary.Sidebar.render");
     const selectedView = useValue(libraryUI$.selectedView);
     const selectedPlaylistId = useValue(libraryUI$.selectedPlaylistId);
-    const searchQuery = useValue(libraryUI$.searchQuery);
     const playlists = useValue(localMusicState$.playlists);
     const listItemStyles = useListItemStyles();
     const searchInputRef = useRef<TextInputSearchRef | null>(null);
@@ -301,10 +300,14 @@ export function MediaLibrarySidebar() {
 
     return (
         <View className="flex-1 min-h-0">
-            <MediaLibrarySearchBar searchInputRef={searchInputRef} query={searchQuery} />
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-                <View className="pb-3">
-                    <Text className="px-3 pt-2 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wider">
+            <MediaLibrarySearchBar searchInputRef={searchInputRef} />
+            <ScrollView
+                className="flex-1"
+                contentContainerClassName="px-2 pb-4"
+                showsVerticalScrollIndicator={false}
+            >
+                <View className="pb-1">
+                    <Text className="h-6 px-2 text-xs font-semibold leading-6 text-white/40 uppercase tracking-wider">
                         Library
                     </Text>
                     {LIBRARY_VIEWS.map((view) => {
@@ -317,6 +320,7 @@ export function MediaLibrarySidebar() {
                                     variant: "compact",
                                     isSelected,
                                     isInteractive: !view.disabled,
+                                    className: "h-7 rounded-md px-2",
                                 })}
                                 onClick={() => handleSelectView(view.id)}
                             >
@@ -336,8 +340,8 @@ export function MediaLibrarySidebar() {
                 </View>
 
                 {SUPPORT_PLAYLISTS ? (
-                    <View className="pb-3">
-                        <View className="flex-row items-center justify-between px-3 pt-2 pb-1">
+                    <View className="pt-2 pb-1">
+                        <View className="h-7 flex-row items-center justify-between px-2">
                             <Text className="text-xs font-semibold text-white/40 uppercase tracking-wider">
                                 Playlists
                             </Text>
@@ -352,7 +356,7 @@ export function MediaLibrarySidebar() {
                             />
                         </View>
                         {playlists.length === 0 ? (
-                            <View className="px-3 py-1">
+                            <View className="px-2 py-1">
                                 <Text className="text-sm text-white/40">No playlists yet</Text>
                             </View>
                         ) : (
@@ -374,6 +378,7 @@ export function MediaLibrarySidebar() {
                                                 variant: "compact",
                                                 isSelected: true,
                                                 isInteractive: false,
+                                                className: "h-7 rounded-md px-2",
                                             })}
                                         >
                                             <TextInput
@@ -398,6 +403,7 @@ export function MediaLibrarySidebar() {
                                                 variant: "compact",
                                                 isSelected: true,
                                                 isInteractive: false,
+                                                className: "h-7 rounded-md px-2",
                                             })}
                                         >
                                             <TextInput
@@ -420,6 +426,7 @@ export function MediaLibrarySidebar() {
                                             listItemStyles.getRowClassName({
                                                 variant: "compact",
                                                 isSelected,
+                                                className: "h-7 rounded-md px-2",
                                             }),
                                             className,
                                         )}
@@ -529,11 +536,11 @@ export function MediaLibrarySidebar() {
                     </View>
                 ) : null}
 
-                <View className="pb-6">
-                    <Text className="px-3 pt-2 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wider">
+                <View className="pt-2 pb-2">
+                    <Text className="h-6 px-2 text-xs font-semibold leading-6 text-white/40 uppercase tracking-wider">
                         Sources
                     </Text>
-                    <View className="px-3 py-1">
+                    <View className="h-7 justify-center px-2">
                         <Text className="text-sm text-white/70">✓ Local Music</Text>
                     </View>
                 </View>

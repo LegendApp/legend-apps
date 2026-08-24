@@ -98,6 +98,10 @@ export function LibrarySettingsContent() {
             canChooseFiles: false,
             canChooseDirectories: true,
             allowsMultipleSelection: false,
+            directoryURL: librarySettings.paths[0],
+            message: "Choose a music folder. Selecting it again re-authorizes access to protected locations such as Downloads.",
+            prompt: "Use Folder",
+            title: "Choose Music Folder",
         });
         const directory = directories?.[0] ?? null;
 
@@ -106,11 +110,17 @@ export function LibrarySettingsContent() {
         }
 
         markLibraryChangeUserInitiated();
-        librarySettings$.paths.set((paths) => {
-            if (paths.includes(directory)) {
-                return paths;
-            }
+        const normalizedDirectory = normalizeLibraryPath(directory);
+        const isAlreadyConfigured = librarySettings$.paths
+            .get()
+            .some((path) => normalizeLibraryPath(path) === normalizedDirectory);
 
+        if (isAlreadyConfigured) {
+            void scanLocalMusic();
+            return;
+        }
+
+        librarySettings$.paths.set((paths) => {
             return [...paths, directory];
         });
     };

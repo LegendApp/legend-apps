@@ -75,7 +75,7 @@ export function ToastProvider() {
                 () => {
                     toast$.visible.set(false);
                 },
-                action ? 5000 : 3000,
+                action ? 5000 : toast.type === "error" ? 8000 : 3000,
             );
 
             return () => {

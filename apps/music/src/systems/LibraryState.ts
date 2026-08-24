@@ -396,6 +396,7 @@ export const hydrateLibraryFromCache = (): boolean => {
     library$.artists.set(buildArtistItems(tracks));
     library$.albums.set(buildAlbumItems(tracks));
     library$.lastScanTime.set(snapshot.lastScanTime ? new Date(snapshot.lastScanTime) : null);
+    localMusicState$.tracks.set(tracks);
 
     lastLibrarySnapshotSignature = makeLibrarySnapshotSignature(
         {

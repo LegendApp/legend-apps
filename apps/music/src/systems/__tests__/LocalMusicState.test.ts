@@ -447,6 +447,18 @@ describe("scanLocalMusic", () => {
         expect(tracks).toHaveLength(1);
         expect(tracks[0]?.fileName).toBe("dup.mp3");
     });
+
+    it("explains how to recover when a configured folder yields no tracks", async () => {
+        const scanner = getMediaLibraryScannerMock();
+        scanner.scanMediaLibrary.mockImplementationOnce(async () => {
+            scanner.__emit("onMediaScanComplete", { totalTracks: 0, totalRoots: 1, errors: [] });
+            return { totalTracks: 0, totalRoots: 1, errors: [] };
+        });
+
+        await scanLocalMusic();
+
+        expect(localMusicState$.error.get()).toContain("use Add Library Folder to re-authorize access");
+    });
 });
 
 describe("createLocalTrackFromFile", () => {
