@@ -145,7 +145,7 @@ export function Playlist() {
                 const normalizedPath = normalizeTrackPath(track.filePath);
                 const isMissing =
                     track.isMissing ||
-                    (hasLibraryTracks && normalizedPath ? !existingTrackPathSet.has(normalizedPath) : false);
+                    (!track.provider && hasLibraryTracks && normalizedPath ? !existingTrackPathSet.has(normalizedPath) : false);
                 return {
                     id: track.id,
                     title: track.title,
@@ -157,6 +157,7 @@ export function Playlist() {
                     index,
                     queueEntryId: track.queueEntryId,
                     isMissing,
+                    provider: track.provider,
                 };
             }),
         [queueTracks, hasLibraryTracks, existingTrackPathSet],

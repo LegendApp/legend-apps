@@ -40,6 +40,9 @@ export type AppManifest = {
   urlSchemes?: {
     macos?: string[];
   };
+  infoPlist?: {
+    macos?: Record<string, string>;
+  };
   release?: {
     macos?: MacOSReleaseMetadata;
   };

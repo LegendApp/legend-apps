@@ -79,6 +79,16 @@ function renderUrlSchemes(schemes: string[]) {
   ].join("\n");
 }
 
+function renderCustomStrings(values: Record<string, string>) {
+  return Object.entries(values)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([key, value]) => [
+      `\t<key>${escapePlistString(key)}</key>`,
+      `\t<string>${escapePlistString(value)}</string>`,
+    ])
+    .join("\n");
+}
+
 function renderDevAppTransportSecurity() {
   return [
     "\t<key>NSAppTransportSecurity</key>",
@@ -128,6 +138,7 @@ export function writeMacOSInfoPlist(
 ) {
   const documentTypes = manifest.documentTypes?.macos?.filter((type) => type.name);
   const urlSchemes = manifest.urlSchemes?.macos?.filter(Boolean) ?? [];
+  const customStrings = manifest.infoPlist?.macos ?? {};
   const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
   const basePlist = replacePlistString(
     replacePlistString(
@@ -149,7 +160,7 @@ export function writeMacOSInfoPlist(
   const sparkleMetadata = renderSparkleMetadata(manifest, mode, arch);
   const outputPlist = basePlist.replace(
     "\n</dict>\n</plist>\n",
-    `\n${appMetadata}${mode === "dev" ? `\n${renderDevAppTransportSecurity()}` : ""}${sparkleMetadata ? `\n${sparkleMetadata}` : ""}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}\n</dict>\n</plist>\n`,
+    `\n${appMetadata}${mode === "dev" ? `\n${renderDevAppTransportSecurity()}` : ""}${sparkleMetadata ? `\n${sparkleMetadata}` : ""}${documentTypes && documentTypes.length > 0 ? `\n${renderDocumentTypes(documentTypes)}` : ""}${urlSchemes.length > 0 ? `\n${renderUrlSchemes(urlSchemes)}` : ""}${Object.keys(customStrings).length > 0 ? `\n${renderCustomStrings(customStrings)}` : ""}\n</dict>\n</plist>\n`,
   );
   const outputPath = path.join(outputDir, "Info.plist");
 

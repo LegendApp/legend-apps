@@ -24,6 +24,7 @@ import { addTracksToPlaylist } from "../../systems/LocalPlaylists";
 import { getQueueAction, type QueueAction } from "../../utils/queueActions";
 import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "../../utils/trackContextMenu";
 import { buildTrackLookup } from "../../utils/trackResolution";
+import { providerLibrary$, providerSearch$, searchProviders } from "../../providers/registry";
 
 type LibraryTrackListItem = TrackData & { sourceTrack?: LibraryTrack };
 
@@ -245,6 +246,7 @@ export function buildTrackItems({
         index: viewIndex,
         trackIndex: track.trackNumber,
         sourceTrack: track,
+        provider: track.provider,
     });
 
     if (selectedView === "starred") {
@@ -403,25 +405,35 @@ export function buildTrackItems({
         }
 
         const trackLookup = buildTrackLookup(tracks);
-        const makeMissingTrack = (path: string, titleOverride?: string, addedAt?: number): LibraryTrack => {
+        const makeMissingTrack = (path: string, entry?: { title: string; artist?: string; duration?: number; logo?: string; addedAt?: number }): LibraryTrack => {
             const fileName = path.split("/").pop() || path;
+            const isSpotify = path.toLowerCase().startsWith("spotify:");
+            const isAppleMusic = path.toLowerCase().startsWith("applemusic:");
+            const isStreaming = isSpotify || isAppleMusic;
             return {
                 id: path,
-                title: titleOverride || fileName,
-                artist: "Missing Track",
+                title: entry?.title || fileName,
+                artist: entry?.artist || (isStreaming ? "Unknown Artist" : "Missing Track"),
                 album: "",
-                duration: "",
+                duration: entry?.duration && entry.duration > 0 ? formatDuration(String(entry.duration)) : "",
                 filePath: path,
                 fileName,
-                isMissing: true,
-                addedAt,
+                thumbnail: entry?.logo,
+                isMissing: !isStreaming,
+                addedAt: entry?.addedAt,
+                provider: isSpotify ? "spotify" : isAppleMusic ? "appleMusic" : undefined,
+                uri: isStreaming ? path : undefined,
+                durationMs: entry?.duration && entry.duration > 0 ? entry.duration * 1000 : undefined,
             };
         };
 
-        const playlistEntries: { filePath: string; title: string; addedAt?: number }[] = playlist.tracks
+        const playlistEntries: { filePath: string; title: string; artist?: string; duration?: number; logo?: string; addedAt?: number }[] = playlist.tracks
             ? playlist.tracks.map((entry) => ({
                   filePath: entry.filePath,
                   title: entry.title,
+                  artist: entry.artist,
+                  duration: entry.duration,
+                  logo: entry.logo,
                   addedAt: entry.addedAt,
               }))
             : playlist.trackPaths.map((path) => ({
@@ -439,7 +451,7 @@ export function buildTrackItems({
                 return resolved;
             }
 
-            return makeMissingTrack(entry.filePath, entry.title, entry.addedAt);
+            return makeMissingTrack(entry.filePath, entry);
         });
 
         return {
@@ -459,13 +471,51 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
     const playlistSort = useValue(libraryUI$.playlistSort);
     const playlistSortDirection = useValue(libraryUI$.playlistSortDirection);
     const allTracks = useValue(library$.tracks);
+    const providerTracks = useValue(providerLibrary$.selectedTracks);
+    const providerSearchTracks = useValue(providerSearch$.tracks);
     const playlists = useValue(localMusicState$.playlists);
     const skipClickRef = useRef(false);
+
+    useEffect(() => {
+        const query = searchQuery.trim();
+        if (selectedView !== "songs" || query.length < 2) {
+            providerSearch$.assign({ query, tracks: [], isLoading: false, error: null });
+            return;
+        }
+        let cancelled = false;
+        const timeout = setTimeout(() => {
+            providerSearch$.assign({ query, isLoading: true, error: null });
+            void searchProviders(query, "any", 20)
+                .then((tracks) => {
+                    if (!cancelled && providerSearch$.query.peek() === query) providerSearch$.tracks.set(tracks);
+                })
+                .catch((error) => {
+                    if (!cancelled) providerSearch$.error.set(error instanceof Error ? error.message : "Streaming search failed.");
+                })
+                .finally(() => {
+                    if (!cancelled) providerSearch$.isLoading.set(false);
+                });
+        }, 350);
+        return () => {
+            cancelled = true;
+            clearTimeout(timeout);
+        };
+    }, [searchQuery, selectedView]);
+
+    const tracksForView = useMemo(() => {
+        if (selectedView === "provider-playlist") return providerTracks;
+        if (selectedView !== "songs" || searchQuery.trim().length < 2 || providerSearchTracks.length === 0) {
+            return allTracks;
+        }
+        const byId = new Map(allTracks.map((track) => [track.id, track]));
+        providerSearchTracks.forEach((track) => byId.set(track.id, track));
+        return Array.from(byId.values());
+    }, [allTracks, providerSearchTracks, providerTracks, searchQuery, selectedView]);
 
     const { trackItems } = useMemo(
         () =>
             buildTrackItems({
-                tracks: allTracks,
+                tracks: tracksForView,
                 playlists,
                 selectedView,
                 selectedPlaylistId,
@@ -474,7 +524,7 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                 playlistSortDirection,
             }),
         [
-            allTracks,
+            tracksForView,
             playlists,
             playlistSort,
             playlistSortDirection,
@@ -587,11 +637,21 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
         [trackItems],
     );
 
-    const trackContextMenuItems = useMemo(
+    const localTrackContextMenuItems = useMemo(
         () =>
             buildTrackContextMenuItems({
                 includeQueueActions: true,
                 includeFinder: true,
+                extraItems: [ADD_TO_PLAYLIST_MENU_ITEM],
+            }),
+        [],
+    );
+
+    const streamingTrackContextMenuItems = useMemo(
+        () =>
+            buildTrackContextMenuItems({
+                includeQueueActions: true,
+                includeFinder: false,
                 extraItems: [ADD_TO_PLAYLIST_MENU_ITEM],
             }),
         [],
@@ -602,7 +662,9 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
             const x = event.pageX ?? event.x ?? 0;
             const y = event.pageY ?? event.y ?? 0;
 
-            const selection = await showContextMenu(trackContextMenuItems, { x, y });
+            const sourceTrack = trackItems[index]?.sourceTrack;
+            const menuItems = sourceTrack?.provider ? streamingTrackContextMenuItems : localTrackContextMenuItems;
+            const selection = await showContextMenu(menuItems, { x, y });
 
             await handleTrackContextMenuSelection({
                 selection,
@@ -648,7 +710,12 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                     }
 
                     try {
-                        const { addedPaths, playlist } = await addTracksToPlaylist(playlistId, trackPaths);
+                        const selectedTracks = indicesToAdd
+                            .map((trackIndex) => trackItems[trackIndex]?.sourceTrack)
+                            .filter((track): track is LibraryTrack => Boolean(track));
+                        const { addedPaths, playlist } = await addTracksToPlaylist(playlistId, trackPaths, {
+                            tracks: selectedTracks,
+                        });
                         const addedCount = addedPaths.length;
                         if (addedCount <= 0) {
                             showToast("No new tracks to add", "info");
@@ -688,7 +755,14 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                 },
             });
         },
-        [handleTrackAction, playlists, selectedIndices$, trackItems, trackContextMenuItems],
+        [
+            handleTrackAction,
+            localTrackContextMenuItems,
+            playlists,
+            selectedIndices$,
+            streamingTrackContextMenuItems,
+            trackItems,
+        ],
     );
 
     const handleNativeDragStart = useCallback(() => {

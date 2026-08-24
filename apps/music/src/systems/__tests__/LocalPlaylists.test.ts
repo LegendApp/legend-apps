@@ -1,9 +1,10 @@
 import { loadLocalPlaylists, localMusicState$ } from "../LocalMusicState";
+import { addTracksToPlaylist } from "../LocalPlaylists";
 
 const FileSystem = require("expo-file-system/next") as {
     __resetMockFileSystem(): void;
     Directory: new (...segments: unknown[]) => { create(): void };
-    File: new (...segments: unknown[]) => { path: string; write(content: string): void };
+    File: new (...segments: unknown[]) => { path: string; write(content: string): void; textSync(): string };
 };
 
 describe("loadLocalPlaylists", () => {
@@ -55,5 +56,41 @@ describe("loadLocalPlaylists", () => {
                 trackCount: 2,
             }),
         ]);
+    });
+
+    it("persists streaming track metadata in editable playlists", async () => {
+        const filePath = "/tmp/cache/Legend Music/playlists/Streaming.m3u";
+        new FileSystem.File(filePath).write("#EXTM3U\n");
+        localMusicState$.playlists.set([{
+            id: filePath,
+            name: "Streaming",
+            filePath,
+            source: "cache",
+            trackPaths: [],
+            tracks: [],
+            trackCount: 0,
+        }]);
+
+        await addTracksToPlaylist(filePath, ["spotify:track:abc"], {
+            tracks: [{
+                id: "spotify:abc",
+                title: "Midnight City",
+                artist: "M83",
+                duration: "4:03",
+                durationMs: 243_000,
+                filePath: "spotify:track:abc",
+                fileName: "Midnight City",
+                provider: "spotify",
+                uri: "spotify:track:abc",
+            }],
+        });
+
+        expect(new FileSystem.File(filePath).textSync()).toContain(
+            "#EXTINF:243,M83 - Midnight City\nspotify:track:abc",
+        );
+        expect(localMusicState$.playlists.get()[0]).toEqual(expect.objectContaining({
+            trackPaths: ["spotify:track:abc"],
+            tracks: [expect.objectContaining({ title: "Midnight City", artist: "M83" })],
+        }));
     });
 });

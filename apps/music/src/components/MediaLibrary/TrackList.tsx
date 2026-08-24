@@ -31,6 +31,8 @@ import { themeState$ } from "../../theme/ThemeProvider";
 import { cn } from "@legend-apps/classnames";
 import type { QueueAction } from "../../utils/queueActions";
 import { useLibraryTrackList } from "./useLibraryTrackList";
+import { providerLibrary$, providerSearch$ } from "../../providers/registry";
+import { ProviderBadge } from "../ProviderBadge";
 
 type TrackListProps = {};
 
@@ -74,6 +76,9 @@ export function TrackList(_props: TrackListProps) {
     const playlistSortDirection = useValue(libraryUI$.playlistSortDirection);
     const playlists = useValue(localMusicState$.playlists);
     const libraryTracks = useValue(localMusicState$.tracks);
+    const providerPlaylist = useValue(providerLibrary$.selectedPlaylist);
+    const providerPlaylistError = useValue(providerLibrary$.error);
+    const providerSearchError = useValue(providerSearch$.error);
 
     const nonSeparatorTrackCount = useMemo(
         () => tracks.reduce((count, track) => (track.isSeparator ? count : count + 1), 0),
@@ -105,8 +110,12 @@ export function TrackList(_props: TrackListProps) {
             return { title: "Songs", count: nonSeparatorTrackCount };
         }
 
+        if (selectedView === "provider-playlist" && providerPlaylist) {
+            return { title: providerPlaylist.name, count: nonSeparatorTrackCount };
+        }
+
         return null;
-    }, [nonSeparatorTrackCount, selectedPlaylist, selectedView]);
+    }, [nonSeparatorTrackCount, providerPlaylist, selectedPlaylist, selectedView]);
 
     const isPlaylistEditable =
         selectedView === "playlist" &&
@@ -133,6 +142,7 @@ export function TrackList(_props: TrackListProps) {
             const { addedPaths, playlist } = await addTracksToPlaylist(
                 selectedPlaylist.id,
                 tracksToAdd.map((track) => track.filePath),
+                { tracks: tracksToAdd },
             );
 
             let undo: (() => void) | undefined;
@@ -337,19 +347,16 @@ export function TrackList(_props: TrackListProps) {
         ],
     );
 
-    const getItemType = useCallback(
-        (item: string) => {
-            return trackById.get(item)?.isSeparator ? "separator" : "track";
-        },
-        [trackById],
-    );
+    const getItemType = useCallback((item: string) => (item.startsWith("sep-") ? "separator" : "track"), []);
 
-    const getFixedItemSize = useCallback(
-        (item: string, _index: number, _type: string | undefined) => {
-            return trackById.get(item)?.isSeparator ? 72 : 32;
-        },
-        [trackById],
-    );
+    const getFixedItemSize = useCallback((item: string) => (item.startsWith("sep-") ? 72 : 32), []);
+
+    const listDataKey =
+        selectedView === "playlist"
+            ? `playlist:${selectedPlaylistId ?? ""}`
+            : selectedView === "provider-playlist"
+              ? `provider-playlist:${providerPlaylist?.provider ?? ""}:${providerPlaylist?.id ?? ""}`
+              : selectedView;
 
     return (
         <View className="flex-1 pl-2 relative">
@@ -365,6 +372,11 @@ export function TrackList(_props: TrackListProps) {
                     </View>
                 </View>
             ) : null}
+            {providerPlaylistError || providerSearchError ? (
+                <View className="mx-3 mb-2 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2">
+                    <Text className="text-xs leading-relaxed text-red-200">{providerPlaylistError ?? providerSearchError}</Text>
+                </View>
+            ) : null}
             <Table
                 header={
                     <TableHeader
@@ -376,8 +388,9 @@ export function TrackList(_props: TrackListProps) {
                 }
             >
                 <LegendList
+                    key={listDataKey}
                     data={trackIds}
-                    dataVersion={selectedView}
+                    dataKey={listDataKey}
                     keyExtractor={keyExtractor}
                     renderItem={renderTrack}
                     getItemType={getItemType}
@@ -549,9 +562,12 @@ function LibraryTrackRow({
                 ) : null}
             </TableCell>
             <TableCell column={titleColumn}>
-                <Text className={cn("text-sm font-medium truncate", listItemStyles.text.primary)} numberOfLines={1}>
-                    {track.title}
-                </Text>
+                <View className="flex-1 flex-row items-center gap-2">
+                    <Text className={cn("flex-1 text-sm font-medium truncate", listItemStyles.text.primary)} numberOfLines={1}>
+                        {track.title}
+                    </Text>
+                    <ProviderBadge provider={track.provider} compact />
+                </View>
             </TableCell>
             <TableCell column={artistColumn}>
                 <Text className={cn("text-sm truncate", listItemStyles.text.secondary)} numberOfLines={1}>

@@ -7,6 +7,10 @@ import { useToast } from "./Toast";
 import { generatePlaylistExtension } from "../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import type { LocalTrack } from "../systems/LocalMusicState";
+import { useValue } from "@legendapp/state/react";
+import { spotifyStatus$ } from "../providers/spotify/provider";
+import { appleMusicStatus$ } from "../providers/appleMusic/provider";
+import { settings$, type AITrackSource } from "../systems/Settings";
 
 export type AIButtonsAddResult = {
     addedCount: number;
@@ -38,6 +42,10 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationError, setGenerationError] = useState<string | null>(null);
     const [aiToolState, setAIToolState] = useState<AIToolState>({ status: "checking" });
+    const configuredSource = useValue(settings$.ai.source) ?? "any";
+    const spotifyStatus = useValue(spotifyStatus$);
+    const appleMusicStatus = useValue(appleMusicStatus$);
+    const source: AITrackSource = configuredSource;
     const trimmedPrompt = prompt.trim();
     let unavailableMessage: string | null = null;
     if (!canUseAI) {
@@ -46,8 +54,19 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
         unavailableMessage = "Checking Codex…";
     } else if (aiToolState.status === "unavailable") {
         unavailableMessage = aiToolState.message;
-    } else if (libraryTracks.length === 0) {
-        unavailableMessage = "No library songs are available. Add or re-authorize a folder in Settings, then rescan.";
+    } else if (source === "local" && libraryTracks.length === 0) {
+        unavailableMessage = "No local songs are available. Add or re-authorize a folder in Settings → Library, then rescan.";
+    } else if (source === "spotify" && (!spotifyStatus.enabled || !spotifyStatus.authenticated)) {
+        unavailableMessage = "Connect Spotify in Settings → Spotify, then try again.";
+    } else if (source === "appleMusic" && (!appleMusicStatus.enabled || !appleMusicStatus.authenticated)) {
+        unavailableMessage = "Connect Apple Music in Settings → Apple Music, then try again.";
+    } else if (
+        source === "any"
+        && libraryTracks.length === 0
+        && !spotifyStatus.authenticated
+        && !appleMusicStatus.authenticated
+    ) {
+        unavailableMessage = "No music sources are available. Add a local library or connect Spotify or Apple Music in Settings.";
     }
 
     const canGenerate = unavailableMessage === null && !isGenerating;
@@ -103,6 +122,7 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 const result = await generatePlaylistExtension({
                     libraryTracks,
                     playlist,
+                    source,
                     userPrompt,
                 });
                 const addResult = await onAddTracks(result.tracks);
@@ -143,7 +163,7 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
             }
             setIsGenerating(false);
         },
-        [canGenerate, libraryTracks, onAddTracks, playlist],
+        [canGenerate, libraryTracks, onAddTracks, playlist, source],
     );
 
     const handleSubmitPrompt = useCallback(() => {
@@ -151,11 +171,17 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
             showToast("Enter a prompt first", "error");
             return;
         }
+        if (!canGenerate) {
+            const message = unavailableMessage ?? "AI playlist generation is unavailable.";
+            setGenerationError(message);
+            showToast(message, "error");
+            return;
+        }
 
         setIsPromptOpen(false);
         setPrompt("");
         void handleGenerate(trimmedPrompt);
-    }, [handleGenerate, trimmedPrompt]);
+    }, [canGenerate, handleGenerate, showToast, trimmedPrompt, unavailableMessage]);
 
     const handleAutoGenerate = useCallback(() => {
         if (playlist.trackPaths.length === 0) {
@@ -178,6 +204,9 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 ) : (
                     <View className="flex-1" />
                 )}
+                <Text className="text-[10px] font-medium text-text-tertiary">
+                    {source === "any" ? "Any source" : source === "local" ? "Local" : source === "spotify" ? "Spotify" : "Apple Music"}
+                </Text>
                 <Button
                     size="small"
                     variant="secondary"
@@ -221,6 +250,29 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                             className="min-h-28 rounded-md border border-border-primary bg-black/20 px-3 py-2 text-sm text-text-primary"
                             textAlignVertical="top"
                         />
+                        <View className="gap-2">
+                            <Text className="text-xs font-medium text-text-secondary">Find tracks in</Text>
+                            <View className="flex-row gap-2">
+                                {([
+                                    ["any", "Any"],
+                                    ["local", "Local"],
+                                    ["spotify", "Spotify"],
+                                    ["appleMusic", "Apple Music"],
+                                ] as const).map(([value, label]) => (
+                                    <Button
+                                        key={value}
+                                        size="small"
+                                        variant={source === value ? "accent" : "secondary"}
+                                        onClick={() => settings$.ai.source.set(value)}
+                                    >
+                                        {label}
+                                    </Button>
+                                ))}
+                            </View>
+                            {unavailableMessage ? (
+                                <Text className="text-xs leading-relaxed text-red-300">{unavailableMessage}</Text>
+                            ) : null}
+                        </View>
                         <View className="flex-row justify-end gap-2">
                             <Button
                                 size="small"
@@ -239,8 +291,8 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                                 variant="accent"
                                 accessibilityLabel="Generate playlist"
                                 accessibilityRole="button"
-                                disabled={!trimmedPrompt}
-                                className={!trimmedPrompt ? "opacity-50" : undefined}
+                                disabled={!trimmedPrompt || !canGenerate}
+                                className={!trimmedPrompt || !canGenerate ? "opacity-50" : undefined}
                                 onClick={handleSubmitPrompt}
                             >
                                 Generate

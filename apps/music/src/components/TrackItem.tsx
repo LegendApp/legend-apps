@@ -10,6 +10,7 @@ import { themeState$ } from "../theme/ThemeProvider";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { cn } from "@legend-apps/classnames";
 import { perfCount } from "@legend-apps/runtime-utils";
+import { ProviderBadge } from "./ProviderBadge";
 
 export interface TrackData {
     id: string;
@@ -26,6 +27,7 @@ export interface TrackData {
     fromSuggestions?: boolean;
     queueEntryId?: string;
     isMissing?: boolean;
+    provider?: string;
 }
 
 interface TrackItemProps {
@@ -187,6 +189,8 @@ export const TrackItem = ({
                     {titleText}
                 </Text>
             )}
+
+            <ProviderBadge provider={track.provider} compact />
 
             <Text
                 className={cn(

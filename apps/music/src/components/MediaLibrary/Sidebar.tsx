@@ -39,6 +39,12 @@ import { perfCount } from "@legend-apps/runtime-utils";
 import { getQueueAction } from "../../utils/queueActions";
 import { buildTrackLookup, resolvePlaylistTracks } from "../../utils/trackResolution";
 import { MediaLibrarySearchBar } from "./SearchBar";
+import { appleMusicStatus$ } from "../../providers/appleMusic/provider";
+import { providerLibrary$, selectProviderPlaylist } from "../../providers/registry";
+import { spotifyStatus$ } from "../../providers/spotify/provider";
+import type { ProviderPlaylist } from "../../providers/types";
+import { state$ } from "../../systems/State";
+import { ProviderBadge } from "../ProviderBadge";
 
 const LIBRARY_VIEWS: { id: LibraryView; label: string; disabled?: boolean }[] = [
     { id: "artists", label: "Artists" },
@@ -52,6 +58,10 @@ export function MediaLibrarySidebar() {
     const selectedView = useValue(libraryUI$.selectedView);
     const selectedPlaylistId = useValue(libraryUI$.selectedPlaylistId);
     const playlists = useValue(localMusicState$.playlists);
+    const providerPlaylists = useValue(providerLibrary$.playlists);
+    const selectedProviderPlaylist = useValue(providerLibrary$.selectedPlaylist);
+    const spotifyStatus = useValue(spotifyStatus$);
+    const appleMusicStatus = useValue(appleMusicStatus$);
     const listItemStyles = useListItemStyles();
     const searchInputRef = useRef<TextInputSearchRef | null>(null);
     const [tempPlaylistId, setTempPlaylistId] = useState<string | null>(null);
@@ -61,6 +71,15 @@ export function MediaLibrarySidebar() {
     const [editingPlaylistName, setEditingPlaylistName] = useState("");
     const handleSelectView = useCallback((view: LibraryView) => {
         selectLibraryView(view);
+    }, []);
+    const handleSelectProviderPlaylist = useCallback(async (playlist: ProviderPlaylist) => {
+        libraryUI$.selectedView.set("provider-playlist");
+        libraryUI$.selectedPlaylistId.set(null);
+        try {
+            await selectProviderPlaylist(playlist);
+        } catch (error) {
+            showToast(error instanceof Error ? error.message : `Could not load ${playlist.name}.`, "error");
+        }
     }, []);
 
     const handleAddPlaylist = useCallback(() => {
@@ -536,6 +555,44 @@ export function MediaLibrarySidebar() {
                     </View>
                 ) : null}
 
+                {providerPlaylists.length > 0 ? (
+                    <View className="pt-2 pb-1">
+                        <Text className="h-7 px-2 text-xs font-semibold leading-7 text-white/40 uppercase tracking-wider">
+                            Streaming Playlists
+                        </Text>
+                        {providerPlaylists.map((playlist) => {
+                            const isSelected = selectedView === "provider-playlist"
+                                && selectedProviderPlaylist?.provider === playlist.provider
+                                && selectedProviderPlaylist.id === playlist.id;
+                            return (
+                                <Button
+                                    key={`${playlist.provider}:${playlist.id}`}
+                                    className={listItemStyles.getRowClassName({
+                                        variant: "compact",
+                                        isSelected,
+                                        className: "h-7 rounded-md px-2 gap-2",
+                                    })}
+                                    onClick={() => void handleSelectProviderPlaylist(playlist)}
+                                    onDoubleClick={() => {
+                                        void selectProviderPlaylist(playlist)
+                                            .then(() => {
+                                                const tracks = providerLibrary$.selectedTracks.peek();
+                                                if (tracks.length > 0) localAudioControls.queue.append(tracks);
+                                            })
+                                            .catch((error) => showToast(error instanceof Error ? error.message : `Could not load ${playlist.name}.`, "error"));
+                                    }}
+                                >
+                                    <ProviderBadge provider={playlist.provider} compact />
+                                    <Text className={cn("flex-1 text-sm", isSelected ? listItemStyles.text.primary : listItemStyles.text.secondary)} numberOfLines={1}>
+                                        {playlist.name}
+                                    </Text>
+                                    <Text className={listItemStyles.getMetaClassName()}>{playlist.trackCount || ""}</Text>
+                                </Button>
+                            );
+                        })}
+                    </View>
+                ) : null}
+
                 <View className="pt-2 pb-2">
                     <Text className="h-6 px-2 text-xs font-semibold leading-6 text-white/40 uppercase tracking-wider">
                         Sources
@@ -543,6 +600,22 @@ export function MediaLibrarySidebar() {
                     <View className="h-7 justify-center px-2">
                         <Text className="text-sm text-white/70">✓ Local Music</Text>
                     </View>
+                    <Button
+                        className="h-7 flex-row items-center gap-2 rounded-md px-2 hover:bg-white/10"
+                        onClick={() => state$.assign({ showSettings: true, showSettingsPage: "spotify" })}
+                    >
+                        <ProviderBadge provider="spotify" compact />
+                        <Text className="flex-1 text-sm text-white/70">{spotifyStatus.authenticated ? "✓ Spotify" : "Spotify"}</Text>
+                        {!spotifyStatus.enabled || !spotifyStatus.authenticated ? <Text className="text-xs text-white/35">Set up</Text> : null}
+                    </Button>
+                    <Button
+                        className="h-7 flex-row items-center gap-2 rounded-md px-2 hover:bg-white/10"
+                        onClick={() => state$.assign({ showSettings: true, showSettingsPage: "apple-music" })}
+                    >
+                        <ProviderBadge provider="appleMusic" compact />
+                        <Text className="flex-1 text-sm text-white/70">{appleMusicStatus.authenticated ? "✓ Apple Music" : "Apple Music"}</Text>
+                        {!appleMusicStatus.enabled || !appleMusicStatus.authenticated ? <Text className="text-xs text-white/35">Set up</Text> : null}
+                    </Button>
                 </View>
             </ScrollView>
         </View>

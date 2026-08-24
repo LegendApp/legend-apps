@@ -8,6 +8,11 @@ export type NativeGraphMode = "dev" | "release";
 
 export const nativePackages: NativePackage[] = [
   {
+    name: "@legend-apps/apple-music",
+    root: path.join(packagesDir, "apple-music"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/codex",
     root: path.join(packagesDir, "codex"),
     platforms: ["macos"],
@@ -170,6 +175,11 @@ export const nativePackages: NativePackage[] = [
   {
     name: "react-native-enriched-markdown",
     root: path.join(rootDir, "apps", "test-kitchen-sink", "node_modules", "react-native-enriched-markdown"),
+    platforms: ["macos", "ios", "android"],
+  },
+  {
+    name: "react-native-webview",
+    root: path.join(rootDir, "apps", "music", "node_modules", "react-native-webview"),
     platforms: ["macos", "ios", "android"],
   },
 ];

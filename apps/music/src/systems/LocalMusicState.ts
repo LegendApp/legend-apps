@@ -44,6 +44,9 @@ export interface LocalTrack {
     provider?: string;
     uri?: string;
     durationMs?: number;
+    artists?: string[];
+    artistUrls?: string[];
+    albumUrl?: string;
 }
 
 export interface LocalPlaylist {

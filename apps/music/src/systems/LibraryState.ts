@@ -19,7 +19,7 @@ export interface LibraryItem {
 
 export interface LibraryTrack extends LocalTrack {}
 
-export type LibraryView = "songs" | "artists" | "albums" | "starred" | "playlist";
+export type LibraryView = "songs" | "artists" | "albums" | "starred" | "playlist" | "provider-playlist";
 export type PlaylistSortMode = "playlist-order" | "date-added" | "title" | "artist" | "album";
 export type PlaylistSortDirection = "asc" | "desc";
 

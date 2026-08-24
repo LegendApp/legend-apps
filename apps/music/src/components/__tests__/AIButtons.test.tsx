@@ -6,6 +6,8 @@ import { generatePlaylistExtension } from "../../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../../systems/ai/playlistContext";
 import type { LocalTrack } from "../../systems/LocalMusicState";
 import { getCodexAvailability } from "@legend-apps/codex";
+import { spotifyStatus$ } from "../../providers/spotify/provider";
+import { settings$ } from "../../systems/Settings";
 
 jest.mock("@legend-apps/codex", () => ({
     __esModule: true,
@@ -115,6 +117,8 @@ async function renderAIButtons({
 describe("AIButtons", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        settings$.ai.source.set("any");
+        spotifyStatus$.assign({ enabled: false, authenticated: false, error: null });
         mockGetCodexAvailability.mockResolvedValue({
             available: true,
             codexPath: "/usr/bin/codex",
@@ -188,8 +192,21 @@ describe("AIButtons", () => {
         expect(findButton(renderer, "Auto").props.disabled).toBe(true);
         expect(findButton(renderer, "Prompt").props.disabled).toBe(true);
         expect(getText(renderer.root)).toContain(
-            "No library songs are available. Add or re-authorize a folder in Settings, then rescan.",
+            "No music sources are available. Add a local library or connect Spotify or Apple Music in Settings.",
         );
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("shows how to connect a selected streaming source", async () => {
+        settings$.ai.source.set("spotify");
+        const renderer = await renderAIButtons();
+
+        expect(findButton(renderer, "Auto").props.disabled).toBe(true);
+        expect(findButton(renderer, "Prompt").props.disabled).toBe(true);
+        expect(getText(renderer.root)).toContain("Connect Spotify in Settings → Spotify, then try again.");
 
         act(() => {
             renderer.unmount();

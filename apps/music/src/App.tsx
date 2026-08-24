@@ -23,6 +23,8 @@ import { runAfterInteractionsWithLabel } from "@legend-apps/runtime-utils";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { WindowsNavigator } from "./windows";
 import { WindowProvider } from "@legend-apps/windows";
+import { SpotifyWebPlayerBridge } from "./providers/spotify/SpotifyWebPlayerBridge";
+import { initializeStreamingProviders } from "./providers/setup";
 
 LogBox.ignoreLogs(["Open debugger", "unknown error"]);
 
@@ -45,6 +47,12 @@ function App(): React.JSX.Element {
             }
         }, "App.hydrateLibrary");
 
+        const providersHandle = runAfterInteractionsWithLabel(() => {
+            void initializeStreamingProviders().catch((error) => {
+                console.warn("Failed to initialize streaming providers:", error);
+            });
+        }, "App.initializeStreamingProviders");
+
         const prefetchHandle = runAfterInteractionsWithLabel(() => {
             void WindowsNavigator.prefetch("SettingsWindow").catch((error) => {
                 console.warn("Failed to prefetch settings window:", error);
@@ -60,6 +68,7 @@ function App(): React.JSX.Element {
         return () => {
             initializeHandle.cancel();
             hydrateHandle.cancel();
+            providersHandle.cancel();
             prefetchHandle.cancel();
         };
     });
@@ -83,6 +92,7 @@ function App(): React.JSX.Element {
                             <TooltipProvider>
                                 <DragDropProvider>
                                     <MainContainer />
+                                    <SpotifyWebPlayerBridge />
                                 </DragDropProvider>
                             </TooltipProvider>
                         </ToastProvider>

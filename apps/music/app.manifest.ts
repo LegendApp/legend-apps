@@ -12,6 +12,7 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-apps/app-exit",
+      "@legend-apps/apple-music",
       "@legend-apps/audio-player",
       "@legend-apps/auto-updater",
       "@legend-apps/codex",
@@ -32,9 +33,18 @@ const manifest = {
       "@legend-apps/text-input-search",
       "@legend-apps/window-controls",
       "@legend-apps/window-manager",
+      "react-native-webview",
     ],
     ios: [],
     android: [],
+  },
+  urlSchemes: {
+    macos: ["legendmusic"],
+  },
+  infoPlist: {
+    macos: {
+      NSAppleMusicUsageDescription: "Legend Music uses Apple Music to search your catalog, show playlists, and play tracks.",
+    },
   },
   release: {
     macos: {

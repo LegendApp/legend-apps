@@ -61,9 +61,11 @@ function localTrackToM3UTrack(track: LocalTrack): M3UTrack {
 function m3uTrackToLocalTrack(track: M3UTrack): LocalTrack {
     const durationSeconds = Number.isFinite(track.duration) && track.duration > 0 ? track.duration : 0;
     const durationString = durationSeconds > 0 ? formatSecondsToMmSs(durationSeconds) : " ";
-    const isSpotify = track.filePath.toLowerCase().startsWith("spotify:");
+    const normalizedPath = track.filePath.toLowerCase();
+    const isSpotify = normalizedPath.startsWith("spotify:");
+    const isAppleMusic = normalizedPath.startsWith("applemusic:");
     const fallbackTitle = track.title || track.filePath.split("/").pop() || track.filePath;
-    const fileName = isSpotify ? fallbackTitle : track.filePath.split("/").pop() || track.filePath;
+    const fileName = isSpotify || isAppleMusic ? fallbackTitle : track.filePath.split("/").pop() || track.filePath;
 
     return {
         id: track.filePath,
@@ -74,8 +76,8 @@ function m3uTrackToLocalTrack(track: M3UTrack): LocalTrack {
         fileName,
         thumbnail: resolveThumbnailBase(track.logo),
         addedAt: track.addedAt,
-        provider: isSpotify ? "spotify" : undefined,
-        uri: isSpotify ? track.filePath : undefined,
+        provider: isSpotify ? "spotify" : isAppleMusic ? "appleMusic" : undefined,
+        uri: isSpotify || isAppleMusic ? track.filePath : undefined,
         durationMs: durationSeconds > 0 ? durationSeconds * 1000 : undefined,
     };
 }

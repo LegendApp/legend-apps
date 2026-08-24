@@ -1,7 +1,7 @@
 import { observable } from "@legendapp/state";
 import { createObservableFile } from "@legend-apps/storage";
 
-type SettingsPage = "account" | "general" | "library" | "overlay" | "theme" | "ui-customize" | "open-source";
+type SettingsPage = "account" | "general" | "library" | "spotify" | "apple-music" | "overlay" | "theme" | "ui-customize" | "open-source";
 
 export const state$ = observable({
     isDropdownOpen: false,

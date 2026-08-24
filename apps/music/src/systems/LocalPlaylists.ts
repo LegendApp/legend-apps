@@ -4,6 +4,7 @@ import { libraryUI$, selectLibraryPlaylist, selectLibraryView } from "./LibraryS
 import {
     createLocalPlaylist,
     type LocalPlaylist,
+    type LocalTrack,
     loadLocalPlaylists,
     localMusicState$,
     sanitizePlaylistFileName,
@@ -87,7 +88,7 @@ const getUniquePlaylistFile = (
 export async function addTracksToPlaylist(
     playlistId: string,
     trackPaths: string[],
-    opts: { dedupe?: boolean } = {},
+    opts: { dedupe?: boolean; tracks?: LocalTrack[] } = {},
 ): Promise<{ addedPaths: string[]; playlist: LocalPlaylist }> {
     const playlist = getPlaylistOrThrow(playlistId);
     if (!isEditablePlaylist(playlist)) {
@@ -116,7 +117,28 @@ export async function addTracksToPlaylist(
     }
 
     if (addedPaths.length > 0) {
-        await saveLocalPlaylistTracks(playlist, nextTrackPaths);
+        const tracksByPath = new Map(
+            (opts.tracks ?? []).map((track) => [toFilePath(track.uri ?? track.filePath).toLowerCase(), track]),
+        );
+        const extraEntries = addedPaths.map((path) => {
+            const track = tracksByPath.get(path.toLowerCase());
+            return track ? {
+                id: track.id,
+                duration: track.durationMs ? Math.round(track.durationMs / 1000) : -1,
+                title: track.title,
+                artist: track.artist,
+                filePath: path,
+                logo: track.thumbnail,
+                addedAt: track.addedAt ?? Date.now(),
+            } : {
+                id: path,
+                duration: -1,
+                title: path.split("/").pop() || path,
+                filePath: path,
+                addedAt: Date.now(),
+            };
+        });
+        await saveLocalPlaylistTracks(playlist, nextTrackPaths, [...(playlist.tracks ?? []), ...extraEntries]);
     }
 
     return { addedPaths, playlist: getPlaylistOrThrow(playlistId) };

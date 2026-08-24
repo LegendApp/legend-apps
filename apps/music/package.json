@@ -6,6 +6,7 @@
   "dependencies": {
     "@gorhom/portal": "^1.0.14",
     "@legend-apps/ai": "0.0.0",
+    "@legend-apps/apple-music": "0.0.0",
     "@legend-apps/app-exit": "0.0.0",
     "@legend-apps/appkit-split-view": "0.0.0",
     "@legend-apps/audio-player": "0.0.0",
@@ -38,6 +39,7 @@
     "@legendapp/motion": "catalog:",
     "@legendapp/state": "catalog:",
     "expo-file-system": "~19.0.21",
+    "react-native-webview": "16.0.0",
     "sf-symbols-typescript": "^2.2.0"
   }
 }

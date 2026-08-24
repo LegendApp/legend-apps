@@ -1,4 +1,7 @@
-import { resolvePlaylistAISuggestions } from "../resolver";
+import { observable } from "@legendapp/state";
+import { registerStreamingProvider } from "../../../providers/registry";
+import type { StreamingProvider } from "../../../providers/types";
+import { resolvePlaylistAISuggestions, resolvePlaylistAISuggestionsWithProviders } from "../resolver";
 import type { LocalTrack } from "../../LocalMusicState";
 
 const track = (overrides: Partial<LocalTrack>): LocalTrack => ({
@@ -42,5 +45,59 @@ describe("resolvePlaylistAISuggestions", () => {
         );
 
         expect(result.tracks.map((item) => item.filePath)).toEqual(["/music/b.mp3"]);
+    });
+
+    it("resolves metadata suggestions through a connected streaming provider", async () => {
+        const spotifyTrack = track({
+            id: "spotify:track:abc",
+            filePath: "spotify:track:abc",
+            uri: "spotify:track:abc",
+            provider: "spotify",
+            title: "Midnight City",
+            artist: "M83",
+            album: "Hurry Up, We're Dreaming",
+        });
+        const search = jest.fn(async () => [spotifyTrack]);
+        const provider: StreamingProvider = {
+            id: "spotify",
+            name: "Spotify",
+            status$: observable({
+                enabled: true,
+                authenticated: true,
+                displayName: "Test",
+                detail: "Connected",
+                error: null,
+                isLoading: false,
+            }),
+            initialize: async () => undefined,
+            login: async () => undefined,
+            logout: async () => undefined,
+            search,
+            listPlaylists: async () => [],
+            listPlaylistTracks: async () => [],
+            playback: {
+                id: "spotify",
+                startsPlaybackOnLoad: true,
+                load: async () => undefined,
+                play: async () => undefined,
+                pause: async () => undefined,
+                seek: async () => undefined,
+                setVolume: async () => undefined,
+                stop: async () => undefined,
+                subscribe: () => () => undefined,
+            },
+        };
+        registerStreamingProvider(provider);
+
+        const result = await resolvePlaylistAISuggestionsWithProviders(
+            [{ title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming" }],
+            [],
+            [],
+            "spotify",
+        );
+
+        expect(search).toHaveBeenCalledWith("Midnight City M83 Hurry Up, We're Dreaming", 10);
+        expect(result.tracks).toEqual([spotifyTrack]);
+        expect(result.unresolved).toEqual([]);
     });
 });

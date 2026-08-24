@@ -22,6 +22,30 @@ export interface OverlaySettingsConfig {
 
 export type RepeatMode = "off" | "all" | "one";
 
+export type MusicProviderId = "local" | "spotify" | "appleMusic";
+export type AITrackSource = "any" | MusicProviderId;
+
+export interface SpotifySettingsConfig {
+    enabled: boolean;
+    clientId: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: number;
+    displayName: string;
+    product: string;
+    codeVerifier: string;
+    codeState: string;
+}
+
+export interface AppleMusicSettingsConfig {
+    enabled: boolean;
+    developerToken: string;
+    userToken: string;
+    storefront: string;
+    userName: string;
+    subscription: string;
+}
+
 export interface PlaybackSettingsConfig {
     shuffle: boolean;
     repeatMode: RepeatMode;
@@ -84,6 +108,13 @@ export interface AppSettings {
     overlay: OverlaySettingsConfig;
     appearance: MusicAppearanceSettings;
     playback: PlaybackSettingsConfig;
+    providers: {
+        spotify: SpotifySettingsConfig;
+        appleMusic: AppleMusicSettingsConfig;
+    };
+    ai: {
+        source: AITrackSource;
+    };
     ui: UISettingsConfig;
     uniqueId: string;
     isAuthed: boolean;
@@ -193,6 +224,30 @@ export const settings$ = createObservableFile<AppSettings>({
             shuffle: false,
             repeatMode: "off",
         },
+        providers: {
+            spotify: {
+                enabled: false,
+                clientId: "",
+                accessToken: "",
+                refreshToken: "",
+                expiresAt: 0,
+                displayName: "",
+                product: "",
+                codeVerifier: "",
+                codeState: "",
+            },
+            appleMusic: {
+                enabled: false,
+                developerToken: "",
+                userToken: "",
+                storefront: "",
+                userName: "",
+                subscription: "",
+            },
+        },
+        ai: {
+            source: "any",
+        },
         ui: {
             playbackControlsEnabled: true,
             playback: {
@@ -220,4 +275,33 @@ export function ensureMusicAppearanceSettings() {
         settings$.appearance.set(normalized);
     }
     return normalized;
+}
+
+export function ensureMusicProviderSettings() {
+    if (!settings$.providers.peek()) {
+        settings$.providers.set({
+            spotify: {
+                enabled: false,
+                clientId: "",
+                accessToken: "",
+                refreshToken: "",
+                expiresAt: 0,
+                displayName: "",
+                product: "",
+                codeVerifier: "",
+                codeState: "",
+            },
+            appleMusic: {
+                enabled: false,
+                developerToken: "",
+                userToken: "",
+                storefront: "",
+                userName: "",
+                subscription: "",
+            },
+        });
+    }
+    if (!settings$.ai.peek()) {
+        settings$.ai.set({ source: "any" });
+    }
 }

@@ -1,0 +1,37 @@
+const unavailable = {
+    available: false,
+    reason: "Apple Music is unavailable in tests.",
+};
+
+const appleMusic = {
+    getAvailability: jest.fn(() => unavailable),
+    getDeveloperToken: jest.fn(async () => ""),
+    authorize: jest.fn(async () => ({
+        authorized: false,
+        status: "denied",
+        userToken: "",
+        storefront: "",
+        userName: "",
+        subscription: "",
+    })),
+    configure: jest.fn(async () => undefined),
+    logout: jest.fn(async () => undefined),
+    loadTrack: jest.fn(async () => undefined),
+    play: jest.fn(async () => undefined),
+    pause: jest.fn(async () => undefined),
+    seek: jest.fn(async () => undefined),
+    setVolume: jest.fn(async () => undefined),
+    stop: jest.fn(async () => undefined),
+    getPlaybackState: jest.fn(async () => ({
+        isPlaying: false,
+        positionSeconds: 0,
+        durationSeconds: 0,
+        artworkUrl: "",
+        isLoading: false,
+        error: "",
+    })),
+};
+
+module.exports = {
+    getAppleMusic: jest.fn(() => appleMusic),
+};
