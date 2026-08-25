@@ -7,7 +7,7 @@ import { Checkbox } from "../components/Checkbox";
 import { SettingsPage, SettingsRow, SettingsSection } from "./components";
 import { Icon } from "../systems/Icon";
 import { globalHotkeyStatus$ } from "../systems/GlobalHotkey";
-import { settings$ } from "../systems/Settings";
+import { AI_SOURCE_IDS, normalizeAISources, settings$, type MusicProviderId } from "../systems/Settings";
 import { state$ } from "../systems/State";
 import packageJson from "../../package.json";
 
@@ -23,6 +23,14 @@ export function GeneralSettingsContent() {
     const globalHotkeyEnabled = useValue(settings$.general.globalHotkeyEnabled);
     const globalHotkey = useValue(settings$.general.globalHotkey);
     const globalHotkeyError = useValue(globalHotkeyStatus$.error);
+    const defaultAISources = normalizeAISources(useValue(settings$.ai.defaultSources));
+
+    const toggleDefaultAISource = (source: MusicProviderId, checked: boolean) => {
+        const nextSources = checked
+            ? AI_SOURCE_IDS.filter((candidate) => candidate === source || defaultAISources.includes(candidate))
+            : defaultAISources.filter((candidate) => candidate !== source);
+        if (nextSources.length > 0) settings$.ai.defaultSources.set(nextSources);
+    };
 
     // const playlistStyleOptions = [
     //     { value: "compact", label: "Compact" },
@@ -55,6 +63,36 @@ export function GeneralSettingsContent() {
                     title="Show Titlebar on Hover"
                     description="Reveal macOS window controls when hovering near the top edge"
                     control={<Checkbox $checked={settings$.general.showTitleBarOnHover} />}
+                />
+            </SettingsSection>
+
+            <SettingsSection title="AI playlists">
+                <SettingsRow
+                    title="Default music sources"
+                    description="Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred."
+                    align="start"
+                    control={(
+                        <View className="w-44 gap-2">
+                            <Checkbox
+                                checked={defaultAISources.includes("local")}
+                                disabled={defaultAISources.length === 1 && defaultAISources[0] === "local"}
+                                label="Local Music"
+                                onChange={(checked) => toggleDefaultAISource("local", checked)}
+                            />
+                            <Checkbox
+                                checked={defaultAISources.includes("spotify")}
+                                disabled={defaultAISources.length === 1 && defaultAISources[0] === "spotify"}
+                                label="Spotify"
+                                onChange={(checked) => toggleDefaultAISource("spotify", checked)}
+                            />
+                            <Checkbox
+                                checked={defaultAISources.includes("appleMusic")}
+                                disabled={defaultAISources.length === 1 && defaultAISources[0] === "appleMusic"}
+                                label="Apple Music"
+                                onChange={(checked) => toggleDefaultAISource("appleMusic", checked)}
+                            />
+                        </View>
+                    )}
                 />
             </SettingsSection>
 

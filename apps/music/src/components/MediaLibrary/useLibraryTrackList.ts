@@ -485,7 +485,7 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
         let cancelled = false;
         const timeout = setTimeout(() => {
             providerSearch$.assign({ query, isLoading: true, error: null });
-            void searchProviders(query, "any", 20)
+            void searchProviders(query, ["spotify", "appleMusic"], 20)
                 .then((tracks) => {
                     if (!cancelled && providerSearch$.query.peek() === query) providerSearch$.tracks.set(tracks);
                 })

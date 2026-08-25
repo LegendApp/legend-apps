@@ -93,11 +93,29 @@ describe("resolvePlaylistAISuggestions", () => {
             [{ title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming" }],
             [],
             [],
-            "spotify",
+            ["spotify"],
         );
 
         expect(search).toHaveBeenCalledWith("Midnight City M83 Hurry Up, We're Dreaming", 10);
         expect(result.tracks).toEqual([spotifyTrack]);
         expect(result.unresolved).toEqual([]);
+    });
+
+    it("prefers a matching local copy even when searching streaming sources", async () => {
+        const localTrack = track({
+            filePath: "/music/midnight-city.mp3",
+            title: "Midnight City",
+            artist: "M83",
+            album: "Hurry Up, We're Dreaming",
+        });
+
+        const result = await resolvePlaylistAISuggestionsWithProviders(
+            [{ title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming" }],
+            [localTrack],
+            [],
+            ["spotify", "appleMusic"],
+        );
+
+        expect(result.tracks).toEqual([localTrack]);
     });
 });

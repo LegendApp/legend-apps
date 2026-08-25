@@ -23,7 +23,13 @@ export interface OverlaySettingsConfig {
 export type RepeatMode = "off" | "all" | "one";
 
 export type MusicProviderId = "local" | "spotify" | "appleMusic";
-export type AITrackSource = "any" | MusicProviderId;
+export const AI_SOURCE_IDS = ["local", "spotify", "appleMusic"] as const satisfies readonly MusicProviderId[];
+export type AITrackSources = MusicProviderId[];
+
+export interface AISettingsConfig {
+    defaultSources: AITrackSources;
+    playlistSourceOverrides: Record<string, AITrackSources>;
+}
 
 export interface SpotifySettingsConfig {
     enabled: boolean;
@@ -107,9 +113,7 @@ export interface AppSettings {
         spotify: SpotifySettingsConfig;
         appleMusic: AppleMusicSettingsConfig;
     };
-    ai: {
-        source: AITrackSource;
-    };
+    ai: AISettingsConfig;
     ui: UISettingsConfig;
     uniqueId: string;
     isAuthed: boolean;
@@ -236,7 +240,8 @@ export const settings$ = createObservableFile<AppSettings>({
             },
         },
         ai: {
-            source: "any",
+            defaultSources: [...AI_SOURCE_IDS],
+            playlistSourceOverrides: {},
         },
         ui: {
             playbackControlsEnabled: true,
@@ -286,7 +291,37 @@ export function ensureMusicProviderSettings() {
             },
         });
     }
-    if (!settings$.ai.peek()) {
-        settings$.ai.set({ source: "any" });
+    const currentAI = settings$.ai.peek() as unknown as {
+        defaultSources?: unknown;
+        playlistSourceOverrides?: unknown;
+        source?: unknown;
+    } | undefined;
+    const normalizedAI = normalizeAISettings(currentAI);
+    if (JSON.stringify(currentAI) !== JSON.stringify(normalizedAI)) {
+        settings$.ai.set(normalizedAI);
     }
+}
+
+export function normalizeAISources(value: unknown, fallback: readonly MusicProviderId[] = AI_SOURCE_IDS): AITrackSources {
+    if (!Array.isArray(value)) return [...fallback];
+    const sources = AI_SOURCE_IDS.filter((source) => value.includes(source));
+    return sources.length > 0 ? sources : [...fallback];
+}
+
+export function normalizeAISettings(value: unknown): AISettingsConfig {
+    const current = value && typeof value === "object" && !Array.isArray(value)
+        ? value as { defaultSources?: unknown; playlistSourceOverrides?: unknown; source?: unknown }
+        : undefined;
+    const legacyDefault = current?.source === "any" ? AI_SOURCE_IDS : [current?.source];
+    return {
+        defaultSources: normalizeAISources(current?.defaultSources ?? legacyDefault, AI_SOURCE_IDS),
+        playlistSourceOverrides: normalizePlaylistSourceOverrides(current?.playlistSourceOverrides),
+    };
+}
+
+function normalizePlaylistSourceOverrides(value: unknown): Record<string, AITrackSources> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value)
+        .map(([playlistId, sources]) => [playlistId, normalizeAISources(sources, [])] as const)
+        .filter(([, sources]) => sources.length > 0));
 }

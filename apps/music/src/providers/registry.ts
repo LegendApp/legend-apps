@@ -1,6 +1,6 @@
 import { observable } from "@legendapp/state";
 import type { LocalTrack } from "../systems/LocalMusicState";
-import type { AITrackSource, MusicProviderId } from "../systems/Settings";
+import type { MusicProviderId } from "../systems/Settings";
 import type { ProviderPlaylist, StreamingProvider } from "./types";
 
 const providers = new Map<Exclude<MusicProviderId, "local">, StreamingProvider>();
@@ -54,18 +54,19 @@ export function getProviderFixMessage(id: Exclude<MusicProviderId, "local">): st
     return status.error;
 }
 
-export function getAvailableSourceProviders(source: AITrackSource): StreamingProvider[] {
-    const candidates = source === "spotify" || source === "appleMusic"
-        ? [providers.get(source)].filter((provider): provider is StreamingProvider => Boolean(provider))
-        : Array.from(providers.values());
+export function getAvailableSourceProviders(sources: readonly MusicProviderId[]): StreamingProvider[] {
+    const candidates = sources
+        .filter((source): source is Exclude<MusicProviderId, "local"> => source !== "local")
+        .map((source) => providers.get(source))
+        .filter((provider): provider is StreamingProvider => Boolean(provider));
     return candidates.filter((provider) => {
         const status = provider.status$.peek();
         return status.enabled && status.authenticated;
     });
 }
 
-export async function searchProviders(query: string, source: AITrackSource, limit = 20): Promise<LocalTrack[]> {
-    const candidates = getAvailableSourceProviders(source);
+export async function searchProviders(query: string, sources: readonly MusicProviderId[], limit = 20): Promise<LocalTrack[]> {
+    const candidates = getAvailableSourceProviders(sources);
     if (candidates.length === 0) return [];
     const results = await Promise.allSettled(candidates.map((provider) => provider.search(query, limit)));
     const tracks = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);

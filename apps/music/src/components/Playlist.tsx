@@ -93,6 +93,7 @@ export function Playlist() {
     const isDefaultPlaylistSelected = localMusicState.isLocalFilesSelected;
     const queueAIPlaylist = useMemo<PlaylistAIContext>(
         () => ({
+            id: "queue",
             name: "Queue",
             trackPaths: queueTracks.map((track) => track.filePath),
             tracks: queueTracks.map((track) => ({

@@ -8,6 +8,7 @@ import type { LocalTrack } from "../../systems/LocalMusicState";
 import { getCodexAvailability } from "@legend-apps/codex";
 import { spotifyStatus$ } from "../../providers/spotify/provider";
 import { settings$ } from "../../systems/Settings";
+import { Checkbox } from "../Checkbox";
 
 jest.mock("@legend-apps/codex", () => ({
     __esModule: true,
@@ -52,6 +53,7 @@ function createTrack(id: string): LocalTrack {
 
 function createPlaylist(overrides: Partial<PlaylistAIContext> = {}): PlaylistAIContext {
     return {
+        id: "road-mix",
         name: "Road Mix",
         trackPaths: ["/music/a.mp3"],
         tracks: [{ id: "a", title: "Track a", artist: "Test Artist", filePath: "/music/a.mp3", duration: 60 }],
@@ -71,7 +73,7 @@ function getText(node: ReactTestInstance | string): string {
 function findButton(renderer: ReactTestRenderer, text: string): ReactTestInstance {
     const button = renderer.root
         .findAll((node) => (node.type as unknown) === "Pressable")
-        .find((node) => getText(node).includes(text));
+        .find((node) => getText(node).includes(text) || String(node.props.accessibilityLabel ?? "").includes(text));
 
     if (!button) {
         throw new Error(`Button not found: ${text}`);
@@ -117,7 +119,8 @@ async function renderAIButtons({
 describe("AIButtons", () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        settings$.ai.source.set("any");
+        settings$.ai.defaultSources.set(["local", "spotify", "appleMusic"]);
+        settings$.ai.playlistSourceOverrides.set({});
         spotifyStatus$.assign({ enabled: false, authenticated: false, error: null });
         mockGetCodexAvailability.mockResolvedValue({
             available: true,
@@ -192,7 +195,7 @@ describe("AIButtons", () => {
         expect(findButton(renderer, "Auto").props.disabled).toBe(true);
         expect(findButton(renderer, "Prompt").props.disabled).toBe(true);
         expect(getText(renderer.root)).toContain(
-            "No music sources are available. Add a local library or connect Spotify or Apple Music in Settings.",
+            "None of the selected music sources are available. Add a local library, connect a selected service, or choose other sources.",
         );
 
         act(() => {
@@ -201,7 +204,7 @@ describe("AIButtons", () => {
     });
 
     it("shows how to connect a selected streaming source", async () => {
-        settings$.ai.source.set("spotify");
+        settings$.ai.defaultSources.set(["spotify"]);
         const renderer = await renderAIButtons();
 
         expect(findButton(renderer, "Auto").props.disabled).toBe(true);
@@ -240,14 +243,43 @@ describe("AIButtons", () => {
     it("exposes the AI controls as labeled buttons", async () => {
         const renderer = await renderAIButtons();
 
-        expect(findButton(renderer, "Auto").props).toMatchObject({
-            accessibilityLabel: "Auto",
+        const autoButton = findButton(renderer, "Auto");
+        const promptButton = findButton(renderer, "Prompt");
+        expect(autoButton.props).toMatchObject({
+            accessibilityLabel: "Auto generate",
             accessibilityRole: "button",
         });
-        expect(findButton(renderer, "Prompt").props).toMatchObject({
-            accessibilityLabel: "Prompt",
+        expect(promptButton.props).toMatchObject({
+            accessibilityLabel: "Prompt AI",
             accessibilityRole: "button",
         });
+        expect(getText(autoButton)).toBe("");
+        expect(getText(promptButton)).toBe("");
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
+    it("stores and clears a playlist-specific source override", async () => {
+        const renderer = await renderAIButtons();
+
+        act(() => {
+            findButton(renderer, "AI sources").props.onPress({ nativeEvent: { button: 0 } });
+        });
+        const spotifyChoice = renderer.root.findAllByType(Checkbox)
+            .find((checkbox) => checkbox.props.label === "Spotify");
+        expect(spotifyChoice).toBeDefined();
+
+        act(() => {
+            spotifyChoice?.props.onChange(false);
+        });
+        expect(settings$.ai.playlistSourceOverrides["road-mix"].peek()).toEqual(["local", "appleMusic"]);
+
+        act(() => {
+            findButton(renderer, "Use defaults").props.onPress({ nativeEvent: { button: 0 } });
+        });
+        expect(settings$.ai.playlistSourceOverrides["road-mix"].peek()).toBeUndefined();
 
         act(() => {
             renderer.unmount();
@@ -293,6 +325,7 @@ describe("AIButtons", () => {
         expect(mockGeneratePlaylistExtension).toHaveBeenCalledWith(
             expect.objectContaining({
                 playlist: expect.objectContaining({ name: "Queue", trackPaths: [] }),
+                sources: ["local", "spotify", "appleMusic"],
                 userPrompt: "more energy",
             }),
         );

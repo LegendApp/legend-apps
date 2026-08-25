@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import { Button } from "./Button";
+import { Checkbox } from "./Checkbox";
 import { useToast } from "./Toast";
 import { generatePlaylistExtension } from "../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
@@ -10,7 +11,13 @@ import type { LocalTrack } from "../systems/LocalMusicState";
 import { useValue } from "@legendapp/state/react";
 import { spotifyStatus$ } from "../providers/spotify/provider";
 import { appleMusicStatus$ } from "../providers/appleMusic/provider";
-import { settings$, type AITrackSource } from "../systems/Settings";
+import {
+    AI_SOURCE_IDS,
+    normalizeAISources,
+    settings$,
+    type AITrackSources,
+    type MusicProviderId,
+} from "../systems/Settings";
 
 export type AIButtonsAddResult = {
     addedCount: number;
@@ -31,21 +38,72 @@ type AIToolState =
     | { status: "available" }
     | { message: string; status: "unavailable" };
 
+const SOURCE_LABELS: Record<MusicProviderId, string> = {
+    local: "Local Music",
+    spotify: "Spotify",
+    appleMusic: "Apple Music",
+};
+
+function sourceSummary(sources: readonly MusicProviderId[]): string {
+    return sources.map((source) => SOURCE_LABELS[source].replace(" Music", "")).join(" + ");
+}
+
+function SourceChoices({
+    appleMusicConnected,
+    libraryCount,
+    onToggle,
+    sources,
+    spotifyConnected,
+}: {
+    appleMusicConnected: boolean;
+    libraryCount: number;
+    onToggle: (source: MusicProviderId, checked: boolean) => void;
+    sources: readonly MusicProviderId[];
+    spotifyConnected: boolean;
+}) {
+    const details: Record<MusicProviderId, string> = {
+        local: `${libraryCount.toLocaleString()} ${libraryCount === 1 ? "song" : "songs"}`,
+        spotify: spotifyConnected ? "Connected" : "Set up in Settings → Spotify",
+        appleMusic: appleMusicConnected ? "Connected" : "Set up in Settings → Apple Music",
+    };
+
+    return (
+        <View className="gap-2">
+            {AI_SOURCE_IDS.map((source) => (
+                <View key={source} className="rounded-md bg-white/5 px-2 py-1.5">
+                    <Checkbox
+                        checked={sources.includes(source)}
+                        label={SOURCE_LABELS[source]}
+                        onChange={(checked) => onToggle(source, checked)}
+                    />
+                    <Text className="ml-7 text-xs text-text-tertiary">{details[source]}</Text>
+                </View>
+            ))}
+        </View>
+    );
+}
+
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
 
 export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
     const showToast = useToast();
+    const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false);
     const [isPromptOpen, setIsPromptOpen] = useState(false);
     const [prompt, setPrompt] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationError, setGenerationError] = useState<string | null>(null);
     const [aiToolState, setAIToolState] = useState<AIToolState>({ status: "checking" });
-    const configuredSource = useValue(settings$.ai.source) ?? "any";
+    const defaultSources = useValue(settings$.ai.defaultSources);
+    const overrideSources = useValue(settings$.ai.playlistSourceOverrides[playlist.id]);
     const spotifyStatus = useValue(spotifyStatus$);
     const appleMusicStatus = useValue(appleMusicStatus$);
-    const source: AITrackSource = configuredSource;
+    const hasSourceOverride = Array.isArray(overrideSources) && overrideSources.length > 0;
+    const sources: AITrackSources = normalizeAISources(
+        hasSourceOverride ? overrideSources : defaultSources,
+        AI_SOURCE_IDS,
+    );
     const trimmedPrompt = prompt.trim();
     let unavailableMessage: string | null = null;
     if (!canUseAI) {
@@ -54,19 +112,18 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
         unavailableMessage = "Checking Codex…";
     } else if (aiToolState.status === "unavailable") {
         unavailableMessage = aiToolState.message;
-    } else if (source === "local" && libraryTracks.length === 0) {
+    } else if (sources.length === 1 && sources[0] === "local" && libraryTracks.length === 0) {
         unavailableMessage = "No local songs are available. Add or re-authorize a folder in Settings → Library, then rescan.";
-    } else if (source === "spotify" && (!spotifyStatus.enabled || !spotifyStatus.authenticated)) {
+    } else if (sources.length === 1 && sources[0] === "spotify" && (!spotifyStatus.enabled || !spotifyStatus.authenticated)) {
         unavailableMessage = "Connect Spotify in Settings → Spotify, then try again.";
-    } else if (source === "appleMusic" && (!appleMusicStatus.enabled || !appleMusicStatus.authenticated)) {
+    } else if (sources.length === 1 && sources[0] === "appleMusic" && (!appleMusicStatus.enabled || !appleMusicStatus.authenticated)) {
         unavailableMessage = "Connect Apple Music in Settings → Apple Music, then try again.";
     } else if (
-        source === "any"
-        && libraryTracks.length === 0
-        && !spotifyStatus.authenticated
-        && !appleMusicStatus.authenticated
+        (!sources.includes("local") || libraryTracks.length === 0)
+        && (!sources.includes("spotify") || !spotifyStatus.enabled || !spotifyStatus.authenticated)
+        && (!sources.includes("appleMusic") || !appleMusicStatus.enabled || !appleMusicStatus.authenticated)
     ) {
-        unavailableMessage = "No music sources are available. Add a local library or connect Spotify or Apple Music in Settings.";
+        unavailableMessage = "None of the selected music sources are available. Add a local library, connect a selected service, or choose other sources.";
     }
 
     const canGenerate = unavailableMessage === null && !isGenerating;
@@ -122,7 +179,7 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 const result = await generatePlaylistExtension({
                     libraryTracks,
                     playlist,
-                    source,
+                    sources,
                     userPrompt,
                 });
                 const addResult = await onAddTracks(result.tracks);
@@ -163,8 +220,23 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
             }
             setIsGenerating(false);
         },
-        [canGenerate, libraryTracks, onAddTracks, playlist, source],
+        [canGenerate, libraryTracks, onAddTracks, playlist, showToast, sources],
     );
+
+    const handleSourceToggle = useCallback((source: MusicProviderId, checked: boolean) => {
+        const nextSources = checked
+            ? AI_SOURCE_IDS.filter((candidate) => candidate === source || sources.includes(candidate))
+            : sources.filter((candidate) => candidate !== source);
+        if (nextSources.length === 0) {
+            showToast("Choose at least one AI music source.", "error");
+            return;
+        }
+        settings$.ai.playlistSourceOverrides[playlist.id].set(nextSources);
+    }, [playlist.id, showToast, sources]);
+
+    const handleUseDefaults = useCallback(() => {
+        settings$.ai.playlistSourceOverrides[playlist.id].delete();
+    }, [playlist.id]);
 
     const handleSubmitPrompt = useCallback(() => {
         if (!trimmedPrompt) {
@@ -192,7 +264,7 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
         }
 
         void handleGenerate();
-    }, [handleGenerate, playlist.trackPaths.length]);
+    }, [handleGenerate, playlist.trackPaths.length, showToast]);
 
     return (
         <>
@@ -204,34 +276,79 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 ) : (
                     <View className="flex-1" />
                 )}
-                <Text className="text-[10px] font-medium text-text-tertiary">
-                    {source === "any" ? "Any source" : source === "local" ? "Local" : source === "spotify" ? "Spotify" : "Apple Music"}
-                </Text>
                 <Button
+                    icon="slider.horizontal.3"
+                    iconSize={12}
                     size="small"
                     variant="secondary"
-                    accessibilityLabel="Auto"
+                    accessibilityLabel={`AI sources: ${sourceSummary(sources)}`}
+                    accessibilityRole="button"
+                    tooltip="Choose AI music sources"
+                    onClick={() => setIsSourcePickerOpen(true)}
+                >
+                    <Text className="text-xs font-medium text-text-secondary" numberOfLines={1}>
+                        {hasSourceOverride ? sourceSummary(sources) : `Default: ${sourceSummary(sources)}`}
+                    </Text>
+                </Button>
+                <Button
+                    size="small"
+                    variant="icon-bg"
+                    icon="wand.and.stars"
+                    accessibilityLabel="Auto generate"
                     accessibilityRole="button"
                     accessibilityHint={autoDisabledReason}
+                    tooltip={autoDisabledReason ?? "Auto generate from this playlist"}
                     disabled={!canAutoGenerate}
                     className={!canAutoGenerate ? "opacity-50" : undefined}
                     onClick={handleAutoGenerate}
-                >
-                    {isGenerating ? "Generating..." : "Auto"}
-                </Button>
+                />
                 <Button
                     size="small"
-                    variant="secondary"
-                    accessibilityLabel="Prompt"
+                    variant="icon-bg"
+                    icon="text.bubble"
+                    accessibilityLabel="Prompt AI"
                     accessibilityRole="button"
                     accessibilityHint={unavailableMessage ?? undefined}
+                    tooltip={unavailableMessage ?? "Prompt AI to add songs"}
                     disabled={!canPromptGenerate}
                     className={!canPromptGenerate ? "opacity-50" : undefined}
                     onClick={() => setIsPromptOpen(true)}
-                >
-                    Prompt
-                </Button>
+                />
             </View>
+            {isSourcePickerOpen ? (
+                <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
+                    <View className="w-[380px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
+                        <View className="gap-1">
+                            <Text className="text-base font-semibold text-text-primary">AI music sources</Text>
+                            <Text className="text-xs leading-relaxed text-text-secondary">
+                                Choose where AI can find songs for {playlist.name}. A matching local copy is always preferred.
+                            </Text>
+                        </View>
+                        <SourceChoices
+                            appleMusicConnected={appleMusicStatus.enabled && appleMusicStatus.authenticated}
+                            libraryCount={libraryTracks.length}
+                            onToggle={handleSourceToggle}
+                            sources={sources}
+                            spotifyConnected={spotifyStatus.enabled && spotifyStatus.authenticated}
+                        />
+                        <View className="flex-row items-center justify-between gap-3">
+                            <View className="min-w-0 flex-1">
+                                <Text className="text-xs text-text-tertiary">
+                                    {hasSourceOverride ? "This playlist overrides your AI defaults." : "Using your AI defaults."}
+                                </Text>
+                            </View>
+                            {hasSourceOverride ? (
+                                <Button size="small" variant="secondary" onClick={handleUseDefaults}>
+                                    Use defaults
+                                </Button>
+                            ) : null}
+                            <Button size="small" variant="accent" onClick={() => setIsSourcePickerOpen(false)}>
+                                Done
+                            </Button>
+                        </View>
+                    </View>
+                </View>
+            ) : null}
             {isPromptOpen ? (
                 <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
                     <View className="w-[440px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
@@ -252,22 +369,22 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                         />
                         <View className="gap-2">
                             <Text className="text-xs font-medium text-text-secondary">Find tracks in</Text>
-                            <View className="flex-row gap-2">
-                                {([
-                                    ["any", "Any"],
-                                    ["local", "Local"],
-                                    ["spotify", "Spotify"],
-                                    ["appleMusic", "Apple Music"],
-                                ] as const).map(([value, label]) => (
-                                    <Button
-                                        key={value}
-                                        size="small"
-                                        variant={source === value ? "accent" : "secondary"}
-                                        onClick={() => settings$.ai.source.set(value)}
-                                    >
-                                        {label}
+                            <SourceChoices
+                                appleMusicConnected={appleMusicStatus.enabled && appleMusicStatus.authenticated}
+                                libraryCount={libraryTracks.length}
+                                onToggle={handleSourceToggle}
+                                sources={sources}
+                                spotifyConnected={spotifyStatus.enabled && spotifyStatus.authenticated}
+                            />
+                            <View className="flex-row items-center justify-between gap-2">
+                                <Text className="min-w-0 flex-1 text-xs text-text-tertiary">
+                                    A matching local copy is always preferred.
+                                </Text>
+                                {hasSourceOverride ? (
+                                    <Button size="small" variant="secondary" onClick={handleUseDefaults}>
+                                        Use defaults
                                     </Button>
-                                ))}
+                                ) : null}
                             </View>
                             {unavailableMessage ? (
                                 <Text className="text-xs leading-relaxed text-red-300">{unavailableMessage}</Text>

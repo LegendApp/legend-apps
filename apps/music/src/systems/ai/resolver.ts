@@ -1,8 +1,8 @@
 import type { LocalTrack } from "../LocalMusicState";
 import { normalizeTrackPath } from "./libraryCatalog";
 import type { PlaylistAISuggestion } from "./parser";
-import { getProviderFixMessage, searchProviders } from "../../providers/registry";
-import type { AITrackSource } from "../Settings";
+import { getAvailableSourceProviders, getProviderFixMessage, searchProviders } from "../../providers/registry";
+import type { AITrackSources, MusicProviderId } from "../Settings";
 
 export type ResolvePlaylistAISuggestionsResult = {
     tracks: LocalTrack[];
@@ -90,14 +90,16 @@ export async function resolvePlaylistAISuggestionsWithProviders(
     suggestions: PlaylistAISuggestion[],
     libraryTracks: LocalTrack[],
     existingPlaylistPaths: string[] = [],
-    source: AITrackSource = "any",
+    sources: AITrackSources = ["local"],
 ): Promise<ResolvePlaylistAISuggestionsResult> {
-    const localTracks = source === "spotify" || source === "appleMusic" ? [] : libraryTracks;
-    const local = resolvePlaylistAISuggestions(suggestions, localTracks, existingPlaylistPaths);
-    if (source === "local") return local;
+    const local = resolvePlaylistAISuggestions(suggestions, libraryTracks, existingPlaylistPaths);
+    const streamingSources = sources.filter(
+        (source): source is Exclude<MusicProviderId, "local"> => source !== "local",
+    );
+    if (streamingSources.length === 0) return local;
 
-    if (source === "spotify" || source === "appleMusic") {
-        const fix = getProviderFixMessage(source);
+    if (getAvailableSourceProviders(streamingSources).length === 0) {
+        const fix = streamingSources.map(getProviderFixMessage).find(Boolean);
         if (fix) throw new Error(fix);
     }
 
@@ -112,7 +114,7 @@ export async function resolvePlaylistAISuggestionsWithProviders(
             unresolved.push(suggestion);
             continue;
         }
-        const candidates = await searchProviders(query, source, 10);
+        const candidates = await searchProviders(query, streamingSources, 10);
         const ranked = candidates
             .map((track) => ({ track, score: matchScore(suggestion, track) }))
             .filter(({ score }) => score >= 70)

@@ -1,5 +1,8 @@
 import {
+    AI_SOURCE_IDS,
     defaultMusicBackground,
+    normalizeAISettings,
+    normalizeAISources,
     normalizeMusicAppearanceSettings,
 } from "../src/systems/Settings";
 import {
@@ -101,5 +104,22 @@ describe("music appearance themes", () => {
                 theme: "dark",
             }).background.color,
         ).toBe(defaultMusicBackground.color);
+    });
+});
+
+describe("AI music sources", () => {
+    it("normalizes multiple sources in stable provider order", () => {
+        expect(normalizeAISources(["appleMusic", "local", "local"])).toEqual(["local", "appleMusic"]);
+    });
+
+    it("falls back to every source for a missing legacy selection", () => {
+        expect(normalizeAISources(undefined)).toEqual(AI_SOURCE_IDS);
+    });
+
+    it("migrates a legacy single-source preference", () => {
+        expect(normalizeAISettings({ source: "spotify" })).toEqual({
+            defaultSources: ["spotify"],
+            playlistSourceOverrides: {},
+        });
     });
 });
