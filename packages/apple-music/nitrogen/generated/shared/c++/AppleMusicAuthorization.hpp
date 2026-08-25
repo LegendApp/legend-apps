@@ -39,15 +39,15 @@ namespace margelo::nitro::legendapps::applemusic {
    */
   struct AppleMusicAuthorization final {
   public:
-    std::string developerToken     SWIFT_PRIVATE;
-    std::string userToken     SWIFT_PRIVATE;
+    bool authorized     SWIFT_PRIVATE;
+    std::string status     SWIFT_PRIVATE;
     std::string storefront     SWIFT_PRIVATE;
     std::string userName     SWIFT_PRIVATE;
     std::string subscription     SWIFT_PRIVATE;
 
   public:
     AppleMusicAuthorization() = default;
-    explicit AppleMusicAuthorization(std::string developerToken, std::string userToken, std::string storefront, std::string userName, std::string subscription): developerToken(developerToken), userToken(userToken), storefront(storefront), userName(userName), subscription(subscription) {}
+    explicit AppleMusicAuthorization(bool authorized, std::string status, std::string storefront, std::string userName, std::string subscription): authorized(authorized), status(status), storefront(storefront), userName(userName), subscription(subscription) {}
 
   public:
     friend bool operator==(const AppleMusicAuthorization& lhs, const AppleMusicAuthorization& rhs) = default;
@@ -63,8 +63,8 @@ namespace margelo::nitro {
     static inline margelo::nitro::legendapps::applemusic::AppleMusicAuthorization fromJSI(jsi::Runtime& runtime, const jsi::Value& arg) {
       jsi::Object obj = arg.asObject(runtime);
       return margelo::nitro::legendapps::applemusic::AppleMusicAuthorization(
-        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "developerToken"))),
-        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "userToken"))),
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "authorized"))),
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "status"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "storefront"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "userName"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "subscription")))
@@ -72,8 +72,8 @@ namespace margelo::nitro {
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::applemusic::AppleMusicAuthorization& arg) {
       jsi::Object obj(runtime);
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "developerToken"), JSIConverter<std::string>::toJSI(runtime, arg.developerToken));
-      obj.setProperty(runtime, PropNameIDCache::get(runtime, "userToken"), JSIConverter<std::string>::toJSI(runtime, arg.userToken));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "authorized"), JSIConverter<bool>::toJSI(runtime, arg.authorized));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "status"), JSIConverter<std::string>::toJSI(runtime, arg.status));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "storefront"), JSIConverter<std::string>::toJSI(runtime, arg.storefront));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "userName"), JSIConverter<std::string>::toJSI(runtime, arg.userName));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "subscription"), JSIConverter<std::string>::toJSI(runtime, arg.subscription));
@@ -87,8 +87,8 @@ namespace margelo::nitro {
       if (!nitro::isPlainObject(runtime, obj)) {
         return false;
       }
-      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "developerToken")))) return false;
-      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "userToken")))) return false;
+      if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "authorized")))) return false;
+      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "status")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "storefront")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "userName")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "subscription")))) return false;

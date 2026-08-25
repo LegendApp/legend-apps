@@ -14,10 +14,10 @@
 
 namespace margelo::nitro::legendapps::applemusic::bridge::swift {
 
-  // pragma MARK: std::function<void(const std::string& /* result */)>
-  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = RNAppleMusic::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const std::string& result) mutable -> void {
+  // pragma MARK: std::function<void(const AppleMusicAuthorization& /* result */)>
+  Func_void_AppleMusicAuthorization create_Func_void_AppleMusicAuthorization(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = RNAppleMusic::Func_void_AppleMusicAuthorization::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const AppleMusicAuthorization& result) mutable -> void {
       swiftClosure.call(result);
     };
   }
@@ -30,10 +30,10 @@ namespace margelo::nitro::legendapps::applemusic::bridge::swift {
     };
   }
 
-  // pragma MARK: std::function<void(const AppleMusicAuthorization& /* result */)>
-  Func_void_AppleMusicAuthorization create_Func_void_AppleMusicAuthorization(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = RNAppleMusic::Func_void_AppleMusicAuthorization::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const AppleMusicAuthorization& result) mutable -> void {
+  // pragma MARK: std::function<void(const std::string& /* result */)>
+  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = RNAppleMusic::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& result) mutable -> void {
       swiftClosure.call(result);
     };
   }

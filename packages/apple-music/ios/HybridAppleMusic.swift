@@ -5,8 +5,6 @@ import MusicKit
 import NitroModules
 
 final class HybridAppleMusic: HybridAppleMusicSpec {
-  private var developerToken: String?
-  private var userToken: String?
   private var currentTrackId: String?
   private var currentArtworkUrl: String?
   private var currentDurationSeconds = 0.0
@@ -26,10 +24,11 @@ final class HybridAppleMusic: HybridAppleMusicSpec {
     return AppleMusicAvailability(available: true, message: "Apple Music is available.")
   }
 
-  func getDeveloperToken() throws -> Promise<String> {
+  func getAuthorization() throws -> Promise<AppleMusicAuthorization> {
     Promise.async { @MainActor [weak self] in
       guard let self else { throw AppleMusicError.unavailable }
-      return try await self.resolveDeveloperToken(provided: nil)
+      guard #available(macOS 12.0, *) else { throw AppleMusicError.unsupported }
+      return try await self.authorizationDetails(status: MusicAuthorization.currentStatus)
     }
   }
 
@@ -43,35 +42,24 @@ final class HybridAppleMusic: HybridAppleMusicSpec {
         throw AppleMusicError.authorizationDenied
       }
 
-      let developerToken = try await self.resolveDeveloperToken(provided: nil)
-      let userToken: String
-      do {
-        userToken = try await MusicUserTokenProvider().userToken(for: developerToken, options: [])
-      } catch {
-        throw AppleMusicError.actionFailed(
-          "Apple Music could not create a user token. Enable MusicKit for this app's App ID, sign with that Apple Developer team, then try again. \(error.localizedDescription)"
-        )
-      }
-
-      self.developerToken = developerToken
-      self.userToken = userToken
-      let storefront = try await self.fetchStorefront(developerToken: developerToken, userToken: userToken) ?? ""
-      let subscription = await self.fetchSubscriptionLabel() ?? ""
-      return AppleMusicAuthorization(
-        developerToken: developerToken,
-        userToken: userToken,
-        storefront: storefront,
-        userName: "Apple Music",
-        subscription: subscription
-      )
+      return try await self.authorizationDetails(status: status)
     }
   }
 
-  func configure(developerToken: String, userToken: String) throws -> Promise<Void> {
+  func request(path: String) throws -> Promise<String> {
     Promise.async { @MainActor [weak self] in
       guard let self else { throw AppleMusicError.unavailable }
-      self.developerToken = try await self.resolveDeveloperToken(provided: developerToken)
-      self.userToken = userToken.isEmpty ? nil : userToken
+      guard #available(macOS 12.0, *) else { throw AppleMusicError.unsupported }
+      guard MusicAuthorization.currentStatus == .authorized else {
+        throw AppleMusicError.authorizationDenied
+      }
+      let response = try await self.musicData(path: path)
+      guard let json = String(data: response.data, encoding: .utf8) else {
+        throw AppleMusicError.actionFailed(
+          "Apple Music returned an unreadable response. Check your connection and try again."
+        )
+      }
+      return json
     }
   }
 
@@ -81,8 +69,6 @@ final class HybridAppleMusic: HybridAppleMusicSpec {
       if #available(macOS 14.0, *) {
         ApplicationMusicPlayer.shared.stop()
       }
-      self.developerToken = nil
-      self.userToken = nil
       self.resetTrackState()
     }
   }
@@ -204,38 +190,58 @@ final class HybridAppleMusic: HybridAppleMusicSpec {
 
   @available(macOS 12.0, *)
   @MainActor
-  private func resolveDeveloperToken(provided: String?) async throws -> String {
-    if let provided = provided?.trimmingCharacters(in: .whitespacesAndNewlines), !provided.isEmpty {
-      developerToken = provided
-      return provided
-    }
-    if let cached = developerToken, !cached.isEmpty {
-      return cached
+  private func authorizationDetails(status: MusicAuthorization.Status) async throws -> AppleMusicAuthorization {
+    guard status == .authorized else {
+      return AppleMusicAuthorization(
+        authorized: false,
+        status: status.rawValue,
+        storefront: "",
+        userName: "",
+        subscription: ""
+      )
     }
 
-    do {
-      let tokenProvider = DefaultMusicTokenProvider()
-      MusicDataRequest.tokenProvider = tokenProvider
-      let token = try await tokenProvider.developerToken(options: [])
-      developerToken = token
-      return token
-    } catch {
-      throw AppleMusicError.developerTokenFailure(error)
-    }
+    let storefront = try await fetchStorefront() ?? ""
+    let subscription = await fetchSubscriptionLabel() ?? ""
+    return AppleMusicAuthorization(
+      authorized: true,
+      status: status.rawValue,
+      storefront: storefront,
+      userName: "Apple Music",
+      subscription: subscription
+    )
   }
 
   @available(macOS 12.0, *)
   @MainActor
-  private func fetchStorefront(developerToken: String, userToken: String) async throws -> String? {
-    guard let url = URL(string: "https://api.music.apple.com/v1/me/storefront") else { return nil }
-    var request = URLRequest(url: url)
-    request.addValue("Bearer \(developerToken)", forHTTPHeaderField: "Authorization")
-    request.addValue(userToken, forHTTPHeaderField: "Music-User-Token")
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
-    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+  private func fetchStorefront() async throws -> String? {
+    let response = try await musicData(path: "/v1/me/storefront")
+    let json = try JSONSerialization.jsonObject(with: response.data) as? [String: Any]
     let items = json?["data"] as? [[String: Any]]
     return items?.first?["id"] as? String
+  }
+
+  @available(macOS 12.0, *)
+  @MainActor
+  private func musicData(path: String) async throws -> MusicDataResponse {
+    let url: URL?
+    if path.hasPrefix("https://") {
+      url = URL(string: path)
+    } else if path.hasPrefix("/v1/") {
+      url = URL(string: "https://api.music.apple.com\(path)")
+    } else {
+      url = nil
+    }
+    guard let url, url.scheme == "https", url.host == "api.music.apple.com" else {
+      throw AppleMusicError.invalidRequest
+    }
+
+    MusicDataRequest.tokenProvider = DefaultMusicTokenProvider()
+    do {
+      return try await MusicDataRequest(urlRequest: URLRequest(url: url)).response()
+    } catch {
+      throw AppleMusicError.dataRequestFailure(error)
+    }
   }
 
   @available(macOS 12.0, *)
@@ -306,12 +312,34 @@ private enum AppleMusicError {
   static let missingTrack = RuntimeError(
     "This Apple Music track is missing an ID. Search for it again, then retry playback."
   )
+  static let invalidRequest = RuntimeError(
+    "Apple Music rejected an invalid catalog request. Search for the item again, then retry."
+  )
 
   static func actionFailed(_ message: String) -> RuntimeError {
     RuntimeError(message)
   }
 
-  static func developerTokenFailure(_ error: Error) -> RuntimeError {
+  static func dataRequestFailure(_ error: Error) -> RuntimeError {
+    if let requestError = error as? MusicDataRequest.Error {
+      switch requestError.status {
+      case 401, 403:
+        return RuntimeError(
+          "Apple Music authorization expired. Reconnect Apple Music in Settings → Apple Music, then try again."
+        )
+      case 404:
+        return RuntimeError(
+          "Apple Music could not find that item in your storefront. Search for it again, then retry."
+        )
+      case 429:
+        return RuntimeError(
+          "Apple Music is rate-limiting requests. Wait a minute, then try again."
+        )
+      default:
+        break
+      }
+    }
+
     let bundleId = Bundle.main.bundleIdentifier ?? "this app's bundle ID"
     let details = errorDetails(error)
     if details.localizedCaseInsensitiveContains("client not found") || details.contains("40402") {
@@ -321,7 +349,7 @@ private enum AppleMusicError {
     }
 
     return RuntimeError(
-      "Apple Music could not create a developer token for \(bundleId). Confirm MusicKit is enabled for that exact App ID, sign Legend Music with the same Apple Developer team, restart the app, and try again. \(error.localizedDescription)"
+      "Apple Music could not finish the request. Check your internet connection and subscription, then try again. If this is the first connection for \(bundleId), confirm MusicKit is enabled for that exact App ID and restart Legend Music. \(error.localizedDescription)"
     )
   }
 

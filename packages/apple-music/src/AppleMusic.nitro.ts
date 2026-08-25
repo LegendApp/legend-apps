@@ -6,8 +6,8 @@ export interface AppleMusicAvailability {
 }
 
 export interface AppleMusicAuthorization {
-  developerToken: string;
-  userToken: string;
+  authorized: boolean;
+  status: string;
   storefront: string;
   userName: string;
   subscription: string;
@@ -26,9 +26,9 @@ export interface AppleMusicPlaybackState {
 
 export interface AppleMusic extends HybridObject<{ ios: "swift" }> {
   getAvailability(): AppleMusicAvailability;
-  getDeveloperToken(): Promise<string>;
+  getAuthorization(): Promise<AppleMusicAuthorization>;
   authorize(): Promise<AppleMusicAuthorization>;
-  configure(developerToken: string, userToken: string): Promise<void>;
+  request(path: string): Promise<string>;
   logout(): Promise<void>;
   loadTrack(trackId: string, startPositionSeconds: number): Promise<void>;
   play(): Promise<void>;

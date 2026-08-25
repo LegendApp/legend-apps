@@ -21,8 +21,8 @@ namespace margelo::nitro::legendapps::applemusic { struct AppleMusicPlaybackStat
 
 #include "AppleMusicAvailability.hpp"
 #include <string>
-#include <NitroModules/Promise.hpp>
 #include "AppleMusicAuthorization.hpp"
+#include <NitroModules/Promise.hpp>
 #include "AppleMusicPlaybackState.hpp"
 
 #include "RNAppleMusic-Swift-Cxx-Umbrella.hpp"
@@ -83,8 +83,8 @@ namespace margelo::nitro::legendapps::applemusic {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<std::string>> getDeveloperToken() override {
-      auto __result = _swiftPart.getDeveloperToken();
+    inline std::shared_ptr<Promise<AppleMusicAuthorization>> getAuthorization() override {
+      auto __result = _swiftPart.getAuthorization();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }
@@ -99,8 +99,8 @@ namespace margelo::nitro::legendapps::applemusic {
       auto __value = std::move(__result.value());
       return __value;
     }
-    inline std::shared_ptr<Promise<void>> configure(const std::string& developerToken, const std::string& userToken) override {
-      auto __result = _swiftPart.configure(developerToken, userToken);
+    inline std::shared_ptr<Promise<std::string>> request(const std::string& path) override {
+      auto __result = _swiftPart.request(path);
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

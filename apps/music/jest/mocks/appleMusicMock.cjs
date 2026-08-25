@@ -5,16 +5,21 @@ const unavailable = {
 
 const appleMusic = {
     getAvailability: jest.fn(() => unavailable),
-    getDeveloperToken: jest.fn(async () => ""),
-    authorize: jest.fn(async () => ({
+    getAuthorization: jest.fn(async () => ({
         authorized: false,
         status: "denied",
-        userToken: "",
         storefront: "",
         userName: "",
         subscription: "",
     })),
-    configure: jest.fn(async () => undefined),
+    authorize: jest.fn(async () => ({
+        authorized: false,
+        status: "denied",
+        storefront: "",
+        userName: "",
+        subscription: "",
+    })),
+    request: jest.fn(async () => "{}"),
     logout: jest.fn(async () => undefined),
     loadTrack: jest.fn(async () => undefined),
     play: jest.fn(async () => undefined),

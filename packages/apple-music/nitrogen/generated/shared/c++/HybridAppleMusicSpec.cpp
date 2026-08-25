@@ -15,9 +15,9 @@ namespace margelo::nitro::legendapps::applemusic {
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("getAvailability", &HybridAppleMusicSpec::getAvailability);
-      prototype.registerHybridMethod("getDeveloperToken", &HybridAppleMusicSpec::getDeveloperToken);
+      prototype.registerHybridMethod("getAuthorization", &HybridAppleMusicSpec::getAuthorization);
       prototype.registerHybridMethod("authorize", &HybridAppleMusicSpec::authorize);
-      prototype.registerHybridMethod("configure", &HybridAppleMusicSpec::configure);
+      prototype.registerHybridMethod("request", &HybridAppleMusicSpec::request);
       prototype.registerHybridMethod("logout", &HybridAppleMusicSpec::logout);
       prototype.registerHybridMethod("loadTrack", &HybridAppleMusicSpec::loadTrack);
       prototype.registerHybridMethod("play", &HybridAppleMusicSpec::play);

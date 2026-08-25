@@ -8,10 +8,14 @@ type SpotifyCredentialKey = "accessToken" | "refreshToken" | "codeVerifier" | "c
 type AppleMusicCredentialKey = "developerToken" | "userToken";
 
 type SpotifyCredentials = Record<SpotifyCredentialKey, string>;
-type AppleMusicCredentials = Record<AppleMusicCredentialKey, string>;
 type LegacyProviderSettings = {
     spotify: Partial<SpotifyCredentials>;
-    appleMusic: Partial<AppleMusicCredentials>;
+    appleMusic: Partial<Record<AppleMusicCredentialKey, string>> & {
+        connected?: boolean;
+        storefront?: string;
+        userName?: string;
+        subscription?: string;
+    };
 };
 
 const SPOTIFY_KEYS: SpotifyCredentialKey[] = ["accessToken", "refreshToken", "codeVerifier", "codeState"];
@@ -24,10 +28,6 @@ export const providerCredentials$ = observable({
         codeVerifier: "",
         codeState: "",
     } satisfies SpotifyCredentials,
-    appleMusic: {
-        developerToken: "",
-        userToken: "",
-    } satisfies AppleMusicCredentials,
     error: null as string | null,
 });
 
@@ -42,12 +42,12 @@ function actionableCredentialError(error: unknown): string {
     return "Secure storage is unavailable. Unlock your login keychain, restart Legend Music, and reconnect your music services.";
 }
 
-function loadOrMigrate(provider: "spotify" | "appleMusic", key: string, legacyValue: string): string {
+function loadOrMigrate(key: SpotifyCredentialKey, legacyValue: string): string {
     const storage = getSecureStorage();
-    const stored = storage.get(CREDENTIAL_NAMESPACE, account(provider, key));
+    const stored = storage.get(CREDENTIAL_NAMESPACE, account("spotify", key));
     if (stored) return stored;
     if (legacyValue) {
-        storage.set(CREDENTIAL_NAMESPACE, account(provider, key), legacyValue);
+        storage.set(CREDENTIAL_NAMESPACE, account("spotify", key), legacyValue);
     }
     return legacyValue;
 }
@@ -64,14 +64,20 @@ export function initializeProviderCredentials(): void {
         const appleMusicLegacy = settings$.providers.appleMusic.peek() as unknown as LegacyProviderSettings["appleMusic"];
         const spotify = Object.fromEntries(SPOTIFY_KEYS.map((key) => [
             key,
-            loadOrMigrate("spotify", key, spotifyLegacy?.[key] ?? ""),
+            loadOrMigrate(key, spotifyLegacy?.[key] ?? ""),
         ])) as SpotifyCredentials;
-        const appleMusic = Object.fromEntries(APPLE_MUSIC_KEYS.map((key) => [
-            key,
-            loadOrMigrate("appleMusic", key, appleMusicLegacy?.[key] ?? ""),
-        ])) as AppleMusicCredentials;
+        const storage = getSecureStorage();
+        const legacyAppleCredentials = APPLE_MUSIC_KEYS.map((key) => (
+            storage.get(CREDENTIAL_NAMESPACE, account("appleMusic", key)) || appleMusicLegacy?.[key] || ""
+        ));
+        const hadAppleConnection = legacyAppleCredentials.every(Boolean)
+            || Boolean(appleMusicLegacy?.storefront || appleMusicLegacy?.userName || appleMusicLegacy?.subscription);
 
-        providerCredentials$.assign({ spotify, appleMusic, error: null });
+        providerCredentials$.assign({ spotify, error: null });
+        if (!appleMusicLegacy?.connected && hadAppleConnection) {
+            settings$.providers.appleMusic.connected.set(true);
+        }
+        APPLE_MUSIC_KEYS.forEach((key) => storage.remove(CREDENTIAL_NAMESPACE, account("appleMusic", key)));
         removeLegacyFields(settings$.providers.spotify, SPOTIFY_KEYS);
         removeLegacyFields(settings$.providers.appleMusic, APPLE_MUSIC_KEYS);
         initialized = true;
@@ -80,31 +86,20 @@ export function initializeProviderCredentials(): void {
     }
 }
 
-function storeValues<T extends Record<string, string>>(
-    provider: "spotify" | "appleMusic",
-    values: Partial<T>,
-): void {
+function storeSpotifyValues(values: Partial<SpotifyCredentials>): void {
     const storage = getSecureStorage();
     for (const [key, value] of Object.entries(values)) {
-        if (value) storage.set(CREDENTIAL_NAMESPACE, account(provider, key), value);
-        else storage.remove(CREDENTIAL_NAMESPACE, account(provider, key));
+        if (value) storage.set(CREDENTIAL_NAMESPACE, account("spotify", key), value);
+        else storage.remove(CREDENTIAL_NAMESPACE, account("spotify", key));
     }
-    providerCredentials$[provider].assign(values);
+    providerCredentials$.spotify.assign(values);
     providerCredentials$.error.set(null);
 }
 
 export function setSpotifyCredentials(values: Partial<SpotifyCredentials>): void {
-    storeValues<SpotifyCredentials>("spotify", values);
-}
-
-export function setAppleMusicCredentials(values: Partial<AppleMusicCredentials>): void {
-    storeValues<AppleMusicCredentials>("appleMusic", values);
+    storeSpotifyValues(values);
 }
 
 export function clearSpotifyCredentials(): void {
     setSpotifyCredentials({ accessToken: "", refreshToken: "", codeVerifier: "", codeState: "" });
-}
-
-export function clearAppleMusicCredentials(): void {
-    setAppleMusicCredentials({ developerToken: "", userToken: "" });
 }

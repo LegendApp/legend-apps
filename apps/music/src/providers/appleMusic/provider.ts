@@ -2,11 +2,6 @@ import { getAppleMusic } from "@legend-apps/apple-music";
 import { observable } from "@legendapp/state";
 import type { LocalTrack } from "../../systems/LocalMusicState";
 import { settings$ } from "../../systems/Settings";
-import {
-    clearAppleMusicCredentials,
-    providerCredentials$,
-    setAppleMusicCredentials,
-} from "../credentials";
 import type { PlaybackStateUpdate, ProviderPlaylist, StreamingProvider } from "../types";
 
 type AppleArtwork = { url?: string };
@@ -23,11 +18,13 @@ type AppleTrackResource = {
         playParams?: ApplePlayParams;
     };
 };
+type AppleTrackPage = { data?: AppleTrackResource[]; next?: string | null };
 
 const playbackHandlers = new Set<(update: PlaybackStateUpdate) => void>();
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
 let playlistsCache: ProviderPlaylist[] = [];
 const playlistTracksCache = new Map<string, LocalTrack[]>();
+let nativeAuthorized = false;
 
 export const appleMusicStatus$ = observable({
     enabled: false,
@@ -44,16 +41,15 @@ function appleSettings() {
 
 function updateStatus(error: string | null = null): void {
     const settings = appleSettings().peek();
-    const credentials = providerCredentials$.appleMusic.peek();
-    const authenticated = Boolean(credentials.developerToken && credentials.userToken);
+    const authenticated = settings?.connected === true && nativeAuthorized;
     appleMusicStatus$.assign({
         enabled: settings?.enabled === true,
         authenticated,
         displayName: settings?.userName ?? "",
         detail: authenticated
             ? settings?.subscription || "Apple Music connected"
-            : "Not connected",
-        error: error ?? providerCredentials$.error.peek(),
+            : settings?.connected ? "Reconnect to restore MusicKit access" : "Not connected",
+        error,
     });
 }
 
@@ -88,48 +84,39 @@ function mapAppleTrack(resource: AppleTrackResource): LocalTrack | null {
     };
 }
 
-function actionableAppleError(status: number, operation: string, body?: string): Error {
-    if (status === 401 || status === 403) {
-        return new Error(`Apple Music authorization expired while ${operation}. Reconnect Apple Music in Settings → Apple Music, then try again.`);
-    }
-    if (status === 404) {
-        return new Error(`Apple Music could not find that item in your storefront while ${operation}. Search for it again, then retry.`);
-    }
-    if (status === 429) {
-        return new Error(`Apple Music is rate-limiting requests. Wait a minute, then try ${operation} again.`);
-    }
-    const suffix = body?.trim() ? ` ${body.trim().slice(0, 240)}` : "";
-    return new Error(`Apple Music could not finish ${operation} (${status}). Check your connection and try again.${suffix}`);
-}
-
-async function ensureTokens(): Promise<{ developerToken: string; userToken: string; storefront: string }> {
+async function ensureAuthorized(): Promise<{ storefront: string }> {
     const settings = appleSettings().peek();
-    const credentials = providerCredentials$.appleMusic.peek();
     if (!settings?.enabled) {
         throw new Error("Apple Music is disabled. Enable it in Settings → Apple Music, then try again.");
     }
-    if (!credentials.developerToken || !credentials.userToken) {
+    if (!settings.connected) {
         throw new Error("Apple Music is not connected. Connect it in Settings → Apple Music, then try again.");
     }
-    return {
-        developerToken: credentials.developerToken,
-        userToken: credentials.userToken,
-        storefront: settings.storefront || "us",
-    };
+    if (!nativeAuthorized) {
+        const authorization = await getAppleMusic().getAuthorization();
+        nativeAuthorized = authorization.authorized;
+        updateStatus();
+    }
+    if (!nativeAuthorized) {
+        throw new Error("Apple Music access is no longer authorized. Reconnect it in Settings → Apple Music, then try again.");
+    }
+    return { storefront: settings.storefront || "us" };
 }
 
-async function appleFetch(path: string, operation: string): Promise<Response> {
-    const tokens = await ensureTokens();
-    const response = await fetch(`https://api.music.apple.com${path}`, {
-        headers: {
-            Authorization: `Bearer ${tokens.developerToken}`,
-            "Music-User-Token": tokens.userToken,
-        },
-    });
-    if (!response.ok) {
-        throw actionableAppleError(response.status, operation, await response.text());
+async function appleRequest<T>(path: string, operation: string): Promise<T> {
+    await ensureAuthorized();
+    try {
+        return JSON.parse(await getAppleMusic().request(path)) as T;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : `Apple Music could not finish ${operation}.`;
+        if (/authoriz|permission|token|sign.?in/i.test(message)) {
+            nativeAuthorized = false;
+            updateStatus(message);
+        }
+        throw new Error(message.includes("Apple Music")
+            ? message
+            : `Apple Music could not finish ${operation}. ${message}`);
     }
-    return response;
 }
 
 function emitPlayback(update: PlaybackStateUpdate): void {
@@ -159,7 +146,7 @@ const appleMusicPlayback = {
     id: "appleMusic" as const,
     startsPlaybackOnLoad: true,
     async load(track: LocalTrack, startPositionSeconds = 0) {
-        await ensureTokens();
+        await ensureAuthorized();
         const trackId = (track.uri ?? track.filePath).split(":").pop() ?? "";
         emitPlayback({ isLoading: true, error: null });
         await getAppleMusic().loadTrack(trackId, Math.max(0, startPositionSeconds));
@@ -205,14 +192,23 @@ export const appleMusicProvider: StreamingProvider = {
             updateStatus(availability.message);
             return;
         }
-        const credentials = providerCredentials$.appleMusic.peek();
-        if (credentials.developerToken) {
-            try {
-                await getAppleMusic().configure(credentials.developerToken, credentials.userToken);
-                if (credentials.userToken) await this.listPlaylists();
-            } catch (error) {
-                updateStatus(error instanceof Error ? error.message : "Apple Music initialization failed.");
+        if (!appleSettings().connected.peek()) return;
+        try {
+            const authorization = await getAppleMusic().getAuthorization();
+            nativeAuthorized = authorization.authorized;
+            if (authorization.authorized) {
+                appleSettings().assign({
+                    storefront: authorization.storefront || appleSettings().storefront.peek(),
+                    userName: authorization.userName,
+                    subscription: authorization.subscription,
+                });
+                updateStatus();
+                await this.listPlaylists();
+            } else {
+                updateStatus("Apple Music access needs to be restored. Reconnect in Settings → Apple Music.");
             }
+        } catch (error) {
+            updateStatus(error instanceof Error ? error.message : "Apple Music initialization failed. Reconnect in Settings → Apple Music.");
         }
     },
     async login() {
@@ -223,11 +219,12 @@ export const appleMusicProvider: StreamingProvider = {
         appleMusicStatus$.error.set(null);
         try {
             const authorization = await getAppleMusic().authorize();
-            setAppleMusicCredentials({
-                developerToken: authorization.developerToken,
-                userToken: authorization.userToken,
-            });
+            nativeAuthorized = authorization.authorized;
+            if (!authorization.authorized) {
+                throw new Error("Apple Music access was not granted. Allow Media & Apple Music in System Settings → Privacy & Security, then try again.");
+            }
             appleSettings().assign({
+                connected: true,
                 storefront: authorization.storefront,
                 userName: authorization.userName,
                 subscription: authorization.subscription,
@@ -246,8 +243,9 @@ export const appleMusicProvider: StreamingProvider = {
     },
     async logout() {
         await getAppleMusic().logout();
-        clearAppleMusicCredentials();
+        nativeAuthorized = false;
         appleSettings().assign({
+            connected: false,
             storefront: "",
             userName: "",
             subscription: "",
@@ -259,12 +257,11 @@ export const appleMusicProvider: StreamingProvider = {
     async search(query: string, limit = 20) {
         const trimmed = query.trim();
         if (!trimmed) return [];
-        const { storefront } = await ensureTokens();
-        const response = await appleFetch(
+        const { storefront } = await ensureAuthorized();
+        const json = await appleRequest<{ results?: { songs?: { data?: AppleTrackResource[] } } }>(
             `/v1/catalog/${encodeURIComponent(storefront)}/search?types=songs&limit=${Math.max(1, Math.min(25, limit))}&term=${encodeURIComponent(trimmed)}`,
             "searching",
         );
-        const json = await response.json() as { results?: { songs?: { data?: AppleTrackResource[] } } };
         return (json.results?.songs?.data ?? []).map(mapAppleTrack).filter((track): track is LocalTrack => Boolean(track));
     },
     async listPlaylists(force = false) {
@@ -272,11 +269,10 @@ export const appleMusicProvider: StreamingProvider = {
         const playlists: ProviderPlaylist[] = [];
         let next: string | null = "/v1/me/library/playlists?limit=100";
         while (next) {
-            const response = await appleFetch(next, "loading playlists");
-            const json = await response.json() as {
+            const json: {
                 data?: Array<{ id: string; attributes?: { name?: string; artwork?: AppleArtwork }; relationships?: { tracks?: { data?: unknown[] } } }>;
                 next?: string | null;
-            };
+            } = await appleRequest(next, "loading playlists");
             playlists.push(...(json.data ?? []).map((playlist) => ({
                 provider: "appleMusic" as const,
                 id: playlist.id,
@@ -295,10 +291,9 @@ export const appleMusicProvider: StreamingProvider = {
         const tracks: LocalTrack[] = [];
         let next: string | null = `/v1/me/library/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100`;
         while (next) {
-            const response = await appleFetch(next, "loading playlist tracks");
-            const json = await response.json() as { data?: AppleTrackResource[]; next?: string | null };
-            tracks.push(...(json.data ?? []).map(mapAppleTrack).filter((track): track is LocalTrack => Boolean(track)));
-            next = json.next ?? null;
+            const page: AppleTrackPage = await appleRequest<AppleTrackPage>(next, "loading playlist tracks");
+            tracks.push(...(page.data ?? []).map(mapAppleTrack).filter((track): track is LocalTrack => Boolean(track)));
+            next = page.next ?? null;
         }
         playlistTracksCache.set(playlistId, tracks);
         return tracks;

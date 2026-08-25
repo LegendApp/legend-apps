@@ -35,6 +35,7 @@ export interface SpotifySettingsConfig {
 
 export interface AppleMusicSettingsConfig {
     enabled: boolean;
+    connected: boolean;
     storefront: string;
     userName: string;
     subscription: string;
@@ -228,6 +229,7 @@ export const settings$ = createObservableFile<AppSettings>({
             },
             appleMusic: {
                 enabled: false,
+                connected: false,
                 storefront: "",
                 userName: "",
                 subscription: "",
@@ -277,6 +279,7 @@ export function ensureMusicProviderSettings() {
             },
             appleMusic: {
                 enabled: false,
+                connected: false,
                 storefront: "",
                 userName: "",
                 subscription: "",

@@ -14,9 +14,9 @@ public protocol HybridAppleMusicSpec_protocol: HybridObject {
 
   // Methods
   func getAvailability() throws -> AppleMusicAvailability
-  func getDeveloperToken() throws -> Promise<String>
+  func getAuthorization() throws -> Promise<AppleMusicAuthorization>
   func authorize() throws -> Promise<AppleMusicAuthorization>
-  func configure(developerToken: String, userToken: String) throws -> Promise<Void>
+  func request(path: String) throws -> Promise<String>
   func logout() throws -> Promise<Void>
   func loadTrack(trackId: String, startPositionSeconds: Double) throws -> Promise<Void>
   func play() throws -> Promise<Void>

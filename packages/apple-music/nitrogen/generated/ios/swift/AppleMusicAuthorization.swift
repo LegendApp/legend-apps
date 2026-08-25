@@ -18,18 +18,18 @@ public extension AppleMusicAuthorization {
   /**
    * Create a new instance of `AppleMusicAuthorization`.
    */
-  init(developerToken: String, userToken: String, storefront: String, userName: String, subscription: String) {
-    self.init(std.string(developerToken), std.string(userToken), std.string(storefront), std.string(userName), std.string(subscription))
+  init(authorized: Bool, status: String, storefront: String, userName: String, subscription: String) {
+    self.init(authorized, std.string(status), std.string(storefront), std.string(userName), std.string(subscription))
   }
 
   @inline(__always)
-  var developerToken: String {
-    return String(self.__developerToken)
+  var authorized: Bool {
+    return self.__authorized
   }
 
   @inline(__always)
-  var userToken: String {
-    return String(self.__userToken)
+  var status: String {
+    return String(self.__status)
   }
 
   @inline(__always)

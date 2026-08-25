@@ -21,9 +21,9 @@ namespace margelo::nitro::legendapps::applemusic { struct AppleMusicAuthorizatio
 namespace margelo::nitro::legendapps::applemusic { struct AppleMusicPlaybackState; }
 
 #include "AppleMusicAvailability.hpp"
-#include <string>
-#include <NitroModules/Promise.hpp>
 #include "AppleMusicAuthorization.hpp"
+#include <NitroModules/Promise.hpp>
+#include <string>
 #include "AppleMusicPlaybackState.hpp"
 
 namespace margelo::nitro::legendapps::applemusic {
@@ -58,9 +58,9 @@ namespace margelo::nitro::legendapps::applemusic {
     public:
       // Methods
       virtual AppleMusicAvailability getAvailability() = 0;
-      virtual std::shared_ptr<Promise<std::string>> getDeveloperToken() = 0;
+      virtual std::shared_ptr<Promise<AppleMusicAuthorization>> getAuthorization() = 0;
       virtual std::shared_ptr<Promise<AppleMusicAuthorization>> authorize() = 0;
-      virtual std::shared_ptr<Promise<void>> configure(const std::string& developerToken, const std::string& userToken) = 0;
+      virtual std::shared_ptr<Promise<std::string>> request(const std::string& path) = 0;
       virtual std::shared_ptr<Promise<void>> logout() = 0;
       virtual std::shared_ptr<Promise<void>> loadTrack(const std::string& trackId, double startPositionSeconds) = 0;
       virtual std::shared_ptr<Promise<void>> play() = 0;
