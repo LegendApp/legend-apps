@@ -27,6 +27,7 @@ const manifest = {
       "@legend-apps/media-tags",
       "@legend-apps/native-menu",
       "@legend-apps/oauth-loopback",
+      "@legend-apps/secure-storage",
       "@legend-apps/sf-symbol",
       "@legend-apps/sidebar",
       "@legend-apps/storage",

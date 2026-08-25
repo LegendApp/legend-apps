@@ -2,6 +2,11 @@ import { getAppleMusic } from "@legend-apps/apple-music";
 import { observable } from "@legendapp/state";
 import type { LocalTrack } from "../../systems/LocalMusicState";
 import { settings$ } from "../../systems/Settings";
+import {
+    clearAppleMusicCredentials,
+    providerCredentials$,
+    setAppleMusicCredentials,
+} from "../credentials";
 import type { PlaybackStateUpdate, ProviderPlaylist, StreamingProvider } from "../types";
 
 type AppleArtwork = { url?: string };
@@ -39,7 +44,8 @@ function appleSettings() {
 
 function updateStatus(error: string | null = null): void {
     const settings = appleSettings().peek();
-    const authenticated = Boolean(settings?.developerToken && settings.userToken);
+    const credentials = providerCredentials$.appleMusic.peek();
+    const authenticated = Boolean(credentials.developerToken && credentials.userToken);
     appleMusicStatus$.assign({
         enabled: settings?.enabled === true,
         authenticated,
@@ -47,7 +53,7 @@ function updateStatus(error: string | null = null): void {
         detail: authenticated
             ? settings?.subscription || "Apple Music connected"
             : "Not connected",
-        error,
+        error: error ?? providerCredentials$.error.peek(),
     });
 }
 
@@ -98,15 +104,16 @@ function actionableAppleError(status: number, operation: string, body?: string):
 
 async function ensureTokens(): Promise<{ developerToken: string; userToken: string; storefront: string }> {
     const settings = appleSettings().peek();
+    const credentials = providerCredentials$.appleMusic.peek();
     if (!settings?.enabled) {
         throw new Error("Apple Music is disabled. Enable it in Settings → Apple Music, then try again.");
     }
-    if (!settings.developerToken || !settings.userToken) {
+    if (!credentials.developerToken || !credentials.userToken) {
         throw new Error("Apple Music is not connected. Connect it in Settings → Apple Music, then try again.");
     }
     return {
-        developerToken: settings.developerToken,
-        userToken: settings.userToken,
+        developerToken: credentials.developerToken,
+        userToken: credentials.userToken,
         storefront: settings.storefront || "us",
     };
 }
@@ -198,11 +205,11 @@ export const appleMusicProvider: StreamingProvider = {
             updateStatus(availability.message);
             return;
         }
-        const settings = appleSettings().peek();
-        if (settings?.developerToken) {
+        const credentials = providerCredentials$.appleMusic.peek();
+        if (credentials.developerToken) {
             try {
-                await getAppleMusic().configure(settings.developerToken, settings.userToken ?? "");
-                if (settings.userToken) await this.listPlaylists();
+                await getAppleMusic().configure(credentials.developerToken, credentials.userToken);
+                if (credentials.userToken) await this.listPlaylists();
             } catch (error) {
                 updateStatus(error instanceof Error ? error.message : "Apple Music initialization failed.");
             }
@@ -216,9 +223,11 @@ export const appleMusicProvider: StreamingProvider = {
         appleMusicStatus$.error.set(null);
         try {
             const authorization = await getAppleMusic().authorize();
-            appleSettings().assign({
+            setAppleMusicCredentials({
                 developerToken: authorization.developerToken,
                 userToken: authorization.userToken,
+            });
+            appleSettings().assign({
                 storefront: authorization.storefront,
                 userName: authorization.userName,
                 subscription: authorization.subscription,
@@ -237,9 +246,8 @@ export const appleMusicProvider: StreamingProvider = {
     },
     async logout() {
         await getAppleMusic().logout();
+        clearAppleMusicCredentials();
         appleSettings().assign({
-            developerToken: "",
-            userToken: "",
             storefront: "",
             userName: "",
             subscription: "",

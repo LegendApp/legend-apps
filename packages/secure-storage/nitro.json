@@ -1,0 +1,21 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["legendapps", "securestorage"],
+  "ios": {
+    "iosModuleName": "RNSecureStorage"
+  },
+  "android": {
+    "androidNamespace": ["legendapps", "securestorage"],
+    "androidCxxLibName": "RNSecureStorage"
+  },
+  "autolinking": {
+    "SecureStorage": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridSecureStorage"
+      }
+    }
+  },
+  "ignorePaths": ["**/node_modules"],
+  "gitAttributesGeneratedFlag": true
+}

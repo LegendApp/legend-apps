@@ -5,6 +5,11 @@ import type { LocalTrack } from "../../systems/LocalMusicState";
 import { settings$ } from "../../systems/Settings";
 import type { PlaybackStateUpdate, ProviderPlaylist, StreamingProvider } from "../types";
 import { refreshProviderPlaylists } from "../registry";
+import {
+    clearSpotifyCredentials,
+    providerCredentials$,
+    setSpotifyCredentials,
+} from "../credentials";
 import { createPKCE } from "./pkce";
 
 const API_BASE = "https://api.spotify.com/v1";
@@ -67,7 +72,8 @@ function spotifySettings() {
 
 function updateStatus(error: string | null = null): void {
     const settings = spotifySettings().peek();
-    const authenticated = Boolean(settings?.refreshToken || (settings?.accessToken && settings.expiresAt > Date.now()));
+    const credentials = providerCredentials$.spotify.peek();
+    const authenticated = Boolean(credentials.refreshToken || (credentials.accessToken && settings?.expiresAt > Date.now()));
     spotifyStatus$.assign({
         enabled: settings?.enabled === true,
         authenticated,
@@ -75,7 +81,7 @@ function updateStatus(error: string | null = null): void {
         detail: authenticated
             ? settings?.product === "premium" ? "Premium account connected" : "Account connected"
             : "Not connected",
-        error,
+        error: error ?? providerCredentials$.error.peek(),
     });
 }
 
@@ -121,19 +127,20 @@ async function fetchToken(values: Record<string, string>) {
 
 export async function ensureSpotifyAccessToken(): Promise<string> {
     const settings = spotifySettings().peek();
-    if (settings?.accessToken && settings.expiresAt > Date.now() + 30_000) {
-        spotifyWebPlayer$.token.set(settings.accessToken);
-        return settings.accessToken;
+    const credentials = providerCredentials$.spotify.peek();
+    if (credentials.accessToken && settings?.expiresAt > Date.now() + 30_000) {
+        spotifyWebPlayer$.token.set(credentials.accessToken);
+        return credentials.accessToken;
     }
-    if (!settings?.refreshToken) {
+    if (!credentials.refreshToken) {
         throw new Error("Spotify is not connected. Connect it in Settings → Spotify, then try again.");
     }
-    const token = await fetchToken({ grant_type: "refresh_token", refresh_token: settings.refreshToken });
-    spotifySettings().assign({
+    const token = await fetchToken({ grant_type: "refresh_token", refresh_token: credentials.refreshToken });
+    setSpotifyCredentials({
         accessToken: token.access_token,
-        refreshToken: token.refresh_token ?? settings.refreshToken,
-        expiresAt: Date.now() + token.expires_in * 1000 - 60_000,
+        refreshToken: token.refresh_token ?? credentials.refreshToken,
     });
+    spotifySettings().expiresAt.set(Date.now() + token.expires_in * 1000 - 60_000);
     spotifyWebPlayer$.token.set(token.access_token);
     updateStatus();
     return token.access_token;
@@ -208,8 +215,8 @@ async function completeLogin(url: string, redirectUri: string): Promise<void> {
     }
     const code = parsed.searchParams.get("code");
     const state = parsed.searchParams.get("state");
-    const settings = spotifySettings().peek();
-    if (!code || !state || !settings?.codeVerifier || state !== settings.codeState) {
+    const credentials = providerCredentials$.spotify.peek();
+    if (!code || !state || !credentials.codeVerifier || state !== credentials.codeState) {
         throw new Error("Spotify returned an invalid sign-in callback. Start Connect again from Settings → Spotify.");
     }
     spotifyStatus$.isLoading.set(true);
@@ -218,15 +225,15 @@ async function completeLogin(url: string, redirectUri: string): Promise<void> {
             grant_type: "authorization_code",
             code,
             redirect_uri: redirectUri,
-            code_verifier: settings.codeVerifier,
+            code_verifier: credentials.codeVerifier,
         });
-        spotifySettings().assign({
+        setSpotifyCredentials({
             accessToken: token.access_token,
             refreshToken: token.refresh_token ?? "",
-            expiresAt: Date.now() + token.expires_in * 1000 - 60_000,
             codeVerifier: "",
             codeState: "",
         });
+        spotifySettings().expiresAt.set(Date.now() + token.expires_in * 1000 - 60_000);
         playlistsCache = [];
         playlistTracksCache.clear();
         spotifyWebPlayer$.token.set(token.access_token);
@@ -377,7 +384,7 @@ export const spotifyProvider: StreamingProvider = {
             throw new Error(`Add a Spotify Client ID in Settings → Spotify. Register ${SPOTIFY_REDIRECT_URI_FOR_DASHBOARD} as its redirect URI.`);
         }
         const pkce = await createPKCE();
-        spotifySettings().assign({ codeVerifier: pkce.verifier, codeState: pkce.state });
+        setSpotifyCredentials({ codeVerifier: pkce.verifier, codeState: pkce.state });
         const loopback = getOAuthLoopback();
         spotifyStatus$.assign({ isLoading: true, error: null });
         try {
@@ -405,14 +412,11 @@ export const spotifyProvider: StreamingProvider = {
     },
     async logout() {
         await spotifyPlayback.stop();
+        clearSpotifyCredentials();
         spotifySettings().assign({
-            accessToken: "",
-            refreshToken: "",
             expiresAt: 0,
             displayName: "",
             product: "",
-            codeVerifier: "",
-            codeState: "",
         });
         spotifyWebPlayer$.assign({ deviceId: "", isReady: false, token: "", error: null });
         playlistsCache = [];

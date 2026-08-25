@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { settings$ } from "../../systems/Settings";
+import { providerCredentials$ } from "../credentials";
 import {
     ensureSpotifyAccessToken,
     handleSpotifyPlayerError,
@@ -60,8 +61,8 @@ document.addEventListener("message", receive);
 
 export function SpotifyWebPlayerBridge() {
     const enabled = useValue(settings$.providers.spotify.enabled);
-    const refreshToken = useValue(settings$.providers.spotify.refreshToken);
-    const accessToken = useValue(settings$.providers.spotify.accessToken);
+    const refreshToken = useValue(providerCredentials$.spotify.refreshToken);
+    const accessToken = useValue(providerCredentials$.spotify.accessToken);
     const webViewRef = useRef<WebView>(null);
     const connected = enabled && Boolean(refreshToken || accessToken);
 

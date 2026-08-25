@@ -28,19 +28,13 @@ export type AITrackSource = "any" | MusicProviderId;
 export interface SpotifySettingsConfig {
     enabled: boolean;
     clientId: string;
-    accessToken: string;
-    refreshToken: string;
     expiresAt: number;
     displayName: string;
     product: string;
-    codeVerifier: string;
-    codeState: string;
 }
 
 export interface AppleMusicSettingsConfig {
     enabled: boolean;
-    developerToken: string;
-    userToken: string;
     storefront: string;
     userName: string;
     subscription: string;
@@ -228,18 +222,12 @@ export const settings$ = createObservableFile<AppSettings>({
             spotify: {
                 enabled: false,
                 clientId: "",
-                accessToken: "",
-                refreshToken: "",
                 expiresAt: 0,
                 displayName: "",
                 product: "",
-                codeVerifier: "",
-                codeState: "",
             },
             appleMusic: {
                 enabled: false,
-                developerToken: "",
-                userToken: "",
                 storefront: "",
                 userName: "",
                 subscription: "",
@@ -283,18 +271,12 @@ export function ensureMusicProviderSettings() {
             spotify: {
                 enabled: false,
                 clientId: "",
-                accessToken: "",
-                refreshToken: "",
                 expiresAt: 0,
                 displayName: "",
                 product: "",
-                codeVerifier: "",
-                codeState: "",
             },
             appleMusic: {
                 enabled: false,
-                developerToken: "",
-                userToken: "",
                 storefront: "",
                 userName: "",
                 subscription: "",

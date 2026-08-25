@@ -18,6 +18,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
+    name: "@legend-apps/secure-storage",
+    root: path.join(packagesDir, "secure-storage"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/codex",
     root: path.join(packagesDir, "codex"),
     platforms: ["macos"],

@@ -25,6 +25,7 @@
     "@legend-apps/media-tags": "0.0.0",
     "@legend-apps/native-menu": "0.0.0",
     "@legend-apps/oauth-loopback": "0.0.0",
+    "@legend-apps/secure-storage": "0.0.0",
     "@legend-apps/reorder-controls": "0.0.0",
     "@legend-apps/runtime-utils": "0.0.0",
     "@legend-apps/settings-window": "0.0.0",
