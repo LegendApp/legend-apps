@@ -26,6 +26,7 @@ const manifest = {
       "@legend-apps/media-library-scanner",
       "@legend-apps/media-tags",
       "@legend-apps/native-menu",
+      "@legend-apps/oauth-loopback",
       "@legend-apps/sf-symbol",
       "@legend-apps/sidebar",
       "@legend-apps/storage",
@@ -37,9 +38,6 @@ const manifest = {
     ],
     ios: [],
     android: [],
-  },
-  urlSchemes: {
-    macos: ["legendmusic"],
   },
   infoPlist: {
     macos: {

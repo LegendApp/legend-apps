@@ -160,6 +160,7 @@
         "@legend-apps/media-library-scanner": "0.0.0",
         "@legend-apps/media-tags": "0.0.0",
         "@legend-apps/native-menu": "0.0.0",
+        "@legend-apps/oauth-loopback": "0.0.0",
         "@legend-apps/reorder-controls": "0.0.0",
         "@legend-apps/runtime-utils": "0.0.0",
         "@legend-apps/settings-window": "0.0.0",
@@ -553,6 +554,18 @@
     "packages/native-text-source": {
       "name": "@legend-apps/native-text-source",
       "version": "0.0.0",
+    },
+    "packages/oauth-loopback": {
+      "name": "@legend-apps/oauth-loopback",
+      "version": "0.0.0",
+      "devDependencies": {
+        "nitrogen": "0.35.6",
+        "react-native-nitro-modules": "0.35.6",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
     },
     "packages/recent-documents": {
       "name": "@legend-apps/recent-documents",
@@ -1152,6 +1165,8 @@
     "@legend-apps/native-select": ["@legend-apps/native-select@workspace:packages/native-select"],
 
     "@legend-apps/native-text-source": ["@legend-apps/native-text-source@workspace:packages/native-text-source"],
+
+    "@legend-apps/oauth-loopback": ["@legend-apps/oauth-loopback@workspace:packages/oauth-loopback"],
 
     "@legend-apps/recent-documents": ["@legend-apps/recent-documents@workspace:packages/recent-documents"],
 

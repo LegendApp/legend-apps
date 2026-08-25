@@ -5,7 +5,12 @@ import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
 import { useToast } from "../components/Toast";
 import { refreshProviderPlaylists } from "../providers/registry";
-import { spotifyProvider, spotifyStatus$, spotifyWebPlayer$ } from "../providers/spotify/provider";
+import {
+    SPOTIFY_REDIRECT_URI_FOR_DASHBOARD,
+    spotifyProvider,
+    spotifyStatus$,
+    spotifyWebPlayer$,
+} from "../providers/spotify/provider";
 import { settings$ } from "../systems/Settings";
 import { SettingsRow, SettingsSection } from "./components";
 
@@ -19,7 +24,7 @@ export function SpotifySettingsContent() {
     const handleConnect = useCallback(async () => {
         try {
             await spotifyProvider.login();
-            showToast("Finish connecting Spotify in your browser. Legend Music will update automatically.");
+            showToast("Spotify connected.");
         } catch (error) {
             showToast(error instanceof Error ? error.message : "Spotify sign-in failed.", "error");
         }
@@ -48,7 +53,7 @@ export function SpotifySettingsContent() {
                 />
                 <SettingsRow
                     title="Client ID"
-                    description="Create a Spotify app, then add legendmusic://spotify-auth-callback as its redirect URI."
+                    description="Personal integration: create your own Spotify developer app and paste its Client ID here."
                     className="flex-col items-stretch gap-3"
                     contentClassName="pr-0"
                     controlWrapperClassName="ml-0 w-full"
@@ -69,6 +74,18 @@ export function SpotifySettingsContent() {
                         </View>
                     )}
                 />
+                <View className="gap-1 rounded-md border border-border-primary bg-background-tertiary p-3">
+                    <Text className="text-xs font-semibold text-text-primary">Create your Spotify key</Text>
+                    <Text className="text-xs leading-relaxed text-text-secondary">
+                        1. Open Dashboard and create an app. Select Web API and Web Playback SDK.
+                    </Text>
+                    <Text className="text-xs leading-relaxed text-text-secondary">
+                        2. Add this Redirect URI exactly: {SPOTIFY_REDIRECT_URI_FOR_DASHBOARD}
+                    </Text>
+                    <Text className="text-xs leading-relaxed text-text-secondary">
+                        3. Save the app, copy its Client ID, and paste it above. Spotify Premium is required.
+                    </Text>
+                </View>
             </SettingsSection>
             <SettingsSection title="Connection">
                 <SettingsRow

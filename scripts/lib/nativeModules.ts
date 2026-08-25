@@ -13,6 +13,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
+    name: "@legend-apps/oauth-loopback",
+    root: path.join(packagesDir, "oauth-loopback"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/codex",
     root: path.join(packagesDir, "codex"),
     platforms: ["macos"],

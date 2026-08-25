@@ -1,3 +1,4 @@
+import { getOAuthLoopback } from "@legend-apps/oauth-loopback";
 import { observable } from "@legendapp/state";
 import { Linking } from "react-native";
 import type { LocalTrack } from "../../systems/LocalMusicState";
@@ -8,7 +9,8 @@ import { createPKCE } from "./pkce";
 
 const API_BASE = "https://api.spotify.com/v1";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
-const REDIRECT_URI = "legendmusic://spotify-auth-callback";
+export const SPOTIFY_REDIRECT_URI_FOR_DASHBOARD = "http://127.0.0.1/spotify-callback";
+const SPOTIFY_CALLBACK_PATH = "/spotify-callback";
 const SCOPES = [
     "streaming",
     "user-read-email",
@@ -37,7 +39,6 @@ type SpotifyPlayerSnapshot = {
 };
 
 const playbackHandlers = new Set<(update: PlaybackStateUpdate) => void>();
-let linkingSubscription: { remove(): void } | null = null;
 let activatePlayer: (() => void) | null = null;
 let playlistsCache: ProviderPlaylist[] = [];
 const playlistTracksCache = new Map<string, LocalTrack[]>();
@@ -191,14 +192,16 @@ async function loadProfile(): Promise<void> {
     updateStatus();
 }
 
-async function completeLogin(url: string): Promise<void> {
+async function completeLogin(url: string, redirectUri: string): Promise<void> {
     let parsed: URL;
     try {
         parsed = new URL(url);
     } catch {
         return;
     }
-    if (parsed.protocol !== "legendmusic:" || parsed.hostname !== "spotify-auth-callback") return;
+    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || parsed.pathname !== SPOTIFY_CALLBACK_PATH) {
+        throw new Error("Spotify returned to an unexpected address. Start Connect again from Settings → Spotify.");
+    }
     const authError = parsed.searchParams.get("error");
     if (authError) {
         throw new Error(`Spotify sign-in was cancelled or denied (${authError}). Try Connect again in Settings → Spotify.`);
@@ -214,7 +217,7 @@ async function completeLogin(url: string): Promise<void> {
         const token = await fetchToken({
             grant_type: "authorization_code",
             code,
-            redirect_uri: REDIRECT_URI,
+            redirect_uri: redirectUri,
             code_verifier: settings.codeVerifier,
         });
         spotifySettings().assign({
@@ -355,16 +358,6 @@ export const spotifyProvider: StreamingProvider = {
     playback: spotifyPlayback,
     async initialize() {
         updateStatus();
-        if (!linkingSubscription) {
-            linkingSubscription = Linking.addEventListener("url", ({ url }) => {
-                void completeLogin(url).catch((error) => {
-                    const message = error instanceof Error ? error.message : "Spotify sign-in failed.";
-                    updateStatus(message);
-                });
-            });
-        }
-        const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) await completeLogin(initialUrl);
         if (spotifyStatus$.authenticated.peek()) {
             try {
                 await ensureSpotifyAccessToken();
@@ -381,20 +374,34 @@ export const spotifyProvider: StreamingProvider = {
         }
         const clientId = spotifySettings().clientId.peek()?.trim();
         if (!clientId) {
-            throw new Error("Add a Spotify Client ID in Settings → Spotify. In Spotify's dashboard, register legendmusic://spotify-auth-callback as the redirect URI.");
+            throw new Error(`Add a Spotify Client ID in Settings → Spotify. Register ${SPOTIFY_REDIRECT_URI_FOR_DASHBOARD} as its redirect URI.`);
         }
         const pkce = await createPKCE();
         spotifySettings().assign({ codeVerifier: pkce.verifier, codeState: pkce.state });
-        const params = encodeForm({
-            client_id: clientId,
-            response_type: "code",
-            redirect_uri: REDIRECT_URI,
-            code_challenge_method: "S256",
-            code_challenge: pkce.challenge,
-            scope: SCOPES.join(" "),
-            state: pkce.state,
-        });
-        await Linking.openURL(`https://accounts.spotify.com/authorize?${params}`);
+        const loopback = getOAuthLoopback();
+        spotifyStatus$.assign({ isLoading: true, error: null });
+        try {
+            const redirectUri = await loopback.start(SPOTIFY_CALLBACK_PATH);
+            const params = encodeForm({
+                client_id: clientId,
+                response_type: "code",
+                redirect_uri: redirectUri,
+                code_challenge_method: "S256",
+                code_challenge: pkce.challenge,
+                scope: SCOPES.join(" "),
+                state: pkce.state,
+            });
+            await Linking.openURL(`https://accounts.spotify.com/authorize?${params}`);
+            const callbackUrl = await loopback.waitForCallback(180_000);
+            await completeLogin(callbackUrl, redirectUri);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Spotify sign-in failed.";
+            updateStatus(message);
+            throw error;
+        } finally {
+            loopback.cancel();
+            spotifyStatus$.isLoading.set(false);
+        }
     },
     async logout() {
         await spotifyPlayback.stop();
