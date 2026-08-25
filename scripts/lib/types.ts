@@ -43,6 +43,11 @@ export type AppManifest = {
   infoPlist?: {
     macos?: Record<string, string>;
   };
+  signing?: {
+    macos?: {
+      developmentTeam?: string;
+    };
+  };
   release?: {
     macos?: MacOSReleaseMetadata;
   };

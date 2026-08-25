@@ -220,9 +220,7 @@ final class HybridAppleMusic: HybridAppleMusicSpec {
       developerToken = token
       return token
     } catch {
-      throw AppleMusicError.actionFailed(
-        "Apple Music could not create a developer token. Enable MusicKit for this app's App ID, sign with that Apple Developer team, then try again. \(error.localizedDescription)"
-      )
+      throw AppleMusicError.developerTokenFailure(error)
     }
   }
 
@@ -311,5 +309,31 @@ private enum AppleMusicError {
 
   static func actionFailed(_ message: String) -> RuntimeError {
     RuntimeError(message)
+  }
+
+  static func developerTokenFailure(_ error: Error) -> RuntimeError {
+    let bundleId = Bundle.main.bundleIdentifier ?? "this app's bundle ID"
+    let details = errorDetails(error)
+    if details.localizedCaseInsensitiveContains("client not found") || details.contains("40402") {
+      return RuntimeError(
+        "Apple's MusicKit service has not registered \(bundleId) yet. If you just created or updated the App ID, wait a few minutes, restart Legend Music, and try again. If it still fails, open Apple Developer → Certificates, Identifiers & Profiles → \(bundleId) → App Services, confirm MusicKit is enabled, and save it again."
+      )
+    }
+
+    return RuntimeError(
+      "Apple Music could not create a developer token for \(bundleId). Confirm MusicKit is enabled for that exact App ID, sign Legend Music with the same Apple Developer team, restart the app, and try again. \(error.localizedDescription)"
+    )
+  }
+
+  private static func errorDetails(_ error: Error) -> String {
+    let nsError = error as NSError
+    var details = [String(describing: error), nsError.localizedDescription]
+    if let debugDescription = nsError.userInfo[NSDebugDescriptionErrorKey] as? String {
+      details.append(debugDescription)
+    }
+    if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
+      details.append(errorDetails(underlyingError))
+    }
+    return details.joined(separator: " | ")
   }
 }

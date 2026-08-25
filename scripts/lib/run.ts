@@ -78,6 +78,14 @@ function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string |
   const containerArgs = fs.existsSync(workspacePath)
     ? ["-workspace", workspacePath]
     : ["-project", xcodeProjectPath];
+  const developmentTeam = env.LEGEND_MACOS_DEVELOPMENT_TEAM;
+  const signingArgs = developmentTeam
+    ? [
+        `DEVELOPMENT_TEAM=${developmentTeam}`,
+        "CODE_SIGN_STYLE=Automatic",
+        "-allowProvisioningUpdates",
+      ]
+    : [];
 
   runCommand(
     "xcodebuild",
@@ -89,6 +97,7 @@ function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string |
       scheme,
       "-derivedDataPath",
       derivedDataPath,
+      ...signingArgs,
     ],
     {
       cwd: shellDir,
