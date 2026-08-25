@@ -51,6 +51,7 @@ namespace margelo::nitro::legendapps::securestorage {
       virtual std::string get(const std::string& service, const std::string& key) = 0;
       virtual void set(const std::string& service, const std::string& key, const std::string& value) = 0;
       virtual void remove(const std::string& service, const std::string& key) = 0;
+      virtual std::string randomBase64Url(double byteCount) = 0;
 
     protected:
       // Hybrid Setup

@@ -16,6 +16,7 @@ public protocol HybridSecureStorageSpec_protocol: HybridObject {
   func get(service: String, key: String) throws -> String
   func set(service: String, key: String, value: String) throws -> Void
   func remove(service: String, key: String) throws -> Void
+  func randomBase64Url(byteCount: Double) throws -> String
 }
 
 public extension HybridSecureStorageSpec_protocol {

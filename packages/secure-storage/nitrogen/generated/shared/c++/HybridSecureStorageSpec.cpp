@@ -17,6 +17,7 @@ namespace margelo::nitro::legendapps::securestorage {
       prototype.registerHybridMethod("get", &HybridSecureStorageSpec::get);
       prototype.registerHybridMethod("set", &HybridSecureStorageSpec::set);
       prototype.registerHybridMethod("remove", &HybridSecureStorageSpec::remove);
+      prototype.registerHybridMethod("randomBase64Url", &HybridSecureStorageSpec::randomBase64Url);
     });
   }
 

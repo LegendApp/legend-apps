@@ -54,6 +54,29 @@ final class HybridSecureStorage: HybridSecureStorageSpec {
     }
   }
 
+  func randomBase64Url(byteCount: Double) throws -> String {
+    guard byteCount.isFinite,
+          byteCount.rounded(.towardZero) == byteCount,
+          byteCount >= 16,
+          byteCount <= 1024 else {
+      throw RuntimeError("Secure randomness requires a whole byte count between 16 and 1024.")
+    }
+    let count = Int(byteCount)
+    var bytes = [UInt8](repeating: 0, count: count)
+    let status = bytes.withUnsafeMutableBytes { buffer in
+      SecRandomCopyBytes(kSecRandomDefault, count, buffer.baseAddress!)
+    }
+    guard status == errSecSuccess else {
+      throw RuntimeError(
+        "Legend Music could not generate secure sign-in data. Restart the app and try connecting Spotify again."
+      )
+    }
+    return Data(bytes).base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+  }
+
   private func baseQuery(service: String, key: String) -> [String: Any] {
     [
       kSecClass as String: kSecClassGenericPassword,

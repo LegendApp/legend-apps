@@ -86,6 +86,14 @@ namespace margelo::nitro::legendapps::securestorage {
         std::rethrow_exception(__result.error());
       }
     }
+    inline std::string randomBase64Url(double byteCount) override {
+      auto __result = _swiftPart.randomBase64Url(std::forward<decltype(byteCount)>(byteCount));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     RNSecureStorage::HybridSecureStorageSpec_cxx _swiftPart;
