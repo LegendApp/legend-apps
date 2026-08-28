@@ -118,6 +118,21 @@ void testClaude(const std::filesystem::path& fixtureRoot) {
       "Claude work row should expand to progress text and a plain-text activity summary");
 }
 
+void testCurrentCodexUserMessages(const std::filesystem::path& fixtureRoot) {
+  std::atomic<uint64_t> generation{1};
+  ChatParseResult result = parseChatFile(
+      "codex",
+      (fixtureRoot / "codex-response-user.jsonl").string(),
+      1,
+      generation);
+  expect(result.rows.size() == 2, "Current Codex response messages should produce both visible turns");
+  expect(result.rows[0].kind == "user", "Current Codex response user message should remain visible");
+  expect(
+      decode(result, result.rows[0].markdownRanges) == "Current-format request",
+      "Current Codex response user text should remain lazy source ranges");
+  expect(result.rows[1].kind == "assistant", "Current Codex assistant message should follow its user turn");
+}
+
 void testCancellation(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{2};
   bool cancelled = false;
@@ -265,6 +280,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path fixtureRoot(argv[1]);
     testCodex(fixtureRoot);
     testClaude(fixtureRoot);
+    testCurrentCodexUserMessages(fixtureRoot);
     testCancellation(fixtureRoot);
     testIsoTimestamps();
     testDocumentRelease(fixtureRoot);

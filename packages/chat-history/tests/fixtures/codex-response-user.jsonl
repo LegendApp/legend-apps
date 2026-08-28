@@ -1,0 +1,2 @@
+{"timestamp":"2026-08-28T00:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Current-format request"}]}}
+{"timestamp":"2026-08-28T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Current-format answer"}]}}

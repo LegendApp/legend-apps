@@ -286,14 +286,15 @@ void applyToolResult(
   }
 }
 
-void parseCodexAssistantMessage(
+void parseCodexMessage(
     const ChatJson& json,
     const JsonRange& payload,
     std::vector<ChatRow>& rows,
     size_t& warningCount,
+    bool allowUser,
     double timestampMs) {
   const std::string role = stringMember(json, payload, "role");
-  if (role != "assistant") {
+  if (role != "assistant" && (!allowUser || role != "user")) {
     return;
   }
 
@@ -341,6 +342,7 @@ ChatParseResult parseCodex(
   std::unordered_map<std::string, size_t> toolRows;
   PendingFileChanges pendingFileChanges;
   std::string cwd;
+  bool sawEventUserMessage = false;
 
   for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex += 1) {
     if ((lineIndex & 0xff) == 0 && activeGeneration.load(std::memory_order_relaxed) != generation) {
@@ -396,6 +398,7 @@ ChatParseResult parseCodex(
     if (recordType == "event_msg" && payload && payload->kind == JsonValueKind::Object) {
       const std::string eventType = stringMember(json, *payload, "type");
       if (eventType == "user_message") {
+        sawEventUserMessage = true;
         appendPendingFileChanges(result.rows, pendingFileChanges);
         std::vector<JsonRange> textRanges;
         const auto message = json.member(*payload, "message");
@@ -449,7 +452,13 @@ ChatParseResult parseCodex(
         : 0;
     const std::string payloadType = stringMember(json, *payload, "type");
     if (payloadType == "message") {
-      parseCodexAssistantMessage(json, *payload, result.rows, result.warningCount, timestampMs);
+      parseCodexMessage(
+          json,
+          *payload,
+          result.rows,
+          result.warningCount,
+          !sawEventUserMessage,
+          timestampMs);
     } else if (payloadType == "function_call" || payloadType == "custom_tool_call" || payloadType == "local_shell_call") {
       std::vector<JsonRange> previews;
       const auto arguments = json.member(*payload, payloadType == "custom_tool_call" ? "input" : "arguments");
