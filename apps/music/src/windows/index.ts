@@ -1,7 +1,7 @@
 import { createSettingsWindowOptions } from "@legend-apps/settings-window";
 import {
     createBorderlessOverlayWindowStyle,
-    createUnifiedToolbarWindowStyle,
+    createDocumentWindowStyle,
     createWindowsNavigator,
     type WindowsConfig,
 } from "@legend-apps/windows";
@@ -21,15 +21,18 @@ const windowsConfig = {
             restoreOnLaunch: true,
             title: "",
             transparentBackground: true,
-            windowStyle: createUnifiedToolbarWindowStyle({
-                frame: {
-                    width: 800,
-                    height: 600,
-                    minWidth: 400,
-                    minHeight: 400,
-                },
-                includeFrame: true,
-            }),
+            windowStyle: {
+                ...createDocumentWindowStyle({
+                    frame: {
+                        width: 800,
+                        height: 600,
+                        minWidth: 400,
+                        minHeight: 400,
+                    },
+                    includeFrame: true,
+                }),
+                titleVisibility: "hidden",
+            },
         },
     },
     CurrentSongOverlayWindow: {

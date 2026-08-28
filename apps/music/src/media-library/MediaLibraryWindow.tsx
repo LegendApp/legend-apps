@@ -1,12 +1,11 @@
 import { PortalProvider } from "@gorhom/portal";
 import { useValue } from "@legendapp/state/react";
 import {
-    createSidebarSplitViewTitlebarChrome,
     SidebarSplitView,
     sidebarSplitViewTitlebarMetrics,
 } from "@legend-apps/appkit-split-view";
-import { showWindow } from "@legend-apps/window-manager";
-import { useCallback, useRef } from "react";
+import { setWindowOptions, showWindow } from "@legend-apps/window-manager";
+import { useCallback, useEffect, useRef } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { Platform, StyleSheet, View } from "react-native";
 import { DragDropProvider } from "../components/dnd";
@@ -29,6 +28,13 @@ export default function MediaLibraryWindow() {
     const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
     const musicTheme = getMusicTheme(appearanceSettings.theme);
     const windowShownRef = useRef(false);
+    const updateWindowStyle = useCallback(() => setWindowOptions(MEDIA_LIBRARY_WINDOW_ID, {
+        windowStyle: {
+            appearance: musicTheme.appearance,
+            backgroundColor: musicTheme.colors.background.secondary,
+            contentLayoutMode: "fullSize",
+        },
+    }), [musicTheme.appearance, musicTheme.colors.background.secondary]);
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const { width, height } = event.nativeEvent.layout;
         if (width > 0 && height > 0) {
@@ -38,18 +44,20 @@ export default function MediaLibraryWindow() {
     const handleSplitViewReady = useCallback(() => {
         if (!windowShownRef.current) {
             windowShownRef.current = true;
-            showWindow(MEDIA_LIBRARY_WINDOW_ID).catch((error: unknown) => {
-                windowShownRef.current = false;
-                console.error("Failed to show media library window:", error);
-            });
+            updateWindowStyle()
+                .then(() => showWindow(MEDIA_LIBRARY_WINDOW_ID))
+                .catch((error: unknown) => {
+                    windowShownRef.current = false;
+                    console.error("Failed to show media library window:", error);
+                });
         }
-    }, []);
-    const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
-        colorScheme: musicTheme.appearance,
-        contentBackgroundColor: musicTheme.colors.background.primary,
-        sidebarBackgroundColor: musicTheme.colors.background.secondary,
-    });
+    }, [updateWindowStyle]);
 
+    useEffect(() => {
+        updateWindowStyle().catch((error: unknown) => {
+            console.error("Failed to update media library window style:", error);
+        });
+    }, [updateWindowStyle]);
     return (
         <WindowProvider id={MEDIA_LIBRARY_WINDOW_ID}>
             <ThemeProvider>
@@ -59,7 +67,6 @@ export default function MediaLibraryWindow() {
                         <DragDropProvider>
                             {isMacOS ? (
                                 <SidebarSplitView
-                                    {...titlebarChromeProps}
                                     appearance={musicTheme.appearance}
                                     className="flex-1 bg-background-primary"
                                     contentMinWidth={360}
@@ -74,10 +81,7 @@ export default function MediaLibraryWindow() {
                                     >
                                         <MediaLibrarySidebar />
                                     </View>
-                                    <View
-                                        className="min-w-0 flex-1 bg-background-primary"
-                                        style={styles.contentPane}
-                                    >
+                                    <View className="min-w-0 flex-1 bg-background-primary">
                                         <ToastProvider>
                                             <TrackList />
                                         </ToastProvider>
@@ -95,9 +99,6 @@ export default function MediaLibraryWindow() {
 }
 
 const styles = StyleSheet.create({
-    contentPane: {
-        paddingTop: sidebarSplitViewTitlebarMetrics.contentInsetTop,
-    },
     root: {
         flex: 1,
     },
