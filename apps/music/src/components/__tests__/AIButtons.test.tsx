@@ -121,6 +121,7 @@ describe("AIButtons", () => {
         jest.clearAllMocks();
         settings$.ai.defaultSources.set(["local", "spotify", "appleMusic"]);
         settings$.ai.playlistSourceOverrides.set({});
+        settings$.ai.toolbarEnabled.set(true);
         spotifyStatus$.assign({ enabled: false, authenticated: false, error: null });
         mockGetCodexAvailability.mockResolvedValue({
             available: true,
@@ -261,6 +262,19 @@ describe("AIButtons", () => {
         });
     });
 
+    it("does not mount AI controls when the toolbar is disabled", async () => {
+        settings$.ai.toolbarEnabled.set(false);
+
+        const renderer = await renderAIButtons();
+
+        expect(renderer.toJSON()).toBeNull();
+        expect(mockGetCodexAvailability).not.toHaveBeenCalled();
+
+        act(() => {
+            renderer.unmount();
+        });
+    });
+
     it("stores and clears a playlist-specific source override", async () => {
         const renderer = await renderAIButtons();
 
@@ -270,6 +284,14 @@ describe("AIButtons", () => {
         const spotifyChoice = renderer.root.findAllByType(Checkbox)
             .find((checkbox) => checkbox.props.label === "Spotify");
         expect(spotifyChoice).toBeDefined();
+        expect(spotifyChoice?.props.disabled).toBe(true);
+
+        act(() => {
+            findButton(renderer, "Override this playlist").props.onPress({ nativeEvent: { button: 0 } });
+        });
+        expect(settings$.ai.playlistSourceOverrides["road-mix"].peek()).toEqual(["local", "spotify", "appleMusic"]);
+        expect(renderer.root.findAllByType(Checkbox)
+            .find((checkbox) => checkbox.props.label === "Spotify")?.props.disabled).toBe(false);
 
         act(() => {
             spotifyChoice?.props.onChange(false);
@@ -277,7 +299,7 @@ describe("AIButtons", () => {
         expect(settings$.ai.playlistSourceOverrides["road-mix"].peek()).toEqual(["local", "appleMusic"]);
 
         act(() => {
-            findButton(renderer, "Use defaults").props.onPress({ nativeEvent: { button: 0 } });
+            findButton(renderer, "Use AI defaults").props.onPress({ nativeEvent: { button: 0 } });
         });
         expect(settings$.ai.playlistSourceOverrides["road-mix"].peek()).toBeUndefined();
 

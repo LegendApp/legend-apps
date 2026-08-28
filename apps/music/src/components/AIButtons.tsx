@@ -50,12 +50,14 @@ function sourceSummary(sources: readonly MusicProviderId[]): string {
 
 function SourceChoices({
     appleMusicConnected,
+    disabled = false,
     libraryCount,
     onToggle,
     sources,
     spotifyConnected,
 }: {
     appleMusicConnected: boolean;
+    disabled?: boolean;
     libraryCount: number;
     onToggle: (source: MusicProviderId, checked: boolean) => void;
     sources: readonly MusicProviderId[];
@@ -73,6 +75,7 @@ function SourceChoices({
                 <View key={source} className="rounded-md bg-white/5 px-2 py-1.5">
                     <Checkbox
                         checked={sources.includes(source)}
+                        disabled={disabled}
                         label={SOURCE_LABELS[source]}
                         onChange={(checked) => onToggle(source, checked)}
                     />
@@ -83,11 +86,47 @@ function SourceChoices({
     );
 }
 
+function SourcePolicyChoices({
+    hasSourceOverride,
+    onUseDefaults,
+    onUseOverride,
+}: {
+    hasSourceOverride: boolean;
+    onUseDefaults: () => void;
+    onUseOverride: () => void;
+}) {
+    return (
+        <View className="flex-row gap-2">
+            <Button
+                size="small"
+                variant={hasSourceOverride ? "secondary" : "accent"}
+                accessibilityState={{ selected: !hasSourceOverride }}
+                onClick={onUseDefaults}
+            >
+                Use AI defaults
+            </Button>
+            <Button
+                size="small"
+                variant={hasSourceOverride ? "accent" : "secondary"}
+                accessibilityState={{ selected: hasSourceOverride }}
+                onClick={onUseOverride}
+            >
+                Override this playlist
+            </Button>
+        </View>
+    );
+}
+
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
 
-export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
+export function AIButtons(props: AIButtonsProps) {
+    const toolbarEnabled = useValue(settings$.ai.toolbarEnabled) ?? true;
+    return toolbarEnabled ? <AIButtonsContent {...props} /> : null;
+}
+
+function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
     const showToast = useToast();
     const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false);
     const [isPromptOpen, setIsPromptOpen] = useState(false);
@@ -238,6 +277,10 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
         settings$.ai.playlistSourceOverrides[playlist.id].delete();
     }, [playlist.id]);
 
+    const handleUseOverride = useCallback(() => {
+        settings$.ai.playlistSourceOverrides[playlist.id].set([...sources]);
+    }, [playlist.id, sources]);
+
     const handleSubmitPrompt = useCallback(() => {
         if (!trimmedPrompt) {
             showToast("Enter a prompt first", "error");
@@ -287,7 +330,9 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                     onClick={() => setIsSourcePickerOpen(true)}
                 >
                     <Text className="text-xs font-medium text-text-secondary" numberOfLines={1}>
-                        {hasSourceOverride ? sourceSummary(sources) : `Default: ${sourceSummary(sources)}`}
+                        {hasSourceOverride
+                            ? `This playlist · ${sourceSummary(sources)}`
+                            : `Default · ${sourceSummary(sources)}`}
                     </Text>
                 </Button>
                 <Button
@@ -321,11 +366,17 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                         <View className="gap-1">
                             <Text className="text-base font-semibold text-text-primary">AI music sources</Text>
                             <Text className="text-xs leading-relaxed text-text-secondary">
-                                Choose where AI can find songs for {playlist.name}. A matching local copy is always preferred.
+                                Choose whether {playlist.name} follows your AI defaults or has its own sources.
                             </Text>
                         </View>
+                        <SourcePolicyChoices
+                            hasSourceOverride={hasSourceOverride}
+                            onUseDefaults={handleUseDefaults}
+                            onUseOverride={handleUseOverride}
+                        />
                         <SourceChoices
                             appleMusicConnected={appleMusicStatus.enabled && appleMusicStatus.authenticated}
+                            disabled={!hasSourceOverride}
                             libraryCount={libraryTracks.length}
                             onToggle={handleSourceToggle}
                             sources={sources}
@@ -334,14 +385,11 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                         <View className="flex-row items-center justify-between gap-3">
                             <View className="min-w-0 flex-1">
                                 <Text className="text-xs text-text-tertiary">
-                                    {hasSourceOverride ? "This playlist overrides your AI defaults." : "Using your AI defaults."}
+                                    {hasSourceOverride
+                                        ? "These sources apply to both Auto and Prompt for this playlist."
+                                        : "Change the defaults in Settings → General → AI playlists."}
                                 </Text>
                             </View>
-                            {hasSourceOverride ? (
-                                <Button size="small" variant="secondary" onClick={handleUseDefaults}>
-                                    Use defaults
-                                </Button>
-                            ) : null}
                             <Button size="small" variant="accent" onClick={() => setIsSourcePickerOpen(false)}>
                                 Done
                             </Button>
@@ -369,8 +417,14 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                         />
                         <View className="gap-2">
                             <Text className="text-xs font-medium text-text-secondary">Find tracks in</Text>
+                            <SourcePolicyChoices
+                                hasSourceOverride={hasSourceOverride}
+                                onUseDefaults={handleUseDefaults}
+                                onUseOverride={handleUseOverride}
+                            />
                             <SourceChoices
                                 appleMusicConnected={appleMusicStatus.enabled && appleMusicStatus.authenticated}
+                                disabled={!hasSourceOverride}
                                 libraryCount={libraryTracks.length}
                                 onToggle={handleSourceToggle}
                                 sources={sources}
@@ -378,13 +432,10 @@ export function AIButtons({ canUseAI, disabledReason, libraryTracks, onAddTracks
                             />
                             <View className="flex-row items-center justify-between gap-2">
                                 <Text className="min-w-0 flex-1 text-xs text-text-tertiary">
-                                    A matching local copy is always preferred.
+                                    {hasSourceOverride
+                                        ? "This choice also applies to Auto. A matching local copy is always preferred."
+                                        : "Using your AI defaults. A matching local copy is always preferred."}
                                 </Text>
-                                {hasSourceOverride ? (
-                                    <Button size="small" variant="secondary" onClick={handleUseDefaults}>
-                                        Use defaults
-                                    </Button>
-                                ) : null}
                             </View>
                             {unavailableMessage ? (
                                 <Text className="text-xs leading-relaxed text-red-300">{unavailableMessage}</Text>

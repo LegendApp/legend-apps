@@ -29,6 +29,7 @@ export type AITrackSources = MusicProviderId[];
 export interface AISettingsConfig {
     defaultSources: AITrackSources;
     playlistSourceOverrides: Record<string, AITrackSources>;
+    toolbarEnabled: boolean;
 }
 
 export interface SpotifySettingsConfig {
@@ -242,6 +243,7 @@ export const settings$ = createObservableFile<AppSettings>({
         ai: {
             defaultSources: [...AI_SOURCE_IDS],
             playlistSourceOverrides: {},
+            toolbarEnabled: true,
         },
         ui: {
             playbackControlsEnabled: true,
@@ -295,6 +297,7 @@ export function ensureMusicProviderSettings() {
         defaultSources?: unknown;
         playlistSourceOverrides?: unknown;
         source?: unknown;
+        toolbarEnabled?: unknown;
     } | undefined;
     const normalizedAI = normalizeAISettings(currentAI);
     if (JSON.stringify(currentAI) !== JSON.stringify(normalizedAI)) {
@@ -310,12 +313,18 @@ export function normalizeAISources(value: unknown, fallback: readonly MusicProvi
 
 export function normalizeAISettings(value: unknown): AISettingsConfig {
     const current = value && typeof value === "object" && !Array.isArray(value)
-        ? value as { defaultSources?: unknown; playlistSourceOverrides?: unknown; source?: unknown }
+        ? value as {
+            defaultSources?: unknown;
+            playlistSourceOverrides?: unknown;
+            source?: unknown;
+            toolbarEnabled?: unknown;
+        }
         : undefined;
     const legacyDefault = current?.source === "any" ? AI_SOURCE_IDS : [current?.source];
     return {
         defaultSources: normalizeAISources(current?.defaultSources ?? legacyDefault, AI_SOURCE_IDS),
         playlistSourceOverrides: normalizePlaylistSourceOverrides(current?.playlistSourceOverrides),
+        toolbarEnabled: typeof current?.toolbarEnabled === "boolean" ? current.toolbarEnabled : true,
     };
 }
 

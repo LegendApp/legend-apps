@@ -68,6 +68,11 @@ export function GeneralSettingsContent() {
 
             <SettingsSection title="AI playlists">
                 <SettingsRow
+                    title="Show AI toolbar"
+                    description="Show source, Auto, and Prompt controls beneath the playlist."
+                    control={<Checkbox $checked={settings$.ai.toolbarEnabled} />}
+                />
+                <SettingsRow
                     title="Default music sources"
                     description="Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred."
                     align="start"

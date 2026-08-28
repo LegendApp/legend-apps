@@ -120,6 +120,11 @@ describe("AI music sources", () => {
         expect(normalizeAISettings({ source: "spotify" })).toEqual({
             defaultSources: ["spotify"],
             playlistSourceOverrides: {},
+            toolbarEnabled: true,
         });
+    });
+
+    it("preserves a disabled AI toolbar setting", () => {
+        expect(normalizeAISettings({ toolbarEnabled: false }).toolbarEnabled).toBe(false);
     });
 });
