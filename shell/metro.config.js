@@ -36,6 +36,16 @@ config.cacheVersion = `legend-apps-${appId}-${process.env.LEGEND_PLATFORM || "na
 
 delete config.watcher?.unstable_workerThreads;
 
+config.transformer = {
+  ...config.transformer,
+  getTransformOptions: async () => ({
+    transform: {
+      experimentalImportSupport: true,
+      inlineRequires: true,
+    },
+  }),
+};
+
 module.exports = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
   dtsFile: "./src/uniwind-types.d.ts",
