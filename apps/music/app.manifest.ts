@@ -19,6 +19,7 @@ const manifest = {
       "@legend-apps/context-menu",
       "@legend-apps/drag-drop",
       "@legend-apps/file-dialog",
+      "@legend-apps/file-scanner",
       "@legend-apps/file-system-watcher",
       "@legend-apps/glass-effect-view",
       "@legend-apps/global-hotkey",
