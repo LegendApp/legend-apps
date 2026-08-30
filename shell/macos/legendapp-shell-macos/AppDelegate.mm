@@ -195,6 +195,30 @@ static void LegendConfigureMusicWindow(NSWindow *window)
   [[window standardWindowButton:NSWindowZoomButton] setHidden:YES];
 }
 
+static void LegendConfigureChatHistoryWindow(NSWindow *window)
+{
+  window.title = @"Legend Chat History";
+  window.minSize = NSMakeSize(640, 460);
+  window.styleMask = NSWindowStyleMaskTitled
+    | NSWindowStyleMaskClosable
+    | NSWindowStyleMaskMiniaturizable
+    | NSWindowStyleMaskResizable
+    | NSWindowStyleMaskFullSizeContentView
+    | NSWindowStyleMaskUnifiedTitleAndToolbar;
+  window.titleVisibility = NSWindowTitleVisible;
+  window.titlebarAppearsTransparent = YES;
+  if (!window.toolbar) {
+    NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"LegendMainWindowToolbar"];
+    toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+    toolbar.showsBaselineSeparator = NO;
+    window.toolbar = toolbar;
+  }
+  if (@available(macOS 11.0, *)) {
+    window.toolbarStyle = NSWindowToolbarStyleUnified;
+    window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleShadow;
+  }
+}
+
 static void LegendMakeViewTransparent(NSView *view)
 {
   view.wantsLayer = YES;
@@ -398,6 +422,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   NSString *appId = LegendCurrentAppId();
   BOOL isMarkdown = [appId isEqualToString:@"markdown"];
   BOOL isMusic = [appId isEqualToString:@"music"];
+  BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
   BOOL hostWindowHidden = LegendHostWindowHidden();
   NSRect frame = isMusic ? NSMakeRect(0, 0, 360, 640) : NSMakeRect(0, 0, 1280, 720);
   self.window = [[NSWindow alloc] initWithContentRect:frame
@@ -426,13 +451,14 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     }
     LegendConfigureMusicWindow(self.window);
     [self.window setDelegate:self];
+  } else if (isChatHistory) {
+    LegendConfigureChatHistoryWindow(self.window);
   } else {
     self.window.title = self.moduleName;
   }
 
   self.window.autorecalculatesKeyViewLoop = YES;
 
-  BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
   if (isChatHistory) {
     [self.window setContentSize:frame.size];
     [self.window center];
