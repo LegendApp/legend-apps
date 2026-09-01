@@ -9,6 +9,14 @@ const manifest = {
     macos: "so.legend.music.macos",
   },
   androidPackage: "so.legend.music",
+  hostWindow: {
+    macos: {
+      startupBackgroundColors: {
+        dark: "#191A1B",
+        light: "#f5f6f8",
+      },
+    },
+  },
   nativeModules: {
     macos: [
       "@legend-apps/app-exit",

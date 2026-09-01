@@ -186,7 +186,7 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
   const open = async (windowKey: keyof TConfig, overrides?: WindowOpenOverrides) => {
     const registration = ensureRegistration(windowKey);
     const {
-      loadComponentBeforeNativeOpen = true,
+      loadComponentBeforeNativeOpen = false,
       ...windowOverrides
     } = overrides ?? {};
     const componentReadyPromise = registration.ensureComponent();
@@ -197,11 +197,17 @@ export function createWindowsNavigator<TConfig extends WindowsConfig>(config: TC
     const mergedOptions = mergeWindowOptions(options, windowOverrides);
 
     const result = await nativeOpenWindow(mergedOptions);
-    if (!loadComponentBeforeNativeOpen) {
-      await componentReadyPromise;
-    }
     if (!result?.success) {
+      await componentReadyPromise.catch(() => undefined);
       throw new Error(`Failed to open window '${String(windowKey)}'.`);
+    }
+    if (!loadComponentBeforeNativeOpen) {
+      try {
+        await componentReadyPromise;
+      } catch (error) {
+        await nativeCloseWindow(mergedOptions.identifier ?? registration.identifier);
+        throw error;
+      }
     }
   };
 

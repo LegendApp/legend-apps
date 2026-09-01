@@ -11,7 +11,11 @@ const manifest = {
   androidPackage: "so.legend.chathistory",
   hostWindow: {
     macos: {
-      hidden: true,
+      hidden: false,
+      startupBackgroundColors: {
+        dark: "#191A1B",
+        light: "#f5f6f8",
+      },
     },
   },
   nativeModules: {

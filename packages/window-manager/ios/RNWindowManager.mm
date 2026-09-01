@@ -150,6 +150,45 @@ static NSColor *LegendColorFromHexString(NSString *value)
   return [NSColor colorWithSRGBRed:red green:green blue:blue alpha:alpha];
 }
 
+static BOOL LegendAppearanceIsDark(NSAppearance *appearance)
+{
+  if (@available(macOS 10.14, *)) {
+    NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames:@[
+      NSAppearanceNameDarkAqua,
+      NSAppearanceNameAqua,
+    ]];
+    return [match isEqualToString:NSAppearanceNameDarkAqua];
+  }
+
+  return NO;
+}
+
+static BOOL LegendWindowUsesDarkAppearance(NSWindow *window)
+{
+  if (window.appearance != nil) {
+    return LegendAppearanceIsDark(window.appearance);
+  }
+  if (NSApp.appearance != nil) {
+    return LegendAppearanceIsDark(NSApp.appearance);
+  }
+
+  NSString *interfaceStyle = [NSUserDefaults.standardUserDefaults stringForKey:@"AppleInterfaceStyle"];
+  return [interfaceStyle caseInsensitiveCompare:@"Dark"] == NSOrderedSame ||
+    LegendAppearanceIsDark(NSApp.effectiveAppearance);
+}
+
+static NSColor *LegendWindowStartupBackgroundColor(NSWindow *window, NSString *value)
+{
+  NSColor *configuredColor = LegendColorFromHexString(value);
+  if (configuredColor != nil) {
+    return configuredColor;
+  }
+
+  return LegendWindowUsesDarkAppearance(window)
+    ? [NSColor colorWithSRGBRed:25.0 / 255.0 green:26.0 / 255.0 blue:27.0 / 255.0 alpha:1]
+    : [NSColor colorWithSRGBRed:245.0 / 255.0 green:246.0 / 255.0 blue:248.0 / 255.0 alpha:1];
+}
+
 static void LegendApplyBackgroundColorToView(NSView *view, NSColor *backgroundColor)
 {
   if (!view || !backgroundColor) {
@@ -1777,13 +1816,36 @@ willBeInsertedIntoToolbar:(BOOL)flag
                                     hasMinHeight ? minHeight : currentMinSize.height)];
     }
 
-	    NSDictionary *initialProps = [self initialPropsFromOptions:options];
-	    RCTUIView *rootView = [self createReactRootViewWithModuleName:moduleName initialProperties:initialProps];
-	    if (!rootView) {
-	      reject(@"no_root_view", @"React root view could not be created", nil);
+    NSColor *startupBackgroundColor = transparentBackground
+      ? NSColor.clearColor
+      : LegendWindowStartupBackgroundColor(window, backgroundColor);
+    if (!transparentBackground && backgroundColor.length == 0) {
+      window.backgroundColor = startupBackgroundColor;
+      window.opaque = startupBackgroundColor.alphaComponent >= 1;
+      LegendApplyBackgroundColorToView(window.contentView, startupBackgroundColor);
+    }
+
+    BOOL presentedBeforeReactRoot = !deferOrderFront;
+    if (presentedBeforeReactRoot) {
+      [window.contentView displayIfNeeded];
+      [window displayIfNeeded];
+      [window makeKeyAndOrderFront:nil];
+      if (levelNumber) {
+        [window orderFrontRegardless];
+      }
+    }
+
+    NSDictionary *initialProps = [self initialPropsFromOptions:options];
+    RCTUIView *rootView = [self createReactRootViewWithModuleName:moduleName initialProperties:initialProps];
+    if (!rootView) {
+      if (presentedBeforeReactRoot) {
+        [window close];
+      }
+      reject(@"no_root_view", @"React root view could not be created", nil);
       return;
     }
 
+    rootView.backgroundColor = startupBackgroundColor;
     window.contentView = rootView;
     LegendApplyWindowBackgroundColor(window, backgroundColor);
     if (usesTitlebarBackground) {
@@ -1815,12 +1877,6 @@ willBeInsertedIntoToolbar:(BOOL)flag
       [self.closeRequestIdentifiers removeObject:identifier];
     }
 
-    if (!deferOrderFront) {
-      [window makeKeyAndOrderFront:nil];
-      if (levelNumber) {
-        [window orderFrontRegardless];
-      }
-    }
     resolve([self successJson]);
   });
 #else

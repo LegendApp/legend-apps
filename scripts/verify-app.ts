@@ -162,6 +162,19 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
     `<key>LegendHostWindowHidden</key>\n\t${manifest.hostWindow?.macos?.hidden === true ? "<true/>" : "<false/>"}`,
     `${manifest.id}/macos Info.plist has wrong host window metadata`,
   );
+  const startupBackgroundColors = manifest.hostWindow?.macos?.startupBackgroundColors;
+  if (startupBackgroundColors) {
+    assertContains(
+      infoPlist,
+      `<key>LegendHostWindowDarkBackgroundColor</key>\n\t<string>${startupBackgroundColors.dark}</string>`,
+      `${manifest.id}/macos Info.plist has wrong dark startup background`,
+    );
+    assertContains(
+      infoPlist,
+      `<key>LegendHostWindowLightBackgroundColor</key>\n\t<string>${startupBackgroundColors.light}</string>`,
+      `${manifest.id}/macos Info.plist has wrong light startup background`,
+    );
+  }
   for (const scheme of manifest.urlSchemes?.macos ?? []) {
     assertContains(infoPlist, `<string>${scheme}</string>`, `${manifest.id}/macos Info.plist is missing URL scheme ${scheme}`);
   }

@@ -9,6 +9,14 @@ const manifest = {
     macos: "so.legend.testkitchensink.macos",
   },
   androidPackage: "so.legend.testkitchensink",
+  hostWindow: {
+    macos: {
+      startupBackgroundColors: {
+        dark: "#f8fafc",
+        light: "#f8fafc",
+      },
+    },
+  },
   nativeModules: {
     macos: [
       "@legend-apps/app-exit",

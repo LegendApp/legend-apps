@@ -140,6 +140,7 @@ export function writeMacOSInfoPlist(
   const urlSchemes = manifest.urlSchemes?.macos?.filter(Boolean) ?? [];
   const customStrings = manifest.infoPlist?.macos ?? {};
   const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
+  const hostWindowStartupBackgroundColors = manifest.hostWindow?.macos?.startupBackgroundColors;
   const basePlist = replacePlistString(
     replacePlistString(
       fs.readFileSync(baseInfoPlistPath, "utf8"),
@@ -156,6 +157,14 @@ export function writeMacOSInfoPlist(
     `\t<string>${escapePlistString(manifest.displayName)}</string>`,
     "\t<key>LegendHostWindowHidden</key>",
     hostWindowHidden ? "\t<true/>" : "\t<false/>",
+    ...(hostWindowStartupBackgroundColors
+      ? [
+          "\t<key>LegendHostWindowDarkBackgroundColor</key>",
+          `\t<string>${escapePlistString(hostWindowStartupBackgroundColors.dark)}</string>`,
+          "\t<key>LegendHostWindowLightBackgroundColor</key>",
+          `\t<string>${escapePlistString(hostWindowStartupBackgroundColors.light)}</string>`,
+        ]
+      : []),
   ].join("\n");
   const sparkleMetadata = renderSparkleMetadata(manifest, mode, arch);
   const outputPlist = basePlist.replace(

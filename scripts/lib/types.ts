@@ -31,6 +31,10 @@ export type AppManifest = {
   hostWindow?: {
     macos?: {
       hidden?: boolean;
+      startupBackgroundColors?: {
+        dark: string;
+        light: string;
+      };
     };
   };
   nativeModules: Record<Platform, string[]>;

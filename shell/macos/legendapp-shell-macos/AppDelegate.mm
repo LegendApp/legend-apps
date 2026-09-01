@@ -72,6 +72,72 @@ static BOOL LegendHostWindowHidden(void)
   return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
 }
 
+static BOOL LegendAppearanceIsDark(NSAppearance *appearance)
+{
+  if (@available(macOS 10.14, *)) {
+    NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames:@[
+      NSAppearanceNameDarkAqua,
+      NSAppearanceNameAqua,
+    ]];
+    return [match isEqualToString:NSAppearanceNameDarkAqua];
+  }
+
+  return NO;
+}
+
+static NSColor *LegendColorFromHexString(NSString *value)
+{
+  if (![value isKindOfClass:NSString.class] || value.length == 0) {
+    return nil;
+  }
+
+  NSString *hex = [value hasPrefix:@"#"] ? [value substringFromIndex:1] : value;
+  if (hex.length != 6 && hex.length != 8) {
+    return nil;
+  }
+
+  unsigned long long raw = 0;
+  if (![[NSScanner scannerWithString:hex] scanHexLongLong:&raw]) {
+    return nil;
+  }
+
+  CGFloat red = hex.length == 8 ? ((raw >> 24) & 0xff) / 255.0 : ((raw >> 16) & 0xff) / 255.0;
+  CGFloat green = hex.length == 8 ? ((raw >> 16) & 0xff) / 255.0 : ((raw >> 8) & 0xff) / 255.0;
+  CGFloat blue = hex.length == 8 ? ((raw >> 8) & 0xff) / 255.0 : (raw & 0xff) / 255.0;
+  CGFloat alpha = hex.length == 8 ? (raw & 0xff) / 255.0 : 1;
+  return [NSColor colorWithSRGBRed:red green:green blue:blue alpha:alpha];
+}
+
+static BOOL LegendHostWindowUsesDarkAppearance(NSWindow *window)
+{
+  if (window.appearance != nil) {
+    return LegendAppearanceIsDark(window.appearance);
+  }
+  if (NSApp.appearance != nil) {
+    return LegendAppearanceIsDark(NSApp.appearance);
+  }
+
+  // AppKit initially reports Aqua before an unshown window joins the app's
+  // appearance hierarchy, so consult the current system style at launch.
+  NSString *interfaceStyle = [NSUserDefaults.standardUserDefaults stringForKey:@"AppleInterfaceStyle"];
+  return [interfaceStyle caseInsensitiveCompare:@"Dark"] == NSOrderedSame ||
+    LegendAppearanceIsDark(NSApp.effectiveAppearance);
+}
+
+static NSColor *LegendHostWindowStartupBackgroundColor(NSWindow *window)
+{
+  BOOL isDark = LegendHostWindowUsesDarkAppearance(window);
+  NSString *key = isDark ? @"LegendHostWindowDarkBackgroundColor" : @"LegendHostWindowLightBackgroundColor";
+  NSColor *configuredColor = LegendColorFromHexString(NSBundle.mainBundle.infoDictionary[key]);
+  if (configuredColor != nil) {
+    return configuredColor;
+  }
+
+  return isDark
+    ? [NSColor colorWithSRGBRed:25.0 / 255.0 green:26.0 / 255.0 blue:27.0 / 255.0 alpha:1]
+    : [NSColor colorWithSRGBRed:245.0 / 255.0 green:246.0 / 255.0 blue:248.0 / 255.0 alpha:1];
+}
+
 static BOOL LegendCanFocusManagedReopenWindow(NSWindow *window, NSWindow *hostWindow)
 {
   return window != nil && window != hostWindow && window.isVisible && !window.sheet && ![window isKindOfClass:NSPanel.class];
@@ -358,17 +424,48 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     if (@available(macOS 10.14, *)) {
       self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
     }
+    LegendConfigureMusicWindow(self.window);
+    [self.window setDelegate:self];
   } else {
     self.window.title = self.moduleName;
   }
 
   self.window.autorecalculatesKeyViewLoop = YES;
 
+  BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
+  if (isChatHistory) {
+    [self.window setContentSize:frame.size];
+    [self.window center];
+  } else {
+    NSString *autosaveName = LegendMainWindowFrameAutoSaveName(appId);
+    [self.window setFrameAutosaveName:autosaveName];
+    if (![self.window setFrameUsingName:autosaveName]) {
+      [self.window center];
+    }
+  }
+
+  BOOL presentBeforeReactRoot = !hostWindowHidden;
+  NSColor *startupBackgroundColor = nil;
+  if (presentBeforeReactRoot) {
+    startupBackgroundColor = LegendHostWindowStartupBackgroundColor(self.window);
+    NSView *placeholderView = [[NSView alloc] initWithFrame:self.window.contentView.bounds];
+    placeholderView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    placeholderView.wantsLayer = YES;
+    placeholderView.layer.backgroundColor = startupBackgroundColor.CGColor;
+    self.window.backgroundColor = startupBackgroundColor;
+    self.window.contentView = placeholderView;
+    [self.window makeKeyAndOrderFront:self];
+    [self.window displayIfNeeded];
+  }
+
   RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName
                                                      initialProperties:self.initialProps
                                                          launchOptions:launchOptions];
 
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  if (startupBackgroundColor != nil) {
+    ((RCTUIView *)rootView).backgroundColor = startupBackgroundColor;
+  }
 
   if (isMusic) {
     NSView *glassContentView = nil;
@@ -406,22 +503,10 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     LegendMakeViewTransparent(rootView);
     rootView.layer.backgroundColor = backgroundColor.CGColor;
   }
-  if (isMusic) {
-    [self.window setDelegate:self];
-  }
-
-  NSString *autosaveName = LegendMainWindowFrameAutoSaveName(appId);
-  [self.window setFrameAutosaveName:autosaveName];
-  if (![self.window setFrameUsingName:autosaveName]) {
-    [self.window center];
-  }
   if (hostWindowHidden) {
     [self.window orderOut:self];
   } else {
     [self.window makeKeyAndOrderFront:self];
-  }
-  if (isMusic) {
-    LegendConfigureMusicWindow(self.window);
   }
 }
 
