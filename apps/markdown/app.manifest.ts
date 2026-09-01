@@ -9,6 +9,9 @@ const manifest = {
     macos: "so.legend.markdown.macos",
   },
   androidPackage: "so.legend.markdown",
+  expoModules: {
+    macos: false,
+  },
   hostWindow: {
     macos: {
       hidden: true,

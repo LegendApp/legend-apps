@@ -103,8 +103,7 @@ export type MusicHotkeyBindingName = (typeof allMusicHotkeyDefinitions)[number][
 
 function migrateLegacyHotkeys() {
     const currentStorage = createStorage({ root: "applicationSupport" });
-    const currentFile = currentStorage.file("hotkeys.json");
-    if (currentFile && !currentFile.exists) {
+    if (currentStorage.read("hotkeys.json", { format: "text" }) === undefined) {
         const legacyStorage = createStorage({ root: "cache", subfolder: "data" });
         const legacy = legacyStorage.read<Record<string, unknown>>("hotkeys.json.json", { format: "json" })
             ?? legacyStorage.read<Record<string, unknown>>("hotkeys.json", { format: "json" });

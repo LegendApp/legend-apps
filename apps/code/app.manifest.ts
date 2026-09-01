@@ -9,6 +9,9 @@ const manifest = {
     macos: "so.legend.code.macos",
   },
   androidPackage: "so.legend.code",
+  expoModules: {
+    macos: false,
+  },
   hostWindow: {
     macos: {
       hidden: true,

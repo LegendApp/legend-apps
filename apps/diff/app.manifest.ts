@@ -9,6 +9,9 @@ const manifest = {
     macos: "so.legend.diff.macos",
   },
   androidPackage: "so.legend.diff",
+  expoModules: {
+    macos: false,
+  },
   hostWindow: {
     macos: {
       hidden: true,

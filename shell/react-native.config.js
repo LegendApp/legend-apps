@@ -48,6 +48,16 @@ for (const pkg of generated?.excludedNativePackages ?? []) {
   };
 }
 
+if (generated?.expoModules?.[generated.platform] === false) {
+  dependencies.expo = {
+    platforms: {
+      android: null,
+      ios: null,
+      macos: null,
+    },
+  };
+}
+
 module.exports = {
   dependencies,
 };

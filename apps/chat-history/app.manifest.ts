@@ -9,6 +9,9 @@ const manifest = {
     macos: "so.legend.chathistory.macos",
   },
   androidPackage: "so.legend.chathistory",
+  expoModules: {
+    macos: false,
+  },
   hostWindow: {
     macos: {
       hidden: false,

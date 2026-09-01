@@ -242,8 +242,18 @@ export function installMacOSPods(
 }
 
 export function getMacOSEnv(appId: string, configPath: string, appRoot = shellDir) {
+  const config = readJson(configPath) as AppManifest;
+  const usesExpoModules = config.expoModules?.macos !== false;
   return {
+    ...(!usesExpoModules
+      ? {
+          BUNDLE_COMMAND: "bundle",
+          CLI_PATH: path.join(rootDir, "node_modules", "react-native", "scripts", "bundle.js"),
+          ENTRY_FILE: path.join(shellDir, "index.native.ts"),
+        }
+      : {}),
     LEGEND_APP: appId,
+    LEGEND_USE_EXPO_MODULES: usesExpoModules ? "1" : "0",
     LEGEND_PLATFORM: "macos",
     LEGEND_NATIVE_CONFIG: configPath,
     LEGEND_APP_CONFIG: configPath,
@@ -354,6 +364,28 @@ function patchMacOSProjectForApp(workspaceDir: string, manifest: AppManifest) {
     /PRODUCT_NAME = .*?;/g,
     `PRODUCT_NAME = ${quotePBX(manifest.displayName)};`,
   );
+
+  if (manifest.expoModules?.macos === false) {
+    project = project
+      .replace(/^\s*D049273A1D34E970A528943A \/\* ExpoModulesProvider\.swift in Sources \*\/ = .*\n/m, "")
+      .replace(/^\s*CA2406CD41308B5A3C582D6C \/\* ExpoModulesProvider\.swift \*\/ = .*\n/m, "")
+      .replace(/^\s*CA2406CD41308B5A3C582D6C \/\* ExpoModulesProvider\.swift \*\/,\n/m, "")
+      .replace(/^\s*A7223F899AD7912E69FE74F7 \/\* ExpoModulesProviders \*\/,\n/m, "")
+      .replace(/^\s*D049273A1D34E970A528943A \/\* ExpoModulesProvider\.swift in Sources \*\/,\n/m, "")
+      .replace(/^\s*2581581A1C9BC7916A6855FB \/\* \[Expo\] Configure project \*\/,\n/m, "")
+      .replace(
+        /^\s*A7223F899AD7912E69FE74F7 \/\* ExpoModulesProviders \*\/ = \{[\s\S]*?^\s*\};\n/m,
+        "",
+      )
+      .replace(
+        /^\s*5B0A6CE5F13628E57A23295B \/\* legendapp-shell-macos \*\/ = \{[\s\S]*?^\s*\};\n/m,
+        "",
+      )
+      .replace(
+        /^\s*2581581A1C9BC7912E69FE74F7 \/\* \[Expo\] Configure project \*\/ = \{[\s\S]*?^\s*\};\n/m,
+        "",
+      );
+  }
 
   fs.writeFileSync(projectPath, project);
 

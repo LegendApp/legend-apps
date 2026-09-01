@@ -162,6 +162,11 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
     `<key>LegendHostWindowHidden</key>\n\t${manifest.hostWindow?.macos?.hidden === true ? "<true/>" : "<false/>"}`,
     `${manifest.id}/macos Info.plist has wrong host window metadata`,
   );
+  assertContains(
+    infoPlist,
+    `<key>LegendUseExpoModules</key>\n\t${manifest.expoModules?.macos === false ? "<false/>" : "<true/>"}`,
+    `${manifest.id}/macos Info.plist has wrong Expo modules metadata`,
+  );
   const startupBackgroundColors = manifest.hostWindow?.macos?.startupBackgroundColors;
   if (startupBackgroundColors) {
     assertContains(

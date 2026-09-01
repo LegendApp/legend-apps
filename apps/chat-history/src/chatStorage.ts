@@ -1,16 +1,18 @@
-import { createStorage } from "@legend-apps/storage";
+import {
+  readApplicationSupportJson,
+  writeApplicationSupportJson,
+} from "@legend-apps/storage/src/applicationSupport";
 
-const storage = createStorage({ subfolder: "chat-history" });
-const settingsPath = "settings.json";
+const settingsPath = "chat-history/settings.json";
 
 type ChatHistorySettings = {
   selectedId?: string;
 };
 
 export function readSelectedChatId() {
-  return storage.read<ChatHistorySettings>(settingsPath, { format: "json" })?.selectedId;
+  return readApplicationSupportJson<ChatHistorySettings>(settingsPath)?.selectedId;
 }
 
 export function writeSelectedChatId(selectedId: string) {
-  storage.write(settingsPath, { selectedId }, { format: "json" });
+  writeApplicationSupportJson(settingsPath, { selectedId });
 }

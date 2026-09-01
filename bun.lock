@@ -659,7 +659,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@legendapp/state": "catalog:",
-        "expo-file-system": "~19.0.21",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -672,7 +671,6 @@
       "dependencies": {
         "@legend-apps/native-text-source": "workspace:*",
         "@legend-apps/storage": "workspace:*",
-        "expo-file-system": "~19.0.21",
       },
       "devDependencies": {
         "nitrogen": "0.35.6",

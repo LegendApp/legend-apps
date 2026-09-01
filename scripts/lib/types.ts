@@ -28,6 +28,7 @@ export type AppManifest = {
     macos: string;
   };
   androidPackage: string;
+  expoModules?: Partial<Record<Platform, boolean>>;
   hostWindow?: {
     macos?: {
       hidden?: boolean;

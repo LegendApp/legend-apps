@@ -8,8 +8,6 @@ import {
   type PersistOptions,
   type SyncTransform,
 } from "@legendapp/state/sync";
-import { Directory, File, Paths } from "expo-file-system/next";
-
 import NativeStorage from "./NativeStorage";
 
 const metadataSuffix = "__m";
@@ -27,6 +25,15 @@ export type StorageListOptions = {
   extension?: string;
 };
 
+export type StoragePath = {
+  isDirectory: boolean;
+  name: string;
+  uri: string;
+};
+
+export type StorageDirectory = StoragePath & { isDirectory: true };
+export type StorageFile = StoragePath & { isDirectory: false };
+
 export type StorageReadOptions<Format extends StorageFormat = StorageFormat> = {
   format: Format;
 };
@@ -36,12 +43,12 @@ export type StorageWriteOptions<Format extends StorageFormat = StorageFormat> = 
 };
 
 export type Storage = {
-  root: Directory;
+  root: StorageDirectory;
   delete(relativePath: string): void;
-  directory(relativePath?: string): Directory;
-  ensureDirectory(relativePath?: string): Directory;
-  file(relativePath: string): File;
-  list(relativePath?: string, options?: StorageListOptions): (Directory | File)[];
+  directory(relativePath?: string): StorageDirectory;
+  ensureDirectory(relativePath?: string): StorageDirectory;
+  file(relativePath: string): StorageFile;
+  list(relativePath?: string, options?: StorageListOptions): StoragePath[];
   read<T = unknown>(relativePath: string, options: StorageReadOptions<"json">): T | undefined;
   read(relativePath: string, options: StorageReadOptions<"m3u" | "text">): string | undefined;
   write(relativePath: string, value: unknown, options: StorageWriteOptions<"json">): void;
@@ -126,23 +133,48 @@ function extensionForFormat(format: StorageFormat) {
   return format === "m3u" ? "m3u" : format === "text" ? "txt" : "json";
 }
 
-function splitRelativePath(relativePath = "") {
-  return relativePath.split("/").filter((segment) => segment.length > 0);
+function normalizeRelativePath(relativePath = "") {
+  if (relativePath.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(relativePath)) {
+    throw new Error(`Storage paths must be relative: ${relativePath}`);
+  }
+
+  const segments = relativePath.split("/");
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    throw new Error(`Storage paths cannot traverse outside their root: ${relativePath}`);
+  }
+  return segments.filter(Boolean).join("/");
+}
+
+function joinRelativePaths(...paths: (string | undefined)[]) {
+  return normalizeRelativePath(paths.filter(Boolean).join("/"));
+}
+
+function storagePathName(relativePath: string, root: StorageRoot) {
+  const segments = relativePath.split("/");
+  return segments.at(-1) || root;
+}
+
+function createStoragePath(root: StorageRoot, relativePath: string, isDirectory: boolean): StoragePath {
+  const uri = NativeStorage.getStoragePathUri(root, relativePath);
+  if (!uri) {
+    throw new Error(`Could not resolve ${root} storage path: ${relativePath}`);
+  }
+  return {
+    isDirectory,
+    name: storagePathName(relativePath, root),
+    uri,
+  };
 }
 
 function fileNameForTable(table: string, extension: string) {
   return `${table}.${extension.replace(/^\./, "")}`;
 }
 
-function readFileValue(file: File, format: StorageFormat) {
-  const content = file.textSync();
+function parseFileValue(content: string, format: StorageFormat) {
   if (format === "json") {
     try {
       return safeParse(content);
     } catch {
-      if (file.exists) {
-        file.delete();
-      }
       return undefined;
     }
   }
@@ -150,73 +182,81 @@ function readFileValue(file: File, format: StorageFormat) {
   return content;
 }
 
-function writeFileValue(file: File, value: unknown, format: StorageFormat) {
-  const output = format === "json" ? safeStringify(value) : typeof value === "string" ? value : String(value);
-  file.parentDirectory.create({ idempotent: true, intermediates: true });
-  file.write(output);
-}
-
 export function getApplicationSupportDirectory() {
-  return new Directory(NativeStorage.getApplicationSupportDirectory());
+  return createStoragePath("applicationSupport", "", true) as StorageDirectory;
 }
 
-function getRootDirectory(root: StorageRoot) {
-  if (root === "applicationSupport") {
-    return getApplicationSupportDirectory();
-  }
-  if (root === "cache") {
-    return Paths.cache;
-  }
-  return Paths.document;
+export function readTextFile(pathOrUri: string) {
+  return NativeStorage.readTextFile(pathOrUri) ?? undefined;
 }
 
 export function createStorage({ root = "applicationSupport", subfolder }: StorageOptions = {}): Storage {
-  const rootDirectory = subfolder
-    ? new Directory(getRootDirectory(root), ...splitRelativePath(subfolder))
-    : getRootDirectory(root);
-
-  const directory = (relativePath = "") => new Directory(rootDirectory, ...splitRelativePath(relativePath));
-  const file = (relativePath: string) => new File(rootDirectory, ...splitRelativePath(relativePath));
+  const rootPath = normalizeRelativePath(subfolder);
+  const resolvePath = (relativePath = "") => joinRelativePaths(rootPath, relativePath);
+  const directory = (relativePath = "") => createStoragePath(root, resolvePath(relativePath), true) as StorageDirectory;
+  const file = (relativePath: string) => createStoragePath(root, resolvePath(relativePath), false) as StorageFile;
 
   const ensureDirectory = (relativePath = "") => {
-    const targetDirectory = directory(relativePath);
-    targetDirectory.create({ idempotent: true, intermediates: true });
-    return targetDirectory;
+    const path = resolvePath(relativePath);
+    if (!NativeStorage.ensureStorageDirectory(root, path)) {
+      throw new Error(`Could not create ${root} storage directory: ${path}`);
+    }
+    return createStoragePath(root, path, true) as StorageDirectory;
   };
 
   return {
-    root: rootDirectory,
+    root: directory(),
     delete(relativePath) {
-      const targetFile = file(relativePath);
-      if (targetFile.exists) {
-        targetFile.delete();
-      }
+      NativeStorage.deleteStoragePath(root, resolvePath(relativePath));
     },
     directory,
     ensureDirectory,
     file,
     list(relativePath = "", options = {}) {
-      const targetDirectory = directory(relativePath);
-      if (!targetDirectory.exists) {
-        return [];
-      }
-      const entries = targetDirectory.list();
+      const path = resolvePath(relativePath);
+      const entries = JSON.parse(NativeStorage.listStorageDirectoryJson(root, path)) as Array<{
+        isDirectory: boolean;
+        name: string;
+      }>;
       const extension = options.extension ? normalizeExtension(options.extension).toLowerCase() : undefined;
-      return extension
-        ? entries.filter((entry) => entry instanceof File && entry.name.toLowerCase().endsWith(extension))
-        : entries;
+      return entries
+        .filter((entry) => !extension || (!entry.isDirectory && entry.name.toLowerCase().endsWith(extension)))
+        .map((entry) => createStoragePath(root, joinRelativePaths(path, entry.name), entry.isDirectory));
     },
     read(relativePath: string, options: StorageReadOptions) {
-      const targetFile = file(relativePath);
-      if (!targetFile.exists) {
+      const path = resolvePath(relativePath);
+      const content = NativeStorage.readStorageText(root, path);
+      if (content === null) {
         return undefined;
       }
-      return readFileValue(targetFile, options.format);
+      const value = parseFileValue(content, options.format);
+      if (options.format === "json" && value === undefined) {
+        NativeStorage.deleteStoragePath(root, path);
+      }
+      return value;
     },
     write(relativePath: string, value: unknown, options: StorageWriteOptions) {
-      writeFileValue(file(relativePath), value, options.format);
+      const path = resolvePath(relativePath);
+      const output = options.format === "json"
+        ? safeStringify(value)
+        : typeof value === "string" ? value : String(value);
+      if (!NativeStorage.writeStorageText(root, path, output)) {
+        throw new Error(`Could not write ${root} storage file: ${path}`);
+      }
     },
   };
+}
+
+function readStorageValue(storage: Storage, relativePath: string, format: StorageFormat) {
+  return (storage.read as (path: string, options: StorageReadOptions) => unknown)(relativePath, { format });
+}
+
+function writeStorageValue(storage: Storage, relativePath: string, value: unknown, format: StorageFormat) {
+  (storage.write as (path: string, nextValue: unknown, options: StorageWriteOptions) => void)(
+    relativePath,
+    value,
+    { format },
+  );
 }
 
 class ObservablePersistStorage implements ManagedPersistPlugin {
@@ -253,21 +293,18 @@ class ObservablePersistStorage implements ManagedPersistPlugin {
   loadTable(table: string) {
     if (!this.tablesLoaded[table]) {
       this.tablesLoaded[table] = true;
-      const mainTableFile = this.storage.file(fileNameForTable(table, this.extension));
-      const metadataTableFile = this.storage.file(fileNameForTable(`${table}${metadataSuffix}`, this.extension));
-
-      if (mainTableFile.exists) {
-        const value = readFileValue(mainTableFile, this.format);
-        if (value !== undefined) {
-          this.data[table] = value;
-        }
+      const value = readStorageValue(this.storage, fileNameForTable(table, this.extension), this.format);
+      if (value !== undefined) {
+        this.data[table] = value;
       }
 
-      if (metadataTableFile.exists) {
-        const value = readFileValue(metadataTableFile, this.format);
-        if (value !== undefined) {
-          this.data[`${table}${metadataSuffix}`] = value;
-        }
+      const metadataValue = readStorageValue(
+        this.storage,
+        fileNameForTable(`${table}${metadataSuffix}`, this.extension),
+        this.format,
+      );
+      if (metadataValue !== undefined) {
+        this.data[`${table}${metadataSuffix}`] = metadataValue;
       }
     }
   }
@@ -323,12 +360,12 @@ class ObservablePersistStorage implements ManagedPersistPlugin {
 
   private saveDebounced(table: string) {
     const value = this.data[table];
-    const file = this.storage.file(fileNameForTable(table, this.extension));
+    const relativePath = fileNameForTable(table, this.extension);
 
     if (value !== undefined && value !== null) {
-      writeFileValue(file, value, this.format);
-    } else if (file.exists) {
-      file.delete();
+      writeStorageValue(this.storage, relativePath, value, this.format);
+    } else {
+      this.storage.delete(relativePath);
     }
   }
 }
@@ -369,8 +406,8 @@ export function createObservableFile<T>({
   );
 
   if (saveDefaultToFile) {
-    const defaultFile = targetStorage.file(`${filename}.json`);
-    if (!defaultFile.exists) {
+    const defaultPath = `${filename}.json`;
+    if (targetStorage.read(defaultPath, { format: "text" }) === undefined) {
       targetStorage.write(`${filename}.json`, initialValue, { format: "json" });
     }
   }

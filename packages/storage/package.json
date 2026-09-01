@@ -18,8 +18,7 @@
     }
   },
   "dependencies": {
-    "@legendapp/state": "catalog:",
-    "expo-file-system": "~19.0.21"
+    "@legendapp/state": "catalog:"
   },
   "peerDependencies": {
     "react": "catalog:",

@@ -141,6 +141,7 @@ export function writeMacOSInfoPlist(
   const customStrings = manifest.infoPlist?.macos ?? {};
   const hostWindowHidden = manifest.hostWindow?.macos?.hidden === true;
   const hostWindowStartupBackgroundColors = manifest.hostWindow?.macos?.startupBackgroundColors;
+  const usesExpoModules = manifest.expoModules?.macos !== false;
   const basePlist = replacePlistString(
     replacePlistString(
       fs.readFileSync(baseInfoPlistPath, "utf8"),
@@ -157,6 +158,8 @@ export function writeMacOSInfoPlist(
     `\t<string>${escapePlistString(manifest.displayName)}</string>`,
     "\t<key>LegendHostWindowHidden</key>",
     hostWindowHidden ? "\t<true/>" : "\t<false/>",
+    "\t<key>LegendUseExpoModules</key>",
+    usesExpoModules ? "\t<true/>" : "\t<false/>",
     ...(hostWindowStartupBackgroundColors
       ? [
           "\t<key>LegendHostWindowDarkBackgroundColor</key>",

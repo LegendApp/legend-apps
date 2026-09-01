@@ -1,5 +1,4 @@
-import { createObservableFile, createStorage, getPersistPlugin } from "@legend-apps/storage";
-import { File } from "expo-file-system/next";
+import { createObservableFile, createStorage, getPersistPlugin, readTextFile } from "@legend-apps/storage";
 
 import darkPlusTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json";
 import githubLightTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json";
@@ -507,9 +506,9 @@ function getDevSyntaxAssetSourceCandidates({ filename, kind }: SyntaxAssetSource
 
 function readDevSyntaxAssetFile(source: SyntaxAssetSource) {
   for (const candidate of getDevSyntaxAssetSourceCandidates(source)) {
-    const file = new File(candidate);
-    if (file.exists) {
-      const value = JSON.parse(file.textSync());
+    const content = readTextFile(candidate);
+    if (content !== undefined) {
+      const value = JSON.parse(content);
       const valid = source.kind === "theme"
         ? parseSyntaxThemeFile(source.filename, value)
         : parseSyntaxGrammarFile(source.filename, value);

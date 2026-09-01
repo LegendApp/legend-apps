@@ -75,6 +75,12 @@ static BOOL LegendHostWindowHidden(void)
   return [value respondsToSelector:@selector(boolValue)] && [value boolValue];
 }
 
+static BOOL LegendUsesExpoModules(void)
+{
+  id value = NSBundle.mainBundle.infoDictionary[@"LegendUseExpoModules"];
+  return ![value respondsToSelector:@selector(boolValue)] || [value boolValue];
+}
+
 static BOOL LegendAppearanceIsDark(NSAppearance *appearance)
 {
   if (@available(macOS 10.14, *)) {
@@ -553,7 +559,8 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 - (NSURL *)bundleURL
 {
 #if DEBUG
-  return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@".expo/.virtual-metro-entry"];
+  NSString *bundleRoot = LegendUsesExpoModules() ? @".expo/.virtual-metro-entry" : @"index.native";
+  return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:bundleRoot];
 #else
   return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
 #endif
