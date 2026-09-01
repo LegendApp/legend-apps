@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      body {
+        display: grid;
+        place-items: center;
+        color: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        background:
+          radial-gradient(circle at 20% 20%, #164e63 0, transparent 38%),
+          radial-gradient(circle at 80% 75%, #4c1d95 0, transparent 42%),
+          #020617;
+      }
+      .orbit { position: relative; width: 420px; height: 420px; animation: spin 12s linear infinite; }
+      .ring { position: absolute; inset: 0; border: 2px solid #22d3ee66; border-radius: 50%; }
+      .ring:nth-child(2) { inset: 72px; border-color: #c084fc88; animation: spin 7s linear infinite reverse; }
+      .dot { position: absolute; left: 50%; top: -14px; width: 28px; height: 28px; border-radius: 50%; background: #67e8f9; box-shadow: 0 0 45px #22d3ee; }
+      .copy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+      h1 { margin: 0; font-size: 52px; letter-spacing: -2px; }
+      p { margin: 14px 0 0; color: #a5f3fc; font-size: 22px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="orbit">
+      <div class="ring"><div class="dot"></div></div>
+      <div class="ring"><div class="dot"></div></div>
+      <div class="copy"><h1>Just HTML</h1><p>CSS animations included</p></div>
+    </div>
+  </body>
+</html>

@@ -12,6 +12,7 @@ import * as React from "react";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
 import * as ReactNativeWebGPU from "react-native-webgpu";
+import * as ReactNativeWebview from "react-native-webview";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
 import type { CompileDeckResult } from "@legend-apps/presentation";
@@ -35,6 +36,7 @@ const hostModules: Record<string, unknown> = {
   "@legend-apps/presentation": Presentation,
   "@shopify/react-native-skia": ReactNativeSkia,
   "react-native-webgpu": ReactNativeWebGPU,
+  "react-native-webview": ReactNativeWebview,
 };
 
 function evaluateDeck(code: string) {

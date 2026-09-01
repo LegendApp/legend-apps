@@ -24,6 +24,7 @@ const manifest = {
       "@legend-apps/window-manager",
       "@shopify/react-native-skia",
       "react-native-webgpu",
+      "react-native-webview",
     ],
     ios: [],
     android: [],

@@ -84,6 +84,36 @@ describe("compileDeck", () => {
     expect(result.code).toContain("Explain that the expression renders live values.");
   });
 
+  test("compiles inline HTML, local pages, and React DOM components for Webview", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": [
+        '<Webview html={"<h1>Inline HTML</h1>"} />',
+        "---",
+        '<Webview src="./page.html" />',
+        "---",
+        '<Webview component="./WebDemo.tsx" props={{ label: "Bundled React" }} />',
+      ].join("\n"),
+      "page.html": "<!doctype html><title>Local page</title><h1>Local HTML</h1>",
+      "WebDemo.tsx": [
+        'import { useEffect, useState } from "react";',
+        'export default function WebDemo({ label }: { label: string }) {',
+        '  const [ready, setReady] = useState(false);',
+        '  useEffect(() => { const frame = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(frame); }, []);',
+        '  return <main>{label}: {ready ? "ready" : "waiting"}</main>;',
+        '}',
+      ].join("\n"),
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.dependencies).toContain(fs.realpathSync(path.join(path.dirname(deckPath), "page.html")));
+    expect(result.dependencies).toContain(fs.realpathSync(path.join(path.dirname(deckPath), "WebDemo.tsx")));
+    expect(result.code).toContain("Inline HTML");
+    expect(result.code).toContain("page.html");
+    expect(result.code).toContain("componentScript");
+    expect(result.code).toContain("__LEGEND_SLIDES_PROPS__");
+  });
+
   test("compiles the advanced example with custom components and animations", async () => {
     const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/showcase.mdx");
     const result = await compileDeck(deckPath);
@@ -93,6 +123,8 @@ describe("compileDeck", () => {
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/LifecycleAnimation.tsx"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/SkiaNebula.tsx"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/WebGPUPortal.tsx"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "web/kinetic.html"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "web/WebParticleField.tsx"));
     expect(result.code).toContain('require("@legend-apps/presentation")');
     expect(result.code).toContain('require("@shopify/react-native-skia")');
     expect(result.code).toContain('require("react-native-webgpu")');
@@ -123,6 +155,17 @@ describe("compileDeck", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.errors.join("\n")).toContain("is not available to decks");
+  });
+
+  test("rejects unavailable packages in Webview components", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": '<Webview component="./WebDemo.tsx" />',
+      "WebDemo.tsx": 'import leftPad from "left-pad"; export default function WebDemo() { return <p>{leftPad("x", 2)}</p>; }',
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors.join("\n")).toContain("is not available to Webview components");
   });
 
   test("rejects local imports outside the deck directory", async () => {

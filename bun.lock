@@ -211,6 +211,7 @@
         "@shopify/react-native-skia": "^2.11.1",
         "fflate": "^0.8.3",
         "react-native-webgpu": "^0.8.5",
+        "react-native-webview": "16.0.0",
         "uniwind": "^1.6.3",
       },
       "devDependencies": {
@@ -611,6 +612,7 @@
         "@mdx-js/mdx": "^3.1.1",
         "esbuild": "^0.25.9",
         "react": "catalog:",
+        "react-dom": "19.1.4",
         "react-native": "catalog:",
         "remark-frontmatter": "^5.0.0",
         "remark-gfm": "^4.0.1",
@@ -2490,6 +2492,8 @@
     "react": ["react@19.1.4", "", {}, "sha512-DHINL3PAmPUiK1uszfbKiXqfE03eszdt5BpVSuEAHb5nfmNPwnsy7g39h2t8aXFc/Bv99GH81s+j8dobtD+jOw=="],
 
     "react-devtools-core": ["react-devtools-core@6.1.5", "", { "dependencies": { "shell-quote": "^1.6.1", "ws": "^7" } }, "sha512-ePrwPfxAnB+7hgnEr8vpKxL9cmnp7F322t8oqcPshbIQQhDKgFDW4tjhF2wjVbdXF9O/nyuy3sQWd9JGpiLPvA=="],
+
+    "react-dom": ["react-dom@19.1.4", "", { "dependencies": { "scheduler": "^0.26.0" }, "peerDependencies": { "react": "^19.1.4" } }, "sha512-s2868ab/xo2SI6H4106A7aFI8Mrqa4xC6HZT/pBzYyQ3cBLqa88hu47xYD8xf+uECleN698Awn7RCWlkTiKnqQ=="],
 
     "react-is": ["react-is@19.2.7", "", {}, "sha512-kZFnouyVv7eP/Phmrlo9FK+zcAdriZJvzxXHF1Sl1P377WSGe2G/JxVolhTrB/jeV47lKImhNUsijjHAAbcl/A=="],
 

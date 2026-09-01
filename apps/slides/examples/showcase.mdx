@@ -96,6 +96,30 @@ The app also provides `react-native-webgpu`, backed by Dawn and Metal on macOS.
 
 ---
 
+## Arbitrary HTML
+
+Local HTML pages run directly inside a built-in `Webview` with no server.
+
+<Webview src="./web/kinetic.html" style={{ height: 680, marginTop: 24 }} />
+
+<!-- The HTML, CSS, and JavaScript in this page are loaded straight from the deck directory. -->
+
+---
+
+## React DOM components
+
+Point `component` at a local file and the deck compiler supplies React DOM and bundles it into the page.
+
+<Webview
+  component="./web/WebParticleField.tsx"
+  props={{ color: "#22d3ee", count: 90, label: "React DOM inside React Native" }}
+  style={{ height: 680, marginTop: 24 }}
+/>
+
+<!-- Props are serialized into the browser runtime; the component and its local imports are bundled with the deck. -->
+
+---
+
 ## Arbitrary expressions
 
 <View className="mt-10 flex-row gap-6">

@@ -7,6 +7,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import { parse as parseYaml } from "yaml";
 import { remarkSlides } from "./remarkSlides";
+import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 
 const hostModules = new Set([
@@ -21,6 +22,7 @@ const hostModules = new Set([
   "@legend-apps/presentation",
   "@shopify/react-native-skia",
   "react-native-webgpu",
+  "react-native-webview",
 ]);
 const sourceExtensions = [
   "",
@@ -148,7 +150,7 @@ function preprocessNotes(source: string) {
   return output;
 }
 
-function mdxDeckPlugin(): Plugin {
+function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>): Plugin {
   return {
     name: "legend-slides-mdx",
     setup(buildApi) {
@@ -157,7 +159,7 @@ function mdxDeckPlugin(): Plugin {
         const compiled = await compile(preprocessNotes(preprocessSlideFrontmatter(source)), {
           jsx: true,
           jsxImportSource: "react",
-          remarkPlugins: [remarkFrontmatter, remarkGfm, remarkSlides],
+          remarkPlugins: [remarkFrontmatter, remarkGfm, [remarkWebviews, { deckPath: entryPath, dependencies: webviewDependencies }], remarkSlides],
         });
         return { contents: String(compiled), loader: "jsx" as Loader };
       });
@@ -250,6 +252,7 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
   }
 
   try {
+    const webviewDependencies = new Set<string>();
     const result = await build({
       absWorkingDir: path.dirname(absoluteDeckPath),
       bundle: true,
@@ -264,7 +267,7 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
       platform: "neutral",
       plugins: [
         localDeckPlugin(absoluteDeckPath),
-        mdxDeckPlugin(),
+        mdxDeckPlugin(absoluteDeckPath, webviewDependencies),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
       sourcemap: "inline",
@@ -277,7 +280,10 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
     }
     return {
       code: output.text,
-      dependencies: dependenciesFrom(result, path.dirname(absoluteDeckPath)),
+      dependencies: [...new Set([
+        ...dependenciesFrom(result, path.dirname(absoluteDeckPath)),
+        ...webviewDependencies,
+      ])].sort(),
       success: true,
       uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath)),
       warnings: formatMessages(result.warnings),
