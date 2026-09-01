@@ -1,6 +1,7 @@
 # Third-party notices
 
-The volumetric raymarching approach in `components/WebGPUPortal.tsx` is adapted from the TypeGPU Clouds example:
+The volumetric raymarching approaches in `components/WebGPUPortal.tsx` and
+`components/TypeGPUClouds.tsx` are adapted from the TypeGPU Clouds example:
 
 Copyright (c) 2025 Software Mansion <swmansion.com>
 

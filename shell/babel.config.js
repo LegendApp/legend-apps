@@ -23,7 +23,7 @@ module.exports = function (api) {
   });
 
   return {
-    plugins: [["babel-plugin-react-compiler", { target: "19" }], inlineLegendPublicPaths],
+    plugins: [["babel-plugin-react-compiler", { target: "19" }], inlineLegendPublicPaths, "@babel/plugin-transform-class-static-block"],
     presets: ["babel-preset-expo"],
   };
 };

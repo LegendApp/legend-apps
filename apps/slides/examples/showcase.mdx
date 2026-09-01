@@ -16,6 +16,7 @@ import { Text, View } from "react-native"
 import { InteractiveCounter } from "./components/InteractiveCounter"
 import { LifecycleAnimation } from "./components/LifecycleAnimation"
 import { SkiaNebula } from "./components/SkiaNebula"
+import { TypeGPUClouds } from "./components/TypeGPUClouds"
 import { WebGPUPortal } from "./components/WebGPUPortal"
 
 export const capabilities = [
@@ -93,6 +94,16 @@ The app also provides `react-native-webgpu`. This scene ray-marches a self-shado
 <WebGPUPortal />
 
 <!-- This component creates its own WGSL shader, render pipeline, uniform buffer, and animation loop. -->
+
+---
+
+## TypeGPU Clouds
+
+Deck components can import `typegpu` and `@typegpu/noise`. This scene uses typed shader functions for volumetric density, self-shadowing, and ray marching.
+
+<TypeGPUClouds />
+
+<!-- This component uses TypeGPU core directly so it does not depend on React Native Worklets. -->
 
 ---
 

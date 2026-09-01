@@ -5,6 +5,7 @@ import { compile } from "@mdx-js/mdx";
 import { build, type BuildResult, type Loader, type Message, type Plugin } from "esbuild";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
+import typegpuPlugin from "unplugin-typegpu/esbuild";
 import { parse as parseYaml } from "yaml";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
@@ -21,8 +22,13 @@ const hostModules = new Set([
   "@legendapp/motion",
   "@legend-apps/presentation",
   "@shopify/react-native-skia",
+  "@typegpu/noise",
   "react-native-webgpu",
   "react-native-webview",
+  "typegpu",
+  "typegpu/common",
+  "typegpu/data",
+  "typegpu/std",
 ]);
 const sourceExtensions = [
   "",
@@ -268,6 +274,7 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
       plugins: [
         localDeckPlugin(absoluteDeckPath),
         mdxDeckPlugin(absoluteDeckPath, webviewDependencies),
+        typegpuPlugin(),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
       sourcemap: "inline",

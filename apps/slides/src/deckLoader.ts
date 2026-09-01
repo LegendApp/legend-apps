@@ -4,6 +4,7 @@ import * as LegendStateReact from "@legendapp/state/react";
 import * as LegendStateSync from "@legendapp/state/sync";
 import * as Presentation from "@legend-apps/presentation";
 import * as ReactNativeSkia from "@shopify/react-native-skia";
+import * as TypeGPUNoise from "@typegpu/noise";
 import { commandRunner } from "@legend-apps/command-runner";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
@@ -13,6 +14,10 @@ import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
 import * as ReactNativeWebGPU from "react-native-webgpu";
 import * as ReactNativeWebview from "react-native-webview";
+import * as TypeGPU from "typegpu";
+import * as TypeGPUCommon from "typegpu/common";
+import * as TypeGPUData from "typegpu/data";
+import * as TypeGPUStd from "typegpu/std";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
 import type { CompileDeckResult } from "@legend-apps/presentation";
@@ -46,8 +51,13 @@ const hostModules: Record<string, unknown> = {
   "@legendapp/motion": Motion,
   "@legend-apps/presentation": Presentation,
   "@shopify/react-native-skia": ReactNativeSkia,
+  "@typegpu/noise": TypeGPUNoise,
   "react-native-webgpu": webGPUHostModule,
   "react-native-webview": ReactNativeWebview,
+  typegpu: TypeGPU,
+  "typegpu/common": TypeGPUCommon,
+  "typegpu/data": TypeGPUData,
+  "typegpu/std": TypeGPUStd,
 };
 
 function evaluateDeck(code: string) {

@@ -26,14 +26,14 @@ const cloudShader = `
 
   fn noise3(position: vec3f) -> f32 {
     let cell = floor(position);
-    let local = fract(position);
-    let smooth = local * local * (vec3f(3.0) - 2.0 * local);
+    let fraction = fract(position);
+    let interpolation = fraction * fraction * (vec3f(3.0) - 2.0 * fraction);
     let offset = vec2f(37.0, 239.0);
-    let uv0 = fract((cell.xy + smooth.xy + offset * cell.z) / ${noiseSize}.0);
-    let uv1 = fract((cell.xy + smooth.xy + offset * (cell.z + 1.0)) / ${noiseSize}.0);
+    let uv0 = fract((cell.xy + interpolation.xy + offset * cell.z) / ${noiseSize}.0);
+    let uv1 = fract((cell.xy + interpolation.xy + offset * (cell.z + 1.0)) / ${noiseSize}.0);
     let low = textureSampleLevel(noiseTexture, noiseSampler, uv0, 0.0).r;
     let high = textureSampleLevel(noiseTexture, noiseSampler, uv1, 0.0).r;
-    return mix(low, high, smooth.z) * 2.0 - 1.0;
+    return mix(low, high, interpolation.z) * 2.0 - 1.0;
   }
 
   fn fbm(position: vec3f) -> f32 {
@@ -133,6 +133,16 @@ function createNoise() {
   return noise;
 }
 
+async function assertShaderModuleValid(module: GPUShaderModule) {
+  const info = await module.getCompilationInfo();
+  const errors = info.messages.filter((message) => message.type === "error");
+  if (errors.length > 0) {
+    throw new Error(errors.map((message) => (
+      `WGSL ${message.lineNum}:${message.linePos}: ${message.message}`
+    )).join("\n"));
+  }
+}
+
 export function WebGPUPortal() {
   const { isActive, isPreview } = useSlideLifecycle();
   const canvasRef = useRef<CanvasRef>(null);
@@ -192,7 +202,8 @@ export function WebGPUPortal() {
           minFilter: "linear",
         });
 
-        const module = device.createShaderModule({ code: cloudShader });
+        const module = device.createShaderModule({ code: cloudShader, label: "Cloudbreaker" });
+        await assertShaderModuleValid(module);
         const pipeline = await device.createRenderPipelineAsync({
           fragment: { entryPoint: "fragmentMain", module, targets: [{ format }] },
           layout: "auto",

@@ -17,9 +17,11 @@
     "@legendapp/motion": "catalog:",
     "@legendapp/state": "catalog:",
     "@shopify/react-native-skia": "^2.11.1",
+    "@typegpu/noise": "^0.12.0",
     "fflate": "^0.8.3",
     "react-native-webgpu": "^0.8.5",
     "react-native-webview": "16.0.0",
+    "typegpu": "^0.12.4",
     "uniwind": "^1.6.3"
   },
   "devDependencies": {
