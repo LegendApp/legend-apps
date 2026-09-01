@@ -1,4 +1,5 @@
 export { PresentationProvider, usePresentation, useSlideLifecycle } from "./runtime";
+export { renderNativeChildren } from "./nativeChildren";
 export type {
   CompiledDeckProps,
   CompiledSlideProps,

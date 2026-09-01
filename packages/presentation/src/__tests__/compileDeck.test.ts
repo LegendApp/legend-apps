@@ -3,7 +3,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import React from "react";
 import { compileDeck } from "../compiler";
+import { renderNativeChildren } from "../nativeChildren";
 
 const temporaryDirectories: string[] = [];
 
@@ -25,6 +27,15 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("removes MDX whitespace and wraps literal native text", () => {
+    const marker = React.createElement("marker");
+    const children = renderNativeChildren(["\n", marker, "  copy  ", 0, "\t"], (text) => React.createElement("text", null, text));
+    expect(children).toHaveLength(3);
+    expect(React.isValidElement(children?.[0])).toBe(true);
+    expect((children?.[1] as React.ReactElement).props.children).toBe("  copy  ");
+    expect((children?.[2] as React.ReactElement).props.children).toBe("0");
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,

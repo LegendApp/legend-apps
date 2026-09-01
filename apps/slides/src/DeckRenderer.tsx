@@ -1,5 +1,6 @@
 import {
   PresentationProvider,
+  renderNativeChildren,
   type CompiledDeckProps,
   type CompiledSlideProps,
   type DeckConfig,
@@ -15,8 +16,10 @@ import {
   Text,
   View,
   type LayoutChangeEvent,
+  type PressableProps,
   type StyleProp,
   type TextStyle,
+  type ViewProps,
 } from "react-native";
 import { getSlidesState, nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 
@@ -72,7 +75,7 @@ function Deck({ children, configJson, targetIndex, isPreview }: CompiledDeckProp
       slideCount: elements.length,
       slideIndex: selectedIndex,
     }}>
-      {selected.props.children}
+      {renderMdxChildren(selected.props.children)}
     </PresentationProvider>
   );
 }
@@ -90,13 +93,28 @@ function MarkdownLink({ children, href }: { children?: ReactNode; href?: string 
   return <MarkdownText style={styles.link}><Text onPress={() => href && void Linking.openURL(href)}>{children}</Text></MarkdownText>;
 }
 
+function renderMdxChildren(children: ReactNode) {
+  return renderNativeChildren(children, (text) => <MarkdownText>{text}</MarkdownText>);
+}
+
+function NativeView({ children, ...props }: ViewProps) {
+  return <View {...props}>{renderMdxChildren(children)}</View>;
+}
+
+function NativePressable({ children, ...props }: PressableProps) {
+  if (typeof children === "function") {
+    return <Pressable {...props}>{(state) => renderMdxChildren(children(state))}</Pressable>;
+  }
+  return <Pressable {...props}>{renderMdxChildren(children)}</Pressable>;
+}
+
 const markdownComponents = {
   Deck,
   Slide,
-  View,
+  View: NativeView,
   Text,
   Image,
-  Pressable,
+  Pressable: NativePressable,
   h1: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h1}>{children}</MarkdownText>,
   h2: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h2}>{children}</MarkdownText>,
   h3: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h3}>{children}</MarkdownText>,
@@ -104,10 +122,10 @@ const markdownComponents = {
   strong: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.strong}>{children}</MarkdownText>,
   em: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.emphasis}>{children}</MarkdownText>,
   code: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.code}>{children}</MarkdownText>,
-  pre: ({ children }: { children?: ReactNode }) => <View style={styles.pre}>{children}</View>,
-  blockquote: ({ children }: { children?: ReactNode }) => <View style={styles.blockquote}>{children}</View>,
-  ul: ({ children }: { children?: ReactNode }) => <View style={styles.list}>{children}</View>,
-  ol: ({ children }: { children?: ReactNode }) => <View style={styles.list}>{children}</View>,
+  pre: ({ children }: { children?: ReactNode }) => <NativeView style={styles.pre}>{children}</NativeView>,
+  blockquote: ({ children }: { children?: ReactNode }) => <NativeView style={styles.blockquote}>{children}</NativeView>,
+  ul: ({ children }: { children?: ReactNode }) => <NativeView style={styles.list}>{children}</NativeView>,
+  ol: ({ children }: { children?: ReactNode }) => <NativeView style={styles.list}>{children}</NativeView>,
   li: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.listItem}>• {children}</MarkdownText>,
   a: MarkdownLink,
 };
