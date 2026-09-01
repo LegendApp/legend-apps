@@ -14,7 +14,11 @@ const manifest = {
   },
   hostWindow: {
     macos: {
-      hidden: true,
+      hidden: false,
+      startupBackgroundColors: {
+        dark: "#1e1e1e",
+        light: "#ffffff",
+      },
     },
   },
   urlSchemes: {

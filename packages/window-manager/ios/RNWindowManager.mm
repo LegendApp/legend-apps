@@ -12,6 +12,11 @@
 #include <cxxreact/ReactMarker.h>
 
 #if TARGET_OS_OSX
+extern double LegendMainWindowFirstVisibleTimeMs;
+extern double LegendMainWindowReactRootAttachedTimeMs;
+#endif
+
+#if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
 #import <CoreImage/CoreImage.h>
 #import <objc/runtime.h>
@@ -24,6 +29,7 @@
 
 #if TARGET_OS_OSX
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
+static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
 
 static inline NSAppearance *LegendDarkAppearance()
 {
@@ -441,9 +447,7 @@ static void LegendApplyWindowTitleAndRepresentedURL(NSWindow *window,
     if ([representedURLValue isKindOfClass:NSNull.class]) {
       window.representedURL = nil;
     } else if (representedURL.fileURL && representedURL.path.length > 0) {
-      [window setTitleWithRepresentedFilename:representedURL.path];
       window.representedURL = representedURL;
-      return;
     } else {
       window.representedURL = representedURL;
     }
@@ -587,6 +591,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(applicationReopenRequested:)
                                                name:LegendApplicationReopenRequestedNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(mainWindowCloseRequested:)
+                                               name:LegendMainWindowCloseRequestedNotification
                                              object:nil];
 #endif
   }
@@ -1524,6 +1532,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
   timing[@"clockOffsetMs"] = @(
     NSDate.date.timeIntervalSince1970 * 1000 - CACurrentMediaTime() * 1000
   );
+  if (LegendMainWindowFirstVisibleTimeMs > 0) {
+    timing[@"mainWindowFirstVisibleTime"] = @(LegendMainWindowFirstVisibleTimeMs);
+  }
+  if (LegendMainWindowReactRootAttachedTimeMs > 0) {
+    timing[@"mainWindowReactRootAttachedTime"] = @(LegendMainWindowReactRootAttachedTimeMs);
+  }
 #endif
 
   double startTime = startupLogger.getAppStartupStartTime();
@@ -1934,7 +1948,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [targetIdentifier isEqualToString:@"main"]
+      ? [RNWindowManager getMainWindow]
+      : (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
       reject(@"window_not_found", @"Window not found", nil);
       return;
@@ -1956,7 +1972,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
-    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    NSWindow *window = [targetIdentifier isEqualToString:@"main"]
+      ? [RNWindowManager getMainWindow]
+      : (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
       reject(@"window_not_found", @"Window not found", nil);
       return;
@@ -2059,6 +2077,25 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     [NSApp activateIgnoringOtherApps:YES];
     [mainWindow makeKeyAndOrderFront:nil];
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)hideMainWindow:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSWindow *mainWindow = [RNWindowManager getMainWindow];
+    if (!mainWindow) {
+      resolve([self failureJson:@"Main window not found"]);
+      return;
+    }
+    [mainWindow orderOut:nil];
+    [self sendWindowEventWithName:@"onWindowClosed"
+                             body:@{@"identifier": @"main", @"moduleName": @"main"}];
     resolve([self successJson]);
   });
 #else
@@ -2380,6 +2417,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
   NSNumber *hasVisibleWindows = notification.userInfo[@"hasVisibleWindows"];
   [self sendWindowEventWithName:@"onApplicationReopenRequested"
                            body:@{@"hasVisibleWindows": hasVisibleWindows ?: @NO}];
+}
+
+- (void)mainWindowCloseRequested:(NSNotification *)notification
+{
+  [self sendWindowEventWithName:@"onWindowCloseRequested"
+                           body:@{@"identifier": @"main", @"moduleName": @"main"}];
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)window

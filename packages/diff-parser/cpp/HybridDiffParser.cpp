@@ -8,6 +8,9 @@
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
 #include <chrono>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 
 namespace margelo::nitro::legendapps::diffparser {
@@ -18,6 +21,19 @@ using DiffClock = std::chrono::steady_clock;
 
 double elapsedDiffMs(DiffClock::time_point start, DiffClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+std::string readDiffFile(const std::string& filePath) {
+  std::ifstream input(filePath, std::ios::binary);
+  if (!input) {
+    throw std::runtime_error("Unable to open diff file: " + filePath);
+  }
+  std::ostringstream contents;
+  contents << input.rdbuf();
+  if (input.bad()) {
+    throw std::runtime_error("Unable to read diff file: " + filePath);
+  }
+  return contents.str();
 }
 
 std::shared_ptr<HybridDiffDocument> loadUnifiedDiffDocument(
@@ -147,6 +163,36 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiff(
     const auto rowsFinishedAt = DiffClock::now();
     auto timing = document->getTiming();
     timing.documentMs = elapsedDiffMs(startedAt, documentCreatedAt);
+    timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
+    timing.copyInitialRowsMs = elapsedDiffMs(rowsStartedAt, rowsFinishedAt);
+    timing.nativeTotalMs = elapsedDiffMs(startedAt, rowsFinishedAt);
+    result.timing = timing;
+    return result;
+  });
+}
+
+std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFile(
+    const std::string& filePath,
+    const std::string& sourceLabel,
+    double initialRowCount,
+    bool ignoreWhitespaceChanges) {
+  return Promise<DiffLoadResult>::async([filePath, sourceLabel, initialRowCount, ignoreWhitespaceChanges]() -> DiffLoadResult {
+    const auto startedAt = DiffClock::now();
+    const auto diffText = readDiffFile(filePath);
+    const auto fileReadAt = DiffClock::now();
+    auto document = loadUnifiedDiffDocument(diffText, sourceLabel, ignoreWhitespaceChanges);
+    const auto documentCreatedAt = DiffClock::now();
+    DiffLoadResult result;
+    result.document = document;
+    const auto filesStartedAt = DiffClock::now();
+    result.files = document->getFiles();
+    const auto filesFinishedAt = DiffClock::now();
+    const auto rowsStartedAt = DiffClock::now();
+    result.initialRows = document->getPlainRows(0, initialRowCount);
+    const auto rowsFinishedAt = DiffClock::now();
+    auto timing = document->getTiming();
+    timing.fetchMs = elapsedDiffMs(startedAt, fileReadAt);
+    timing.documentMs = elapsedDiffMs(fileReadAt, documentCreatedAt);
     timing.copyFilesMs = elapsedDiffMs(filesStartedAt, filesFinishedAt);
     timing.copyInitialRowsMs = elapsedDiffMs(rowsStartedAt, rowsFinishedAt);
     timing.nativeTotalMs = elapsedDiffMs(startedAt, rowsFinishedAt);

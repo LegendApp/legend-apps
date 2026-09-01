@@ -18,6 +18,7 @@ namespace margelo::nitro::legendapps::diffparser {
       prototype.registerHybridMethod("startUnifiedDiffFromUrl", &HybridDiffParserSpec::startUnifiedDiffFromUrl);
       prototype.registerHybridMethod("loadGitFolderDiff", &HybridDiffParserSpec::loadGitFolderDiff);
       prototype.registerHybridMethod("loadUnifiedDiff", &HybridDiffParserSpec::loadUnifiedDiff);
+      prototype.registerHybridMethod("loadUnifiedDiffFile", &HybridDiffParserSpec::loadUnifiedDiffFile);
       prototype.registerHybridMethod("loadUnifiedDiffFromUrl", &HybridDiffParserSpec::loadUnifiedDiffFromUrl);
     });
   }

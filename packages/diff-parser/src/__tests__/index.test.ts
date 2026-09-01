@@ -2,6 +2,7 @@ function createParser() {
   return {
     loadGitFolderDiff: jest.fn(async () => ({ ok: "git" })),
     loadUnifiedDiff: jest.fn(async () => ({ ok: "unified" })),
+    loadUnifiedDiffFile: jest.fn(async () => ({ ok: "file" })),
     loadUnifiedDiffFromUrl: jest.fn(async () => ({ ok: "url" })),
     startGitFolderDiff: jest.fn(() => ({ ok: "session" })),
     startUnifiedDiffFromUrl: jest.fn(() => ({ ok: "url-session" })),
@@ -166,11 +167,22 @@ describe("@legend-apps/diff-parser", () => {
     );
   });
 
+  it("loads unified diff files natively", async () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    await expect(diffParser.loadUnifiedDiffFile("/tmp/large.diff", "large.diff")).resolves.toEqual({ ok: "file" });
+    await diffParser.loadUnifiedDiffFile("/tmp/other.patch", "other.patch", 50, true);
+
+    expect(parser.loadUnifiedDiffFile).toHaveBeenNthCalledWith(1, "/tmp/large.diff", "large.diff", 200, false);
+    expect(parser.loadUnifiedDiffFile).toHaveBeenNthCalledWith(2, "/tmp/other.patch", "other.patch", 50, true);
+  });
+
   it("reuses the native hybrid parser object", async () => {
     const { diffParser, nitroModules } = loadModuleWithParser();
 
     await diffParser.loadGitFolderDiff("/tmp/repo");
     await diffParser.loadUnifiedDiff("diff --git a/a b/a", "fixture");
+    await diffParser.loadUnifiedDiffFile("/tmp/fixture.diff", "fixture.diff");
     await diffParser.loadUnifiedDiffFromUrl("https://github.com/owner/repo/pull/1.diff", "owner/repo#1");
 
     expect(nitroModules.createHybridObject).toHaveBeenCalledTimes(1);

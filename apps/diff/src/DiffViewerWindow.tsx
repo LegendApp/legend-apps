@@ -9,6 +9,7 @@ import {
   DiffMergeNativePane,
   DiffNativeRowConfig,
   loadUnifiedDiff,
+  loadUnifiedDiffFile,
   loadUnifiedDiffFromUrl,
   startGitFolderDiff,
   startUnifiedDiffFromUrl,
@@ -32,7 +33,7 @@ import { noteRecentDocument } from "@legend-apps/recent-documents";
 import { SFSymbol } from "@legend-apps/sf-symbol";
 import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, getSyntaxTheme, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
+import { addWindowCloseRequestedListener } from "@legend-apps/window-manager";
 import { useWindowId } from "@legend-apps/windows";
 import {
   VirtualizedFixedDocumentList,
@@ -64,7 +65,7 @@ import { getDroppedDiffSource, getUnsupportedDropMessage } from "./diffDrop";
 import { getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "./filePairDiff";
 import { getDiffPalette } from "./diffPalette";
-import { focusDiffSearchToolbarItem, showDiffViewerWindow } from "./diffWindowControls";
+import { closeDiffViewerWindow, focusDiffSearchToolbarItem } from "./diffWindowControls";
 import {
   createDiffMergeDraftFileWithResolvedBlock,
   createReadyMergeState,
@@ -308,6 +309,7 @@ export type DiffViewerWindowProps = {
   focusUrlInputRequestId?: number;
   folderPath?: string;
   initialSplitPaneMetrics?: DiffSplitPaneMetrics | null;
+  onClose?: () => void;
   source?: DiffOpenSource;
 };
 
@@ -2887,12 +2889,11 @@ export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
   );
 }
 
-function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
+function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, source }: DiffViewerWindowProps) {
   "use no memo";
   // React Compiler does not yet support the async try/finally workflows in this controller.
 
   const windowIdentifier = useWindowId();
-  const windowShownAfterSplitMetricsRef = useRef(false);
   const fontFamily = useDiffFontFamilySetting();
   const fontSize = useDiffFontSizeSetting();
   const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
@@ -3658,23 +3659,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
           );
         }
       } else if (nextSource.kind === "diffFile") {
-        const commandResult = await commandRunner.runCommand({
-          args: [nextSource.value],
-          command: "/bin/cat",
-          timeoutMs: 60_000,
-        });
-        if (commandResult.timedOut) {
-          loadError = new Error("Reading the diff file timed out. The file may be too large to open.");
-        } else if (commandResult.exitCode !== 0) {
-          loadError = new Error(commandResult.stderr || `cat exited with code ${commandResult.exitCode}.`);
-        } else {
-          result = await loadUnifiedDiff(
-            commandResult.stdout,
-            nextSource.label,
-            initialRowCount,
-            loadIgnoreWhitespaceChanges,
-          );
-        }
+        result = await loadUnifiedDiffFile(
+          nextSource.value,
+          nextSource.label,
+          initialRowCount,
+          loadIgnoreWhitespaceChanges,
+        );
       } else {
         progressiveSession = startGitFolderDiff(nextSource.value, {
           ...getDiffGitFolderLoadCompareOptions(nextSource),
@@ -4082,7 +4072,9 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
         prepareMergeDraftsForTransition("close")
           .then((canClose) => {
             if (canClose) {
-              return closeWindow(windowIdentifier);
+              return closeDiffViewerWindow(windowIdentifier).then(() => {
+                onClose?.();
+              });
             }
             return null;
           })
@@ -4101,7 +4093,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return () => {
       subscription.remove();
     };
-  }, [prepareMergeDraftsForTransition, setDocumentErrorValue, state$, windowIdentifier]);
+  }, [onClose, prepareMergeDraftsForTransition, setDocumentErrorValue, state$, windowIdentifier]);
 
   const openFolder = useCallback(async () => {
     if (!loadingSource$.peek()) {
@@ -4822,24 +4814,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     return row;
   }, [activeFileIndex$, handleSidebarFilePress, mergeState$, sidebarRender$, toggleSidebarFolder]);
 
-  const showDeferredWindow = useCallback((reason: string) => {
-    if (windowShownAfterSplitMetricsRef.current) {
-      return;
-    }
-
-    windowShownAfterSplitMetricsRef.current = true;
-    showDiffViewerWindow(windowIdentifier).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[DiffViewerWindow] Unable to show window after split metrics: ${message}`);
-    });
-  }, [windowIdentifier]);
-
-  useEffect(() => {
-    if (state.status === "fatal") {
-      showDeferredWindow("fatal");
-    }
-  }, [showDeferredWindow, state.status]);
-
   const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
     const nextMetrics = {
       contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
@@ -4851,14 +4825,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     const previousDiffPaneHeight = diffPaneHeight$.peek();
     setSplitPaneMetricsValue(nextMetrics);
     const isSidebarCollapsed = sidebarCollapsed$.peek();
-    if (
-      !windowShownAfterSplitMetricsRef.current &&
-      nextMetrics.contentHeight > 0 &&
-      nextMetrics.contentWidth > 0 &&
-      (isSidebarCollapsed || nextMetrics.sidebarWidth > 0)
-    ) {
-      showDeferredWindow("splitViewReady");
-    }
     const shouldSaveSidebarWidth =
       nextMetrics.sidebarWidth >= defaultDiffSidebarWidth &&
       !isSidebarCollapsed &&
@@ -4869,7 +4835,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     if (nextMetrics.contentHeight > 0 && previousDiffPaneHeight !== nextMetrics.contentHeight) {
       setDiffPaneHeightValue(nextMetrics.contentHeight);
     }
-  }, [diffPaneHeight$, setDiffPaneHeightValue, setSplitPaneMetricsValue, showDeferredWindow, sidebarCollapsed$, sidebarWidth, splitPaneMetrics$]);
+  }, [diffPaneHeight$, setDiffPaneHeightValue, setSplitPaneMetricsValue, sidebarCollapsed$, sidebarWidth, splitPaneMetrics$]);
 
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);

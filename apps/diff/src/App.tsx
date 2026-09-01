@@ -3,11 +3,13 @@ import { commandRunner } from "@legend-apps/command-runner";
 import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
 import { useRoutedHotkeys } from "@legend-apps/hotkeys";
 import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/native-menu";
-import { addWindowFocusedListener } from "@legend-apps/window-manager";
-import { useEffect, useMemo, useRef } from "react";
+import { addWindowFocusedListener, setMainWindowFrame, showMainWindow } from "@legend-apps/window-manager";
+import { WindowProvider } from "@legend-apps/windows";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, LogBox } from "react-native";
-import { diffMenuOwnerId, diffViewerWindowIdentifier } from "./appConstants";
+import { diffMenuOwnerId, diffPrimaryWindowIdentifier } from "./appConstants";
 import { installDiffAppExitHandler } from "./diffAppExit";
+import { upsertSavedDiffWindow } from "./diffAppMetadata";
 import { getDiffSourceFromOpenUrl, getLaunchDiffSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "./diffFiles";
 import { diffMenuConfig } from "./diffMenus";
 import {
@@ -25,7 +27,7 @@ import {
 } from "./diffSettings";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
 import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
-import { openDiffSettingsWindow, openDiffViewerWindow, prefetchDiffViewerWindow, registerDiffWindows } from "./diffWindows";
+import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows, type DiffViewerWindowOpenOptions } from "./diffWindows";
 
 
 LogBox.ignoreLogs([
@@ -36,11 +38,29 @@ LogBox.ignoreLogs([
 
 registerDiffWindows();
 const initialUrlPromise = Linking.getInitialURL();
-prefetchDiffViewerWindow().catch(reportDiffAppControllerError);
 configureDiffAutoUpdates().catch(reportDiffAppControllerError);
+const LazyDiffViewerWindowShell = lazy(() =>
+  import("./DiffViewerWindowShell").then((module) => ({ default: module.DiffViewerWindowShell })),
+);
 
 type DiffAppProps = {
   launchArguments?: string[];
+};
+
+type DiffViewerOpener = (
+  sourceInput?: Parameters<typeof openDiffViewerWindow>[0],
+  options?: DiffViewerWindowOpenOptions,
+) => Promise<void>;
+
+type PrimaryDiffViewerOpener = (
+  sourceInput?: Parameters<typeof openDiffViewerWindow>[0],
+  options?: Pick<DiffViewerWindowOpenOptions, "focusUrlInput" | "frame">,
+) => Promise<void>;
+
+type PrimaryDiffWindow = {
+  focusUrlInputRequestId?: number;
+  instanceId: number;
+  source?: NonNullable<ReturnType<typeof normalizeDiffOpenSource>>;
 };
 
 function reportDiffAppControllerError(error: unknown) {
@@ -56,35 +76,35 @@ async function configureDiffAutoUpdates() {
   }
 }
 
-async function openDiffViewerForSelectedFolder(controller: DocumentAppController) {
+async function openDiffViewerForSelectedFolder(controller: DocumentAppController, openViewer: DiffViewerOpener) {
   const folderPath = await openDiffFolderDialog();
 
   if (folderPath) {
-    await openDiffViewerWindow(normalizeDiffOpenSource(folderPath));
+    await openViewer(normalizeDiffOpenSource(folderPath));
     controller.setDocumentWindowOpen(true);
   }
 }
 
-async function openDiffViewerForUrl(controller: DocumentAppController) {
-  await openDiffViewerWindow(null, { focusUrlInput: true, freshWindow: true });
+async function openDiffViewerForUrl(controller: DocumentAppController, openViewer: DiffViewerOpener) {
+  await openViewer(null, { focusUrlInput: true, freshWindow: true });
   controller.setDocumentWindowOpen(true);
 }
 
-async function openDiffViewerForSelectedFiles(controller: DocumentAppController) {
+async function openDiffViewerForSelectedFiles(controller: DocumentAppController, openViewer: DiffViewerOpener) {
   const source = await openDiffFilePairDialog();
 
   if (source) {
-    await openDiffViewerWindow(source);
+    await openViewer(source);
     controller.setDocumentWindowOpen(true);
   }
 }
 
-async function openDiffStartWindow(controller: DocumentAppController) {
-  await openDiffViewerWindow(null, { freshWindow: true });
+async function openDiffStartWindow(controller: DocumentAppController, openViewer: DiffViewerOpener) {
+  await openViewer(null, { freshWindow: true });
   controller.setDocumentWindowOpen(true);
 }
 
-async function openDiffViewerFromClipboard(controller: DocumentAppController) {
+async function openDiffViewerFromClipboard(controller: DocumentAppController, openViewer: DiffViewerOpener) {
   const result = await commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 });
 
   if (result.exitCode !== 0) {
@@ -96,26 +116,26 @@ async function openDiffViewerFromClipboard(controller: DocumentAppController) {
     throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
   }
 
-  await openDiffViewerWindow(source);
+  await openViewer(source);
   controller.setDocumentWindowOpen(true);
 }
 
-function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
+function createDiffMenuHandlers(controller: DocumentAppController, openViewer: DiffViewerOpener): NativeMenuActionHandlers {
   return {
     startWindow: () => {
-      openDiffStartWindow(controller).catch(reportDiffAppControllerError);
+      openDiffStartWindow(controller, openViewer).catch(reportDiffAppControllerError);
     },
     openFolder: () => {
-      openDiffViewerForSelectedFolder(controller).catch(reportDiffAppControllerError);
+      openDiffViewerForSelectedFolder(controller, openViewer).catch(reportDiffAppControllerError);
     },
     compareFiles: () => {
-      openDiffViewerForSelectedFiles(controller).catch(reportDiffAppControllerError);
+      openDiffViewerForSelectedFiles(controller, openViewer).catch(reportDiffAppControllerError);
     },
     openUrl: () => {
-      openDiffViewerForUrl(controller).catch(reportDiffAppControllerError);
+      openDiffViewerForUrl(controller, openViewer).catch(reportDiffAppControllerError);
     },
     openFromClipboard: () => {
-      openDiffViewerFromClipboard(controller).catch(reportDiffAppControllerError);
+      openDiffViewerFromClipboard(controller, openViewer).catch(reportDiffAppControllerError);
     },
     settings: () => {
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
@@ -144,25 +164,31 @@ function createDiffMenuHandlers(controller: DocumentAppController): NativeMenuAc
   };
 }
 
-function DiffApplicationHotkeysController({ controller }: { controller: DocumentAppController }) {
+function DiffApplicationHotkeysController({
+  controller,
+  openViewer,
+}: {
+  controller: DocumentAppController;
+  openViewer: DiffViewerOpener;
+}) {
   const bindings = useDiffHotkeyBindings();
   const handlers = useMemo(() => ({
     compareFiles: () => {
-      openDiffViewerForSelectedFiles(controller).catch(controller.reportError);
+      openDiffViewerForSelectedFiles(controller, openViewer).catch(controller.reportError);
     },
     openFolder: () => {
-      openDiffViewerForSelectedFolder(controller).catch(controller.reportError);
+      openDiffViewerForSelectedFolder(controller, openViewer).catch(controller.reportError);
     },
     openFromClipboard: () => {
-      openDiffViewerFromClipboard(controller).catch(controller.reportError);
+      openDiffViewerFromClipboard(controller, openViewer).catch(controller.reportError);
     },
     openUrl: () => {
-      openDiffViewerForUrl(controller).catch(controller.reportError);
+      openDiffViewerForUrl(controller, openViewer).catch(controller.reportError);
     },
     startWindow: () => {
-      openDiffStartWindow(controller).catch(controller.reportError);
+      openDiffStartWindow(controller, openViewer).catch(controller.reportError);
     },
-  }), [controller]);
+  }), [controller, openViewer]);
 
   useRoutedHotkeys({
     bindings,
@@ -186,12 +212,16 @@ function DiffApplicationHotkeysController({ controller }: { controller: Document
   return null;
 }
 
-async function openRecentDiffFolder(path: string, controller: DocumentAppController) {
-  await openDiffViewerWindow(normalizeDiffOpenSource(path));
+async function openRecentDiffFolder(path: string, controller: DocumentAppController, openViewer: DiffViewerOpener) {
+  await openViewer(normalizeDiffOpenSource(path));
   controller.setDocumentWindowOpen(true);
 }
 
-async function openInitialDiffViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
+async function openInitialDiffViewer(
+  launchArguments: string[] | undefined,
+  controller: DocumentAppController,
+  openPrimaryViewer: PrimaryDiffViewerOpener,
+) {
   let source = getLaunchDiffSource(launchArguments?.slice(1));
   if (!source) {
     const initialUrl = await initialUrlPromise;
@@ -200,31 +230,93 @@ async function openInitialDiffViewer(launchArguments: string[] | undefined, cont
 
   let restoredWindowCount = 0;
   if (source) {
-    await openDiffViewerWindow(source);
+    await openPrimaryViewer(source);
     controller.setDocumentWindowOpen(true);
   } else {
     if (getDiffRestoreWindowsOnStartupSetting()) {
-      restoredWindowCount = await restoreSavedDiffWindows();
+      restoredWindowCount = await restoreSavedDiffWindows(({ frame, source: savedSource }) =>
+        openPrimaryViewer(savedSource ?? null, { frame }));
     }
     if (restoredWindowCount === 0) {
-      await openDiffViewerWindow(null);
+      await openPrimaryViewer(null);
     }
     controller.setDocumentWindowOpen(true);
   }
 }
 
 export function App({ launchArguments }: DiffAppProps) {
+  const initialLaunchSource = useMemo(() => getLaunchDiffSource(launchArguments?.slice(1)), [launchArguments]);
   const handledOpenUrlRef = useRef<{ handledAt: number; url: string } | null>(null);
+  const nextPrimaryInstanceIdRef = useRef(1);
+  const [primaryWindow, setPrimaryWindow] = useState<PrimaryDiffWindow | null>(() => ({
+    instanceId: 0,
+    ...(initialLaunchSource ? { source: initialLaunchSource } : {}),
+  }));
+  const primaryWindowRef = useRef(primaryWindow);
+
+  const openPrimaryViewer = useCallback<PrimaryDiffViewerOpener>(async (sourceInput, options = {}) => {
+    const source = normalizeDiffOpenSource(sourceInput);
+    const current = primaryWindowRef.current;
+    const shouldReplaceViewer = current === null || JSON.stringify(current.source) !== JSON.stringify(source);
+    const focusUrlInputRequestId = options.focusUrlInput ? nextPrimaryInstanceIdRef.current : undefined;
+
+    if (shouldReplaceViewer || focusUrlInputRequestId !== undefined) {
+      const nextWindow: PrimaryDiffWindow = {
+        instanceId: nextPrimaryInstanceIdRef.current,
+        ...(focusUrlInputRequestId ? { focusUrlInputRequestId } : {}),
+        ...(source ? { source } : {}),
+      };
+      nextPrimaryInstanceIdRef.current += 1;
+      primaryWindowRef.current = nextWindow;
+      setPrimaryWindow(nextWindow);
+    }
+
+    upsertSavedDiffWindow({
+      ...(options.frame ? { frame: options.frame } : {}),
+      id: diffPrimaryWindowIdentifier,
+      ...(source ? { source } : {}),
+    });
+    if (options.frame) {
+      await setMainWindowFrame(options.frame);
+    }
+    await showMainWindow();
+  }, []);
+
+  const openViewer = useCallback<DiffViewerOpener>(async (sourceInput, options = {}) => {
+    if (primaryWindowRef.current === null) {
+      await openPrimaryViewer(sourceInput, options);
+      return;
+    }
+    await openDiffViewerWindow(sourceInput, options);
+  }, [openPrimaryViewer]);
+
+  const createMenuHandlers = useCallback(
+    (documentController: DocumentAppController) => createDiffMenuHandlers(documentController, openViewer),
+    [openViewer],
+  );
+  const handleInitialOpen = useCallback(
+    (args: string[] | undefined, documentController: DocumentAppController) =>
+      openInitialDiffViewer(args, documentController, openPrimaryViewer),
+    [openPrimaryViewer],
+  );
+  const handleRecentDocumentOpen = useCallback(
+    (path: string, documentController: DocumentAppController) => openRecentDiffFolder(path, documentController, openViewer),
+    [openViewer],
+  );
+  const handleReopenRequested = useCallback(
+    (documentController: DocumentAppController) => openDiffStartWindow(documentController, openViewer),
+    [openViewer],
+  );
   const controller = useDocumentAppController({
-    createMenuHandlers: createDiffMenuHandlers,
+    createMenuHandlers,
     launchArguments,
     menus: diffMenuConfig,
-    onInitialOpen: openInitialDiffViewer,
-    onRecentDocumentOpen: openRecentDiffFolder,
-    onReopenRequested: openDiffStartWindow,
+    onInitialOpen: handleInitialOpen,
+    onRecentDocumentOpen: handleRecentDocumentOpen,
+    onReopenRequested: handleReopenRequested,
     ownerId: diffMenuOwnerId,
     reportError: reportDiffAppControllerError,
-    windowIdentifier: diffViewerWindowIdentifier,
+    windowIdentifier: diffPrimaryWindowIdentifier,
   });
   const controllerRef = useRef(controller);
 
@@ -256,7 +348,7 @@ export function App({ launchArguments }: DiffAppProps) {
         const source = getDiffSourceFromOpenUrl(url);
         if (source) {
           const currentController = controllerRef.current;
-          openDiffViewerWindow(source)
+          openViewer(source)
             .then(() => {
               currentController.setDocumentWindowOpen(true);
             })
@@ -277,9 +369,30 @@ export function App({ launchArguments }: DiffAppProps) {
     return () => {
       subscription.remove();
     };
+  }, [openViewer]);
+
+  const handlePrimaryWindowClose = useCallback(() => {
+    primaryWindowRef.current = null;
+    setPrimaryWindow(null);
   }, []);
 
-  return <DiffApplicationHotkeysController controller={controller} />;
+  return (
+    <>
+      <DiffApplicationHotkeysController controller={controller} openViewer={openViewer} />
+      {primaryWindow ? (
+        <WindowProvider id={diffPrimaryWindowIdentifier}>
+          <Suspense fallback={null}>
+            <LazyDiffViewerWindowShell
+              key={primaryWindow.instanceId}
+              focusUrlInputRequestId={primaryWindow.focusUrlInputRequestId}
+              onClose={handlePrimaryWindowClose}
+              source={primaryWindow.source}
+            />
+          </Suspense>
+        </WindowProvider>
+      ) : null}
+    </>
+  );
 }
 
 export default App;

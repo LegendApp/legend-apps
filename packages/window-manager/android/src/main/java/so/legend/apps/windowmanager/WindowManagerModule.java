@@ -36,6 +36,11 @@ public class WindowManagerModule extends NativeWindowManagerSpec {
   }
 
   @Override
+  public void hideMainWindow(Promise promise) {
+    promise.resolve(unavailableJson());
+  }
+
+  @Override
   public void showMainWindow(Promise promise) {
     promise.resolve(unavailableJson());
   }

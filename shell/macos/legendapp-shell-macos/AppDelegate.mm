@@ -10,6 +10,10 @@
 #include <cxxreact/ReactMarker.h>
 
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
+static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
+
+double LegendMainWindowFirstVisibleTimeMs = 0;
+double LegendMainWindowReactRootAttachedTimeMs = 0;
 
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
@@ -228,6 +232,30 @@ static void LegendConfigureChatHistoryWindow(NSWindow *window)
   }
 }
 
+static void LegendConfigureDiffWindow(NSWindow *window)
+{
+  window.title = @"Legend Diff";
+  window.minSize = NSMakeSize(640, 460);
+  window.styleMask = NSWindowStyleMaskTitled
+    | NSWindowStyleMaskClosable
+    | NSWindowStyleMaskMiniaturizable
+    | NSWindowStyleMaskResizable
+    | NSWindowStyleMaskFullSizeContentView
+    | NSWindowStyleMaskUnifiedTitleAndToolbar;
+  window.titleVisibility = NSWindowTitleVisible;
+  window.titlebarAppearsTransparent = YES;
+  if (!window.toolbar) {
+    NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"main"];
+    toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+    toolbar.showsBaselineSeparator = NO;
+    window.toolbar = toolbar;
+  }
+  if (@available(macOS 11.0, *)) {
+    window.toolbarStyle = NSWindowToolbarStyleUnified;
+    window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleShadow;
+  }
+}
+
 static void LegendMakeViewTransparent(NSView *view)
 {
   view.wantsLayer = YES;
@@ -339,6 +367,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 {
   NSString *appId = LegendCurrentAppId();
   BOOL isMusic = [appId isEqualToString:@"music"];
+  BOOL isDiff = [appId isEqualToString:@"diff"];
   BOOL hostWindowHidden = LegendHostWindowHidden();
   BOOL shouldHandleReopen = YES;
 
@@ -351,6 +380,17 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
       [self.window makeKeyAndOrderFront:self];
     }
     [NSApp activateIgnoringOtherApps:YES];
+  } else if (isDiff && !self.window.isVisible) {
+    NSWindow *targetWindow = flag ? [self reopenTargetWindow] : nil;
+    if (targetWindow) {
+      [targetWindow makeKeyAndOrderFront:self];
+    } else {
+      [NSNotificationCenter.defaultCenter postNotificationName:LegendApplicationReopenRequestedNotification
+                                                        object:self
+                                                      userInfo:@{@"hasVisibleWindows": @NO}];
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+    shouldHandleReopen = NO;
   } else if (hostWindowHidden) {
     [self.window orderOut:self];
 
@@ -398,12 +438,18 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 {
   NSString *appId = LegendCurrentAppId();
   BOOL shouldHideMusicWindow = [appId isEqualToString:@"music"] && sender == self.window;
+  BOOL shouldRequestDiffWindowClose = [appId isEqualToString:@"diff"] && sender == self.window;
 
   if (shouldHideMusicWindow) {
     [self.window orderOut:self];
   }
 
-  return !shouldHideMusicWindow;
+  if (shouldRequestDiffWindowClose) {
+    [NSNotificationCenter.defaultCenter postNotificationName:LegendMainWindowCloseRequestedNotification
+                                                      object:self];
+  }
+
+  return !shouldHideMusicWindow && !shouldRequestDiffWindowClose;
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -438,8 +484,11 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   BOOL isMarkdown = [appId isEqualToString:@"markdown"];
   BOOL isMusic = [appId isEqualToString:@"music"];
   BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
+  BOOL isDiff = [appId isEqualToString:@"diff"];
   BOOL hostWindowHidden = LegendHostWindowHidden();
-  NSRect frame = isMusic ? NSMakeRect(0, 0, 360, 640) : NSMakeRect(0, 0, 1280, 720);
+  NSRect frame = isMusic
+    ? NSMakeRect(0, 0, 360, 640)
+    : (isDiff ? NSMakeRect(0, 0, 1180, 780) : NSMakeRect(0, 0, 1280, 720));
   self.window = [[NSWindow alloc] initWithContentRect:frame
                                            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
                                              backing:NSBackingStoreBuffered
@@ -468,6 +517,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     [self.window setDelegate:self];
   } else if (isChatHistory) {
     LegendConfigureChatHistoryWindow(self.window);
+  } else if (isDiff) {
+    LegendConfigureDiffWindow(self.window);
+    [self.window setDelegate:self];
   } else {
     self.window.title = self.moduleName;
   }
@@ -497,6 +549,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     self.window.contentView = placeholderView;
     [self.window makeKeyAndOrderFront:self];
     [self.window displayIfNeeded];
+    LegendMainWindowFirstVisibleTimeMs = CACurrentMediaTime() * 1000;
   }
 
   RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName
@@ -529,6 +582,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     rootViewController.view = rootView;
     self.window.contentViewController = rootViewController;
   }
+  LegendMainWindowReactRootAttachedTimeMs = CACurrentMediaTime() * 1000;
 
   if (isMarkdown || isMusic) {
     NSColor *backgroundColor = isMusic

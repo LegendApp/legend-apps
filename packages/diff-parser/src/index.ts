@@ -51,6 +51,10 @@ export function loadUnifiedDiff(diffText: string, sourceLabel: string, initialRo
   return getDiffParser().loadUnifiedDiff(diffText, sourceLabel, initialRowCount, ignoreWhitespaceChanges);
 }
 
+export function loadUnifiedDiffFile(filePath: string, sourceLabel: string, initialRowCount = 200, ignoreWhitespaceChanges = false) {
+  return getDiffParser().loadUnifiedDiffFile(filePath, sourceLabel, initialRowCount, ignoreWhitespaceChanges);
+}
+
 export function loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount = 200, ignoreWhitespaceChanges = false) {
   return getDiffParser().loadUnifiedDiffFromUrl(diffUrl, sourceLabel, initialRowCount, ignoreWhitespaceChanges);
 }

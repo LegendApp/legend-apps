@@ -7,6 +7,7 @@ export interface Spec extends TurboModule {
   openWindow(optionsJson: string): Promise<string>;
   closeWindow(identifier: string): Promise<string>;
   closeFrontmostWindow(): Promise<string>;
+  hideMainWindow(): Promise<string>;
   showWindow(identifier: string): Promise<string>;
   showMainWindow(): Promise<string>;
   setMainWindowOptions(optionsJson: string): Promise<string>;

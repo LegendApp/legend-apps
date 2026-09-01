@@ -1,8 +1,17 @@
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { createUnifiedToolbarWindowStyle } from "@legend-apps/windows";
-import { focusToolbarSearchItem, setWindowOptions, showWindow } from "@legend-apps/window-manager";
+import {
+  closeWindow,
+  focusToolbarSearchItem,
+  hideMainWindow,
+  setMainWindowOptions,
+  setWindowOptions,
+  showMainWindow,
+  showWindow,
+} from "@legend-apps/window-manager";
+import { diffPrimaryWindowIdentifier } from "./appConstants";
 import { getDiffCompareToolbarModel, type DiffCompareRepoState } from "./diffCompareTargets";
-import type { DiffOpenSource } from "./diffFiles";
+import { getDiffRepresentedUrl, type DiffOpenSource } from "./diffFiles";
 import { getDiffPalette } from "./diffPalette";
 import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
 import { getDiffViewerWindowTitleVisibility } from "./diffWindowChrome";
@@ -153,7 +162,15 @@ export function createDiffViewerWindowStyle({
 }
 
 export function showDiffViewerWindow(windowIdentifier: string) {
-  return showWindow(windowIdentifier);
+  return windowIdentifier === diffPrimaryWindowIdentifier
+    ? showMainWindow()
+    : showWindow(windowIdentifier);
+}
+
+export function closeDiffViewerWindow(windowIdentifier: string) {
+  return windowIdentifier === diffPrimaryWindowIdentifier
+    ? hideMainWindow()
+    : closeWindow(windowIdentifier);
 }
 
 export function setDiffViewerWindowAppearance({
@@ -163,7 +180,10 @@ export function setDiffViewerWindowAppearance({
   appearance: "dark" | "light";
   windowIdentifier: string;
 }) {
-  return setWindowOptions(windowIdentifier, {
+  const setOptions = windowIdentifier === diffPrimaryWindowIdentifier
+    ? setMainWindowOptions
+    : (options: Parameters<typeof setWindowOptions>[1]) => setWindowOptions(windowIdentifier, options);
+  return setOptions({
     windowStyle: {
       appearance,
     },
@@ -191,8 +211,11 @@ export function setDiffViewerWindowToolbarOptions({
   viewMode: DiffViewMode;
   windowIdentifier: string;
 }) {
-  return setWindowOptions(windowIdentifier, {
-    representedURL: source?.value,
+  const setOptions = windowIdentifier === diffPrimaryWindowIdentifier
+    ? setMainWindowOptions
+    : (options: Parameters<typeof setWindowOptions>[1]) => setWindowOptions(windowIdentifier, options);
+  return setOptions({
+    representedURL: getDiffRepresentedUrl(source),
     title,
     windowStyle: createDiffViewerWindowStyle({
       includeFrame: false,

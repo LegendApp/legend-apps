@@ -1,10 +1,12 @@
 import {
+  addMainWindowMovedListener,
+  addMainWindowResizedListener,
   addWindowClosedListener,
   addWindowMovedListener,
   addWindowResizedListener,
   type WindowFrameEvent,
 } from "@legend-apps/window-manager";
-import { diffViewerWindowIdentifier } from "./appConstants";
+import { diffPrimaryWindowIdentifier, diffViewerWindowIdentifier } from "./appConstants";
 import {
   getSavedDiffWindows,
   removeSavedDiffWindow,
@@ -14,7 +16,9 @@ import {
 import { openDiffViewerWindow } from "./diffWindows";
 
 function isDiffViewerWindowIdentifier(identifier: string) {
-  return identifier === diffViewerWindowIdentifier || identifier.startsWith(`${diffViewerWindowIdentifier}-`);
+  return identifier === diffPrimaryWindowIdentifier ||
+    identifier === diffViewerWindowIdentifier ||
+    identifier.startsWith(`${diffViewerWindowIdentifier}-`);
 }
 
 function handleWindowFrameEvent(event: WindowFrameEvent) {
@@ -24,6 +28,12 @@ function handleWindowFrameEvent(event: WindowFrameEvent) {
 }
 
 export function installDiffWindowRestoration() {
+  const mainMovedSubscription = addMainWindowMovedListener((frame) => {
+    updateSavedDiffWindowFrame(diffPrimaryWindowIdentifier, frame);
+  });
+  const mainResizedSubscription = addMainWindowResizedListener((frame) => {
+    updateSavedDiffWindowFrame(diffPrimaryWindowIdentifier, frame);
+  });
   const movedSubscription = addWindowMovedListener(handleWindowFrameEvent);
   const resizedSubscription = addWindowResizedListener(handleWindowFrameEvent);
   const closedSubscription = addWindowClosedListener(({ identifier }) => {
@@ -34,6 +44,8 @@ export function installDiffWindowRestoration() {
 
   return {
     remove() {
+      mainMovedSubscription.remove();
+      mainResizedSubscription.remove();
       movedSubscription.remove();
       resizedSubscription.remove();
       closedSubscription.remove();
@@ -49,9 +61,18 @@ function restoreSavedWindow(savedWindow: SavedDiffWindow) {
   });
 }
 
-export async function restoreSavedDiffWindows() {
+export async function restoreSavedDiffWindows(
+  openPrimaryWindow?: (savedWindow: SavedDiffWindow) => Promise<void>,
+) {
   const savedWindows = getSavedDiffWindows();
-  for (const savedWindow of savedWindows.slice().reverse()) {
+  const primarySavedWindow = savedWindows.find((window) => window.id === diffPrimaryWindowIdentifier) ?? savedWindows[0];
+  if (primarySavedWindow && openPrimaryWindow) {
+    await openPrimaryWindow(primarySavedWindow);
+  }
+  const secondarySavedWindows = openPrimaryWindow
+    ? savedWindows.filter((window) => window !== primarySavedWindow)
+    : savedWindows;
+  for (const savedWindow of secondarySavedWindows.slice().reverse()) {
     await restoreSavedWindow(savedWindow);
   }
   return savedWindows.length;

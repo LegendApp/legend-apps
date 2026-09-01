@@ -8,8 +8,7 @@ import {
   diffViewerWindowModuleName,
 } from "./appConstants";
 import { upsertSavedDiffWindow } from "./diffAppMetadata";
-import { normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
-import { DiffViewerWindowShell } from "./DiffViewerWindowShell";
+import { getDiffRepresentedUrl, normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { createDiffViewerWindowStyle } from "./diffWindowControls";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 
@@ -18,8 +17,8 @@ let diffViewerUrlFocusRequestId = 0;
 
 const diffWindowsConfig = {
   [diffViewerWindowModuleName]: {
-    component: DiffViewerWindowShell,
     identifier: diffViewerWindowIdentifier,
+    loadComponent: () => import("./DiffViewerWindowShell").then((module) => module.DiffViewerWindowShell),
     options: {
       title: "Legend Diff",
       transparentBackground: true,
@@ -37,7 +36,7 @@ const DiffWindowsNavigator = createWindowsNavigator(diffWindowsConfig);
 
 type DiffWindow = keyof typeof diffWindowsConfig;
 
-type DiffViewerWindowOpenOptions = {
+export type DiffViewerWindowOpenOptions = {
   focusUrlInput?: boolean;
   frame?: WindowFrame;
   freshWindow?: boolean;
@@ -96,9 +95,8 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     identifier: windowIdentifier,
     initialProperties,
     interceptClose: true,
-    deferOrderFront: shouldShowSourceToolbar,
     loadComponentBeforeNativeOpen: false,
-    representedURL: source?.value,
+    representedURL: getDiffRepresentedUrl(source),
     title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
     transparentBackground: true,
     ...(options.frame ? { x: options.frame.x, y: options.frame.y } : {}),
@@ -111,10 +109,6 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     });
     return result;
   });
-}
-
-export function prefetchDiffViewerWindow() {
-  return DiffWindowsNavigator.prefetch(diffViewerWindowModuleName as DiffWindow);
 }
 
 export function openDiffSettingsWindow() {

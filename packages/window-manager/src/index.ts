@@ -218,6 +218,8 @@ export type ReactNativeStartupTiming = {
   executeJavaScriptBundleEntryPointStart?: number;
   initializeRuntimeEnd?: number;
   initializeRuntimeStart?: number;
+  mainWindowFirstVisibleTime?: number;
+  mainWindowReactRootAttachedTime?: number;
   startTime?: number;
 };
 
@@ -379,6 +381,15 @@ export function showMainWindow(): Promise<WindowResult> {
   );
 }
 
+export function hideMainWindow(): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.hideMainWindow().then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function showWindow(identifier: string): Promise<WindowResult> {
   if (Platform.OS !== "macos") {
     return fallbackResult();
@@ -533,6 +544,7 @@ export function useWindowManager() {
     openWindow,
     closeWindow,
     closeFrontmostWindow,
+    hideMainWindow,
     showMainWindow,
     showWindow,
     setMainWindowOptions,

@@ -81,6 +81,10 @@ export function createDiffFilePairSource(oldPath: string, newPath: string): Diff
   };
 }
 
+export function getDiffRepresentedUrl(source: DiffOpenSource | null | undefined) {
+  return source?.kind === "diffFile" ? source.value : null;
+}
+
 export function isDiffFilePath(path: string) {
   return /\.(diff|patch)$/i.test(path);
 }

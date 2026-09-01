@@ -2,6 +2,7 @@ import {
   createDiffFilePairSource,
   createDiffFileSource,
   getDiffRecentDocumentPath,
+  getDiffRepresentedUrl,
   getDiffSourceLabel,
   getFilename,
   getDiffSourceFromOpenUrl,
@@ -51,6 +52,13 @@ describe("diffFiles", () => {
       label: "My Patch.patch",
       value: "/Users/jay/My Patch.patch",
     });
+  });
+
+  it("uses proxy document URLs only for real diff files", () => {
+    expect(getDiffRepresentedUrl(createDiffFileSource("/tmp/change.diff"))).toBe("/tmp/change.diff");
+    expect(getDiffRepresentedUrl(normalizeDiffOpenSource("/tmp/repository"))).toBeNull();
+    expect(getDiffRepresentedUrl(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"))).toBeNull();
+    expect(getDiffRepresentedUrl(null)).toBeNull();
   });
 
   it("normalizes supported GitHub pull and commit URLs", () => {

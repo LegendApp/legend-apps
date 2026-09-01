@@ -31,6 +31,11 @@ public:
       const std::string& sourceLabel,
       double initialRowCount,
       bool ignoreWhitespaceChanges) override;
+  std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFile(
+      const std::string& filePath,
+      const std::string& sourceLabel,
+      double initialRowCount,
+      bool ignoreWhitespaceChanges) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel,
