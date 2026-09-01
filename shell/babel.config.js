@@ -1,8 +1,11 @@
 module.exports = function (api) {
-  api.cache.using(() => process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE || "");
+  api.cache.using(() => [
+    process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE || "",
+    process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH || "",
+  ].join("|"));
 
-  const inlineLegendSyntaxAssetSource = ({ types: t }) => ({
-    name: "inline-legend-syntax-asset-source",
+  const inlineLegendPublicPaths = ({ types: t }) => ({
+    name: "inline-legend-public-paths",
     visitor: {
       MemberExpression(path) {
         const { node } = path;
@@ -10,19 +13,17 @@ module.exports = function (api) {
           t.isMemberExpression(node.object)
           && t.isIdentifier(node.object.object, { name: "process" })
           && t.isIdentifier(node.object.property, { name: "env" })
-          && t.isIdentifier(node.property, { name: "EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE" })
+          && t.isIdentifier(node.property)
+          && ["EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE", "EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH"].includes(node.property.name)
         ) {
-          path.replaceWith(t.valueToNode(process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE));
+          path.replaceWith(t.valueToNode(process.env[node.property.name]));
         }
       },
     },
   });
 
   return {
-    plugins: [
-      ["babel-plugin-react-compiler", { target: "19" }],
-      inlineLegendSyntaxAssetSource,
-    ],
+    plugins: [["babel-plugin-react-compiler", { target: "19" }], inlineLegendPublicPaths],
     presets: ["babel-preset-expo"],
   };
 };

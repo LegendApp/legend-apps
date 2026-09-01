@@ -1,0 +1,31 @@
+---
+title: Legend Slides
+transition: fade
+theme:
+  backgroundColor: "#111827"
+  color: "#f8fafc"
+presenter:
+  showNext: true
+  showNotes: true
+---
+
+import { View } from "react-native"
+import { Counter } from "./Counter"
+
+# Legend Slides
+
+Markdown and React Native, together.
+
+<!-- Introduce the premise, then advance with the right arrow or space bar. -->
+
+---
+transition: slide
+---
+
+## Local components are live
+
+<View className="mt-8 rounded-2xl bg-blue-500 p-8">
+  <Counter />
+</View>
+
+<!-- The counter is local TSX and keeps normal React behavior. -->

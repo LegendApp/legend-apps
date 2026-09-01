@@ -224,6 +224,15 @@ export type WindowFrame = {
   height: number;
 };
 
+export type Display = {
+  frame: WindowFrame;
+  id: string;
+  isMain: boolean;
+  name: string;
+  scaleFactor: number;
+  visibleFrame: WindowFrame;
+};
+
 export type WindowResult = {
   success: boolean;
   message?: string;
@@ -370,6 +379,13 @@ export function openWindow(options: WindowOptions = {}): Promise<WindowResult> {
   return NativeWindowManager.openWindow(JSON.stringify(convertOptionsToNative(options))).then((value) =>
     parseJson(value, { success: false, message: "Invalid native response" }),
   );
+}
+
+export function getDisplays(): Promise<Display[]> {
+  if (Platform.OS !== "macos") {
+    return Promise.resolve([]);
+  }
+  return NativeWindowManager.getDisplays().then((value) => parseJson(value, []));
 }
 
 export function closeWindow(identifier = ""): Promise<WindowResult> {
@@ -522,6 +538,13 @@ export function addApplicationReopenRequestedListener(listener: (event: Applicat
   return new NativeEventEmitter(NativeWindowManager as never).addListener("onApplicationReopenRequested", listener);
 }
 
+export function addDisplaysChangedListener(listener: (displays: Display[]) => void) {
+  if (Platform.OS !== "macos") {
+    return emptySubscription;
+  }
+  return new NativeEventEmitter(NativeWindowManager as never).addListener("onDisplaysChanged", listener);
+}
+
 export function addWindowToolbarItemSelectedListener(listener: (event: WindowToolbarItemSelectedEvent) => void) {
   if (Platform.OS !== "macos") {
     return emptySubscription;
@@ -560,6 +583,7 @@ export function addMainWindowResizedListener(listener: (frame: WindowFrame) => v
 export function useWindowManager() {
   return {
     openWindow,
+    getDisplays,
     closeWindow,
     closeFrontmostWindow,
     hideMainWindow,
@@ -578,6 +602,7 @@ export function useWindowManager() {
     onWindowMoved: addWindowMovedListener,
     onWindowResized: addWindowResizedListener,
     onApplicationReopenRequested: addApplicationReopenRequestedListener,
+    onDisplaysChanged: addDisplaysChangedListener,
     onWindowTitlebarControlPressed: addWindowTitlebarControlPressedListener,
     onWindowToolbarItemSelected: addWindowToolbarItemSelectedListener,
     onWindowToolbarSearch: addWindowToolbarSearchListener,

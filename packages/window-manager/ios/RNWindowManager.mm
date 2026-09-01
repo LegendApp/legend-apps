@@ -827,6 +827,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     @"onTitlebarControlPressed",
     @"onToolbarItemSelected",
     @"onToolbarSearch",
+    @"onDisplaysChanged",
   ];
 }
 
@@ -838,6 +839,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   [NSNotificationCenter.defaultCenter addObserver:self
                                          selector:@selector(windowDidBecomeKey:)
                                              name:NSWindowDidBecomeKeyNotification
+                                           object:nil];
+  [NSNotificationCenter.defaultCenter addObserver:self
+                                         selector:@selector(screensChanged:)
+                                             name:NSApplicationDidChangeScreenParametersNotification
                                            object:nil];
 #endif
 }
@@ -1779,6 +1784,39 @@ willBeInsertedIntoToolbar:(BOOL)flag
   return [self jsonStringFromObject:timing];
 }
 
+- (NSArray<NSDictionary *> *)displayDictionaries
+{
+#if TARGET_OS_OSX
+  NSMutableArray<NSDictionary *> *displays = [NSMutableArray new];
+  NSScreen *mainScreen = NSScreen.mainScreen;
+  for (NSScreen *screen in NSScreen.screens) {
+    NSNumber *screenNumber = screen.deviceDescription[@"NSScreenNumber"];
+    NSRect frame = screen.frame;
+    NSRect visibleFrame = screen.visibleFrame;
+    NSString *name = @"Display";
+    if (@available(macOS 10.15, *)) {
+      name = screen.localizedName ?: name;
+    }
+    [displays addObject:@{
+      @"id": screenNumber.stringValue ?: @"",
+      @"name": name,
+      @"isMain": @(screen == mainScreen),
+      @"scaleFactor": @(screen.backingScaleFactor),
+      @"frame": @{ @"x": @(frame.origin.x), @"y": @(frame.origin.y), @"width": @(frame.size.width), @"height": @(frame.size.height) },
+      @"visibleFrame": @{ @"x": @(visibleFrame.origin.x), @"y": @(visibleFrame.origin.y), @"width": @(visibleFrame.size.width), @"height": @(visibleFrame.size.height) },
+    }];
+  }
+  return displays;
+#else
+  return @[];
+#endif
+}
+
+- (void)getDisplays:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  resolve([self jsonStringFromObject:[self displayDictionaries]]);
+}
+
 #if TARGET_OS_OSX
 - (RCTUIView *)createReactRootViewWithModuleName:(NSString *)moduleName initialProperties:(NSDictionary *)initialProps
 {
@@ -2683,6 +2721,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
 {
   [self sendWindowEventWithName:@"onWindowCloseRequested"
                            body:@{@"identifier": @"main", @"moduleName": @"main"}];
+}
+
+- (void)screensChanged:(NSNotification *)notification
+{
+  [self sendWindowEventWithName:@"onDisplaysChanged" body:[self displayDictionaries]];
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)window

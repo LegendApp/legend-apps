@@ -32,6 +32,10 @@ export function getDevSyntaxAssetSourceRoot() {
     );
 }
 
+export function getSlidesCompilerPath() {
+  return path.join(rootDir, "scripts", "compile-slides.ts");
+}
+
 export function runCommand(command: string, args: string[], options: {
   cwd?: string;
   env?: Record<string, string | undefined>;
@@ -127,6 +131,7 @@ export function runPlatformCommand(
     LEGEND_APP: appId,
     LEGEND_PLATFORM: platform,
     EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE: mode === "dev" ? getDevSyntaxAssetSourceRoot() : undefined,
+    EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH: appId === "slides" ? getSlidesCompilerPath() : undefined,
     RCT_METRO_PORT: devServerPort ? String(devServerPort) : undefined,
     ...extraEnv,
   };

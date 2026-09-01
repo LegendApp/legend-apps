@@ -8,7 +8,7 @@ import {
   withDefaultPortArg,
 } from "./lib/apps";
 import { writeGeneratedConfig } from "./lib/nativeModules";
-import { getDevSyntaxAssetSourceRoot, runCommand } from "./lib/run";
+import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
 async function startOne(appId: string, platform: Platform, extraArgs: string[]) {
@@ -24,6 +24,7 @@ async function startOne(appId: string, platform: Platform, extraArgs: string[]) 
     LEGEND_APP_CONFIG: generated.configPath,
     LEGEND_NATIVE_CONFIG: generated.configPath,
     EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE: getDevSyntaxAssetSourceRoot(),
+    EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH: appId === "slides" ? getSlidesCompilerPath() : undefined,
     RCT_METRO_PORT: String(devServerPort),
   };
 

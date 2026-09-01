@@ -4,6 +4,7 @@ import { TurboModuleRegistry } from "react-native";
 export interface Spec extends TurboModule {
   getConstantsJson(): string;
   getReactNativeStartupTimingJson(): string;
+  getDisplays(): Promise<string>;
   openWindow(optionsJson: string): Promise<string>;
   closeWindow(identifier: string): Promise<string>;
   closeFrontmostWindow(): Promise<string>;

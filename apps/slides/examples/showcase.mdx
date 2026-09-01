@@ -1,0 +1,99 @@
+---
+title: Legend Slides Showcase
+aspectRatio: 16:9
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#0f172a"
+  color: "#f8fafc"
+presenter:
+  showNext: true
+  showNotes: true
+---
+
+import { Text, View } from "react-native"
+import { InteractiveCounter } from "./components/InteractiveCounter"
+import { LifecycleAnimation } from "./components/LifecycleAnimation"
+
+export const capabilities = [
+  ["Markdown", "Headings, lists, links, and code"],
+  ["React Native", "View, Text, Pressable, and Animated"],
+  ["Local modules", "TypeScript components beside the deck"],
+]
+
+# Legend Slides
+
+Markdown for the story. React Native for everything else.
+
+<View className="mt-10 self-start rounded-2xl bg-cyan-500 px-8 py-4">
+  <Text className="text-3xl font-bold text-slate-950">Advanced example deck</Text>
+</View>
+
+<!-- Welcome the audience and explain that this deck is compiled from local MDX. -->
+
+---
+transition: slide
+---
+
+## Markdown remains Markdown
+
+- Inline code such as `const answer = 6 * 7`
+- **Strong text**, *emphasis*, and [links](https://reactnative.dev/)
+- Fenced code stays visible to the audience
+
+```tsx
+function Greeting() {
+  return <Text>Hello from MDX</Text>;
+}
+```
+
+<!-- Point out that inline and fenced code are parsed separately from executable expressions. -->
+
+---
+
+## Local TypeScript components
+
+The counter below is imported from `./components/InteractiveCounter` and owns normal React state.
+
+<InteractiveCounter />
+
+<!-- Click the counter in rehearsal mode to demonstrate that the slide is a live React tree. -->
+
+---
+transition: fade
+---
+
+## Lifecycle-aware animation
+
+`useSlideLifecycle()` distinguishes the audience's active slide from presenter previews.
+
+<LifecycleAnimation />
+
+<!-- The preview renders the completed state; the audience window animates when this slide becomes active. -->
+
+---
+
+## Arbitrary expressions
+
+<View className="mt-10 flex-row gap-6">
+  {capabilities.map(([title, detail], index) => (
+    <View key={title} className="flex-1 rounded-3xl border border-slate-700 bg-slate-800 p-8">
+      <Text className="text-xl font-bold uppercase tracking-widest text-cyan-300">{String(index + 1).padStart(2, "0")}</Text>
+      <Text className="mt-5 text-4xl font-bold text-white">{title}</Text>
+      <Text className="mt-4 text-2xl leading-9 text-slate-300">{detail}</Text>
+    </View>
+  ))}
+</View>
+
+<!-- This grid is produced by an ordinary JavaScript array map inside the MDX slide. -->
+
+---
+transition: none
+---
+
+# Ready to present
+
+Use ← and →, Page Up and Page Down, or Space from either window.
+
+<!-- Select a display in the presenter sidebar, then choose Present. -->
