@@ -33,20 +33,31 @@ export function SkiaNebula() {
   const [time, setTime] = useState(isPreview ? 3.4 : 0);
 
   useEffect(() => {
+    let cancelled = false;
+    let frame = 0;
     if (isPreview) {
       setTime(3.4);
       return;
     }
     if (!isActive) {
+      setTime(0);
       return;
     }
 
+    setTime(0);
     const startedAt = performance.now();
-    let frame = requestAnimationFrame(function update(now) {
+    const update = (now: number) => {
+      if (cancelled) {
+        return;
+      }
       setTime((now - startedAt) / 1_000);
       frame = requestAnimationFrame(update);
-    });
-    return () => cancelAnimationFrame(frame);
+    };
+    frame = requestAnimationFrame(update);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
   }, [isActive, isPreview]);
 
   if (!nebulaEffect) {
