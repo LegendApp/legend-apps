@@ -43,7 +43,7 @@ describe("TranscriptDataSource", () => {
     }]);
   });
 
-  it("invalidates only the streamed message layout", () => {
+  it("preserves the measured layout while a streamed message updates", () => {
     const dataSource = new TranscriptDataSource(createDocument(1));
     const batches: DataSourceMutationBatch[] = [];
     dataSource.appendDemoMessage({
@@ -66,7 +66,7 @@ describe("TranscriptDataSource", () => {
         type: "update",
         index: 1,
         count: 1,
-        layout: "invalidate",
+        layout: "preserve",
       }],
       previousLength: 2,
       previousRevision: 1,

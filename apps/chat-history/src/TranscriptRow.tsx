@@ -1,7 +1,7 @@
 import type { ChatDocument, ChatFileChange, ChatRowMetadata } from "@legend-apps/chat-history";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useRecyclingState } from "@legendapp/list/react-native";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import { useUniwind } from "uniwind";
@@ -78,8 +78,8 @@ function imageUri(source: string) {
 
 function MessageImage({ source }: { source: string }) {
   const uri = imageUri(source);
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
-  const [failed, setFailed] = useState(false);
+  const [aspectRatio, setAspectRatio] = useRecyclingState(16 / 9);
+  const [failed, setFailed] = useRecyclingState(false);
 
   useEffect(() => {
     let active = true;
