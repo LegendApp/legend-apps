@@ -77,7 +77,9 @@ function Deck({ children, configJson, targetIndex, isPreview }: CompiledDeckProp
       slideCount: elements.length,
       slideIndex: selectedIndex,
     }}>
-      {renderMdxChildren(selected.props.children)}
+      <View style={styles.slideContent}>
+        {renderMdxChildren(selected.props.children)}
+      </View>
     </PresentationProvider>
   );
 }
@@ -182,6 +184,7 @@ const styles = StyleSheet.create({
   listItem: { color: "#e2e8f0", fontSize: 40, lineHeight: 56 },
   paragraph: { color: "#e2e8f0", fontSize: 40, lineHeight: 56, marginBottom: 20 },
   pre: { backgroundColor: "#0f172a", borderRadius: 20, padding: 28 },
+  slideContent: { flex: 1, justifyContent: "center", paddingHorizontal: 120, paddingVertical: 80 },
   strong: { fontWeight: "700" },
   stage: { overflow: "hidden" },
 });
