@@ -19,6 +19,8 @@ const hostModules = new Set([
   "@legendapp/state/sync",
   "@legendapp/motion",
   "@legend-apps/presentation",
+  "@shopify/react-native-skia",
+  "react-native-webgpu",
 ]);
 const sourceExtensions = [
   "",

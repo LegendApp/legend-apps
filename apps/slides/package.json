@@ -16,7 +16,12 @@
     "@legend-apps/windows": "0.0.0",
     "@legendapp/motion": "catalog:",
     "@legendapp/state": "catalog:",
+    "@shopify/react-native-skia": "^2.11.1",
     "fflate": "^0.8.3",
+    "react-native-webgpu": "^0.8.5",
     "uniwind": "^1.6.3"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.72"
   }
 }

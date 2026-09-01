@@ -197,6 +197,16 @@ export const nativePackages: NativePackage[] = [
     root: path.join(rootDir, "apps", "music", "node_modules", "react-native-webview"),
     platforms: ["macos", "ios", "android"],
   },
+  {
+    name: "@shopify/react-native-skia",
+    root: path.join(rootDir, "apps", "slides", "node_modules", "@shopify", "react-native-skia"),
+    platforms: ["macos"],
+  },
+  {
+    name: "react-native-webgpu",
+    root: path.join(rootDir, "apps", "slides", "node_modules", "react-native-webgpu"),
+    platforms: ["macos"],
+  },
 ];
 
 export function getActiveNativePackages(manifest: AppManifest, platform: Platform) {

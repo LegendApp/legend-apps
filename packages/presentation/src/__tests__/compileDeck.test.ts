@@ -91,8 +91,14 @@ describe("compileDeck", () => {
     if (!result.success) return;
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/InteractiveCounter.tsx"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/LifecycleAnimation.tsx"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/SkiaNebula.tsx"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/WebGPUPortal.tsx"));
     expect(result.code).toContain('require("@legend-apps/presentation")');
+    expect(result.code).toContain('require("@shopify/react-native-skia")');
+    expect(result.code).toContain('require("react-native-webgpu")');
     expect(result.code).toContain("Animated.timing");
+    expect(result.code).toContain("createRenderPipeline");
+    expect(result.code).toContain("RuntimeEffect.Make");
     expect(result.code).toContain("useSlideLifecycle");
     expect(result.uniwindCode).toContain("bg-slate-800");
   });

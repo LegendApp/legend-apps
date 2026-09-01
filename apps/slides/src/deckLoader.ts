@@ -3,6 +3,7 @@ import * as LegendState from "@legendapp/state";
 import * as LegendStateReact from "@legendapp/state/react";
 import * as LegendStateSync from "@legendapp/state/sync";
 import * as Presentation from "@legend-apps/presentation";
+import * as ReactNativeSkia from "@shopify/react-native-skia";
 import { commandRunner } from "@legend-apps/command-runner";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
@@ -10,6 +11,7 @@ import { createStorage } from "@legend-apps/storage";
 import * as React from "react";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
+import * as ReactNativeWebGPU from "react-native-webgpu";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
 import type { CompileDeckResult } from "@legend-apps/presentation";
@@ -31,6 +33,8 @@ const hostModules: Record<string, unknown> = {
   "@legendapp/state/sync": LegendStateSync,
   "@legendapp/motion": Motion,
   "@legend-apps/presentation": Presentation,
+  "@shopify/react-native-skia": ReactNativeSkia,
+  "react-native-webgpu": ReactNativeWebGPU,
 };
 
 function evaluateDeck(code: string) {

@@ -1,0 +1,17 @@
+diff --git a/apple/MetalView.mm b/apple/MetalView.mm
+index 6657a6264677fdcc6269be01bb3fa573eff98407..8a6b9ffa11312e1b97d703edd2354e10c70c5847 100644
+--- a/apple/MetalView.mm
++++ b/apple/MetalView.mm
+@@ -1,2 +1,3 @@
+ #import "MetalView.h"
++#import <QuartzCore/CAMetalLayer.h>
+ #import "webgpu/webgpu_cpp.h"
+diff --git a/apple/WebGPUView.h b/apple/WebGPUView.h
+index 88ece5c3114f8979f258ccbf16e74c86f1409461..969a0ff8f495f216d811701bb7c9448a6488459f 100644
+--- a/apple/WebGPUView.h
++++ b/apple/WebGPUView.h
+@@ -3,3 +3,3 @@
+ #import "MetalView.h"
++#import "RNWGUIKit.h"
+ #import <React/RCTViewComponentView.h>
+-#import <UIKit/UIKit.h>

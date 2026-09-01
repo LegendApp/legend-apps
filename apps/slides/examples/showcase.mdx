@@ -15,6 +15,8 @@ presenter:
 import { Text, View } from "react-native"
 import { InteractiveCounter } from "./components/InteractiveCounter"
 import { LifecycleAnimation } from "./components/LifecycleAnimation"
+import { SkiaNebula } from "./components/SkiaNebula"
+import { WebGPUPortal } from "./components/WebGPUPortal"
 
 export const capabilities = [
   ["Markdown", "Headings, lists, links, and code"],
@@ -71,6 +73,26 @@ transition: fade
 <LifecycleAnimation />
 
 <!-- The preview renders the completed state; the audience window animates when this slide becomes active. -->
+
+---
+
+## React Native Skia
+
+The app provides `@shopify/react-native-skia`, so deck-local components can render SkSL effects.
+
+<SkiaNebula />
+
+<!-- This is a live Skia RuntimeEffect. The presenter preview intentionally renders a stable frame. -->
+
+---
+
+## React Native WebGPU
+
+The app also provides `react-native-webgpu`, backed by Dawn and Metal on macOS.
+
+<WebGPUPortal />
+
+<!-- This component creates its own WGSL shader, render pipeline, uniform buffer, and animation loop. -->
 
 ---
 
