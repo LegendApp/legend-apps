@@ -8,6 +8,9 @@
 #import <React/RCTUtils.h>
 #import <TargetConditionals.h>
 
+#include <cmath>
+#include <cxxreact/ReactMarker.h>
+
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
 #import <CoreImage/CoreImage.h>
@@ -1509,6 +1512,45 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #else
   return @"{}";
 #endif
+}
+
+- (NSString *)getReactNativeStartupTimingJson
+{
+  facebook::react::ReactMarker::StartupLogger& startupLogger =
+    facebook::react::ReactMarker::StartupLogger::getInstance();
+  NSMutableDictionary<NSString *, NSNumber *> *timing = [NSMutableDictionary new];
+
+#if TARGET_OS_OSX
+  timing[@"clockOffsetMs"] = @(
+    NSDate.date.timeIntervalSince1970 * 1000 - CACurrentMediaTime() * 1000
+  );
+#endif
+
+  double startTime = startupLogger.getAppStartupStartTime();
+  if (std::isnan(startTime)) {
+    startTime = startupLogger.getInitReactRuntimeStartTime();
+  }
+  if (!std::isnan(startTime)) {
+    timing[@"startTime"] = @(startTime);
+  }
+
+  const struct {
+    NSString *key;
+    double value;
+  } markers[] = {
+    {@"initializeRuntimeStart", startupLogger.getInitReactRuntimeStartTime()},
+    {@"executeJavaScriptBundleEntryPointStart", startupLogger.getRunJSBundleStartTime()},
+    {@"executeJavaScriptBundleEntryPointEnd", startupLogger.getRunJSBundleEndTime()},
+    {@"initializeRuntimeEnd", startupLogger.getInitReactRuntimeEndTime()},
+    {@"endTime", startupLogger.getAppStartupEndTime()},
+  };
+  for (const auto& marker : markers) {
+    if (!std::isnan(marker.value)) {
+      timing[marker.key] = @(marker.value);
+    }
+  }
+
+  return [self jsonStringFromObject:timing];
 }
 
 #if TARGET_OS_OSX

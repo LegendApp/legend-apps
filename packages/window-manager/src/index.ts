@@ -211,6 +211,16 @@ export type WindowResult = {
   message?: string;
 };
 
+export type ReactNativeStartupTiming = {
+  clockOffsetMs?: number;
+  endTime?: number;
+  executeJavaScriptBundleEntryPointEnd?: number;
+  executeJavaScriptBundleEntryPointStart?: number;
+  initializeRuntimeEnd?: number;
+  initializeRuntimeStart?: number;
+  startTime?: number;
+};
+
 export type MainWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
 export type TargetWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
 
@@ -321,6 +331,16 @@ function convertOptionsToNative(options: WindowOptions = {}): NativeWindowOption
 
 function fallbackResult(message = "WindowManager is only available on macOS"): Promise<WindowResult> {
   return Promise.resolve({ success: false, message });
+}
+
+export function getReactNativeStartupTiming(): ReactNativeStartupTiming | undefined {
+  if (Platform.OS !== "macos") {
+    return undefined;
+  }
+  return parseJson<ReactNativeStartupTiming | undefined>(
+    NativeWindowManager.getReactNativeStartupTimingJson(),
+    undefined,
+  );
 }
 
 export function openWindow(options: WindowOptions = {}): Promise<WindowResult> {

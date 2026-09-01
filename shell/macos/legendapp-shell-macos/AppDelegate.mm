@@ -5,6 +5,9 @@
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <Carbon/Carbon.h>
+#import <QuartzCore/QuartzCore.h>
+
+#include <cxxreact/ReactMarker.h>
 
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
 
@@ -256,6 +259,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
+  facebook::react::ReactMarker::logMarkerDone(
+    facebook::react::ReactMarker::APP_STARTUP_START,
+    CACurrentMediaTime() * 1000);
   LegendConfigureApplicationMenuTitles();
 
   Class documentControllerClass = NSClassFromString(@"RNRecentDocumentController");
@@ -282,6 +288,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
                                                name:NSWindowDidBecomeKeyNotification
                                              object:nil];
 
+  facebook::react::ReactMarker::logMarkerDone(
+    facebook::react::ReactMarker::INIT_REACT_RUNTIME_START,
+    CACurrentMediaTime() * 1000);
   [super applicationDidFinishLaunching:notification];
 
   if ([LegendCurrentAppId() isEqualToString:@"music"]) {

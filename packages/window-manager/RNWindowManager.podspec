@@ -14,5 +14,6 @@ Pod::Spec.new do |s|
   s.source_files = "ios/**/*.{h,m,mm}"
   s.osx.frameworks = "AppKit", "CoreImage", "QuartzCore"
   s.dependency "React-Core"
+  s.dependency "React-cxxreact"
   s.dependency "ReactCodegen"
 end
