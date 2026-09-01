@@ -11,7 +11,11 @@ unstable npm package, Git branch, or downloadable artifact.
 - Commit: `94dfeeda7ef4037faee459e8113436dc6855ea4a`
 - Base: Legend List `main` 3.3.5 at `80193ceda8f54b31e26b53f8a0ebb8cc07aa9bf0`
 - Built: 2026-08-18
-- Local revision: `1`
+- Local revision: `2`
+- Local patch: reject transient React Native macOS Fabric layout measurements
+  that exceed the window viewport or have no cross-axis size during bootstrap
+  initial scrolling. This prevents padding- or content-sized `onLayout`
+  measurements from replacing the real viewport and disabling virtualization.
 - Ported fix: Legend List commit `6d423f31752d7c1db8b01ed4c66c06fb7a3b465e`
   (`fix: keep recycled container renders coherent across prepends`), adapted
   to preserve sparse `dataSource` assignments without reading additional rows.

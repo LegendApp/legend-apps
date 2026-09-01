@@ -462,7 +462,7 @@
     },
     "packages/legend-list-sparse-layout": {
       "name": "@legendapp/list",
-      "version": "3.3.5-sparse-layout.94dfeeda.1",
+      "version": "3.3.5-sparse-layout.94dfeeda.2",
       "dependencies": {
         "use-sync-external-store": "^1.5.0",
       },
@@ -792,7 +792,7 @@
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
   },
   "catalog": {
-    "@legendapp/list": "3.3.5-sparse-layout.94dfeeda.1",
+    "@legendapp/list": "3.3.5-sparse-layout.94dfeeda.2",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
     "react": "19.1.4",

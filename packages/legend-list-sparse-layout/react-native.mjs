@@ -8188,6 +8188,18 @@ function getWindowSize() {
     width: screenSize.width
   };
 }
+function shouldIgnoreTransientMacOSScrollMeasurement(options) {
+  if (Platform.OS !== "macos" || !options.usesBootstrapInitialScroll) {
+    return false;
+  }
+  const scrollAxis = options.horizontal ? "width" : "height";
+  const otherAxis = options.horizontal ? "height" : "width";
+  const measuredLength = options.layout[scrollAxis];
+  const measuredOtherAxisLength = options.layout[otherAxis];
+  const windowLength = getWindowSize()[scrollAxis];
+  return (Number.isFinite(measuredOtherAxisLength) && measuredOtherAxisLength <= 0) ||
+    (Number.isFinite(measuredLength) && Number.isFinite(windowLength) && windowLength > 0 && measuredLength > windowLength + 1);
+}
 
 // src/core/handleLayout.ts
 function handleLayout(ctx, layoutParam, setCanRender) {
@@ -9628,6 +9640,13 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   );
   const onLayoutChange = useCallback(
     (layout, fromLayoutEffect) => {
+      if (shouldIgnoreTransientMacOSScrollMeasurement({
+        horizontal,
+        layout,
+        usesBootstrapInitialScroll
+      })) {
+        return;
+      }
       const previousScrollLength = state.scrollLength;
       const previousOtherAxisSize = state.otherAxisSize;
       handleLayout(ctx, layout, setCanRender);
@@ -9641,7 +9660,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
       }
       advanceCurrentInitialScrollSession(ctx);
     },
-    [dataLength, initialScrollAtEnd, stylePaddingEndState, usesBootstrapInitialScroll]
+    [dataLength, horizontal, initialScrollAtEnd, stylePaddingEndState, usesBootstrapInitialScroll]
   );
   const { onLayout } = useOnLayoutSync({
     onLayoutChange,

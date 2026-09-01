@@ -45,8 +45,12 @@ const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
 const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
 const CHAT_HISTORY_TITLEBAR_HEIGHT = sidebarSplitViewTitlebarMetrics.contentInsetTop;
 const CHAT_HISTORY_SIDEBAR_TOP_INSET = sidebarSplitViewTitlebarMetrics.sidebarInsetTop;
-const CHAT_COMPOSER_ESTIMATED_HEIGHT = 80;
+const CHAT_COMPOSER_INITIAL_HEIGHT = 90;
 const CHAT_COMPOSER_CONTENT_GAP = 24;
+const CHAT_HISTORY_INITIAL_LIST_SIZE = {
+  height: 720,
+  width: 1020,
+};
 const CHAT_PROVIDER_SECTIONS = [
   { provider: "codex", title: "Codex" },
   { provider: "claude", title: "Claude" },
@@ -249,7 +253,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
   const streamingDocumentIdRef = useRef<string | undefined>(undefined);
   const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
   const [anchor, setAnchor] = useState<{ documentId: string; index: number } | undefined>(undefined);
-  const [composerHeight, setComposerHeight] = useState(CHAT_COMPOSER_ESTIMATED_HEIGHT);
+  const [composerHeight, setComposerHeight] = useState(CHAT_COMPOSER_INITIAL_HEIGHT);
   const [streamingDocumentId, setStreamingDocumentId] = useState<string | undefined>(undefined);
   const dataSource = useMemo(() => new TranscriptDataSource(document), [document]);
   const anchorIndex = anchor?.documentId === document.documentId ? anchor.index : undefined;
@@ -346,6 +350,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
         dataKey={document.documentId}
         dataSource={dataSource}
         estimatedItemSize={500}
+        estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE}
         getItemType={getItemType}
         initialScrollAtEnd
         recycleItems
