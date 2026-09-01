@@ -19,6 +19,7 @@ const manifest = {
       "@legend-apps/file-system-watcher",
       "@legend-apps/keyboard-manager",
       "@legend-apps/recent-documents",
+      "@legend-apps/scaled-view",
       "@legend-apps/storage",
       "@legend-apps/window-manager",
     ],

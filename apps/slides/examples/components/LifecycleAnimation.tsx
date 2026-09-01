@@ -23,7 +23,7 @@ export function LifecycleAnimation() {
       duration: 1_200,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
     });
     animation.start();
     return () => animation.stop();

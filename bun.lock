@@ -202,11 +202,13 @@
         "@legend-apps/keyboard-manager": "0.0.0",
         "@legend-apps/presentation": "0.0.0",
         "@legend-apps/recent-documents": "0.0.0",
+        "@legend-apps/scaled-view": "0.0.0",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/window-manager": "0.0.0",
         "@legend-apps/windows": "0.0.0",
         "@legendapp/motion": "catalog:",
         "@legendapp/state": "catalog:",
+        "fflate": "^0.8.3",
         "uniwind": "^1.6.3",
       },
     },
@@ -637,6 +639,14 @@
       "dependencies": {
         "@legendapp/state": "catalog:",
       },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/scaled-view": {
+      "name": "@legend-apps/scaled-view",
+      "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
@@ -1285,6 +1295,8 @@
 
     "@legend-apps/runtime-utils": ["@legend-apps/runtime-utils@workspace:packages/runtime-utils"],
 
+    "@legend-apps/scaled-view": ["@legend-apps/scaled-view@workspace:packages/scaled-view"],
+
     "@legend-apps/secure-storage": ["@legend-apps/secure-storage@workspace:packages/secure-storage"],
 
     "@legend-apps/settings-window": ["@legend-apps/settings-window@workspace:packages/settings-window"],
@@ -1884,6 +1896,8 @@
     "fb-watchman": ["fb-watchman@2.0.2", "", { "dependencies": { "bser": "2.1.1" } }, "sha512-p5161BqbuCaSnB8jIbzQHOlpgsPmK5rJVDfDKO91Axs5NC1uu3HRQm6wt9cd9/+GtQQIO53JdGXXoyDpTAsgYA=="],
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
+
+    "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "fill-range": ["fill-range@7.1.1", "", { "dependencies": { "to-regex-range": "^5.0.1" } }, "sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg=="],
 

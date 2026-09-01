@@ -1,0 +1,21 @@
+{
+  "name": "@legend-apps/scaled-view",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "codegenConfig": {
+    "name": "RNScaledViewSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "ios": {
+      "componentProvider": {
+        "ScaledView": "RNScaledViewComponent"
+      }
+    }
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-native": "catalog:"
+  }
+}

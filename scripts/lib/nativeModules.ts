@@ -173,6 +173,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
+    name: "@legend-apps/scaled-view",
+    root: path.join(packagesDir, "scaled-view"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/sf-symbol",
     root: path.join(packagesDir, "sf-symbol"),
     platforms: ["macos", "ios", "android"],

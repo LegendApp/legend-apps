@@ -35,14 +35,30 @@ export function AudienceWindow() {
       duration: 320,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
     });
+    let settled = false;
+    const finishTransition = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      progress.setValue(1);
+      setPreviousSlide(null);
+    };
     animation.start(({ finished }) => {
       if (finished) {
-        setPreviousSlide(null);
+        finishTransition();
       }
     });
-    return () => animation.stop();
+    const watchdog = setTimeout(() => {
+      animation.stop();
+      finishTransition();
+    }, 450);
+    return () => {
+      clearTimeout(watchdog);
+      animation.stop();
+    };
   }, [currentSlide, progress, transition]);
 
   const enteringStyle = transition === "slide"

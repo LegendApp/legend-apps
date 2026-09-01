@@ -7,6 +7,7 @@ import {
   type SlideConfig,
   type SlideTransition,
 } from "@legend-apps/presentation";
+import { ScaledView } from "@legend-apps/scaled-view";
 import React, { Children, isValidElement, useEffect, type ReactElement, type ReactNode } from "react";
 import {
   Image,
@@ -149,10 +150,21 @@ export function SlideCanvas({ children }: { children: ReactNode }) {
   const width = config.width ?? 1920;
   const height = config.height ?? width / aspectRatio;
   const scale = Math.min(size.width / width || 0, size.height / height || 0);
+  const renderedWidth = width * scale;
+  const renderedHeight = height * scale;
   const handleLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
   return (
     <View onLayout={handleLayout} style={[styles.canvas, { backgroundColor: config.theme?.backgroundColor ?? "#111827" }]}>
-      <View style={{ width, height, transform: [{ scale }] }}>{children}</View>
+      <ScaledView
+        contentHeight={height}
+        contentWidth={width}
+        style={{
+          height: renderedHeight,
+          width: renderedWidth,
+        }}
+      >
+        {children}
+      </ScaledView>
     </View>
   );
 }
