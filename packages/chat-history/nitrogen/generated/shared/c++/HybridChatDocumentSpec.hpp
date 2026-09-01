@@ -52,6 +52,7 @@ namespace margelo::nitro::legendapps::chathistory {
 
     public:
       // Properties
+      virtual std::string getContentDigest() = 0;
       virtual std::string getDocumentId() = 0;
       virtual double getRowCount() = 0;
       virtual double getWarningCount() = 0;

@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "chat-history": "bun scripts/run-app.ts chat-history",
+    "chat-history:benchmark:export": "bun apps/chat-history/scripts/export-benchmark-app.ts",
     "code": "bun scripts/run-app.ts code",
     "diff": "bun scripts/run-app.ts diff",
     "diff:package:arm": "bun scripts/package-macos-app.ts diff arm",

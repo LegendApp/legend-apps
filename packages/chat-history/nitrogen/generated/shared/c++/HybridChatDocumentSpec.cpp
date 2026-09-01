@@ -14,6 +14,7 @@ namespace margelo::nitro::legendapps::chathistory {
     HybridObject::loadHybridMethods();
     // load custom methods/properties
     registerHybrids(this, [](Prototype& prototype) {
+      prototype.registerHybridGetter("contentDigest", &HybridChatDocumentSpec::getContentDigest);
       prototype.registerHybridGetter("documentId", &HybridChatDocumentSpec::getDocumentId);
       prototype.registerHybridGetter("rowCount", &HybridChatDocumentSpec::getRowCount);
       prototype.registerHybridGetter("warningCount", &HybridChatDocumentSpec::getWarningCount);

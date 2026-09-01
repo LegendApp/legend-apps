@@ -112,18 +112,21 @@ function MessageImage({ source }: { source: string }) {
   return image;
 }
 
-function MessageRow({ document, index, metadata }: {
+function MessageRow({ document, index, loadImages, metadata }: {
   document: ChatDocument;
   index: number;
+  loadImages: boolean;
   metadata: ChatRowMetadata;
 }) {
   const isUser = metadata.kind === "user";
   const { theme } = useUniwind();
   const markdownStyle = markdownStyleByAppearance[theme === "dark" ? "dark" : "light"];
-  const imageSources = Array.from(
-    { length: metadata.imageCount },
-    (_, imageIndex) => document.getImageSource(index, imageIndex),
-  );
+  const imageSources = loadImages
+    ? Array.from(
+      { length: metadata.imageCount },
+      (_, imageIndex) => document.getImageSource(index, imageIndex),
+    )
+    : [];
   return (
     <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-3"}>
       <View
@@ -145,7 +148,7 @@ function MessageRow({ document, index, metadata }: {
             selectable
           />
         ) : null}
-        {metadata.hasImagePlaceholder ? <ImagePlaceholder /> : null}
+        {metadata.hasImagePlaceholder || (!loadImages && metadata.imageCount > 0) ? <ImagePlaceholder /> : null}
       </View>
     </View>
   );
@@ -265,9 +268,17 @@ function FileChangesRow({ document, index, metadata }: {
   );
 }
 
-export function TranscriptRow({ document, index }: { document: ChatDocument; index: number }) {
+export function TranscriptRow({
+  document,
+  index,
+  loadImages = true,
+}: {
+  document: ChatDocument;
+  index: number;
+  loadImages?: boolean;
+}) {
   const metadata = document.getRowMetadata(index);
-  let row = <MessageRow document={document} index={index} metadata={metadata} />;
+  let row = <MessageRow document={document} index={index} loadImages={loadImages} metadata={metadata} />;
   if (metadata.kind === "tool") {
     row = <ToolRow document={document} index={index} metadata={metadata} />;
   } else if (metadata.kind === "files") {

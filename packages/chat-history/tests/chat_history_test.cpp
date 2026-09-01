@@ -67,6 +67,7 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
 
   ChatDocumentTiming timing(static_cast<double>(result.source->size()), 14, 4, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("codex-group", std::move(result), timing);
+  expect(document->getContentDigest() == "ea203684aeae72fb", "Codex display rows should have the canonical content digest");
   expect(document->getRowCount() == 4, "Codex adjacent tools should collapse without hiding file changes");
   const ChatRowMetadata userMetadata = document->getRowMetadata(0);
   expect(
@@ -110,6 +111,7 @@ void testClaude(const std::filesystem::path& fixtureRoot) {
 
   ChatDocumentTiming timing(static_cast<double>(result.source->size()), 8, 3, 0, 0, 0, 0, 0);
   auto document = std::make_shared<HybridChatDocument>("claude-group", std::move(result), timing);
+  expect(document->getContentDigest() == "4cb20d4c68d78408", "Claude display rows should have the canonical content digest");
   expect(document->getRowCount() == 3, "Claude progress text and tools should collapse into one display row");
   const ChatRowMetadata metadata = document->getRowMetadata(1);
   expect(metadata.kind == "tool" && metadata.toolName == "Worked for 3s", "Claude work row should expose its duration");

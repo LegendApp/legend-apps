@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 
@@ -157,10 +158,15 @@ HybridChatDocument::HybridChatDocument(
       warningCount_(result.warningCount),
       timing_(timing) {
   buildDisplayRows();
+  contentDigest_ = computeContentDigest();
 }
 
 HybridChatDocument::~HybridChatDocument() {
   ChatDocumentRegistry::shared().unregisterDocument(documentId_);
+}
+
+std::string HybridChatDocument::getContentDigest() {
+  return contentDigest_;
 }
 
 std::string HybridChatDocument::getDocumentId() {
@@ -227,6 +233,52 @@ void HybridChatDocument::buildDisplayRows() {
       }
     }
   }
+}
+
+std::string HybridChatDocument::computeContentDigest() const {
+  uint64_t digest = 0xcbf29ce484222325ULL;
+  const auto update = [&digest](std::string_view value) {
+    for (const unsigned char byte : value) {
+      digest = (digest ^ byte) * 0x100000001b3ULL;
+    }
+  };
+  const auto field = [&update](std::string_view value) {
+    update(std::to_string(value.size()));
+    update(":");
+    update(value);
+    update(";");
+  };
+  field(std::to_string(displayRows_.size()));
+  for (const ChatDisplayRow& displayRow : displayRows_) {
+    const ChatRow& row = rows_[displayRow.firstRow];
+    field(displayRow.isWorkGroup ? "tool" : row.kind);
+    field(displayRow.isWorkGroup
+        ? std::string()
+        : visibleAssistantMarkdown(row, visibleUserMarkdown(row, decodeRanges(row.markdownRanges))));
+    field(displayRow.isWorkGroup ? workGroupLabel(displayRow) : row.toolName);
+    field(displayRow.isWorkGroup
+        ? workGroupPreview(displayRow, 64 * 1024)
+        : decodeRanges(row.previewRanges, 64 * 1024));
+    field(displayRow.isWorkGroup ? workGroupStatus(displayRow) : row.toolStatus);
+    field(!displayRow.isWorkGroup && row.hasImagePlaceholder ? "1" : "0");
+    field(std::to_string(displayRow.isWorkGroup ? 0 : row.imageSources.size()));
+    if (!displayRow.isWorkGroup) {
+      for (const std::string& source : row.imageSources) {
+        field(source);
+      }
+    }
+    field(std::to_string(displayRow.isWorkGroup ? 0 : row.fileChanges.size()));
+    if (!displayRow.isWorkGroup) {
+      for (const ChatRow::FileChange& change : row.fileChanges) {
+        field(change.path);
+        field(std::to_string(change.additions));
+        field(std::to_string(change.deletions));
+      }
+    }
+  }
+  std::ostringstream output;
+  output << std::hex << std::setfill('0') << std::setw(16) << digest;
+  return output.str();
 }
 
 std::string HybridChatDocument::workGroupLabel(const ChatDisplayRow& displayRow) const {

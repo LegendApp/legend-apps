@@ -19,6 +19,7 @@ public:
   HybridChatDocument(std::string documentId, ChatParseResult result, ChatDocumentTiming timing);
   ~HybridChatDocument() override;
 
+  std::string getContentDigest() override;
   std::string getDocumentId() override;
   double getRowCount() override;
   double getWarningCount() override;
@@ -37,6 +38,7 @@ protected:
 
 private:
   void buildDisplayRows();
+  std::string computeContentDigest() const;
   std::string decodeRanges(const std::vector<JsonRange>& ranges, size_t maximumBytes = 0) const;
   std::string workGroupLabel(const ChatDisplayRow& displayRow) const;
   std::string workGroupPreview(const ChatDisplayRow& displayRow, size_t maximumBytes) const;
@@ -46,6 +48,7 @@ private:
   size_t checkedImageIndex(const ChatRow& row, double imageIndex) const;
 
   std::string documentId_;
+  std::string contentDigest_;
   mutable std::mutex mutex_;
   std::shared_ptr<const ChatSource> source_;
   std::vector<ChatRow> rows_;

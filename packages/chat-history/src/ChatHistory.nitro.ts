@@ -40,6 +40,7 @@ export interface ChatDocumentTiming {
 }
 
 export interface ChatDocument extends HybridObject<{ ios: "c++" }> {
+  readonly contentDigest: string;
   readonly documentId: string;
   readonly rowCount: number;
   readonly warningCount: number;

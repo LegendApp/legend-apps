@@ -30,6 +30,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Uniwind } from "uniwind";
 import { ChatComposer } from "./ChatComposer";
+import {
+  emitChatBenchmarkEvent,
+  getChatBenchmarkConfig,
+  type ChatBenchmarkContentReadyEvent,
+} from "./chatBenchmark";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
 import {
@@ -88,7 +93,14 @@ const chatSidebarContentInset = {
 type TranscriptState =
   | { status: "idle" }
   | { selectedId: string; status: "loading" }
-  | { document: ChatDocument; selectedId: string; status: "ready" }
+  | {
+    document: ChatDocument;
+    openedAt: number;
+    path: string;
+    phase?: "initial" | "switch";
+    selectedId: string;
+    status: "ready";
+  }
   | { error: string; selectedId: string; status: "error" };
 
 type ChatSidebarEntry =
@@ -247,8 +259,23 @@ function ChatSidebar({
   );
 }
 
-function TranscriptList({ document }: { document: ChatDocument }) {
+function TranscriptList({
+  document,
+  loadImages,
+  onContentReady,
+  openedAt,
+  path,
+  phase,
+}: {
+  document: ChatDocument;
+  loadImages: boolean;
+  onContentReady?: (event: ChatBenchmarkContentReadyEvent) => void;
+  openedAt: number;
+  path: string;
+  phase?: "initial" | "switch";
+}) {
   const listRef = useRef<LegendListRef>(null);
+  const reportedDocumentIdRef = useRef<string | undefined>(undefined);
   const demoMessageSequenceRef = useRef(0);
   const streamingDocumentIdRef = useRef<string | undefined>(undefined);
   const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
@@ -264,11 +291,11 @@ function TranscriptList({ document }: { document: ChatDocument }) {
       if (item !== undefined) {
         row = isDemoTranscriptMessage(item)
           ? <DemoTranscriptRow message={item} />
-          : <TranscriptRow document={document} index={item} />;
+          : <TranscriptRow document={document} index={item} loadImages={loadImages} />;
       }
       return row;
     },
-    [document],
+    [document, loadImages],
   );
   const getItemType = useCallback(
     (item: TranscriptListItem) => isDemoTranscriptMessage(item)
@@ -340,6 +367,36 @@ function TranscriptList({ document }: { document: ChatDocument }) {
     streamingDocumentIdRef.current = undefined;
     document.releaseNativeResources();
   }, [activeTimers, document]);
+  const handleLoad = useCallback(() => {
+    if (reportedDocumentIdRef.current === document.documentId) {
+      return;
+    }
+    reportedDocumentIdRef.current = document.documentId;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (phase) {
+          const timing = document.getTiming();
+          onContentReady?.({
+            contentDigest: document.contentDigest,
+            durationMs: performance.now() - openedAt,
+            name: "contentReady",
+            path,
+            phase,
+            recordCount: timing.recordCount,
+            rowCount: timing.rowCount,
+            sourceBytes: timing.sourceBytes,
+            timing: {
+              documentMs: timing.documentMs,
+              loadMs: timing.mappedMs,
+              nativeTotalMs: timing.totalMs,
+              parseMs: timing.normalizedMs,
+              scanMs: timing.scannedMs,
+            },
+          });
+        }
+      });
+    });
+  }, [document, onContentReady, openedAt, path, phase]);
 
   return (
     <View className="flex-1 bg-background">
@@ -353,6 +410,7 @@ function TranscriptList({ document }: { document: ChatDocument }) {
         estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE}
         getItemType={getItemType}
         initialScrollAtEnd
+        onLoad={handleLoad}
         recycleItems
         ref={listRef}
         renderItem={renderItem}
@@ -370,7 +428,17 @@ function TranscriptList({ document }: { document: ChatDocument }) {
   );
 }
 
-function TranscriptPane({ selectedId, state }: { selectedId?: string; state: TranscriptState }) {
+function TranscriptPane({
+  loadImages,
+  onContentReady,
+  selectedId,
+  state,
+}: {
+  loadImages: boolean;
+  onContentReady?: (event: ChatBenchmarkContentReadyEvent) => void;
+  selectedId?: string;
+  state: TranscriptState;
+}) {
   const isCurrentSelection = "selectedId" in state && state.selectedId === selectedId;
   if (isCurrentSelection && state.status === "error") {
     return (
@@ -380,7 +448,16 @@ function TranscriptPane({ selectedId, state }: { selectedId?: string; state: Tra
     );
   }
   if (isCurrentSelection && state.status === "ready") {
-    return <TranscriptList document={state.document} />;
+    return (
+      <TranscriptList
+        document={state.document}
+        loadImages={loadImages}
+        onContentReady={onContentReady}
+        openedAt={state.openedAt}
+        path={state.path}
+        phase={state.phase}
+      />
+    );
   }
   if (selectedId !== undefined) {
     return <View className="flex-1 bg-background" />;
@@ -392,15 +469,22 @@ function TranscriptPane({ selectedId, state }: { selectedId?: string; state: Tra
   );
 }
 
-export function ChatHistoryWindow() {
+type ChatHistoryWindowProps = {
+  launchArguments?: string[];
+};
+
+export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const windowIdentifier = useWindowId();
   const displayTheme = useSystemLegendDisplayTheme();
+  const benchmark = useMemo(() => getChatBenchmarkConfig(launchArguments), [launchArguments]);
   const [summaries, setSummaries] = useState<ChatSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({ status: "idle" });
   const loadGenerationRef = useRef(0);
+  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const windowShownRef = useRef(false);
   const selectedTitle = summaries.find((summary) => summary.id === selectedId)?.title;
 
   useEffect(() => {
@@ -416,6 +500,15 @@ export function ChatHistoryWindow() {
 
   useEffect(() => {
     let active = true;
+    if (benchmark) {
+      setSummaries(benchmark.fixtures);
+      setSelectedId(benchmark.fixtures[0].id);
+      setCatalogLoading(false);
+      return () => {
+        active = false;
+        cancelPendingOpen();
+      };
+    }
     void getRecentChats(20)
       .then((recentChats) => {
         if (active) {
@@ -439,20 +532,37 @@ export function ChatHistoryWindow() {
       active = false;
       cancelPendingOpen();
     };
-  }, []);
+  }, [benchmark]);
 
   useEffect(() => {
     const selected = summaries.find((summary) => summary.id === selectedId);
     if (selected) {
       const generation = loadGenerationRef.current + 1;
+      const openedAt = performance.now();
+      const phase = benchmark
+        ? selected.id === benchmark.fixtures[0].id
+          ? "initial"
+          : selected.id === benchmark.fixtures[1].id
+            ? "switch"
+            : undefined
+        : undefined;
       loadGenerationRef.current = generation;
       cancelPendingOpen();
-      writeSelectedChatId(selected.id);
+      if (!benchmark) {
+        writeSelectedChatId(selected.id);
+      }
       setTranscriptState({ selectedId: selected.id, status: "loading" });
       void openChat(selected.provider as ChatProvider, selected.path)
         .then((document) => {
           if (loadGenerationRef.current === generation) {
-            setTranscriptState({ document, selectedId: selected.id, status: "ready" });
+            setTranscriptState({
+              document,
+              openedAt,
+              path: selected.path,
+              phase,
+              selectedId: selected.id,
+              status: "ready",
+            });
           } else {
             document.releaseNativeResources();
           }
@@ -463,11 +573,35 @@ export function ChatHistoryWindow() {
           }
         });
     }
-  }, [selectedId, summaries]);
+  }, [benchmark, selectedId, summaries]);
+
+  useEffect(() => () => {
+    if (switchTimerRef.current !== undefined) {
+      clearTimeout(switchTimerRef.current);
+    }
+  }, []);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
+  const handleContentReady = useCallback((event: ChatBenchmarkContentReadyEvent) => {
+    if (!benchmark) {
+      return;
+    }
+    emitChatBenchmarkEvent(benchmark, event);
+    if (event.phase === "initial" && switchTimerRef.current === undefined) {
+      switchTimerRef.current = setTimeout(() => {
+        switchTimerRef.current = undefined;
+        setSelectedId(benchmark.fixtures[1].id);
+      }, benchmark.switchDelayMs);
+    }
+  }, [benchmark]);
+  const handleWindowLayout = useCallback(() => {
+    if (benchmark && !windowShownRef.current) {
+      windowShownRef.current = true;
+      emitChatBenchmarkEvent(benchmark, { name: "windowShown" });
+    }
+  }, [benchmark]);
 
   const emptyMessage = catalogLoading
     ? "Scanning recent chats…"
@@ -487,11 +621,17 @@ export function ChatHistoryWindow() {
       contentMinWidth={420}
       sidebarMinWidth={220}
       sidebarWidth={260}
+      onLayout={handleWindowLayout}
       style={styles.root}
     >
       <ChatSidebar summaries={summaries} selectedId={selectedId} onSelect={handleSelect} />
       {summaries.length > 0 ? (
-        <TranscriptPane selectedId={selectedId} state={transcriptState} />
+        <TranscriptPane
+          loadImages={benchmark?.loadImages ?? true}
+          onContentReady={handleContentReady}
+          selectedId={selectedId}
+          state={transcriptState}
+        />
       ) : (
         <View className="flex-1 items-center justify-center bg-background px-10">
           {catalogLoading ? <ActivityIndicator /> : null}
@@ -534,8 +674,9 @@ const chatHistoryWindowsConfig = {
 
 const ChatHistoryWindowsNavigator = createWindowsNavigator(chatHistoryWindowsConfig);
 
-function openChatHistoryWindow() {
+function openChatHistoryWindow(launchArguments?: string[]) {
   return ChatHistoryWindowsNavigator.open(CHAT_HISTORY_WINDOW_MODULE_NAME, {
+    initialProperties: launchArguments ? { launchArguments } : undefined,
     windowStyle: {
       backgroundColor: getSystemLegendDisplayTheme().colors.windowBackground,
     },
@@ -546,10 +687,15 @@ function reportChatHistoryWindowError(error: unknown) {
   console.error(`[ChatHistoryWindow] ${errorMessage(error)}`);
 }
 
-export function App() {
+type ChatHistoryAppProps = {
+  launchArguments?: string[];
+};
+
+export function App({ launchArguments }: ChatHistoryAppProps) {
+  const handleOpen = useCallback(() => openChatHistoryWindow(launchArguments), [launchArguments]);
   usePrimaryWindowLifecycle({
-    onInitialOpen: openChatHistoryWindow,
-    onReopenRequested: openChatHistoryWindow,
+    onInitialOpen: handleOpen,
+    onReopenRequested: handleOpen,
     reportError: reportChatHistoryWindowError,
   });
 
