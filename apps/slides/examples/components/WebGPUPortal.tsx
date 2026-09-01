@@ -1,7 +1,7 @@
 import { useSlideLifecycle } from "@legend-apps/presentation";
 import { useEffect, useRef, useState } from "react";
 import { PixelRatio, StyleSheet, Text, View } from "react-native";
-import { Canvas, GPUBufferUsage, type CanvasRef } from "react-native-webgpu";
+import { Canvas, type CanvasRef } from "react-native-webgpu";
 
 const canvasWidth = 1500;
 const canvasHeight = 560;
@@ -65,6 +65,10 @@ export function WebGPUPortal() {
           device.destroy();
           return;
         }
+        const bufferUsage = globalThis.GPUBufferUsage;
+        if (!bufferUsage) {
+          throw new Error("WebGPU buffer constants are not available.");
+        }
 
         const surface = canvasRef.current.getNativeSurface();
         const context = canvasRef.current.getContext("webgpu");
@@ -86,7 +90,7 @@ export function WebGPUPortal() {
         });
         const uniformBuffer = device.createBuffer({
           size: 16,
-          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
+          usage: bufferUsage.COPY_DST | bufferUsage.UNIFORM,
         });
         const bindGroup = device.createBindGroup({
           entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],

@@ -24,6 +24,17 @@ let watcher: { remove(): void } | undefined;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 let buildSequence = 0;
 
+// react-native-webgpu installs these globals after its constants module has
+// already captured its exports, so expose the installed values to deck code.
+const webGPUHostModule = {
+  ...ReactNativeWebGPU,
+  GPUBufferUsage: globalThis.GPUBufferUsage,
+  GPUColorWrite: globalThis.GPUColorWrite,
+  GPUMapMode: globalThis.GPUMapMode,
+  GPUShaderStage: globalThis.GPUShaderStage,
+  GPUTextureUsage: globalThis.GPUTextureUsage,
+};
+
 const hostModules: Record<string, unknown> = {
   react: React,
   "react/jsx-runtime": JsxRuntime,
@@ -35,7 +46,7 @@ const hostModules: Record<string, unknown> = {
   "@legendapp/motion": Motion,
   "@legend-apps/presentation": Presentation,
   "@shopify/react-native-skia": ReactNativeSkia,
-  "react-native-webgpu": ReactNativeWebGPU,
+  "react-native-webgpu": webGPUHostModule,
   "react-native-webview": ReactNativeWebview,
 };
 
