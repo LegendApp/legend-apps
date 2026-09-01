@@ -130,7 +130,9 @@ describe("compileDeck", () => {
     expect(result.code).toContain('require("react-native-webgpu")');
     expect(result.code).toContain("Animated.timing");
     expect(result.code).toContain("createRenderPipeline");
+    expect(result.code).toContain("createTexture");
     expect(result.code).toContain("globalThis.GPUBufferUsage");
+    expect(result.code).toContain("textureSampleLevel");
     expect(result.code).toContain("RuntimeEffect.Make");
     expect(result.code).toContain("useSlideLifecycle");
     expect(result.uniwindCode).toContain("bg-slate-800");
