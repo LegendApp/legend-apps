@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Legend Chat History</title>
+        <item>
+            <title>0.0.1</title>
+            <pubDate>Tue, 01 Sep 2026 18:50:50 +0300</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.1/Legend-Chat-History-0.0.1-arm.zip" length="8718795" type="application/octet-stream" sparkle:edSignature="bV3kip8K98Z5Xg5in1o/QNZSuZjMnTcCN0o4rO38U3ErTa7IJU401bbTQ5vVzD2G0nNs/3piJy4W9qEjBvF5CA=="/>
+        </item>
+    </channel>
+</rss>
