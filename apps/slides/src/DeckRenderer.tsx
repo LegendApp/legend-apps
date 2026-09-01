@@ -152,16 +152,14 @@ export function SlideCanvas({ children }: { children: ReactNode }) {
   const scale = Math.min(size.width / width || 0, size.height / height || 0);
   const renderedWidth = width * scale;
   const renderedHeight = height * scale;
+  const backgroundColor = config.theme?.backgroundColor ?? "#111827";
   const handleLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
   return (
-    <View onLayout={handleLayout} style={[styles.canvas, { backgroundColor: config.theme?.backgroundColor ?? "#111827" }]}>
+    <View onLayout={handleLayout} style={styles.canvas}>
       <ScaledView
         contentHeight={height}
         contentWidth={width}
-        style={{
-          height: renderedHeight,
-          width: renderedWidth,
-        }}
+        style={[styles.stage, { backgroundColor, height: renderedHeight, width: renderedWidth }]}
       >
         {children}
       </ScaledView>
@@ -171,7 +169,7 @@ export function SlideCanvas({ children }: { children: ReactNode }) {
 
 const styles = StyleSheet.create({
   blockquote: { borderLeftColor: "#64748b", borderLeftWidth: 8, paddingLeft: 32 },
-  canvas: { alignItems: "center", flex: 1, justifyContent: "center", overflow: "hidden" },
+  canvas: { alignItems: "center", backgroundColor: "#000", flex: 1, justifyContent: "center", overflow: "hidden" },
   code: { backgroundColor: "#1e293b", color: "#e2e8f0", fontFamily: "Menlo", fontSize: 30 },
   emphasis: { fontStyle: "italic" },
   h1: { color: "#f8fafc", fontSize: 88, fontWeight: "700", marginBottom: 36 },
@@ -183,4 +181,5 @@ const styles = StyleSheet.create({
   paragraph: { color: "#e2e8f0", fontSize: 40, lineHeight: 56, marginBottom: 20 },
   pre: { backgroundColor: "#0f172a", borderRadius: 20, padding: 28 },
   strong: { fontWeight: "700" },
+  stage: { overflow: "hidden" },
 });
