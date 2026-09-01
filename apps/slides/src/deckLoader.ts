@@ -87,7 +87,7 @@ export async function loadDeck(path: string, remember = true) {
   const commandResult = await commandRunner.runCommand({
     command: "bun",
     args: [compilerPath, path],
-    cwd: compilerPath.slice(0, compilerPath.lastIndexOf("/")),
+    cwd: directoryName(directoryName(compilerPath)),
     timeoutMs: 30_000,
   });
   if (sequence !== buildSequence) {
