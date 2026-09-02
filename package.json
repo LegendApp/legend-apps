@@ -47,7 +47,7 @@
     "test:diff-parser:native": "bash packages/diff-parser/tests/run-native.sh",
     "test:syntax-parser": "jest --config packages/syntax-parser/jest.config.cjs",
     "test:music": "jest --config apps/music/jest.config.cjs",
-    "test:slides": "bun test packages/presentation/src/__tests__",
+    "test:slides": "bun test packages/presentation/src/__tests__ apps/slides/src/__tests__",
     "test:markdown-document": "jest --config packages/markdown-document/jest.config.cjs",
     "test:markdown-e2e": "bun scripts/test-markdown-e2e.ts",
     "profile:markdown-e2e": "bun scripts/profile-markdown-e2e.ts",

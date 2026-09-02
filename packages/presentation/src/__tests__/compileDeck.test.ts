@@ -51,6 +51,34 @@ describe("compileDeck", () => {
     expect(result.uniwindCode).toContain("stylesheet");
   });
 
+  test("collects multiple notes and keeps per-slide frontmatter independent", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": [
+        "---",
+        "title: Notes and metadata",
+        "transition: fade",
+        "---",
+        "# First",
+        "<!-- first note -->",
+        "A paragraph.",
+        "<!-- follow-up note -->",
+        "---",
+        "transition: none",
+        "speaker: Jay",
+        "---",
+        "# Second",
+        "<!-- second slide note -->",
+      ].join("\n"),
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code.indexOf("first note")).toBeLessThan(result.code.indexOf("follow-up note"));
+    expect(result.code).toContain("second slide note");
+    expect(result.code).toContain('speaker":"Jay');
+    expect(result.code).toContain('transition":"none');
+  });
+
   test("bundles local components and externalizes host packages", async () => {
     const deckPath = createDeck({
       "deck.mdx": `import { Card } from "./Card"\nimport { View } from "react-native"\n\n<Card><View className="bg-fuchsia-500" /></Card>`,
@@ -162,6 +190,15 @@ describe("compileDeck", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.errors.join("\n")).toContain("is not available to decks");
+  });
+
+  test("reports the source location for failed local imports", async () => {
+    const deckPath = createDeck({ "deck.mdx": `import missing from "./missing"\n\n{missing}` });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors.join("\n")).toMatch(/deck\.mdx:\d+:\d+:/);
+    expect(result.errors.join("\n")).toContain('Could not resolve local import "./missing"');
   });
 
   test("rejects unavailable packages in Webview components", async () => {
