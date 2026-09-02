@@ -3,16 +3,20 @@ import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
 import {
   addDisplaysChangedListener,
+  addWindowClosedListener,
   closeWindow,
   getDisplays,
+  setPreventDisplaySleep,
   setWindowTitle,
+  showWindow,
   type Display,
   WindowStyleMask,
 } from "@legend-apps/window-manager";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { getLastDeckPath, loadDeck } from "./deckLoader";
+import { getPresentationDisplayId, rememberPresentationDisplayId } from "./slidesPreferences";
 import { nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { slidesWindows } from "./slidesWindows";
 
@@ -20,6 +24,18 @@ type PresenterWindowProps = { launchArguments?: string[] };
 
 const nextKeyCodes = new Set<number>([KeyCodes.KEY_RIGHT, KeyCodes.KEY_DOWN, KeyCodes.KEY_PAGE_DOWN, KeyCodes.KEY_SPACE]);
 const previousKeyCodes = new Set<number>([KeyCodes.KEY_LEFT, KeyCodes.KEY_UP, KeyCodes.KEY_PAGE_UP]);
+const digitKeyCodes = new Map<number, string>([
+  [KeyCodes.KEY_0, "0"],
+  [KeyCodes.KEY_1, "1"],
+  [KeyCodes.KEY_2, "2"],
+  [KeyCodes.KEY_3, "3"],
+  [KeyCodes.KEY_4, "4"],
+  [KeyCodes.KEY_5, "5"],
+  [KeyCodes.KEY_6, "6"],
+  [KeyCodes.KEY_7, "7"],
+  [KeyCodes.KEY_8, "8"],
+  [KeyCodes.KEY_9, "9"],
+]);
 
 function Button({ disabled, label, onPress, primary = false }: { disabled?: boolean; label: string; onPress(): void; primary?: boolean }) {
   return (
@@ -45,6 +61,119 @@ function Preview({ index, label }: { index: number; label: string }) {
   );
 }
 
+function SpeakerNotes({ notes, slideCount, slideIndex }: { notes?: string; slideCount: number; slideIndex: number }) {
+  return (
+    <View style={styles.notesSection}>
+      <View style={styles.notesHeader}>
+        <Text style={styles.notesTitle}>Speaker Notes</Text>
+        <Text style={styles.notesSlide}>Slide {slideIndex + 1} of {slideCount || 1}</Text>
+      </View>
+      <ScrollView key={slideIndex} contentContainerStyle={styles.notesContent} style={styles.notes}>
+        <Text style={[styles.notesText, !notes && styles.notesPlaceholder]}>{notes || "No notes for this slide."}</Text>
+      </ScrollView>
+    </View>
+  );
+}
+
+function formatElapsed(milliseconds: number) {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function PresenterClock({ audienceOpen }: { audienceOpen: boolean }) {
+  const elapsedBeforeRun = useRef(0);
+  const startedAt = useRef(0);
+  const runningRef = useRef(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [now, setNow] = useState(() => new Date());
+  const [running, setRunning] = useState(false);
+
+  const changeRunning = useCallback((nextRunning: boolean) => {
+    if (nextRunning === runningRef.current) {
+      return;
+    }
+    if (nextRunning) {
+      startedAt.current = Date.now();
+    } else {
+      elapsedBeforeRun.current += Date.now() - startedAt.current;
+      setElapsed(elapsedBeforeRun.current);
+    }
+    runningRef.current = nextRunning;
+    setRunning(nextRunning);
+  }, []);
+
+  useEffect(() => {
+    changeRunning(audienceOpen);
+  }, [audienceOpen, changeRunning]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+      if (runningRef.current) {
+        setElapsed(elapsedBeforeRun.current + Date.now() - startedAt.current);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const reset = () => {
+    elapsedBeforeRun.current = 0;
+    startedAt.current = Date.now();
+    setElapsed(0);
+  };
+
+  return (
+    <View style={styles.clockSection}>
+      <View>
+        <Text style={styles.clockLabel}>Elapsed</Text>
+        <Text style={styles.elapsed}>{formatElapsed(elapsed)}</Text>
+      </View>
+      <View style={styles.clockRight}>
+        <Text style={styles.clockLabel}>Current time</Text>
+        <Text style={styles.currentTime}>{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
+      </View>
+      <View style={styles.timerActions}>
+        <Button label={running ? "Pause" : "Start"} onPress={() => changeRunning(!running)} />
+        <Button label="Reset" onPress={reset} />
+      </View>
+    </View>
+  );
+}
+
+function SlideJump({ onFocusChange, slideCount }: { onFocusChange(focused: boolean): void; slideCount: number }) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    const slideNumber = Number(value);
+    if (Number.isInteger(slideNumber) && slideNumber >= 1 && slideNumber <= slideCount) {
+      setCurrentSlide(slideNumber - 1);
+      setValue("");
+    }
+  };
+  return (
+    <View style={styles.jumpRow}>
+      <TextInput
+        accessibilityLabel="Slide number"
+        keyboardType="number-pad"
+        onBlur={() => onFocusChange(false)}
+        onChangeText={(text) => setValue(text.replace(/\D/g, ""))}
+        onFocus={() => onFocusChange(true)}
+        onSubmitEditing={submit}
+        placeholder={`1–${Math.max(1, slideCount)}`}
+        placeholderTextColor="#71717a"
+        returnKeyType="go"
+        style={styles.jumpInput}
+        value={value}
+      />
+      <Button disabled={!value} label="Go" onPress={submit} />
+    </View>
+  );
+}
+
 function launchDeckPath(launchArguments?: string[]) {
   return launchArguments?.find((argument) => argument.toLowerCase().endsWith(".mdx"));
 }
@@ -52,12 +181,22 @@ function launchDeckPath(launchArguments?: string[]) {
 export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const [displays, setDisplays] = useState<Display[]>([]);
   const [selectedDisplayId, setSelectedDisplayId] = useState<string | null>(null);
+  const [keyboardJump, setKeyboardJump] = useState("");
+  const jumpInputFocused = useRef(false);
+  const keyboardJumpRef = useRef("");
+  const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const state = useSlidesState((value) => value);
 
   const refreshDisplays = useCallback(async () => {
     const nextDisplays = await getDisplays();
     setDisplays(nextDisplays);
-    setSelectedDisplayId((current) => nextDisplays.some((display) => display.id === current) ? current : null);
+    setSelectedDisplayId((current) => {
+      if (nextDisplays.some((display) => display.id === current)) {
+        return current;
+      }
+      const remembered = getPresentationDisplayId();
+      return nextDisplays.some((display) => display.id === remembered) ? remembered ?? null : null;
+    });
   }, []);
 
   const openDeck = useCallback(async () => {
@@ -91,23 +230,24 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       y: rehearsalFrame.y + (rehearsalFrame.height - rehearsalHeight) / 2,
       windowStyle: { height: rehearsalHeight, width: rehearsalWidth },
     } : undefined);
-    setSlidesState({ audienceOpen: true });
+    setSlidesState({ audienceOpen: true, blackout: false });
+    await showWindow("slides-presenter");
   }, [displays]);
+
+  const closeAudience = useCallback(async () => {
+    await closeWindow("slides-audience");
+    setSlidesState({ audienceOpen: false, blackout: false });
+    await showWindow("slides-presenter");
+  }, []);
 
   useEffect(() => {
     void refreshDisplays();
-    const displaysSubscription = addDisplaysChangedListener(setDisplays);
+    const displaysSubscription = addDisplaysChangedListener(() => void refreshDisplays());
     const recentSubscription = addRecentDocumentOpenListener(({ path }) => void loadDeck(path));
-    const removeKeys = addKeyDownListener((event) => {
-      if (nextKeyCodes.has(event.keyCode)) {
-        nextSlide();
-        return true;
+    const closedSubscription = addWindowClosedListener((event) => {
+      if (event.identifier === "slides-audience") {
+        setSlidesState({ audienceOpen: false, blackout: false });
       }
-      if (previousKeyCodes.has(event.keyCode)) {
-        previousSlide();
-        return true;
-      }
-      return false;
     });
     const launchedPath = launchDeckPath(launchArguments);
     const initialPath = launchedPath ?? getLastDeckPath();
@@ -117,9 +257,83 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     return () => {
       displaysSubscription.remove();
       recentSubscription.remove();
-      removeKeys();
+      closedSubscription.remove();
     };
   }, [launchArguments, refreshDisplays]);
+
+  useEffect(() => {
+    const removeKeys = addKeyDownListener((event) => {
+      if (jumpInputFocused.current) {
+        return false;
+      }
+      if (nextKeyCodes.has(event.keyCode)) {
+        nextSlide();
+        return true;
+      }
+      if (previousKeyCodes.has(event.keyCode)) {
+        previousSlide();
+        return true;
+      }
+      if (event.keyCode === KeyCodes.KEY_HOME) {
+        setCurrentSlide(0);
+        return true;
+      }
+      if (event.keyCode === KeyCodes.KEY_END) {
+        setCurrentSlide(Number.MAX_SAFE_INTEGER);
+        return true;
+      }
+      if (event.keyCode === KeyCodes.KEY_B) {
+        setSlidesState((current) => ({ blackout: !current.blackout }));
+        return true;
+      }
+      if (event.keyCode === KeyCodes.KEY_ESCAPE && state.audienceOpen) {
+        void closeAudience();
+        return true;
+      }
+      const digit = digitKeyCodes.get(event.keyCode);
+      if (digit !== undefined) {
+        const nextJump = `${keyboardJumpRef.current}${digit}`.replace(/^0+/, "").slice(0, 4);
+        keyboardJumpRef.current = nextJump;
+        setKeyboardJump(nextJump);
+        if (keyboardJumpTimeout.current) {
+          clearTimeout(keyboardJumpTimeout.current);
+        }
+        keyboardJumpTimeout.current = setTimeout(() => {
+          keyboardJumpRef.current = "";
+          setKeyboardJump("");
+        }, 2500);
+        return true;
+      }
+      if (event.keyCode === KeyCodes.KEY_RETURN && keyboardJumpRef.current) {
+        setCurrentSlide(Number(keyboardJumpRef.current) - 1);
+        keyboardJumpRef.current = "";
+        setKeyboardJump("");
+        return true;
+      }
+      if (event.keyCode === KeyCodes.KEY_DELETE && keyboardJumpRef.current) {
+        const nextJump = keyboardJumpRef.current.slice(0, -1);
+        keyboardJumpRef.current = nextJump;
+        setKeyboardJump(nextJump);
+        return true;
+      }
+      return false;
+    });
+    return () => {
+      removeKeys();
+      if (keyboardJumpTimeout.current) {
+        clearTimeout(keyboardJumpTimeout.current);
+      }
+    };
+  }, [closeAudience, state.audienceOpen]);
+
+  useEffect(() => {
+    void setPreventDisplaySleep(state.audienceOpen);
+    return () => {
+      if (state.audienceOpen) {
+        void setPreventDisplaySleep(false);
+      }
+    };
+  }, [state.audienceOpen]);
 
   const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
   const currentNotes = state.slides[state.currentSlide]?.notes;
@@ -137,9 +351,10 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
           <Text numberOfLines={1} style={styles.path}>{state.deckPath ?? "No deck open"}</Text>
         </View>
         <View style={styles.toolbarGroup}>
+          {keyboardJump && <Text style={styles.keyboardJump}>Jump to {keyboardJump} ↵</Text>}
           <Button disabled={state.audienceOpen || !state.component} label={state.audienceOpen ? "Audience Open" : "Rehearse"} onPress={() => void openAudience()} />
           <Button disabled={!selectedDisplay || !state.component} label="Present" onPress={() => selectedDisplay && void openAudience(selectedDisplay)} primary />
-          {state.audienceOpen && <Button label="Stop" onPress={() => void closeWindow("slides-audience").then(() => setSlidesState({ audienceOpen: false }))} />}
+          {state.audienceOpen && <Button label="Stop" onPress={() => void closeAudience()} />}
         </View>
       </View>
 
@@ -151,6 +366,9 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
                 <Preview index={state.currentSlide} label="Current" />
                 {showNext && <Preview index={Math.min(state.currentSlide + 1, state.slides.length - 1)} label="Next" />}
               </View>
+              {showNotes && (
+                <SpeakerNotes notes={currentNotes} slideCount={state.slides.length} slideIndex={state.currentSlide} />
+              )}
               <View style={styles.navigation}>
                 <Button disabled={state.currentSlide === 0} label="Previous" onPress={previousSlide} />
                 <Text style={styles.counter}>{state.currentSlide + 1} / {state.slides.length || 1}</Text>
@@ -167,19 +385,24 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         </View>
 
         <View style={styles.sidebar}>
+          <PresenterClock audienceOpen={state.audienceOpen} />
+          <Text style={styles.sidebarTitle}>Slide Navigator</Text>
+          <SlideJump onFocusChange={(focused) => { jumpInputFocused.current = focused; }} slideCount={state.slides.length} />
+          <Button
+            disabled={!state.audienceOpen}
+            label={state.blackout ? "Restore Audience" : "Blackout Audience"}
+            onPress={() => setSlidesState((current) => ({ blackout: !current.blackout }))}
+          />
           <Text style={styles.sidebarTitle}>Presentation Display</Text>
           {displays.map((display) => (
-            <Pressable key={display.id} onPress={() => setSelectedDisplayId(display.id)} style={[styles.displayRow, selectedDisplayId === display.id && styles.displayRowSelected]}>
+            <Pressable key={display.id} onPress={() => {
+              setSelectedDisplayId(display.id);
+              rememberPresentationDisplayId(display.id);
+            }} style={[styles.displayRow, selectedDisplayId === display.id && styles.displayRowSelected]}>
               <Text style={styles.displayName}>{display.name}</Text>
               <Text style={styles.displayMeta}>{display.frame.width} × {display.frame.height}{display.isMain ? " · Main" : ""}</Text>
             </Pressable>
           ))}
-          {showNotes && (
-            <>
-              <Text style={styles.sidebarTitle}>Speaker Notes</Text>
-              <ScrollView style={styles.notes}><Text style={styles.notesText}>{currentNotes || "No notes for this slide."}</Text></ScrollView>
-            </>
-          )}
           {(state.buildErrors.length > 0 || state.buildWarnings.length > 0) && (
             <View style={styles.errors}>
               <Text style={styles.errorTitle}>Build output</Text>
@@ -196,8 +419,12 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 const styles = StyleSheet.create({
   button: { backgroundColor: "#30323a", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
   buttonText: { color: "#f4f4f5", fontSize: 13, fontWeight: "600" },
+  clockLabel: { color: "#71717a", fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase" },
+  clockRight: { alignItems: "flex-end" },
+  clockSection: { alignItems: "flex-start", flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 4, rowGap: 12 },
   content: { flex: 1, flexDirection: "row" },
   counter: { color: "#d4d4d8", fontSize: 14, fontVariant: ["tabular-nums"] },
+  currentTime: { color: "#d4d4d8", fontSize: 17, fontVariant: ["tabular-nums"], fontWeight: "600", marginTop: 3 },
   disabled: { opacity: 0.4 },
   displayMeta: { color: "#a1a1aa", fontSize: 11, marginTop: 3 },
   displayName: { color: "#f4f4f5", fontSize: 13, fontWeight: "600" },
@@ -206,15 +433,25 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", flex: 1, gap: 14, justifyContent: "center" },
   emptyBody: { color: "#a1a1aa", fontSize: 14 },
   emptyTitle: { color: "#fafafa", fontSize: 24, fontWeight: "700" },
+  elapsed: { color: "#fafafa", fontSize: 26, fontVariant: ["tabular-nums"], fontWeight: "700", marginTop: 1 },
   errors: { backgroundColor: "#321f24", borderRadius: 8, marginTop: 18, maxHeight: 220, padding: 12 },
   errorText: { color: "#fda4af", fontFamily: "Menlo", fontSize: 11, marginTop: 6 },
   errorTitle: { color: "#fecdd3", fontSize: 13, fontWeight: "700" },
   eyebrow: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" },
   lastGood: { color: "#fda4af", fontSize: 11, fontStyle: "italic", marginTop: 10 },
+  jumpInput: { backgroundColor: "#18181b", borderColor: "#3f3f46", borderRadius: 8, borderWidth: 1, color: "#f4f4f5", flex: 1, fontSize: 14, minHeight: 37, paddingHorizontal: 10 },
+  jumpRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  keyboardJump: { color: "#93c5fd", fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
   mainColumn: { flex: 1, padding: 20 },
   navigation: { alignItems: "center", flexDirection: "row", gap: 14, justifyContent: "center", marginTop: 18 },
-  notes: { backgroundColor: "#18181b", borderRadius: 8, maxHeight: 240, padding: 12 },
-  notesText: { color: "#d4d4d8", fontSize: 14, lineHeight: 20 },
+  notes: { maxHeight: 170 },
+  notesContent: { paddingHorizontal: 16, paddingVertical: 14 },
+  notesHeader: { alignItems: "center", borderBottomColor: "#3f3f46", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  notesPlaceholder: { color: "#71717a", fontStyle: "italic" },
+  notesSection: { backgroundColor: "#202024", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, marginTop: 18, minHeight: 112, overflow: "hidden" },
+  notesSlide: { color: "#71717a", fontSize: 12, fontVariant: ["tabular-nums"] },
+  notesText: { color: "#e4e4e7", fontSize: 17, lineHeight: 25 },
+  notesTitle: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   path: { color: "#a1a1aa", flexShrink: 1, fontSize: 12, maxWidth: 430 },
   pressed: { opacity: 0.75 },
   preview: { aspectRatio: 16 / 9, backgroundColor: "#000", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, overflow: "hidden" },
@@ -227,4 +464,5 @@ const styles = StyleSheet.create({
   sidebarTitle: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 10, marginTop: 8, textTransform: "uppercase" },
   toolbar: { alignItems: "center", borderBottomColor: "#3f3f46", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", justifyContent: "space-between", minHeight: 58, paddingHorizontal: 16 },
   toolbarGroup: { alignItems: "center", flexDirection: "row", gap: 10 },
+  timerActions: { flexBasis: "100%", flexDirection: "row", gap: 8 },
 });

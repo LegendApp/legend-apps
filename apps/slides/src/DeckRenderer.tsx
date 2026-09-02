@@ -8,7 +8,7 @@ import {
   type SlideTransition,
 } from "@legend-apps/presentation";
 import { ScaledView } from "@legend-apps/scaled-view";
-import React, { Children, isValidElement, useEffect, type ReactElement, type ReactNode } from "react";
+import React, { Children, createContext, isValidElement, useContext, useEffect, type ReactElement, type ReactNode } from "react";
 import {
   Image,
   Linking,
@@ -38,11 +38,14 @@ function Slide({ children }: CompiledSlideProps) {
   return children;
 }
 
+const DeckRenderContext = createContext<{ isPreview: boolean; targetIndex?: number }>({ isPreview: false });
+
 function normalizeTransition(value: unknown): SlideTransition | undefined {
   return value === "none" || value === "fade" || value === "slide" ? value : undefined;
 }
 
-function Deck({ children, configJson, targetIndex, isPreview }: CompiledDeckProps & { targetIndex?: number; isPreview?: boolean }) {
+function Deck({ children, configJson }: CompiledDeckProps) {
+  const { isPreview, targetIndex } = useContext(DeckRenderContext);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
   const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
@@ -141,7 +144,11 @@ export function DeckRenderer({ isPreview = false, targetIndex }: { isPreview?: b
   if (!Component) {
     return null;
   }
-  return <Component components={{ ...markdownComponents, Deck: (props: CompiledDeckProps) => <Deck {...props} isPreview={isPreview} targetIndex={targetIndex} /> }} key={`${revision}:${targetIndex ?? "current"}:${isPreview}`} />;
+  return (
+    <DeckRenderContext.Provider value={{ isPreview, targetIndex }}>
+      <Component components={markdownComponents} key={`${revision}:${targetIndex ?? "current"}`} />
+    </DeckRenderContext.Provider>
+  );
 }
 
 export function SlideCanvas({ children }: { children: ReactNode }) {

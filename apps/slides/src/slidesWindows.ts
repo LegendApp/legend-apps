@@ -1,11 +1,9 @@
 import { createWindowsNavigator, WindowStyleMask, type WindowsConfig } from "@legend-apps/windows";
-import { AudienceWindow } from "./AudienceWindow";
-import { PresenterWindow } from "./PresenterWindow";
 
 const windows = {
   SlidesPresenterWindow: {
-    component: PresenterWindow,
     identifier: "slides-presenter",
+    loadComponent: () => import("./PresenterWindow").then((module) => module.PresenterWindow),
     options: {
       title: "Legend Slides",
       windowStyle: {
@@ -17,8 +15,8 @@ const windows = {
     },
   },
   SlidesAudienceWindow: {
-    component: AudienceWindow,
     identifier: "slides-audience",
+    loadComponent: () => import("./AudienceWindow").then((module) => module.AudienceWindow),
     options: {
       title: "Legend Slides — Audience",
       windowStyle: {

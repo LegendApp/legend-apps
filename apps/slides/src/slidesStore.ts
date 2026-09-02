@@ -9,6 +9,7 @@ export type DeckSlide = {
 
 export type SlidesState = {
   audienceOpen: boolean;
+  blackout: boolean;
   buildErrors: string[];
   buildWarnings: string[];
   component: ComponentType<any> | null;
@@ -22,6 +23,7 @@ export type SlidesState = {
 
 let state: SlidesState = {
   audienceOpen: false,
+  blackout: false,
   buildErrors: [],
   buildWarnings: [],
   component: null,

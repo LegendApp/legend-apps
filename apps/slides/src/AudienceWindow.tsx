@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import { addWindowClosedListener } from "@legend-apps/window-manager";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, useSlidesState } from "./slidesStore";
 
 export function AudienceWindow() {
   const currentSlide = useSlidesState((state) => state.currentSlide);
+  const blackout = useSlidesState((state) => state.blackout);
+  const slideCount = useSlidesState((state) => state.slides.length);
   const transition = useSlidesState((state) => state.slides[state.currentSlide]?.metadata.transition ?? state.config.transition ?? "none");
   const previousCurrent = useRef(currentSlide);
   const [previousSlide, setPreviousSlide] = useState<number | null>(null);
@@ -13,12 +14,6 @@ export function AudienceWindow() {
 
   useEffect(() => {
     setSlidesState({ audienceOpen: true });
-    const subscription = addWindowClosedListener((event) => {
-      if (event.identifier === "slides-audience") {
-        setSlidesState({ audienceOpen: false });
-      }
-    });
-    return () => subscription.remove();
   }, []);
 
   useLayoutEffect(() => {
@@ -74,19 +69,29 @@ export function AudienceWindow() {
         { index: outgoingSlide, style: outgoingStyle },
         { index: currentSlide, style: enteringStyle },
       ];
+  const preloadIndex = currentSlide + 1 < slideCount ? currentSlide + 1 : null;
+  const renderedLayers = preloadIndex !== null && !layers.some((layer) => layer.index === preloadIndex)
+    ? [...layers, { index: preloadIndex, style: styles.preload }]
+    : layers;
 
   return (
     <View style={styles.root}>
-      {layers.map((layer) => (
-        <Animated.View key={layer.index} style={[styles.layer, layer.style]}>
-          <SlideCanvas><DeckRenderer targetIndex={layer.index} /></SlideCanvas>
-        </Animated.View>
-      ))}
+      {renderedLayers.map((layer) => {
+        const isPreload = layer.index === preloadIndex && !layers.some((visibleLayer) => visibleLayer.index === layer.index);
+        return (
+          <Animated.View key={layer.index} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
+            <SlideCanvas><DeckRenderer isPreview={isPreload} targetIndex={layer.index} /></SlideCanvas>
+          </Animated.View>
+        );
+      })}
+      {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
   layer: { ...StyleSheet.absoluteFillObject },
+  preload: { height: 1, left: -2, opacity: 0, top: -2, width: 1 },
   root: { backgroundColor: "#000", flex: 1 },
 });
