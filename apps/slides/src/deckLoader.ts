@@ -5,6 +5,7 @@ import * as LegendStateSync from "@legendapp/state/sync";
 import * as Presentation from "@legend-apps/presentation";
 import * as ReactNativeSkia from "@shopify/react-native-skia";
 import * as TypeGPUNoise from "@typegpu/noise";
+import * as TypeGPUReact from "@typegpu/react";
 import { commandRunner } from "@legend-apps/command-runner";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
@@ -54,6 +55,7 @@ const hostModules: Record<string, unknown> = {
   "@legend-apps/presentation": Presentation,
   "@shopify/react-native-skia": ReactNativeSkia,
   "@typegpu/noise": TypeGPUNoise,
+  "@typegpu/react": TypeGPUReact,
   "react-native-webgpu": webGPUHostModule,
   "react-native-webview": ReactNativeWebview,
   typegpu: TypeGPU,

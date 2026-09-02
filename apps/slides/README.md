@@ -58,6 +58,11 @@ The host provides these package imports:
 - `@legendapp/state`, `@legendapp/state/react`, and `@legendapp/state/sync`
 - `@legendapp/motion`
 - `@legend-apps/presentation`
+- `@shopify/react-native-skia`
+- `react-native-webgpu`
+- `typegpu`, `typegpu/common`, `typegpu/data`, and `typegpu/std`
+- `@typegpu/noise` and `@typegpu/react`
+- `react-native-webview`
 
 `@legend-apps/presentation` exports `usePresentation` and `useSlideLifecycle`. Package imports outside this list, network imports, paths outside the deck directory, and symlink escapes are rejected. A deck has no package manifest or dependencies of its own.
 

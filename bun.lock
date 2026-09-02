@@ -210,6 +210,7 @@
         "@legendapp/state": "catalog:",
         "@shopify/react-native-skia": "^2.11.1",
         "@typegpu/noise": "^0.12.0",
+        "@typegpu/react": "^0.12.0",
         "fflate": "^0.8.3",
         "react-native-webgpu": "^0.8.5",
         "react-native-webview": "16.0.0",
@@ -1478,6 +1479,8 @@
     "@ts-morph/common": ["@ts-morph/common@0.28.1", "", { "dependencies": { "minimatch": "^10.0.1", "path-browserify": "^1.0.1", "tinyglobby": "^0.2.14" } }, "sha512-W74iWf7ILp1ZKNYXY5qbddNaml7e9Sedv5lvU1V8lftlitkc9Pq1A+jlH23ltDgWYeZFFEqGCD1Ies9hqu3O+g=="],
 
     "@typegpu/noise": ["@typegpu/noise@0.12.0", "", { "peerDependencies": { "typegpu": "^0.12.0" } }, "sha512-JuBKXz8nkwC+1jMjJS5C6SZD+xzsF1yb8+Pcl3L5uhjqdEGraksXH20v0vOvjmio8dsRZWhmZ5S27DTdqhSpCA=="],
+
+    "@typegpu/react": ["@typegpu/react@0.12.0", "", { "peerDependencies": { "react": "^19.0.0", "react-native": "*", "react-native-webgpu": "*", "react-native-worklets": "*", "typegpu": "^0.12.0" }, "optionalPeers": ["react-native", "react-native-webgpu", "react-native-worklets"] }, "sha512-I/EYTgFwFSxxBnK0Pn3vby7yqkNk/ZsCQhx6ja63hSzsfRcLlThg6nQRwDuYCHqW+OLJM5Ji7FOYbNrLDDiYpg=="],
 
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 

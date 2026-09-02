@@ -23,6 +23,7 @@ const hostModules = new Set([
   "@legend-apps/presentation",
   "@shopify/react-native-skia",
   "@typegpu/noise",
+  "@typegpu/react",
   "react-native-webgpu",
   "react-native-webview",
   "typegpu",

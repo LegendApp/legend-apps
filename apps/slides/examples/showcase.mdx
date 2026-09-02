@@ -16,8 +16,8 @@ import { Text, View } from "react-native"
 import { InteractiveCounter } from "./components/InteractiveCounter"
 import { LifecycleAnimation } from "./components/LifecycleAnimation"
 import { SkiaNebula } from "./components/SkiaNebula"
-import { TypeGPUClouds } from "./components/TypeGPUClouds"
-import { WebGPUPortal } from "./components/WebGPUPortal"
+import { TypeGPUBoids } from "./components/TypeGPUBoids"
+import { TypeGPUGameOfLife } from "./components/TypeGPUGameOfLife"
 
 export const capabilities = [
   ["Markdown", "Headings, lists, links, and code"],
@@ -87,23 +87,23 @@ The app provides `@shopify/react-native-skia`, so deck-local components can rend
 
 ---
 
-## React Native WebGPU
+## React Native WebGPU + TypeGPU
 
-The app also provides `react-native-webgpu`. This scene ray-marches a self-shadowing procedural cloud volume directly through Dawn and Metal.
+This is the non-interactive Game of Life example from Software Mansion Labs' React Native TypeGPU showcase.
 
-<WebGPUPortal />
+<TypeGPUGameOfLife />
 
-<!-- This component creates its own WGSL shader, render pipeline, uniform buffer, and animation loop. -->
+<!-- The example uses a TypeGPU compute pipeline and instanced rendering through React Native WebGPU. -->
 
 ---
 
-## TypeGPU Clouds
+## TypeGPU Boids
 
-Deck components can import `typegpu` and `@typegpu/noise`. This scene uses typed shader functions for volumetric density, self-shadowing, and ray marching.
+This second React Native example simulates 500 autonomous agents in a TypeGPU compute shader and renders them as instanced triangles.
 
-<TypeGPUClouds />
+<TypeGPUBoids />
 
-<!-- This component uses TypeGPU core directly so it does not depend on React Native Worklets. -->
+<!-- This is Software Mansion Labs' React Native Boids example, using the official @typegpu/react hooks without Reanimated or interaction. -->
 
 ---
 
