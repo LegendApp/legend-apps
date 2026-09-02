@@ -214,7 +214,7 @@ function localDeckPlugin(entryPath: string): Plugin {
 function formatMessages(messages: Message[]) {
   return messages.map((message) => {
     const location = message.location
-      ? `${message.location.file}:${message.location.line}:${message.location.column}: `
+      ? `${path.basename(message.location.file)}:${message.location.line}:${message.location.column}: `
       : "";
     return `${location}${message.text}`;
   });

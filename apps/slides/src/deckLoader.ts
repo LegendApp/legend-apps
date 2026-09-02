@@ -8,7 +8,6 @@ import * as TypeGPUNoise from "@typegpu/noise";
 import { commandRunner } from "@legend-apps/command-runner";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
-import { createStorage } from "@legend-apps/storage";
 import * as React from "react";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
@@ -21,11 +20,14 @@ import * as TypeGPUStd from "typegpu/std";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
 import type { CompileDeckResult } from "@legend-apps/presentation";
+import { failedDeckUpdate, successfulDeckUpdate } from "./deckBuildPolicy";
+import { getLastDeckPath, rememberDeckPath } from "./slidesPreferences";
 import { getSlidesState, setSlidesState } from "./slidesStore";
 
 const compilerPath = process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH;
-const slidesStorage = createStorage({ subfolder: "slides" });
 let watcher: { remove(): void } | undefined;
+let watchedDirectory: string | undefined;
+let watchedDeckPath: string | undefined;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 let buildSequence = 0;
 
@@ -94,6 +96,17 @@ function directoryName(path: string) {
   return path.slice(0, Math.max(1, path.lastIndexOf("/")));
 }
 
+function watchDeckDirectory(path: string) {
+  const directory = directoryName(path);
+  if (watchedDirectory === directory && watchedDeckPath === path) {
+    return;
+  }
+  watcher?.remove();
+  watchedDirectory = directory;
+  watchedDeckPath = path;
+  watcher = watchDirectories([directory], () => scheduleRebuild(path));
+}
+
 function decodeBase64(value: string) {
   const binary = globalThis.atob(value);
   const bytes = new Uint8Array(binary.length);
@@ -111,12 +124,11 @@ function parseCompilerResult(stdout: string): CompileDeckResult {
   return JSON.parse(strFromU8(gunzipSync(decodeBase64(envelope.data)))) as CompileDeckResult;
 }
 
-export function getLastDeckPath() {
-  return slidesStorage.read<{ path?: string }>("recent.json", { format: "json" })?.path;
-}
+export { getLastDeckPath } from "./slidesPreferences";
 
 export async function loadDeck(path: string, remember = true) {
   const sequence = ++buildSequence;
+  watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], deckPath: path, status: "building" });
   if (!compilerPath) {
     setSlidesState({ buildErrors: ["The slides compiler path was not included in this build."], status: "error" });
@@ -132,8 +144,7 @@ export async function loadDeck(path: string, remember = true) {
   const commandResult = await commandRunner.runCommand({
     command: "bun",
     args: [compilerPath, path],
-    cwd: directoryName(directoryName(compilerPath)),
-    timeoutMs: 30_000,
+    timeoutMs: 60_000,
   });
   if (sequence !== buildSequence) {
     return;
@@ -141,37 +152,31 @@ export async function loadDeck(path: string, remember = true) {
 
   let result: CompileDeckResult;
   try {
+    if (commandResult.timedOut) {
+      throw new Error("Deck compilation exceeded 60 seconds.");
+    }
     result = parseCompilerResult(commandResult.stdout);
-  } catch {
+  } catch (error) {
     result = {
       success: false,
-      errors: [commandResult.stderr || "The slides compiler returned an invalid response."],
+      errors: [commandResult.timedOut
+        ? "Deck compilation exceeded 60 seconds."
+        : commandResult.stderr || (error instanceof Error ? error.message : "The slides compiler returned an invalid response.")],
       warnings: [],
     };
   }
 
   if (!result.success) {
-    setSlidesState({ buildErrors: result.errors, buildWarnings: result.warnings, status: "error" });
+    setSlidesState(failedDeckUpdate(result));
     return;
   }
 
   try {
     const component = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
-    const previousSlide = getSlidesState().currentSlide;
-    setSlidesState({
-      buildErrors: [],
-      buildWarnings: result.warnings,
-      component,
-      currentSlide: previousSlide,
-      deckPath: path,
-      revision: getSlidesState().revision + 1,
-      status: "ready",
-    });
-    watcher?.remove();
-    watcher = watchDirectories([directoryName(path)], () => scheduleRebuild(path));
+    setSlidesState(successfulDeckUpdate(getSlidesState(), component, path, result.warnings));
     if (remember) {
-      slidesStorage.write("recent.json", { path }, { format: "json" });
+      rememberDeckPath(path);
       noteRecentDocument(path);
     }
   } catch (error) {
