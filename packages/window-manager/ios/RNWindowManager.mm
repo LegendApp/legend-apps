@@ -766,6 +766,7 @@ extern "C" void LegendPrecreateRestorableWindows(void)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *windowOptions;
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
+@property (nonatomic, strong, nullable) id displaySleepActivity;
 @property (nonatomic, assign) BOOL hasListeners;
 @property (nonatomic, assign) BOOL mainWindowObserversInstalled;
 #if TARGET_OS_OSX
@@ -2244,6 +2245,27 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #endif
 }
 
+- (void)setPreventDisplaySleep:(BOOL)enabled
+                       resolve:(RCTPromiseResolveBlock)resolve
+                        reject:(__unused RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    if (enabled && !self.displaySleepActivity) {
+      self.displaySleepActivity = [NSProcessInfo.processInfo
+        beginActivityWithOptions:NSActivityIdleDisplaySleepDisabled
+        reason:@"Legend Slides presentation in progress"];
+    } else if (!enabled && self.displaySleepActivity) {
+      [NSProcessInfo.processInfo endActivity:self.displaySleepActivity];
+      self.displaySleepActivity = nil;
+    }
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
 - (void)focusToolbarSearchItem:(NSString *)identifier
                         itemId:(NSString *)itemId
                          value:(NSString *)value
@@ -2884,6 +2906,10 @@ willBeInsertedIntoToolbar:(BOOL)flag
 - (void)dealloc
 {
 #if TARGET_OS_OSX
+  if (self.displaySleepActivity) {
+    [NSProcessInfo.processInfo endActivity:self.displaySleepActivity];
+    self.displaySleepActivity = nil;
+  }
   [NSNotificationCenter.defaultCenter removeObserver:self];
 #endif
 }

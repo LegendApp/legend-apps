@@ -487,6 +487,15 @@ export function setWindowTitle(identifier: string, title: string): Promise<Windo
   );
 }
 
+export function setPreventDisplaySleep(enabled: boolean): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.setPreventDisplaySleep(enabled).then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function focusToolbarSearchItem(identifier: string, itemId: string, value = ""): Promise<WindowResult> {
   if (Platform.OS !== "macos") {
     return fallbackResult();
@@ -595,6 +604,7 @@ export function useWindowManager() {
     setMainWindowFrame,
     setWindowBlur,
     setWindowTitle,
+    setPreventDisplaySleep,
     focusToolbarSearchItem,
     onWindowClosed: addWindowClosedListener,
     onWindowCloseRequested: addWindowCloseRequestedListener,
