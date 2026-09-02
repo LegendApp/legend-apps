@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 const { getDefaultConfig } = require("@expo/metro-config");
 const { makeMetroConfig } = require("@rnx-kit/metro-config");
@@ -11,6 +13,11 @@ if (!appId) {
 
 const rootDir = path.resolve(__dirname, "..");
 const appSrc = path.join(rootDir, "apps", appId, "src");
+const babelConfigHash = crypto
+  .createHash("sha256")
+  .update(fs.readFileSync(path.join(__dirname, "babel.config.js")))
+  .digest("hex")
+  .slice(0, 12);
 
 const config = makeMetroConfig(getDefaultConfig(__dirname));
 
@@ -32,7 +39,7 @@ config.resolver.unstable_conditionsByPlatform = {
   macos: ["react-native"],
 };
 config.resolver.useWatchman = false;
-config.cacheVersion = `legend-apps-${appId}-${process.env.LEGEND_PLATFORM || "native"}`;
+config.cacheVersion = `legend-apps-${appId}-${process.env.LEGEND_PLATFORM || "native"}-${babelConfigHash}`;
 
 delete config.watcher?.unstable_workerThreads;
 
