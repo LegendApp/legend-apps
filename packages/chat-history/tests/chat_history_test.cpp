@@ -249,6 +249,25 @@ void testCatalogIndexes() {
       "Catalog should skip subagents while filling the requested visible limit");
 }
 
+void testMissingCatalogRoots() {
+  const std::filesystem::path testHome = std::filesystem::temp_directory_path() /
+      ("legend-chat-history-empty-" + std::to_string(getpid()));
+  std::filesystem::create_directories(testHome);
+
+  const char* previousHomeValue = std::getenv("HOME");
+  const std::string previousHome = previousHomeValue ? previousHomeValue : "";
+  setenv("HOME", testHome.c_str(), 1);
+  const std::vector<ChatSummary> summaries = getRecentChatCatalog(20);
+  if (previousHomeValue) {
+    setenv("HOME", previousHome.c_str(), 1);
+  } else {
+    unsetenv("HOME");
+  }
+  std::filesystem::remove_all(testHome);
+
+  expect(summaries.empty(), "Missing Codex and Claude directories should produce an empty catalog");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -286,6 +305,7 @@ int main(int argc, char** argv) {
     testCancellation(fixtureRoot);
     testIsoTimestamps();
     testDocumentRelease(fixtureRoot);
+    testMissingCatalogRoots();
     testCatalogIndexes();
     std::cout << "chat history native tests passed\n";
   } catch (const std::exception& error) {
