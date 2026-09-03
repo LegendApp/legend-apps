@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { appsDir, rootDir } from "./apps";
+import {
+  buildReleaseNotesPrompt,
+  collectWorkspaceDependencyScope,
+  filterAppReleaseCommits,
+  normalizeGeneratedReleaseNotes,
+  parseReleaseCommitLog,
+  sharedReleasePaths,
+  type WorkspacePackage,
+} from "./changelogScope";
 import { getGitHubReleaseTag, getMacOSReleaseVersion } from "./release";
 import type { AppManifest, AppPackageMetadata } from "./types";
 
@@ -75,51 +85,173 @@ function getCommitRange(manifest: AppManifest, appPackage: AppPackageMetadata) {
   return previousTag ? `${previousTag}..HEAD` : getFallbackCommitRange();
 }
 
-function getCommitSubjects(manifest: AppManifest, appPackage: AppPackageMetadata) {
-  const commitRange = getCommitRange(manifest, appPackage);
-  if (!commitRange) {
-    return [];
-  }
+function getWorkspacePackages() {
+  const workspaceDirectories = [
+    ...["apps", "packages"].flatMap((parentDirectory) =>
+      fs.readdirSync(path.join(rootDir, parentDirectory), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => path.join(parentDirectory, entry.name))
+    ),
+    "shell",
+  ];
 
+  return workspaceDirectories.flatMap<WorkspacePackage>((directory) => {
+    const packagePath = path.join(rootDir, directory, "package.json");
+    if (!fs.existsSync(packagePath)) {
+      return [];
+    }
+
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+    if (typeof packageJson.name !== "string") {
+      return [];
+    }
+
+    return [{
+      dependencies: Object.keys({
+        ...packageJson.peerDependencies,
+        ...packageJson.optionalDependencies,
+        ...packageJson.dependencies,
+      }),
+      directory: directory.split(path.sep).join("/"),
+      name: packageJson.name,
+    }];
+  });
+}
+
+function getAppDependencyScope(manifest: AppManifest) {
+  return collectWorkspaceDependencyScope(
+    getWorkspacePackages(),
+    `apps/${manifest.id}`,
+    Object.values(manifest.nativeModules).flat(),
+  );
+}
+
+function getReleaseCommits(commitRange: string) {
   const output = runGit([
     "log",
     "--no-merges",
-    "--pretty=format:%s",
+    "--format=%x1e%H%x1f%s%x1f%b%x1d",
+    "--name-only",
     commitRange,
   ]);
-  const seen = new Set<string>();
-  return output
-    .split("\n")
-    .map((subject) => subject.trim())
-    .filter((subject) => subject && !/^version\s+\d/i.test(subject))
-    .filter((subject) => {
-      const key = subject.toLowerCase();
-      if (seen.has(key)) {
-        return false;
-      }
+  if (!output) {
+    return [];
+  }
 
-      seen.add(key);
-      return true;
+  return parseReleaseCommitLog(output)
+    .filter((commit) => !/^(?:version\s+\d|release(?:\s|:)|update changelog)/i.test(commit.subject));
+}
+
+type AgentCli = {
+  command: string;
+  name: string;
+  outputFile: boolean;
+};
+
+function findExecutable(command: string) {
+  for (const directory of process.env.PATH?.split(path.delimiter) ?? []) {
+    const executablePath = path.join(directory, command);
+    try {
+      fs.accessSync(executablePath, fs.constants.X_OK);
+      return executablePath;
+    } catch {
+      // Keep looking in PATH.
+    }
+  }
+}
+
+function findAgentCli() {
+  const candidates: AgentCli[] = [
+    { command: "codex", name: "Codex", outputFile: true },
+    { command: "claude", name: "Claude", outputFile: false },
+  ];
+
+  for (const candidate of candidates) {
+    const executablePath = findExecutable(candidate.command);
+    if (executablePath) {
+      return { ...candidate, executablePath };
+    }
+  }
+}
+
+function runChangelogAgent(prompt: string) {
+  const agent = findAgentCli();
+  if (!agent) {
+    throw new Error("Codex CLI and Claude CLI were not found. Install one before preparing a changelog.");
+  }
+
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "legend-app-changelog-"));
+  const outputPath = path.join(temporaryDirectory, "release-notes.md");
+  const args = agent.outputFile
+    ? [
+      "exec",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--sandbox",
+      "read-only",
+      "-c",
+      'approval_policy="never"',
+      "-c",
+      'model_reasoning_effort="medium"',
+      "--output-last-message",
+      outputPath,
+      prompt,
+    ]
+    : ["-p", prompt];
+
+  console.log(`Generating curated release notes with ${agent.name}...`);
+  try {
+    const result = spawnSync(agent.executablePath, args, {
+      cwd: rootDir,
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024,
+      stdio: agent.outputFile ? ["ignore", "inherit", "inherit"] : "pipe",
+      timeout: 10 * 60 * 1000,
     });
-}
+    if (result.status !== 0) {
+      const output = `${result.stderr ?? ""}${result.stdout ?? ""}`.trim();
+      throw new Error(output || `${agent.name} exited with status ${result.status ?? "unknown"}.`);
+    }
 
-function sentenceCase(text: string) {
-  return text.slice(0, 1).toUpperCase() + text.slice(1);
-}
-
-function formatCommitSubject(subject: string) {
-  const withoutType = subject.replace(/^(?:feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(?:\([^)]*\))?:\s*/i, "");
-  const normalized = sentenceCase(withoutType.trim()).replace(/\.\s*$/, "");
-  return normalized ? `${normalized}.` : subject;
+    const output = agent.outputFile
+      ? fs.readFileSync(outputPath, "utf8")
+      : result.stdout ?? "";
+    return normalizeGeneratedReleaseNotes(output);
+  } finally {
+    fs.rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
 }
 
 function generateReleaseNotes(manifest: AppManifest, appPackage: AppPackageMetadata) {
-  const subjects = getCommitSubjects(manifest, appPackage);
-  if (subjects.length === 0) {
+  const commitRange = getCommitRange(manifest, appPackage);
+  if (!commitRange) {
     return "- Initial release.";
   }
 
-  return subjects.map((subject) => `- ${formatCommitSubject(subject)}`).join("\n");
+  const dependencyScope = getAppDependencyScope(manifest);
+  const commits = filterAppReleaseCommits(
+    getReleaseCommits(commitRange),
+    manifest.id,
+    dependencyScope.directories,
+    dependencyScope.dependencyNames,
+  );
+  if (commits.length === 0) {
+    throw new Error(`No commits affecting ${manifest.displayName} were found in ${commitRange}.`);
+  }
+
+  return runChangelogAgent(buildReleaseNotesPrompt({
+    appDisplayName: manifest.displayName,
+    appId: manifest.id,
+    commitRange,
+    commits,
+    relevantDirectories: [...new Set([
+      ...dependencyScope.directories,
+      ...sharedReleasePaths,
+      ...commits.flatMap((commit) => commit.files.filter((file) => file.startsWith("patches/"))),
+    ])],
+    version: getMacOSReleaseVersion(appPackage),
+  }));
 }
 
 function findVersionSection(content: string, version: string) {
