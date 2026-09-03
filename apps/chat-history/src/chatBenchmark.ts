@@ -51,7 +51,13 @@ type LoggedChatBenchmarkEvent = ChatBenchmarkEvent & {
   reactNativeStartupTiming?: ReturnType<typeof getReactNativeStartupTiming>;
   timestampMs: number;
 };
+type PendingChatBenchmarkEvent = {
+  event: ChatBenchmarkEvent;
+  timestampMs: number;
+};
 const eventsByFile = new Map<string, LoggedChatBenchmarkEvent[]>();
+const pendingEventsByFile = new Map<string, PendingChatBenchmarkEvent[]>();
+const flushTimersByFile = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function getChatBenchmarkConfig(launchArguments?: string[]) {
   const encoded = launchArguments
@@ -70,17 +76,37 @@ export function getChatBenchmarkConfig(launchArguments?: string[]) {
   }
 }
 
-export function emitChatBenchmarkEvent(config: ChatBenchmarkConfig, event: ChatBenchmarkEvent) {
-  const startupTiming = event.name === "contentReady"
-    ? getReactNativeStartupTiming()
-    : undefined;
+function flushChatBenchmarkEvents(config: ChatBenchmarkConfig) {
+  flushTimersByFile.delete(config.eventFileName);
+  const pendingEvents = pendingEventsByFile.get(config.eventFileName);
+  if (!pendingEvents) {
+    return;
+  }
+  pendingEventsByFile.delete(config.eventFileName);
   const events = eventsByFile.get(config.eventFileName) ?? [];
-  events.push({
-    ...event,
-    reactNativeClockOffsetMs: startupTiming?.clockOffsetMs,
-    reactNativeStartupTiming: startupTiming,
-    timestampMs: Date.now(),
-  });
+  for (const pending of pendingEvents) {
+    const startupTiming = pending.event.name === "contentReady"
+      ? getReactNativeStartupTiming()
+      : undefined;
+    events.push({
+      ...pending.event,
+      reactNativeClockOffsetMs: startupTiming?.clockOffsetMs,
+      reactNativeStartupTiming: startupTiming,
+      timestampMs: pending.timestampMs,
+    });
+  }
   eventsByFile.set(config.eventFileName, events);
   writeApplicationSupportJson(`chat-history-benchmark/${config.eventFileName}`, events);
+}
+
+export function emitChatBenchmarkEvent(config: ChatBenchmarkConfig, event: ChatBenchmarkEvent) {
+  const pendingEvents = pendingEventsByFile.get(config.eventFileName) ?? [];
+  pendingEvents.push({ event, timestampMs: Date.now() });
+  pendingEventsByFile.set(config.eventFileName, pendingEvents);
+  if (!flushTimersByFile.has(config.eventFileName)) {
+    // Keep benchmark diagnostics and disk I/O outside layout and visual-readiness callbacks.
+    flushTimersByFile.set(config.eventFileName, setTimeout(() => {
+      flushChatBenchmarkEvents(config);
+    }, 0));
+  }
 }
