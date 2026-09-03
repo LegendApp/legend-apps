@@ -4,11 +4,11 @@
         <title>Legend Chat History</title>
         <item>
             <title>0.0.1</title>
-            <pubDate>Tue, 01 Sep 2026 18:50:50 +0300</pubDate>
+            <pubDate>Thu, 03 Sep 2026 11:54:09 +0300</pubDate>
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.1/Legend-Chat-History-0.0.1-arm.zip" length="8718778" type="application/octet-stream" sparkle:edSignature="VnvEu0y+wWnJ4VtO174pIIlE8AIaKOKfbK7E1yKHxZ3OYNFrsuxiqKfbNpDI8d5Y/q0jithwnvPD8xsCQ4zdBw=="/>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.1/Legend-Chat-History-0.0.1-x86.zip" length="9380050" type="application/octet-stream" sparkle:edSignature="FCVoPJzs0Sf1wcV3AVD5dM8vfEwxpOshlYMnkYLIxVPofBTqgJEiNoS6A8bLDfCqDAIvRRG2cAkOKmZXjnO1Ag=="/>
         </item>
     </channel>
 </rss>
