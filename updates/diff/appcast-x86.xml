@@ -6,9 +6,12 @@
             <title>0.0.2</title>
             <pubDate>Tue, 18 Aug 2026 16:33:02 +0200</pubDate>
             <sparkle:version>2</sparkle:version>
-            <sparkle:shortVersionString>0.0.2</sparkle:shortVersionString>
+            <sparkle:shortVersionString>0.0.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.2/Legend-Diff-0.0.2-x86.zip" length="11485081" type="application/octet-stream" sparkle:edSignature="iCTyInjBNcrv95fzh83Q/1NbMHlU31FOOgQzsTQfK0mwnEAKC+OqtIZqeh/gUIWtwifNk7e0c3hlwXU9dWKvAg=="/>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.3/Legend-Diff-0.0.3-x86.zip" length="10749783" type="application/octet-stream" sparkle:edSignature="huHzZnZ0AIteMy/Fep5dIzo1eiomoyNguasU3tZF85+rNFwHZqgEQEQVJeNPDW9EpWbpGzEl+XKB/qFFj/fQBA=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.3/Legend-Diff-x86-Legend%20Diff2-1.delta" sparkle:deltaFrom="1" length="1142110" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="439136" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,en" sparkle:edSignature="dtCl/vPvElh6W0tFkeF09pFCoC2Bstvry5j5xJxHEP8TGfiKpAaAJi5BEk5L5yf3DGO4dqzeFkaOJXvhCTVGCQ=="/>
+            </sparkle:deltas>
         </item>
         <item>
             <title>0.0.1</title>
@@ -16,7 +19,7 @@
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.1/Legend-Diff-0.0.1-x86.zip" length="11484912" type="application/octet-stream" sparkle:edSignature="iIGJdKFNBcOXLCnP1GfAS4XPIPu7f3rcpPMYwb0clURK+bbg00EWLZ6teg+z74VWmRXj/ADLGRzYCMHmAPlCCQ=="/>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.3/Legend-Diff-0.0.1-x86.zip" length="11484912" type="application/octet-stream" sparkle:edSignature="iIGJdKFNBcOXLCnP1GfAS4XPIPu7f3rcpPMYwb0clURK+bbg00EWLZ6teg+z74VWmRXj/ADLGRzYCMHmAPlCCQ=="/>
         </item>
     </channel>
 </rss>
