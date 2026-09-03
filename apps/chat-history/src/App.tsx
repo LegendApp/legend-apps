@@ -33,7 +33,7 @@ import { ChatComposer } from "./ChatComposer";
 import {
   emitChatBenchmarkEvent,
   getChatBenchmarkConfig,
-  type ChatBenchmarkContentReadyEvent,
+  type ChatBenchmarkEvent,
 } from "./chatBenchmark";
 import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
@@ -262,14 +262,14 @@ function ChatSidebar({
 function TranscriptList({
   document,
   loadImages,
-  onContentReady,
+  onBenchmarkEvent,
   openedAt,
   path,
   phase,
 }: {
   document: ChatDocument;
   loadImages: boolean;
-  onContentReady?: (event: ChatBenchmarkContentReadyEvent) => void;
+  onBenchmarkEvent?: (event: ChatBenchmarkEvent) => void;
   openedAt: number;
   path: string;
   phase?: "initial" | "switch";
@@ -376,8 +376,7 @@ function TranscriptList({
       requestAnimationFrame(() => {
         if (phase) {
           const timing = document.getTiming();
-          onContentReady?.({
-            contentDigest: document.contentDigest,
+          onBenchmarkEvent?.({
             durationMs: performance.now() - openedAt,
             name: "contentReady",
             path,
@@ -393,10 +392,19 @@ function TranscriptList({
               scanMs: timing.scannedMs,
             },
           });
+          // Parser parity must not delay the visual readiness boundary being measured.
+          setTimeout(() => {
+            onBenchmarkEvent?.({
+              contentDigest: document.contentDigest,
+              name: "contentDigest",
+              path,
+              phase,
+            });
+          }, 0);
         }
       });
     });
-  }, [document, onContentReady, openedAt, path, phase]);
+  }, [document, onBenchmarkEvent, openedAt, path, phase]);
 
   return (
     <View className="flex-1 bg-background">
@@ -410,7 +418,7 @@ function TranscriptList({
         estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE}
         getItemType={getItemType}
         initialScrollAtEnd
-        onLoad={handleLoad}
+        onLoad={phase ? handleLoad : undefined}
         recycleItems
         ref={listRef}
         renderItem={renderItem}
@@ -430,12 +438,12 @@ function TranscriptList({
 
 function TranscriptPane({
   loadImages,
-  onContentReady,
+  onBenchmarkEvent,
   selectedId,
   state,
 }: {
   loadImages: boolean;
-  onContentReady?: (event: ChatBenchmarkContentReadyEvent) => void;
+  onBenchmarkEvent?: (event: ChatBenchmarkEvent) => void;
   selectedId?: string;
   state: TranscriptState;
 }) {
@@ -452,7 +460,7 @@ function TranscriptPane({
       <TranscriptList
         document={state.document}
         loadImages={loadImages}
-        onContentReady={onContentReady}
+        onBenchmarkEvent={onBenchmarkEvent}
         openedAt={state.openedAt}
         path={state.path}
         phase={state.phase}
@@ -538,7 +546,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
     const selected = summaries.find((summary) => summary.id === selectedId);
     if (selected) {
       const generation = loadGenerationRef.current + 1;
-      const openedAt = performance.now();
+      const openedAt = benchmark ? performance.now() : 0;
       const phase = benchmark
         ? selected.id === benchmark.fixtures[0].id
           ? "initial"
@@ -584,12 +592,16 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
-  const handleContentReady = useCallback((event: ChatBenchmarkContentReadyEvent) => {
+  const handleBenchmarkEvent = useCallback((event: ChatBenchmarkEvent) => {
     if (!benchmark) {
       return;
     }
     emitChatBenchmarkEvent(benchmark, event);
-    if (event.phase === "initial" && switchTimerRef.current === undefined) {
+    if (
+      event.name === "contentReady"
+      && event.phase === "initial"
+      && switchTimerRef.current === undefined
+    ) {
       switchTimerRef.current = setTimeout(() => {
         switchTimerRef.current = undefined;
         setSelectedId(benchmark.fixtures[1].id);
@@ -621,14 +633,14 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       contentMinWidth={420}
       sidebarMinWidth={220}
       sidebarWidth={260}
-      onLayout={handleWindowLayout}
+      onLayout={benchmark ? handleWindowLayout : undefined}
       style={styles.root}
     >
       <ChatSidebar summaries={summaries} selectedId={selectedId} onSelect={handleSelect} />
       {summaries.length > 0 ? (
         <TranscriptPane
           loadImages={benchmark?.loadImages ?? true}
-          onContentReady={handleContentReady}
+          onBenchmarkEvent={benchmark ? handleBenchmarkEvent : undefined}
           selectedId={selectedId}
           state={transcriptState}
         />

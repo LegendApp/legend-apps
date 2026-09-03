@@ -158,7 +158,6 @@ HybridChatDocument::HybridChatDocument(
       warningCount_(result.warningCount),
       timing_(timing) {
   buildDisplayRows();
-  contentDigest_ = computeContentDigest();
 }
 
 HybridChatDocument::~HybridChatDocument() {
@@ -166,6 +165,9 @@ HybridChatDocument::~HybridChatDocument() {
 }
 
 std::string HybridChatDocument::getContentDigest() {
+  std::call_once(contentDigestOnce_, [this]() {
+    contentDigest_ = computeContentDigest();
+  });
   return contentDigest_;
 }
 

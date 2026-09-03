@@ -19,7 +19,6 @@ export type ChatBenchmarkConfig = {
 };
 
 export type ChatBenchmarkContentReadyEvent = {
-  contentDigest: string;
   durationMs: number;
   name: "contentReady";
   path: string;
@@ -36,7 +35,17 @@ export type ChatBenchmarkContentReadyEvent = {
   };
 };
 
-type ChatBenchmarkEvent = ChatBenchmarkContentReadyEvent | { name: "windowShown" };
+export type ChatBenchmarkContentDigestEvent = {
+  contentDigest: string;
+  name: "contentDigest";
+  path: string;
+  phase: "initial" | "switch";
+};
+
+export type ChatBenchmarkEvent =
+  | ChatBenchmarkContentDigestEvent
+  | ChatBenchmarkContentReadyEvent
+  | { name: "windowShown" };
 type LoggedChatBenchmarkEvent = ChatBenchmarkEvent & {
   reactNativeClockOffsetMs?: number;
   reactNativeStartupTiming?: ReturnType<typeof getReactNativeStartupTiming>;

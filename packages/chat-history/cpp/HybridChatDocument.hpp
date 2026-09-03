@@ -49,6 +49,7 @@ private:
 
   std::string documentId_;
   std::string contentDigest_;
+  std::once_flag contentDigestOnce_;
   mutable std::mutex mutex_;
   std::shared_ptr<const ChatSource> source_;
   std::vector<ChatRow> rows_;
