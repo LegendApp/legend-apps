@@ -71,7 +71,6 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => {
     experiments: {
       ...config.experiments,
       autolinkingModuleResolution: true,
-      reactCompiler: true,
     },
   };
 };

@@ -19,7 +19,10 @@ module.exports = function (api) {
   });
 
   return {
-    plugins: [inlineLegendSyntaxAssetSource],
+    plugins: [
+      ["babel-plugin-react-compiler", { target: "19" }],
+      inlineLegendSyntaxAssetSource,
+    ],
     presets: ["babel-preset-expo"],
   };
 };
