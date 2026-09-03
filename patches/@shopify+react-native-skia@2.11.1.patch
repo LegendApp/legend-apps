@@ -1,0 +1,21 @@
+--- a/apple/ViewScreenshotService.mm
++++ b/apple/ViewScreenshotService.mm
+@@ -7,0 +8,3 @@
++#if TARGET_OS_OSX
++#include "include/utils/mac/SkCGUtils.h"
++#endif
+@@ -91 +94,13 @@
+-  return nullptr;
++  NSView *view = [_uiManager viewForReactTag:viewTag];
++  if (view == nil || NSIsEmptyRect(view.bounds)) {
++    return nullptr;
++  }
++
++  NSBitmapImageRep *bitmap =
++      [view bitmapImageRepForCachingDisplayInRect:view.bounds];
++  if (bitmap == nil) {
++    return nullptr;
++  }
++  [view cacheDisplayInRect:view.bounds toBitmapImageRep:bitmap];
++  CGImageRef image = bitmap.CGImage;
++  return image == nil ? nullptr : SkMakeImageFromCGImage(image);

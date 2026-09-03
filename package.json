@@ -95,6 +95,7 @@
     "typescript": "~7.0.2"
   },
   "patchedDependencies": {
+    "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
     "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
