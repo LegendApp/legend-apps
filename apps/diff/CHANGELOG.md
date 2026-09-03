@@ -1,5 +1,10 @@
 # Legend Diff Changelog
 
+## 0.0.3
+
+- Improved performance
+- Another attempt to fix blank diff rows seen by users
+
 ## 0.0.2
 
 - Fixed blank diff rows and gaps between hunks.
