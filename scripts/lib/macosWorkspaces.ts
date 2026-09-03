@@ -238,7 +238,10 @@ export function installMacOSPods(
     env: getMacOSEnv(appId, configPath, appRoot),
   });
 
-  fs.writeFileSync(hashPath, `${hash}\n`);
+  // Podspecs may materialize native artifacts such as XCFrameworks while they
+  // are evaluated. Record the graph after installation so the next run sees
+  // the state CocoaPods actually produced.
+  fs.writeFileSync(hashPath, `${getNativeGraphHash(workspaceDir, configPath)}\n`);
 }
 
 export function getMacOSEnv(appId: string, configPath: string, appRoot = shellDir) {
@@ -440,6 +443,7 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
 
       addDirectoryFileList(hash, path.join(pkgRoot, "cpp"));
       addDirectoryFileList(hash, path.join(pkgRoot, "ios"));
+      addDirectoryFileList(hash, path.join(pkgRoot, "libs"));
       addDirectoryFileList(hash, path.join(pkgRoot, "macos"));
       addDirectoryFileList(hash, path.join(pkgRoot, "nitrogen", "generated"));
       addCodegenSpecFiles(hash, path.join(pkgRoot, "src"));
