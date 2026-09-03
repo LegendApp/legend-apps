@@ -1,4 +1,5 @@
 export { PresentationProvider, usePresentation, useSlideLifecycle } from "./runtime";
+export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";
 export type {
   CompiledDeckProps,
@@ -10,3 +11,10 @@ export type {
   SlideTransition,
 } from "./types";
 export type { CompileDeckFailure, CompileDeckResult, CompileDeckSuccess } from "./compiler/types";
+export type {
+  TypeGPUFrameContext,
+  TypeGPUScene,
+  TypeGPUSceneContext,
+  TypeGPUSceneInstance,
+  TypeGPUSceneSize,
+} from "./typegpu";

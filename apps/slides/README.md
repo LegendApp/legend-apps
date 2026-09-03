@@ -64,11 +64,54 @@ The host provides these package imports:
 - `@typegpu/noise` and `@typegpu/react`
 - `react-native-webview`
 
-`@legend-apps/presentation` exports `usePresentation` and `useSlideLifecycle`. Package imports outside this list, network imports, paths outside the deck directory, and symlink escapes are rejected. A deck has no package manifest or dependencies of its own.
+`@legend-apps/presentation` exports `usePresentation`, `useSlideLifecycle`, and `defineTypeGPUScene`. Package imports outside this list, network imports, paths outside the deck directory, and symlink escapes are rejected. A deck has no package manifest or dependencies of its own.
 
 Deck code is intentionally trusted and runs inside the app's Hermes runtime with the app's permissions. Only open decks you trust.
 
 Uniwind scans the entire deck directory on every successful compile, so static `className` values in local components are available without adding those files to the app project.
+
+## TypeGPU scenes
+
+The built-in `TypeGPU` component owns the React Native canvas, WebGPU device and
+context, animation loop, presentation, error handling, and slide lifecycle. A
+deck only supplies portable TypeGPU setup and rendering code:
+
+```mdx
+import { scene } from "./scene"
+
+<TypeGPU scene={scene} width={1120} height={560} />
+```
+
+Define a scene in a local TypeScript file. `defineTypeGPUScene` provides the
+host values during setup and the current texture view during each frame:
+
+```ts
+import { defineTypeGPUScene } from "@legend-apps/presentation";
+import { common, d } from "typegpu";
+
+export const scene = defineTypeGPUScene(({ format, root }) => {
+  const pipeline = root.createRenderPipeline({
+    vertex: common.fullScreenTriangle,
+    fragment: () => {
+      "use gpu";
+      return d.vec4f(0.1, 0.7, 1, 1);
+    },
+    targets: { format },
+  });
+
+  return {
+    render({ view }) {
+      pipeline.withColorAttachment({ view }).draw(3);
+    },
+  };
+});
+```
+
+The host also supplies `device`, `size`, and `isPreview` during setup. Each
+frame receives `time`, `deltaTime`, `timestamp`, `frame`, `isPreview`, and
+`view`. Presenter previews render one stable frame; the active audience slide
+receives continuous frames. Scene instances may return `dispose()` for their
+own non-TypeGPU resources.
 
 ## Current packaging constraint
 

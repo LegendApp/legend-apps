@@ -17,7 +17,7 @@ import { InteractiveCounter } from "./components/InteractiveCounter"
 import { LifecycleAnimation } from "./components/LifecycleAnimation"
 import { SkiaNebula } from "./components/SkiaNebula"
 import { TypeGPUBoids } from "./components/TypeGPUBoids"
-import { TypeGPUGameOfLife } from "./components/TypeGPUGameOfLife"
+import { cloudScene } from "./vendor/typegpu-clouds/scene"
 
 export const capabilities = [
   ["Markdown", "Headings, lists, links, and code"],
@@ -87,13 +87,18 @@ The app provides `@shopify/react-native-skia`, so deck-local components can rend
 
 ---
 
-## React Native WebGPU + TypeGPU
+## Volumetric TypeGPU clouds
 
-This is the non-interactive Game of Life example from Software Mansion Labs' React Native TypeGPU showcase.
+Ray-marched density, self-shadowing, and cinematic light—rendered through React Native WebGPU.
 
-<TypeGPUGameOfLife />
+<TypeGPU
+  scene={cloudScene}
+  width={1120}
+  height={560}
+  style={{ borderRadius: 28 }}
+/>
 
-<!-- The example uses a TypeGPU compute pipeline and instanced rendering through React Native WebGPU. -->
+<!-- The shader utilities are verbatim upstream files; TypeGPU owns the React Native canvas and slide lifecycle. -->
 
 ---
 

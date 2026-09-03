@@ -11,6 +11,7 @@
     "react-native": "catalog:",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
+    "typegpu": "^0.12.4",
     "unplugin-typegpu": "^0.12.3",
     "yaml": "^2.8.1"
   }

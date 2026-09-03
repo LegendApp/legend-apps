@@ -151,7 +151,10 @@ describe("compileDeck", () => {
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/LifecycleAnimation.tsx"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/SkiaNebula.tsx"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/TypeGPUBoids.tsx"));
-    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/TypeGPUGameOfLife.tsx"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "vendor/typegpu-clouds/consts.ts"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "vendor/typegpu-clouds/scene.ts"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "vendor/typegpu-clouds/types.ts"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "vendor/typegpu-clouds/utils.ts"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "web/kinetic.html"));
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "web/WebParticleField.tsx"));
     expect(result.code).toContain('require("@legend-apps/presentation")');
@@ -163,6 +166,10 @@ describe("compileDeck", () => {
     expect(result.code).toContain("createRenderPipeline");
     expect(result.code).toContain("createGuardedComputePipeline");
     expect(result.code).toContain("dispatchThreads");
+    expect(result.code).toContain("raymarch");
+    expect(result.code).toContain("sampleDensity");
+    expect(result.code).toContain("cloudScene");
+    expect(result.code).toContain("TypeGPU");
     expect(result.code).toContain("triangleAmount");
     expect(result.code).toContain("useConfigureContext");
     expect(result.code).toContain("__TYPEGPU_META__");

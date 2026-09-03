@@ -23,6 +23,7 @@ import {
   type ViewProps,
 } from "react-native";
 import { getSlidesState, nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
 
 function parseObject<T extends object>(value: string, fallback: T) {
@@ -122,6 +123,7 @@ const markdownComponents = {
   Text,
   Image,
   Pressable: NativePressable,
+  TypeGPU,
   Webview,
   h1: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h1}>{children}</MarkdownText>,
   h2: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h2}>{children}</MarkdownText>,
