@@ -23,8 +23,10 @@ import {
   type ViewProps,
 } from "react-native";
 import { getSlidesState, nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { CodeBlock } from "./CodeBlock";
 import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
+import { getCodeLanguage, getCodeSource } from "./codeBlocks";
 
 function parseObject<T extends object>(value: string, fallback: T) {
   try {
@@ -116,6 +118,22 @@ function NativePressable({ children, ...props }: PressableProps) {
   return <Pressable {...props}>{renderMdxChildren(children)}</Pressable>;
 }
 
+function MarkdownCode({ children }: { children?: ReactNode }) {
+  return <MarkdownText style={styles.code}>{children}</MarkdownText>;
+}
+
+function MarkdownPre({ children }: { children?: ReactNode }) {
+  const child = Children.count(children) === 1 ? Children.toArray(children)[0] : undefined;
+  if (isValidElement(child)) {
+    const props = child.props as { children?: unknown; className?: unknown };
+    const source = getCodeSource(props.children);
+    if (source !== undefined) {
+      return <CodeBlock language={getCodeLanguage(props.className)} source={source} />;
+    }
+  }
+  return <NativeView style={styles.pre}>{children}</NativeView>;
+}
+
 const markdownComponents = {
   Deck,
   Slide,
@@ -131,8 +149,8 @@ const markdownComponents = {
   p: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.paragraph}>{children}</MarkdownText>,
   strong: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.strong}>{children}</MarkdownText>,
   em: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.emphasis}>{children}</MarkdownText>,
-  code: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.code}>{children}</MarkdownText>,
-  pre: ({ children }: { children?: ReactNode }) => <NativeView style={styles.pre}>{children}</NativeView>,
+  code: MarkdownCode,
+  pre: MarkdownPre,
   blockquote: ({ children }: { children?: ReactNode }) => <NativeView style={styles.blockquote}>{children}</NativeView>,
   ul: ({ children }: { children?: ReactNode }) => <NativeView style={styles.list}>{children}</NativeView>,
   ol: ({ children }: { children?: ReactNode }) => <NativeView style={styles.list}>{children}</NativeView>,

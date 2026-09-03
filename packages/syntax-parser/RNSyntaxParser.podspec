@@ -14,6 +14,33 @@ Pod::Spec.new do |s|
   s.source_files = "cpp/**/*.{h,hpp,cpp}"
   s.preserve_paths = "vendor/TextMateLib/**/*"
   s.resource_bundles = {
+    "RNSyntaxParserGrammars" => [
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/javascript.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/typescript.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/jsx.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/tsx.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/json.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/markdown.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/yaml.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/css.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/scss.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/html.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/xml.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/shellscript.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/python.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/ruby.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/go.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/rust.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/swift.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/kotlin.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/java.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/cpp.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/c.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/objective-c.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/objective-cpp.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/toml.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/docker.json",
+    ],
     "RNSyntaxParserThemes" => [
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json",

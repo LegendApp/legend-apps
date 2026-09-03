@@ -4,10 +4,17 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "enriched-markdown": {
+    "enableCodeHighlight": true,
+    "enableMath": true
+  },
   "workspaces": [
     "shell",
     "apps/*",
     "packages/*"
+  ],
+  "trustedDependencies": [
+    "react-native-enriched-markdown"
   ],
   "scripts": {
     "chat-history": "bun scripts/run-app.ts chat-history",
@@ -89,7 +96,7 @@
   },
   "patchedDependencies": {
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
-    "react-native-enriched-markdown@0.7.4": "patches/react-native-enriched-markdown@0.7.4.patch",
+    "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
     "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch"
   },

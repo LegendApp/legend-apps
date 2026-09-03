@@ -21,6 +21,7 @@ const manifest = {
       "@legend-apps/recent-documents",
       "@legend-apps/scaled-view",
       "@legend-apps/storage",
+      "@legend-apps/syntax-parser",
       "@legend-apps/window-manager",
       "@shopify/react-native-skia",
       "react-native-webgpu",

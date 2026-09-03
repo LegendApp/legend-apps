@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "main": "index.ts",
+  "enriched-markdown": {
+    "enableCodeHighlight": true,
+    "enableMath": true
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
