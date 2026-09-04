@@ -18,6 +18,12 @@ enabled after applying an update or stopping the audience window. Use **Unlock
 Live Updates** to resume automatic updates; an already queued build still needs
 to be applied explicitly. Opening another deck while locked queues it too.
 
+If the presentation display disconnects, the audience output is blacked out and
+closed. Reconnect it, select the display, and press **Present** to resume at the
+same slide. It never automatically moves the talk onto your laptop screen.
+Resolution and display-position changes resize the active audience window;
+windowed rehearsal is left alone.
+
 `examples/showcase.mdx` exercises inline and fenced code, executable expressions, local TypeScript components, React state, speaker notes, per-slide transitions, and a lifecycle-aware React Native animation. `examples/demo.mdx` is a smaller starting point.
 
 ## Deck format

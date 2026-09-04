@@ -19,6 +19,7 @@ import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import { getPresentationDisplayId, rememberPresentationDisplayId } from "./slidesPreferences";
 import { nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { slidesWindows } from "./slidesWindows";
+import { createAudienceSession } from "./audienceSession";
 
 type PresenterWindowProps = { launchArguments?: string[] };
 
@@ -186,10 +187,33 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const keyboardJumpRef = useRef("");
   const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const state = useSlidesState((value) => value);
+  const [audience] = useState(() => createAudienceSession({
+    async open(display) {
+      const frame = display?.frame;
+      const rehearsalFrame = !display ? (await getDisplays()).find((candidate) => candidate.isMain)?.visibleFrame : undefined;
+      const width = Math.min(1280, rehearsalFrame?.width ?? 1280);
+      const height = Math.min(720, rehearsalFrame?.height ?? 720);
+      await slidesWindows.open("SlidesAudienceWindow", display ? {
+        x: frame?.x, y: frame?.y,
+        windowStyle: { height: frame?.height, width: frame?.width, mask: [WindowStyleMask.Borderless] },
+      } : {
+        x: rehearsalFrame ? rehearsalFrame.x + (rehearsalFrame.width - width) / 2 : undefined,
+        y: rehearsalFrame ? rehearsalFrame.y + (rehearsalFrame.height - height) / 2 : undefined,
+        windowStyle: { height, width },
+      });
+    },
+    async close() {
+      const result = await closeWindow("slides-audience");
+      if (!result.success) throw new Error(result.message ?? "Could not close the audience window.");
+    },
+    async focusPresenter() { await showWindow("slides-presenter"); },
+    update: setSlidesState,
+  }));
 
   const refreshDisplays = useCallback(async () => {
     const nextDisplays = await getDisplays();
     setDisplays(nextDisplays);
+    await audience.displaysChanged(nextDisplays);
     setSelectedDisplayId((current) => {
       if (nextDisplays.some((display) => display.id === current)) {
         return current;
@@ -197,7 +221,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       const remembered = getPresentationDisplayId();
       return nextDisplays.some((display) => display.id === remembered) ? remembered ?? null : null;
     });
-  }, []);
+  }, [audience]);
 
   const openDeck = useCallback(async () => {
     const paths = await openFileDialog({
@@ -212,34 +236,8 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     }
   }, []);
 
-  const openAudience = useCallback(async (display?: Display) => {
-    setSlidesState({ deckLocked: true });
-    const frame = display?.frame;
-    const rehearsalFrame = displays.find((candidate) => candidate.isMain)?.visibleFrame;
-    const rehearsalWidth = Math.min(1280, rehearsalFrame?.width ?? 1280);
-    const rehearsalHeight = Math.min(720, rehearsalFrame?.height ?? 720);
-    await slidesWindows.open("SlidesAudienceWindow", display ? {
-      x: frame?.x,
-      y: frame?.y,
-      windowStyle: {
-        height: frame?.height,
-        mask: [WindowStyleMask.Borderless],
-        width: frame?.width,
-      },
-    } : rehearsalFrame ? {
-      x: rehearsalFrame.x + (rehearsalFrame.width - rehearsalWidth) / 2,
-      y: rehearsalFrame.y + (rehearsalFrame.height - rehearsalHeight) / 2,
-      windowStyle: { height: rehearsalHeight, width: rehearsalWidth },
-    } : undefined);
-    setSlidesState({ audienceOpen: true, blackout: false });
-    await showWindow("slides-presenter");
-  }, [displays]);
-
-  const closeAudience = useCallback(async () => {
-    await closeWindow("slides-audience");
-    setSlidesState({ audienceOpen: false, blackout: false });
-    await showWindow("slides-presenter");
-  }, []);
+  const openAudience = audience.open;
+  const closeAudience = audience.close;
 
   useEffect(() => {
     void refreshDisplays();
@@ -247,7 +245,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     const recentSubscription = addRecentDocumentOpenListener(({ path }) => void loadDeck(path));
     const closedSubscription = addWindowClosedListener((event) => {
       if (event.identifier === "slides-audience") {
-        setSlidesState({ audienceOpen: false, blackout: false });
+        audience.closed();
       }
     });
     const launchedPath = launchDeckPath(launchArguments);
@@ -260,7 +258,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       recentSubscription.remove();
       closedSubscription.remove();
     };
-  }, [launchArguments, refreshDisplays]);
+  }, [audience, launchArguments, refreshDisplays]);
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
@@ -408,6 +406,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
             onPress={() => setSlidesState((current) => ({ blackout: !current.blackout }))}
           />
           <Text style={styles.sidebarTitle}>Presentation Display</Text>
+          {!!state.displayMessage && <Text style={styles.errorText}>{state.displayMessage}</Text>}
           {displays.map((display) => (
             <Pressable key={display.id} onPress={() => {
               setSelectedDisplayId(display.id);

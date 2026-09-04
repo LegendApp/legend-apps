@@ -10,6 +10,7 @@ export type DeckSlide = {
 
 export type SlidesState = {
   deckLocked: boolean;
+  displayMessage: string;
   pendingDeck: { path: string; result: CompileDeckSuccess; remember: boolean } | null;
   audienceOpen: boolean;
   blackout: boolean;
@@ -26,6 +27,7 @@ export type SlidesState = {
 
 let state: SlidesState = {
   deckLocked: false,
+  displayMessage: "",
   pendingDeck: null,
   audienceOpen: false,
   blackout: false,
