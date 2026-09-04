@@ -18,6 +18,7 @@ const manifest = {
       "@legend-apps/file-dialog",
       "@legend-apps/file-system-watcher",
       "@legend-apps/keyboard-manager",
+      "@legend-apps/native-menu",
       "@legend-apps/recent-documents",
       "@legend-apps/scaled-view",
       "@legend-apps/storage",

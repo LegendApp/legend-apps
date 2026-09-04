@@ -8,6 +8,7 @@
     "@legend-apps/file-dialog": "0.0.0",
     "@legend-apps/file-system-watcher": "0.0.0",
     "@legend-apps/keyboard-manager": "0.0.0",
+    "@legend-apps/native-menu": "0.0.0",
     "@legend-apps/presentation": "0.0.0",
     "@legend-apps/recent-documents": "0.0.0",
     "@legend-apps/scaled-view": "0.0.0",
