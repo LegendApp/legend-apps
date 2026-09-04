@@ -24,6 +24,13 @@ same slide. It never automatically moves the talk onto your laptop screen.
 Resolution and display-position changes resize the active audience window;
 windowed rehearsal is left alone.
 
+Slide render failures are isolated from the presenter controls. Details appear
+under **Slide errors**; the audience sees a neutral fallback. **Retry Slide
+Content**, navigating away and back, or applying a corrected build retries the
+content. TypeGPU setup/render/device-loss errors and cleanup failures are caught
+by the host. Arbitrary timers, event handlers, infinite loops, and native crashes
+in trusted deck code are not sandboxed by React error boundaries.
+
 `examples/showcase.mdx` exercises inline and fenced code, executable expressions, local TypeScript components, React state, speaker notes, per-slide transitions, and a lifecycle-aware React Native animation. `examples/demo.mdx` is a smaller starting point.
 
 ## Deck format

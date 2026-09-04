@@ -22,7 +22,8 @@ import {
   type TextStyle,
   type ViewProps,
 } from "react-native";
-import { getSlidesState, nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { CodeBlock } from "./CodeBlock";
 import { Effect } from "./Effect";
 import { TypeGPU } from "./TypeGPU";
@@ -85,7 +86,9 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       slideIndex: selectedIndex,
     }}>
       <View style={styles.slideContent}>
-        {renderMdxChildren(selected.props.children)}
+        <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
+          {renderMdxChildren(selected.props.children)}
+        </SlideErrorBoundary>
       </View>
     </PresentationProvider>
   );
@@ -163,13 +166,27 @@ const markdownComponents = {
 export function DeckRenderer({ isPreview = false, targetIndex }: { isPreview?: boolean; targetIndex?: number }) {
   const Component = useSlidesState((state) => state.component);
   const revision = useSlidesState((state) => state.revision);
+  const retryRevision = useSlidesState((state) => state.retryRevision);
   if (!Component) {
     return null;
   }
   return (
     <DeckRenderContext.Provider value={{ isPreview, targetIndex }}>
-      <Component components={markdownComponents} key={`${revision}:${targetIndex ?? "current"}`} />
+      <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}:${targetIndex ?? "current"}`}>
+        <Component components={markdownComponents} />
+      </SlideErrorBoundary>
     </DeckRenderContext.Provider>
+  );
+}
+
+function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNode; index: number; isPreview: boolean }) {
+  return (
+    <ContentErrorBoundary
+      fallback={<View className="flex-1 items-center justify-center"><Text style={styles.paragraph}>Slide unavailable</Text></View>}
+      onError={(error) => reportSlideError(error, index, isPreview)}
+    >
+      {children}
+    </ContentErrorBoundary>
   );
 }
 

@@ -130,6 +130,16 @@ export { getLastDeckPath } from "./slidesPreferences";
 
 export async function loadDeck(path: string, remember = true) {
   const sequence = ++buildSequence;
+  try {
+    await buildDeck(path, remember, sequence);
+  } catch (error) {
+    if (sequence === buildSequence) {
+      setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
+    }
+  }
+}
+
+async function buildDeck(path: string, remember: boolean, sequence: number) {
   watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
   if (!compilerPath) {

@@ -17,7 +17,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import { getPresentationDisplayId, rememberPresentationDisplayId } from "./slidesPreferences";
-import { nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 
@@ -383,7 +383,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
           )}
         </View>
 
-        <View style={styles.sidebar}>
+        <ScrollView style={styles.sidebar} contentContainerStyle={{ padding: 16 }}>
           <PresenterClock audienceOpen={state.audienceOpen} />
           <Text style={styles.sidebarTitle}>Deck Updates</Text>
           <Button
@@ -423,7 +423,14 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
               {state.component && <Text style={styles.lastGood}>Showing the last successful build.</Text>}
             </View>
           )}
-        </View>
+          {state.runtimeErrors.length > 0 && (
+            <View className="mt-4 gap-2">
+              <Text style={styles.errorTitle}>Slide errors</Text>
+              {state.runtimeErrors.map((message) => <Text key={message} selectable style={styles.errorText}>{message}</Text>)}
+              <Button label="Retry Slide Content" onPress={retrySlideContent} />
+            </View>
+          )}
+        </ScrollView>
       </View>
     </View>
   );
@@ -473,7 +480,7 @@ const styles = StyleSheet.create({
   primaryButton: { backgroundColor: "#2563eb" },
   primaryButtonText: { color: "#fff" },
   root: { backgroundColor: "#18181b", flex: 1 },
-  sidebar: { backgroundColor: "#202024", borderLeftColor: "#3f3f46", borderLeftWidth: StyleSheet.hairlineWidth, padding: 16, width: 290 },
+  sidebar: { backgroundColor: "#202024", borderLeftColor: "#3f3f46", borderLeftWidth: StyleSheet.hairlineWidth, flexGrow: 0, width: 290 },
   sidebarTitle: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 10, marginTop: 8, textTransform: "uppercase" },
   toolbar: { alignItems: "center", borderBottomColor: "#3f3f46", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", justifyContent: "space-between", minHeight: 58, paddingHorizontal: 16 },
   toolbarGroup: { alignItems: "center", flexDirection: "row", gap: 10 },

@@ -25,6 +25,7 @@ export function successfulDeckUpdate(
     buildWarnings: warnings,
     component,
     pendingDeck: null,
+    runtimeErrors: [],
     currentSlide: current.currentSlide,
     deckPath: path,
     revision: current.revision + 1,

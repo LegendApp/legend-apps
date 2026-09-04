@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { Canvas, type CanvasRef } from "react-native-webgpu";
 import { tgpu, type TgpuRoot } from "typegpu";
+import { reportSlideError } from "./slidesStore";
+import { releaseGPUResources } from "./gpuCleanup";
 
 export type TypeGPUProps = {
   backgroundColor?: string;
@@ -29,7 +31,7 @@ export function TypeGPU({
   transparent = false,
   width = 960,
 }: TypeGPUProps) {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const { isActive, isPreview, slideIndex } = useSlideLifecycle();
   const canvasRef = useRef<CanvasRef>(null);
   const [error, setError] = useState<string>();
 
@@ -39,24 +41,35 @@ export function TypeGPU({
     }
 
     let cancelled = false;
-    let disposed = false;
+    let stopped = false;
     let frameId = 0;
     let device: GPUDevice | undefined;
     let root: TgpuRoot | undefined;
     let sceneInstance: TypeGPUSceneInstance | undefined;
+    const report = (caught: unknown) => reportSlideError(caught, slideIndex, isPreview);
 
     const dispose = () => {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
       cancelAnimationFrame(frameId);
-      void sceneInstance?.dispose?.();
-      if (root) {
-        root.destroy();
-      } else {
-        device?.destroy();
-      }
+      // Drain whatever has arrived so far. Async setup may finish after an
+      // unmount, so later calls must still release newly acquired resources.
+      const instance = sceneInstance;
+      const gpuRoot = root;
+      const gpuDevice = device;
+      sceneInstance = undefined;
+      root = undefined;
+      device = undefined;
+      releaseGPUResources(instance?.dispose?.bind(instance), () => {
+        if (gpuRoot) gpuRoot.destroy();
+        else gpuDevice?.destroy();
+      }, report);
+    };
+
+    const fail = (caught: unknown) => {
+      if (cancelled || stopped) return;
+      stopped = true;
+      setError(caught instanceof Error ? caught.message : String(caught));
+      report(caught);
+      dispose();
     };
 
     async function start() {
@@ -71,6 +84,14 @@ export function TypeGPU({
           dispose();
           return;
         }
+        const acquiredDevice = device;
+        void device.lost.then((info) => {
+          if (device === acquiredDevice) fail(new Error(`WebGPU device lost: ${info.message}`));
+        }).catch(fail);
+        device.addEventListener?.("uncapturederror", (event) => {
+          event.preventDefault?.();
+          fail(event.error);
+        });
 
         const surface = canvasRef.current.getNativeSurface();
         const context = canvasRef.current.getContext("webgpu");
@@ -89,7 +110,7 @@ export function TypeGPU({
           root,
           size: { height, width },
         });
-        if (cancelled) {
+        if (cancelled || stopped) {
           dispose();
           return;
         }
@@ -98,7 +119,7 @@ export function TypeGPU({
         let previousTimestamp: number | undefined;
         let frame = 0;
         const render = (timestamp: number) => {
-          if (cancelled || !sceneInstance) {
+          if (cancelled || stopped || !sceneInstance) {
             return;
           }
           try {
@@ -122,15 +143,13 @@ export function TypeGPU({
               frameId = requestAnimationFrame(render);
             }
           } catch (caught) {
-            setError(caught instanceof Error ? caught.message : String(caught));
+            fail(caught);
           }
         };
         frameId = requestAnimationFrame(render);
       } catch (caught) {
+        fail(caught);
         dispose();
-        if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : String(caught));
-        }
       }
     }
 
@@ -139,12 +158,12 @@ export function TypeGPU({
       cancelled = true;
       dispose();
     };
-  }, [height, isActive, isPreview, previewTime, scene, width]);
+  }, [height, isActive, isPreview, previewTime, scene, slideIndex, width]);
 
   return (
     <View style={[styles.container, { backgroundColor, height, width }, style]}>
       <Canvas ref={canvasRef} style={{ height, width }} transparent={transparent} />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={styles.error}>{isPreview ? error : "Animation unavailable"}</Text> : null}
     </View>
   );
 }

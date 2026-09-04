@@ -11,6 +11,8 @@ export type DeckSlide = {
 export type SlidesState = {
   deckLocked: boolean;
   displayMessage: string;
+  runtimeErrors: string[];
+  retryRevision: number;
   pendingDeck: { path: string; result: CompileDeckSuccess; remember: boolean } | null;
   audienceOpen: boolean;
   blackout: boolean;
@@ -28,6 +30,8 @@ export type SlidesState = {
 let state: SlidesState = {
   deckLocked: false,
   displayMessage: "",
+  runtimeErrors: [],
+  retryRevision: 0,
   pendingDeck: null,
   audienceOpen: false,
   blackout: false,
@@ -74,4 +78,15 @@ export function nextSlide() {
 
 export function previousSlide() {
   setCurrentSlide(state.currentSlide - 1);
+}
+
+export function reportSlideError(error: unknown, slideIndex: number, isPreview: boolean) {
+  const message = `Slide ${slideIndex + 1}${isPreview ? " (preview)" : ""}: ${error instanceof Error ? error.message : String(error)}`;
+  if (!state.runtimeErrors.includes(message)) {
+    setSlidesState({ runtimeErrors: [...state.runtimeErrors.slice(-19), message] });
+  }
+}
+
+export function retrySlideContent() {
+  setSlidesState({ retryRevision: state.retryRevision + 1, runtimeErrors: [] });
 }
