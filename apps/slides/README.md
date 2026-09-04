@@ -191,3 +191,6 @@ compilation times out, compare with `bun scripts/compile-slides.ts <deck.mdx>`
 and check for macOS file-access prompts for Legend Slides, especially when the
 checkout or deck is in Documents. Do not grant Full Disk Access as a blanket
 workaround; investigate the specific file-access failure first.
+
+Use the [rehearsal checklist](REHEARSAL.md) to validate the actual talk before
+presenting. It includes the current verification status and remaining checks.
