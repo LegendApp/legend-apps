@@ -184,6 +184,8 @@ export type WindowOptions = {
   animateFrameChange?: boolean;
   deferOrderFront?: boolean;
   frameAnimationDurationMs?: number;
+  /** Keep the native window shell and its AppKit-managed frame available for the next app launch. */
+  restoreOnLaunch?: boolean;
 };
 
 type NativeWindowStyleOptions = Omit<WindowStyleOptions, "mask"> & {
@@ -224,7 +226,7 @@ export type ReactNativeStartupTiming = {
 };
 
 export type MainWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
-export type TargetWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "windowStyle">;
+export type TargetWindowOptions = Pick<WindowOptions, "title" | "representedURL" | "restoreOnLaunch" | "windowStyle">;
 
 export type WindowClosedEvent = {
   identifier: string;

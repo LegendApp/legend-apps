@@ -49,6 +49,7 @@ const markdownWindowsConfig = {
     loadComponent: () => import("./MarkdownEditorWindow"),
     identifier: editorWindowIdentifier,
     options: {
+      restoreOnLaunch: true,
       title: "Untitled",
       windowStyle: createMarkdownEditorWindowStyle({ includeFrame: true }),
     },

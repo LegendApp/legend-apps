@@ -3,7 +3,7 @@ import { commandRunner } from "@legend-apps/command-runner";
 import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
 import { useRoutedHotkeys } from "@legend-apps/hotkeys";
 import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/native-menu";
-import { addWindowFocusedListener, setMainWindowFrame, showMainWindow } from "@legend-apps/window-manager";
+import { addWindowFocusedListener, showMainWindow } from "@legend-apps/window-manager";
 import { WindowProvider } from "@legend-apps/windows";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, LogBox } from "react-native";
@@ -26,7 +26,11 @@ import {
   setDiffViewModeSetting,
 } from "./diffSettings";
 import { dispatchDiffViewerAction } from "./diffViewerActions";
-import { installDiffWindowRestoration, restoreSavedDiffWindows } from "./diffWindowRestoration";
+import {
+  installDiffWindowRestoration,
+  restoreSavedDiffWindows,
+  setDiffManagedWindowRestorationEnabled,
+} from "./diffWindowRestoration";
 import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows, type DiffViewerWindowOpenOptions } from "./diffWindows";
 
 
@@ -54,7 +58,7 @@ type DiffViewerOpener = (
 
 type PrimaryDiffViewerOpener = (
   sourceInput?: Parameters<typeof openDiffViewerWindow>[0],
-  options?: Pick<DiffViewerWindowOpenOptions, "focusUrlInput" | "frame">,
+  options?: Pick<DiffViewerWindowOpenOptions, "focusUrlInput">,
 ) => Promise<void>;
 
 type PrimaryDiffWindow = {
@@ -229,13 +233,18 @@ async function openInitialDiffViewer(
   }
 
   let restoredWindowCount = 0;
+  const restoreWindowsOnStartup = getDiffRestoreWindowsOnStartupSetting();
+  if (source || !restoreWindowsOnStartup) {
+    // Explicit document launches replace the saved session for this launch.
+    await setDiffManagedWindowRestorationEnabled(false);
+  }
   if (source) {
     await openPrimaryViewer(source);
     controller.setDocumentWindowOpen(true);
   } else {
-    if (getDiffRestoreWindowsOnStartupSetting()) {
-      restoredWindowCount = await restoreSavedDiffWindows(({ frame, source: savedSource }) =>
-        openPrimaryViewer(savedSource ?? null, { frame }));
+    if (restoreWindowsOnStartup) {
+      restoredWindowCount = await restoreSavedDiffWindows((savedSource) =>
+        openPrimaryViewer(savedSource ?? null));
     }
     if (restoredWindowCount === 0) {
       await openPrimaryViewer(null);
@@ -272,13 +281,9 @@ export function App({ launchArguments }: DiffAppProps) {
     }
 
     upsertSavedDiffWindow({
-      ...(options.frame ? { frame: options.frame } : {}),
       id: diffPrimaryWindowIdentifier,
       ...(source ? { source } : {}),
     });
-    if (options.frame) {
-      await setMainWindowFrame(options.frame);
-    }
     await showMainWindow();
   }, []);
 

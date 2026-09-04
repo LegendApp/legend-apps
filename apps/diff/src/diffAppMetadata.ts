@@ -93,11 +93,10 @@ function setSavedDiffWindows(savedWindows: readonly SavedDiffWindow[]) {
   diffAppMetadata$.savedWindows.set(savedWindows.map(normalizeSavedDiffWindow).slice(0, maxSavedWindows));
 }
 
-export function upsertSavedDiffWindow(window: { frame?: WindowFrame; id: string; source?: DiffOpenSource }) {
+export function upsertSavedDiffWindow(window: { id: string; source?: DiffOpenSource }) {
   const existing = getSavedDiffWindows().filter((item) => item.id !== window.id);
   setSavedDiffWindows([
     normalizeSavedDiffWindow({
-      frame: window.frame,
       id: window.id,
       lastOpenedAt: Date.now(),
       source: window.source,
@@ -120,22 +119,6 @@ export function updateSavedDiffWindowSource(id: string, source: DiffOpenSource) 
     ));
   } else {
     upsertSavedDiffWindow({ id, source });
-  }
-}
-
-export function updateSavedDiffWindowFrame(id: string, frame: WindowFrame) {
-  const normalizedFrame = normalizeSavedWindowFrame(frame);
-  if (normalizedFrame) {
-    setSavedDiffWindows(
-      getSavedDiffWindows().map((window) =>
-        window.id === id
-          ? {
-            ...window,
-            frame: normalizedFrame,
-          }
-          : window,
-      ),
-    );
   }
 }
 

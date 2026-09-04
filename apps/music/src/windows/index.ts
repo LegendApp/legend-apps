@@ -18,6 +18,7 @@ const windowsConfig = {
         identifier: "media-library",
         options: {
             deferOrderFront: true,
+            restoreOnLaunch: true,
             title: "",
             transparentBackground: true,
             windowStyle: createUnifiedToolbarWindowStyle({

@@ -40,6 +40,7 @@ const codeWindowsConfig = {
     loadComponent: () => import("./CodeViewerWindow"),
     identifier: codeViewerWindowIdentifier,
     options: {
+      restoreOnLaunch: true,
       title: "Legend Code",
       windowStyle: createCodeViewerWindowStyle({ includeFrame: true }),
     },

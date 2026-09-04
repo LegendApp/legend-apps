@@ -5,7 +5,6 @@ import {
   getRecentDiffSources,
   getSavedDiffWindows,
   removeSavedDiffWindow,
-  updateSavedDiffWindowFrame,
   updateSavedDiffWindowSource,
   upsertSavedDiffWindow,
 } from "../diffAppMetadata";
@@ -113,15 +112,12 @@ describe("diffAppMetadata", () => {
 
     if (source) {
       upsertSavedDiffWindow({
-        frame: { height: 600, width: 800, x: 10, y: 20 },
         id: "diff-viewer-folder",
       });
       updateSavedDiffWindowSource("diff-viewer-folder", source);
-      updateSavedDiffWindowFrame("diff-viewer-folder", { height: 700, width: 900, x: 30, y: 40 });
 
       expect(getSavedDiffWindows()).toMatchObject([
         {
-          frame: { height: 700, width: 900, x: 30, y: 40 },
           id: "diff-viewer-folder",
           source,
         },

@@ -48,6 +48,7 @@ import {
   useDiffSyntaxTheme,
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
+import { setDiffManagedWindowRestorationEnabled } from "./diffWindowRestoration";
 
 type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine";
 
@@ -66,6 +67,10 @@ function AppearanceSettingsContent() {
   const restoreWindowsOnStartup = useDiffRestoreWindowsOnStartupSetting();
   const showOnlyHunks = useDiffShowOnlyHunksSetting();
   const selectedSyntaxTheme = useDiffSyntaxThemeSetting();
+  const handleRestoreWindowsOnStartupChange = useCallback((enabled: boolean) => {
+    setDiffRestoreWindowsOnStartupSetting(enabled);
+    void setDiffManagedWindowRestorationEnabled(enabled);
+  }, []);
 
   return (
     <>
@@ -95,7 +100,7 @@ function AppearanceSettingsContent() {
             <SwitchControl
               accessibilityLabel="Restore windows on startup"
               checked={restoreWindowsOnStartup}
-              onChange={setDiffRestoreWindowsOnStartupSetting}
+              onChange={handleRestoreWindowsOnStartupChange}
             />
           )}
           description="Reopen previous Diff windows with their saved size and position."

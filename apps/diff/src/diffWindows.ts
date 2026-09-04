@@ -10,6 +10,7 @@ import {
 import { upsertSavedDiffWindow } from "./diffAppMetadata";
 import { getDiffRepresentedUrl, normalizeDiffOpenSource, type DiffOpenSource } from "./diffFiles";
 import { createDiffViewerWindowStyle } from "./diffWindowControls";
+import { getDiffRestoreWindowsOnStartupSetting } from "./diffSettings";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 
 let diffViewerUntitledWindowId = 0;
@@ -38,6 +39,7 @@ type DiffWindow = keyof typeof diffWindowsConfig;
 
 export type DiffViewerWindowOpenOptions = {
   focusUrlInput?: boolean;
+  /** One-time migration input; AppKit owns subsequent frame persistence. */
   frame?: WindowFrame;
   freshWindow?: boolean;
   windowIdentifier?: string;
@@ -90,20 +92,19 @@ export function openDiffViewerWindow(sourceInput?: DiffOpenSource | string | nul
     windowStyle.width = options.frame.width;
     windowStyle.height = options.frame.height;
   }
-
   return DiffWindowsNavigator.open(diffViewerWindowModuleName as DiffWindow, {
     identifier: windowIdentifier,
     initialProperties,
     interceptClose: true,
     loadComponentBeforeNativeOpen: false,
     representedURL: getDiffRepresentedUrl(source),
+    restoreOnLaunch: getDiffRestoreWindowsOnStartupSetting(),
     title: diffViewerWindowTitle({ hasUnsavedMergeDrafts: false, source }),
     transparentBackground: true,
     ...(options.frame ? { x: options.frame.x, y: options.frame.y } : {}),
     windowStyle,
   }).then((result) => {
     upsertSavedDiffWindow({
-      ...(options.frame ? { frame: options.frame } : {}),
       id: windowIdentifier,
       ...(source ? { source } : {}),
     });

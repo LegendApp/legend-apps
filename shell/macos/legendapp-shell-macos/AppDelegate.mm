@@ -15,6 +15,8 @@ static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMai
 double LegendMainWindowFirstVisibleTimeMs = 0;
 double LegendMainWindowReactRootAttachedTimeMs = 0;
 
+extern "C" void LegendPrecreateRestorableWindows(void) __attribute__((weak_import));
+
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
   if (![value isKindOfClass:NSString.class] || value.length == 0) {
@@ -557,6 +559,12 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     if (![self.window setFrameUsingName:autosaveName]) {
       [self.window center];
     }
+  }
+
+  // Restorable managed windows are native shells first; their React roots attach
+  // when JavaScript opens the same stable identifiers.
+  if (LegendPrecreateRestorableWindows) {
+    LegendPrecreateRestorableWindows();
   }
 
   BOOL presentBeforeReactRoot = !hostWindowHidden;

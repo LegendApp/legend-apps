@@ -30,6 +30,111 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #if TARGET_OS_OSX
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
 static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
+static NSString * const LegendRestorableWindowOptionsDefaultsKey = @"LegendRestorableWindowOptions";
+static NSMutableDictionary<NSString *, NSWindow *> *LegendPrecreatedWindows;
+static BOOL LegendApplicationIsTerminating = NO;
+
+static NSString *LegendManagedWindowFrameAutosaveName(NSString *identifier)
+{
+  NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier ?: @"legend-app";
+  return [NSString stringWithFormat:@"LegendManagedWindow.%@.%@", bundleIdentifier, identifier ?: @""];
+}
+
+static NSArray<NSDictionary *> *LegendReadRestorableWindowOptions(void)
+{
+  NSArray *records = [NSUserDefaults.standardUserDefaults arrayForKey:LegendRestorableWindowOptionsDefaultsKey];
+  if (![records isKindOfClass:NSArray.class]) {
+    return @[];
+  }
+  NSMutableArray<NSDictionary *> *options = [NSMutableArray new];
+  for (NSString *record in records) {
+    if (![record isKindOfClass:NSString.class]) {
+      continue;
+    }
+    NSData *data = [record dataUsingEncoding:NSUTF8StringEncoding];
+    id value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    if ([value isKindOfClass:NSDictionary.class]) {
+      [options addObject:value];
+    }
+  }
+  return options;
+}
+
+static NSDictionary *LegendFindRestorableWindowOptions(NSString *identifier)
+{
+  for (NSDictionary *record in LegendReadRestorableWindowOptions()) {
+    if ([record[@"identifier"] isEqualToString:identifier]) {
+      return record;
+    }
+  }
+  return nil;
+}
+
+static NSDictionary *LegendRestorableWindowOptions(NSDictionary *options)
+{
+  static NSArray<NSString *> *keys;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    keys = @[
+      @"deferOrderFront", @"hasShadow", @"height", @"identifier", @"level", @"moduleName",
+      @"representedURL", @"restoreOnLaunch", @"title", @"transparentBackground", @"width", @"windowStyle",
+      @"x", @"y",
+    ];
+  });
+  NSMutableDictionary *restorableOptions = [NSMutableDictionary new];
+  for (NSString *key in keys) {
+    id value = options[key];
+    if (value != nil) {
+      restorableOptions[key] = value;
+    }
+  }
+  return restorableOptions;
+}
+
+static void LegendWriteRestorableWindowOptions(NSArray<NSDictionary *> *options)
+{
+  NSMutableArray<NSString *> *records = [NSMutableArray new];
+  for (NSDictionary *record in options) {
+    NSData *data = [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
+    NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+    if (json) {
+      [records addObject:json];
+    }
+  }
+  [NSUserDefaults.standardUserDefaults setObject:records forKey:LegendRestorableWindowOptionsDefaultsKey];
+}
+
+static void LegendSetRestorableWindowOptions(NSString *identifier, NSDictionary *options)
+{
+  if (identifier.length == 0) {
+    return;
+  }
+  NSMutableArray<NSDictionary *> *records = [LegendReadRestorableWindowOptions() mutableCopy];
+  NSIndexSet *matchingIndexes = [records indexesOfObjectsPassingTest:^BOOL(NSDictionary *record, NSUInteger index, BOOL *stop) {
+    return [record[@"identifier"] isEqualToString:identifier];
+  }];
+  if (matchingIndexes.count > 0) {
+    [records removeObjectsAtIndexes:matchingIndexes];
+  }
+  if (options != nil) {
+    [records addObject:LegendRestorableWindowOptions(options)];
+  }
+  LegendWriteRestorableWindowOptions(records);
+}
+
+static void LegendRemovePrecreatedWindow(NSString *identifier)
+{
+  NSWindow *window = LegendPrecreatedWindows[identifier];
+  [LegendPrecreatedWindows removeObjectForKey:identifier];
+  [window close];
+}
+
+extern "C" NSWindow *LegendTakePrecreatedWindow(NSString *identifier)
+{
+  NSWindow *window = LegendPrecreatedWindows[identifier];
+  [LegendPrecreatedWindows removeObjectForKey:identifier];
+  return window;
+}
 
 static inline NSAppearance *LegendDarkAppearance()
 {
@@ -546,6 +651,89 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [rootView setNeedsLayout:YES];
 }
+
+extern "C" void LegendPrecreateRestorableWindows(void)
+{
+  if (LegendPrecreatedWindows != nil) {
+    return;
+  }
+
+  LegendPrecreatedWindows = [NSMutableDictionary new];
+  for (NSDictionary *options in LegendReadRestorableWindowOptions()) {
+    NSString *identifier = [options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : nil;
+    if (identifier.length == 0 || ![options[@"restoreOnLaunch"] boolValue]) {
+      continue;
+    }
+
+    NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class]
+      ? options[@"windowStyle"]
+      : @{};
+    NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
+    NSNumber *widthNumber = [windowStyle[@"width"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"width"]
+      : ([options[@"width"] isKindOfClass:NSNumber.class] ? options[@"width"] : nil);
+    NSNumber *heightNumber = [windowStyle[@"height"] isKindOfClass:NSNumber.class]
+      ? windowStyle[@"height"]
+      : ([options[@"height"] isKindOfClass:NSNumber.class] ? options[@"height"] : nil);
+    CGFloat width = widthNumber ? MAX(widthNumber.doubleValue, 1) : 400;
+    CGFloat height = heightNumber ? MAX(heightNumber.doubleValue, 1) : 300;
+    NSUInteger styleMask = maskNumber
+      ? maskNumber.unsignedIntegerValue
+      : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable);
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
+                                                   styleMask:styleMask
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    window.releasedWhenClosed = NO;
+    LegendApplyWindowOptions(window, options);
+
+    NSNumber *levelNumber = [options[@"level"] isKindOfClass:NSNumber.class] ? options[@"level"] : nil;
+    if (levelNumber) {
+      window.level = levelNumber.integerValue;
+    }
+    NSNumber *hasShadow = [options[@"hasShadow"] isKindOfClass:NSNumber.class] ? options[@"hasShadow"] : nil;
+    if (hasShadow) {
+      window.hasShadow = hasShadow.boolValue;
+    }
+    BOOL transparentBackground = [options[@"transparentBackground"] boolValue];
+    NSString *backgroundColor = [windowStyle[@"backgroundColor"] isKindOfClass:NSString.class]
+      ? windowStyle[@"backgroundColor"]
+      : nil;
+    NSColor *startupBackgroundColor = transparentBackground
+      ? NSColor.clearColor
+      : LegendWindowStartupBackgroundColor(window, backgroundColor);
+    window.backgroundColor = startupBackgroundColor;
+    window.opaque = !transparentBackground && startupBackgroundColor.alphaComponent >= 1;
+
+    NSView *placeholder = [[NSView alloc] initWithFrame:window.contentView.bounds];
+    placeholder.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    LegendApplyBackgroundColorToView(placeholder, startupBackgroundColor);
+    window.contentView = placeholder;
+
+    NSString *autosaveName = LegendManagedWindowFrameAutosaveName(identifier);
+    [window setFrameAutosaveName:autosaveName];
+    if (![window setFrameUsingName:autosaveName]) {
+      NSNumber *originX = [options[@"x"] isKindOfClass:NSNumber.class] ? options[@"x"] : nil;
+      NSNumber *originY = [options[@"y"] isKindOfClass:NSNumber.class] ? options[@"y"] : nil;
+      if (originX || originY) {
+        NSPoint origin = window.frame.origin;
+        origin.x = originX ? originX.doubleValue : origin.x;
+        origin.y = originY ? originY.doubleValue : origin.y;
+        [window setFrameOrigin:origin];
+      } else {
+        [window center];
+      }
+    }
+
+    LegendPrecreatedWindows[identifier] = window;
+    if (![options[@"deferOrderFront"] boolValue]) {
+      [window makeKeyAndOrderFront:nil];
+      if (levelNumber) {
+        [window orderFrontRegardless];
+      }
+    }
+  }
+}
 #endif
 
 @interface RNWindowManager ()
@@ -559,11 +747,13 @@ static void LegendSizeRootViewToWindow(RCTUIView *rootView, NSWindow *window)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSView *> *titlebarMaterialViews;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *toolbarItemConfigs;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, CIFilter *> *windowBlurFilters;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *windowOptions;
 @property (nonatomic, strong) NSMutableSet<NSString *> *closeRequestIdentifiers;
 @property (nonatomic, assign) BOOL hasListeners;
 @property (nonatomic, assign) BOOL mainWindowObserversInstalled;
 #if TARGET_OS_OSX
 - (void)sendToolbarSearchEventForField:(NSSearchField *)searchField submitted:(BOOL)submitted shiftKey:(BOOL)shiftKey;
+- (void)recordWindowOptions:(NSDictionary *)options identifier:(NSString *)identifier moduleName:(NSString *)moduleName;
 #endif
 @end
 
@@ -586,6 +776,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _titlebarMaterialViews = [NSMutableDictionary new];
     _toolbarItemConfigs = [NSMutableDictionary new];
     _windowBlurFilters = [NSMutableDictionary new];
+    _windowOptions = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
 #if TARGET_OS_OSX
     [NSNotificationCenter.defaultCenter addObserver:self
@@ -595,6 +786,10 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(mainWindowCloseRequested:)
                                                name:LegendMainWindowCloseRequestedNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(applicationWillTerminate:)
+                                               name:NSApplicationWillTerminateNotification
                                              object:nil];
 #endif
   }
@@ -1609,6 +1804,13 @@ willBeInsertedIntoToolbar:(BOOL)flag
       identifier = moduleName ?: @"default";
     }
 
+    // A caller can turn off restoration before the window has been adopted by
+    // React, so remove a native startup shell immediately when requested.
+    if (LegendDictionaryHasKey(options, @"restoreOnLaunch") && ![options[@"restoreOnLaunch"] boolValue]) {
+      LegendSetRestorableWindowOptions(identifier, nil);
+      LegendRemovePrecreatedWindow(identifier);
+    }
+
     NSString *title = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
     title = title ?: moduleName ?: @"New Window";
     BOOL hasRepresentedURL = LegendDictionaryHasKey(options, @"representedURL");
@@ -1798,6 +2000,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       if (!deferOrderFront || existingWindow.isVisible) {
         [existingWindow makeKeyAndOrderFront:nil];
       }
+      [self recordWindowOptions:options identifier:identifier moduleName:moduleName];
       resolve([self successJson]);
       return;
     }
@@ -1805,7 +2008,8 @@ willBeInsertedIntoToolbar:(BOOL)flag
     NSUInteger styleMask = maskNumber
       ? maskNumber.unsignedIntegerValue
       : (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable);
-    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
+    NSWindow *precreatedWindow = LegendTakePrecreatedWindow ? LegendTakePrecreatedWindow(identifier) : nil;
+    NSWindow *window = precreatedWindow ?: [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, width, height)
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
@@ -1853,7 +2057,9 @@ willBeInsertedIntoToolbar:(BOOL)flag
       window.contentView.layer.masksToBounds = NO;
     }
 
-    if (originX || originY) {
+    if (precreatedWindow) {
+      // Native startup already restored this window to its final AppKit frame.
+    } else if (originX || originY) {
       NSPoint origin = window.frame.origin;
       if (originX) {
         origin.x = originX.doubleValue;
@@ -1881,8 +2087,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendApplyBackgroundColorToView(window.contentView, startupBackgroundColor);
     }
 
-    BOOL presentedBeforeReactRoot = !deferOrderFront;
-    if (presentedBeforeReactRoot) {
+    if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue]) {
+      [window setFrameAutosaveName:LegendManagedWindowFrameAutosaveName(identifier)];
+    }
+    BOOL presentedBeforeReactRoot = precreatedWindow != nil || !deferOrderFront;
+    if (presentedBeforeReactRoot && !precreatedWindow) {
       [window.contentView displayIfNeeded];
       [window displayIfNeeded];
       [window makeKeyAndOrderFront:nil];
@@ -1927,6 +2136,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     self.windows[identifier] = window;
     self.rootViews[identifier] = rootView;
     self.moduleNames[identifier] = moduleName ?: @"";
+    [self recordWindowOptions:options identifier:identifier moduleName:moduleName];
     if (interceptClose) {
       [self.closeRequestIdentifiers addObject:identifier];
     } else {
@@ -2153,13 +2363,15 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
   RCTExecuteOnMainQueue(^{
     NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSDictionary *options = [self parseObjectJSON:optionsJson];
+    [self recordWindowOptions:options
+                   identifier:targetIdentifier
+                   moduleName:self.moduleNames[targetIdentifier] ?: @""];
     NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
     if (!window) {
       reject(@"window_not_found", @"Window not found", nil);
       return;
     }
-
-    NSDictionary *options = [self parseObjectJSON:optionsJson];
     LegendApplyWindowOptions(window, options);
     [self applyTitlebarControlsFromOptions:options toWindow:window identifier:targetIdentifier];
     [self applyToolbarItemsFromOptions:options toWindow:window identifier:targetIdentifier];
@@ -2419,6 +2631,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
                            body:@{@"hasVisibleWindows": hasVisibleWindows ?: @NO}];
 }
 
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+  LegendApplicationIsTerminating = YES;
+}
+
 - (void)mainWindowCloseRequested:(NSNotification *)notification
 {
   [self sendWindowEventWithName:@"onWindowCloseRequested"
@@ -2513,13 +2730,57 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
   [self.closeRequestIdentifiers removeObject:identifier];
   [self.toolbarItemConfigs removeObjectForKey:identifier];
+  NSDictionary *windowOptions = self.windowOptions[identifier];
+  if (!LegendApplicationIsTerminating && [windowOptions[@"restoreOnLaunch"] boolValue]) {
+    LegendSetRestorableWindowOptions(identifier, nil);
+  }
   [self.windows removeObjectForKey:identifier];
   [self.rootViews removeObjectForKey:identifier];
   [self.moduleNames removeObjectForKey:identifier];
+  [self.windowOptions removeObjectForKey:identifier];
   if (shouldCloseWindow && window) {
     [window close];
   }
   [self sendWindowEventWithName:@"onWindowClosed" body:@{@"identifier": identifier ?: @"", @"moduleName": moduleName ?: @""}];
+}
+
+- (void)recordWindowOptions:(NSDictionary *)options identifier:(NSString *)identifier moduleName:(NSString *)moduleName
+{
+  if (identifier.length == 0 || ![options isKindOfClass:NSDictionary.class]) {
+    return;
+  }
+
+  NSDictionary *persistedOptions = LegendFindRestorableWindowOptions(identifier);
+  NSDictionary *previousOptions = self.windowOptions[identifier] ?: persistedOptions ?: @{};
+  NSMutableDictionary *mergedOptions = [previousOptions mutableCopy];
+  [mergedOptions addEntriesFromDictionary:options];
+  NSDictionary *previousWindowStyle = [previousOptions[@"windowStyle"] isKindOfClass:NSDictionary.class]
+    ? previousOptions[@"windowStyle"]
+    : @{};
+  NSDictionary *nextWindowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class]
+    ? options[@"windowStyle"]
+    : nil;
+  if (nextWindowStyle) {
+    NSMutableDictionary *mergedWindowStyle = [previousWindowStyle mutableCopy];
+    [mergedWindowStyle addEntriesFromDictionary:nextWindowStyle];
+    mergedOptions[@"windowStyle"] = mergedWindowStyle;
+  }
+  mergedOptions[@"identifier"] = identifier;
+  if (moduleName.length > 0) {
+    mergedOptions[@"moduleName"] = moduleName;
+  }
+  self.windowOptions[identifier] = mergedOptions;
+
+  if (LegendDictionaryHasKey(options, @"restoreOnLaunch")) {
+    if ([options[@"restoreOnLaunch"] boolValue]) {
+      LegendSetRestorableWindowOptions(identifier, mergedOptions);
+    } else {
+      LegendSetRestorableWindowOptions(identifier, nil);
+      LegendRemovePrecreatedWindow(identifier);
+    }
+  } else if ([mergedOptions[@"restoreOnLaunch"] boolValue]) {
+    LegendSetRestorableWindowOptions(identifier, mergedOptions);
+  }
 }
 
 - (NSDictionary *)initialPropsFromOptions:(NSDictionary *)options
