@@ -70,6 +70,36 @@ Deck code is intentionally trusted and runs inside the app's Hermes runtime with
 
 Uniwind scans the entire deck directory on every successful compile, so static `className` values in local components are available without adding those files to the app project.
 
+## Content effects
+
+`Effect` can wrap static Markdown or React Native content and apply a GPU-animated Skia image filter. The built-in presets are `liquid`, `ripple`, `glitch`, and `pixelate`:
+
+```mdx
+<Effect preset="liquid" strength={14} speed={0.8} padding={24}>
+
+# Liquid typography
+
+</Effect>
+```
+
+Decks may provide a custom SkSL image-filter shader through the `shader` prop and additional numeric values through `uniforms`. Custom shaders receive `image` (the captured content), `resolution`, `time`, and `strength` automatically:
+
+```mdx
+export const invert = `
+  uniform shader image;
+  half4 main(float2 position) {
+    half4 color = image.eval(position);
+    return half4(1.0 - color.rgb, color.a);
+  }
+`
+
+<Effect shader={invert}>
+  <Text>Custom effect</Text>
+</Effect>
+```
+
+Effects snapshot their content and are intentionally non-interactive. The original React Native content remains visible if capture or shader compilation is unavailable.
+
 ## TypeGPU scenes
 
 The built-in `TypeGPU` component owns the React Native canvas, WebGPU device and

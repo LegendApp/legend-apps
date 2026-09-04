@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { getSlidesState, nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { CodeBlock } from "./CodeBlock";
+import { Effect } from "./Effect";
 import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
 import { getCodeLanguage, getCodeSource } from "./codeBlocks";
@@ -136,6 +137,7 @@ function MarkdownPre({ children }: { children?: ReactNode }) {
 
 const markdownComponents = {
   Deck,
+  Effect,
   Slide,
   View: NativeView,
   Text,
