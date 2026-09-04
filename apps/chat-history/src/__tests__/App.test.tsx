@@ -1,5 +1,5 @@
-import { getRecentChats } from "@legend-apps/chat-history";
-import { openWindow, setMainWindowOptions } from "@legend-apps/window-manager";
+import { getRecentChats, openChat, type ChatSummary } from "@legend-apps/chat-history";
+import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions } from "@legend-apps/window-manager";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { App, ChatHistoryWindow } from "../App";
 import { getChatBenchmarkConfig } from "../chatBenchmark";
@@ -29,6 +29,7 @@ jest.mock("@legend-apps/theme", () => ({
   }),
 }));
 jest.mock("@legend-apps/window-manager", () => ({
+  addApplicationReopenRequestedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
   openWindow: jest.fn().mockResolvedValue({ success: true }),
   setMainWindowOptions: jest.fn().mockResolvedValue({ success: true }),
 }));
@@ -56,7 +57,11 @@ describe("Chat History host window", () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(getRecentChats).mockResolvedValue([]);
+    jest.mocked(openChat).mockImplementation(() => new Promise(() => {}));
+  });
 
   afterEach(async () => {
     if (renderer) {
@@ -84,5 +89,36 @@ describe("Chat History host window", () => {
     });
     expect(openWindow).not.toHaveBeenCalled();
     expect(JSON.stringify(renderer!.toJSON())).toContain("No local Codex or Claude transcripts found.");
+  });
+
+  it("refreshes on reopen while retaining an unchanged selected transcript", async () => {
+    const original: ChatSummary = { id: "old", title: "Original", path: "/old.jsonl", provider: "codex", updatedAt: 1 };
+    const latest: ChatSummary = { id: "new", title: "New", path: "/new.jsonl", provider: "codex", updatedAt: 2 };
+    jest.mocked(getRecentChats).mockResolvedValueOnce([original]);
+    await act(async () => { renderer = create(<App />); });
+    expect(openChat).toHaveBeenCalledTimes(1);
+    const reopen = jest.mocked(addApplicationReopenRequestedListener).mock.calls[0]![0];
+    jest.mocked(getRecentChats).mockResolvedValueOnce([latest, { ...original }]);
+    await act(async () => { reopen({ hasVisibleWindows: false }); });
+    expect(getRecentChats).toHaveBeenCalledTimes(2);
+    expect(openChat).toHaveBeenCalledTimes(1);
+    const sidebar = renderer!.root.findAllByType("LegendList" as never)[0]!;
+    expect(sidebar.props.extraData).toBe(original.id);
+    expect(sidebar.props.data.some((entry: { summary?: ChatSummary }) => entry.summary?.id === latest.id)).toBe(true);
+    await act(async () => { reopen({ hasVisibleWindows: true }); });
+    expect(getRecentChats).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a stale catalog response after a newer reopen refresh", async () => {
+    let resolveInitial!: (chats: ChatSummary[]) => void;
+    jest.mocked(getRecentChats).mockReturnValueOnce(new Promise((resolve) => { resolveInitial = resolve; }));
+    await act(async () => { renderer = create(<App />); });
+    const reopen = jest.mocked(addApplicationReopenRequestedListener).mock.calls[0]![0];
+    const latest: ChatSummary = { id: "new", title: "New", path: "/new.jsonl", provider: "codex", updatedAt: 2 };
+    jest.mocked(getRecentChats).mockResolvedValueOnce([latest]);
+    await act(async () => { reopen({ hasVisibleWindows: false }); });
+    await act(async () => { resolveInitial([]); });
+    expect(openChat).toHaveBeenCalledTimes(1);
+    expect(setMainWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ title: "New" }));
   });
 });

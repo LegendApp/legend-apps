@@ -12,7 +12,7 @@ import {
   type ChatSummary,
 } from "@legend-apps/chat-history";
 import { useSystemLegendDisplayTheme } from "@legend-apps/theme";
-import { setMainWindowOptions } from "@legend-apps/window-manager";
+import { addApplicationReopenRequestedListener, setMainWindowOptions } from "@legend-apps/window-manager";
 import {
   LegendList,
   type LegendListDataSourceRenderItemProps,
@@ -483,7 +483,8 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const loadGenerationRef = useRef(0);
   const switchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const windowShownRef = useRef(false);
-  const selectedTitle = summaries.find((summary) => summary.id === selectedId)?.title;
+  const selectedSummary = summaries.find((summary) => summary.id === selectedId);
+  const selectedTitle = selectedSummary?.title;
 
   useEffect(() => {
     setMainWindowOptions({
@@ -507,33 +508,52 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         cancelPendingOpen();
       };
     }
-    void getRecentChats(20)
+    let catalogGeneration = 0;
+    const restoredId = readSelectedChatId();
+    const refreshCatalog = () => {
+      const generation = ++catalogGeneration;
+      void getRecentChats(20)
       .then((recentChats) => {
-        if (active) {
+        if (active && generation === catalogGeneration) {
           const sortedChats = [...recentChats].sort(sortChatsNewestFirst);
-          const restoredId = readSelectedChatId();
-          const initialId = sortedChats.some((summary) => summary.id === restoredId)
-            ? restoredId
-            : sortedChats[0]?.id;
-          setSummaries(sortedChats);
-          setSelectedId(initialId);
+          // Preserve unchanged models so reopening does not reload the selected transcript.
+          setSummaries((previous) => sortedChats.map((summary) => {
+            const existing = previous.find((candidate) => candidate.id === summary.id);
+            return existing && existing.path === summary.path && existing.provider === summary.provider
+              && existing.title === summary.title && existing.updatedAt === summary.updatedAt
+              ? existing : summary;
+          }));
+          setSelectedId((currentId) => {
+            const preferredId = currentId ?? restoredId;
+            return sortedChats.some((summary) => summary.id === preferredId)
+              ? preferredId : sortedChats[0]?.id;
+          });
+          setCatalogError(undefined);
           setCatalogLoading(false);
         }
       })
       .catch((error) => {
-        if (active) {
+        if (active && generation === catalogGeneration) {
           setCatalogError(errorMessage(error));
           setCatalogLoading(false);
         }
       });
+    };
+    refreshCatalog();
+    const reopenSubscription = addApplicationReopenRequestedListener(({ hasVisibleWindows }) => {
+      if (!hasVisibleWindows) {
+        refreshCatalog();
+      }
+    });
     return () => {
       active = false;
+      reopenSubscription.remove();
       cancelPendingOpen();
     };
   }, [benchmark]);
 
   useEffect(() => {
-    const selected = summaries.find((summary) => summary.id === selectedId);
+    const selected = selectedSummary;
     if (selected) {
       const generation = loadGenerationRef.current + 1;
       const openedAt = benchmark ? performance.now() : 0;
@@ -571,7 +591,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
           }
         });
     }
-  }, [benchmark, selectedId, summaries]);
+  }, [benchmark, selectedSummary]);
 
   useEffect(() => () => {
     if (switchTimerRef.current !== undefined) {

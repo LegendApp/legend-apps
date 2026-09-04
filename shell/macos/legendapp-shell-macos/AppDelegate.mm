@@ -373,11 +373,17 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   BOOL shouldHandleReopen = YES;
 
   if (isChatHistory) {
+    BOOL wasVisible = self.window.isVisible;
     if (self.window.isMiniaturized) {
       [self.window deminiaturize:self];
     }
     [self.window makeKeyAndOrderFront:self];
     [NSApp activateIgnoringOtherApps:YES];
+    if (!wasVisible) {
+      [NSNotificationCenter.defaultCenter postNotificationName:LegendApplicationReopenRequestedNotification
+                                                        object:self
+                                                      userInfo:@{@"hasVisibleWindows": @NO}];
+    }
     shouldHandleReopen = NO;
   } else if (isMusic) {
     if (self.window == nil) {
