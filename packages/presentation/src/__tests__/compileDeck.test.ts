@@ -112,6 +112,25 @@ describe("compileDeck", () => {
     expect(result.code).toContain("Explain that the expression renders live values.");
   });
 
+  test("lowers async code in MDX and local components for Hermes", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": `import { compute } from "./compute"\n\nexport async function answer() { return await compute(); }\n\n# Async deck`,
+      "compute.ts": `export async function compute() { return await Promise.resolve(42); }`,
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    // The inline sourcemap includes the original source; only inspect executable JS.
+    const code = result.code.split("//# sourceMappingURL=")[0];
+    expect(code).not.toMatch(/\basync\s+(?:function|\()/);
+    const module = { exports: {} };
+    new Function("module", "exports", "require", code)(module, module.exports, (name) => {
+      if (name === "react/jsx-runtime") return { jsx() {}, jsxs() {} };
+      throw new Error(`Unexpected import: ${name}`);
+    });
+    expect(await module.exports.answer()).toBe(42);
+  });
+
   test("compiles inline HTML, local pages, and React DOM components for Webview", async () => {
     const deckPath = createDeck({
       "deck.mdx": [

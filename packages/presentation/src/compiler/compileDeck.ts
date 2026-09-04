@@ -279,6 +279,8 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
       sourcemap: "inline",
+      // Decks bypass Metro's Babel pass. Hermes cannot evaluate async syntax.
+      supported: { "async-await": false, "async-generator": false },
       target: "es2020",
       write: false,
     });
