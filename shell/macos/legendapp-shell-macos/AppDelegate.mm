@@ -543,7 +543,12 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
   self.window.autorecalculatesKeyViewLoop = YES;
 
-  if (isChatHistory) {
+  BOOL isChatHistoryBenchmark = isChatHistory && [NSProcessInfo.processInfo.arguments
+    indexOfObjectPassingTest:^BOOL(NSString *argument, NSUInteger index, BOOL *stop) {
+      return [argument hasPrefix:@"--chat-history-benchmark="];
+    }] != NSNotFound;
+  if (isChatHistoryBenchmark) {
+    // Fixed benchmark geometry must not override a normal user's saved window frame.
     [self.window setContentSize:frame.size];
     [self.window center];
   } else {
