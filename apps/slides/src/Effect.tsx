@@ -11,9 +11,10 @@ import {
   type Uniform,
 } from "@shopify/react-native-skia";
 import { renderNativeChildren, useSlideLifecycle } from "@legend-apps/presentation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
+import { SlideCaptureContext } from "./SlideCaptureContext";
 
 type EffectProps = {
   children?: ReactNode;
@@ -111,19 +112,23 @@ export function Effect({
   uniforms,
 }: EffectProps) {
   const { isActive, isPreview } = useSlideLifecycle();
+  const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
-  const imageRef = useRef<SkImage | undefined>(undefined);
-  const [image, setImage] = useState<SkImage>();
+  const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
   const [size, setSize] = useState({ height: 0, width: 0 });
   const source = resolveEffectSource(preset, shader);
   const runtimeEffect = useMemo(() => source ? Skia.RuntimeEffect.Make(source) ?? undefined : undefined, [source]);
   const shouldRender = isActive || isPreview;
+  const image = snapshot?.scale === captureScale && snapshot.width === size.width && snapshot.height === size.height
+    ? snapshot.image : undefined;
 
   useEffect(() => {
-    if (!runtimeEffect || !shouldRender || imageRef.current || size.width === 0 || size.height === 0) {
+    setSnapshot(undefined);
+    if (!runtimeEffect || !shouldRender || captureScale <= 0 || size.width === 0 || size.height === 0) {
       return;
     }
     let cancelled = false;
+    let captured: SkImage | undefined;
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {
         void makeImageFromView(sourceRef).then((snapshot) => {
@@ -134,8 +139,8 @@ export function Effect({
             snapshot.dispose();
             return;
           }
-          imageRef.current = snapshot;
-          setImage(snapshot);
+          captured = snapshot;
+          setSnapshot({ image: snapshot, scale: captureScale, width: size.width, height: size.height });
         }).catch(() => {
           // Unsupported capture paths fall back to the unfiltered children.
         });
@@ -144,20 +149,13 @@ export function Effect({
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
+      captured?.dispose();
     };
-  }, [runtimeEffect, shouldRender, size.height, size.width]);
-
-  useEffect(() => () => {
-    imageRef.current?.dispose();
-    imageRef.current = undefined;
-  }, []);
+  }, [captureScale, runtimeEffect, shouldRender, size.height, size.width]);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextSize = event.nativeEvent.layout;
     if (nextSize.width !== size.width || nextSize.height !== size.height) {
-      imageRef.current?.dispose();
-      imageRef.current = undefined;
-      setImage(undefined);
       setSize({ height: nextSize.height, width: nextSize.width });
     }
   };

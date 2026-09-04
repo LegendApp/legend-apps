@@ -28,6 +28,7 @@ import { CodeBlock } from "./CodeBlock";
 import { Effect } from "./Effect";
 import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
+import { SlideCaptureContext } from "./SlideCaptureContext";
 import { getCodeLanguage, getCodeSource } from "./codeBlocks";
 
 function parseObject<T extends object>(value: string, fallback: T) {
@@ -190,7 +191,7 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
   );
 }
 
-export function SlideCanvas({ children }: { children: ReactNode }) {
+export function SlideCanvas({ children, captureEnabled = true }: { children: ReactNode; captureEnabled?: boolean }) {
   const config = useSlidesState((state) => state.config);
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   const aspectParts = config.aspectRatio?.split(/[/:]/).map(Number) ?? [];
@@ -211,7 +212,9 @@ export function SlideCanvas({ children }: { children: ReactNode }) {
         contentWidth={width}
         style={[styles.stage, { backgroundColor, height: renderedHeight, width: renderedWidth }]}
       >
-        {children}
+        <SlideCaptureContext.Provider value={captureEnabled ? scale : 0}>
+          {children}
+        </SlideCaptureContext.Provider>
       </ScaledView>
     </View>
   );

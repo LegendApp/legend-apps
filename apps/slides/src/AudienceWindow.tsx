@@ -80,7 +80,9 @@ export function AudienceWindow() {
         const isPreload = layer.index === preloadIndex && !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         return (
           <Animated.View key={layer.index} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
-            <SlideCanvas><DeckRenderer isPreview={isPreload} targetIndex={layer.index} /></SlideCanvas>
+            <SlideCanvas captureEnabled={!isPreload && outgoingSlide === null}>
+              <DeckRenderer isPreview={isPreload} targetIndex={layer.index} />
+            </SlideCanvas>
           </Animated.View>
         );
       })}
