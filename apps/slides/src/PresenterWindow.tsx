@@ -15,7 +15,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { getLastDeckPath, loadDeck } from "./deckLoader";
+import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import { getPresentationDisplayId, rememberPresentationDisplayId } from "./slidesPreferences";
 import { nextSlide, previousSlide, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { slidesWindows } from "./slidesWindows";
@@ -213,6 +213,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   }, []);
 
   const openAudience = useCallback(async (display?: Display) => {
+    setSlidesState({ deckLocked: true });
     const frame = display?.frame;
     const rehearsalFrame = displays.find((candidate) => candidate.isMain)?.visibleFrame;
     const rehearsalWidth = Math.min(1280, rehearsalFrame?.width ?? 1280);
@@ -386,6 +387,19 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
         <View style={styles.sidebar}>
           <PresenterClock audienceOpen={state.audienceOpen} />
+          <Text style={styles.sidebarTitle}>Deck Updates</Text>
+          <Button
+            label={state.deckLocked ? "Unlock Live Updates" : "Lock Deck"}
+            onPress={() => setSlidesState({ deckLocked: !state.deckLocked })}
+          />
+          <Text style={styles.displayMeta}>{state.deckLocked ? "Deck locked. Saves will not change the stage." : "Live updates enabled."}</Text>
+          {state.status === "building" && <Text style={styles.displayMeta}>Compiling changes…</Text>}
+          {state.pendingDeck && (
+            <View style={{ gap: 8, marginTop: 8 }}>
+              <Text style={styles.displayMeta}>Update ready: {state.pendingDeck.path.split("/").pop()}</Text>
+              <Button label="Apply Update Now" onPress={applyPendingDeck} />
+            </View>
+          )}
           <Text style={styles.sidebarTitle}>Slide Navigator</Text>
           <SlideJump onFocusChange={(focused) => { jumpInputFocused.current = focused; }} slideCount={state.slides.length} />
           <Button

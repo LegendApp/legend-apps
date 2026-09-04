@@ -20,8 +20,8 @@ import * as TypeGPUData from "typegpu/data";
 import * as TypeGPUStd from "typegpu/std";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
-import type { CompileDeckResult } from "@legend-apps/presentation";
-import { failedDeckUpdate, successfulDeckUpdate } from "./deckBuildPolicy";
+import type { CompileDeckResult, CompileDeckSuccess } from "@legend-apps/presentation";
+import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "./deckBuildPolicy";
 import { getLastDeckPath, rememberDeckPath } from "./slidesPreferences";
 import { getSlidesState, setSlidesState } from "./slidesStore";
 
@@ -131,13 +131,16 @@ export { getLastDeckPath } from "./slidesPreferences";
 export async function loadDeck(path: string, remember = true) {
   const sequence = ++buildSequence;
   watchDeckDirectory(path);
-  setSlidesState({ buildErrors: [], deckPath: path, status: "building" });
+  setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
   if (!compilerPath) {
     setSlidesState({ buildErrors: ["The slides compiler path was not included in this build."], status: "error" });
     return;
   }
 
   const availability = await commandRunner.getAvailability(["bun"]);
+  if (sequence !== buildSequence) {
+    return;
+  }
   if (!availability.bun) {
     setSlidesState({ buildErrors: ["Bun is required to compile local MDX decks."], status: "error" });
     return;
@@ -173,6 +176,23 @@ export async function loadDeck(path: string, remember = true) {
     return;
   }
 
+  // Do not evaluate deck code or replace global styles until the presenter
+  // explicitly accepts the build. Check the lock after the asynchronous build.
+  if (shouldDeferDeckUpdate(getSlidesState())) {
+    setSlidesState({ pendingDeck: { path, result, remember }, status: "ready", buildWarnings: result.warnings });
+    return;
+  }
+  publishDeck(result, path, remember);
+}
+
+export function applyPendingDeck() {
+  const pending = getSlidesState().pendingDeck;
+  if (pending) {
+    publishDeck(pending.result, pending.path, pending.remember);
+  }
+}
+
+function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean) {
   try {
     const component = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);

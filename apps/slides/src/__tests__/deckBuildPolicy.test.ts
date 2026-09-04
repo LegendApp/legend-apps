@@ -1,12 +1,14 @@
 // @ts-nocheck Bun's test globals are intentionally scoped to this standalone test suite.
 import { describe, expect, test } from "bun:test";
-import { failedDeckUpdate, successfulDeckUpdate } from "../deckBuildPolicy";
+import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "../deckBuildPolicy";
 
 const LastGoodDeck = () => null;
 const RebuiltDeck = () => null;
 
 function readyState() {
   return {
+    deckLocked: false,
+    pendingDeck: null,
     audienceOpen: true,
     blackout: false,
     buildErrors: [],
@@ -22,6 +24,19 @@ function readyState() {
 }
 
 describe("deck build policy", () => {
+  test("defers replacement of a locked deck but permits initial loading", () => {
+    expect(shouldDeferDeckUpdate({ ...readyState(), deckLocked: true })).toBe(true);
+    expect(shouldDeferDeckUpdate(readyState())).toBe(false);
+    expect(shouldDeferDeckUpdate({ ...readyState(), component: null, deckLocked: true })).toBe(false);
+  });
+
+  test("applying a pending build preserves the lock and slide position", () => {
+    const current = { ...readyState(), deckLocked: true, pendingDeck: { path: "/deck/deck.mdx" } };
+    const applied = { ...current, ...successfulDeckUpdate(current, RebuiltDeck, "/deck/deck.mdx", []) };
+    expect(applied.deckLocked).toBe(true);
+    expect(applied.pendingDeck).toBeNull();
+    expect(applied.currentSlide).toBe(4);
+  });
   test("keeps the last successful deck and slide visible after a failed rebuild", () => {
     const current = readyState();
     const update = failedDeckUpdate({ errors: ["deck.mdx:2:4: Unexpected token"], success: false, warnings: [] });

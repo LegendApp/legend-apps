@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { ComponentType } from "react";
 import type { DeckConfig, SlideConfig } from "@legend-apps/presentation";
+import type { CompileDeckSuccess } from "@legend-apps/presentation";
 
 export type DeckSlide = {
   metadata: SlideConfig;
@@ -8,6 +9,8 @@ export type DeckSlide = {
 };
 
 export type SlidesState = {
+  deckLocked: boolean;
+  pendingDeck: { path: string; result: CompileDeckSuccess; remember: boolean } | null;
   audienceOpen: boolean;
   blackout: boolean;
   buildErrors: string[];
@@ -22,6 +25,8 @@ export type SlidesState = {
 };
 
 let state: SlidesState = {
+  deckLocked: false,
+  pendingDeck: null,
   audienceOpen: false,
   blackout: false,
   buildErrors: [],

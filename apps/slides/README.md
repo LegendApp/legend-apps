@@ -12,6 +12,12 @@ bun run slides run macos -- apps/slides/examples/showcase.mdx
 
 Bun compiles the deck when it opens and whenever a file in the deck directory changes. A failed rebuild leaves the last successful deck on screen and reports the error in the presenter window.
 
+Opening the audience window locks the deck. Saves continue to compile, but new
+code and styles are held until **Apply Update Now** is pressed. The lock stays
+enabled after applying an update or stopping the audience window. Use **Unlock
+Live Updates** to resume automatic updates; an already queued build still needs
+to be applied explicitly. Opening another deck while locked queues it too.
+
 `examples/showcase.mdx` exercises inline and fenced code, executable expressions, local TypeScript components, React state, speaker notes, per-slide transitions, and a lifecycle-aware React Native animation. `examples/demo.mdx` is a smaller starting point.
 
 ## Deck format
