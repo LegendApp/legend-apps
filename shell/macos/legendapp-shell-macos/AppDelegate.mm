@@ -367,11 +367,19 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 {
   NSString *appId = LegendCurrentAppId();
   BOOL isMusic = [appId isEqualToString:@"music"];
+  BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
   BOOL isDiff = [appId isEqualToString:@"diff"];
   BOOL hostWindowHidden = LegendHostWindowHidden();
   BOOL shouldHandleReopen = YES;
 
-  if (isMusic) {
+  if (isChatHistory) {
+    if (self.window.isMiniaturized) {
+      [self.window deminiaturize:self];
+    }
+    [self.window makeKeyAndOrderFront:self];
+    [NSApp activateIgnoringOtherApps:YES];
+    shouldHandleReopen = NO;
+  } else if (isMusic) {
     if (self.window == nil) {
       [self loadReactNativeWindow:nil];
     } else if (!self.window.isVisible) {
@@ -437,10 +445,12 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 - (BOOL)windowShouldClose:(NSWindow *)sender
 {
   NSString *appId = LegendCurrentAppId();
-  BOOL shouldHideMusicWindow = [appId isEqualToString:@"music"] && sender == self.window;
+  BOOL shouldHideHostWindow = ([appId isEqualToString:@"music"] || [appId isEqualToString:@"chat-history"])
+    && sender == self.window;
   BOOL shouldRequestDiffWindowClose = [appId isEqualToString:@"diff"] && sender == self.window;
 
-  if (shouldHideMusicWindow) {
+  if (shouldHideHostWindow) {
+    // Keep the root view and JavaScript runtime alive for the next Dock reopen.
     [self.window orderOut:self];
   }
 
@@ -449,7 +459,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
                                                       object:self];
   }
 
-  return !shouldHideMusicWindow && !shouldRequestDiffWindowClose;
+  return !shouldHideHostWindow && !shouldRequestDiffWindowClose;
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -517,6 +527,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     [self.window setDelegate:self];
   } else if (isChatHistory) {
     LegendConfigureChatHistoryWindow(self.window);
+    [self.window setDelegate:self];
   } else if (isDiff) {
     LegendConfigureDiffWindow(self.window);
     [self.window setDelegate:self];

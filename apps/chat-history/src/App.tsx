@@ -11,15 +11,8 @@ import {
   type ChatProvider,
   type ChatSummary,
 } from "@legend-apps/chat-history";
-import { getSystemLegendDisplayTheme, useSystemLegendDisplayTheme } from "@legend-apps/theme";
-import { setWindowOptions } from "@legend-apps/window-manager";
-import {
-  createUnifiedToolbarWindowStyle,
-  createWindowsNavigator,
-  type WindowsConfig,
-  usePrimaryWindowLifecycle,
-  useWindowId,
-} from "@legend-apps/windows";
+import { useSystemLegendDisplayTheme } from "@legend-apps/theme";
+import { setMainWindowOptions } from "@legend-apps/window-manager";
 import {
   LegendList,
   type LegendListDataSourceRenderItemProps,
@@ -46,8 +39,6 @@ import { TranscriptRow } from "./TranscriptRow";
 
 Uniwind.setTheme("system");
 
-const CHAT_HISTORY_WINDOW_IDENTIFIER = "chat-history";
-const CHAT_HISTORY_WINDOW_MODULE_NAME = "ChatHistoryWindow";
 const CHAT_HISTORY_TITLEBAR_HEIGHT = sidebarSplitViewTitlebarMetrics.contentInsetTop;
 const CHAT_HISTORY_SIDEBAR_TOP_INSET = sidebarSplitViewTitlebarMetrics.sidebarInsetTop;
 const CHAT_COMPOSER_INITIAL_HEIGHT = 90;
@@ -482,7 +473,6 @@ type ChatHistoryWindowProps = {
 };
 
 export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
-  const windowIdentifier = useWindowId();
   const displayTheme = useSystemLegendDisplayTheme();
   const benchmark = useMemo(() => getChatBenchmarkConfig(launchArguments), [launchArguments]);
   const [summaries, setSummaries] = useState<ChatSummary[]>([]);
@@ -496,7 +486,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const selectedTitle = summaries.find((summary) => summary.id === selectedId)?.title;
 
   useEffect(() => {
-    setWindowOptions(windowIdentifier, {
+    setMainWindowOptions({
       title: selectedTitle ?? "Legend Chat History",
       windowStyle: {
         appearance: "system",
@@ -504,7 +494,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         titlebarSeparatorStyle: "shadow",
       },
     }).catch(reportChatHistoryWindowError);
-  }, [displayTheme.colors.windowBackground, selectedTitle, windowIdentifier]);
+  }, [displayTheme.colors.windowBackground, selectedTitle]);
 
   useEffect(() => {
     let active = true;
@@ -656,45 +646,6 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   );
 }
 
-const chatHistoryWindowsConfig = {
-  [CHAT_HISTORY_WINDOW_MODULE_NAME]: {
-    component: ChatHistoryWindow,
-    identifier: CHAT_HISTORY_WINDOW_IDENTIFIER,
-    options: {
-      title: "Legend Chat History",
-      transparentBackground: true,
-      windowStyle: {
-        ...createUnifiedToolbarWindowStyle({
-          appearance: "system",
-          frame: {
-            width: 1280,
-            height: 720,
-            minWidth: 640,
-            minHeight: 460,
-          },
-          includeFrame: true,
-          miniaturizable: true,
-        }),
-        contentLayoutMode: "fullSize",
-        titlebarSeparatorStyle: "shadow",
-        titleVisibility: "visible",
-        titlebarControls: [],
-      },
-    },
-  },
-} satisfies WindowsConfig;
-
-const ChatHistoryWindowsNavigator = createWindowsNavigator(chatHistoryWindowsConfig);
-
-function openChatHistoryWindow(launchArguments?: string[]) {
-  return ChatHistoryWindowsNavigator.open(CHAT_HISTORY_WINDOW_MODULE_NAME, {
-    initialProperties: launchArguments ? { launchArguments } : undefined,
-    windowStyle: {
-      backgroundColor: getSystemLegendDisplayTheme().colors.windowBackground,
-    },
-  });
-}
-
 function reportChatHistoryWindowError(error: unknown) {
   console.error(`[ChatHistoryWindow] ${errorMessage(error)}`);
 }
@@ -704,14 +655,7 @@ type ChatHistoryAppProps = {
 };
 
 export function App({ launchArguments }: ChatHistoryAppProps) {
-  const handleOpen = useCallback(() => openChatHistoryWindow(launchArguments), [launchArguments]);
-  usePrimaryWindowLifecycle({
-    onInitialOpen: handleOpen,
-    onReopenRequested: handleOpen,
-    reportError: reportChatHistoryWindowError,
-  });
-
-  return null;
+  return <ChatHistoryWindow launchArguments={launchArguments} />;
 }
 
 export default App;
