@@ -164,4 +164,30 @@ own non-TypeGPU resources.
 
 ## Current packaging constraint
 
-The compiler path is embedded by the repository's development commands, so the app currently runs decks from a source checkout with Bun installed. Bundling the compiler into a distributable `.app` is separate release-packaging work.
+The compiler path is embedded by the repository's build and development commands, so the app currently runs decks from a source checkout with Bun installed. Bundling the compiler into a distributable `.app` is separate release-packaging work.
+
+## Presentation build (no Metro)
+
+Build a release app on the machine you will present from, after your deck and
+dependencies are ready:
+
+```sh
+bun install --frozen-lockfile
+bun run slides build macos
+bun run slides open macos --release -- /absolute/path/to/talk.mdx
+```
+
+This embeds the application JavaScript and the checkout's compiler path; it
+does not connect to Metro. Keep this checkout and Bun available at the same
+paths until after your talk, and keep all local deck files together. The app
+still invokes Bun to compile decks, so this is a personal presentation build,
+not a standalone app you can copy to another computer. Run the **open** command
+before the talk rather than rebuilding or installing dependencies at the venue.
+Quit any existing Slides process before opening this build.
+
+Before relying on this build, confirm it actually opens your deck with Metro
+stopped. A successful native build alone is not a passing rehearsal. If deck
+compilation times out, compare with `bun scripts/compile-slides.ts <deck.mdx>`
+and check for macOS file-access prompts for Legend Slides, especially when the
+checkout or deck is in Documents. Do not grant Full Disk Access as a blanket
+workaround; investigate the specific file-access failure first.

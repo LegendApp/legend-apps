@@ -12,7 +12,7 @@ import {
 } from "./lib/macosWorkspaces";
 import { getMacOSAppWrapperName, macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
 import { writeGeneratedConfig } from "./lib/nativeModules";
-import { runCommand, runPlatformCommand } from "./lib/run";
+import { getSlidesCompilerPath, runCommand, runPlatformCommand } from "./lib/run";
 import type { MacOSReleaseArch, Platform } from "./lib/types";
 
 function parseMacOSBuildArch(args: string[]) {
@@ -163,6 +163,8 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         cwd: shellDir,
         env: {
           ...getMacOSEnv(appId, generated.configPath, appRoot),
+          EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH: appId === "slides" ? getSlidesCompilerPath() : undefined,
+          NODE_ENV: "production",
           LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
         },
       },
