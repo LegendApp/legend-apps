@@ -12,7 +12,7 @@ import {
 } from "./lib/macosWorkspaces";
 import { getMacOSAppWrapperName, macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
 import { writeGeneratedConfig } from "./lib/nativeModules";
-import { getSlidesCompilerPath, runCommand, runPlatformCommand } from "./lib/run";
+import { getMacOSDevelopmentSigningArgs, getSlidesCompilerPath, runCommand, runPlatformCommand } from "./lib/run";
 import type { MacOSReleaseArch, Platform } from "./lib/types";
 
 function parseMacOSBuildArch(args: string[]) {
@@ -158,6 +158,9 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         `ARCHS=${getXcodeArch(arch)}`,
         "ONLY_ACTIVE_ARCH=NO",
         "DEPLOYMENT_POSTPROCESSING=YES",
+        ...getMacOSDevelopmentSigningArgs(
+          process.env.LEGEND_MACOS_DEVELOPMENT_TEAM ?? manifest.signing?.macos?.developmentTeam,
+        ),
       ],
       {
         cwd: shellDir,

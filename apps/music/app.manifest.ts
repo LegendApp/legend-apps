@@ -57,11 +57,6 @@ const manifest = {
       NSAppleMusicUsageDescription: "Legend Music uses Apple Music to search your catalog, show playlists, and play tracks.",
     },
   },
-  signing: {
-    macos: {
-      developmentTeam: "56DD97VT22",
-    },
-  },
   release: {
     macos: {
       sparkle: {

@@ -70,6 +70,17 @@ function readStringArg(args: string[], names: string[], defaultValue: string) {
   return defaultValue;
 }
 
+export function getMacOSDevelopmentSigningArgs(developmentTeam?: string) {
+  return developmentTeam
+    ? [
+        `DEVELOPMENT_TEAM=${developmentTeam}`,
+        "CODE_SIGN_STYLE=Automatic",
+        "CODE_SIGN_IDENTITY=Apple Development",
+        "-allowProvisioningUpdates",
+      ]
+    : [];
+}
+
 function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string | undefined>) {
   const mode = readStringArg(args, ["--mode", "--configuration"], "Debug");
   const projectPath = readStringArg(args, ["--project-path"], "macos");
@@ -82,14 +93,7 @@ function runMacOSBuildForLaunchArgs(args: string[], env: Record<string, string |
   const containerArgs = fs.existsSync(workspacePath)
     ? ["-workspace", workspacePath]
     : ["-project", xcodeProjectPath];
-  const developmentTeam = env.LEGEND_MACOS_DEVELOPMENT_TEAM;
-  const signingArgs = developmentTeam
-    ? [
-        `DEVELOPMENT_TEAM=${developmentTeam}`,
-        "CODE_SIGN_STYLE=Automatic",
-        "-allowProvisioningUpdates",
-      ]
-    : [];
+  const signingArgs = getMacOSDevelopmentSigningArgs(env.LEGEND_MACOS_DEVELOPMENT_TEAM);
 
   runCommand(
     "xcodebuild",

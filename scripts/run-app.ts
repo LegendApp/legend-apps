@@ -178,7 +178,8 @@ async function main() {
       {
         ...getMacOSEnv(command.appId, generated.configPath),
         LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
-        LEGEND_MACOS_DEVELOPMENT_TEAM: manifest.signing?.macos?.developmentTeam,
+        LEGEND_MACOS_DEVELOPMENT_TEAM:
+          process.env.LEGEND_MACOS_DEVELOPMENT_TEAM ?? manifest.signing?.macos?.developmentTeam,
       },
     );
     return;

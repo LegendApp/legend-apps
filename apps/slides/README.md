@@ -185,6 +185,13 @@ not a standalone app you can copy to another computer. Run the **open** command
 before the talk rather than rebuilding or installing dependencies at the venue.
 Quit any existing Slides process before opening this build.
 
+Slides uses the same Apple development team as Music for local debug and
+presentation builds. Install a valid Apple Development signing identity for
+that team in Keychain before building. The build preserves that identity when
+re-signing processed assets and Hermes. macOS may ask for Documents access once
+when switching from an ad-hoc build; using the same signing identity and bundle
+ID on later builds lets it recognize the app and retain the approval.
+
 Before relying on this build, confirm it actually opens your deck with Metro
 stopped. A successful native build alone is not a passing rehearsal. If deck
 compilation times out, compare with `bun scripts/compile-slides.ts <deck.mdx>`
