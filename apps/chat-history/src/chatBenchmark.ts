@@ -85,14 +85,23 @@ function flushChatBenchmarkEvents(config: ChatBenchmarkConfig) {
   pendingEventsByFile.delete(config.eventFileName);
   const events = eventsByFile.get(config.eventFileName) ?? [];
   for (const pending of pendingEvents) {
-    const startupTiming = pending.event.name === "contentReady"
+    const startupTiming = pending.event.name === "contentReady" || pending.event.name === "windowShown"
       ? getReactNativeStartupTiming()
       : undefined;
+    const nativeWindowTime = startupTiming?.mainWindowFirstVisibleTime;
+    const clockOffset = startupTiming?.clockOffsetMs;
+    // The host is presented before React mounts. Convert its native timestamp only
+    // during the deferred flush so reporting still does no work on the layout path.
+    const timestampMs = pending.event.name === "windowShown"
+      && typeof nativeWindowTime === "number" && nativeWindowTime > 0 && Number.isFinite(nativeWindowTime)
+      && typeof clockOffset === "number" && Number.isFinite(clockOffset)
+      ? nativeWindowTime + clockOffset
+      : pending.timestampMs;
     events.push({
       ...pending.event,
       reactNativeClockOffsetMs: startupTiming?.clockOffsetMs,
       reactNativeStartupTiming: startupTiming,
-      timestampMs: pending.timestampMs,
+      timestampMs,
     });
   }
   eventsByFile.set(config.eventFileName, events);
