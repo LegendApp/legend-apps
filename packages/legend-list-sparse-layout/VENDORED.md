@@ -7,23 +7,23 @@ unstable npm package, Git branch, or downloadable artifact.
 ## Source
 
 - Repository: `https://github.com/LegendApp/legend-list`
-- Branch at build time: `codex/sparse-layout`
-- Commit: `94dfeeda7ef4037faee459e8113436dc6855ea4a`
+- Branch at build time: `codex/chat-tail-estimates`
+- Commit: `67a3cbc94c4f4109212a0cb5a21bccf4b7b0227d`
 - Base: Legend List `main` 3.3.5 at `80193ceda8f54b31e26b53f8a0ebb8cc07aa9bf0`
-- Built: 2026-08-18
-- Local revision: `2`
-- Local patch: reject transient React Native macOS Fabric layout measurements
+- Built: 2026-09-05
+- Added API: `getEstimatedItemSize` supplies heterogeneous, non-authoritative
+  first-layout estimates while preserving measured sizes as authoritative.
+- Included fix: reject transient React Native macOS Fabric layout measurements
   that exceed the window viewport or have no cross-axis size during bootstrap
   initial scrolling. This prevents padding- or content-sized `onLayout`
   measurements from replacing the real viewport and disabling virtualization.
-- Ported fix: Legend List commit `6d423f31752d7c1db8b01ed4c66c06fb7a3b465e`
+- Included fix: Legend List commit `6d423f31752d7c1db8b01ed4c66c06fb7a3b465e`
   (`fix: keep recycled container renders coherent across prepends`), adapted
   to preserve sparse `dataSource` assignments without reading additional rows.
 
 The files in this directory are the publish-ready output produced by running
 `bun run build` in the source checkout. The package version includes the source
-commit prefix and local revision so Bun cannot silently substitute a public
-npm release.
+commit prefix so Bun cannot silently substitute a public npm release.
 
 ## Updating
 

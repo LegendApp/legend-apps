@@ -318,6 +318,11 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
      */
     estimatedItemSize?: number;
     /**
+     * Returns an item-specific size estimate used before measurement. Unlike
+     * `getFixedItemSize`, the measured size remains authoritative.
+     */
+    getEstimatedItemSize?: (item: ItemT, index: number, type: TItemType) => number | undefined;
+    /**
      * Estimated size of the ScrollView in pixels, a hint for the first render to improve performance
      * @default undefined
      */

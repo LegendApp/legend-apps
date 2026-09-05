@@ -1423,7 +1423,7 @@ function getItemSize(ctx, key, index, data, useAverageSize, preferCachedSize, no
   const {
     sizes,
     averageSizes,
-    props: { estimatedItemSize, getItemType },
+    props: { estimatedItemSize, getEstimatedItemSize, getItemType },
     scrollingTo
   } = state;
   const sizeKnown = state.sizesKnown.get(key);
@@ -1437,9 +1437,15 @@ function getItemSize(ctx, key, index, data, useAverageSize, preferCachedSize, no
     setSize(ctx, key, size, notifyTotalSize);
     return size;
   }
-  (_b = resolved == null ? void 0 : resolved.itemType) != null ? _b : getItemType ? (_a3 = getItemType(data, index)) != null ? _a3 : "" : "";
+  const itemType = (_b = resolved == null ? void 0 : resolved.itemType) != null ? _b : getItemType ? (_a3 = getItemType(data, index)) != null ? _a3 : "" : "";
   if (size === void 0 && renderedSize !== void 0) {
     return renderedSize;
+  }
+  if (size === void 0 && getEstimatedItemSize) {
+    const estimatedSize = getEstimatedItemSize(data, index, itemType);
+    if (estimatedSize !== void 0) {
+      size = estimatedSize + ctx.scrollAxisGap;
+    }
   }
   if (size === void 0) {
     size = estimatedItemSize + ctx.scrollAxisGap;
@@ -8155,24 +8161,25 @@ var DataSourceObserver = class {
 
 // src/core/doInitialAllocateContainers.ts
 function doInitialAllocateContainers(ctx) {
-  var _a3;
+  var _a3, _b, _c;
   const state = ctx.state;
   const {
     scrollLength,
-    props: { getFixedItemSize, numColumns, estimatedItemSize }
+    props: { getEstimatedItemSize, getFixedItemSize, getItemType, numColumns, estimatedItemSize }
   } = state;
   const dataLength = getDataLength(state);
   const drawDistance = getEffectiveDrawDistance(ctx);
   const hasContainers = peek$(ctx, "numContainers");
   if (scrollLength > 0 && dataLength > 0 && !hasContainers) {
     let averageItemSize;
-    if (getFixedItemSize) {
+    if (getFixedItemSize || getEstimatedItemSize) {
       let totalSize = 0;
       const num = Math.min(20, dataLength);
       for (let i = 0; i < num; i++) {
         const item = getDataItem(state, i);
         if (item !== void 0) {
-          totalSize += (_a3 = getFixedItemLayoutSize(ctx, i, item)) != null ? _a3 : estimatedItemSize + ctx.scrollAxisGap;
+          const itemType = (_a3 = getItemType == null ? void 0 : getItemType(item, i)) != null ? _a3 : "";
+          totalSize += (_c = getFixedItemLayoutSize(ctx, i, item)) != null ? _c : ((_b = getEstimatedItemSize == null ? void 0 : getEstimatedItemSize(item, i, itemType)) != null ? _b : estimatedItemSize) + ctx.scrollAxisGap;
         }
       }
       averageItemSize = totalSize / num;
@@ -8208,18 +8215,6 @@ function getWindowSize() {
     height: screenSize.height,
     width: screenSize.width
   };
-}
-function shouldIgnoreTransientMacOSScrollMeasurement(options) {
-  if (ReactNative.Platform.OS !== "macos" || !options.usesBootstrapInitialScroll) {
-    return false;
-  }
-  const scrollAxis = options.horizontal ? "width" : "height";
-  const otherAxis = options.horizontal ? "height" : "width";
-  const measuredLength = options.layout[scrollAxis];
-  const measuredOtherAxisLength = options.layout[otherAxis];
-  const windowLength = getWindowSize()[scrollAxis];
-  return (Number.isFinite(measuredOtherAxisLength) && measuredOtherAxisLength <= 0) ||
-    (Number.isFinite(measuredLength) && Number.isFinite(windowLength) && windowLength > 0 && measuredLength > windowLength + 1);
 }
 
 // src/core/handleLayout.ts
@@ -8932,8 +8927,8 @@ function getRenderedItem(ctx, key, containerId) {
   if (!state.props.dataSource && !state.props.data) {
     throw new TypeError("LegendList data is unavailable");
   }
-  const metadata = containerId === void 0 ? void 0 : state.containerItemMetadata.get(containerId);
-  const useAssignedGeneration = metadata !== void 0 && metadata.dataChangeEpoch !== state.dataChangeEpoch;
+  const metadata = state.containerItemMetadata.get(containerId);
+  const useAssignedGeneration = metadata && metadata.dataChangeEpoch !== state.dataChangeEpoch;
   const {
     indexByKey,
     props: { dataSource, getItemType, renderItem }
@@ -8955,7 +8950,7 @@ function getRenderedItem(ctx, key, containerId) {
       item,
       type: useAssignedGeneration ? (_b = metadata.itemType) != null ? _b : "" : item !== void 0 && getItemType ? (_c = getItemType(item, index)) != null ? _c : "" : ""
     };
-    const itemProps = assignedDataSource ? { ...sharedItemProps, dataSource: assignedDataSource } : { ...sharedItemProps, data: useAssignedGeneration ? metadata.data : indexedData.getLegacyData() };
+    const itemProps = assignedDataSource !== void 0 ? { ...sharedItemProps, dataSource: assignedDataSource } : { ...sharedItemProps, data: useAssignedGeneration ? metadata.data : indexedData.getLegacyData() };
     renderedItem = renderItem(itemProps);
   }
   return { index, item, renderedItem };
@@ -9098,6 +9093,17 @@ function areViewabilityConfigsEqual(a, b) {
 function areViewabilityConfigPairsEqual(a, b) {
   return (a == null ? void 0 : a.length) === (b == null ? void 0 : b.length) && (a === b || (a == null ? void 0 : a.every((pair, index) => areViewabilityConfigsEqual(pair.viewabilityConfig, b == null ? void 0 : b[index].viewabilityConfig))));
 }
+function shouldIgnoreTransientMacOSScrollMeasurement(options) {
+  if (Platform.OS !== "macos" || !options.usesBootstrapInitialScroll) {
+    return false;
+  }
+  const scrollAxis = options.horizontal ? "width" : "height";
+  const otherAxis = options.horizontal ? "height" : "width";
+  const measuredLength = options.layout[scrollAxis];
+  const measuredOtherAxisLength = options.layout[otherAxis];
+  const windowLength = getWindowSize()[scrollAxis];
+  return Number.isFinite(measuredOtherAxisLength) && measuredOtherAxisLength <= 0 || Number.isFinite(measuredLength) && Number.isFinite(windowLength) && windowLength > 0 && measuredLength > windowLength + 1;
+}
 var LegendListInner = typedForwardRef(function LegendListInner2(props, forwardedRef) {
   var _a3, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
   const noopOnScroll = React2.useCallback((_event) => {
@@ -9124,6 +9130,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     estimatedItemSize = 100,
     estimatedListSize,
     extraData,
+    getEstimatedItemSize,
     getFixedItemSize,
     getItemType,
     horizontal,
@@ -9375,6 +9382,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   const didScrollAxisChange = !isFirstLocal && state.props.horizontal !== !!horizontal;
   const previousNumColumnsProp = state.props.numColumns;
   const didScrollAxisGapChange = !isFirstLocal && ctx.scrollAxisGap !== nextScrollAxisGap;
+  const wrappedGetEstimatedItemSize = useWrapIfItem(getEstimatedItemSize);
   const wrappedGetFixedItemSize = useWrapIfItem(getFixedItemSize);
   const wrappedGetItemType = useWrapIfItem(getItemType);
   const wrappedKeyExtractor = useWrapIfItem(keyExtractor);
@@ -9429,6 +9437,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     dataVersion,
     drawDistance,
     estimatedItemSize,
+    getEstimatedItemSize: wrappedGetEstimatedItemSize,
     getFixedItemSize: wrappedGetFixedItemSize,
     getItemType: wrappedGetItemType,
     hasReliableKeyExtractor: !!dataSource || !!keyExtractorProp,
