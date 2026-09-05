@@ -4,6 +4,8 @@ import { getReactNativeStartupTiming } from "@legend-apps/window-manager";
 
 const benchmarkArgumentPrefix = "--chat-history-benchmark=";
 
+export type ChatBenchmarkTarget = Pick<ChatSummary, "id" | "provider">;
+
 export type ChatBenchmarkFixture = ChatSummary & {
   provider: ChatProvider;
   sha256: string;
@@ -12,10 +14,10 @@ export type ChatBenchmarkFixture = ChatSummary & {
 
 export type ChatBenchmarkConfig = {
   eventFileName: string;
-  fixtures: [ChatBenchmarkFixture, ChatBenchmarkFixture];
   loadImages: boolean;
   switchDelayMs: number;
-  version: 1;
+  targets: [ChatBenchmarkTarget, ChatBenchmarkTarget];
+  version: 2;
 };
 
 export type ChatBenchmarkContentReadyEvent = {
@@ -68,7 +70,7 @@ export function getChatBenchmarkConfig(launchArguments?: string[]) {
   }
   try {
     const config = JSON.parse(decodeURIComponent(encoded)) as ChatBenchmarkConfig;
-    return config.version === 1 && config.fixtures.length === 2 && config.eventFileName.length > 0
+    return config.version === 2 && config.targets.length === 2 && config.eventFileName.length > 0
       ? config
       : undefined;
   } catch {

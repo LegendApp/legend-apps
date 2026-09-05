@@ -512,9 +512,35 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   useEffect(() => {
     let active = true;
     if (benchmark) {
-      setSummaries(benchmark.fixtures);
-      setSelectedId(benchmark.fixtures[0].id);
-      setCatalogLoading(false);
+      void getRecentChats(1_000_000)
+        .then((discoveredChats) => {
+          if (!active) {
+            return;
+          }
+          const targets = benchmark.targets.map((target) => discoveredChats.find(
+            (summary) => summary.id === target.id && summary.provider === target.provider,
+          ));
+          if (targets.some((target) => !target)) {
+            throw new Error("A pinned benchmark chat was not found during native history discovery");
+          }
+          const resolvedTargets = targets as [ChatSummary, ChatSummary];
+          const visibleChats = discoveredChats.slice(0, 20);
+          for (const target of resolvedTargets) {
+            if (!visibleChats.some((summary) => summary.id === target.id)) {
+              visibleChats.push(target);
+            }
+          }
+          setSummaries(visibleChats);
+          setSelectedId(resolvedTargets[0].id);
+          setCatalogError(undefined);
+          setCatalogLoading(false);
+        })
+        .catch((error) => {
+          if (active) {
+            setCatalogError(errorMessage(error));
+            setCatalogLoading(false);
+          }
+        });
       return () => {
         active = false;
         cancelPendingOpen();
@@ -570,9 +596,9 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       const generation = loadGenerationRef.current + 1;
       const openedAt = benchmark ? performance.now() : 0;
       const phase = benchmark
-        ? selected.id === benchmark.fixtures[0].id
+        ? selected.id === benchmark.targets[0].id
           ? "initial"
-          : selected.id === benchmark.fixtures[1].id
+          : selected.id === benchmark.targets[1].id
             ? "switch"
             : undefined
         : undefined;
@@ -626,7 +652,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
     ) {
       switchTimerRef.current = setTimeout(() => {
         switchTimerRef.current = undefined;
-        setSelectedId(benchmark.fixtures[1].id);
+        setSelectedId(benchmark.targets[1].id);
       }, benchmark.switchDelayMs);
     }
   }, [benchmark]);

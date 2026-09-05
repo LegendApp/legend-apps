@@ -4,7 +4,6 @@
 #include "ChatDocument.hpp"
 #include "HybridChatDocument.hpp"
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <stdexcept>
@@ -24,10 +23,8 @@ double elapsedMs(Clock::time_point start, Clock::time_point end) {
 HybridChatHistory::HybridChatHistory() : HybridObject(TAG) {}
 
 std::shared_ptr<Promise<std::vector<ChatSummary>>> HybridChatHistory::getRecentChats(double limit) {
-  const size_t boundedLimit = std::clamp<size_t>(
-      std::isfinite(limit) && limit > 0 ? static_cast<size_t>(limit) : 0,
-      0,
-      100);
+  const size_t boundedLimit =
+      std::isfinite(limit) && limit > 0 ? static_cast<size_t>(limit) : 0;
   return Promise<std::vector<ChatSummary>>::async([boundedLimit]() {
     return getRecentChatCatalog(boundedLimit);
   });

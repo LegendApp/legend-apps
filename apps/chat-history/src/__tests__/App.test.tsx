@@ -92,6 +92,27 @@ describe("Chat History host window", () => {
     expect(JSON.stringify(renderer!.toJSON())).toContain("No local Codex or Claude transcripts found.");
   });
 
+  it("discovers benchmark chats instead of accepting fixture paths", async () => {
+    const initial: ChatSummary = { id: "codex:initial", title: "Initial", path: "/discovered-initial.jsonl", provider: "codex", updatedAt: 2 };
+    const secondary: ChatSummary = { id: "codex:secondary", title: "Secondary", path: "/discovered-secondary.jsonl", provider: "codex", updatedAt: 1 };
+    jest.mocked(getChatBenchmarkConfig).mockReturnValueOnce({
+      eventFileName: "events.json",
+      loadImages: false,
+      switchDelayMs: 3_000,
+      targets: [
+        { id: initial.id, provider: initial.provider },
+        { id: secondary.id, provider: secondary.provider },
+      ],
+      version: 2,
+    });
+    jest.mocked(getRecentChats).mockResolvedValueOnce([initial, secondary]);
+
+    await act(async () => { renderer = create(<App />); });
+
+    expect(getRecentChats).toHaveBeenCalledWith(1_000_000);
+    expect(openChat).toHaveBeenCalledWith("codex", "/discovered-initial.jsonl");
+  });
+
   it("opens a saved chat while catalog discovery is still pending", async () => {
     const saved: ChatSummary = {
       id: "saved",
