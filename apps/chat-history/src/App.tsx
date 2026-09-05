@@ -41,7 +41,8 @@ Uniwind.setTheme("system");
 
 const CHAT_HISTORY_TITLEBAR_HEIGHT = sidebarSplitViewTitlebarMetrics.contentInsetTop;
 const CHAT_HISTORY_SIDEBAR_TOP_INSET = sidebarSplitViewTitlebarMetrics.sidebarInsetTop;
-const CHAT_COMPOSER_INITIAL_HEIGHT = 90;
+// The single-line composer is 88 pt: 28 pt outer padding plus a 60 pt glass field.
+const CHAT_COMPOSER_INITIAL_HEIGHT = 88;
 const CHAT_COMPOSER_CONTENT_GAP = 24;
 const CHAT_HISTORY_INITIAL_LIST_SIZE = {
   height: 720,
