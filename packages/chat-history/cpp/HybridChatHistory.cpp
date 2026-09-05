@@ -2,6 +2,7 @@
 
 #include "ChatCatalog.hpp"
 #include "ChatDocument.hpp"
+#include "ChatPrefetch.hpp"
 #include "HybridChatDocument.hpp"
 
 #include <algorithm>
@@ -39,7 +40,10 @@ std::shared_ptr<Promise<std::shared_ptr<HybridChatDocumentSpec>>> HybridChatHist
   const uint64_t generation = openGeneration_.fetch_add(1, std::memory_order_relaxed) + 1;
   return Promise<std::shared_ptr<HybridChatDocumentSpec>>::async([this, provider, path, generation]() {
     const auto startedAt = Clock::now();
-    ChatParseResult result = parseChatFile(provider, path, generation, openGeneration_);
+    std::optional<ChatParseResult> prefetched = takePrefetchedChatFile(provider, path);
+    ChatParseResult result = prefetched
+        ? std::move(*prefetched)
+        : parseChatFile(provider, path, generation, openGeneration_);
     const auto parsedAt = Clock::now();
     if (openGeneration_.load(std::memory_order_relaxed) != generation) {
       throw std::runtime_error("Chat open cancelled");
@@ -57,6 +61,10 @@ std::shared_ptr<Promise<std::shared_ptr<HybridChatDocumentSpec>>> HybridChatHist
     const double rowCount = document->getRowCount();
     ChatDocumentRegistry::shared().registerDocument(documentId, document);
     const auto finishedAt = Clock::now();
+    const double documentMs = elapsedMs(parsedAt, finishedAt);
+    const double totalMs = prefetched
+        ? mappedMs + scannedMs + normalizedMs + documentMs
+        : elapsedMs(startedAt, finishedAt);
     document->setTiming(ChatDocumentTiming(
         sourceBytes,
         recordCount,
@@ -64,8 +72,8 @@ std::shared_ptr<Promise<std::shared_ptr<HybridChatDocumentSpec>>> HybridChatHist
         mappedMs,
         scannedMs,
         normalizedMs,
-        elapsedMs(parsedAt, finishedAt),
-        elapsedMs(startedAt, finishedAt)));
+        documentMs,
+        totalMs));
     return std::static_pointer_cast<HybridChatDocumentSpec>(document);
   });
 }
