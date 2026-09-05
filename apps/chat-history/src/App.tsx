@@ -28,7 +28,7 @@ import {
   getChatBenchmarkConfig,
   type ChatBenchmarkEvent,
 } from "./chatBenchmark";
-import { readSelectedChatId, writeSelectedChatId } from "./chatStorage";
+import { readSavedChatSelection, writeSelectedChat } from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
 import {
   isDemoTranscriptMessage,
@@ -483,8 +483,11 @@ type ChatHistoryWindowProps = {
 export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const displayTheme = useSystemLegendDisplayTheme();
   const benchmark = useMemo(() => getChatBenchmarkConfig(launchArguments), [launchArguments]);
-  const [summaries, setSummaries] = useState<ChatSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [savedSelection] = useState(() => benchmark ? {} : readSavedChatSelection());
+  const [summaries, setSummaries] = useState<ChatSummary[]>(() => savedSelection.selectedChat
+    ? [savedSelection.selectedChat]
+    : []);
+  const [selectedId, setSelectedId] = useState<string | undefined>(savedSelection.selectedId);
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({ status: "idle" });
@@ -517,7 +520,6 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       };
     }
     let catalogGeneration = 0;
-    const restoredId = readSelectedChatId();
     const refreshCatalog = () => {
       const generation = ++catalogGeneration;
       void getRecentChats(20)
@@ -532,7 +534,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
               ? existing : summary;
           }));
           setSelectedId((currentId) => {
-            const preferredId = currentId ?? restoredId;
+            const preferredId = currentId ?? savedSelection.selectedId;
             return sortedChats.some((summary) => summary.id === preferredId)
               ? preferredId : sortedChats[0]?.id;
           });
@@ -575,7 +577,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       loadGenerationRef.current = generation;
       cancelPendingOpen();
       if (!benchmark) {
-        writeSelectedChatId(selected.id);
+        writeSelectedChat(selected);
       }
       setTranscriptState({ selectedId: selected.id, status: "loading" });
       void openChat(selected.provider as ChatProvider, selected.path)

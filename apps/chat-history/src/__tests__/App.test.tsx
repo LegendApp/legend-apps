@@ -3,6 +3,7 @@ import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { App, ChatHistoryWindow } from "../App";
 import { getChatBenchmarkConfig } from "../chatBenchmark";
+import { readSavedChatSelection } from "../chatStorage";
 
 jest.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator",
@@ -42,8 +43,8 @@ jest.mock("../ChatComposer", () => ({ ChatComposer: "ChatComposer" }));
 jest.mock("../DemoTranscriptRow", () => ({ DemoTranscriptRow: "DemoTranscriptRow" }));
 jest.mock("../TranscriptRow", () => ({ TranscriptRow: "TranscriptRow" }));
 jest.mock("../chatStorage", () => ({
-  readSelectedChatId: jest.fn(),
-  writeSelectedChatId: jest.fn(),
+  readSavedChatSelection: jest.fn(() => ({})),
+  writeSelectedChat: jest.fn(),
 }));
 jest.mock("../chatBenchmark", () => ({
   emitChatBenchmarkEvent: jest.fn(),
@@ -89,6 +90,23 @@ describe("Chat History host window", () => {
     });
     expect(openWindow).not.toHaveBeenCalled();
     expect(JSON.stringify(renderer!.toJSON())).toContain("No local Codex or Claude transcripts found.");
+  });
+
+  it("opens a saved chat while catalog discovery is still pending", async () => {
+    const saved: ChatSummary = {
+      id: "saved",
+      path: "/saved.jsonl",
+      provider: "codex",
+      title: "Saved",
+      updatedAt: 1,
+    };
+    jest.mocked(readSavedChatSelection).mockReturnValueOnce({ selectedChat: saved, selectedId: saved.id });
+    jest.mocked(getRecentChats).mockReturnValueOnce(new Promise(() => {}));
+
+    await act(async () => { renderer = create(<App />); });
+
+    expect(openChat).toHaveBeenCalledWith("codex", "/saved.jsonl");
+    expect(setMainWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Saved" }));
   });
 
   it("refreshes on reopen while retaining an unchanged selected transcript", async () => {
