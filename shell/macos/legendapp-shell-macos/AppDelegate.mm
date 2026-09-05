@@ -288,6 +288,9 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 @interface AppDelegate ()
 
 @property (nonatomic, weak) NSWindow *lastFocusedManagedWindow;
+@property (nonatomic, strong) NSColor *startupBackgroundColor;
+
+- (void)prepareHostWindowIfNeeded;
 
 @end
 
@@ -298,6 +301,14 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   facebook::react::ReactMarker::logMarkerDone(
     facebook::react::ReactMarker::APP_STARTUP_START,
     CACurrentMediaTime() * 1000);
+
+  // AppKit shells do not depend on React, so present and restore them while
+  // the JavaScript runtime initializes instead of serializing the two phases.
+  [self prepareHostWindowIfNeeded];
+  if (LegendPrecreateRestorableWindows) {
+    LegendPrecreateRestorableWindows();
+  }
+
   LegendConfigureApplicationMenuTitles();
 
   Class documentControllerClass = NSClassFromString(@"RNRecentDocumentController");
@@ -498,97 +509,23 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)loadReactNativeWindow:(NSDictionary *)launchOptions
 {
+  // Normally prepared in applicationWillFinishLaunching; keep this idempotent
+  // for alternate launch paths and direct test invocation.
+  [self prepareHostWindowIfNeeded];
+
   NSString *appId = LegendCurrentAppId();
   BOOL isMarkdown = [appId isEqualToString:@"markdown"];
   BOOL isMusic = [appId isEqualToString:@"music"];
-  BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
-  BOOL isDiff = [appId isEqualToString:@"diff"];
   BOOL hostWindowHidden = LegendHostWindowHidden();
-  NSRect frame = isMusic
-    ? NSMakeRect(0, 0, 360, 640)
-    : (isDiff ? NSMakeRect(0, 0, 1180, 780) : NSMakeRect(0, 0, 1280, 720));
-  self.window = [[NSWindow alloc] initWithContentRect:frame
-                                           styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
-                                             backing:NSBackingStoreBuffered
-                                               defer:NO];
-
-  if (isMarkdown) {
-    NSColor *backgroundColor = [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
-    self.window.title = LegendInitialMarkdownWindowTitle();
-    self.window.backgroundColor = backgroundColor;
-    self.window.opaque = YES;
-    self.window.titleVisibility = NSWindowTitleVisible;
-    self.window.titlebarAppearsTransparent = YES;
-    self.window.styleMask = self.window.styleMask | NSWindowStyleMaskFullSizeContentView;
-    if (@available(macOS 11.0, *)) {
-      self.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-    }
-  } else if (isMusic) {
-    self.window.title = @"Legend Music";
-    self.window.backgroundColor = NSColor.clearColor;
-    self.window.opaque = NO;
-    self.window.minSize = NSMakeSize(200, 300);
-    if (@available(macOS 10.14, *)) {
-      self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-    }
-    LegendConfigureMusicWindow(self.window);
-    [self.window setDelegate:self];
-  } else if (isChatHistory) {
-    LegendConfigureChatHistoryWindow(self.window);
-    [self.window setDelegate:self];
-  } else if (isDiff) {
-    LegendConfigureDiffWindow(self.window);
-    [self.window setDelegate:self];
-  } else {
-    self.window.title = self.moduleName;
-  }
-
-  self.window.autorecalculatesKeyViewLoop = YES;
-
-  BOOL isChatHistoryBenchmark = isChatHistory && [NSProcessInfo.processInfo.arguments
-    indexOfObjectPassingTest:^BOOL(NSString *argument, NSUInteger index, BOOL *stop) {
-      return [argument hasPrefix:@"--chat-history-benchmark="];
-    }] != NSNotFound;
-  if (isChatHistoryBenchmark) {
-    // Fixed benchmark geometry must not override a normal user's saved window frame.
-    [self.window setContentSize:frame.size];
-    [self.window center];
-  } else {
-    NSString *autosaveName = LegendMainWindowFrameAutoSaveName(appId);
-    [self.window setFrameAutosaveName:autosaveName];
-    if (![self.window setFrameUsingName:autosaveName]) {
-      [self.window center];
-    }
-  }
-
-  // Restorable managed windows are native shells first; their React roots attach
-  // when JavaScript opens the same stable identifiers.
-  if (LegendPrecreateRestorableWindows) {
-    LegendPrecreateRestorableWindows();
-  }
-
-  BOOL presentBeforeReactRoot = !hostWindowHidden;
-  NSColor *startupBackgroundColor = nil;
-  if (presentBeforeReactRoot) {
-    startupBackgroundColor = LegendHostWindowStartupBackgroundColor(self.window);
-    NSView *placeholderView = [[NSView alloc] initWithFrame:self.window.contentView.bounds];
-    placeholderView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    placeholderView.wantsLayer = YES;
-    placeholderView.layer.backgroundColor = startupBackgroundColor.CGColor;
-    self.window.backgroundColor = startupBackgroundColor;
-    self.window.contentView = placeholderView;
-    [self.window makeKeyAndOrderFront:self];
-    [self.window displayIfNeeded];
-    LegendMainWindowFirstVisibleTimeMs = CACurrentMediaTime() * 1000;
-  }
+  NSRect frame = self.window.contentView.bounds;
 
   RCTPlatformView *rootView = [self.rootViewFactory viewWithModuleName:self.moduleName
                                                      initialProperties:self.initialProps
                                                          launchOptions:launchOptions];
 
   rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  if (startupBackgroundColor != nil) {
-    ((RCTUIView *)rootView).backgroundColor = startupBackgroundColor;
+  if (self.startupBackgroundColor != nil) {
+    ((RCTUIView *)rootView).backgroundColor = self.startupBackgroundColor;
   }
 
   if (isMusic) {
@@ -632,6 +569,89 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     [self.window orderOut:self];
   } else {
     [self.window makeKeyAndOrderFront:self];
+  }
+}
+
+- (void)prepareHostWindowIfNeeded
+{
+  if (self.window != nil) {
+    return;
+  }
+
+  NSString *appId = LegendCurrentAppId();
+  BOOL isMarkdown = [appId isEqualToString:@"markdown"];
+  BOOL isMusic = [appId isEqualToString:@"music"];
+  BOOL isChatHistory = [appId isEqualToString:@"chat-history"];
+  BOOL isDiff = [appId isEqualToString:@"diff"];
+  BOOL hostWindowHidden = LegendHostWindowHidden();
+  NSRect frame = isMusic
+    ? NSMakeRect(0, 0, 360, 640)
+    : (isDiff ? NSMakeRect(0, 0, 1180, 780) : NSMakeRect(0, 0, 1280, 720));
+  self.window = [[NSWindow alloc] initWithContentRect:frame
+                                           styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
+                                             backing:NSBackingStoreBuffered
+                                               defer:NO];
+
+  if (isMarkdown) {
+    NSColor *backgroundColor = [NSColor colorWithSRGBRed:0.960784 green:0.964706 blue:0.972549 alpha:1];
+    self.window.title = LegendInitialMarkdownWindowTitle();
+    self.window.backgroundColor = backgroundColor;
+    self.window.opaque = YES;
+    self.window.titleVisibility = NSWindowTitleVisible;
+    self.window.titlebarAppearsTransparent = YES;
+    self.window.styleMask = self.window.styleMask | NSWindowStyleMaskFullSizeContentView;
+    if (@available(macOS 11.0, *)) {
+      self.window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+    }
+  } else if (isMusic) {
+    self.window.title = @"Legend Music";
+    self.window.backgroundColor = NSColor.clearColor;
+    self.window.opaque = NO;
+    self.window.minSize = NSMakeSize(200, 300);
+    if (@available(macOS 10.14, *)) {
+      self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    }
+    LegendConfigureMusicWindow(self.window);
+    [self.window setDelegate:self];
+  } else if (isChatHistory) {
+    LegendConfigureChatHistoryWindow(self.window);
+    [self.window setDelegate:self];
+  } else if (isDiff) {
+    LegendConfigureDiffWindow(self.window);
+    [self.window setDelegate:self];
+  } else {
+    self.window.title = LegendCurrentDisplayName();
+  }
+
+  self.window.autorecalculatesKeyViewLoop = YES;
+
+  BOOL isChatHistoryBenchmark = isChatHistory && [NSProcessInfo.processInfo.arguments
+    indexOfObjectPassingTest:^BOOL(NSString *argument, NSUInteger index, BOOL *stop) {
+      return [argument hasPrefix:@"--chat-history-benchmark="];
+    }] != NSNotFound;
+  if (isChatHistoryBenchmark) {
+    // Fixed benchmark geometry must not override a normal user's saved window frame.
+    [self.window setContentSize:frame.size];
+    [self.window center];
+  } else {
+    NSString *autosaveName = LegendMainWindowFrameAutoSaveName(appId);
+    [self.window setFrameAutosaveName:autosaveName];
+    if (![self.window setFrameUsingName:autosaveName]) {
+      [self.window center];
+    }
+  }
+
+  if (!hostWindowHidden) {
+    self.startupBackgroundColor = LegendHostWindowStartupBackgroundColor(self.window);
+    NSView *placeholderView = [[NSView alloc] initWithFrame:self.window.contentView.bounds];
+    placeholderView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    placeholderView.wantsLayer = YES;
+    placeholderView.layer.backgroundColor = self.startupBackgroundColor.CGColor;
+    self.window.backgroundColor = self.startupBackgroundColor;
+    self.window.contentView = placeholderView;
+    [self.window makeKeyAndOrderFront:self];
+    [self.window displayIfNeeded];
+    LegendMainWindowFirstVisibleTimeMs = CACurrentMediaTime() * 1000;
   }
 }
 
