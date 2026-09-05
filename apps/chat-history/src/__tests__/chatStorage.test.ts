@@ -1,5 +1,10 @@
 import { readApplicationSupportJson, writeApplicationSupportJson } from "@legend-apps/storage/src/applicationSupport";
-import { readSavedChatSelection, writeSelectedChat } from "../chatStorage";
+import {
+  readCachedChatCatalog,
+  readSavedChatSelection,
+  writeCachedChatCatalog,
+  writeSelectedChat,
+} from "../chatStorage";
 
 jest.mock("@legend-apps/storage/src/applicationSupport", () => ({
   readApplicationSupportJson: jest.fn(),
@@ -33,5 +38,15 @@ describe("chatStorage", () => {
       selectedChat: summary,
       selectedId: summary.id,
     });
+  });
+
+  it("filters invalid cached catalog entries", () => {
+    jest.mocked(readApplicationSupportJson).mockReturnValue([summary, { id: "broken" }, null]);
+    expect(readCachedChatCatalog()).toEqual([summary]);
+  });
+
+  it("persists the latest catalog", () => {
+    writeCachedChatCatalog([summary]);
+    expect(writeApplicationSupportJson).toHaveBeenCalledWith("chat-history/catalog.json", [summary]);
   });
 });

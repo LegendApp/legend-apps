@@ -28,7 +28,12 @@ import {
   getChatBenchmarkConfig,
   type ChatBenchmarkEvent,
 } from "./chatBenchmark";
-import { readSavedChatSelection, writeSelectedChat } from "./chatStorage";
+import {
+  readCachedChatCatalog,
+  readSavedChatSelection,
+  writeCachedChatCatalog,
+  writeSelectedChat,
+} from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
 import {
   isDemoTranscriptMessage,
@@ -484,10 +489,18 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const displayTheme = useSystemLegendDisplayTheme();
   const benchmark = useMemo(() => getChatBenchmarkConfig(launchArguments), [launchArguments]);
   const [savedSelection] = useState(() => benchmark ? {} : readSavedChatSelection());
-  const [summaries, setSummaries] = useState<ChatSummary[]>(() => savedSelection.selectedChat
-    ? [savedSelection.selectedChat]
-    : []);
-  const [selectedId, setSelectedId] = useState<string | undefined>(savedSelection.selectedId);
+  const [cachedSummaries] = useState(() => benchmark ? [] : readCachedChatCatalog());
+  const [summaries, setSummaries] = useState<ChatSummary[]>(() => {
+    if (!savedSelection.selectedChat) {
+      return cachedSummaries;
+    }
+    return cachedSummaries.some((summary) => summary.id === savedSelection.selectedChat?.id)
+      ? cachedSummaries
+      : [savedSelection.selectedChat, ...cachedSummaries];
+  });
+  const [selectedId, setSelectedId] = useState<string | undefined>(
+    savedSelection.selectedId ?? cachedSummaries[0]?.id,
+  );
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({ status: "idle" });
@@ -526,6 +539,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       .then((recentChats) => {
         if (active && generation === catalogGeneration) {
           const sortedChats = [...recentChats].sort(sortChatsNewestFirst);
+          writeCachedChatCatalog(sortedChats);
           // Preserve unchanged models so reopening does not reload the selected transcript.
           setSummaries((previous) => sortedChats.map((summary) => {
             const existing = previous.find((candidate) => candidate.id === summary.id);
