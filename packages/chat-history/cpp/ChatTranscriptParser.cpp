@@ -474,9 +474,11 @@ ChatParseResult parseCodex(
           timestampMs);
     } else if (payloadType == "function_call_output" || payloadType == "custom_tool_call_output") {
       std::vector<JsonRange> previews;
-      const auto output = json.member(*payload, "output");
-      if (output && output->kind == JsonValueKind::String) {
-        previews.push_back(*output);
+      if (json.memberKind(*payload, "output") == JsonValueKind::String) {
+        const auto output = json.member(*payload, "output");
+        if (output) {
+          previews.push_back(*output);
+        }
       }
       applyToolResult(
           result.rows,

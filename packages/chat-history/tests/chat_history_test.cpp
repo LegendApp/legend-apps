@@ -135,6 +135,41 @@ void testCurrentCodexUserMessages(const std::filesystem::path& fixtureRoot) {
   expect(result.rows[1].kind == "assistant", "Current Codex assistant message should follow its user turn");
 }
 
+void testArrayToolOutputIsShallow() {
+  const std::string malformed = "{\"before\":1,\"output\":[\"unterminated]}";
+  const ChatJson malformedJson(malformed.data(), malformed.size());
+  const auto malformedRoot = malformedJson.topLevelObject(0, malformed.size());
+  expect(malformedRoot.has_value(), "Shallow object discovery should accept a bounded object range");
+  expect(
+      malformedJson.memberKind(*malformedRoot, "output") == JsonValueKind::Array,
+      "Member kind lookup should not traverse a matching array value");
+  expect(
+      !malformedJson.member(*malformedRoot, "output").has_value(),
+      "Full member lookup should continue validating the matching value");
+
+  const std::filesystem::path path = std::filesystem::temp_directory_path() /
+      ("legend-chat-history-array-output-" + std::to_string(getpid()) + ".jsonl");
+  {
+    std::ofstream output(path);
+    output
+        << "{\"timestamp\":\"2026-01-01T00:00:00.000Z\",\"type\":\"response_item\","
+           "\"payload\":{\"type\":\"custom_tool_call\",\"call_id\":\"image-call\","
+           "\"name\":\"capture_screen\",\"input\":\"{}\"}}\n"
+        << "{\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"type\":\"response_item\","
+           "\"payload\":{\"type\":\"custom_tool_call_output\",\"call_id\":\"image-call\","
+           "\"output\":[{\"type\":\"input_text\",\"text\":\"captured\"},"
+           "{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,omitted\"}]}}\n";
+  }
+  std::atomic<uint64_t> generation{1};
+  ChatParseResult result = parseChatFile("codex", path.string(), 1, generation);
+  std::filesystem::remove(path);
+  expect(result.rows.size() == 1, "Array tool output should remain paired with its call");
+  expect(result.rows[0].toolStatus == "completed", "Array tool output should complete its tool row");
+  expect(
+      decode(result, result.rows[0].previewRanges) == "{}",
+      "Array tool output should preserve the call preview without decoding embedded image data");
+}
+
 void testCancellation(const std::filesystem::path& fixtureRoot) {
   std::atomic<uint64_t> generation{2};
   bool cancelled = false;
@@ -287,6 +322,17 @@ int main(int argc, char** argv) {
                 << " scanned_ms=" << result.scannedMs
                 << " normalized_ms=" << result.normalizedMs
                 << " total_ms=" << totalMs << '\n';
+      ChatDocumentTiming timing(
+          static_cast<double>(result.source->size()),
+          static_cast<double>(result.recordCount),
+          static_cast<double>(result.rows.size()),
+          result.mappedMs,
+          result.scannedMs,
+          result.normalizedMs,
+          totalMs,
+          0);
+      auto document = std::make_shared<HybridChatDocument>("probe", std::move(result), timing);
+      std::cout << "digest=" << document->getContentDigest() << '\n';
       return 0;
     } catch (const std::exception& error) {
       std::cerr << error.what() << '\n';
@@ -302,6 +348,7 @@ int main(int argc, char** argv) {
     testCodex(fixtureRoot);
     testClaude(fixtureRoot);
     testCurrentCodexUserMessages(fixtureRoot);
+    testArrayToolOutputIsShallow();
     testCancellation(fixtureRoot);
     testIsoTimestamps();
     testDocumentRelease(fixtureRoot);

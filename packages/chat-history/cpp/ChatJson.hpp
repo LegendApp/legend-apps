@@ -41,6 +41,8 @@ public:
       size_t cursor,
       std::string_view key) const;
   std::optional<JsonRange> member(const JsonRange& object, std::string_view key) const;
+  // Returns the matching value's kind without traversing the value itself.
+  std::optional<JsonValueKind> memberKind(const JsonRange& object, std::string_view key) const;
   bool forEachObjectMember(
       const JsonRange& object,
       const std::function<bool(const JsonRange&, const JsonRange&)>& callback) const;
@@ -52,6 +54,9 @@ public:
 
 private:
   size_t skipWhitespace(size_t position, size_t end) const;
+  std::optional<size_t> findMemberValueStart(
+      const JsonRange& object,
+      std::string_view key) const;
   std::optional<size_t> memberValueStart(size_t position, size_t end, std::string_view key) const;
   std::optional<size_t> skipString(size_t position, size_t end) const;
   std::optional<size_t> skipValue(size_t position, size_t end) const;

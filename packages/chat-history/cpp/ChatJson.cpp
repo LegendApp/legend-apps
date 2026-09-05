@@ -244,42 +244,59 @@ std::optional<JsonRange> ChatJson::orderedTrailingMember(
 }
 
 std::optional<JsonRange> ChatJson::member(const JsonRange& object, std::string_view key) const {
-  std::optional<JsonRange> result;
-  if (object.kind == JsonValueKind::Object && object.end <= size_ && object.end > object.start + 1) {
-    size_t cursor = object.start + 1;
-    while (cursor < object.end - 1 && !result) {
-      cursor = skipWhitespace(cursor, object.end);
-      if (cursor < object.end && data_[cursor] == '}') {
-        break;
-      }
-      const size_t keyStart = cursor;
-      const auto keyEnd = skipString(cursor, object.end);
-      if (!keyEnd) {
-        break;
-      }
-      cursor = skipWhitespace(*keyEnd, object.end);
-      if (cursor >= object.end || data_[cursor] != ':') {
-        break;
-      }
-      cursor = skipWhitespace(cursor + 1, object.end);
-      const auto valueEnd = skipValue(cursor, object.end);
-      if (!valueEnd) {
-        break;
-      }
-      const JsonRange keyRange{keyStart, *keyEnd, JsonValueKind::String};
-      if (stringEquals(keyRange, key)) {
-        result = JsonRange{cursor, *valueEnd, kindAt(cursor)};
-        break;
-      }
-      cursor = skipWhitespace(*valueEnd, object.end);
-      if (cursor < object.end && data_[cursor] == ',') {
-        cursor += 1;
-      } else {
-        break;
-      }
+  const auto valueStart = findMemberValueStart(object, key);
+  const auto valueEnd = valueStart ? skipValue(*valueStart, object.end) : std::nullopt;
+  if (valueStart && valueEnd) {
+    return JsonRange{*valueStart, *valueEnd, kindAt(*valueStart)};
+  }
+  return std::nullopt;
+}
+
+std::optional<JsonValueKind> ChatJson::memberKind(
+    const JsonRange& object,
+    std::string_view key) const {
+  const auto valueStart = findMemberValueStart(object, key);
+  return valueStart ? std::optional<JsonValueKind>(kindAt(*valueStart)) : std::nullopt;
+}
+
+std::optional<size_t> ChatJson::findMemberValueStart(
+    const JsonRange& object,
+    std::string_view key) const {
+  if (object.kind != JsonValueKind::Object || object.end > size_ || object.end <= object.start + 1) {
+    return std::nullopt;
+  }
+  size_t cursor = object.start + 1;
+  while (cursor < object.end - 1) {
+    cursor = skipWhitespace(cursor, object.end);
+    if (cursor < object.end && data_[cursor] == '}') {
+      break;
+    }
+    const size_t keyStart = cursor;
+    const auto keyEnd = skipString(cursor, object.end);
+    if (!keyEnd) {
+      break;
+    }
+    cursor = skipWhitespace(*keyEnd, object.end);
+    if (cursor >= object.end || data_[cursor] != ':') {
+      break;
+    }
+    cursor = skipWhitespace(cursor + 1, object.end);
+    const JsonRange keyRange{keyStart, *keyEnd, JsonValueKind::String};
+    if (stringEquals(keyRange, key)) {
+      return cursor;
+    }
+    const auto valueEnd = skipValue(cursor, object.end);
+    if (!valueEnd) {
+      break;
+    }
+    cursor = skipWhitespace(*valueEnd, object.end);
+    if (cursor < object.end && data_[cursor] == ',') {
+      cursor += 1;
+    } else {
+      break;
     }
   }
-  return result;
+  return std::nullopt;
 }
 
 bool ChatJson::forEachObjectMember(
