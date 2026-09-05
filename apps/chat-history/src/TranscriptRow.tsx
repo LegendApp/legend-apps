@@ -272,12 +272,13 @@ export function TranscriptRow({
   document,
   index,
   loadImages = true,
+  metadata,
 }: {
   document: ChatDocument;
   index: number;
   loadImages?: boolean;
+  metadata: ChatRowMetadata;
 }) {
-  const metadata = document.getRowMetadata(index);
   let row = <MessageRow document={document} index={index} loadImages={loadImages} metadata={metadata} />;
   if (metadata.kind === "tool") {
     row = <ToolRow document={document} index={index} metadata={metadata} />;

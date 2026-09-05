@@ -282,17 +282,24 @@ function TranscriptList({
       if (item !== undefined) {
         row = isDemoTranscriptMessage(item)
           ? <DemoTranscriptRow message={item} />
-          : <TranscriptRow document={document} index={item} loadImages={loadImages} />;
+          : (
+            <TranscriptRow
+              document={document}
+              index={item}
+              loadImages={loadImages}
+              metadata={dataSource.getRowMetadata(item)}
+            />
+          );
       }
       return row;
     },
-    [document, loadImages],
+    [dataSource, document, loadImages],
   );
   const getItemType = useCallback(
     (item: TranscriptListItem) => isDemoTranscriptMessage(item)
       ? `demo-${item.role}`
-      : document.getRowMetadata(item).kind,
-    [document],
+      : dataSource.getRowMetadata(item).kind,
+    [dataSource],
   );
   const schedule = useCallback((callback: () => void, delay: number) => {
     const timer = setTimeout(() => {

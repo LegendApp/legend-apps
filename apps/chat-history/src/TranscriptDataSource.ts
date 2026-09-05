@@ -1,4 +1,4 @@
-import type { ChatDocument } from "@legend-apps/chat-history";
+import type { ChatDocument, ChatRowMetadata } from "@legend-apps/chat-history";
 import type {
   DataSourceMutationBatch,
   DataSourceOperation,
@@ -25,6 +25,7 @@ export function isDemoTranscriptMessage(
 export class TranscriptDataSource implements LegendListDataSource<TranscriptListItem> {
   private readonly demoMessages: DemoTranscriptMessage[] = [];
   private readonly listeners = new Set<MutationListener>();
+  private readonly metadata = new Map<number, ChatRowMetadata>();
   private revision = 0;
 
   constructor(private readonly document: ChatDocument) {}
@@ -46,6 +47,15 @@ export class TranscriptDataSource implements LegendListDataSource<TranscriptList
   getKey(index: number) {
     const demoMessage = this.demoMessages[index - this.document.rowCount];
     return demoMessage?.id ?? `${this.document.documentId}:${index}`;
+  }
+
+  getRowMetadata(index: number) {
+    let metadata = this.metadata.get(index);
+    if (!metadata) {
+      metadata = this.document.getRowMetadata(index);
+      this.metadata.set(index, metadata);
+    }
+    return metadata;
   }
 
   getRevision() {

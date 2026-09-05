@@ -1,12 +1,20 @@
-import type { ChatDocument } from "@legend-apps/chat-history";
+import type { ChatDocument, ChatRowMetadata } from "@legend-apps/chat-history";
 import type { DataSourceMutationBatch } from "@legendapp/list/react-native";
 import { TranscriptDataSource } from "../TranscriptDataSource";
 
 function createDocument(rowCount = 2) {
+  const getRowMetadata = jest.fn((index: number) => ({
+    hasImagePlaceholder: false,
+    hasToolPreview: false,
+    imageCount: 0,
+    index,
+    kind: index === 0 ? "user" : "assistant",
+  } satisfies ChatRowMetadata));
   return {
     documentId: "document-1",
+    getRowMetadata,
     rowCount,
-  } as ChatDocument;
+  } as unknown as ChatDocument;
 }
 
 describe("TranscriptDataSource", () => {
@@ -72,5 +80,14 @@ describe("TranscriptDataSource", () => {
       previousRevision: 1,
       revision: 2,
     }]);
+  });
+
+  it("reuses native row metadata across list type and render lookups", () => {
+    const document = createDocument();
+    const dataSource = new TranscriptDataSource(document);
+
+    expect(dataSource.getRowMetadata(0)).toBe(dataSource.getRowMetadata(0));
+    expect(dataSource.getRowMetadata(1).kind).toBe("assistant");
+    expect(document.getRowMetadata).toHaveBeenCalledTimes(2);
   });
 });
