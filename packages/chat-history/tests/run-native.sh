@@ -16,7 +16,6 @@ clang++ \
   "$ROOT_DIR/packages/chat-history/tests/chat_history_test.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatJson.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatCatalog.cpp" \
-  "$ROOT_DIR/packages/chat-history/cpp/ChatPrefetch.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTime.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTranscriptParser.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatDocumentRegistry.cpp" \

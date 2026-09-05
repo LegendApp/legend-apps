@@ -1,7 +1,6 @@
 #include "../cpp/ChatDocument.hpp"
 #include "../cpp/ChatCatalog.hpp"
 #include "../cpp/ChatJson.hpp"
-#include "../cpp/ChatPrefetch.hpp"
 #include "../cpp/ChatTime.hpp"
 #include "../cpp/HybridChatDocument.hpp"
 
@@ -182,19 +181,6 @@ void testCancellation(const std::filesystem::path& fixtureRoot) {
   expect(cancelled, "Parser should observe a superseded open generation");
 }
 
-void testPrefetch(const std::filesystem::path& fixtureRoot) {
-  const std::string path = (fixtureRoot / "codex.jsonl").string();
-  prefetchChatFile("codex", path);
-  expect(
-      !takePrefetchedChatFile("claude", path).has_value(),
-      "A mismatched open should leave the prefetched result available");
-  std::optional<ChatParseResult> result = takePrefetchedChatFile("codex", path);
-  expect(result.has_value() && result->rows.size() == 5, "Prefetch should preserve the normal parser result");
-  expect(
-      !takePrefetchedChatFile("codex", path).has_value(),
-      "A prefetched parse should be consumed only once");
-}
-
 void testIsoTimestamps() {
   expect(
       parseIsoTimestampMilliseconds("1970-01-01T00:00:00Z") == 0,
@@ -364,7 +350,6 @@ int main(int argc, char** argv) {
     testCurrentCodexUserMessages(fixtureRoot);
     testArrayToolOutputIsShallow();
     testCancellation(fixtureRoot);
-    testPrefetch(fixtureRoot);
     testIsoTimestamps();
     testDocumentRelease(fixtureRoot);
     testMissingCatalogRoots();

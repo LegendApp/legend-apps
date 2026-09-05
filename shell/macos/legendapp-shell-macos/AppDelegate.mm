@@ -305,13 +305,6 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   // AppKit shells do not depend on React, so present and restore them while
   // the JavaScript runtime initializes instead of serializing the two phases.
   [self prepareHostWindowIfNeeded];
-  if ([LegendCurrentAppId() isEqualToString:@"chat-history"]) {
-    Class prefetchClass = NSClassFromString(@"RNChatHistoryPrefetch");
-    SEL prepareSelector = NSSelectorFromString(@"prepareInitialChat");
-    if ([prefetchClass respondsToSelector:prepareSelector]) {
-      [prefetchClass performSelector:prepareSelector];
-    }
-  }
   if (LegendPrecreateRestorableWindows) {
     LegendPrecreateRestorableWindows();
   }
