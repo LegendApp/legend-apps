@@ -2,7 +2,7 @@ import type { ChatDocument, ChatFileChange, ChatRowMetadata } from "@legend-apps
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useRecyclingState } from "@legendapp/list/react-native";
 import { useEffect } from "react";
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import { useUniwind } from "uniwind";
 
@@ -112,11 +112,12 @@ function MessageImage({ source }: { source: string }) {
   return image;
 }
 
-function MessageRow({ document, index, loadImages, metadata }: {
+function MessageRow({ document, index, loadImages, metadata, onLayout }: {
   document: ChatDocument;
   index: number;
   loadImages: boolean;
   metadata: ChatRowMetadata;
+  onLayout?: ViewProps["onLayout"];
 }) {
   const isUser = metadata.kind === "user";
   const { theme } = useUniwind();
@@ -128,7 +129,7 @@ function MessageRow({ document, index, loadImages, metadata }: {
     )
     : [];
   return (
-    <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-3"}>
+    <View className={isUser ? "items-end px-5 py-2" : "items-start px-5 py-3"} onLayout={onLayout}>
       <View
         className={isUser
           ? "max-w-[82%] self-end rounded-2xl bg-surface-muted px-4 py-3"
@@ -154,10 +155,11 @@ function MessageRow({ document, index, loadImages, metadata }: {
   );
 }
 
-function ToolRow({ document, index, metadata }: {
+function ToolRow({ document, index, metadata, onLayout }: {
   document: ChatDocument;
   index: number;
   metadata: ChatRowMetadata;
+  onLayout?: ViewProps["onLayout"];
 }) {
   const [expanded, setExpanded] = useRecyclingState(false);
   const [preview, setPreview] = useRecyclingState<string | undefined>(undefined);
@@ -174,7 +176,7 @@ function ToolRow({ document, index, metadata }: {
   };
 
   return (
-    <View className="px-5 py-2">
+    <View className="px-5 py-2" onLayout={onLayout}>
       <Pressable
         className="border-b border-border py-3"
         disabled={!canExpand}
@@ -214,10 +216,11 @@ function FileChangeLine({ file }: { file: ChatFileChange }) {
   );
 }
 
-function FileChangesRow({ document, index, metadata }: {
+function FileChangesRow({ document, index, metadata, onLayout }: {
   document: ChatDocument;
   index: number;
   metadata: ChatRowMetadata;
+  onLayout?: ViewProps["onLayout"];
 }) {
   const [expanded, setExpanded] = useRecyclingState(false);
   const fileCount = metadata.fileCount ?? 0;
@@ -229,7 +232,7 @@ function FileChangesRow({ document, index, metadata }: {
   );
 
   return (
-    <View className="px-5 py-2">
+    <View className="px-5 py-2" onLayout={onLayout}>
       <View className="overflow-hidden rounded-xl border border-border bg-surface">
         <View className="flex-row items-center gap-3 px-4 py-4">
           <View className="h-10 w-10 items-center justify-center rounded-lg bg-surface-muted">
@@ -273,17 +276,27 @@ export function TranscriptRow({
   index,
   loadImages = true,
   metadata,
+  onLayout,
 }: {
   document: ChatDocument;
   index: number;
   loadImages?: boolean;
   metadata: ChatRowMetadata;
+  onLayout?: ViewProps["onLayout"];
 }) {
-  let row = <MessageRow document={document} index={index} loadImages={loadImages} metadata={metadata} />;
+  let row = (
+    <MessageRow
+      document={document}
+      index={index}
+      loadImages={loadImages}
+      metadata={metadata}
+      onLayout={onLayout}
+    />
+  );
   if (metadata.kind === "tool") {
-    row = <ToolRow document={document} index={index} metadata={metadata} />;
+    row = <ToolRow document={document} index={index} metadata={metadata} onLayout={onLayout} />;
   } else if (metadata.kind === "files") {
-    row = <FileChangesRow document={document} index={index} metadata={metadata} />;
+    row = <FileChangesRow document={document} index={index} metadata={metadata} onLayout={onLayout} />;
   }
   return row;
 }

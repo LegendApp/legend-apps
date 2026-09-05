@@ -280,8 +280,47 @@ function TranscriptList({
   const [composerHeight, setComposerHeight] = useState(CHAT_COMPOSER_INITIAL_HEIGHT);
   const [streamingDocumentId, setStreamingDocumentId] = useState<string | undefined>(undefined);
   const dataSource = useMemo(() => new TranscriptDataSource(document), [document]);
+  const lastDocumentRowIndex = document.rowCount - 1;
   const anchorIndex = anchor?.documentId === document.documentId ? anchor.index : undefined;
   const isStreaming = streamingDocumentId === document.documentId;
+  const handleInitialTailLayout = useCallback(() => {
+    if (reportedDocumentIdRef.current === document.documentId) {
+      return;
+    }
+    reportedDocumentIdRef.current = document.documentId;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (phase) {
+          const timing = document.getTiming();
+          onBenchmarkEvent?.({
+            durationMs: performance.now() - openedAt,
+            name: "contentReady",
+            path,
+            phase,
+            recordCount: timing.recordCount,
+            rowCount: timing.rowCount,
+            sourceBytes: timing.sourceBytes,
+            timing: {
+              documentMs: timing.documentMs,
+              loadMs: timing.mappedMs,
+              nativeTotalMs: timing.totalMs,
+              parseMs: timing.normalizedMs,
+              scanMs: timing.scannedMs,
+            },
+          });
+          // Parser parity must not delay the visual readiness boundary being measured.
+          setTimeout(() => {
+            onBenchmarkEvent?.({
+              contentDigest: document.contentDigest,
+              name: "contentDigest",
+              path,
+              phase,
+            });
+          }, 0);
+        }
+      });
+    });
+  }, [document, onBenchmarkEvent, openedAt, path, phase]);
   const renderItem = useCallback(
     ({ item }: LegendListDataSourceRenderItemProps<TranscriptListItem>) => {
       let row = null;
@@ -294,12 +333,13 @@ function TranscriptList({
               index={item}
               loadImages={loadImages}
               metadata={dataSource.getRowMetadata(item)}
+              onLayout={item === lastDocumentRowIndex && phase ? handleInitialTailLayout : undefined}
             />
           );
       }
       return row;
     },
-    [dataSource, document, loadImages],
+    [dataSource, document, handleInitialTailLayout, lastDocumentRowIndex, loadImages, phase],
   );
   const getItemType = useCallback(
     (item: TranscriptListItem) => isDemoTranscriptMessage(item)
@@ -371,45 +411,6 @@ function TranscriptList({
     streamingDocumentIdRef.current = undefined;
     document.releaseNativeResources();
   }, [activeTimers, document]);
-  const handleLoad = useCallback(() => {
-    if (reportedDocumentIdRef.current === document.documentId) {
-      return;
-    }
-    reportedDocumentIdRef.current = document.documentId;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (phase) {
-          const timing = document.getTiming();
-          onBenchmarkEvent?.({
-            durationMs: performance.now() - openedAt,
-            name: "contentReady",
-            path,
-            phase,
-            recordCount: timing.recordCount,
-            rowCount: timing.rowCount,
-            sourceBytes: timing.sourceBytes,
-            timing: {
-              documentMs: timing.documentMs,
-              loadMs: timing.mappedMs,
-              nativeTotalMs: timing.totalMs,
-              parseMs: timing.normalizedMs,
-              scanMs: timing.scannedMs,
-            },
-          });
-          // Parser parity must not delay the visual readiness boundary being measured.
-          setTimeout(() => {
-            onBenchmarkEvent?.({
-              contentDigest: document.contentDigest,
-              name: "contentDigest",
-              path,
-              phase,
-            });
-          }, 0);
-        }
-      });
-    });
-  }, [document, onBenchmarkEvent, openedAt, path, phase]);
-
   return (
     <View className="flex-1 bg-background">
       <LegendList
@@ -422,7 +423,7 @@ function TranscriptList({
         estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE}
         getItemType={getItemType}
         initialScrollAtEnd
-        onLoad={phase ? handleLoad : undefined}
+        onLoad={document.rowCount === 0 && phase ? handleInitialTailLayout : undefined}
         recycleItems
         ref={listRef}
         renderItem={renderItem}
