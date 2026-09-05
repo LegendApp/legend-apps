@@ -5,7 +5,6 @@ import {
 import type { ChatSummary } from "@legend-apps/chat-history";
 
 const settingsPath = "chat-history/settings.json";
-const catalogPath = "chat-history/catalog.json";
 
 type ChatHistorySettings = {
   selectedChat?: ChatSummary;
@@ -41,13 +40,4 @@ export function writeSelectedChat(selectedChat: ChatSummary) {
     selectedChat,
     selectedId: selectedChat.id,
   });
-}
-
-export function readCachedChatCatalog() {
-  const summaries = readApplicationSupportJson<unknown>(catalogPath);
-  return Array.isArray(summaries) ? summaries.filter(isChatSummary) : [];
-}
-
-export function writeCachedChatCatalog(summaries: readonly ChatSummary[]) {
-  writeApplicationSupportJson(catalogPath, summaries);
 }

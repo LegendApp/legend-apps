@@ -3,7 +3,7 @@ import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { App, ChatHistoryWindow } from "../App";
 import { getChatBenchmarkConfig } from "../chatBenchmark";
-import { readCachedChatCatalog, readSavedChatSelection, writeCachedChatCatalog } from "../chatStorage";
+import { readSavedChatSelection } from "../chatStorage";
 
 jest.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator",
@@ -43,9 +43,7 @@ jest.mock("../ChatComposer", () => ({ ChatComposer: "ChatComposer" }));
 jest.mock("../DemoTranscriptRow", () => ({ DemoTranscriptRow: "DemoTranscriptRow" }));
 jest.mock("../TranscriptRow", () => ({ TranscriptRow: "TranscriptRow" }));
 jest.mock("../chatStorage", () => ({
-  readCachedChatCatalog: jest.fn(() => []),
   readSavedChatSelection: jest.fn(() => ({})),
-  writeCachedChatCatalog: jest.fn(),
   writeSelectedChat: jest.fn(),
 }));
 jest.mock("../chatBenchmark", () => ({
@@ -111,30 +109,12 @@ describe("Chat History host window", () => {
     expect(setMainWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Saved" }));
   });
 
-  it("renders a cached catalog until native discovery refreshes it", async () => {
-    const cached: ChatSummary = {
-      id: "cached",
-      path: "/cached.jsonl",
-      provider: "claude",
-      title: "Cached",
-      updatedAt: 1,
-    };
-    jest.mocked(readCachedChatCatalog).mockReturnValueOnce([cached]);
-    jest.mocked(getRecentChats).mockReturnValueOnce(new Promise(() => {}));
-
-    await act(async () => { renderer = create(<App />); });
-
-    const sidebar = renderer!.root.findAllByType("LegendList" as never)[0]!;
-    expect(sidebar.props.data.some((entry: { summary?: ChatSummary }) => entry.summary?.id === cached.id)).toBe(true);
-  });
-
   it("refreshes on reopen while retaining an unchanged selected transcript", async () => {
     const original: ChatSummary = { id: "old", title: "Original", path: "/old.jsonl", provider: "codex", updatedAt: 1 };
     const latest: ChatSummary = { id: "new", title: "New", path: "/new.jsonl", provider: "codex", updatedAt: 2 };
     jest.mocked(getRecentChats).mockResolvedValueOnce([original]);
     await act(async () => { renderer = create(<App />); });
     expect(openChat).toHaveBeenCalledTimes(1);
-    expect(writeCachedChatCatalog).toHaveBeenCalledWith([original]);
     const reopen = jest.mocked(addApplicationReopenRequestedListener).mock.calls[0]![0];
     jest.mocked(getRecentChats).mockResolvedValueOnce([latest, { ...original }]);
     await act(async () => { reopen({ hasVisibleWindows: false }); });
