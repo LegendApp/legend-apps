@@ -535,7 +535,8 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
     }
     let catalogGeneration = 0;
     const refreshCatalog = () => {
-      const generation = ++catalogGeneration;
+      catalogGeneration = catalogGeneration + 1;
+      const generation = catalogGeneration;
       void getRecentChats(20)
       .then((recentChats) => {
         if (active && generation === catalogGeneration) {
