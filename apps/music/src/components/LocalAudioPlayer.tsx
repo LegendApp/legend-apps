@@ -1,5 +1,5 @@
 import { observable } from "@legendapp/state";
-import { File } from "expo-file-system/next";
+import { File } from "../utils/fileSystem";
 import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
 import { audioPlayer as audioPlayerApi, type NowPlayingInfoPayload } from "@legend-apps/audio-player";
 import { showToast } from "./Toast";

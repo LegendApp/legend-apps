@@ -9,6 +9,9 @@ const manifest = {
     macos: "so.legend.music.macos",
   },
   androidPackage: "so.legend.music",
+  expoModules: {
+    macos: false,
+  },
   hostWindow: {
     macos: {
       startupBackgroundColors: {

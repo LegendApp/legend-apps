@@ -1,4 +1,4 @@
-import { File } from "expo-file-system/next";
+import { File } from "./fileSystem";
 import { DEBUG_QUEUE_LOGS } from "../systems/constants";
 import type { LocalTrack } from "../systems/LocalMusicState";
 import { ensureCacheDirectory, getCacheDirectory, getPlaylistsDirectory } from "./cacheDirectories";

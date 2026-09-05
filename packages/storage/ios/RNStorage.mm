@@ -167,4 +167,43 @@ RCT_EXPORT_MODULE(NativeStorage)
   return url ? [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:nil] : nil;
 }
 
+- (NSNumber *)pathExists:(NSString *)pathOrUri isDirectory:(BOOL)isDirectory
+{
+  if (pathOrUri.length == 0) {
+    return @NO;
+  }
+  NSURL *url = [pathOrUri hasPrefix:@"file://"]
+    ? [NSURL URLWithString:pathOrUri]
+    : [NSURL fileURLWithPath:pathOrUri];
+  if (!url) {
+    return @NO;
+  }
+  BOOL foundDirectory = NO;
+  BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:url.path isDirectory:&foundDirectory];
+  return @(exists && foundDirectory == isDirectory);
+}
+
+- (NSNumber *)writeStorageBytes:(NSString *)root
+                   relativePath:(NSString *)relativePath
+                          value:(NSArray<NSNumber *> *)value
+{
+  NSURL *url = relativePath.length > 0 ? [self storageURLForRoot:root relativePath:relativePath] : nil;
+  if (!url) {
+    return @NO;
+  }
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  if (![fileManager createDirectoryAtURL:url.URLByDeletingLastPathComponent
+             withIntermediateDirectories:YES
+                              attributes:nil
+                                   error:nil]) {
+    return @NO;
+  }
+  NSMutableData *data = [NSMutableData dataWithLength:value.count];
+  uint8_t *bytes = static_cast<uint8_t *>(data.mutableBytes);
+  for (NSUInteger index = 0; index < value.count; index++) {
+    bytes[index] = value[index].unsignedCharValue;
+  }
+  return @([data writeToURL:url atomically:YES]);
+}
+
 @end

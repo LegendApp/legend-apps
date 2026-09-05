@@ -6,8 +6,10 @@ export interface Spec extends TurboModule {
   ensureStorageDirectory(root: string, relativePath: string): boolean;
   getStoragePathUri(root: string, relativePath: string): string;
   listStorageDirectoryJson(root: string, relativePath: string): string;
+  pathExists(pathOrUri: string, isDirectory: boolean): boolean;
   readStorageText(root: string, relativePath: string): string | null;
   readTextFile(pathOrUri: string): string | null;
+  writeStorageBytes(root: string, relativePath: string, value: readonly number[]): boolean;
   writeStorageText(root: string, relativePath: string, value: string): boolean;
 }
 

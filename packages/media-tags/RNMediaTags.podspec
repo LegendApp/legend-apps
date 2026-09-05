@@ -17,5 +17,5 @@ Pod::Spec.new do |s|
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
   s.dependency "ID3TagEditor", "5.5.0"
-  s.frameworks = "AVFoundation", "AudioToolbox", "ImageIO"
+  s.frameworks = "AVFoundation", "AudioToolbox", "CoreMedia", "ImageIO"
 end

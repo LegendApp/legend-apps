@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system/next";
+import * as FileSystem from "./fileSystem";
 
 /**
  * Gets a cache directory for the LegendMusic app

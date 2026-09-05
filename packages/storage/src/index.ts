@@ -190,6 +190,14 @@ export function readTextFile(pathOrUri: string) {
   return NativeStorage.readTextFile(pathOrUri) ?? undefined;
 }
 
+export function pathExists(pathOrUri: string, isDirectory = false) {
+  return NativeStorage.pathExists(pathOrUri, isDirectory);
+}
+
+export function writeStorageBytes(root: StorageRoot, relativePath: string, value: Uint8Array) {
+  return NativeStorage.writeStorageBytes(root, normalizeRelativePath(relativePath), Array.from(value));
+}
+
 export function createStorage({ root = "applicationSupport", subfolder }: StorageOptions = {}): Storage {
   const rootPath = normalizeRelativePath(subfolder);
   const resolvePath = (relativePath = "") => joinRelativePaths(rootPath, relativePath);

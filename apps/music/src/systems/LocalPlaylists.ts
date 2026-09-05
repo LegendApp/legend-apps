@@ -1,4 +1,4 @@
-import { Directory, File } from "expo-file-system/next";
+import { Directory, File } from "../utils/fileSystem";
 
 import { libraryUI$, selectLibraryPlaylist, selectLibraryView } from "./LibraryState";
 import {

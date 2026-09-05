@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.source = { :path => "." }
   s.platforms = { :ios => "15.0", :osx => "14.0" }
   s.source_files = "ios/**/*.{h,m,mm}"
-  s.frameworks = "AVFoundation", "MediaPlayer"
+  s.frameworks = "AVFoundation", "CoreMedia", "MediaPlayer"
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
 end

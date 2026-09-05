@@ -1,5 +1,5 @@
 import { batch, observable } from "@legendapp/state";
-import { Directory, File } from "expo-file-system/next";
+import { Directory, File } from "../utils/fileSystem";
 import { addDirectoryChangeListener, setWatchedDirectories } from "@legend-apps/file-system-watcher";
 import {
     addMediaLibraryScannerListener,

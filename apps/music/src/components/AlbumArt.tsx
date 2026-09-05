@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system/next";
+import * as FileSystem from "../utils/fileSystem";
 import { useEffect, useState } from "react";
 import { Image, type ImageProps, Text, View } from "react-native";
 import { ensureCacheDirectory, getCacheDirectory } from "../utils/cacheDirectories";

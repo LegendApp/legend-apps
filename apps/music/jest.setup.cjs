@@ -278,14 +278,17 @@ jest.mock("@legend-apps/storage", () => {
             file: jest.fn(),
             list: jest.fn(() => []),
             read: jest.fn(),
-            root: {},
+            root: { isDirectory: true, name: "cache", uri: "file:///Users/test/Library/Caches" },
             write: jest.fn(),
         })),
         getApplicationSupportDirectory: jest.fn(() => ({})),
         getPersistPlugin: jest.fn((obs$) => plugins.get(obs$)),
+        pathExists: jest.fn(() => true),
+        readTextFile: jest.fn(() => ""),
         observablePersistStorage: jest.fn(() => ({
             flush: jest.fn(async () => {}),
         })),
+        writeStorageBytes: jest.fn(() => true),
     };
 });
 

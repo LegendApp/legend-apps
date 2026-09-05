@@ -1,6 +1,7 @@
 package so.legend.apps.storage;
 
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReadableArray;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -182,6 +183,40 @@ public class StorageModule extends NativeStorageSpec {
       return value.toString();
     } catch (IllegalArgumentException | IOException ignored) {
       return null;
+    }
+  }
+
+  @Override
+  public boolean pathExists(String pathOrUri, boolean isDirectory) {
+    try {
+      File file = pathOrUri.startsWith("file://") ? new File(URI.create(pathOrUri)) : new File(pathOrUri);
+      return file.exists() && file.isDirectory() == isDirectory;
+    } catch (IllegalArgumentException ignored) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean writeStorageBytes(String rootName, String relativePath, ReadableArray value) {
+    try {
+      File file = relativePath.isEmpty() ? null : storageFile(rootName, relativePath);
+      if (file == null) {
+        return false;
+      }
+      File parent = file.getParentFile();
+      if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+        return false;
+      }
+      try (FileOutputStream output = new FileOutputStream(file)) {
+        byte[] bytes = new byte[value.size()];
+        for (int index = 0; index < value.size(); index++) {
+          bytes[index] = (byte) value.getInt(index);
+        }
+        output.write(bytes);
+      }
+      return true;
+    } catch (IOException ignored) {
+      return false;
     }
   }
 }
