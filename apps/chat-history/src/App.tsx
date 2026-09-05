@@ -492,6 +492,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const [catalogError, setCatalogError] = useState<string | undefined>();
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [transcriptState, setTranscriptState] = useState<TranscriptState>({ status: "idle" });
+  const benchmarkDiscoveryMsRef = useRef<number | undefined>(undefined);
   const loadGenerationRef = useRef(0);
   const switchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const windowShownRef = useRef(false);
@@ -512,6 +513,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   useEffect(() => {
     let active = true;
     if (benchmark) {
+      const discoveryStartedAt = performance.now();
       void getRecentChats(1_000_000)
         .then((discoveredChats) => {
           if (!active) {
@@ -524,6 +526,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
             throw new Error("A pinned benchmark chat was not found during native history discovery");
           }
           const resolvedTargets = targets as [ChatSummary, ChatSummary];
+          benchmarkDiscoveryMsRef.current = performance.now() - discoveryStartedAt;
           const visibleChats = discoveredChats.slice(0, 20);
           for (const target of resolvedTargets) {
             if (!visibleChats.some((summary) => summary.id === target.id)) {
@@ -644,7 +647,12 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
     if (!benchmark) {
       return;
     }
-    emitChatBenchmarkEvent(benchmark, event);
+    emitChatBenchmarkEvent(
+      benchmark,
+      event.name === "contentReady" && event.phase === "initial"
+        ? { ...event, discoveryMs: benchmarkDiscoveryMsRef.current }
+        : event,
+    );
     if (
       event.name === "contentReady"
       && event.phase === "initial"

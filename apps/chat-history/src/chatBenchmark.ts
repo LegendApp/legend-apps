@@ -21,6 +21,7 @@ export type ChatBenchmarkConfig = {
 };
 
 export type ChatBenchmarkContentReadyEvent = {
+  discoveryMs?: number;
   durationMs: number;
   name: "contentReady";
   path: string;
