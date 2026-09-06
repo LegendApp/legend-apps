@@ -229,7 +229,8 @@ void HybridChatDocument::buildDisplayRows() {
       if (lastTool < turnEnd) {
         displayRows_.push_back(ChatDisplayRow{index, lastTool - index + 1, true, {}});
         index = lastTool + 1;
-      } else {
+      }
+      while (index < turnEnd) {
         displayRows_.push_back(ChatDisplayRow{index, 1, false, {}});
         index += 1;
       }
