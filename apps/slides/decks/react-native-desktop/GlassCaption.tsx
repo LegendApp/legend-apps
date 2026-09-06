@@ -1,6 +1,6 @@
 import { useSlideLifecycle } from "@legend-apps/presentation";
 import { useEffect, useState } from "react";
-import { glassTimeline } from "./glassShader";
+import { glassTimeline } from "./packs/glass";
 
 const captions = ["We can fake the glass", "More refraction should help", "Perfect. Ship it."];
 

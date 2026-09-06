@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { benchmark, chartLabels, sortedBenchmarks, type BenchmarkMetric } from "./benchmark";
+import { AmbientAurora } from "./packs/backgrounds";
 
 const accent = "#67e8f9";
 
-export function Scene({ children, eyebrow, title, footer }: {
+export function Scene({ background = <AmbientAurora />, children, eyebrow, title, footer }: {
+  background?: ReactNode;
   children: ReactNode;
   eyebrow: string;
   title: ReactNode;
@@ -12,6 +14,7 @@ export function Scene({ children, eyebrow, title, footer }: {
 }) {
   return (
     <View style={styles.scene}>
+      {background ? <View pointerEvents="none" style={styles.sceneBackground}>{background}</View> : null}
       <Text className="text-2xl font-semibold uppercase tracking-widest" style={styles.accent}>{eyebrow}</Text>
       {title ? <Text style={styles.title}>{title}</Text> : null}
       <View className="flex-1 justify-center">{children}</View>
@@ -75,7 +78,7 @@ export function BenchmarkChart({ metric }: { metric: BenchmarkMetric }) {
 const histories = ["Design a desktop app", "Make it feel native", "Add a little glass", "A reasonable amount", "Please stop adding glass"];
 
 // Synthetic artwork for the effect demonstration, never a screenshot or benchmark fixture.
-export function ChatIllustration() {
+export function ChatIllustration({ glassBackdrop = false }: { glassBackdrop?: boolean }) {
   return (
     <View className="overflow-hidden rounded-3xl border border-slate-600 bg-slate-950" style={styles.chat}>
       <View className="h-16 flex-row items-center gap-3 border-b border-slate-700 px-8">
@@ -87,8 +90,8 @@ export function ChatIllustration() {
         <View className="gap-3 border-r border-slate-600 p-6" style={styles.sidebar}>
           <Text className="text-xl font-semibold uppercase tracking-widest text-cyan-200">Your conversations</Text>
           {histories.map((title, index) => (
-            <View className="rounded-xl px-5 py-3" style={index === 2 ? styles.selected : undefined} key={title}>
-              <Text className="text-2xl text-slate-100">{title}</Text>
+            <View className="rounded-xl px-5 py-3" style={index === 2 && !glassBackdrop ? styles.selected : undefined} key={title}>
+              <Text className="text-2xl text-slate-100" style={index === 2 && glassBackdrop ? styles.hidden : undefined}>{title}</Text>
             </View>
           ))}
           <Text className="mt-auto text-xl text-slate-400">Codex + Claude</Text>
@@ -99,12 +102,27 @@ export function ChatIllustration() {
           <View style={styles.orbOrange} />
           <Text className="mb-8 text-xl uppercase tracking-widest text-cyan-100">You</Text>
           <Text className="text-5xl font-semibold text-white">Can we add a little glass?</Text>
-          <View className="mt-10 gap-5 rounded-2xl border border-white/30 bg-slate-950/70 p-8">
+          <View className="mt-10 gap-5 rounded-2xl border border-white/30 bg-slate-950/70 p-8" style={glassBackdrop ? styles.hidden : undefined}>
             <Text className="text-xl uppercase tracking-widest text-slate-300">Assistant</Text>
             <Text className="text-4xl text-white">Of course. How hard could it be?</Text>
             <Text className="text-2xl text-slate-300">Blur. Refraction. Highlights. Just a few details.</Text>
           </View>
         </View>
+      </View>
+    </View>
+  );
+}
+
+export function GlassChatControls() {
+  return (
+    <View pointerEvents="none" style={styles.glassControls}>
+      <View className="justify-center px-5" style={styles.glassSelection}>
+        <Text className="text-2xl font-medium text-white">Add a little glass</Text>
+      </View>
+      <View className="gap-5 p-8" style={styles.glassResponse}>
+        <Text className="text-xl uppercase tracking-widest text-white/80">Assistant</Text>
+        <Text className="text-4xl font-medium text-white">Of course. How hard could it be?</Text>
+        <Text className="text-2xl text-white/80">Blur. Refraction. Highlights. Just a few details.</Text>
       </View>
     </View>
   );
@@ -135,6 +153,7 @@ export function DataPath() {
 
 const styles = StyleSheet.create({
   scene: { width: 1680, height: 920 },
+  sceneBackground: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
   accent: { color: accent },
   title: { color: "#f8fafc", fontSize: 72, lineHeight: 84, fontWeight: "700", marginTop: 20, marginBottom: 28 },
   statement: { color: "#f8fafc", fontSize: 96, lineHeight: 112, fontWeight: "700", maxWidth: 1500 },
@@ -146,6 +165,10 @@ const styles = StyleSheet.create({
   chat: { width: 1680, height: 580 },
   sidebar: { width: 420, backgroundColor: "#1e293b" },
   selected: { backgroundColor: "#3c5470" },
+  hidden: { opacity: 0 },
+  glassControls: { ...StyleSheet.absoluteFillObject },
+  glassSelection: { height: 60, left: 24, position: "absolute", top: 252, width: 372 },
+  glassResponse: { height: 222, left: 468, position: "absolute", top: 262, width: 1164 },
   orbCyan: { position: "absolute", left: 80, top: -100, width: 600, height: 600, borderRadius: 300, backgroundColor: "#087e8b" },
   orbViolet: { position: "absolute", right: -80, top: 80, width: 680, height: 680, borderRadius: 340, backgroundColor: "#5b21b6" },
   orbOrange: { position: "absolute", left: 320, bottom: -220, width: 440, height: 440, borderRadius: 220, backgroundColor: "#c05d37" },

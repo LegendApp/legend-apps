@@ -13,13 +13,13 @@ presenter:
 ---
 
 import { Text, View } from "react-native"
-import { Scene, BigStatement, Frameworks, BenchmarkChart, ChatIllustration, DataPath } from "./Scene"
+import { Scene, BigStatement, Frameworks, BenchmarkChart, ChatIllustration, GlassChatControls, DataPath } from "./Scene"
 import { Columns, Rows, CodePanel, SidebarGallery, NativeLayers } from "./Content"
 import { snippets } from "./snippets"
-import { counterfeitGlass, glassTimeline } from "./glassShader"
 import { GlassCaption } from "./GlassCaption"
 import { sidebarStorm, sidebarCount } from "./sidebarStorm"
-
+import { prismaticTear, subtleFaultTiming } from "./packs/distortion"
+import { chatGlassUniforms, glassTimeline, liquidGlass } from "./packs/glass"
 
 <Scene eyebrow="React Native / Desktop" title="">
   <BigStatement children={"React Native is the best way to build desktop apps"} detail="Yes, even if you never ship a mobile app." />
@@ -30,12 +30,12 @@ import { sidebarStorm, sidebarCount } from "./sidebarStorm"
 ---
 
 <Scene eyebrow="The reputation" title="The compromise framework">
-  <Effect preset="glitch" strength={12} speed={0.35} padding={28}>
+  <Effect shader={prismaticTear} strength={5} speed={1} padding={28} previewTime={3.14} uniforms={subtleFaultTiming}>
     <BigStatement children={"Convenient.\nBut surely worse?"} detail="Slower. Heavier. Less native. That is the assumption." />
   </Effect>
 </Scene>
 
-<!-- 0:20–0:45. “Normally the pitch is that you give something up and get code sharing back. We internalize that so thoroughly that we sometimes don't even measure it.” These are assumptions being challenged, not quotes from research. Keep this beat quick. “What if React Native is the option we would choose for quality?” -->
+<!-- 0:20–0:45. “Normally the pitch is that you give something up and get code sharing back. We internalize that so thoroughly that we sometimes don't even measure it.” These are assumptions being challenged, not quotes from research. Keep this beat quick. A small visual fault appears after three seconds and repeats every 8.5 seconds; it should suggest that the premise is unstable without competing with the words. “What if React Native is the option we would choose for quality?” -->
 
 ---
 
@@ -138,13 +138,16 @@ import { sidebarStorm, sidebarCount } from "./sidebarStorm"
 transition: none
 ---
 
-<Scene eyebrow="Recreating native materials" title={<GlassCaption />} footer="Liquid-ish Glass™ · a deliberately exaggerated imitation">
-  <Effect shader={counterfeitGlass} strength={240} speed={1} previewTime={glassTimeline.peak}>
-    <ChatIllustration />
-  </Effect>
+<Scene eyebrow="Recreating native materials" title={<GlassCaption />} footer="Convincing first. Comically over-engineered by the end.">
+  <View style={{ height: 580, width: 1680 }}>
+    <Effect shader={liquidGlass} strength={96} speed={1} previewTime={glassTimeline.peak} uniforms={chatGlassUniforms}>
+      <ChatIllustration glassBackdrop />
+    </Effect>
+    <GlassChatControls />
+  </View>
 </Scene>
 
-<!-- 8:10–9:25. ONE ANIMATED SLIDE. Begin: “We can fake the glass.” It stays mild for four seconds, changes caption at 12 seconds, and reaches peak absurdity at 28 seconds. As it gets worse: “Some refraction. Maybe more refraction. Chromatic aberration is a feature, right?” At “Perfect. Ship it.” pause: “I may have misunderstood the human interface guidelines.” It keeps moving until you advance. Returning restarts it; Current and audience stay in sync, and Next shows a stable final frame. This is a deliberate RN/Skia imitation, not a measured competitor implementation. Extra rendering work can have a cost; this gag does not measure that cost. No fake FPS numbers. The next slide is the quiet native-code reset. -->
+<!-- 8:10–9:25. ONE ANIMATED SLIDE. Begin: “We can fake the glass.” The two rounded surfaces initially behave like a restrained floating material: local background color, mild blur, edge refraction, a thin highlight and crisp controls. It holds for four seconds, changes caption at 12 seconds, and reaches peak absurdity at 28 seconds. As only those surfaces get worse: “Some refraction. Maybe more refraction. Chromatic aberration is a feature, right?” At “Perfect. Ship it.” pause: “I may have misunderstood the human interface guidelines.” It keeps moving until you advance. Returning restarts it; Current and audience stay in sync, and Next shows a stable final frame. This is a deliberate RN/Skia approximation, not a measured competitor implementation or Apple's actual material. Extra rendering work can have a cost; this gag does not measure that cost. No fake FPS numbers. The next slide is the quiet native-code reset. -->
 
 ---
 transition: none

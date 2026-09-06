@@ -53,7 +53,7 @@ component captures content and its `TypeGPU` component owns GPU lifecycle.
 
 Chat History artwork and the three sidebar designs are labeled illustrations or
 schematics. They contain no private conversation text and are not attributed to
-competitor screenshots. The glass escalation is intentionally bad custom Skia
-rendering. The quiet reset shows real native source; Slides does not yet embed
+competitor screenshots. The glass escalation begins as a restrained custom Skia
+approximation and then becomes intentionally excessive. The quiet reset shows real native source; Slides does not yet embed
 `NSGlassEffectView`. The 384-sidebars scene is real TypeGPU shader code, without
 an invented FPS or throughput claim.

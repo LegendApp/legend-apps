@@ -31,7 +31,8 @@ The Chat History artwork is synthetic. It is not a screenshot of the real app.
 - `Scene.tsx` and `Content.tsx`: native layout, charts, diagrams and artwork.
 - `snippets.ts`: short source excerpts and labeled usage examples.
 - `benchmark.ts`: measured values, chart labels and sorting.
-- `glassShader.ts` and `GlassCaption.tsx`: automatic glass escalation.
+- `packs/`: reusable background, distortion and glass prototypes.
+- `GlassCaption.tsx`: automatic glass escalation copy.
 - `sidebarStorm.ts`: the TypeGPU scene.
 
 No dependencies, host changes or native module changes are needed by this deck.
@@ -39,9 +40,11 @@ Do not copy the entire talk into another generated deck: edit the MDX directly.
 
 ## Effects
 
-Slide 15 is **one continuously animated glass joke**. It starts subtle, holds for
-four seconds, changes caption at 12 seconds and reaches maximum distortion at
-28 seconds. It keeps moving until you advance; revisiting restarts the sequence.
+Slide 15 is **one continuously animated glass joke**. It begins as two localized,
+restrained glass surfaces, holds for four seconds, changes caption at 12 seconds
+and reaches maximum absurdity at 28 seconds. The controls remain crisp above the
+material while refraction, caustics and color separation escalate inside it. It
+keeps moving until you advance; revisiting restarts the sequence.
 The presenter’s Current view and audience animate from the same clock; Next
 shows a stable final frame. Only the caption leaf updates at its two beats;
 the host’s shader clock drives the distortion.
@@ -51,7 +54,11 @@ a custom shader is Apple's material. Slides does not currently expose the native
 GlassEffectView package to decks. A genuine live material demo would need native
 linking or a switch to an app that already uses it.
 
-Other effects include the opening-assumption glitch, Skia ripple, the TypeGPU
+The `packs` folder prototypes the future `slides:` virtual namespace described in
+`packs/README.md`. These deck-local versions bundle with the MDX and require no
+installation. Every slide uses the slowly drifting ambient aurora. The opening
+assumption uses a configurable brief fault with explicit delay, duration and
+interval controls. Other effects include Skia ripple and the TypeGPU
 scene with 384 sidebars and a restrained closing ripple. Evidence charts remain
 still so their values are readable. No effect-performance measurements are claimed.
 
