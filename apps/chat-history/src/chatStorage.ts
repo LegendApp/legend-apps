@@ -5,6 +5,9 @@ import {
 import type { ChatSummary } from "@legend-apps/chat-history";
 
 const settingsPath = "chat-history/settings.json";
+const selectedChatWriteDelayMs = 100;
+let pendingSelectedChat: ChatSummary | undefined;
+let selectedChatWriteTimer: ReturnType<typeof setTimeout> | undefined;
 
 type ChatHistorySettings = {
   selectedChat?: ChatSummary;
@@ -35,9 +38,33 @@ export function readSavedChatSelection(): SavedChatSelection {
   return { selectedChat, selectedId };
 }
 
+function persistSelectedChat() {
+  const selectedChat = pendingSelectedChat;
+  pendingSelectedChat = undefined;
+  selectedChatWriteTimer = undefined;
+  if (selectedChat) {
+    try {
+      writeApplicationSupportJson(settingsPath, {
+        selectedChat,
+        selectedId: selectedChat.id,
+      });
+    } catch (error) {
+      console.error(`[ChatHistoryStorage] ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
 export function writeSelectedChat(selectedChat: ChatSummary) {
-  writeApplicationSupportJson(settingsPath, {
-    selectedChat,
-    selectedId: selectedChat.id,
-  });
+  pendingSelectedChat = selectedChat;
+  if (selectedChatWriteTimer !== undefined) {
+    clearTimeout(selectedChatWriteTimer);
+  }
+  selectedChatWriteTimer = setTimeout(persistSelectedChat, selectedChatWriteDelayMs);
+}
+
+export function flushSelectedChatWrite() {
+  if (selectedChatWriteTimer !== undefined) {
+    clearTimeout(selectedChatWriteTimer);
+    persistSelectedChat();
+  }
 }

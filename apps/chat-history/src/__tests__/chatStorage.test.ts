@@ -1,5 +1,5 @@
 import { readApplicationSupportJson, writeApplicationSupportJson } from "@legend-apps/storage/src/applicationSupport";
-import { readSavedChatSelection, writeSelectedChat } from "../chatStorage";
+import { flushSelectedChatWrite, readSavedChatSelection, writeSelectedChat } from "../chatStorage";
 
 jest.mock("@legend-apps/storage/src/applicationSupport", () => ({
   readApplicationSupportJson: jest.fn(),
@@ -15,7 +15,14 @@ const summary = {
 };
 
 describe("chatStorage", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    flushSelectedChatWrite();
+    jest.useRealTimers();
+  });
 
   it("restores a valid selected chat", () => {
     jest.mocked(readApplicationSupportJson).mockReturnValue({ selectedChat: summary, selectedId: summary.id });
@@ -29,9 +36,24 @@ describe("chatStorage", () => {
 
   it("persists enough metadata to open before catalog discovery", () => {
     writeSelectedChat(summary);
+    expect(writeApplicationSupportJson).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(100);
     expect(writeApplicationSupportJson).toHaveBeenCalledWith("chat-history/settings.json", {
       selectedChat: summary,
       selectedId: summary.id,
     });
+  });
+  it("coalesces selections and flushes the latest full summary on shutdown", () => {
+    writeSelectedChat(summary);
+    const latest = { ...summary, id: "codex:two", path: "/two.jsonl" };
+    writeSelectedChat(latest);
+    flushSelectedChatWrite();
+    expect(writeApplicationSupportJson).toHaveBeenCalledTimes(1);
+    expect(writeApplicationSupportJson).toHaveBeenCalledWith("chat-history/settings.json", {
+      selectedChat: latest,
+      selectedId: latest.id,
+    });
+    jest.runAllTimers();
+    expect(writeApplicationSupportJson).toHaveBeenCalledTimes(1);
   });
 });

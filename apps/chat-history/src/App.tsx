@@ -29,7 +29,7 @@ import {
   getChatBenchmarkConfig,
   type ChatBenchmarkEvent,
 } from "./chatBenchmark";
-import { readSavedChatSelection, writeSelectedChat } from "./chatStorage";
+import { flushSelectedChatWrite, readSavedChatSelection, writeSelectedChat } from "./chatStorage";
 import { DemoTranscriptRow } from "./DemoTranscriptRow";
 import {
   isDemoTranscriptMessage,
@@ -608,6 +608,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       active = false;
       reopenSubscription.remove();
       cancelPendingOpen();
+      flushSelectedChatWrite();
     };
   }, [benchmark]);
 

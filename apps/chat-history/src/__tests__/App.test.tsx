@@ -43,6 +43,7 @@ jest.mock("../ChatComposer", () => ({ ChatComposer: "ChatComposer" }));
 jest.mock("../DemoTranscriptRow", () => ({ DemoTranscriptRow: "DemoTranscriptRow" }));
 jest.mock("../TranscriptRow", () => ({ TranscriptRow: "TranscriptRow" }));
 jest.mock("../chatStorage", () => ({
+  flushSelectedChatWrite: jest.fn(),
   readSavedChatSelection: jest.fn(() => ({})),
   writeSelectedChat: jest.fn(),
 }));
