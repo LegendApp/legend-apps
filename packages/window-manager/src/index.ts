@@ -166,11 +166,13 @@ export type WindowToolbarButtonItem = {
   id: string;
   label?: string;
   menuItems?: WindowToolbarMenuItem[];
+  monospacedDigits?: boolean;
   placement?: WindowToolbarItemPlacement;
   systemImageName?: string;
   tooltip?: string;
   type: "button";
   value?: string;
+  width?: number;
 };
 
 export type WindowToolbarLabelItem = {
