@@ -19,3 +19,45 @@
 +  [view cacheDisplayInRect:view.bounds toBitmapImageRep:bitmap];
 +  CGImageRef image = bitmap.CGImage;
 +  return image == nil ? nullptr : SkMakeImageFromCGImage(image);
+--- a/apple/SkiaUIView.mm
++++ b/apple/SkiaUIView.mm
+@@ -78,6 +78,16 @@
+       _impl->getDrawView()->setShowDebugOverlays(_debugMode);
+       _impl->setUseP3ColorSpace(_useP3ColorSpace);
+       _impl->setHighBitDepth(_highBitDepth);
++#if TARGET_OS_OSX
++      // A recycled Fabric view can keep its bounds without another layout.
++      // Initialize the new Metal surface from those bounds on attachment.
++      if (!NSIsEmptyRect(self.bounds)) {
++        [CATransaction begin];
++        [CATransaction setDisableActions:YES];
++        _impl->setSize(self.bounds.size.width, self.bounds.size.height);
++        [CATransaction commit];
++      }
++#endif
+     }
+   }
+ }
+--- a/cpp/rnskia/RNSkPictureView.h
++++ b/cpp/rnskia/RNSkPictureView.h
+@@ -55 +55,4 @@ public:
+-    _picture = picture;
++    {
++      std::lock_guard<std::mutex> lock(_pictureMutex);
++      _picture = std::move(picture);
++    }
+@@ -59 +62,4 @@ public:
+-  sk_sp<SkPicture> getPicture() const { return _picture; }
++  sk_sp<SkPicture> getPicture() const {
++    std::lock_guard<std::mutex> lock(_pictureMutex);
++    return _picture;
++  }
+@@ -63,3 +69,3 @@ private:
+-    // Capture picture pointer to ensure thread safety - _picture can be
+-    // modified from the JS thread while we're drawing on the render thread
+-    sk_sp<SkPicture> picture = _picture;
++    // Retain under the same lock as setPicture: copying sk_sp concurrently
++    // with assignment can reference a picture that has already been released.
++    sk_sp<SkPicture> picture = getPicture();
+@@ -78,0 +85 @@ private:
++  mutable std::mutex _pictureMutex;

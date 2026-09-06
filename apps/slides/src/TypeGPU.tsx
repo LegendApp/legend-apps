@@ -31,7 +31,7 @@ export function TypeGPU({
   transparent = false,
   width = 960,
 }: TypeGPUProps) {
-  const { isActive, isPreview, slideIndex } = useSlideLifecycle();
+  const { isActive, isPreview, slideIndex, startedAt } = useSlideLifecycle();
   const canvasRef = useRef<CanvasRef>(null);
   const [error, setError] = useState<string>();
 
@@ -124,7 +124,7 @@ export function TypeGPU({
           }
           try {
             firstTimestamp ??= timestamp;
-            const elapsed = isPreview ? previewTime : (timestamp - firstTimestamp) / 1000;
+            const elapsed = isPreview ? previewTime : Math.max(0, timestamp - (startedAt ?? firstTimestamp)) / 1000;
             const deltaTime = previousTimestamp === undefined || isPreview
               ? 0
               : (timestamp - previousTimestamp) / 1000;
@@ -158,7 +158,7 @@ export function TypeGPU({
       cancelled = true;
       dispose();
     };
-  }, [height, isActive, isPreview, previewTime, scene, slideIndex, width]);
+  }, [height, isActive, isPreview, previewTime, scene, slideIndex, startedAt, width]);
 
   return (
     <View style={[styles.container, { backgroundColor, height, width }, style]}>

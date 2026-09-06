@@ -71,12 +71,12 @@ function Button({ disabled, label, onPress, primary = false }: { disabled?: bool
   );
 }
 
-function Preview({ index, label, weight = 1 }: { index: number; label: string; weight?: number }) {
+function Preview({ index, label, live = false, weight = 1 }: { index: number; label: string; live?: boolean; weight?: number }) {
   return (
     <View style={[styles.previewSection, { flex: weight }]}>
       <Text style={styles.eyebrow}>{label}</Text>
       <View style={styles.preview}>
-        <SlideCanvas><DeckRenderer isPreview targetIndex={index} /></SlideCanvas>
+        <SlideCanvas><DeckRenderer isPreview={!live} targetIndex={index} /></SlideCanvas>
       </View>
     </View>
   );
@@ -202,7 +202,7 @@ function PresenterWorkspace({
   return (
     <View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <Preview index={currentIndex} label="Current" weight={showNext ? layout.currentPreviewRatio : 1} />
+        <Preview index={currentIndex} label="Current" live weight={showNext ? layout.currentPreviewRatio : 1} />
         {showNext && (
           <>
             <ResizeHandle

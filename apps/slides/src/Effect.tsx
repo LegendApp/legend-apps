@@ -36,6 +36,7 @@ type EffectCanvasProps = {
   isPreview: boolean;
   previewTime: number;
   speed: number;
+  startedAt?: number;
   strength: number;
   uniforms?: Record<string, Uniform>;
   width: number;
@@ -49,6 +50,7 @@ function EffectCanvas({
   isPreview,
   previewTime,
   speed,
+  startedAt,
   strength,
   uniforms,
   width,
@@ -65,15 +67,15 @@ function EffectCanvas({
       return;
     }
     let frame = 0;
-    const startedAt = performance.now();
+    const epoch = startedAt ?? performance.now();
     const update = (timestamp: number) => {
-      setTime((timestamp - startedAt) / 1000 * speed);
+      setTime(Math.max(0, timestamp - epoch) / 1000 * speed);
       frame = requestAnimationFrame(update);
     };
-    setTime(0);
+    setTime(Math.max(0, performance.now() - epoch) / 1000 * speed);
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [isActive, isPreview, previewTime, speed]);
+  }, [isActive, isPreview, previewTime, speed, startedAt]);
 
   const shaderUniforms = {
     ...uniforms,
@@ -111,7 +113,7 @@ export function Effect({
   style,
   uniforms,
 }: EffectProps) {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const { isActive, isPreview, startedAt } = useSlideLifecycle();
   const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
   const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
@@ -161,9 +163,12 @@ export function Effect({
   };
 
   return (
-    <View collapsable={false} onLayout={handleLayout} ref={sourceRef} style={[styles.container, style]}>
-      <View style={[padding ? { padding } : undefined, image && styles.hidden]}>
-        {renderNativeChildren(children, (text) => <Text>{text}</Text>)}
+    <View onLayout={handleLayout} style={[styles.container, style]}>
+      <View style={image && styles.hidden}>
+        {/* Capture only the native source, never the canvas that replaces it. */}
+        <View collapsable={false} ref={sourceRef} style={padding ? { padding } : undefined}>
+          {renderNativeChildren(children, (text) => <Text>{text}</Text>)}
+        </View>
       </View>
       {image && runtimeEffect ? (
         <EffectCanvas
@@ -174,6 +179,7 @@ export function Effect({
           isPreview={isPreview}
           previewTime={previewTime}
           speed={speed}
+          startedAt={startedAt}
           strength={strength}
           uniforms={uniforms}
           width={size.width}

@@ -45,6 +45,8 @@ export type PresentationRuntime = {
   previous(): void;
   slideCount: number;
   slideIndex: number;
+  /** Shared performance.now() epoch for the active slide animation. */
+  startedAt?: number;
 };
 
 export type CompiledSlideProps = {
