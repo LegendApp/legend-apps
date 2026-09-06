@@ -15,6 +15,7 @@ import { useSystemLegendDisplayTheme } from "@legend-apps/theme";
 import { addApplicationReopenRequestedListener, setMainWindowOptions } from "@legend-apps/window-manager";
 import {
   LegendList,
+  type LegendListDataSource,
   type LegendListDataSourceRenderItemProps,
   type LegendListRef,
   type LegendListRenderItemProps,
@@ -81,6 +82,13 @@ const chatSidebarContentInset = {
   left: 0,
   right: 0,
   top: CHAT_HISTORY_SIDEBAR_TOP_INSET,
+};
+const emptyTranscriptDataSource: LegendListDataSource<TranscriptListItem> = {
+  getItem: () => undefined,
+  getKey: (index) => `empty:${index}`,
+  getLength: () => 0,
+  getRevision: () => 0,
+  subscribe: () => () => {},
 };
 type TranscriptState =
   | { status: "idle" }
@@ -252,6 +260,7 @@ function ChatSidebar({
 }
 
 function TranscriptList({
+  dataKey,
   document,
   loadImages,
   onBenchmarkEvent,
@@ -259,11 +268,12 @@ function TranscriptList({
   path,
   phase,
 }: {
-  document: ChatDocument;
+  dataKey: string;
+  document?: ChatDocument;
   loadImages: boolean;
   onBenchmarkEvent?: (event: ChatBenchmarkEvent) => void;
-  openedAt: number;
-  path: string;
+  openedAt?: number;
+  path?: string;
   phase?: "initial" | "switch";
 }) {
   const listRef = useRef<LegendListRef>(null);
@@ -274,12 +284,17 @@ function TranscriptList({
   const [anchor, setAnchor] = useState<{ documentId: string; index: number } | undefined>(undefined);
   const [composerHeight, setComposerHeight] = useState(CHAT_COMPOSER_INITIAL_HEIGHT);
   const [streamingDocumentId, setStreamingDocumentId] = useState<string | undefined>(undefined);
-  const dataSource = useMemo(() => new TranscriptDataSource(document), [document]);
-  const lastDocumentRowIndex = document.rowCount - 1;
-  const anchorIndex = anchor?.documentId === document.documentId ? anchor.index : undefined;
-  const isStreaming = streamingDocumentId === document.documentId;
+  const documentId = document?.documentId;
+  const transcriptDataSource = useMemo(
+    () => document ? new TranscriptDataSource(document) : undefined,
+    [document],
+  );
+  const dataSource = transcriptDataSource ?? emptyTranscriptDataSource;
+  const anchorIndex = anchor && anchor.documentId === documentId ? anchor.index : undefined;
+  const isStreaming = documentId !== undefined && streamingDocumentId === documentId;
+  const lastDocumentRowIndex = (document?.rowCount ?? 0) - 1;
   const handleInitialTailLayout = useCallback(() => {
-    if (reportedDocumentIdRef.current === document.documentId) {
+    if (!document || openedAt === undefined || path === undefined || reportedDocumentIdRef.current === document.documentId) {
       return;
     }
     reportedDocumentIdRef.current = document.documentId;
@@ -319,7 +334,7 @@ function TranscriptList({
   const renderItem = useCallback(
     ({ item }: LegendListDataSourceRenderItemProps<TranscriptListItem>) => {
       let row = null;
-      if (item !== undefined) {
+      if (item !== undefined && document) {
         row = isDemoTranscriptMessage(item)
           ? <DemoTranscriptRow message={item} />
           : (
@@ -327,20 +342,20 @@ function TranscriptList({
               document={document}
               index={item}
               loadImages={loadImages}
-              metadata={dataSource.getRowMetadata(item)}
+              metadata={transcriptDataSource!.getRowMetadata(item)}
               onLayout={item === lastDocumentRowIndex && phase ? handleInitialTailLayout : undefined}
             />
           );
       }
       return row;
     },
-    [dataSource, document, handleInitialTailLayout, lastDocumentRowIndex, loadImages, phase],
+    [document, handleInitialTailLayout, lastDocumentRowIndex, loadImages, phase, transcriptDataSource],
   );
   const getItemType = useCallback(
     (item: TranscriptListItem) => isDemoTranscriptMessage(item)
       ? `demo-${item.role}`
-      : dataSource.getRowMetadata(item).kind,
-    [dataSource],
+      : transcriptDataSource?.getRowMetadata(item).kind ?? "",
+    [transcriptDataSource],
   );
   const schedule = useCallback((callback: () => void, delay: number) => {
     const timer = setTimeout(() => {
@@ -360,10 +375,13 @@ function TranscriptList({
     { paddingBottom: composerHeight + CHAT_COMPOSER_CONTENT_GAP },
   ], [composerHeight]);
   const streamDemoResponse = useCallback(() => {
-    const id = `${document.documentId}:demo-assistant:${++demoMessageSequenceRef.current}`;
+    if (!documentId || !transcriptDataSource) {
+      return;
+    }
+    const id = `${documentId}:demo-assistant:${++demoMessageSequenceRef.current}`;
     const words = DEMO_STREAM_RESPONSE.split(" ");
     let wordCount = 1;
-    dataSource.appendDemoMessage({
+    transcriptDataSource.appendDemoMessage({
       id,
       role: "assistant",
       streaming: true,
@@ -373,38 +391,38 @@ function TranscriptList({
     const streamNextWord = () => {
       wordCount += 1;
       const streamContinues = wordCount < words.length;
-      dataSource.updateDemoMessage(id, words.slice(0, wordCount).join(" "));
+      transcriptDataSource.updateDemoMessage(id, words.slice(0, wordCount).join(" "));
       if (streamContinues) {
         schedule(streamNextWord, DEMO_STREAM_WORD_DELAY_MS);
       } else {
-        dataSource.finishDemoMessage(id);
+        transcriptDataSource.finishDemoMessage(id);
         streamingDocumentIdRef.current = undefined;
         setStreamingDocumentId(undefined);
       }
     };
     schedule(streamNextWord, DEMO_STREAM_WORD_DELAY_MS);
-  }, [dataSource, document.documentId, schedule]);
+  }, [documentId, schedule, transcriptDataSource]);
   const handleSendDemoMessage = useCallback((text: string) => {
-    if (streamingDocumentIdRef.current === undefined) {
-      streamingDocumentIdRef.current = document.documentId;
-      const userIndex = dataSource.appendDemoMessage({
-        id: `${document.documentId}:demo-user:${++demoMessageSequenceRef.current}`,
+    if (documentId && transcriptDataSource && streamingDocumentIdRef.current === undefined) {
+      streamingDocumentIdRef.current = documentId;
+      const userIndex = transcriptDataSource.appendDemoMessage({
+        id: `${documentId}:demo-user:${++demoMessageSequenceRef.current}`,
         role: "user",
         text,
       });
-      setAnchor({ documentId: document.documentId, index: userIndex });
-      setStreamingDocumentId(document.documentId);
+      setAnchor({ documentId, index: userIndex });
+      setStreamingDocumentId(documentId);
       requestAnimationFrame(() => {
         void listRef.current?.scrollToEnd({ animated: true });
       });
       schedule(streamDemoResponse, DEMO_STREAM_START_DELAY_MS);
     }
-  }, [dataSource, document.documentId, schedule, streamDemoResponse]);
+  }, [documentId, schedule, streamDemoResponse, transcriptDataSource]);
   useEffect(() => () => {
     activeTimers.forEach(clearTimeout);
     activeTimers.clear();
     streamingDocumentIdRef.current = undefined;
-    document.releaseNativeResources();
+    document?.releaseNativeResources();
   }, [activeTimers, document]);
   return (
     <View className="flex-1 bg-background">
@@ -412,13 +430,13 @@ function TranscriptList({
         anchoredEndSpace={anchoredEndSpace}
         contentContainerStyle={listContentStyle}
         contentInset={chatHistoryListContentInset}
-        dataKey={document.documentId}
+        dataKey={dataKey}
         dataSource={dataSource}
         estimatedItemSize={500}
         estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE}
         getItemType={getItemType}
         initialScrollAtEnd
-        onLoad={document.rowCount === 0 && phase ? handleInitialTailLayout : undefined}
+        onLoad={document?.rowCount === 0 && phase ? handleInitialTailLayout : undefined}
         recycleItems
         ref={listRef}
         renderItem={renderItem}
@@ -427,9 +445,10 @@ function TranscriptList({
       />
       <View pointerEvents="box-none" style={styles.composerOverlay}>
         <ChatComposer
-          disabled={isStreaming}
+          disabled={!document || isStreaming}
           onHeightChange={setComposerHeight}
           onSend={handleSendDemoMessage}
+          transcriptId={dataKey}
         />
       </View>
     </View>
@@ -448,31 +467,30 @@ function TranscriptPane({
   state: TranscriptState;
 }) {
   const isCurrentSelection = "selectedId" in state && state.selectedId === selectedId;
-  if (isCurrentSelection && state.status === "error") {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-10">
-        <Text className="text-sm text-danger">{state.error}</Text>
-      </View>
-    );
-  }
-  if (isCurrentSelection && state.status === "ready") {
-    return (
+  const document = isCurrentSelection && state.status === "ready" ? state.document : undefined;
+  const message = isCurrentSelection && state.status === "error"
+    ? state.error
+    : selectedId === undefined
+      ? "No transcript selected."
+      : undefined;
+  return (
+    <View className="flex-1 bg-background">
       <TranscriptList
-        document={state.document}
+        dataKey={selectedId ?? "none"}
+        document={document}
         loadImages={loadImages}
         onBenchmarkEvent={onBenchmarkEvent}
-        openedAt={state.openedAt}
-        path={state.path}
-        phase={state.phase}
+        openedAt={isCurrentSelection && state.status === "ready" ? state.openedAt : undefined}
+        path={isCurrentSelection && state.status === "ready" ? state.path : undefined}
+        phase={isCurrentSelection && state.status === "ready" ? state.phase : undefined}
       />
-    );
-  }
-  if (selectedId !== undefined) {
-    return <View className="flex-1 bg-background" />;
-  }
-  return (
-    <View className="flex-1 items-center justify-center bg-background">
-      <Text className="text-sm text-muted">No transcript selected.</Text>
+      {message ? (
+        <View className="absolute inset-0 items-center justify-center bg-background px-10">
+          <Text className={isCurrentSelection && state.status === "error" ? "text-sm text-danger" : "text-sm text-muted"}>
+            {message}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }

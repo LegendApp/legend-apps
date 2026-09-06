@@ -1,5 +1,5 @@
 import { GlassSurface } from "@legend-apps/glass-effect-view";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
 
@@ -12,16 +12,22 @@ export function ChatComposer({
   disabled,
   onHeightChange,
   onSend,
+  transcriptId,
 }: {
   disabled: boolean;
   onHeightChange: (height: number) => void;
   onSend: (text: string) => void;
+  transcriptId: string;
 }) {
   const [text, setText] = useState("");
   const canSend = !disabled && text.trim().length > 0;
   const { theme } = useUniwind();
   const mutedTextStyle = useResolveClassNames("text-muted");
   const glassTintColor = theme === "dark" ? "#20212466" : "#ffffff70";
+
+  useEffect(() => {
+    setText("");
+  }, [transcriptId]);
 
   const send = () => {
     const message = text.trim();
