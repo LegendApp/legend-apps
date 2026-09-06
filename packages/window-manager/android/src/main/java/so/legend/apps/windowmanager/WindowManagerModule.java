@@ -66,6 +66,11 @@ public class WindowManagerModule extends NativeWindowManagerSpec {
   }
 
   @Override
+  public void setWindowToolbarItemText(String identifier, String itemId, String text, Promise promise) {
+    promise.resolve(unavailableJson());
+  }
+
+  @Override
   public void focusToolbarSearchItem(String identifier, String itemId, String value, Promise promise) {
     promise.resolve(unavailableJson());
   }
