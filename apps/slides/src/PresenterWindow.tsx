@@ -13,10 +13,29 @@ import {
   WindowStyleMask,
 } from "@legend-apps/window-manager";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+  type GestureResponderEvent,
+  type LayoutChangeEvent,
+  type PanResponderGestureState,
+} from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
-import { getPresentationDisplayId, rememberPresentationDisplayId } from "./slidesPreferences";
+import {
+  getPresentationDisplayId,
+  getPresenterLayout,
+  rememberPresentationDisplayId,
+  rememberPresenterLayout,
+  resetPresenterLayout as resetStoredPresenterLayout,
+} from "./slidesPreferences";
+import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
 import { nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
@@ -63,9 +82,9 @@ function Preview({ index, label, weight = 1 }: { index: number; label: string; w
   );
 }
 
-function SpeakerNotes({ notes, slideCount, slideIndex }: { notes?: string; slideCount: number; slideIndex: number }) {
+function SpeakerNotes({ notes, slideCount, slideIndex, weight }: { notes?: string; slideCount: number; slideIndex: number; weight: number }) {
   return (
-    <View style={styles.notesSection}>
+    <View style={[styles.notesSection, { flex: weight }]}>
       <View style={styles.notesHeader}>
         <Text style={styles.notesTitle}>Speaker Notes</Text>
         <Text style={styles.notesSlide}>Slide {slideIndex + 1} of {slideCount || 1}</Text>
@@ -73,6 +92,145 @@ function SpeakerNotes({ notes, slideCount, slideIndex }: { notes?: string; slide
       <ScrollView key={slideIndex} contentContainerStyle={styles.notesContent} style={styles.notes}>
         <Text style={[styles.notesText, !notes && styles.notesPlaceholder]}>{notes || "No notes for this slide."}</Text>
       </ScrollView>
+    </View>
+  );
+}
+
+type ResizeHandleProps = {
+  direction: "horizontal" | "vertical";
+  label: string;
+  onResize(delta: number): void;
+  onResizeEnd(): void;
+};
+
+function ResizeHandle({ direction, label, onResize, onResizeEnd }: ResizeHandleProps) {
+  const lastDeltaRef = useRef(0);
+  const onResizeRef = useRef(onResize);
+  const onResizeEndRef = useRef(onResizeEnd);
+  onResizeRef.current = onResize;
+  onResizeEndRef.current = onResizeEnd;
+  const [panResponder] = useState(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      lastDeltaRef.current = 0;
+    },
+    onPanResponderMove: (_event: GestureResponderEvent, gesture: PanResponderGestureState) => {
+      const totalDelta = direction === "horizontal" ? gesture.dx : gesture.dy;
+      const delta = totalDelta - lastDeltaRef.current;
+      lastDeltaRef.current = totalDelta;
+      if (delta !== 0) onResizeRef.current(delta);
+    },
+    onPanResponderRelease: () => {
+      lastDeltaRef.current = 0;
+      onResizeEndRef.current();
+    },
+    onPanResponderTerminate: () => {
+      lastDeltaRef.current = 0;
+      onResizeEndRef.current();
+    },
+  }));
+
+  return (
+    <View
+      accessibilityActions={[{ name: "decrement" }, { name: "increment" }]}
+      accessibilityLabel={label}
+      accessibilityRole="adjustable"
+      onAccessibilityAction={(event) => {
+        onResize(event.nativeEvent.actionName === "increment" ? 24 : -24);
+        onResizeEnd();
+      }}
+      style={[
+        styles.resizeHandle,
+        direction === "horizontal" ? styles.horizontalResizeHandle : styles.verticalResizeHandle,
+        // React Native macOS supports resize cursors that are missing from the core ViewStyle type.
+        { cursor: direction === "horizontal" ? "ew-resize" : "ns-resize" } as any,
+      ]}
+      {...panResponder.panHandlers}
+    >
+      <View style={direction === "horizontal" ? styles.horizontalResizeLine : styles.verticalResizeLine} />
+    </View>
+  );
+}
+
+type PresenterWorkspaceProps = {
+  currentIndex: number;
+  nextIndex: number;
+  notes?: string;
+  resetVersion: number;
+  showNext: boolean;
+  showNotes: boolean;
+  slideCount: number;
+};
+
+function PresenterWorkspace({
+  currentIndex,
+  nextIndex,
+  notes,
+  resetVersion,
+  showNext,
+  showNotes,
+  slideCount,
+}: PresenterWorkspaceProps) {
+  const [layout, setLayout] = useState(getPresenterLayout);
+  const layoutRef = useRef(layout);
+  const workspaceSizeRef = useRef({ height: 0, width: 0 });
+
+  useEffect(() => {
+    if (resetVersion === 0) return;
+    layoutRef.current = defaultPresenterLayout;
+    setLayout(defaultPresenterLayout);
+  }, [resetVersion]);
+
+  const handleWorkspaceLayout = useCallback((event: LayoutChangeEvent) => {
+    workspaceSizeRef.current = event.nativeEvent.layout;
+  }, []);
+
+  const resize = useCallback((divider: "previews" | "notes", delta: number) => {
+    const availableSize = divider === "previews"
+      ? workspaceSizeRef.current.width
+      : workspaceSizeRef.current.height;
+    const nextLayout = resizePresenterLayout(layoutRef.current, divider, delta, availableSize);
+    if (nextLayout === layoutRef.current) return;
+    layoutRef.current = nextLayout;
+    setLayout(nextLayout);
+  }, []);
+
+  const persistLayout = useCallback(() => rememberPresenterLayout(layoutRef.current), []);
+  const previewWeight = showNotes ? 1 - layout.notesRatio : 1;
+
+  return (
+    <View onLayout={handleWorkspaceLayout} style={styles.workspace}>
+      <View style={[styles.previews, { flex: previewWeight }]}>
+        <Preview index={currentIndex} label="Current" weight={showNext ? layout.currentPreviewRatio : 1} />
+        {showNext && (
+          <>
+            <ResizeHandle
+              direction="horizontal"
+              label="Resize current and next slide previews"
+              onResize={(delta) => resize("previews", delta)}
+              onResizeEnd={persistLayout}
+            />
+            <Preview index={nextIndex} label="Next" weight={1 - layout.currentPreviewRatio} />
+          </>
+        )}
+      </View>
+      {showNotes && (
+        <>
+          <ResizeHandle
+            direction="vertical"
+            label="Resize slide previews and speaker notes"
+            onResize={(delta) => resize("notes", delta)}
+            onResizeEnd={persistLayout}
+          />
+          <SpeakerNotes
+            notes={notes}
+            slideCount={slideCount}
+            slideIndex={currentIndex}
+            weight={layout.notesRatio}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -163,6 +321,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const [selectedDisplayId, setSelectedDisplayId] = useState<string | null>(null);
   const [rehearsalEnabled, setRehearsalEnabled] = useState(false);
   const [activeMode, setActiveMode] = useState<"rehearsal" | "presentation" | null>(null);
+  const [presenterLayoutResetVersion, setPresenterLayoutResetVersion] = useState(0);
   const [keyboardJump, setKeyboardJump] = useState("");
   const keyboardJumpRef = useRef("");
   const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -217,7 +376,12 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     }
   }, []);
 
-  useSlidesMenus(openDeck, state.audienceOpen, state.blackout);
+  const resetPresenterLayout = useCallback(() => {
+    resetStoredPresenterLayout();
+    setPresenterLayoutResetVersion((version) => version + 1);
+  }, []);
+
+  useSlidesMenus(openDeck, state.audienceOpen, state.blackout, resetPresenterLayout);
 
   const openAudience = audience.open;
   const closeAudience = audience.close;
@@ -379,11 +543,15 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
             </View>
           </View>
 
-          <View style={styles.previews}>
-            <Preview index={state.currentSlide} label="Current" weight={2} />
-            {showNext && <Preview index={Math.min(state.currentSlide + 1, state.slides.length - 1)} label="Next" />}
-          </View>
-          {showNotes && <SpeakerNotes notes={currentNotes} slideCount={state.slides.length} slideIndex={state.currentSlide} />}
+          <PresenterWorkspace
+            currentIndex={state.currentSlide}
+            nextIndex={Math.min(state.currentSlide + 1, state.slides.length - 1)}
+            notes={currentNotes}
+            resetVersion={presenterLayoutResetVersion}
+            showNext={showNext}
+            showNotes={showNotes}
+            slideCount={state.slides.length}
+          />
 
           {state.blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
           {!!state.displayMessage && <Text style={styles.errorText}>{state.displayMessage}</Text>}
@@ -445,26 +613,32 @@ const styles = StyleSheet.create({
   eyebrow: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" },
   keyboardJump: { color: "#93c5fd", fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
   lastGood: { color: "#fda4af", fontSize: 11, fontStyle: "italic", marginTop: 10 },
-  notes: { maxHeight: 210 },
+  notes: { flex: 1 },
   notesContent: { paddingHorizontal: 16, paddingVertical: 14 },
   notesHeader: { alignItems: "center", borderBottomColor: "#3f3f46", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
   notesPlaceholder: { color: "#71717a", fontStyle: "italic" },
-  notesSection: { backgroundColor: "#202024", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, marginTop: 14, minHeight: 112, overflow: "hidden" },
+  notesSection: { backgroundColor: "#202024", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, minHeight: 0, overflow: "hidden" },
   notesSlide: { color: "#71717a", fontSize: 12, fontVariant: ["tabular-nums"] },
   notesText: { color: "#e4e4e7", fontSize: 17, lineHeight: 25 },
   notesTitle: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   presentationControls: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 10, justifyContent: "flex-end" },
   presenter: { flex: 1, padding: 18 },
   pressed: { opacity: 0.75 },
-  preview: { aspectRatio: 16 / 9, backgroundColor: "#000", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, overflow: "hidden" },
-  previews: { flex: 1, flexDirection: "row", gap: 14, minHeight: 0 },
+  horizontalResizeHandle: { height: "100%", width: 14 },
+  horizontalResizeLine: { backgroundColor: "#3f3f46", height: "100%", width: StyleSheet.hairlineWidth },
+  preview: { backgroundColor: "#000", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, flex: 1, overflow: "hidden" },
+  previews: { flexDirection: "row", minHeight: 0 },
   previewSection: { minWidth: 0 },
   primaryButton: { backgroundColor: "#2563eb" },
   primaryButtonText: { color: "#fff" },
   rehearsalToggle: { alignItems: "center", flexDirection: "row", gap: 6 },
+  resizeHandle: { alignItems: "center", justifyContent: "center" },
   root: { backgroundColor: "#18181b", flex: 1 },
   statusBar: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
   statusMessage: { color: "#a1a1aa", fontSize: 12 },
   timerActions: { flexDirection: "row", gap: 8 },
   updateBanner: { alignItems: "center", backgroundColor: "#272c3b", borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginTop: 12, padding: 10 },
+  verticalResizeHandle: { height: 14, width: "100%" },
+  verticalResizeLine: { backgroundColor: "#3f3f46", height: StyleSheet.hairlineWidth, width: "100%" },
+  workspace: { flex: 1, minHeight: 0 },
 });

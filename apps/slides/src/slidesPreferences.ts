@@ -1,9 +1,11 @@
 import { createStorage } from "@legend-apps/storage";
+import { defaultPresenterLayout, normalizePresenterLayout, type PresenterLayout } from "./presenterLayout";
 
 const slidesStorage = createStorage({ subfolder: "slides" });
 
 type SlidesPreferences = {
   path?: string;
+  presenterLayout?: PresenterLayout;
   presentationDisplayId?: string;
 };
 
@@ -29,4 +31,16 @@ export function getPresentationDisplayId() {
 
 export function rememberPresentationDisplayId(presentationDisplayId: string) {
   updatePreferences({ presentationDisplayId });
+}
+
+export function getPresenterLayout() {
+  return normalizePresenterLayout(readPreferences().presenterLayout);
+}
+
+export function rememberPresenterLayout(presenterLayout: PresenterLayout) {
+  updatePreferences({ presenterLayout: normalizePresenterLayout(presenterLayout) });
+}
+
+export function resetPresenterLayout() {
+  updatePreferences({ presenterLayout: defaultPresenterLayout });
 }

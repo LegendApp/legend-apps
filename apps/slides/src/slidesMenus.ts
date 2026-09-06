@@ -11,7 +11,12 @@ import { getSlidesState, setSlidesState } from "./slidesStore";
 
 const menuOwner = "slides-presenter";
 
-export function useSlidesMenus(openDeck: () => void | Promise<void>, audienceOpen: boolean, blackout: boolean) {
+export function useSlidesMenus(
+  openDeck: () => void | Promise<void>,
+  audienceOpen: boolean,
+  blackout: boolean,
+  resetPresenterLayout: () => void,
+) {
   useEffect(() => {
     configureMenus(menuOwner, [
       {
@@ -29,6 +34,10 @@ export function useSlidesMenus(openDeck: () => void | Promise<void>, audienceOpe
           title: "Blackout Audience",
           enabled: false,
           shortcut: { key: "b", modifiers: commandModifier },
+        }, {
+          id: "reset-presenter-layout",
+          title: "Reset Presenter Layout",
+          enabled: true,
         }],
       },
     ]);
@@ -38,12 +47,13 @@ export function useSlidesMenus(openDeck: () => void | Promise<void>, audienceOpe
       if (action.itemId === "blackout" && getSlidesState().audienceOpen) {
         setSlidesState((current) => ({ blackout: !current.blackout }));
       }
+      if (action.itemId === "reset-presenter-layout") resetPresenterLayout();
     });
     return () => {
       subscription.remove();
       clearMenus(menuOwner);
     };
-  }, [openDeck]);
+  }, [openDeck, resetPresenterLayout]);
 
   useEffect(() => {
     updateMenuItems(menuOwner, [{
