@@ -4,6 +4,7 @@ import {
   type CompiledDeckProps,
   type CompiledSlideProps,
   type DeckConfig,
+  type PresentationTemplateProps,
   type SlideConfig,
   type SlideTransition,
 } from "@legend-apps/presentation";
@@ -30,6 +31,7 @@ import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
 import { SlideCaptureContext } from "./SlideCaptureContext";
 import { getCodeLanguage, getCodeSource } from "./codeBlocks";
+import { resolveSlideTemplate } from "./slideTemplates";
 
 function parseObject<T extends object>(value: string, fallback: T) {
   try {
@@ -42,6 +44,10 @@ function parseObject<T extends object>(value: string, fallback: T) {
 
 function Slide({ children }: CompiledSlideProps) {
   return children;
+}
+
+function MissingSlideTemplate({ reference }: { reference: string }): never {
+  throw new Error(`Template "${reference}" is not available in the compiled deck.`);
 }
 
 const DeckRenderContext = createContext<{ isPreview: boolean; targetIndex?: number }>({ isPreview: false });
@@ -75,6 +81,11 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   if (!selected) {
     return null;
   }
+  const selectedMetadata = slides[selectedIndex].metadata;
+  const templates = getSlidesState().templates;
+  const resolvedTemplate = resolveSlideTemplate(templates, config, selectedMetadata);
+  const Template = resolvedTemplate.component;
+  const content = renderMdxChildren(selected.props.children);
   return (
     <PresentationProvider value={{
       currentSlide: getSlidesState().currentSlide,
@@ -86,11 +97,13 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       slideCount: elements.length,
       slideIndex: selectedIndex,
     }}>
-      <View style={styles.slideContent}>
-        <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
-          {renderMdxChildren(selected.props.children)}
-        </SlideErrorBoundary>
-      </View>
+      <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
+        {resolvedTemplate.reference && !Template
+          ? <MissingSlideTemplate reference={resolvedTemplate.reference} />
+          : Template
+          ? <Template deck={config} slide={selectedMetadata}>{content}</Template>
+          : <View style={styles.slideContent}>{content}</View>}
+      </SlideErrorBoundary>
     </PresentationProvider>
   );
 }

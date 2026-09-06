@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 export type SlideTransition = "none" | "fade" | "slide";
 
@@ -15,6 +15,7 @@ export type DeckConfig = {
     showNext?: boolean;
     showNotes?: boolean;
   };
+  template?: string;
   theme?: PresentationTheme;
   title?: string;
   transition?: SlideTransition;
@@ -22,9 +23,18 @@ export type DeckConfig = {
 };
 
 export type SlideConfig = {
+  template?: string | false;
   transition?: SlideTransition;
   [key: string]: unknown;
 };
+
+export type PresentationTemplateProps = {
+  children?: ReactNode;
+  deck: DeckConfig;
+  slide: SlideConfig;
+};
+
+export type PresentationTemplates = Record<string, ComponentType<PresentationTemplateProps>>;
 
 export type PresentationRuntime = {
   currentSlide: number;

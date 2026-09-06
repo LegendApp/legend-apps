@@ -20,6 +20,7 @@ function readyState() {
     revision: 7,
     slides: [],
     status: "ready",
+    templates: {},
   };
 }
 
@@ -32,7 +33,7 @@ describe("deck build policy", () => {
 
   test("applying a pending build preserves the lock and slide position", () => {
     const current = { ...readyState(), deckLocked: true, pendingDeck: { path: "/deck/deck.mdx" } };
-    const applied = { ...current, ...successfulDeckUpdate(current, RebuiltDeck, "/deck/deck.mdx", []) };
+    const applied = { ...current, ...successfulDeckUpdate(current, RebuiltDeck, {}, "/deck/deck.mdx", []) };
     expect(applied.deckLocked).toBe(true);
     expect(applied.pendingDeck).toBeNull();
     expect(applied.currentSlide).toBe(4);
@@ -55,7 +56,7 @@ describe("deck build policy", () => {
     };
     const recoveredState = {
       ...failedState,
-      ...successfulDeckUpdate(failedState, RebuiltDeck, "/deck/deck.mdx", ["warning"]),
+      ...successfulDeckUpdate(failedState, RebuiltDeck, {}, "/deck/deck.mdx", ["warning"]),
     };
 
     expect(recoveredState.component).toBe(RebuiltDeck);

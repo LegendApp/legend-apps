@@ -9,6 +9,30 @@ type Node = {
   [key: string]: unknown;
 };
 
+type RemarkSlidesOptions = {
+  templates?: Map<string, string>;
+};
+
+function registerTemplate(
+  config: Record<string, unknown>,
+  label: string,
+  templates: Map<string, string> | undefined,
+  allowDisabled: boolean,
+) {
+  const reference = config.template;
+  if (reference === undefined || (allowDisabled && reference === false)) {
+    return;
+  }
+  if (typeof reference !== "string" || !reference.trim()) {
+    throw new Error(`${label} template must be a local file name or path${allowDisabled ? ", or false" : ""}.`);
+  }
+  if (reference.startsWith("/") || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(reference)) {
+    throw new Error(`${label} template must be relative to the deck file.`);
+  }
+  const importPath = reference.startsWith(".") ? reference : `./${reference}`;
+  templates?.set(reference, importPath);
+}
+
 function parseFrontmatter(value: string | undefined, label: string) {
   if (!value?.trim()) {
     return {};
@@ -62,7 +86,7 @@ function stringAttribute(name: string, value: string): Node {
   };
 }
 
-export function remarkSlides() {
+export function remarkSlides(options: RemarkSlidesOptions = {}) {
   return (root: Node) => {
     const moduleNodes = root.children?.filter((node) => node.type === "mdxjsEsm") ?? [];
     const contentNodes = root.children?.filter((node) => node.type !== "mdxjsEsm") ?? [];
@@ -70,6 +94,7 @@ export function remarkSlides() {
     const deckConfig = firstNode?.type === "yaml"
       ? parseFrontmatter(firstNode.value, "Deck")
       : {};
+    registerTemplate(deckConfig, "Deck", options.templates, false);
     const slideSource = firstNode?.type === "yaml" ? contentNodes.slice(1) : contentNodes;
 
     const slides: Array<{ metadata: Record<string, unknown>; nodes: Node[]; notes: string[] }> = [];
@@ -94,6 +119,7 @@ export function remarkSlides() {
           pushSlide();
         }
         metadata = parseFrontmatter(node.value, `Slide ${slides.length + 1}`);
+        registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
         continue;
       }
       if ((node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") && node.name === "SlideFrontmatter") {
@@ -102,6 +128,7 @@ export function remarkSlides() {
         }
         const encoded = getEncodedAttribute(node);
         metadata = parseFrontmatter(encoded ? Buffer.from(encoded, "base64").toString("utf8") : "", `Slide ${slides.length + 1}`);
+        registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
         continue;
       }
       const nextNode = extractNotes(node, notes);

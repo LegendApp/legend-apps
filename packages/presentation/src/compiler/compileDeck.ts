@@ -163,12 +163,28 @@ function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>): Plu
     setup(buildApi) {
       buildApi.onLoad({ filter: /\.mdx$/ }, async (args) => {
         const source = fs.readFileSync(args.path, "utf8");
+        const templates = new Map<string, string>();
         const compiled = await compile(preprocessNotes(preprocessSlideFrontmatter(source)), {
           jsx: true,
           jsxImportSource: "react",
-          remarkPlugins: [remarkFrontmatter, remarkGfm, [remarkWebviews, { deckPath: entryPath, dependencies: webviewDependencies }], remarkSlides],
+          remarkPlugins: [
+            remarkFrontmatter,
+            remarkGfm,
+            [remarkWebviews, { deckPath: entryPath, dependencies: webviewDependencies }],
+            [remarkSlides, { templates }],
+          ],
         });
-        return { contents: String(compiled), loader: "jsx" as Loader };
+        const templateEntries = [...templates.entries()];
+        const templateImports = templateEntries.map(([, importPath], index) =>
+          `import __LegendSlidesTemplate${index} from ${JSON.stringify(importPath)};`
+        );
+        const templateExport = `export const __legendSlidesTemplates = {${templateEntries.map(([reference], index) =>
+          `${JSON.stringify(reference)}: __LegendSlidesTemplate${index}`
+        ).join(",")}};`;
+        return {
+          contents: [...templateImports, String(compiled), templateExport].join("\n"),
+          loader: "jsx" as Loader,
+        };
       });
     },
   };
