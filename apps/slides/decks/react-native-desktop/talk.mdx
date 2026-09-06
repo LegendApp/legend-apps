@@ -1,0 +1,372 @@
+---
+title: React Native is the best way to build desktop apps
+aspectRatio: 16:9
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#080c14"
+  color: "#f8fafc"
+presenter:
+  showNext: true
+  showNotes: true
+---
+
+import { Text, View } from "react-native"
+import { Scene, BigStatement, Frameworks, BenchmarkChart, ChatIllustration, DataPath } from "./Scene"
+import { Columns, Rows, CodePanel, SidebarGallery, NativeLayers } from "./Content"
+import { snippets } from "./snippets"
+import { counterfeitGlass, glassTimeline } from "./glassShader"
+import { GlassCaption } from "./GlassCaption"
+import { sidebarStorm, sidebarCount } from "./sidebarStorm"
+
+
+<Scene eyebrow="React Native / Desktop" title="">
+  <BigStatement children={"React Native is the best way to build desktop apps"} detail="Yes, even if you never ship a mobile app." />
+</Scene>
+
+<!-- 0:00–0:20. Say the title, then let the audience react. “You already know React Native. What I want to change is which projects you consider it for.” This is a case for choosing RN, grounded in one app and its comparisons. Today's native demos and measurements are macOS; Windows is a separate implementation. The title is my conclusion about the whole package, not a promise that RN wins every metric. -->
+
+---
+
+<Scene eyebrow="The reputation" title="The compromise framework">
+  <Effect preset="glitch" strength={12} speed={0.35} padding={28}>
+    <BigStatement children={"Convenient.\nBut surely worse?"} detail="Slower. Heavier. Less native. That is the assumption." />
+  </Effect>
+</Scene>
+
+<!-- 0:20–0:45. “Normally the pitch is that you give something up and get code sharing back. We internalize that so thoroughly that we sometimes don't even measure it.” These are assumptions being challenged, not quotes from research. Keep this beat quick. “What if React Native is the option we would choose for quality?” -->
+
+---
+
+<Scene eyebrow="The first surprise" title="Desktop is a React Native target" footer="React Native macOS + React Native Windows">
+  <Columns items={[["macOS", "React Native on top of AppKit."], ["Windows", "A native Windows implementation."], ["Your skills", "React, TypeScript, components, state."]]} />
+</Scene>
+
+<!-- 0:45–1:15. Pause on desktop. Most people here know RN but have not used it this way. “This is a desktop app you build with React Native. You do not have to stretch a phone screen across a laptop.” Microsoft maintains the desktop projects; the versions, setup and supported libraries differ. The rest of this talk demonstrates my macOS work. Sources: https://microsoft.github.io/react-native-macos/ and https://microsoft.github.io/react-native-windows/. -->
+
+---
+
+<Scene eyebrow="The familiar part" title="You can already read the app">
+  <CodePanel code={snippets.sidebar} label="Chat History · App.tsx · abbreviated JSX" detail="A native split view, with React components on both sides." />
+</Scene>
+
+<!-- 1:15–1:45. Read only the outline: split view, sidebar, transcript. “You don't need a new way to think about components to build this.” The component is a local wrapper from @legend-apps/appkit-split-view, not an RN core export. Ellipses omit props; this is a source excerpt, not copy-paste code. The real view specifies platform appearance and minimum widths. Source: apps/chat-history/src/App.tsx in main-integration. -->
+
+---
+
+<Scene eyebrow="The test case" title="I built a Chat History app" footer="Illustration · local histories · large transcripts · native desktop shell">
+  <ChatIllustration />
+</Scene>
+
+<!-- 1:45–2:25. “I wanted to browse local Codex and Claude histories. Select a conversation, read a long transcript, switch to another.” The illustration uses synthetic text for privacy. The benchmark files are genuinely large: 228.25 MiB initially and 140.99 MiB on switch. This is a local-data application: scanning, parsing, ownership and rendering all affect the result. An optional live app reveal can replace part of this explanation, but the slide is complete without one. -->
+
+---
+
+<Scene eyebrow="The experiment" title="One app. Nine implementations." footer="React Native · browser runtimes · Flutter · GPUI · Apple native">
+  <Frameworks />
+</Scene>
+
+<!-- 2:25–3:05. “Then I did the sensible thing and built it eight more times.” Pause briefly. Name the families: browser runtimes, Flutter, Rust/GPUI, Apple's native frameworks, and React Native. Deno has two variants here, using WebView and CEF. The comparison is implemented apps with equivalent normalized content. I did not somehow write nine perfectly equally optimized architectures. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="The ground rules" title="Same workload. Measured from outside." footer="September 5, 2026 · Apple M4 · macOS 26.6.1 · p50">
+  <Columns items={[["Same content", "Matching normalized digests. Images disabled."], ["Real builds", "Production apps. Fresh processes. Warm filesystem cache."], ["Repeated runs", "2 warmups + 10 measurements. Rotating app order."]]} />
+</Scene>
+
+<!-- 3:05–3:35. “I checked that the parsers produced the same normalized content, then timed what appeared on screen.” The camera is 60 fps; first content means stable visible content. Catalog discovery is included; no prebuilt application catalog cache. Use medians. These controls let us compare this workload, not isolate a framework renderer. Full method and limitations are in the backups and benchmark-source.md. Do not spend the whole talk defending a benchmark before showing it. -->
+
+---
+
+<Scene eyebrow="Performance" title="First content in 394 ms" footer="Stable first content · production · warm filesystem cache · n=10">
+  <BenchmarkChart metric="content" />
+</Scene>
+
+<!-- 3:35–4:35. “React Native is the first one ready.” Let the chart settle. RN is 394.0 ms; GPUI 490.2; Tauri 568.1; Electron 792.0. In this run Electron takes about twice as long to show the content. That result alone should make us stop treating RN as the slow compromise by default. The chart includes full discovery, data work and rendering. It is not a scroll-FPS test and it does not establish universal framework rankings. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="Memory" title="102 MB. Including the app." footer="Initial physical footprint + attributable helpers · p50 · lower is better">
+  <BenchmarkChart metric="memory" />
+  <Text className="mt-6 text-3xl text-cyan-200">SwiftUI wins initial memory. React Native is still very competitive.</Text>
+</Scene>
+
+<!-- 4:35–5:30. “JavaScript apparently does not require half a gigabyte.” RN's initial physical footprint is 101.7 MB, Electron 628.9 and Tauri 533.1 including attributable helpers. SwiftUI is lowest at 47.6. Give that win clearly: “If initial memory is your only criterion, SwiftUI wins this chart.” AppKit wins the switched snapshot. These are after-load footprints, not peak memory or an idle endurance test. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="Shipping" title="17 MB of app" footer="Production app bundles · full nine-app chart in backup">
+  <Columns items={[["React Native", "17.0 MB bundle"], ["Electron", "286.1 MB bundle"], ["Tauri", "11.3 MB bundle"]]} />
+</Scene>
+
+<!-- 5:30–5:50. “A small download and a small running process are different measurements.” Tauri uses the system WebKit runtime, so not all runtime bytes travel inside its bundle. AppKit is smaller still at 2.4 MB. These are logical app-bundle sizes, not compressed download measurements. The all-nine bundle chart is in backup. No need to imply RN is the smallest: the point is that its size is practical. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="Why it works" title="Keep the big data native" footer="Memory-mapped input → C++ document → lazy row requests → native views">
+  <DataPath />
+</Scene>
+
+<!-- 5:50–6:45. “The trick is not that JavaScript suddenly became the fastest language for parsing a giant file.” The native document owns the large data. C++ maps and selectively parses input; React and LegendList request rows lazily. Small requests cross the boundary as needed. “I can use React for the interface without making React own every byte of the file.” Competitors can also call C++; this is an architectural choice enabled by RN, not an exclusive capability. -->
+
+---
+
+<Scene eyebrow="The boundary" title="A native document looks like an object">
+  <CodePanel code={snippets.native} label="ChatHistory.nitro.ts · selected members" detail="A typed interface to native ownership. Ask for a row when you need it." />
+</Scene>
+
+<!-- 6:45–7:15. Point at rowCount and getRowMetadata. “The UI doesn't need a giant array of hydrated JavaScript objects just to know how many rows there are.” Nitro generates native bindings from the TypeScript contract. The ios key is how this Apple-target module is configured in this repository; it is not a promise of Windows support. Native calls still have costs, and synchronous work still needs to be bounded. Source: packages/chat-history/src/ChatHistory.nitro.ts; https://nitro.margelo.com/. -->
+
+---
+
+<Scene eyebrow="Native UI" title="React is composing native pieces">
+  <NativeLayers />
+</Scene>
+
+<!-- 7:15–7:50. “Native isn't just an adjective on the download page.” The app's split container is implemented with AppKit, while React owns the content and events. Platform services are accessible through native modules. Clarify that RN Text/View do not magically turn every custom widget into a stock AppKit control. It takes deliberate native integration. The benefit is being able to put native containers, ordinary React UI and custom rendering in one app. Source: packages/appkit-split-view and apps/chat-history/src/App.tsx. -->
+
+---
+
+<Scene eyebrow="Sidebars" title="We have mastered the rectangle" footer="Schematic sidebar designs">
+  <SidebarGallery />
+</Scene>
+
+<!-- 7:50–8:10. “There is nothing wrong with a rectangle. We have shipped many excellent rectangles.” These are schematic designs, not screenshots attributed to Electron, Tauri or Flutter. Those technologies can make beautiful interfaces too. The actual argument is that matching a changing platform material becomes your implementation work if you recreate it. “Let's say we want something more like Liquid Glass. How hard could it be?” -->
+
+---
+transition: none
+---
+
+<Scene eyebrow="Recreating native materials" title={<GlassCaption />} footer="Liquid-ish Glass™ · a deliberately exaggerated imitation">
+  <Effect shader={counterfeitGlass} strength={240} speed={1} previewTime={glassTimeline.peak}>
+    <ChatIllustration />
+  </Effect>
+</Scene>
+
+<!-- 8:10–9:25. ONE ANIMATED SLIDE. Begin: “We can fake the glass.” It stays mild for four seconds, changes caption at 12 seconds, and reaches peak absurdity at 28 seconds. As it gets worse: “Some refraction. Maybe more refraction. Chromatic aberration is a feature, right?” At “Perfect. Ship it.” pause: “I may have misunderstood the human interface guidelines.” It keeps moving until you advance. Returning restarts it; previews show a stable final frame. This is a deliberate RN/Skia imitation, not a measured competitor implementation. Extra rendering work can have a cost; this gag does not measure that cost. No fake FPS numbers. The next slide is the quiet native-code reset. -->
+
+---
+transition: none
+---
+
+<Scene eyebrow="The native option" title="Or ask the operating system" footer="Native implementation · macOS 26+">
+  <CodePanel code={snippets.glass} label="GlassEffectView.swift · native implementation excerpt" detail="NSGlassEffectView owns the material. React children go in its content view." />
+</Scene>
+
+<!-- 9:25–9:50. Leave a beat of silence after the visual chaos. “Or we could use the actual view.” This excerpt is real Swift from the repository. The wrapper uses NSGlassEffectView on macOS 26 and hosts React children in its contentContainer; on older systems this wrapper falls back to the ordinary content container. This slide shows how the native integration works, not a live native-glass rendering inside Slides. AppKit and SwiftUI can access the same platform material. Source: packages/glass-effect-view/ios/GlassEffectView.swift; https://developer.apple.com/documentation/appkit/nsglasseffectview. -->
+
+---
+
+<Scene eyebrow="React Native Skia" title="Also: we can do this on purpose" footer="Native content → captured image → animated Skia shader">
+  <Effect preset="ripple" strength={52} speed={0.8} padding={48}>
+    <View className="gap-8 rounded-3xl bg-cyan-300 px-12 py-16">
+      <Text className="text-8xl font-bold text-slate-950">Taste is optional.</Text>
+      <Text className="text-5xl text-slate-800">The rendering capability is real.</Text>
+    </View>
+  </Effect>
+</Scene>
+
+<!-- 9:50–10:20. “Custom graphics are great when you actually want custom graphics.” Skia gives us a rendering surface for drawing and effects. This particular Slides component captures ordinary native content once, then applies an animated shader to the image. The captured image is not an interactive native control. Use the platform for the platform's material; use custom graphics for your own visual language. This slide demonstrates the latter. Source: apps/slides/src/Effect.tsx. -->
+
+---
+
+<Scene eyebrow="TypeGPU" title="We have enough sidebars now" footer="384 illustrated sidebars · one instanced draw · shader-driven motion">
+  <TypeGPU scene={sidebarStorm} width={1680} height={580} previewTime={6} />
+</Scene>
+
+<!-- 10:20–10:55. “The design review asked for more sidebar.” Pause while the 384 little windows move. This is a separate WebGPU scene authored with TypeGPU. One instanced draw renders 384 quads; their motion comes from the vertex shader. It is not a boids compute simulation and I have not benchmarked its throughput. It shows another available tool in the same RN app. Source: sidebarStorm.ts; https://docs.swmansion.com/TypeGPU/. -->
+
+---
+
+<Scene eyebrow="TypeGPU" title="The shader is TypeScript">
+  <CodePanel code={snippets.gpu} label="sidebarStorm.ts · vertex and draw excerpts" detail="React owns the scene. The vertex shader moves the sidebars." />
+</Scene>
+
+<!-- 10:55–11:20. “That motion is written in a language you already use.” TypeGPU resolves the typed shader functions to WGSL for WebGPU. This arithmetic executes on the GPU, not as 384 React component updates. Point out the draw call and move on; this is not a shader programming workshop. In this typed vertex callback the library handles the GPU context. Do not imply any arbitrary TypeScript API can execute on the GPU. Source: sidebarStorm.ts and TypeGPU docs. -->
+
+---
+
+<Scene eyebrow="Development" title="Familiarity is a serious advantage">
+  <Columns items={[["Composition", "Components, Hooks, state, TypeScript."], ["Iteration", "Edit UI and see the result quickly."], ["Reuse", "Share logic, tests and compatible libraries."]]} />
+</Scene>
+
+<!-- 11:20–12:05. “JavaScript is easy” undersells the argument for this room. The important fact is that you already know how to organize a React app, debug state and build a screen. You can reuse that judgment immediately. Pure JS logic often travels well; native libraries need actual desktop support. Ease is fewer new things to learn for the ordinary work, plus a path to native code when you need it. This is a developer-experience argument, not a measured nine-framework build-time ranking. -->
+
+---
+
+<Scene eyebrow="The feedback loop" title="Edit. See it. Keep going.">
+  <Rows items={[["UI changes", "Fast Refresh for the React Native app."], ["Native changes", "Build and relink the native code."], ["This deck", "Local MDX compilation, then a Slides update."]]} />
+</Scene>
+
+<!-- 12:05–12:30. “I want to spend the day making decisions about the product, not waiting to see whether a spacing change helped.” RN Fast Refresh supports quick component edits and preserves local state when safe. Native changes require a native build. Be precise about this presentation: the deck has its own MDX recompiler; that is not Metro Fast Refresh. No live edit is required for this slide to work. If doing one, change a caption in this deck and apply the queued update. Source: https://reactnative.dev/docs/fast-refresh and apps/slides/README.md. -->
+
+---
+
+<Scene eyebrow="Native modules" title="Use the language the job needs">
+  <Columns items={[["TypeScript", "UI, application logic, orchestration."], ["C++", "Parsing, native ownership, shared libraries."], ["Platform code", "Swift / Objective-C++ on macOS. Kotlin on Android."]]} />
+</Scene>
+
+<!-- 12:30–13:00. “Choosing TypeScript for my UI didn't mean choosing it for every task.” Chat History is a concrete C++ example. Nitro supports C++, Swift and Kotlin bindings; native platform APIs can require additional wrappers and build configuration. Other languages can be reached through appropriate interop, but “any language with no effort” would be misleading. Windows has its own integration path. The advantage is a practical boundary where each piece can be written in a suitable language. Source: https://nitro.margelo.com/ and the chat-history module. -->
+
+---
+
+<Scene eyebrow="agent-device" title="Give the agent a task it can verify">
+  <BigStatement children={"“Open the app.\nSwitch conversations.\nCheck the content.”"} detail="A concrete task with an observable result." />
+</Scene>
+
+<!-- 13:00–13:40. “The agent doesn't have to stop at reading the source.” With agent-device it can inspect a running app, interact and save evidence. For this talk, a good task is opening a known history, selecting a second known history, and checking its title and expected content. This is an example instruction, not a transcript of a completed run. The test needs public-safe fixtures and expected values. Agent-device supports other technologies too; this is useful workflow, not RN exclusivity. Source: https://github.com/callstack/agent-device. -->
+
+---
+
+<Scene eyebrow="Verification" title="Close the loop" footer="agent-device · macOS app-scoped sessions · evidence you can review">
+  <Columns items={[["Observe", "Read accessibility state. Capture the app window."], ["Act", "Select a known history. Wait for the expected content."], ["Verify", "Check the result. Keep screenshots and failure evidence."]]} />
+</Scene>
+
+<!-- 13:40–14:25. “A confident sentence from the agent is not the same thing as checking the app.” The loop is inspect, act, verify. A useful result includes what was selected and what appeared, not just “tests passed.” Clear accessibility labels help target elements; screenshots cover the visual result. Save a repeatable path once it works. The backup has actual CLI syntax for opening an app-scoped session and capturing evidence. No fabricated terminal output is shown here. Source: agent-device documentation. -->
+
+---
+
+<Scene eyebrow="Desktop craft" title="Native is the beginning">
+  <Rows items={[["Keyboard + focus", "Shortcuts, tab order, selection, visible focus."], ["Windows + files", "Resize well, restore state, handle real documents."], ["Accessibility", "Names, roles, state and usable interactions."]]} />
+</Scene>
+
+<!-- 14:25–14:55. “Native views give us a foundation. We still have to build a good desktop app.” A bigger window is not sufficient. Think about keyboard use, focus, resizing, text selection, files, and accessibility from the beginning. These are responsibilities, not claims that this version of Chat History already implements every one. The repository has a useful real example: each sidebar row exposes its label, button role and selected state. -->
+
+---
+
+<Scene eyebrow="Cross-platform" title="Share the product. Respect the platform.">
+  <Columns items={[["Share", "Data models, business rules, state and useful components."], ["Adapt", "Menus, windows, input and platform materials."], ["Check", "Library support and native setup on each target."]]} />
+</Scene>
+
+<!-- 14:55–15:25. “Code reuse is valuable when it doesn't force the wrong interface.” Keep platform differences explicit instead of hiding them behind a lowest-common-denominator design. Desktop native modules and dependencies must support the target. A working macOS integration is not automatically a Windows integration. Today's measured results are macOS only. This talk is deliberately also a case for a desktop-only app, so code sharing with mobile is a bonus rather than the entire pitch. -->
+
+---
+
+<Scene eyebrow="The honest tradeoff" title="You still own a native app">
+  <Rows items={[["Toolchains", "Xcode or Windows build tools, signing and packaging."], ["Dependencies", "Check desktop compatibility before committing to a library."], ["Integration", "Some platform features need native code."]]} />
+</Scene>
+
+<!-- 15:25–15:55. “There is no framework that removes the work of shipping software.” React Native doesn't make signing, distribution, native dependency upgrades or platform behavior disappear. Mention this plainly, then return to why it is still worth it: the work buys a real native integration while the common UI work stays familiar. This is where my preference comes from, not a claim of zero native maintenance. Do not turn this into a long setup tutorial. -->
+
+---
+
+<Scene eyebrow="The choice" title="Why React Native wins for me">
+  <Columns items={[["A responsive app", "Fastest first content in this comparison; competitive footprint."], ["Native integration", "Platform containers and services, with custom graphics when useful."], ["A familiar workflow", "React skills, TypeScript, native modules and agent verification."]]} />
+</Scene>
+
+<!-- 15:55–16:30. “I don't need one framework to win every isolated column. I need an app I want to use, and a codebase I want to work in.” RN combines the measured result, native integration and the development workflow I want. SwiftUI and AppKit won individual resource metrics; that doesn't undo the overall choice. Keep this as the conclusion from this project and these priorities. Invite people to actually include RN in their next desktop evaluation. -->
+
+---
+
+<Scene eyebrow="Your next project" title="You do not need a mobile app first">
+  <Rows items={[["Start small", "Build one useful desktop screen."], ["macOS", "microsoft.github.io/react-native-macos"], ["Windows", "microsoft.github.io/react-native-windows"]]} />
+</Scene>
+
+<!-- 16:30–17:00. “Build the little desktop tool you've been wishing existed.” Start with the official platform setup, render a useful screen and add one desktop integration. Check the packages you need before investing heavily. These are real public entry points, not an invented starter-repository URL. No QR code is necessary until there is a final public talk or repository link. Sources: official React Native macOS and Windows sites. -->
+
+---
+
+<Scene eyebrow="One last thing" title="These slides are a React Native app">
+  <CodePanel code={snippets.deck} label="This presentation · talk.mdx · abbreviated JSX" detail="MDX + React Native + Skia + TypeGPU" />
+</Scene>
+
+<!-- 17:00–17:40. “The presentation has been the demo.” Reveal that the same app hosts the deck, presenter notes, audience window, custom React components, Skia effects and TypeGPU scenes. The excerpt is the actual shape of the sidebar slide. Optionally show the presenter window; the slide stands on its own if switching windows would interrupt the ending. The app's local authoring setup is not being offered as a finished standalone distribution product. Source: apps/slides/README.md and this deck. -->
+
+---
+
+<Scene eyebrow="React Native / Desktop" title="">
+  <Effect preset="ripple" strength={8} speed={0.3} padding={16}>
+    <BigStatement children={"Build your next\ndesktop app\nwith React Native."} detail="You already know where to start." />
+  </Effect>
+</Scene>
+
+<!-- 17:40–18:00. “I used React Native to build the app. I used React Native to make the case. I think you should try it for your next desktop project.” Stop there. END OF TALK. Everything after this is optional material for questions or edits. The running order leaves extra time inside the 20-minute slot for laughter and transitions. -->
+
+---
+
+<Scene eyebrow="Backup / switching" title="React Native and GPUI are tied" footer="Selection → stable content · 60 fps external recording · p50">
+  <BenchmarkChart metric="switch" />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. RN 139.7 ms; GPUI 140.3 ms. A difference of 0.6 ms is below one video frame at 60 fps. Do not turn printed precision into a meaningful winner. Tauri is 168.8 ms in this run. All values are p50 settled-visible switching timings. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="Backup / bundle size" title="Small download ≠ small memory footprint" footer="Logical bytes in production app bundles · reported in MB">
+  <BenchmarkChart metric="bundle" />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. AppKit is smallest at 2.4 MB. RN is 17.0 MB. A system WebView lets an application use runtime bytes that are already on the machine. Bundle size and helper-process memory answer different questions. These are logical bytes in production bundles, not compressed installer downloads. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="Backup / memory after switching" title="AppKit wins this snapshot" footer="Switched physical footprint + attributable helpers · p50">
+  <BenchmarkChart metric="switchedMemory" />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. AppKit 101.0 MB, SwiftUI 121.2, RN 132.6 after switching. The result is a snapshot after the second load; it does not establish peak memory, long-session retention or memory-pressure behavior. Native ownership and release policies matter. Source: benchmark-source.md. -->
+
+---
+
+<Scene eyebrow="Backup / methodology" title="What this comparison answers">
+  <Rows items={[["It answers", "How these implementations handle these large histories."], ["It controls", "Content parity, launch procedure, cache conditions and repetition."], ["It does not isolate", "Renderer cost, scroll FPS, developer time or every possible architecture."]]} />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. Use this if someone asks whether the benchmark is fair. Equivalent normalized content is necessary but doesn't make all code equally optimized. Each architecture reflects engineering choices. The correct conclusion is that RN can deliver this strong end-to-end result, not that every app on every workload must rank the same. Results come from the September 5 run, not the older opening summary in PERFORMANCE_ANALYSIS.md. -->
+
+---
+
+<Scene eyebrow="Backup / implementation choices" title="What I was choosing between">
+  <Rows items={[["Web runtimes", "DOM / CSS workflows and browser integrations."], ["SwiftUI / AppKit", "Direct Apple platform development."], ["Flutter / GPUI", "Different rendering and language ecosystems."], ["React Native", "React composition with native integration."]]} />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. These describe implementation families, not objective ease-of-use scores. Electron ships Chromium; Tauri's system WebView changes its packaging model. Native Apple frameworks are compelling for Apple-focused work. Flutter and GPUI offer other approaches to custom UI. Avoid pretending this project recorded comparable engineering hours. The reason to choose RN here is its combination of measured app behavior and the skills and integrations I want. -->
+
+---
+
+<Scene eyebrow="Backup / C++" title="There really is native code behind it">
+  <CodePanel code={snippets.cpp} label="HybridChatDocument.cpp · beginning of getRowMetadata" detail="The interface resolves a display row before constructing its metadata." />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. This is a verbatim beginning of the real method, followed by an explicit omission comment. It indexes native document state, then builds row metadata. It is not the entire parser or evidence that every access is zero-copy. Use this slide to ground the native-boundary discussion, not to explain all of C++. Source: packages/chat-history/cpp/HybridChatDocument.cpp. -->
+
+---
+
+<Scene eyebrow="Backup / Liquid Glass" title="The React side stays small">
+  <CodePanel code={snippets.glassReact} label="Usage example of the repository GlassEffectView wrapper" detail="The wrapper is local to this repository; it is not an RN core component." />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. This is an illustrative usage example of the actual exported API, not a source excerpt from Chat History. The wrapper defaults to regular style, forwards props and hosts children in RNGlassEffectView. The Swift implementation creates NSGlassEffectView on supported macOS versions. It is not currently linked or exposed to this MDX deck. The preceding Skia gag is a different rendering path. Source: packages/glass-effect-view/src/GlassEffectView.ts. -->
+
+---
+
+<Scene eyebrow="Backup / accessibility" title="Useful to people. Useful to agents.">
+  <CodePanel code={snippets.accessibility} label="Chat History · ChatSidebarRow · styling omitted" detail="A name, a role and selected state are part of the component contract." />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. These are actual props in the sidebar row. They communicate meaningful state; they do not alone establish a complete accessibility audit. Keyboard behavior, focus order and screen-reader experience still need verification. Agent-device can use accessibility snapshots as part of inspection. Real labels make both the UI and automation easier to understand. Source: apps/chat-history/src/App.tsx and agent-device docs. -->
+
+---
+
+<Scene eyebrow="Backup / agent-device" title="Start with app-scoped evidence">
+  <CodePanel code={snippets.agent} label="CLI example · run after launching the current debug app" detail="Inspect the current snapshot before choosing an interaction target." />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. This example opens or binds an app-scoped macOS session, reads interactive accessibility nodes and captures the app window. Launch the current debug app with the repo scripts first, so the session does not accidentally bind an old release. The snippet intentionally does not invent a stable node reference or show fake test output. After inspecting the snapshot, the agent chooses the correct target, acts and checks new evidence. Source: installed agent-device 0.20.10 help and repository AGENTS.md. -->
+
+---
+
+<Scene eyebrow="Backup / performance" title="JavaScript does not have to own everything">
+  <Columns items={[["Keep ownership clear", "Large native resources stay behind a small interface."], ["Render what matters", "Virtualize long content and load rows lazily."], ["Measure the path", "Discovery, parsing, crossings, layout and paint."]]} />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. These are architectural lessons from this application. Do not assume a bridge or a render is the bottleneck without evidence. Moving all work to native code is not automatically a win either: interfaces, caching and lifetime management matter. Other frameworks can use the same principles. The RN result demonstrates the available design space. -->
+
+---
+
+<Scene eyebrow="Backup / resources" title="The pieces are available">
+  <Rows items={[["Native desktop", "microsoft.github.io/react-native-macos\nmicrosoft.github.io/react-native-windows"], ["Graphics", "shopify.github.io/react-native-skia\ndocs.swmansion.com/TypeGPU"], ["Native + agents", "nitro.margelo.com\ngithub.com/callstack/agent-device"]]} />
+</Scene>
+
+<!-- BACKUP. BACKUP ONLY. Public project documentation. sources.md maps the talk's technical claims and code excerpts to their sources; benchmark-source.md documents the local measurements. Check target compatibility and current setup guidance for your project. The talk's custom MDX components are local source in this deck directory. -->
