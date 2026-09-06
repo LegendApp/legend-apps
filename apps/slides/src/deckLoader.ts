@@ -20,7 +20,7 @@ import * as TypeGPUData from "typegpu/data";
 import * as TypeGPUStd from "typegpu/std";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
-import type { CompileDeckResult, CompileDeckSuccess } from "@legend-apps/presentation";
+import type { CompileDeckResult, CompileDeckSuccess, PresentationTemplates } from "@legend-apps/presentation";
 import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "./deckBuildPolicy";
 import { getLastDeckPath, rememberDeckPath } from "./slidesPreferences";
 import { getSlidesState, setSlidesState } from "./slidesStore";
@@ -77,7 +77,11 @@ function evaluateDeck(code: string) {
   if (typeof component !== "function") {
     throw new Error("The compiled deck did not export an MDX component.");
   }
-  return component as React.ComponentType<any>;
+  const templates = module.exports.__legendSlidesTemplates;
+  return {
+    component: component as React.ComponentType<any>,
+    templates: templates && typeof templates === "object" ? templates as PresentationTemplates : {},
+  };
 }
 
 function applyUniwindStyles(code: string) {
@@ -204,9 +208,9 @@ export function applyPendingDeck() {
 
 function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean) {
   try {
-    const component = evaluateDeck(result.code);
+    const { component, templates } = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
-    setSlidesState(successfulDeckUpdate(getSlidesState(), component, path, result.warnings));
+    setSlidesState(successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings));
     if (remember) {
       rememberDeckPath(path);
       noteRecentDocument(path);

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { CompileDeckFailure } from "@legend-apps/presentation";
+import type { CompileDeckFailure, PresentationTemplates } from "@legend-apps/presentation";
 import type { SlidesState } from "./slidesStore";
 
 export function shouldDeferDeckUpdate(current: Pick<SlidesState, "deckLocked" | "component">) {
@@ -17,6 +17,7 @@ export function failedDeckUpdate(result: CompileDeckFailure): Partial<SlidesStat
 export function successfulDeckUpdate(
   current: SlidesState,
   component: ComponentType<any>,
+  templates: PresentationTemplates,
   path: string,
   warnings: string[],
 ): Partial<SlidesState> {
@@ -30,5 +31,6 @@ export function successfulDeckUpdate(
     deckPath: path,
     revision: current.revision + 1,
     status: "ready",
+    templates,
   };
 }

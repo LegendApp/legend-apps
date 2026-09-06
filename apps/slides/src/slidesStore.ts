@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ComponentType } from "react";
-import type { DeckConfig, SlideConfig } from "@legend-apps/presentation";
+import type { DeckConfig, PresentationTemplates, SlideConfig } from "@legend-apps/presentation";
 import type { CompileDeckSuccess } from "@legend-apps/presentation";
 
 export type DeckSlide = {
@@ -25,6 +25,7 @@ export type SlidesState = {
   revision: number;
   slides: DeckSlide[];
   status: "idle" | "building" | "ready" | "error";
+  templates: PresentationTemplates;
 };
 
 let state: SlidesState = {
@@ -44,6 +45,7 @@ let state: SlidesState = {
   revision: 0,
   slides: [],
   status: "idle",
+  templates: {},
 };
 const listeners = new Set<() => void>();
 

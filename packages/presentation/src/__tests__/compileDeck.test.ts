@@ -92,6 +92,61 @@ describe("compileDeck", () => {
     expect(result.uniwindCode).toContain("bg-fuchsia-500");
   });
 
+  test("bundles a template selected by file name in deck frontmatter", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": [
+        "---",
+        "title: Templates",
+        "template: templates/Frame",
+        "---",
+        "# Framed slide",
+      ].join("\n"),
+      "templates/Frame.tsx": [
+        'import type { PresentationTemplateProps } from "@legend-apps/presentation";',
+        'import { View } from "react-native";',
+        'export default function Frame({ children }: PresentationTemplateProps) {',
+        '  return <View className="rounded-3xl bg-violet-950 p-12">{children}</View>;',
+        '}',
+      ].join("\n"),
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "templates/Frame.tsx"));
+    expect(result.code).toContain("__legendSlidesTemplates");
+    expect(result.code).toContain('"templates/Frame"');
+    expect(result.code).toContain("rounded-3xl");
+    expect(result.uniwindCode).toContain("bg-violet-950");
+  });
+
+  test("bundles deck and per-slide template files", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": [
+        "---",
+        "template: templates/Default.tsx",
+        "---",
+        "# First",
+        "---",
+        "template: templates/Title.tsx",
+        "---",
+        "# Second",
+        "---",
+        "template: false",
+        "---",
+        "# Third",
+      ].join("\n"),
+      "templates/Default.tsx": "export default function Default({ children }) { return children; }",
+      "templates/Title.tsx": "export default function Title({ children }) { return children; }",
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "templates/Default.tsx"));
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "templates/Title.tsx"));
+    expect(result.code).toContain('template":"templates/Title.tsx');
+    expect(result.code).toContain('template":false');
+  });
+
   test("supports inline code and executable MDX expressions", async () => {
     const deckPath = createDeck({
       "deck.mdx": [
@@ -217,6 +272,30 @@ describe("compileDeck", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.errors.join("\n")).toContain("is not available to decks");
+  });
+
+  test("rejects invalid and escaping template references", async () => {
+    const invalidDeckPath = createDeck({ "deck.mdx": "---\ntemplate: 42\n---\n# Invalid" });
+    const invalidResult = await compileDeck(invalidDeckPath);
+    expect(invalidResult.success).toBe(false);
+    if (!invalidResult.success) {
+      expect(invalidResult.errors.join("\n")).toContain("Deck template must be a local file name or path");
+    }
+
+    const outsideTemplatePath = createDeck({
+      "deck.mdx": "# Outside fixture",
+      "Template.tsx": "export default () => null",
+    });
+    const outsideDirectory = path.dirname(outsideTemplatePath);
+    const escapingReference = `../${path.basename(outsideDirectory)}/Template`;
+    const escapingDeckPath = createDeck({
+      "deck.mdx": `---\ntemplate: ${escapingReference}\n---\n# Escaping`,
+    });
+    const escapingResult = await compileDeck(escapingDeckPath);
+    expect(escapingResult.success).toBe(false);
+    if (!escapingResult.success) {
+      expect(escapingResult.errors.join("\n")).toContain("escapes the deck directory");
+    }
   });
 
   test("reports the source location for failed local imports", async () => {

@@ -6,6 +6,8 @@ export type {
   CompiledSlideProps,
   DeckConfig,
   PresentationRuntime,
+  PresentationTemplateProps,
+  PresentationTemplates,
   PresentationTheme,
   SlideConfig,
   SlideTransition,

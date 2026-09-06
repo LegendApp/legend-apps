@@ -51,6 +51,7 @@ theme:
 presenter:
   showNext: true
   showNotes: true
+template: templates/Frame
 ---
 
 # First slide
@@ -65,6 +66,39 @@ transition: slide
 ```
 
 Transitions are `none`, `fade`, or `slide`. The deck default is `none`, and slide frontmatter may override it.
+
+## Templates
+
+A deck can select a local template component by file name or path. Extensions are
+optional, and the path is relative to the deck file:
+
+```yaml
+template: templates/Frame
+```
+
+The template file must default-export a React Native component. It receives the
+rendered slide content as `children`, document frontmatter as `deck`, and the
+current slide's frontmatter as `slide`:
+
+```tsx
+import type { PresentationTemplateProps } from "@legend-apps/presentation";
+import { Text, View } from "react-native";
+
+export default function Frame({ children, deck, slide }: PresentationTemplateProps) {
+  return (
+    <View style={{ flex: 1, padding: 80 }}>
+      <Text>{deck.title}</Text>
+      <View style={{ flex: 1, justifyContent: "center" }}>{children}</View>
+      {typeof slide.section === "string" && <Text>{slide.section}</Text>}
+    </View>
+  );
+}
+```
+
+The deck template applies to every slide. Slide frontmatter can select another
+template, or set `template: false` to use the built-in layout for that slide.
+Template files follow the same local-import and host-package rules as other deck
+components, are watched for live rebuilds, and are scanned for Uniwind classes.
 
 ## Components and code
 
