@@ -8,12 +8,16 @@ const windows = {
     options: {
       title: "Legend Slides",
       windowStyle: {
+        appearance: "dark",
+        backgroundColor: "#111114",
         height: 820,
         hasToolbar: true,
         minHeight: 600,
         minWidth: 900,
         titlebarAppearsTransparent: true,
-        titlebarMaterial: "glass",
+        titlebarMaterial: "hudWindow",
+        titlebarMaterialBlendingMode: "withinWindow",
+        titlebarMaterialState: "active",
         titlebarSeparatorStyle: "none",
         toolbarItems: createPresenterToolbarItems({
           activeMode: null,
@@ -25,7 +29,7 @@ const windows = {
           selectedDisplayId: null,
           timerRunning: false,
         }),
-        toolbarStyle: "unified",
+        toolbarStyle: "unifiedCompact",
         width: 1280,
       },
     },
