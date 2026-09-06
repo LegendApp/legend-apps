@@ -1,6 +1,8 @@
 export { PresentationProvider, usePresentation, useSlideLifecycle } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";
+export { persistSlideSpeakerNotesWithFileAccess, updateSlideSpeakerNotes } from "./speakerNotesSource";
+export type { SpeakerNotesFileAccess } from "./speakerNotesSource";
 export type {
   CompiledDeckProps,
   CompiledSlideProps,

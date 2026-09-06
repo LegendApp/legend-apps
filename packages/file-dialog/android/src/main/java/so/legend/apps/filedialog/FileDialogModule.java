@@ -31,7 +31,17 @@ public class FileDialogModule extends NativeFileDialogSpec {
   }
 
   @Override
+  public void readTextFile(String path, Promise promise) {
+    promise.resolve("");
+  }
+
+  @Override
   public void writeTextFile(String path, String contents, Promise promise) {
     promise.resolve(null);
+  }
+
+  @Override
+  public void writeTextFileIfUnchanged(String path, String expectedContents, String contents, Promise promise) {
+    promise.resolve(false);
   }
 }
