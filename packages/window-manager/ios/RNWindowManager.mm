@@ -1335,6 +1335,29 @@ willBeInsertedIntoToolbar:(BOOL)flag
     return toolbarItem;
   }
 
+  if ([type isEqualToString:@"label"]) {
+    NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
+    NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
+    NSString *text = [config[@"text"] isKindOfClass:NSString.class] ? config[@"text"] : @"";
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
+    CGFloat width = widthNumber ? widthNumber.doubleValue : MAX(44, [text sizeWithAttributes:nil].width + 12);
+
+    NSTextField *textField = [NSTextField labelWithString:text];
+    textField.translatesAutoresizingMaskIntoConstraints = NO;
+    textField.alignment = NSTextAlignmentRight;
+    textField.font = [NSFont monospacedDigitSystemFontOfSize:NSFont.systemFontSize weight:NSFontWeightSemibold];
+    textField.textColor = NSColor.labelColor;
+    textField.toolTip = label;
+    [textField.widthAnchor constraintEqualToConstant:width].active = YES;
+
+    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+    toolbarItem.view = textField;
+    toolbarItem.label = label;
+    toolbarItem.paletteLabel = label;
+    toolbarItem.toolTip = label;
+    return toolbarItem;
+  }
+
   if ([type isEqualToString:@"search"]) {
     NSString *itemId = [config[@"id"] isKindOfClass:NSString.class] ? config[@"id"] : @"";
     NSString *label = [config[@"label"] isKindOfClass:NSString.class] ? config[@"label"] : itemId;
@@ -2238,6 +2261,46 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
     window.title = title ?: @"";
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
+- (void)setWindowToolbarItemText:(NSString *)identifier
+                          itemId:(NSString *)itemId
+                            text:(NSString *)text
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    NSString *targetIdentifier = [self normalizeIdentifier:identifier];
+    NSWindow *window = (NSWindow *)self.windows[targetIdentifier];
+    if (!window) {
+      resolve([self failureJson:@"Window not found"]);
+      return;
+    }
+
+    NSString *toolbarIdentifier = [NSString stringWithFormat:@"legend.toolbar.%@", itemId ?: @""];
+    NSToolbarItem *toolbarItem = nil;
+    for (NSToolbarItem *candidate in window.toolbar.items) {
+      if ([candidate.itemIdentifier isEqualToString:toolbarIdentifier]) {
+        toolbarItem = candidate;
+        break;
+      }
+    }
+    if (!toolbarItem) {
+      resolve([self failureJson:@"Toolbar item not found"]);
+      return;
+    }
+
+    if (![toolbarItem.view isKindOfClass:NSTextField.class]) {
+      resolve([self failureJson:@"Toolbar item is not a text item"]);
+      return;
+    }
+    ((NSTextField *)toolbarItem.view).stringValue = text ?: @"";
     resolve([self successJson]);
   });
 #else

@@ -4,10 +4,13 @@ import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
 import {
   addDisplaysChangedListener,
   addWindowClosedListener,
+  addWindowToolbarItemSelectedListener,
   closeWindow,
   getDisplays,
   setPreventDisplaySleep,
+  setWindowOptions,
   setWindowTitle,
+  setWindowToolbarItemText,
   showWindow,
   type Display,
   WindowStyleMask,
@@ -19,7 +22,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
   type GestureResponderEvent,
@@ -40,6 +42,22 @@ import { nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlides
 import { slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
+import {
+  createPresenterToolbarItems,
+  formatPresenterElapsed,
+  presenterDisplayToolbarItemId,
+  presenterElapsedToolbarItemId,
+  presenterModePresentationValue,
+  presenterModeRehearsalValue,
+  presenterModeToolbarItemId,
+  presenterStartToolbarItemId,
+  presenterStartValue,
+  presenterStopValue,
+  presenterTimerPauseValue,
+  presenterTimerResetValue,
+  presenterTimerResumeValue,
+  type PresenterMode,
+} from "./presenterToolbar";
 
 type PresenterWindowProps = { launchArguments?: string[] };
 
@@ -58,23 +76,22 @@ const digitKeyCodes = new Map<number, string>([
   [KeyCodes.KEY_9, "9"],
 ]);
 
-function Button({ disabled, label, onPress, primary = false }: { disabled?: boolean; label: string; onPress(): void; primary?: boolean }) {
+function Button({ disabled, label, onPress }: { disabled?: boolean; label: string; onPress(): void }) {
   return (
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, primary && styles.primaryButton, disabled && styles.disabled, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.button, disabled && styles.disabled, pressed && styles.pressed]}
     >
-      <Text style={[styles.buttonText, primary && styles.primaryButtonText]}>{label}</Text>
+      <Text style={styles.buttonText}>{label}</Text>
     </Pressable>
   );
 }
 
-function Preview({ index, label, live = false, weight = 1 }: { index: number; label: string; live?: boolean; weight?: number }) {
+function Preview({ index, live = false, weight = 1 }: { index: number; live?: boolean; weight?: number }) {
   return (
     <View style={[styles.previewSection, { flex: weight }]}>
-      <Text style={styles.eyebrow}>{label}</Text>
       <View style={styles.preview}>
         <SlideCanvas><DeckRenderer isPreview={!live} targetIndex={index} /></SlideCanvas>
       </View>
@@ -82,13 +99,9 @@ function Preview({ index, label, live = false, weight = 1 }: { index: number; la
   );
 }
 
-function SpeakerNotes({ notes, slideCount, slideIndex, weight }: { notes?: string; slideCount: number; slideIndex: number; weight: number }) {
+function SpeakerNotes({ notes, slideIndex, weight }: { notes?: string; slideIndex: number; weight: number }) {
   return (
     <View style={[styles.notesSection, { flex: weight }]}>
-      <View style={styles.notesHeader}>
-        <Text style={styles.notesTitle}>Speaker Notes</Text>
-        <Text style={styles.notesSlide}>Slide {slideIndex + 1} of {slideCount || 1}</Text>
-      </View>
       <ScrollView key={slideIndex} contentContainerStyle={styles.notesContent} style={styles.notes}>
         <Text style={[styles.notesText, !notes && styles.notesPlaceholder]}>{notes || "No notes for this slide."}</Text>
       </ScrollView>
@@ -160,7 +173,6 @@ type PresenterWorkspaceProps = {
   resetVersion: number;
   showNext: boolean;
   showNotes: boolean;
-  slideCount: number;
 };
 
 function PresenterWorkspace({
@@ -170,7 +182,6 @@ function PresenterWorkspace({
   resetVersion,
   showNext,
   showNotes,
-  slideCount,
 }: PresenterWorkspaceProps) {
   const [layout, setLayout] = useState(getPresenterLayout);
   const layoutRef = useRef(layout);
@@ -202,7 +213,7 @@ function PresenterWorkspace({
   return (
     <View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <Preview index={currentIndex} label="Current" live weight={showNext ? layout.currentPreviewRatio : 1} />
+        <Preview index={currentIndex} live weight={showNext ? layout.currentPreviewRatio : 1} />
         {showNext && (
           <>
             <ResizeHandle
@@ -211,7 +222,7 @@ function PresenterWorkspace({
               onResize={(delta) => resize("previews", delta)}
               onResizeEnd={persistLayout}
             />
-            <Preview index={nextIndex} label="Next" weight={1 - layout.currentPreviewRatio} />
+            <Preview index={nextIndex} weight={1 - layout.currentPreviewRatio} />
           </>
         )}
       </View>
@@ -225,7 +236,6 @@ function PresenterWorkspace({
           />
           <SpeakerNotes
             notes={notes}
-            slideCount={slideCount}
             slideIndex={currentIndex}
             weight={layout.notesRatio}
           />
@@ -235,25 +245,40 @@ function PresenterWorkspace({
   );
 }
 
-function formatElapsed(milliseconds: number) {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-    : `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
+type PresenterToolbarProps = {
+  activeMode: PresenterMode | null;
+  audienceOpen: boolean;
+  displays: Display[];
+  hasDeck: boolean;
+  onDisplayChange(displayId: string): void;
+  onModeChange(mode: PresenterMode): void;
+  onStart(): Promise<void>;
+  onStop(): Promise<void>;
+  rehearsalEnabled: boolean;
+  selectedDisplayId: string | null;
+};
 
-function PresenterClock({ audienceOpen, rehearsal }: { audienceOpen: boolean; rehearsal: boolean }) {
+function PresenterToolbar({
+  activeMode,
+  audienceOpen,
+  displays,
+  hasDeck,
+  onDisplayChange,
+  onModeChange,
+  onStart,
+  onStop,
+  rehearsalEnabled,
+  selectedDisplayId,
+}: PresenterToolbarProps) {
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
   const runningRef = useRef(false);
   const [elapsed, setElapsed] = useState(0);
-  const [now, setNow] = useState(() => new Date());
-  const [running, setRunning] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const elapsedRef = useRef(elapsed);
+  elapsedRef.current = elapsed;
 
-  const changeRunning = useCallback((nextRunning: boolean) => {
+  const changeTimerRunning = useCallback((nextRunning: boolean) => {
     if (nextRunning === runningRef.current) {
       return;
     }
@@ -264,7 +289,7 @@ function PresenterClock({ audienceOpen, rehearsal }: { audienceOpen: boolean; re
       setElapsed(elapsedBeforeRun.current);
     }
     runningRef.current = nextRunning;
-    setRunning(nextRunning);
+    setTimerRunning(nextRunning);
   }, []);
 
   useEffect(() => {
@@ -273,43 +298,75 @@ function PresenterClock({ audienceOpen, rehearsal }: { audienceOpen: boolean; re
       startedAt.current = Date.now();
       setElapsed(0);
     }
-    changeRunning(audienceOpen);
-  }, [audienceOpen, changeRunning]);
+    changeTimerRunning(audienceOpen);
+  }, [audienceOpen, changeTimerRunning]);
 
   useEffect(() => {
+    if (!timerRunning) {
+      return;
+    }
     const interval = setInterval(() => {
-      setNow(new Date());
-      if (runningRef.current) {
-        setElapsed(elapsedBeforeRun.current + Date.now() - startedAt.current);
-      }
+      setElapsed(elapsedBeforeRun.current + Date.now() - startedAt.current);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [timerRunning]);
 
-  const reset = () => {
+  const resetTimer = useCallback(() => {
     elapsedBeforeRun.current = 0;
     startedAt.current = Date.now();
     setElapsed(0);
-  };
+  }, []);
 
-  return (
-    <View style={styles.clockSection}>
-      <View>
-        <Text style={styles.clockLabel}>Elapsed</Text>
-        <Text style={styles.elapsed}>{formatElapsed(elapsed)}</Text>
-      </View>
-      <View style={styles.clockRight}>
-        <Text style={styles.clockLabel}>Current time</Text>
-        <Text style={styles.currentTime}>{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
-      </View>
-      {rehearsal && (
-        <View style={styles.timerActions}>
-          <Button label={running ? "Pause" : "Start"} onPress={() => changeRunning(!running)} />
-          <Button label="Reset" onPress={reset} />
-        </View>
-      )}
-    </View>
-  );
+  useEffect(() => {
+    void setWindowOptions("slides-presenter", {
+      windowStyle: {
+        toolbarItems: createPresenterToolbarItems({
+          activeMode,
+          audienceOpen,
+          displays,
+          elapsed: elapsedRef.current,
+          hasDeck,
+          rehearsalEnabled,
+          selectedDisplayId,
+          timerRunning,
+        }),
+      },
+    });
+  }, [activeMode, audienceOpen, displays, hasDeck, rehearsalEnabled, selectedDisplayId, timerRunning]);
+
+  useEffect(() => {
+    void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed));
+  }, [elapsed]);
+
+  useEffect(() => {
+    const subscription = addWindowToolbarItemSelectedListener((event) => {
+      if (event.identifier !== "slides-presenter") {
+        return;
+      }
+      if (event.itemId === presenterModeToolbarItemId) {
+        if (event.value === presenterModePresentationValue || event.value === presenterModeRehearsalValue) {
+          onModeChange(event.value);
+        } else if (event.value === presenterTimerPauseValue) {
+          changeTimerRunning(false);
+        } else if (event.value === presenterTimerResumeValue) {
+          changeTimerRunning(true);
+        } else if (event.value === presenterTimerResetValue) {
+          resetTimer();
+        }
+      } else if (event.itemId === presenterDisplayToolbarItemId && displays.some((display) => display.id === event.value)) {
+        onDisplayChange(event.value);
+      } else if (event.itemId === presenterStartToolbarItemId) {
+        if (event.value === presenterStartValue) {
+          void onStart();
+        } else if (event.value === presenterStopValue) {
+          void onStop();
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [changeTimerRunning, displays, onDisplayChange, onModeChange, onStart, onStop, resetTimer]);
+
+  return null;
 }
 
 function launchDeckPath(launchArguments?: string[]) {
@@ -320,7 +377,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const [displays, setDisplays] = useState<Display[]>([]);
   const [selectedDisplayId, setSelectedDisplayId] = useState<string | null>(null);
   const [rehearsalEnabled, setRehearsalEnabled] = useState(false);
-  const [activeMode, setActiveMode] = useState<"rehearsal" | "presentation" | null>(null);
+  const [activeMode, setActiveMode] = useState<PresenterMode | null>(null);
   const [presenterLayoutResetVersion, setPresenterLayoutResetVersion] = useState(0);
   const [keyboardJump, setKeyboardJump] = useState("");
   const keyboardJumpRef = useRef("");
@@ -481,16 +538,25 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const showNext = state.config.presenter?.showNext !== false;
   const showNotes = state.config.presenter?.showNotes !== false;
 
-  const startAudience = async () => {
+  const startAudience = useCallback(async () => {
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
     await openAudience(rehearsalEnabled ? undefined : selectedDisplay);
     setActiveMode(mode);
-  };
-  const stopAudience = async () => {
+  }, [openAudience, rehearsalEnabled, selectedDisplay]);
+  const stopAudience = useCallback(async () => {
     await closeAudience();
     setActiveMode(null);
     setSlidesState({ deckLocked: false });
-  };
+  }, [closeAudience]);
+
+  const selectDisplay = useCallback((displayId: string) => {
+    setSelectedDisplayId(displayId);
+    rememberPresentationDisplayId(displayId);
+  }, []);
+
+  const selectMode = useCallback((mode: PresenterMode) => {
+    setRehearsalEnabled(mode === "rehearsal");
+  }, []);
 
   useEffect(() => {
     const filename = state.deckPath?.split(/[\\/]/).pop();
@@ -498,50 +564,21 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   }, [state.deckPath]);
   return (
     <View style={styles.root}>
+      <PresenterToolbar
+        activeMode={activeMode}
+        audienceOpen={state.audienceOpen}
+        displays={displays}
+        hasDeck={Boolean(state.component)}
+        onDisplayChange={selectDisplay}
+        onModeChange={selectMode}
+        onStart={startAudience}
+        onStop={stopAudience}
+        rehearsalEnabled={rehearsalEnabled}
+        selectedDisplayId={selectedDisplayId}
+      />
       {state.component ? (
         <View style={styles.presenter}>
-          <View style={styles.statusBar}>
-            <PresenterClock audienceOpen={state.audienceOpen} rehearsal={activeMode === "rehearsal"} />
-            <View style={styles.presentationControls}>
-              {keyboardJump && <Text style={styles.keyboardJump}>Jump to {keyboardJump} ↵</Text>}
-              {!state.audienceOpen ? (
-                <>
-                  <View style={styles.rehearsalToggle}>
-                    <Text style={styles.controlLabel}>Rehearsal</Text>
-                    <Switch accessibilityLabel="Rehearsal mode" onValueChange={setRehearsalEnabled} value={rehearsalEnabled} />
-                  </View>
-                  {!rehearsalEnabled && (
-                    <View style={styles.displayChoices}>
-                      {displays.map((display) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={display.id}
-                          onPress={() => {
-                            setSelectedDisplayId(display.id);
-                            rememberPresentationDisplayId(display.id);
-                          }}
-                          style={[styles.displayChoice, selectedDisplayId === display.id && styles.displayChoiceSelected]}
-                        >
-                          <Text numberOfLines={1} style={styles.displayChoiceText}>{display.name}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                  <Button
-                    disabled={!rehearsalEnabled && !selectedDisplay}
-                    label={rehearsalEnabled ? "Start Rehearsal" : "Present"}
-                    onPress={() => void startAudience()}
-                    primary
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.activeMode}>{activeMode === "rehearsal" ? "Rehearsing" : "Presenting"}</Text>
-                  <Button label="Stop" onPress={() => void stopAudience()} />
-                </>
-              )}
-            </View>
-          </View>
+          {keyboardJump && <Text style={styles.keyboardJump}>Jump to {keyboardJump} ↵</Text>}
 
           <PresenterWorkspace
             currentIndex={state.currentSlide}
@@ -550,7 +587,6 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
             resetVersion={presenterLayoutResetVersion}
             showNext={showNext}
             showNotes={showNotes}
-            slideCount={state.slides.length}
           />
 
           {state.blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
@@ -589,54 +625,33 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 }
 
 const styles = StyleSheet.create({
-  activeMode: { color: "#a1a1aa", fontSize: 12, fontWeight: "600", textTransform: "uppercase" },
   blackoutWarning: { backgroundColor: "#3f3006", borderRadius: 8, color: "#fde68a", marginTop: 12, padding: 10, textAlign: "center" },
   button: { backgroundColor: "#30323a", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
   buttonText: { color: "#f4f4f5", fontSize: 13, fontWeight: "600" },
-  clockLabel: { color: "#71717a", fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase" },
-  clockRight: { alignItems: "flex-end" },
-  clockSection: { alignItems: "flex-start", flexDirection: "row", flexWrap: "wrap", gap: 24, minWidth: 250 },
-  controlLabel: { color: "#d4d4d8", fontSize: 13, fontWeight: "600" },
-  currentTime: { color: "#d4d4d8", fontSize: 17, fontVariant: ["tabular-nums"], fontWeight: "600", marginTop: 3 },
   disabled: { opacity: 0.4 },
-  displayChoice: { borderColor: "#3f3f46", borderRadius: 8, borderWidth: 1, maxWidth: 160, paddingHorizontal: 10, paddingVertical: 8 },
-  displayChoices: { flexDirection: "row", gap: 6 },
-  displayChoiceSelected: { backgroundColor: "#272c3b", borderColor: "#60a5fa" },
-  displayChoiceText: { color: "#d4d4d8", fontSize: 12, fontWeight: "600" },
   empty: { alignItems: "center", flex: 1, gap: 14, justifyContent: "center" },
   emptyBody: { color: "#a1a1aa", fontSize: 14 },
   emptyTitle: { color: "#fafafa", fontSize: 24, fontWeight: "700" },
-  elapsed: { color: "#fafafa", fontSize: 26, fontVariant: ["tabular-nums"], fontWeight: "700", marginTop: 1 },
   errors: { backgroundColor: "#321f24", borderRadius: 8, marginTop: 12, maxHeight: 160, padding: 12 },
   errorText: { color: "#fda4af", fontFamily: "Menlo", fontSize: 11, marginTop: 6 },
   errorTitle: { color: "#fecdd3", fontSize: 13, fontWeight: "700" },
-  eyebrow: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" },
-  keyboardJump: { color: "#93c5fd", fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
+  keyboardJump: { backgroundColor: "#272c3b", borderRadius: 7, color: "#93c5fd", fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600", paddingHorizontal: 9, paddingVertical: 6, position: "absolute", right: 22, top: 22, zIndex: 1 },
   lastGood: { color: "#fda4af", fontSize: 11, fontStyle: "italic", marginTop: 10 },
   notes: { flex: 1 },
   notesContent: { paddingHorizontal: 16, paddingVertical: 14 },
-  notesHeader: { alignItems: "center", borderBottomColor: "#3f3f46", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
   notesPlaceholder: { color: "#71717a", fontStyle: "italic" },
   notesSection: { backgroundColor: "#202024", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, minHeight: 0, overflow: "hidden" },
-  notesSlide: { color: "#71717a", fontSize: 12, fontVariant: ["tabular-nums"] },
   notesText: { color: "#e4e4e7", fontSize: 17, lineHeight: 25 },
-  notesTitle: { color: "#a1a1aa", fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
-  presentationControls: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 10, justifyContent: "flex-end" },
-  presenter: { flex: 1, padding: 18 },
+  presenter: { flex: 1, padding: 14 },
   pressed: { opacity: 0.75 },
   horizontalResizeHandle: { height: "100%", width: 14 },
   horizontalResizeLine: { backgroundColor: "#3f3f46", height: "100%", width: StyleSheet.hairlineWidth },
   preview: { backgroundColor: "#000", borderColor: "#3f3f46", borderRadius: 10, borderWidth: 1, flex: 1, overflow: "hidden" },
   previews: { flexDirection: "row", minHeight: 0 },
   previewSection: { minWidth: 0 },
-  primaryButton: { backgroundColor: "#2563eb" },
-  primaryButtonText: { color: "#fff" },
-  rehearsalToggle: { alignItems: "center", flexDirection: "row", gap: 6 },
   resizeHandle: { alignItems: "center", justifyContent: "center" },
   root: { backgroundColor: "#18181b", flex: 1 },
-  statusBar: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
   statusMessage: { color: "#a1a1aa", fontSize: 12 },
-  timerActions: { flexDirection: "row", gap: 8 },
   updateBanner: { alignItems: "center", backgroundColor: "#272c3b", borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginTop: 12, padding: 10 },
   verticalResizeHandle: { height: 14, width: "100%" },
   verticalResizeLine: { backgroundColor: "#3f3f46", height: StyleSheet.hairlineWidth, width: "100%" },

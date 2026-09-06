@@ -1,4 +1,5 @@
 import { createWindowsNavigator, WindowStyleMask, type WindowsConfig } from "@legend-apps/windows";
+import { createPresenterToolbarItems } from "./presenterToolbar";
 
 const windows = {
   SlidesPresenterWindow: {
@@ -8,8 +9,23 @@ const windows = {
       title: "Legend Slides",
       windowStyle: {
         height: 820,
+        hasToolbar: true,
         minHeight: 600,
         minWidth: 900,
+        titlebarAppearsTransparent: true,
+        titlebarMaterial: "glass",
+        titlebarSeparatorStyle: "none",
+        toolbarItems: createPresenterToolbarItems({
+          activeMode: null,
+          audienceOpen: false,
+          displays: [],
+          elapsed: 0,
+          hasDeck: false,
+          rehearsalEnabled: false,
+          selectedDisplayId: null,
+          timerRunning: false,
+        }),
+        toolbarStyle: "unified",
         width: 1280,
       },
     },

@@ -173,6 +173,15 @@ export type WindowToolbarButtonItem = {
   value?: string;
 };
 
+export type WindowToolbarLabelItem = {
+  id: string;
+  label?: string;
+  placement?: WindowToolbarItemPlacement;
+  text: string;
+  type: "label";
+  width?: number;
+};
+
 export type WindowToolbarMenuButtonItem = Omit<WindowToolbarButtonItem, "menuItems" | "type"> & {
   menuItems: WindowToolbarMenuItem[];
   type: "menuButton";
@@ -180,6 +189,7 @@ export type WindowToolbarMenuButtonItem = Omit<WindowToolbarButtonItem, "menuIte
 
 export type WindowToolbarItem =
   | WindowToolbarButtonItem
+  | WindowToolbarLabelItem
   | WindowToolbarMenuButtonItem
   | WindowToolbarSearchItem
   | WindowToolbarSegmentedItem;
@@ -487,6 +497,15 @@ export function setWindowTitle(identifier: string, title: string): Promise<Windo
   );
 }
 
+export function setWindowToolbarItemText(identifier: string, itemId: string, text: string): Promise<WindowResult> {
+  if (Platform.OS !== "macos") {
+    return fallbackResult();
+  }
+  return NativeWindowManager.setWindowToolbarItemText(identifier, itemId, text).then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function setPreventDisplaySleep(enabled: boolean): Promise<WindowResult> {
   if (Platform.OS !== "macos") {
     return fallbackResult();
@@ -604,6 +623,7 @@ export function useWindowManager() {
     setMainWindowFrame,
     setWindowBlur,
     setWindowTitle,
+    setWindowToolbarItemText,
     setPreventDisplaySleep,
     focusToolbarSearchItem,
     onWindowClosed: addWindowClosedListener,
