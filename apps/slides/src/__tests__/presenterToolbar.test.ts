@@ -9,6 +9,7 @@ import {
   presenterStartToolbarItemId,
   presenterStopValue,
   presenterTimerPauseValue,
+  presenterTimerRestartValue,
 } from "../presenterToolbar";
 
 const displays = [
@@ -25,7 +26,6 @@ describe("presenter toolbar", () => {
 
   it("builds the idle presentation controls at the trailing edge", () => {
     const items = createPresenterToolbarItems({
-      activeMode: null,
       audienceOpen: false,
       displays,
       elapsed: 65_000,
@@ -36,20 +36,19 @@ describe("presenter toolbar", () => {
     });
 
     expect(items.map((item) => item.id)).toEqual([
+      presenterElapsedToolbarItemId,
       presenterModeToolbarItemId,
       presenterDisplayToolbarItemId,
       presenterStartToolbarItemId,
-      presenterElapsedToolbarItemId,
     ]);
     expect(items.every((item) => item.placement === "trailing")).toBe(true);
-    expect(items[1]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
-    expect(items[2]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
-    expect(items[3]).toMatchObject({ text: "1:05", type: "label" });
+    expect(items[0]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
+    expect(items[2]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
+    expect(items[3]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
   });
 
-  it("replaces mode choices with timer controls during rehearsal", () => {
+  it("puts active timer controls in the elapsed-time menu", () => {
     const items = createPresenterToolbarItems({
-      activeMode: "rehearsal",
       audienceOpen: true,
       displays,
       elapsed: 2_000,
@@ -58,17 +57,20 @@ describe("presenter toolbar", () => {
       selectedDisplayId: "stage",
       timerRunning: true,
     });
-    const modeItem = items[0];
+    const timerItem = items[0];
 
-    expect(modeItem).toMatchObject({ enabled: true, label: "Rehearsal", type: "menuButton" });
-    expect("menuItems" in modeItem && modeItem.menuItems?.[0]).toMatchObject({ value: presenterTimerPauseValue });
+    expect(timerItem).toMatchObject({ enabled: true, label: "0:02", type: "menuButton" });
+    expect("menuItems" in timerItem && timerItem.menuItems).toMatchObject([
+      { value: presenterTimerPauseValue },
+      { value: presenterTimerRestartValue },
+    ]);
     expect(items[1]).toMatchObject({ enabled: false });
-    expect(items[2]).toMatchObject({ label: "Stop", value: presenterStopValue });
+    expect(items[2]).toMatchObject({ enabled: false });
+    expect(items[3]).toMatchObject({ label: "Stop", value: presenterStopValue });
   });
 
   it("keeps start disabled until a deck and output target are available", () => {
     const items = createPresenterToolbarItems({
-      activeMode: null,
       audienceOpen: false,
       displays: [],
       elapsed: 0,
@@ -78,7 +80,8 @@ describe("presenter toolbar", () => {
       timerRunning: false,
     });
 
-    expect(items[1]).toMatchObject({ enabled: false });
+    expect(items[0]).toMatchObject({ enabled: false });
     expect(items[2]).toMatchObject({ enabled: false });
+    expect(items[3]).toMatchObject({ enabled: false });
   });
 });

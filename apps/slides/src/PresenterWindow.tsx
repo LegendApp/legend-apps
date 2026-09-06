@@ -54,10 +54,15 @@ import {
   presenterStartValue,
   presenterStopValue,
   presenterTimerPauseValue,
-  presenterTimerResetValue,
+  presenterTimerRestartValue,
   presenterTimerResumeValue,
-  type PresenterMode,
 } from "./presenterToolbar";
+import {
+  initialPresenterTimerState,
+  transitionPresenterTimer,
+  type PresenterMode,
+  type PresenterTimerEvent,
+} from "./presenterTimer";
 
 type PresenterWindowProps = { launchArguments?: string[] };
 
@@ -248,8 +253,10 @@ function PresenterWorkspace({
 type PresenterToolbarProps = {
   activeMode: PresenterMode | null;
   audienceOpen: boolean;
+  currentSlide: number;
   displays: Display[];
   hasDeck: boolean;
+  isEditing?: boolean;
   onDisplayChange(displayId: string): void;
   onModeChange(mode: PresenterMode): void;
   onStart(): Promise<void>;
@@ -261,8 +268,10 @@ type PresenterToolbarProps = {
 function PresenterToolbar({
   activeMode,
   audienceOpen,
+  currentSlide,
   displays,
   hasDeck,
+  isEditing = false,
   onDisplayChange,
   onModeChange,
   onStart,
@@ -273,33 +282,65 @@ function PresenterToolbar({
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
   const runningRef = useRef(false);
+  const timerStateRef = useRef(initialPresenterTimerState);
+  const audienceOpenRef = useRef(false);
+  const previousSlideRef = useRef(currentSlide);
+  const editingRef = useRef(isEditing);
   const [elapsed, setElapsed] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const elapsedRef = useRef(elapsed);
   elapsedRef.current = elapsed;
 
-  const changeTimerRunning = useCallback((nextRunning: boolean) => {
-    if (nextRunning === runningRef.current) {
-      return;
-    }
-    if (nextRunning) {
-      startedAt.current = Date.now();
-    } else {
-      elapsedBeforeRun.current += Date.now() - startedAt.current;
+  const updateTimerClock = useCallback((nextRunning: boolean, restart: boolean) => {
+    const now = Date.now();
+    const wasRunning = runningRef.current;
+    if (restart) {
+      elapsedBeforeRun.current = 0;
+      startedAt.current = now;
+      setElapsed(0);
+    } else if (nextRunning && !wasRunning) {
+      startedAt.current = now;
+    } else if (!nextRunning && wasRunning) {
+      elapsedBeforeRun.current += now - startedAt.current;
       setElapsed(elapsedBeforeRun.current);
     }
-    runningRef.current = nextRunning;
-    setTimerRunning(nextRunning);
+    if (nextRunning !== wasRunning) {
+      runningRef.current = nextRunning;
+      setTimerRunning(nextRunning);
+    }
   }, []);
 
+  const applyTimerEvent = useCallback((event: PresenterTimerEvent) => {
+    const transition = transitionPresenterTimer(timerStateRef.current, event);
+    timerStateRef.current = transition.state;
+    updateTimerClock(transition.state.running, transition.restart);
+  }, [updateTimerClock]);
+
   useEffect(() => {
-    if (audienceOpen) {
-      elapsedBeforeRun.current = 0;
-      startedAt.current = Date.now();
-      setElapsed(0);
+    if (audienceOpen === audienceOpenRef.current) {
+      return;
     }
-    changeTimerRunning(audienceOpen);
-  }, [audienceOpen, changeTimerRunning]);
+    audienceOpenRef.current = audienceOpen;
+    applyTimerEvent(audienceOpen
+      ? { mode: activeMode ?? (rehearsalEnabled ? "rehearsal" : "presentation"), type: "audience-started" }
+      : { type: "audience-stopped" });
+  }, [activeMode, applyTimerEvent, audienceOpen, rehearsalEnabled]);
+
+  useEffect(() => {
+    const previousSlide = previousSlideRef.current;
+    previousSlideRef.current = currentSlide;
+    if (audienceOpen && previousSlide !== currentSlide) {
+      applyTimerEvent({ from: previousSlide, to: currentSlide, type: "slide-navigated" });
+    }
+  }, [applyTimerEvent, audienceOpen, currentSlide]);
+
+  useEffect(() => {
+    const editingStarted = isEditing && !editingRef.current;
+    editingRef.current = isEditing;
+    if (audienceOpen && editingStarted) {
+      applyTimerEvent({ type: "editing-started" });
+    }
+  }, [applyTimerEvent, audienceOpen, isEditing]);
 
   useEffect(() => {
     if (!timerRunning) {
@@ -311,17 +352,10 @@ function PresenterToolbar({
     return () => clearInterval(interval);
   }, [timerRunning]);
 
-  const resetTimer = useCallback(() => {
-    elapsedBeforeRun.current = 0;
-    startedAt.current = Date.now();
-    setElapsed(0);
-  }, []);
-
   useEffect(() => {
     void setWindowOptions("slides-presenter", {
       windowStyle: {
         toolbarItems: createPresenterToolbarItems({
-          activeMode,
           audienceOpen,
           displays,
           elapsed: elapsedRef.current,
@@ -332,7 +366,7 @@ function PresenterToolbar({
         }),
       },
     });
-  }, [activeMode, audienceOpen, displays, hasDeck, rehearsalEnabled, selectedDisplayId, timerRunning]);
+  }, [audienceOpen, displays, hasDeck, rehearsalEnabled, selectedDisplayId, timerRunning]);
 
   useEffect(() => {
     void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed));
@@ -343,15 +377,17 @@ function PresenterToolbar({
       if (event.identifier !== "slides-presenter") {
         return;
       }
-      if (event.itemId === presenterModeToolbarItemId) {
+      if (event.itemId === presenterElapsedToolbarItemId) {
+        if (event.value === presenterTimerPauseValue) {
+          applyTimerEvent({ type: "pause-requested" });
+        } else if (event.value === presenterTimerResumeValue) {
+          applyTimerEvent({ type: "resume-requested" });
+        } else if (event.value === presenterTimerRestartValue) {
+          applyTimerEvent({ type: "restart-requested" });
+        }
+      } else if (event.itemId === presenterModeToolbarItemId) {
         if (event.value === presenterModePresentationValue || event.value === presenterModeRehearsalValue) {
           onModeChange(event.value);
-        } else if (event.value === presenterTimerPauseValue) {
-          changeTimerRunning(false);
-        } else if (event.value === presenterTimerResumeValue) {
-          changeTimerRunning(true);
-        } else if (event.value === presenterTimerResetValue) {
-          resetTimer();
         }
       } else if (event.itemId === presenterDisplayToolbarItemId && displays.some((display) => display.id === event.value)) {
         onDisplayChange(event.value);
@@ -364,7 +400,7 @@ function PresenterToolbar({
       }
     });
     return () => subscription.remove();
-  }, [changeTimerRunning, displays, onDisplayChange, onModeChange, onStart, onStop, resetTimer]);
+  }, [applyTimerEvent, displays, onDisplayChange, onModeChange, onStart, onStop]);
 
   return null;
 }
@@ -567,6 +603,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       <PresenterToolbar
         activeMode={activeMode}
         audienceOpen={state.audienceOpen}
+        currentSlide={state.currentSlide}
         displays={displays}
         hasDeck={Boolean(state.component)}
         onDisplayChange={selectDisplay}

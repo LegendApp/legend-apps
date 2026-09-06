@@ -20,7 +20,6 @@ const windows = {
         titlebarMaterialState: "active",
         titlebarSeparatorStyle: "none",
         toolbarItems: createPresenterToolbarItems({
-          activeMode: null,
           audienceOpen: false,
           displays: [],
           elapsed: 0,

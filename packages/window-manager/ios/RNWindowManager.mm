@@ -1291,6 +1291,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
     }
     NSArray *menuItems = [config[@"menuItems"] isKindOfClass:NSArray.class] ? config[@"menuItems"] : @[];
+    NSNumber *widthNumber = [config[@"width"] isKindOfClass:NSNumber.class] ? config[@"width"] : nil;
     BOOL isMenuButton = [type isEqualToString:@"menuButton"] || menuItems.count > 0;
 
     NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
@@ -1317,12 +1318,15 @@ willBeInsertedIntoToolbar:(BOOL)flag
       button.controlSize = NSControlSizeRegular;
       button.enabled = toolbarItem.enabled;
       button.toolTip = tooltip;
+      if (LegendDictionaryHasKey(config, @"monospacedDigits") && [config[@"monospacedDigits"] boolValue]) {
+        button.font = [NSFont monospacedDigitSystemFontOfSize:NSFont.systemFontSize weight:NSFontWeightSemibold];
+      }
       if (image) {
         button.image = image;
         button.imagePosition = NSImageLeft;
       }
       NSFont *font = button.font ?: [NSFont systemFontOfSize:NSFont.systemFontSize];
-      CGFloat buttonWidth = MAX(148, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
+      CGFloat buttonWidth = widthNumber ? widthNumber.doubleValue : MAX(148, [label sizeWithAttributes:@{NSFontAttributeName: font}].width + (image ? 64 : 52));
       button.frame = NSMakeRect(0, 0, buttonWidth, MAX(28, button.fittingSize.height));
       objc_setAssociatedObject(button, &LegendToolbarControlMetadataKey, metadata, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
       toolbarItem.view = button;
@@ -2296,11 +2300,16 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
 
-    if (![toolbarItem.view isKindOfClass:NSTextField.class]) {
-      resolve([self failureJson:@"Toolbar item is not a text item"]);
+    if ([toolbarItem.view isKindOfClass:NSTextField.class]) {
+      ((NSTextField *)toolbarItem.view).stringValue = text ?: @"";
+    } else if ([toolbarItem.view isKindOfClass:NSButton.class]) {
+      ((NSButton *)toolbarItem.view).title = text ?: @"";
+      toolbarItem.label = text ?: @"";
+      toolbarItem.paletteLabel = toolbarItem.label;
+    } else {
+      resolve([self failureJson:@"Toolbar item does not support text"]);
       return;
     }
-    ((NSTextField *)toolbarItem.view).stringValue = text ?: @"";
     resolve([self successJson]);
   });
 #else
