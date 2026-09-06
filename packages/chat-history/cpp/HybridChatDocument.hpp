@@ -12,6 +12,7 @@ struct ChatDisplayRow {
   size_t firstRow = 0;
   size_t rowCount = 1;
   bool isWorkGroup = false;
+  ChatRowMetadata metadata;
 };
 
 class HybridChatDocument final : public HybridChatDocumentSpec {
@@ -23,6 +24,7 @@ public:
   std::string getDocumentId() override;
   double getRowCount() override;
   double getWarningCount() override;
+  std::string getRowKind(double index) override;
   ChatRowMetadata getRowMetadata(double index) override;
   std::string getToolPreview(double index, double maximumBytes) override;
   std::string getImageSource(double index, double imageIndex) override;
@@ -39,6 +41,7 @@ protected:
 private:
   void buildDisplayRows();
   std::string computeContentDigest() const;
+  ChatRowMetadata createRowMetadata(size_t displayIndex) const;
   std::string decodeRanges(const std::vector<JsonRange>& ranges, size_t maximumBytes = 0) const;
   std::string workGroupLabel(const ChatDisplayRow& displayRow) const;
   std::string workGroupPreview(const ChatDisplayRow& displayRow, size_t maximumBytes) const;

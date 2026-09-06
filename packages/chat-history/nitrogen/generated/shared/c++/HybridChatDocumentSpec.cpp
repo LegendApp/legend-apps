@@ -18,6 +18,7 @@ namespace margelo::nitro::legendapps::chathistory {
       prototype.registerHybridGetter("documentId", &HybridChatDocumentSpec::getDocumentId);
       prototype.registerHybridGetter("rowCount", &HybridChatDocumentSpec::getRowCount);
       prototype.registerHybridGetter("warningCount", &HybridChatDocumentSpec::getWarningCount);
+      prototype.registerHybridMethod("getRowKind", &HybridChatDocumentSpec::getRowKind);
       prototype.registerHybridMethod("getRowMetadata", &HybridChatDocumentSpec::getRowMetadata);
       prototype.registerHybridMethod("getToolPreview", &HybridChatDocumentSpec::getToolPreview);
       prototype.registerHybridMethod("getImageSource", &HybridChatDocumentSpec::getImageSource);

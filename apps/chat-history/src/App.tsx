@@ -354,8 +354,8 @@ function TranscriptList({
   const getItemType = useCallback(
     (item: TranscriptListItem) => isDemoTranscriptMessage(item)
       ? `demo-${item.role}`
-      : transcriptDataSource?.getRowMetadata(item).kind ?? "",
-    [transcriptDataSource],
+      : document?.getRowKind(item) ?? "",
+    [document],
   );
   const schedule = useCallback((callback: () => void, delay: number) => {
     const timer = setTimeout(() => {

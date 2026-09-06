@@ -214,7 +214,7 @@ void HybridChatDocument::buildDisplayRows() {
   size_t index = 0;
   while (index < rows_.size()) {
     if (rows_[index].kind == "user") {
-      displayRows_.push_back(ChatDisplayRow{index, 1, false});
+      displayRows_.push_back(ChatDisplayRow{index, 1, false, {}});
       index += 1;
     } else {
       size_t turnEnd = index;
@@ -227,13 +227,16 @@ void HybridChatDocument::buildDisplayRows() {
       }
 
       if (lastTool < turnEnd) {
-        displayRows_.push_back(ChatDisplayRow{index, lastTool - index + 1, true});
+        displayRows_.push_back(ChatDisplayRow{index, lastTool - index + 1, true, {}});
         index = lastTool + 1;
       } else {
-        displayRows_.push_back(ChatDisplayRow{index, 1, false});
+        displayRows_.push_back(ChatDisplayRow{index, 1, false, {}});
         index += 1;
       }
     }
+  }
+  for (size_t displayIndex = 0; displayIndex < displayRows_.size(); displayIndex += 1) {
+    displayRows_[displayIndex].metadata = createRowMetadata(displayIndex);
   }
 }
 
@@ -334,13 +337,12 @@ std::string HybridChatDocument::workGroupStatus(const ChatDisplayRow& displayRow
   return status;
 }
 
-ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
-  const size_t displayIndex = checkedIndex(index);
+ChatRowMetadata HybridChatDocument::createRowMetadata(size_t displayIndex) const {
   const ChatDisplayRow& displayRow = displayRows_[displayIndex];
   const ChatRow& row = rows_[displayRow.firstRow];
   if (displayRow.isWorkGroup) {
     return ChatRowMetadata(
-        index,
+        static_cast<double>(displayIndex),
         "tool",
         std::nullopt,
         workGroupLabel(displayRow),
@@ -361,7 +363,7 @@ ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
   }
   const bool hasFiles = !row.fileChanges.empty();
   return ChatRowMetadata(
-      index,
+      static_cast<double>(displayIndex),
       row.kind,
       hasMarkdown ? std::optional<std::string>(markdownBlockId(documentId_, displayIndex)) : std::nullopt,
       row.toolName.empty() ? std::nullopt : std::optional<std::string>(row.toolName),
@@ -372,6 +374,14 @@ ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
       hasFiles ? std::optional<double>(row.fileChanges.size()) : std::nullopt,
       hasFiles ? std::optional<double>(fileAdditions) : std::nullopt,
       hasFiles ? std::optional<double>(fileDeletions) : std::nullopt);
+}
+
+std::string HybridChatDocument::getRowKind(double index) {
+  return displayRows_[checkedIndex(index)].metadata.kind;
+}
+
+ChatRowMetadata HybridChatDocument::getRowMetadata(double index) {
+  return displayRows_[checkedIndex(index)].metadata;
 }
 
 std::string HybridChatDocument::decodeRanges(const std::vector<JsonRange>& ranges, size_t maximumBytes) const {

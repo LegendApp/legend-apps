@@ -44,6 +44,7 @@ export interface ChatDocument extends HybridObject<{ ios: "c++" }> {
   readonly documentId: string;
   readonly rowCount: number;
   readonly warningCount: number;
+  getRowKind(index: number): string;
   getRowMetadata(index: number): ChatRowMetadata;
   getToolPreview(index: number, maximumBytes: number): string;
   getImageSource(index: number, imageIndex: number): string;

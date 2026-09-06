@@ -69,6 +69,9 @@ void testCodex(const std::filesystem::path& fixtureRoot) {
   auto document = std::make_shared<HybridChatDocument>("codex-group", std::move(result), timing);
   expect(document->getContentDigest() == "ea203684aeae72fb", "Codex display rows should have the canonical content digest");
   expect(document->getRowCount() == 4, "Codex adjacent tools should collapse without hiding file changes");
+  expect(
+      document->getRowKind(0) == "user" && document->getRowKind(1) == "tool",
+      "Display row kinds should be available without constructing full metadata");
   const ChatRowMetadata userMetadata = document->getRowMetadata(0);
   expect(
       userMetadata.imageCount == 1
