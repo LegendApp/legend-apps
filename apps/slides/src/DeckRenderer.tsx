@@ -58,7 +58,11 @@ function normalizeTransition(value: unknown): SlideTransition | undefined {
 
 function Deck({ children, configJson }: CompiledDeckProps) {
   const { isPreview, targetIndex } = useContext(DeckRenderContext);
+  // An outgoing layer can become active again without remounting. Subscribe so
+  // React Compiler cannot retain a getSlidesState() snapshot from its exit.
+  const currentSlide = useSlidesState((state) => state.currentSlide);
   const startedAt = useSlidesState((state) => state.slideStartedAt);
+  const templates = useSlidesState((state) => state.templates);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
   const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
@@ -69,7 +73,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     })(),
     notes: element.props.notes,
   }));
-  const selectedIndex = Math.max(0, Math.min(targetIndex ?? getSlidesState().currentSlide, elements.length - 1));
+  const selectedIndex = Math.max(0, Math.min(targetIndex ?? currentSlide, elements.length - 1));
 
   useEffect(() => {
     const current = getSlidesState();
@@ -83,15 +87,14 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     return null;
   }
   const selectedMetadata = slides[selectedIndex].metadata;
-  const templates = getSlidesState().templates;
   const resolvedTemplate = resolveSlideTemplate(templates, config, selectedMetadata);
   const Template = resolvedTemplate.component;
   const content = renderMdxChildren(selected.props.children);
   return (
     <PresentationProvider value={{
-      currentSlide: getSlidesState().currentSlide,
+      currentSlide,
       goTo: setCurrentSlide,
-      isActive: !isPreview && selectedIndex === getSlidesState().currentSlide,
+      isActive: !isPreview && selectedIndex === currentSlide,
       isPreview: Boolean(isPreview),
       next: nextSlide,
       previous: previousSlide,
