@@ -158,6 +158,30 @@ RCT_EXPORT_MODULE(NativeFileDialog)
 #endif
 }
 
+- (void)readTextFile:(NSString *)path resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    if (path.length == 0) {
+      reject(@"invalid_path", @"Cannot read file without a path.", nil);
+      return;
+    }
+
+    NSString *expandedPath = [path stringByExpandingTildeInPath];
+    NSError *error = nil;
+    NSString *contents = [NSString stringWithContentsOfFile:expandedPath encoding:NSUTF8StringEncoding error:&error];
+    if (!contents) {
+      reject(@"read_failed", error.localizedDescription ?: @"Failed to read file.", error);
+      return;
+    }
+
+    resolve(contents);
+  });
+#else
+  resolve(@"");
+#endif
+}
+
 - (void)writeTextFile:(NSString *)path contents:(NSString *)contents resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
 #if TARGET_OS_OSX
@@ -179,6 +203,45 @@ RCT_EXPORT_MODULE(NativeFileDialog)
   });
 #else
   resolve(nil);
+#endif
+}
+
+- (void)writeTextFileIfUnchanged:(NSString *)path
+                expectedContents:(NSString *)expectedContents
+                        contents:(NSString *)contents
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    if (path.length == 0) {
+      reject(@"invalid_path", @"Cannot write file without a path.", nil);
+      return;
+    }
+
+    NSString *expandedPath = [path stringByExpandingTildeInPath];
+    NSError *readError = nil;
+    NSString *currentContents = [NSString stringWithContentsOfFile:expandedPath encoding:NSUTF8StringEncoding error:&readError];
+    if (!currentContents) {
+      reject(@"read_failed", readError.localizedDescription ?: @"Failed to read file.", readError);
+      return;
+    }
+    if (![currentContents isEqualToString:expectedContents ?: @""]) {
+      resolve(@NO);
+      return;
+    }
+
+    NSError *writeError = nil;
+    BOOL ok = [contents writeToFile:expandedPath atomically:YES encoding:NSUTF8StringEncoding error:&writeError];
+    if (!ok) {
+      reject(@"write_failed", writeError.localizedDescription ?: @"Failed to write file.", writeError);
+      return;
+    }
+
+    resolve(@YES);
+  });
+#else
+  resolve(@NO);
 #endif
 }
 

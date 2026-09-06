@@ -56,12 +56,28 @@ export function revealInFinder(path: string) {
   return NativeFileDialog.revealInFinder(path);
 }
 
+export function readTextFile(path: string) {
+  if (Platform.OS !== "macos") {
+    return Promise.resolve("");
+  }
+
+  return NativeFileDialog.readTextFile(path);
+}
+
 export function writeTextFile(path: string, contents: string) {
   if (Platform.OS !== "macos") {
     return Promise.resolve();
   }
 
   return NativeFileDialog.writeTextFile(path, contents);
+}
+
+export function writeTextFileIfUnchanged(path: string, expectedContents: string, contents: string) {
+  if (Platform.OS !== "macos") {
+    return Promise.resolve(false);
+  }
+
+  return NativeFileDialog.writeTextFileIfUnchanged(path, expectedContents, contents);
 }
 
 export { default as NativeFileDialog } from "./NativeFileDialog";

@@ -29,6 +29,7 @@ import {
   type PanResponderGestureState,
 } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
+import { EditableMarkdown } from "./EditableMarkdown";
 import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import {
   getPresentationDisplayId,
@@ -63,6 +64,7 @@ import {
   type PresenterMode,
   type PresenterTimerEvent,
 } from "./presenterTimer";
+import { persistSlideSpeakerNotes } from "./speakerNotesPersistence";
 
 type PresenterWindowProps = { launchArguments?: string[] };
 
@@ -104,11 +106,33 @@ function Preview({ index, live = false, weight = 1 }: { index: number; live?: bo
   );
 }
 
-function SpeakerNotes({ notes, slideIndex, weight }: { notes?: string; slideIndex: number; weight: number }) {
+function SpeakerNotes({
+  deckPath,
+  editable,
+  notes,
+  onEditingChange,
+  onSave,
+  slideIndex,
+  weight,
+}: {
+  deckPath: string;
+  editable: boolean;
+  notes?: string;
+  onEditingChange(editing: boolean): void;
+  onSave(notes: string): Promise<void>;
+  slideIndex: number;
+  weight: number;
+}) {
   return (
     <View style={[styles.notesSection, { flex: weight }]}>
-      <ScrollView key={slideIndex} contentContainerStyle={styles.notesContent} style={styles.notes}>
-        <Text style={[styles.notesText, !notes && styles.notesPlaceholder]}>{notes || "No notes for this slide."}</Text>
+      <ScrollView key={`${deckPath}:${slideIndex}`} contentContainerStyle={styles.notesContent} style={styles.notes}>
+        <EditableMarkdown
+          editable={editable}
+          markdown={notes ?? ""}
+          onEditingChange={onEditingChange}
+          onSave={onSave}
+          placeholder={editable ? "Click to add speaker notes." : "No notes for this slide."}
+        />
       </ScrollView>
     </View>
   );
@@ -173,8 +197,12 @@ function ResizeHandle({ direction, label, onResize, onResizeEnd }: ResizeHandleP
 
 type PresenterWorkspaceProps = {
   currentIndex: number;
+  deckPath: string;
   nextIndex: number;
+  notesEditable: boolean;
   notes?: string;
+  onNotesEditingChange(editing: boolean): void;
+  onSaveNotes(deckPath: string, slideIndex: number, notes: string): Promise<void>;
   resetVersion: number;
   showNext: boolean;
   showNotes: boolean;
@@ -182,8 +210,12 @@ type PresenterWorkspaceProps = {
 
 function PresenterWorkspace({
   currentIndex,
+  deckPath,
   nextIndex,
+  notesEditable,
   notes,
+  onNotesEditingChange,
+  onSaveNotes,
   resetVersion,
   showNext,
   showNotes,
@@ -240,7 +272,11 @@ function PresenterWorkspace({
             onResizeEnd={persistLayout}
           />
           <SpeakerNotes
+            deckPath={deckPath}
+            editable={notesEditable}
             notes={notes}
+            onEditingChange={onNotesEditingChange}
+            onSave={(nextNotes) => onSaveNotes(deckPath, currentIndex, nextNotes)}
             slideIndex={currentIndex}
             weight={layout.notesRatio}
           />
@@ -414,6 +450,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const [selectedDisplayId, setSelectedDisplayId] = useState<string | null>(null);
   const [rehearsalEnabled, setRehearsalEnabled] = useState(false);
   const [activeMode, setActiveMode] = useState<PresenterMode | null>(null);
+  const [notesEditing, setNotesEditing] = useState(false);
   const [presenterLayoutResetVersion, setPresenterLayoutResetVersion] = useState(0);
   const [keyboardJump, setKeyboardJump] = useState("");
   const keyboardJumpRef = useRef("");
@@ -504,6 +541,9 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
+      if (notesEditing && event.keyCode !== KeyCodes.KEY_PAGE_DOWN && event.keyCode !== KeyCodes.KEY_PAGE_UP) {
+        return false;
+      }
       if (nextKeyCodes.has(event.keyCode)) {
         nextSlide();
         return true;
@@ -558,7 +598,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         clearTimeout(keyboardJumpTimeout.current);
       }
     };
-  }, [closeAudience, state.audienceOpen]);
+  }, [closeAudience, notesEditing, state.audienceOpen]);
 
   useEffect(() => {
     void setPreventDisplaySleep(state.audienceOpen);
@@ -571,6 +611,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
   const currentNotes = state.slides[state.currentSlide]?.notes;
+  const notesEditable = !state.audienceOpen || activeMode === "rehearsal";
   const showNext = state.config.presenter?.showNext !== false;
   const showNotes = state.config.presenter?.showNotes !== false;
 
@@ -594,6 +635,23 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     setRehearsalEnabled(mode === "rehearsal");
   }, []);
 
+  const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string) => {
+    try {
+      await persistSlideSpeakerNotes(deckPath, slideIndex, notes);
+      setSlidesState((current) => current.deckPath === deckPath
+        ? {
+            displayMessage: "",
+            slides: current.slides.map((slide, index) => index === slideIndex ? { ...slide, notes } : slide),
+          }
+        : {});
+    } catch (error) {
+      setSlidesState((current) => current.deckPath === deckPath
+        ? { displayMessage: `Speaker notes: ${error instanceof Error ? error.message : String(error)}` }
+        : {});
+      throw error;
+    }
+  }, []);
+
   useEffect(() => {
     const filename = state.deckPath?.split(/[\\/]/).pop();
     void setWindowTitle("slides-presenter", filename ? `${filename} — Legend Slides` : "Legend Slides");
@@ -606,6 +664,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         currentSlide={state.currentSlide}
         displays={displays}
         hasDeck={Boolean(state.component)}
+        isEditing={notesEditing}
         onDisplayChange={selectDisplay}
         onModeChange={selectMode}
         onStart={startAudience}
@@ -619,8 +678,12 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
           <PresenterWorkspace
             currentIndex={state.currentSlide}
+            deckPath={state.deckPath ?? ""}
             nextIndex={Math.min(state.currentSlide + 1, state.slides.length - 1)}
+            notesEditable={notesEditable}
             notes={currentNotes}
+            onNotesEditingChange={setNotesEditing}
+            onSaveNotes={saveSpeakerNotes}
             resetVersion={presenterLayoutResetVersion}
             showNext={showNext}
             showNotes={showNotes}
@@ -675,10 +738,8 @@ const styles = StyleSheet.create({
   keyboardJump: { backgroundColor: "#272c3b", borderRadius: 7, color: "#93c5fd", fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600", paddingHorizontal: 9, paddingVertical: 6, position: "absolute", right: 22, top: 22, zIndex: 1 },
   lastGood: { color: "#fda4af", fontSize: 11, fontStyle: "italic", marginTop: 10 },
   notes: { flex: 1 },
-  notesContent: { paddingHorizontal: 16, paddingVertical: 14 },
-  notesPlaceholder: { color: "#71717a", fontStyle: "italic" },
+  notesContent: { flexGrow: 1, paddingHorizontal: 16, paddingVertical: 14 },
   notesSection: { minHeight: 0, overflow: "hidden" },
-  notesText: { color: "#e4e4e7", fontSize: 17, lineHeight: 25 },
   presenter: { flex: 1, padding: 14 },
   pressed: { opacity: 0.75 },
   horizontalResizeHandle: { height: "100%", width: 14 },
