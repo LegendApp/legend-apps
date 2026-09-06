@@ -62,7 +62,10 @@ export function AudienceWindow() {
   const outgoingStyle = transition === "slide"
     ? { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }] }
     : { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) };
-  const outgoingSlide = previousCurrent.current === currentSlide ? previousSlide : previousCurrent.current;
+  // Render from state: ref changes do not invalidate React's cached output.
+  // The layout effect establishes the outgoing layer before paint; cuts never
+  // have one, even when the previous transition has not cleaned up yet.
+  const outgoingSlide = transition === "none" || previousSlide === currentSlide ? null : previousSlide;
   const layers = outgoingSlide === null
     ? [{ index: currentSlide, style: enteringStyle }]
     : [

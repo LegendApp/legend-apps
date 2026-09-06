@@ -21,6 +21,7 @@ export type SlidesState = {
   component: ComponentType<any> | null;
   config: DeckConfig;
   currentSlide: number;
+  slideStartedAt: number;
   deckPath: string | null;
   revision: number;
   slides: DeckSlide[];
@@ -41,6 +42,7 @@ let state: SlidesState = {
   component: null,
   config: {},
   currentSlide: 0,
+  slideStartedAt: performance.now(),
   deckPath: null,
   revision: 0,
   slides: [],
@@ -54,7 +56,13 @@ export function getSlidesState() {
 }
 
 export function setSlidesState(update: Partial<SlidesState> | ((current: SlidesState) => Partial<SlidesState>)) {
-  state = { ...state, ...(typeof update === "function" ? update(state) : update) };
+  const next = { ...state, ...(typeof update === "function" ? update(state) : update) };
+  // Both windows share one clock, including when the audience opens mid-slide.
+  if (next.currentSlide !== state.currentSlide || next.revision !== state.revision
+    || next.retryRevision !== state.retryRevision || (next.audienceOpen && !state.audienceOpen)) {
+    next.slideStartedAt = performance.now();
+  }
+  state = next;
   listeners.forEach((listener) => listener());
 }
 

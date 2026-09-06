@@ -42,8 +42,9 @@ Do not copy the entire talk into another generated deck: edit the MDX directly.
 Slide 15 is **one continuously animated glass joke**. It starts subtle, holds for
 four seconds, changes caption at 12 seconds and reaches maximum distortion at
 28 seconds. It keeps moving until you advance; revisiting restarts the sequence.
-Presenter previews show a stable final frame. Only the caption leaf updates at
-its two beats; the host's shader clock drives the distortion.
+The presenter’s Current view and audience animate from the same clock; Next
+shows a stable final frame. Only the caption leaf updates at its two beats;
+the host’s shader clock drives the distortion.
 
 The native reset on slide 16 shows actual Swift source. It does not pretend that
 a custom shader is Apple's material. Slides does not currently expose the native
@@ -61,11 +62,15 @@ for visual review; bounds checks found no off-stage text. SkSL compilation,
 TypeGPU shader generation and a headless WebGPU render pass. Glass caption timing,
 cleanup, restart and static preview checks pass.
 
-The offline previews approximate native layout and are not screenshots from
-Legend Slides. Native playback, font metrics and timing still need rehearsal on
-the presentation display. Earlier Bun startup hangs prevented a native rehearsal;
-this pass uses the installed Node runtime for authoring checks.
+The offline previews approximate native layout. Rehearse native playback, font
+metrics and timing on the actual presentation display before presenting.
 
-The full workspace TypeScript check currently fails in separately edited
-`apps/slides/src/DeckRenderer.tsx`: `MissingSlideTemplate` has an inferred `void`
-return type and is used as JSX. This authoring pass leaves that host work untouched.
+Native macOS verification after the effects fixes: a debug rebuild, 21 slide
+visits covering glass (15), ripple (17), TypeGPU (18), glitch (2), closing ripple
+(31), and their neighboring slides. Both windows were captured on every visit;
+the effects remained visible on repeated forward and backward navigation.
+Each glass visit ran for 31 seconds, and ripple returns included presenter
+resizing. Current and audience showed the same glass escalation stage.
+The workspace typecheck, Slides/macOS verification, and capture/clock regression
+tests pass. The Skia native patch requires rebuilding the app; Metro reload alone
+cannot apply it.

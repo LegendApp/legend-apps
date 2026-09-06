@@ -58,6 +58,7 @@ function normalizeTransition(value: unknown): SlideTransition | undefined {
 
 function Deck({ children, configJson }: CompiledDeckProps) {
   const { isPreview, targetIndex } = useContext(DeckRenderContext);
+  const startedAt = useSlidesState((state) => state.slideStartedAt);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
   const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
@@ -96,6 +97,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       previous: previousSlide,
       slideCount: elements.length,
       slideIndex: selectedIndex,
+      startedAt,
     }}>
       <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
         {resolvedTemplate.reference && !Template

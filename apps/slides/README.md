@@ -192,8 +192,8 @@ export const scene = defineTypeGPUScene(({ format, root }) => {
 
 The host also supplies `device`, `size`, and `isPreview` during setup. Each
 frame receives `time`, `deltaTime`, `timestamp`, `frame`, `isPreview`, and
-`view`. Presenter previews render one stable frame; the active audience slide
-receives continuous frames. Scene instances may return `dispose()` for their
+`view`. Next-slide previews render one stable frame. The presenter’s Current
+view and the audience receive continuous frames with a shared slide clock. Scene instances may return `dispose()` for their
 own non-TypeGPU resources.
 
 ## Current packaging constraint
