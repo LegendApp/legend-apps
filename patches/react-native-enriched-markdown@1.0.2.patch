@@ -2327,10 +2327,12 @@ index e3f1c31..9ea9990 100644
  
  - (void)emitContextMenuItemPress:(NSString *)itemText
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
-index b9c4939..ab1150e 100644
+index b9c4939..f7afaf8 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
-@@ -64,6 +64,17 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
+@@ -11,0 +12 @@
++#include <TargetConditionals.h>
+@@ -64,6 +65,17 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
  }
  
  
@@ -2348,7 +2350,13 @@ index b9c4939..ab1150e 100644
  void EnrichedMarkdownTextInputEventEmitter::onChangeText(OnChangeText event) const {
    dispatchEvent("changeText", [event=std::move(event)](jsi::Runtime &runtime) {
      auto payload = jsi::Object(runtime);
-@@ -101,6 +112,27 @@ void EnrichedMarkdownTextInputEventEmitter::onInputKeyPress(OnInputKeyPress even
+@@ -94 +106,4 @@ void EnrichedMarkdownTextInputEventEmitter::onInputKeyPress(OnInputKeyPress even
++#if TARGET_OS_OSX
++  dispatchEvent("keyPress", [event=std::move(event)](jsi::Runtime &runtime) {
++#else
+-  dispatchEvent("inputKeyPress", [event=std::move(event)](jsi::Runtime &runtime) {
++#endif
+@@ -101,6 +117,27 @@ void EnrichedMarkdownTextInputEventEmitter::onInputKeyPress(OnInputKeyPress even
  }
  
  
@@ -2376,7 +2384,7 @@ index b9c4939..ab1150e 100644
  void EnrichedMarkdownTextInputEventEmitter::onChangeState(OnChangeState event) const {
    dispatchEvent("changeState", [event=std::move(event)](jsi::Runtime &runtime) {
      auto payload = jsi::Object(runtime);
-@@ -364,4 +396,15 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
+@@ -364,4 +401,15 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
    });
  }
  
