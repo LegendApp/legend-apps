@@ -1,3 +1,5 @@
+export { MaterialSampler } from "./MaterialSampler";
+
 // A reusable Skia approximation for decks. The native app should use NSGlassEffectView.
 export const glassTimeline = { warmup: 4, moreRefraction: 12, peak: 28 } as const;
 

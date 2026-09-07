@@ -1,6 +1,6 @@
 # React Native is the best way to build desktop apps
 
-A complete first draft for Legend Slides: **31 main slides + 11 effect-gallery
+A complete first draft for Legend Slides: **31 main slides + 23 effect-gallery
 slides + 11 backups**, with speaker notes on every slide. The main running order
 budgets **18 minutes**, plus two minutes for laughter and transitions. The
 audience is React Native developers who mostly do not know about desktop support.
@@ -60,11 +60,15 @@ installation. Every slide uses the slowly drifting ambient aurora. The opening
 assumption uses a configurable brief fault with explicit delay, duration and
 interval controls.
 
-Slides 32–42 form an optional effect gallery. They demonstrate a native-layer
+Slides 32–54 form an optional effect gallery. They demonstrate a native-layer
 peel, code-to-interface transformation, native-data boundary, benchmark arrival,
 agent-device scan, desktop-window portal, platform-chrome conveyor and TypeGPU
 data constellation. Three performance effects add a latency race, memory gravity
-and a frame-budget scanner. The JS-driven pack effects use the shared slide lifecycle,
+and a frame-budget scanner. A generated Lottie JSON example uses native vector
+playback. Eleven configurable additions cover platform metamorphosis, thread
+pressure, shader typography, pointer magnetism, component X-ray, material
+sampling, GPU interface assembly, code-to-pixels, physics layout, focus spotlight
+and recursive desktops. The JS-driven pack effects use the shared slide lifecycle,
 so presenter previews are static and returning to an active slide restarts its
 animation. The TypeGPU constellation draws 1,024 moving fragments in one
 instanced draw. No effect-performance measurements are claimed.
@@ -72,7 +76,7 @@ instanced draw. No effect-performance measurements are claimed.
 ## Validation and rehearsal
 
 The deck files pass a focused TypeScript check and the MDX compiles with no
-warnings. All 53 slides have speaker notes. Validation covers SkSL compilation,
+warnings. All 65 slides have speaker notes. Validation covers SkSL compilation,
 TypeGPU shader generation, a headless WebGPU render pass, glass caption timing,
 cleanup, restart and static preview behavior.
 

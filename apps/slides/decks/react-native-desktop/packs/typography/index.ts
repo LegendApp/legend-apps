@@ -1,0 +1,1 @@
+export { ShaderTypography } from "./ShaderTypography";

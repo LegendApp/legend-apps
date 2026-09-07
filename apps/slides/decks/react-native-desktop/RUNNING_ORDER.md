@@ -46,16 +46,28 @@ Main talk targets 18 minutes of material, leaving about two minutes for pauses a
 | 40 | Effect gallery | 394 ms feels different from 792 ms |
 | 41 | Effect gallery | Memory has weight |
 | 42 | Effect gallery | Heavy work misses the frame |
-| 43 | Backup | React Native and GPUI are tied |
-| 44 | Backup | Small download ≠ small memory footprint |
-| 45 | Backup | AppKit wins this snapshot |
-| 46 | Backup | What this comparison answers |
-| 47 | Backup | What I was choosing between |
-| 48 | Backup | There really is native code behind it |
-| 49 | Backup | The React side stays small |
-| 50 | Backup | Useful to people. Useful to agents. |
-| 51 | Backup | Start with app-scoped evidence |
-| 52 | Backup | JavaScript does not have to own everything |
-| 53 | Backup | The pieces are available |
+| 43 | Effect gallery | A JSON file becomes native animation |
+| 44 | Effect gallery | Phone-shaped becomes desktop-shaped |
+| 45 | Effect gallery | The native pulse keeps moving |
+| 46 | Effect gallery | Let the words become the effect |
+| 47 | Effect gallery | Make the interface feel magnetic |
+| 48 | Effect gallery | X-ray the component tree |
+| 49 | Effect gallery | Choose your material |
+| 50 | Effect gallery | 4,096 particles become an interface |
+| 51 | Effect gallery | Code becomes pixels |
+| 52 | Effect gallery | Give layout a little gravity |
+| 53 | Effect gallery | Move the spotlight, not the slide |
+| 54 | Effect gallery | How many desktops is too many? |
+| 55 | Backup | React Native and GPUI are tied |
+| 56 | Backup | Small download ≠ small memory footprint |
+| 57 | Backup | AppKit wins this snapshot |
+| 58 | Backup | What this comparison answers |
+| 59 | Backup | What I was choosing between |
+| 60 | Backup | There really is native code behind it |
+| 61 | Backup | The React side stays small |
+| 62 | Backup | Useful to people. Useful to agents. |
+| 63 | Backup | Start with app-scoped evidence |
+| 64 | Backup | JavaScript does not have to own everything |
+| 65 | Backup | The pieces are available |
 
-Scripted time: **18:00**. Glass escalation is slide 15; it is one continuous animation. The main talk ends at slide 31, the effect gallery occupies slides 32–42, and backups begin at slide 43.
+Scripted time: **18:00**. Glass escalation is slide 15; it is one continuous animation. The main talk ends at slide 31, the effect gallery occupies slides 32–54, and backups begin at slide 55.

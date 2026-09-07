@@ -17,6 +17,18 @@ The proposed installed-pack namespace is `slides:`:
 - `slides:performance/latency-race`
 - `slides:performance/memory-gravity`
 - `slides:performance/frame-budget`
+- `slides:animation/lottie`
+- `slides:transform/platform-metamorphosis`
+- `slides:performance/thread-pressure`
+- `slides:typography/shader`
+- `slides:interaction/magnetic-cursor`
+- `slides:reveal/component-xray`
+- `slides:glass/material-sampler`
+- `slides:data/gpu-interface-reveal`
+- `slides:transform/code-to-pixels`
+- `slides:motion/physics-layout`
+- `slides:reveal/focus-spotlight`
+- `slides:depth/infinite-desktop`
 - `slides:distortion/prismatic-tear`
 - `slides:glass/liquid`
 - `slides:jay/absurd-glass` for a third-party pack
@@ -38,6 +50,22 @@ distortionTiming({
 
 This keeps effect strength separate from when and how often the effect runs.
 
+The newer component packs share a small presentation profile:
+
+```tsx
+<PlatformMetamorphosis
+  intensity="heavy"
+  tempo="fast"
+  durationSeconds={2.7}
+  previewProgress={0.78}
+/>
+```
+
+`intensity` changes displacement and visual density, while `tempo` selects a
+default duration. `durationSeconds` overrides that duration and `previewProgress`
+chooses the stable frame used in presenter previews. All time-driven components
+restart from their opening frame when their slide becomes active again.
+
 The performance effects expose their visual timing and comparison values as
 props. `LatencyRace` and `MemoryGravity` default to the measured Chat History
 results. `FrameBudget` defaults to illustrative values and labels them as such.
@@ -45,14 +73,16 @@ results. `FrameBudget` defaults to illustrative values and labels them as such.
 ## Lottie and Rive assets
 
 Deck-local packs cannot add a native animation runtime to an already built Slides
-app. A future plugin can declare a required host capability such as `lottie` or
-`rive`; Slides can then enable that pack only when its native binary contains the
-matching runtime. Installing either runtime requires refreshing native dependencies
-and rebuilding the app.
+app. Slides now includes Lottie on macOS, so a local pack can import
+`lottie-react-native` and bundle a JSON animation. A future plugin can declare a
+required host capability such as `lottie` or `rive`; Slides can then enable that
+pack only when its native binary contains the matching runtime. Adding another
+runtime still requires refreshing native dependencies and rebuilding the app.
 
-Lottie is the easier generated-asset path. Simple shape, transform and trim-path
-animations can be authored as JSON, validated and bundled with a deck. Complex
-animations should still come from an animation tool because the JSON format is a
+Lottie is the easier generated-asset path. `LottiePlayer` synchronizes JSON playback
+with the slide lifecycle and keeps presenter previews static. Simple shape,
+transform and trim-path animations can be authored as JSON, validated and bundled
+with a deck. Complex animations should still come from an animation tool because the JSON format is a
 compiled interchange format rather than a pleasant authoring API.
 
 Rive is better for interactive state machines, but runtime files are binary `.riv`

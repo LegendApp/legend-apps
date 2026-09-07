@@ -19,15 +19,20 @@ import { snippets } from "./snippets"
 import { GlassCaption } from "./GlassCaption"
 import { sidebarStorm, sidebarCount } from "./sidebarStorm"
 import { AgentDeviceScan } from "./packs/automation"
+import { NativeOrbitLottie } from "./packs/animation"
 import { BenchmarkArrival } from "./packs/charts"
 import { ChromeConveyor } from "./packs/comparison"
-import { NativeDataWindow, gpuConstellation, gpuConstellationCount } from "./packs/data"
+import { NativeDataWindow, gpuConstellation, gpuConstellationCount, gpuInterfaceReveal, gpuInterfaceRevealCount } from "./packs/data"
+import { InfiniteDesktop } from "./packs/depth"
 import { prismaticTear, subtleFaultTiming } from "./packs/distortion"
-import { chatGlassUniforms, glassTimeline, liquidGlass } from "./packs/glass"
-import { FrameBudget, LatencyRace, MemoryGravity } from "./packs/performance"
-import { NativeLayerPeel } from "./packs/reveal"
-import { CodeToUI } from "./packs/transform"
+import { chatGlassUniforms, glassTimeline, liquidGlass, MaterialSampler } from "./packs/glass"
+import { MagneticCursor } from "./packs/interaction"
+import { PhysicsLayout } from "./packs/motion"
+import { FrameBudget, LatencyRace, MemoryGravity, ThreadPressure } from "./packs/performance"
+import { ComponentXRay, FocusSpotlight, NativeLayerPeel } from "./packs/reveal"
+import { CodeToPixels, CodeToUI, PlatformMetamorphosis } from "./packs/transform"
 import { WindowPortal } from "./packs/transitions"
+import { ShaderTypography } from "./packs/typography"
 
 <Scene eyebrow="React Native / Desktop" title="">
   <BigStatement children={"React Native is the best way to build desktop apps"} detail="Yes, even if you never ship a mobile app." />
@@ -381,6 +386,102 @@ transition: none
 </Scene>
 
 <!-- EFFECT GALLERY. OPTIONAL. This generic frame-budget explanation contrasts work that fits within 16.7 ms with work that crosses the frame boundary. The 6 ms and 24 ms workloads are illustrative and are not measurements of React Native or any compared implementation. Proposed pack path: slides:performance/frame-budget. -->
+
+---
+
+<Scene eyebrow="Effect gallery / Lottie" title="A JSON file becomes native animation">
+  <NativeOrbitLottie />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. This animation is generated deck-local Lottie JSON played by lottie-react-native and lottie-ios on macOS. The shared slide clock drives normalized progress, so presenter previews are static and leaving then returning restarts the animation. Proposed pack path: slides:animation/lottie. -->
+
+---
+
+<Scene eyebrow="Effect gallery / responsive form" title="Phone-shaped becomes desktop-shaped">
+  <PlatformMetamorphosis intensity="heavy" tempo="fast" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. The same schematic Chat History component expands from a narrow mobile composition into a desktop window with sidebar and toolbar. The heavy, fast preset adds a small overshoot; use the light preset for a restrained product transition. This is a layout metaphor, not a claim that desktop adaptation is automatic. Proposed pack path: slides:transform/platform-metamorphosis. -->
+
+---
+
+<Scene eyebrow="Effect gallery / execution" title="The native pulse keeps moving">
+  <ThreadPressure intensity="heavy" tempo="fast" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. A JS-driven indicator pauses behind an illustrative pressure interval while the native lane keeps moving. The component does not actually block the Slides JavaScript thread, so it remains safe for presenting and makes no measured performance claim. Proposed pack path: slides:performance/thread-pressure. -->
+
+---
+
+<Scene eyebrow="Effect gallery / typography" title="Let the words become the effect">
+  <ShaderTypography intensity="heavy" tempo="slow" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Skia masks an animated runtime shader into system-matched typography. Use this as a section-opening emphasis rather than a persistent title treatment. The heavy preset adds stronger color separation and scan energy. Proposed pack path: slides:typography/shader. -->
+
+---
+
+<Scene eyebrow="Effect gallery / pointer" title="Make the interface feel magnetic">
+  <MagneticCursor intensity="light" tempo="slow" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. A simulated pointer draws nearby actions toward it. This slide intentionally uses the light preset: proximity feedback should feel responsive without making controls flee across the screen. A product version could feed the same field from pointer events. Proposed pack path: slides:interaction/magnetic-cursor. -->
+
+---
+
+<Scene eyebrow="Effect gallery / architecture" title="X-ray the component tree">
+  <ComponentXRay intensity="heavy" tempo="slow" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. The interface separates into text, React, Fabric, native view and platform layers while a scan crosses the stack. These labels simplify the architecture for explanation and are not a literal runtime view hierarchy. Proposed pack path: slides:reveal/component-xray. -->
+
+---
+
+<Scene eyebrow="Effect gallery / materials" title="Choose your material">
+  <MaterialSampler intensity="heavy" tempo="slow" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Four local material treatments move over the same schematic backdrop. Frost, prism and gel are custom visual approximations; Platform is a reminder to use the native material when platform fidelity is the goal. Proposed pack path: slides:glass/material-sampler. -->
+
+---
+
+<Scene eyebrow="Effect gallery / TypeGPU" title="4,096 particles become an interface" footer={`${gpuInterfaceRevealCount} particles · one instanced draw · shader-driven assembly`}>
+  <TypeGPU scene={gpuInterfaceReveal} width={1680} height={580} previewTime={6} />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. One TypeGPU instanced draw spirals 4,096 fragments into a desktop-interface grid. It is an effect demonstration, not a benchmark, and it keeps the per-particle animation on the GPU rather than creating 4,096 React components. Proposed pack path: slides:data/gpu-interface-reveal. -->
+
+---
+
+<Scene eyebrow="Effect gallery / transformation" title="Code becomes pixels">
+  <CodeToPixels intensity="heavy" tempo="fast" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Source lines dissolve into a pixel stream and resolve as interface chrome. This is a visual transition between code and product, not an explanation of the React Native compiler or renderer. Proposed pack path: slides:transform/code-to-pixels. -->
+
+---
+
+<Scene eyebrow="Effect gallery / physics" title="Give layout a little gravity">
+  <PhysicsLayout intensity="heavy" tempo="fast" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Desktop panels fall into their constraints with damped spring motion. The heavy preset is intentionally theatrical; the light preset reduces rotation and bounce for real product use. Proposed pack path: slides:motion/physics-layout. -->
+
+---
+
+<Scene eyebrow="Effect gallery / attention" title="Move the spotlight, not the slide">
+  <FocusSpotlight intensity="light" tempo="slow" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. A Skia shader moves a soft focus region across three stationary ideas. This light, slow preset is designed for explanation while preserving spatial context and readable previews. Proposed pack path: slides:reveal/focus-spotlight. -->
+
+---
+
+<Scene eyebrow="Effect gallery / recursion" title="How many desktops is too many?">
+  <InfiniteDesktop intensity="heavy" tempo="fast" />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Ten schematic desktop windows recurse toward a vanishing point and accelerate under the heavy, fast preset. Use this for one absurd transition, not as a background for benchmark numbers. Proposed pack path: slides:depth/infinite-desktop. -->
 
 ---
 
