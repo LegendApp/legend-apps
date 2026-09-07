@@ -81,7 +81,7 @@ describe("compileDeck", () => {
 
   test("bundles local components and externalizes host packages", async () => {
     const deckPath = createDeck({
-      "deck.mdx": `import { Card } from "./Card"\nimport { View } from "react-native"\n\n<Card><View className="bg-fuchsia-500" /></Card>`,
+      "deck.mdx": `import { Card } from "./Card"\nimport LottieView from "lottie-react-native"\nimport { View } from "react-native"\n\n<Card><View className="bg-fuchsia-500" /><LottieView source={{ v: "5.7.4", fr: 60, ip: 0, op: 1, w: 1, h: 1, assets: [], layers: [] }} /></Card>`,
       "Card.tsx": `import React from "react"; export function Card({ children }: { children: React.ReactNode }) { return children; }`,
     });
     const result = await compileDeck(deckPath);
@@ -89,6 +89,7 @@ describe("compileDeck", () => {
     if (!result.success) return;
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "Card.tsx"));
     expect(result.code).toContain('require("react-native")');
+    expect(result.code).toContain('require("lottie-react-native")');
     expect(result.uniwindCode).toContain("bg-fuchsia-500");
   });
 

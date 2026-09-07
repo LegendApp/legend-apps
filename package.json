@@ -99,7 +99,8 @@
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
     "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
-    "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch"
+    "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch",
+    "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch"
   },
   "catalog": {
     "react": "19.1.4",

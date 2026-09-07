@@ -197,6 +197,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@legend-apps/command-runner": "0.0.0",
+        "@legend-apps/design-system": "0.0.0",
         "@legend-apps/file-dialog": "0.0.0",
         "@legend-apps/file-system-watcher": "0.0.0",
         "@legend-apps/keyboard-manager": "0.0.0",
@@ -204,6 +205,7 @@
         "@legend-apps/presentation": "0.0.0",
         "@legend-apps/recent-documents": "0.0.0",
         "@legend-apps/scaled-view": "0.0.0",
+        "@legend-apps/settings-window": "0.0.0",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/syntax-parser": "0.0.0",
         "@legend-apps/window-manager": "0.0.0",
@@ -214,6 +216,7 @@
         "@typegpu/noise": "^0.12.0",
         "@typegpu/react": "^0.12.0",
         "fflate": "^0.8.3",
+        "lottie-react-native": "7.3.8",
         "react-native-enriched-markdown": "1.0.2",
         "react-native-webgpu": "^0.8.5",
         "react-native-webview": "16.0.0",
@@ -860,6 +863,7 @@
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
     "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
+    "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
   },
   "catalog": {
@@ -2201,6 +2205,8 @@
     "longest-streak": ["longest-streak@3.1.0", "", {}, "sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g=="],
 
     "loose-envify": ["loose-envify@1.4.0", "", { "dependencies": { "js-tokens": "^3.0.0 || ^4.0.0" }, "bin": { "loose-envify": "cli.js" } }, "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q=="],
+
+    "lottie-react-native": ["lottie-react-native@7.3.8", "", { "peerDependencies": { "@lottiefiles/dotlottie-react": "^0.13.5", "react": "*", "react-native": ">=0.46", "react-native-windows": ">=0.63.x" }, "optionalPeers": ["@lottiefiles/dotlottie-react", "react-native-windows"] }, "sha512-GAOl99TKi0c6xCcB1AJ+o70mgOPIAI/7K2G+Gs+o4po/qBhgvWijPNCKH8h6yNmlwFTg+RN3DmzRvHNFGxZMKQ=="],
 
     "lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
 

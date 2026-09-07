@@ -12,6 +12,7 @@ import { noteRecentDocument } from "@legend-apps/recent-documents";
 import * as React from "react";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
+import * as LottieReactNative from "lottie-react-native";
 import * as ReactNativeWebGPU from "react-native-webgpu";
 import * as ReactNativeWebview from "react-native-webview";
 import * as TypeGPU from "typegpu";
@@ -54,6 +55,7 @@ const hostModules: Record<string, unknown> = {
   "@legendapp/motion": Motion,
   "@legend-apps/presentation": Presentation,
   "@shopify/react-native-skia": ReactNativeSkia,
+  "lottie-react-native": LottieReactNative,
   "@typegpu/noise": TypeGPUNoise,
   "@typegpu/react": TypeGPUReact,
   "react-native-webgpu": webGPUHostModule,
