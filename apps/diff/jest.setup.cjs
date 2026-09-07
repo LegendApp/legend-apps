@@ -19,31 +19,41 @@ jest.mock("@legendapp/list/react-native", () => {
       },
     },
     LegendList: React.forwardRef(function LegendList({
-      data = [],
+      data,
+      dataSource,
       renderItem,
       style,
     }, ref) {
+      const [dataSourceRevision, setDataSourceRevision] = React.useState(0);
+      React.useEffect(() => dataSource?.subscribe(() => {
+        setDataSourceRevision((revision) => revision + 1);
+      }), [dataSource]);
+      const itemCount = dataSource?.getLength() ?? data?.length ?? 0;
+      const items = Array.from(
+        { length: itemCount },
+        (_, index) => dataSource?.getItem(index) ?? data?.[index],
+      );
       renderItems.push(renderItem);
       React.useImperativeHandle(ref, () => ({
         clearCaches: jest.fn(),
         getState: () => ({
-          elementAtIndex: (index) => (index >= 0 && index < data.length ? {} : undefined),
-          end: data.length - 1,
-          endBuffered: data.length - 1,
+          elementAtIndex: (index) => (index >= 0 && index < itemCount ? {} : undefined),
+          end: itemCount - 1,
+          endBuffered: itemCount - 1,
           start: 0,
           startBuffered: 0,
         }),
         scrollToIndex: jest.fn(async () => undefined),
         scrollToOffset: jest.fn(async () => undefined),
         setItemSize: jest.fn(),
-      }), [data]);
+      }), [dataSourceRevision, itemCount]);
 
       return React.createElement(
         View,
         { style },
-        data.map((item, index) => React.createElement(
+        items.map((item, index) => React.createElement(
           React.Fragment,
-          { key: item ?? index },
+          { key: dataSource?.getKey(index) ?? item ?? index },
           renderItem({ item, index }),
         )),
       );

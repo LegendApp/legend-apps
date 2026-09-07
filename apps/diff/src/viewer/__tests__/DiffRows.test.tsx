@@ -222,6 +222,29 @@ describe("DiffRows", () => {
     expect(nativeRow?.props.style).toEqual([{ width: "100%" }, { height: 24 }]);
   });
 
+  it("keeps a unified native row mounted while its JavaScript row is unavailable", async () => {
+    const view = await render(
+      <DiffUnifiedRow
+        adaptiveRender="normal"
+        collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
+        index={47}
+        isFileHeader={false}
+        nativeConfigId="test:unified"
+        nativeRowHeight={24}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$()}
+        row={undefined}
+      />,
+    );
+
+    expect(findRenderedTreeWithProps(view.toJSON(), {
+      configId: "test:unified",
+      itemId: 47,
+      rowIndex: 47,
+    })).not.toBeNull();
+  });
+
   it("renders side-by-side changed rows with the native row component", async () => {
     const oldRow = createRow({
       changeType: diffChangeTypeRemove,
@@ -280,6 +303,37 @@ describe("DiffRows", () => {
     });
     expect(nativeRow).not.toBeNull();
     expect(nativeRow?.props.style).toEqual([{ width: "100%" }, { height: 24 }]);
+  });
+
+  it("keeps a side-by-side native row mounted while its JavaScript row is unavailable", async () => {
+    const view = await render(
+      <DiffSideBySideRow
+        adaptiveRender="normal"
+        collapsedFileIndexes$={observable(new Set<number>())}
+        index={93}
+        itemMetadata={{
+          fileIndex: 2,
+          hunkIndex: 1,
+          hunkStart: false,
+          itemId: 93,
+          kind: "changed",
+          sourceEnd: 95,
+          sourceStart: 92,
+        }}
+        listIndex={18}
+        nativeConfigId="test:blocks"
+        nativeRowHeight={24}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$()}
+        row={undefined}
+      />,
+    );
+
+    expect(findRenderedTreeWithProps(view.toJSON(), {
+      configId: "test:blocks",
+      itemId: 93,
+      rowIndex: 18,
+    })).not.toBeNull();
   });
 
   it("uses the file index when progressive file summaries share a row start", async () => {
