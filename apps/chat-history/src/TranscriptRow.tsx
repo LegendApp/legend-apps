@@ -1,4 +1,4 @@
-import type { ChatDocument, ChatFileChange, ChatRowMetadata } from "@legend-apps/chat-history";
+import type { ChatDocument, ChatFileChange, ChatImageMetadata, ChatRowMetadata } from "@legend-apps/chat-history";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useRecyclingState } from "@legendapp/list/react-native";
 import { useEffect } from "react";
@@ -76,13 +76,19 @@ function imageUri(source: string) {
   return `file://${source.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function MessageImage({ source }: { source: string }) {
-  const uri = imageUri(source);
+function MessageImage({ image }: { image: ChatImageMetadata }) {
+  const uri = imageUri(image.source);
+  const nativeAspectRatio = image.width && image.height ? image.width / image.height : undefined;
   const [aspectRatio, setAspectRatio] = useRecyclingState(16 / 9);
   const [failed, setFailed] = useRecyclingState(false);
 
   useEffect(() => {
+    if (nativeAspectRatio !== undefined) {
+      return;
+    }
     let active = true;
+    // Remote and unsupported sources retain the asynchronous fallback. Local
+    // metadata is already available before the Image's first native layout.
     Image.getSize(
       uri,
       (width, height) => {
@@ -95,21 +101,21 @@ function MessageImage({ source }: { source: string }) {
     return () => {
       active = false;
     };
-  }, [uri]);
+  }, [nativeAspectRatio, uri]);
 
-  let image = (
+  let content = (
     <Image
       accessibilityLabel="Attached image"
       onError={() => setFailed(true)}
       resizeMode="contain"
       source={{ uri }}
-      style={[styles.messageImage, { aspectRatio }]}
+      style={[styles.messageImage, { aspectRatio: nativeAspectRatio ?? aspectRatio }]}
     />
   );
   if (failed) {
-    image = <ImagePlaceholder />;
+    content = <ImagePlaceholder />;
   }
-  return image;
+  return content;
 }
 
 function MessageRow({ document, index, loadImages, metadata, onLayout }: {
@@ -122,10 +128,10 @@ function MessageRow({ document, index, loadImages, metadata, onLayout }: {
   const isUser = metadata.kind === "user";
   const { theme } = useUniwind();
   const markdownStyle = markdownStyleByAppearance[theme === "dark" ? "dark" : "light"];
-  const imageSources = loadImages
+  const images = loadImages
     ? Array.from(
       { length: metadata.imageCount },
-      (_, imageIndex) => document.getImageSource(index, imageIndex),
+      (_, imageIndex) => document.getImageMetadata(index, imageIndex),
     )
     : [];
   return (
@@ -135,8 +141,8 @@ function MessageRow({ document, index, loadImages, metadata, onLayout }: {
           ? "max-w-[82%] self-end rounded-2xl bg-surface-muted px-4 py-3"
           : "w-full max-w-[92%]"}
       >
-        {imageSources.map((source, imageIndex) => (
-          <MessageImage key={`${source}:${imageIndex}`} source={source} />
+        {images.map((image, imageIndex) => (
+          <MessageImage key={`${image.source}:${imageIndex}`} image={image} />
         ))}
         {metadata.markdownBlockId ? (
           <EnrichedMarkdownText

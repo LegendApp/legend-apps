@@ -27,6 +27,7 @@ export type {
   ChatDocument,
   ChatDocumentTiming,
   ChatFileChange,
+  ChatImageMetadata,
   ChatRowMetadata,
   ChatSummary,
 } from "./ChatHistory.nitro";

@@ -22,6 +22,12 @@ export interface ChatRowMetadata {
   fileDeletions?: number;
 }
 
+export interface ChatImageMetadata {
+  source: string;
+  width?: number;
+  height?: number;
+}
+
 export interface ChatFileChange {
   path: string;
   additions: number;
@@ -48,6 +54,7 @@ export interface ChatDocument extends HybridObject<{ ios: "c++" }> {
   getRowMetadata(index: number): ChatRowMetadata;
   getToolPreview(index: number, maximumBytes: number): string;
   getImageSource(index: number, imageIndex: number): string;
+  getImageMetadata(index: number, imageIndex: number): ChatImageMetadata;
   getFileChange(index: number, fileIndex: number): ChatFileChange;
   getTiming(): ChatDocumentTiming;
   releaseNativeResources(): number;

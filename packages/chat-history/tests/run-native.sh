@@ -7,6 +7,9 @@ mkdir -p "$BUILD_DIR"
 
 clang++ \
   -std=c++20 \
+  -fobjc-arc \
+  -framework Foundation \
+  -framework ImageIO \
   -Wall \
   -Wextra \
   -Werror \
@@ -19,6 +22,7 @@ clang++ \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTime.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTranscriptParser.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatStartupLoad.cpp" \
+  "$ROOT_DIR/packages/chat-history/cpp/ChatImageDimensions.mm" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatDocumentRegistry.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/HybridChatDocument.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/HybridChatHistory.cpp" \
@@ -27,3 +31,10 @@ clang++ \
   -o "$BUILD_DIR/chat_history_test"
 
 "$BUILD_DIR/chat_history_test" "$ROOT_DIR/packages/chat-history/tests/fixtures"
+
+clang++ -std=c++20 -Wall -Wextra -Werror -fobjc-arc \
+  -framework Foundation -framework ImageIO -framework CoreGraphics \
+  "$ROOT_DIR/packages/chat-history/tests/chat_image_test.mm" \
+  "$ROOT_DIR/packages/chat-history/cpp/ChatImageDimensions.mm" \
+  -o "$BUILD_DIR/chat_image_test"
+"$BUILD_DIR/chat_image_test"

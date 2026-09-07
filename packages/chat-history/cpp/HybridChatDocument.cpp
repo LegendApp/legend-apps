@@ -1,4 +1,5 @@
 #include "HybridChatDocument.hpp"
+#include "ChatImageDimensions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -449,6 +450,15 @@ std::string HybridChatDocument::getImageSource(double index, double imageIndex) 
   const ChatDisplayRow& displayRow = displayRows_[checkedIndex(index)];
   const ChatRow& row = rows_[displayRow.firstRow];
   return row.imageSources[checkedImageIndex(row, imageIndex)];
+}
+
+ChatImageMetadata HybridChatDocument::getImageMetadata(double index, double imageIndex) {
+  const std::string source = getImageSource(index, imageIndex);
+  const auto dimensions = readChatImageDimensions(source);
+  return ChatImageMetadata(
+      source,
+      dimensions ? std::optional<double>(dimensions->width) : std::nullopt,
+      dimensions ? std::optional<double>(dimensions->height) : std::nullopt);
 }
 
 ChatFileChange HybridChatDocument::getFileChange(double index, double fileIndex) {

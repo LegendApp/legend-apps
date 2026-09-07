@@ -22,6 +22,7 @@ namespace margelo::nitro::legendapps::chathistory {
       prototype.registerHybridMethod("getRowMetadata", &HybridChatDocumentSpec::getRowMetadata);
       prototype.registerHybridMethod("getToolPreview", &HybridChatDocumentSpec::getToolPreview);
       prototype.registerHybridMethod("getImageSource", &HybridChatDocumentSpec::getImageSource);
+      prototype.registerHybridMethod("getImageMetadata", &HybridChatDocumentSpec::getImageMetadata);
       prototype.registerHybridMethod("getFileChange", &HybridChatDocumentSpec::getFileChange);
       prototype.registerHybridMethod("getTiming", &HybridChatDocumentSpec::getTiming);
       prototype.registerHybridMethod("releaseNativeResources", &HybridChatDocumentSpec::releaseNativeResources);

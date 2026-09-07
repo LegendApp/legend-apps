@@ -11,6 +11,7 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :osx => "14.0" }
+  s.frameworks = "ImageIO"
   s.source_files = "cpp/**/*.{h,hpp,cpp,mm}", "ios/**/*.{h,m,mm}"
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",

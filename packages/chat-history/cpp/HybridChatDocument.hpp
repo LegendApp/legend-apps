@@ -28,6 +28,7 @@ public:
   ChatRowMetadata getRowMetadata(double index) override;
   std::string getToolPreview(double index, double maximumBytes) override;
   std::string getImageSource(double index, double imageIndex) override;
+  ChatImageMetadata getImageMetadata(double index, double imageIndex) override;
   ChatFileChange getFileChange(double index, double fileIndex) override;
   ChatDocumentTiming getTiming() override;
   double releaseNativeResources() override;
