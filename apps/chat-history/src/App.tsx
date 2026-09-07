@@ -523,6 +523,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       windowStyle: {
         appearance: "system",
         backgroundColor: displayTheme.colors.windowBackground,
+        contentLayoutMode: "fullSize",
         titlebarSeparatorStyle: "shadow",
       },
     }).catch(reportChatHistoryWindowError);

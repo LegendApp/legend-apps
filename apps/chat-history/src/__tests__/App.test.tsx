@@ -86,6 +86,7 @@ describe("Chat History host window", () => {
       windowStyle: {
         appearance: "system",
         backgroundColor: "#f5f6f8",
+        contentLayoutMode: "fullSize",
         titlebarSeparatorStyle: "shadow",
       },
     });
