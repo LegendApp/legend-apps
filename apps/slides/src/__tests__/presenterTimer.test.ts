@@ -30,6 +30,24 @@ describe("presenter timer", () => {
     expect(restarted).toMatchObject({ restart: true, state: { running: true } });
   });
 
+  it("starts immediately and does not restart on slide 2 when presentation automation is disabled", () => {
+    const behavior = {
+      presentationStartsOnSecondSlide: false,
+      rehearsalPausesWhileEditing: true,
+    };
+    const opened = transitionPresenterTimer(initialPresenterTimerState, {
+      mode: "presentation",
+      type: "audience-started",
+    }, behavior);
+    expect(opened).toMatchObject({
+      restart: true,
+      state: { pauseReason: null, running: true },
+    });
+
+    const advanced = transitionPresenterTimer(opened.state, { from: 0, to: 1, type: "slide-navigated" }, behavior);
+    expect(advanced).toEqual({ restart: false, state: opened.state });
+  });
+
   it("starts rehearsal immediately and resumes an editing pause on navigation", () => {
     const opened = transitionPresenterTimer(initialPresenterTimerState, {
       mode: "rehearsal",
@@ -52,6 +70,20 @@ describe("presenter timer", () => {
     const navigated = transitionPresenterTimer(paused.state, { from: 2, to: 3, type: "slide-navigated" });
 
     expect(navigated).toEqual({ restart: false, state: paused.state });
+  });
+
+  it("keeps rehearsal running while editing when edit automation is disabled", () => {
+    const running = {
+      mode: "rehearsal",
+      pauseReason: null,
+      running: true,
+    };
+    const editing = transitionPresenterTimer(running, { type: "editing-started" }, {
+      presentationStartsOnSecondSlide: true,
+      rehearsalPausesWhileEditing: false,
+    });
+
+    expect(editing).toEqual({ restart: false, state: running });
   });
 
   it("restarts and runs on a manual restart", () => {

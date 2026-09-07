@@ -22,6 +22,16 @@ export type PresenterTimerTransition = {
   state: PresenterTimerState;
 };
 
+export type PresenterTimerBehavior = {
+  presentationStartsOnSecondSlide: boolean;
+  rehearsalPausesWhileEditing: boolean;
+};
+
+export const defaultPresenterTimerBehavior: PresenterTimerBehavior = {
+  presentationStartsOnSecondSlide: true,
+  rehearsalPausesWhileEditing: true,
+};
+
 export const initialPresenterTimerState: PresenterTimerState = {
   mode: null,
   pauseReason: "stopped",
@@ -31,9 +41,10 @@ export const initialPresenterTimerState: PresenterTimerState = {
 export function transitionPresenterTimer(
   state: PresenterTimerState,
   event: PresenterTimerEvent,
+  behavior: PresenterTimerBehavior = defaultPresenterTimerBehavior,
 ): PresenterTimerTransition {
   if (event.type === "audience-started") {
-    const running = event.mode === "rehearsal";
+    const running = event.mode === "rehearsal" || !behavior.presentationStartsOnSecondSlide;
     return {
       restart: true,
       state: {
@@ -55,7 +66,12 @@ export function transitionPresenterTimer(
     if (event.from === event.to) {
       return { restart: false, state };
     }
-    if (state.mode === "presentation" && event.from === 0 && event.to === 1) {
+    if (
+      behavior.presentationStartsOnSecondSlide &&
+      state.mode === "presentation" &&
+      event.from === 0 &&
+      event.to === 1
+    ) {
       return {
         restart: true,
         state: { ...state, pauseReason: null, running: true },
@@ -71,7 +87,7 @@ export function transitionPresenterTimer(
   }
 
   if (event.type === "editing-started") {
-    if (state.mode === "rehearsal" && state.running) {
+    if (behavior.rehearsalPausesWhileEditing && state.mode === "rehearsal" && state.running) {
       return {
         restart: false,
         state: { ...state, pauseReason: "editing", running: false },
