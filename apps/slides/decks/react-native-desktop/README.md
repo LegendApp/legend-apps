@@ -1,9 +1,9 @@
 # React Native is the best way to build desktop apps
 
-A complete first draft for Legend Slides: **31 main slides + 11 backups**, with
-speaker notes on every slide. The main running order budgets **18 minutes**, plus
-two minutes for laughter and transitions. The audience is React Native developers
-who mostly do not know about desktop support.
+A complete first draft for Legend Slides: **31 main slides + 11 effect-gallery
+slides + 11 backups**, with speaker notes on every slide. The main running order
+budgets **18 minutes**, plus two minutes for laughter and transitions. The
+audience is React Native developers who mostly do not know about desktop support.
 
 Open `talk.mdx` in Legend Slides. From this worktree:
 
@@ -31,7 +31,7 @@ The Chat History artwork is synthetic. It is not a screenshot of the real app.
 - `Scene.tsx` and `Content.tsx`: native layout, charts, diagrams and artwork.
 - `snippets.ts`: short source excerpts and labeled usage examples.
 - `benchmark.ts`: measured values, chart labels and sorting.
-- `packs/`: reusable background, distortion and glass prototypes.
+- `packs/`: reusable backgrounds, shaders, reveals, transformations, charts and transitions.
 - `GlassCaption.tsx`: automatic glass escalation copy.
 - `sidebarStorm.ts`: the TypeGPU scene.
 
@@ -58,16 +58,23 @@ The `packs` folder prototypes the future `slides:` virtual namespace described i
 `packs/README.md`. These deck-local versions bundle with the MDX and require no
 installation. Every slide uses the slowly drifting ambient aurora. The opening
 assumption uses a configurable brief fault with explicit delay, duration and
-interval controls. Other effects include Skia ripple and the TypeGPU
-scene with 384 sidebars and a restrained closing ripple. Evidence charts remain
-still so their values are readable. No effect-performance measurements are claimed.
+interval controls.
+
+Slides 32–42 form an optional effect gallery. They demonstrate a native-layer
+peel, code-to-interface transformation, native-data boundary, benchmark arrival,
+agent-device scan, desktop-window portal, platform-chrome conveyor and TypeGPU
+data constellation. Three performance effects add a latency race, memory gravity
+and a frame-budget scanner. The JS-driven pack effects use the shared slide lifecycle,
+so presenter previews are static and returning to an active slide restarts its
+animation. The TypeGPU constellation draws 1,024 moving fragments in one
+instanced draw. No effect-performance measurements are claimed.
 
 ## Validation and rehearsal
 
-The deck files pass a focused TypeScript check and the MDX compiles with no warnings. All 42 slides have notes and rendered offline
-for visual review; bounds checks found no off-stage text. SkSL compilation,
-TypeGPU shader generation and a headless WebGPU render pass. Glass caption timing,
-cleanup, restart and static preview checks pass.
+The deck files pass a focused TypeScript check and the MDX compiles with no
+warnings. All 53 slides have speaker notes. Validation covers SkSL compilation,
+TypeGPU shader generation, a headless WebGPU render pass, glass caption timing,
+cleanup, restart and static preview behavior.
 
 The offline previews approximate native layout. Rehearse native playback, font
 metrics and timing on the actual presentation display before presenting.
@@ -81,3 +88,11 @@ resizing. Current and audience showed the same glass escalation stage.
 The workspace typecheck, Slides/macOS verification, and capture/clock regression
 tests pass. The Skia native patch requires rebuilding the app; Metro reload alone
 cannot apply it.
+
+The first eight gallery slides were also played in the native macOS app from a temporary
+copy outside Documents. Every opening and completed state rendered, and reverse
+navigation restarted the automation, portal, chrome and TypeGPU effects without
+blanking. The TypeGPU constellation continued moving after a leave-and-return cycle.
+The latency, memory-gravity and frame-budget slides were then checked in the same
+native app. Their opening, completed and repeated states remained visible during
+forward and backward navigation.

@@ -18,8 +18,16 @@ import { Columns, Rows, CodePanel, SidebarGallery, NativeLayers } from "./Conten
 import { snippets } from "./snippets"
 import { GlassCaption } from "./GlassCaption"
 import { sidebarStorm, sidebarCount } from "./sidebarStorm"
+import { AgentDeviceScan } from "./packs/automation"
+import { BenchmarkArrival } from "./packs/charts"
+import { ChromeConveyor } from "./packs/comparison"
+import { NativeDataWindow, gpuConstellation, gpuConstellationCount } from "./packs/data"
 import { prismaticTear, subtleFaultTiming } from "./packs/distortion"
 import { chatGlassUniforms, glassTimeline, liquidGlass } from "./packs/glass"
+import { FrameBudget, LatencyRace, MemoryGravity } from "./packs/performance"
+import { NativeLayerPeel } from "./packs/reveal"
+import { CodeToUI } from "./packs/transform"
+import { WindowPortal } from "./packs/transitions"
 
 <Scene eyebrow="React Native / Desktop" title="">
   <BigStatement children={"React Native is the best way to build desktop apps"} detail="Yes, even if you never ship a mobile app." />
@@ -35,7 +43,7 @@ import { chatGlassUniforms, glassTimeline, liquidGlass } from "./packs/glass"
   </Effect>
 </Scene>
 
-<!-- 0:20–0:45. “Normally the pitch is that you give something up and get code sharing back. We internalize that so thoroughly that we sometimes don't even measure it.” These are assumptions being challenged, not quotes from research. Keep this beat quick. A small visual fault appears after three seconds and repeats every 8.5 seconds; it should suggest that the premise is unstable without competing with the words. “What if React Native is the option we would choose for quality?” -->
+<!-- 0:20–0:45. “Normally the pitch is that you give something up and get code sharing back. We internalize that so thoroughly that we sometimes don't even measure it.” These are assumptions being challenged, not quotes from research. Keep this beat quick. A small visual fault appears after three seconds and repeats every 4.25 seconds; it should suggest that the premise is unstable without competing with the words. “What if React Native is the option we would choose for quality?” -->
 
 ---
 
@@ -285,6 +293,94 @@ transition: none
 </Scene>
 
 <!-- 17:40–18:00. “I used React Native to build the app. I used React Native to make the case. I think you should try it for your next desktop project.” Stop there. END OF TALK. Everything after this is optional material for questions or edits. The running order leaves extra time inside the 20-minute slot for laughter and transitions. -->
+
+---
+
+<Scene eyebrow="Effect gallery / native layers" title="Peel the app apart">
+  <NativeLayerPeel />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. A reusable reveal for explaining how React, Fabric, AppKit views and platform services fit together. The labels are an architectural simplification, not a literal call stack. The animation restarts when the slide becomes active and remains static in presenter previews. Proposed pack path: slides:reveal/native-layers. -->
+
+---
+
+<Scene eyebrow="Effect gallery / transformation" title="Components become interface">
+  <CodeToUI />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Use this when the code-to-product transition matters more than another static code sample. JSX lines move toward a native-looking Chat History window while the rows assemble. It is a visual metaphor, not a compiler diagram. Proposed pack path: slides:transform/code-to-ui. -->
+
+---
+
+<Scene eyebrow="Effect gallery / native data" title="The large document stays native">
+  <NativeDataWindow />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Five small pieces of visible-row data cross from a 228 MiB native document into React. This visual explains ownership and lazy requests; it does not claim that the real application sends exactly five packets or uses this wire format. Proposed pack path: slides:data/native-window. -->
+
+---
+
+<Scene eyebrow="Effect gallery / benchmarks" title="Let the result arrive">
+  <BenchmarkArrival />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. The bars arrive once, in measured order, then stay readable. Values match the stable-first-content chart: RN 394, GPUI 490, Tauri 568 and Electron 792 ms. This is a motion treatment for evidence already documented in benchmark-source.md. Proposed pack path: slides:charts/arrival. -->
+
+---
+
+<Scene eyebrow="Effect gallery / automation" title="Observe. Act. Verify.">
+  <AgentDeviceScan />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. The scan establishes app state, the target moves to a known result, and the verification badge appears only after the action. This is an illustrative workflow rather than captured agent-device output. Proposed pack path: slides:automation/device-scan. -->
+
+---
+
+<Scene eyebrow="Effect gallery / transitions" title="Open the native window">
+  <WindowPortal />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. A component outline becomes a full desktop window through a focused portal transition. Use this for one major reveal rather than between every slide. The window is schematic. Proposed pack path: slides:transitions/window-portal. -->
+
+---
+
+<Scene eyebrow="Effect gallery / comparison" title="Rectangles, then platform chrome">
+  <ChromeConveyor />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. Generic schematic sidebars pass by before a more intentional platform-shaped design arrives. The rectangles are not attributed to any competing framework; every compared technology can produce polished UI. Proposed pack path: slides:comparison/chrome-conveyor. -->
+
+---
+
+<Scene eyebrow="Effect gallery / TypeGPU" title="1,024 fragments become visible rows" footer={`${gpuConstellationCount} particles · one instanced draw · shader-driven motion`}>
+  <TypeGPU scene={gpuConstellation} width={1680} height={580} previewTime={6} />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. A TypeGPU scene moves 1,024 fragments from a native-data cloud into five visible-row bands with one instanced draw. The motion is a visual metaphor for selective access and is not a benchmark of the real data boundary. Proposed pack path: slides:data/gpu-constellation. -->
+
+---
+
+<Scene eyebrow="Effect gallery / speed" title="394 ms feels different from 792 ms">
+  <LatencyRace />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. The measured stable-first-content values become a deliberately slowed race so the timing difference is easy to see. The visual duration is proportional but does not run in real time. Both cards stop at the same finish line and remain readable before the effect repeats. Proposed pack path: slides:performance/latency-race. -->
+
+---
+
+<Scene eyebrow="Effect gallery / weight" title="Memory has weight">
+  <MemoryGravity />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. React Native's 101.7 MB and Electron's 628.9 MB initial physical footprints compress two supports by different amounts. Gravity is a visual metaphor; the printed values are the actual p50 measurements from this comparison. Proposed pack path: slides:performance/memory-gravity. -->
+
+---
+
+<Scene eyebrow="Effect gallery / timing" title="Heavy work misses the frame">
+  <FrameBudget />
+</Scene>
+
+<!-- EFFECT GALLERY. OPTIONAL. This generic frame-budget explanation contrasts work that fits within 16.7 ms with work that crosses the frame boundary. The 6 ms and 24 ms workloads are illustrative and are not measurements of React Native or any compared implementation. Proposed pack path: slides:performance/frame-budget. -->
 
 ---
 

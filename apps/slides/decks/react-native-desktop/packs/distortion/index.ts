@@ -15,7 +15,7 @@ export function distortionTiming({
 export const subtleFaultTiming = distortionTiming({
   delaySeconds: 3,
   durationSeconds: 0.34,
-  intervalSeconds: 8.5,
+  intervalSeconds: 4.25,
 });
 
 export const prismaticTear = `
