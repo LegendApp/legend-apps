@@ -41,6 +41,10 @@ struct ChatParseResult {
   std::vector<ChatRow> rows;
   size_t recordCount = 0;
   size_t warningCount = 0;
+  // Native diagnostics: detect envelope schema drift without retaining contents.
+  size_t codexFastPathRecords = 0;
+  size_t codexFallbackRecords = 0;
+  size_t codexFallbackBytes = 0;
   double mappedMs = 0;
   double scannedMs = 0;
   double normalizedMs = 0;

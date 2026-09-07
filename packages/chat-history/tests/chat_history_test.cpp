@@ -19,6 +19,9 @@
 
 using namespace margelo::nitro::legendapps::chathistory;
 
+void testCodexEnvelopeSchemas(const std::filesystem::path& fixtureRoot);
+int auditRecentChats(size_t limit);
+
 namespace {
 
 void expect(bool condition, const std::string& message) {
@@ -352,6 +355,20 @@ void testMissingCatalogRoots() {
 } // namespace
 
 int main(int argc, char** argv) {
+  if ((argc == 2 || argc == 3) && std::string(argv[1]) == "--audit-recent") {
+    try {
+      size_t consumed = 0;
+      const std::string argument = argc == 3 ? argv[2] : "20";
+      const auto limit = std::stoul(argument, &consumed);
+      if (consumed != argument.size() || limit == 0 || limit > 1000) {
+        throw std::invalid_argument("limit");
+      }
+      return auditRecentChats(limit);
+    } catch (...) {
+      std::cerr << "Recent-chat audit failed; limit must be an integer from 1 to 1000\n";
+      return 1;
+    }
+  }
   if (argc == 4 && std::string(argv[1]) == "--probe") {
     try {
       std::atomic<uint64_t> generation{1};
@@ -363,6 +380,9 @@ int main(int argc, char** argv) {
                 << " bytes=" << result.source->size()
                 << " records=" << result.recordCount
                 << " rows=" << result.rows.size()
+                << " fast=" << result.codexFastPathRecords
+                << " fallback=" << result.codexFallbackRecords
+                << " fallback_bytes=" << result.codexFallbackBytes
                 << " warnings=" << result.warningCount
                 << " mapped_ms=" << result.mappedMs
                 << " scanned_ms=" << result.scannedMs
@@ -395,6 +415,7 @@ int main(int argc, char** argv) {
     testCodex(fixtureRoot);
     testClaude(fixtureRoot);
     testCurrentCodexUserMessages(fixtureRoot);
+    testCodexEnvelopeSchemas(fixtureRoot);
     testArrayToolOutputIsShallow();
     testCancellation(fixtureRoot);
     testIsoTimestamps();

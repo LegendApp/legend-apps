@@ -358,6 +358,11 @@ ChatParseResult parseCodex(
     std::optional<JsonRange> timestamp;
     size_t cursor = root->start + 1;
     timestamp = json.orderedMember(*root, cursor, "timestamp");
+    if (timestamp) {
+      // Newer Codex envelopes insert ordinal before type. A missing member
+      // leaves cursor unchanged, preserving the older envelope fast path.
+      (void)json.orderedMember(*root, cursor, "ordinal");
+    }
     const auto recordTypeRange = timestamp
         ? json.orderedMember(*root, cursor, "type")
         : std::nullopt;
@@ -366,8 +371,13 @@ ChatParseResult parseCodex(
         : std::nullopt;
     bool validRecord = timestamp && recordTypeRange && payload;
     if (validRecord) {
+      // Both known envelopes intentionally inspect only needed payload fields;
+      // ignored payloads are not recursively validated on this shallow path.
+      result.codexFastPathRecords += 1;
       recordType = json.stringValue(*recordTypeRange);
     } else {
+      result.codexFallbackRecords += 1;
+      result.codexFallbackBytes += lines[lineIndex].end - lines[lineIndex].start;
       validRecord = json.forEachObjectMember(
           *root,
           [&](const JsonRange& key, const JsonRange& value) {

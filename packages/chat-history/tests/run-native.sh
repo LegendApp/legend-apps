@@ -7,6 +7,7 @@ mkdir -p "$BUILD_DIR"
 
 clang++ \
   -std=c++20 \
+  -O2 \
   -fobjc-arc \
   -framework Foundation \
   -framework ImageIO \
@@ -17,6 +18,7 @@ clang++ \
   -I"$ROOT_DIR/packages/chat-history/nitrogen/generated/shared/c++" \
   -I"$ROOT_DIR/packages/native-text-source/cpp" \
   "$ROOT_DIR/packages/chat-history/tests/chat_history_test.cpp" \
+  "$ROOT_DIR/packages/chat-history/tests/chat_parser_schema_test.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatJson.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatCatalog.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTime.cpp" \
@@ -30,6 +32,11 @@ clang++ \
   "$ROOT_DIR/packages/chat-history/nitrogen/generated/shared/c++/HybridChatDocumentSpec.cpp" \
   -o "$BUILD_DIR/chat_history_test"
 
+if [[ $# -gt 0 ]]; then
+  "$BUILD_DIR/chat_history_test" "$@"
+  exit
+fi
+
 "$BUILD_DIR/chat_history_test" "$ROOT_DIR/packages/chat-history/tests/fixtures"
 
 clang++ -std=c++20 -Wall -Wextra -Werror -fobjc-arc \
@@ -38,3 +45,7 @@ clang++ -std=c++20 -Wall -Wextra -Werror -fobjc-arc \
   "$ROOT_DIR/packages/chat-history/cpp/ChatImageDimensions.mm" \
   -o "$BUILD_DIR/chat_image_test"
 "$BUILD_DIR/chat_image_test"
+
+# Catch provider schema drift during the regular suite, not only manual audits.
+# The audit reports SKIP when no local Codex chats are available.
+"$BUILD_DIR/chat_history_test" --audit-recent 20
