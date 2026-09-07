@@ -1,8 +1,8 @@
-import { getRecentChats, openChat, type ChatSummary } from "@legend-apps/chat-history";
+import { getRecentChats, openChat, type ChatDocument, type ChatSummary } from "@legend-apps/chat-history";
 import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions } from "@legend-apps/window-manager";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { App, ChatHistoryWindow } from "../App";
-import { getChatBenchmarkConfig } from "../chatBenchmark";
+import { emitChatBenchmarkEvent, getChatBenchmarkConfig } from "../chatBenchmark";
 import { readSavedChatSelection } from "../chatStorage";
 
 jest.mock("react-native", () => ({
@@ -160,5 +160,65 @@ describe("Chat History host window", () => {
     await act(async () => { resolveInitial([]); });
     expect(openChat).toHaveBeenCalledTimes(1);
     expect(setMainWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ title: "New" }));
+  });
+
+  it("keeps the transcript list mounted through benchmark loading and switching", async () => {
+    jest.useFakeTimers();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (callback) => {
+      callback(0);
+      return 0;
+    };
+    const initial: ChatSummary = { id: "initial", title: "Initial", path: "/initial.jsonl", provider: "codex", updatedAt: 2 };
+    const secondary: ChatSummary = { ...initial, id: "secondary", path: "/secondary.jsonl" };
+    const createDocument = (documentId: string) => ({
+      documentId,
+      rowCount: 0,
+      contentDigest: documentId,
+      getTiming: () => ({}),
+      releaseNativeResources: jest.fn(),
+    } as unknown as ChatDocument);
+    const firstDocument = createDocument("first");
+    const secondDocument = createDocument("second");
+    let resolveFirst!: (document: ChatDocument) => void;
+    let resolveSecond!: (document: ChatDocument) => void;
+    jest.mocked(getChatBenchmarkConfig).mockReturnValueOnce({
+      eventFileName: "switch-events.json",
+      loadImages: false,
+      switchDelayMs: 100,
+      targets: [initial, secondary],
+      version: 2,
+    });
+    jest.mocked(getRecentChats).mockResolvedValueOnce([initial, secondary]);
+    jest.mocked(openChat)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    try {
+      await act(async () => { renderer = create(<App />); });
+      const transcriptList = () => renderer!.root.findAllByType("LegendList" as never)[1]!;
+      const list = transcriptList();
+      expect(list.props.dataSource.getLength()).toBe(0);
+      await act(async () => { resolveFirst(firstDocument); });
+      expect(transcriptList()).toBe(list);
+      await act(async () => { list.props.onLoad(); });
+      expect(emitChatBenchmarkEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        name: "contentReady", phase: "initial", path: initial.path,
+      }));
+      await act(async () => { jest.advanceTimersByTime(100); });
+      expect(openChat).toHaveBeenLastCalledWith("codex", secondary.path);
+      expect(transcriptList()).toBe(list);
+      expect(firstDocument.releaseNativeResources).toHaveBeenCalledTimes(1);
+      await act(async () => { resolveSecond(secondDocument); });
+      expect(transcriptList()).toBe(list);
+      expect(list.props.dataKey).toBe(secondary.id);
+      await act(async () => { list.props.onLoad(); });
+      expect(emitChatBenchmarkEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        name: "contentReady", phase: "switch", path: secondary.path,
+      }));
+      await act(async () => { jest.runOnlyPendingTimers(); });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      jest.useRealTimers();
+    }
   });
 });
