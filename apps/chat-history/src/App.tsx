@@ -77,12 +77,6 @@ const chatHistoryListContentInset = {
 const chatHistoryListViewabilityConfig = {
   startOffset: CHAT_HISTORY_TITLEBAR_HEIGHT,
 };
-const chatSidebarContentInset = {
-  bottom: 0,
-  left: 0,
-  right: 0,
-  top: CHAT_HISTORY_SIDEBAR_TOP_INSET,
-};
 const emptyTranscriptDataSource: LegendListDataSource<TranscriptListItem> = {
   getItem: () => undefined,
   getKey: (index) => `empty:${index}`,
@@ -244,7 +238,6 @@ function ChatSidebar({
     <View className="flex-1 bg-surface-muted">
       <LegendList
         contentContainerStyle={styles.sidebarContent}
-        contentInset={chatSidebarContentInset}
         data={entries}
         estimatedItemSize={CHAT_SIDEBAR_CHAT_ROW_HEIGHT}
         extraData={selectedId}
@@ -766,6 +759,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sidebarContent: {
+    paddingTop: CHAT_HISTORY_SIDEBAR_TOP_INSET,
     paddingBottom: 8,
   },
   sidebarItem: {
