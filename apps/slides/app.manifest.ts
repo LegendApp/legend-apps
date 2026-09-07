@@ -25,6 +25,7 @@ const manifest = {
       "@legend-apps/syntax-parser",
       "@legend-apps/window-manager",
       "@shopify/react-native-skia",
+      "lottie-react-native",
       "react-native-enriched-markdown",
       "react-native-webgpu",
       "react-native-webview",

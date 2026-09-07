@@ -112,6 +112,7 @@ The host provides these package imports:
 - `@legendapp/motion`
 - `@legend-apps/presentation`
 - `@shopify/react-native-skia`
+- `lottie-react-native`
 - `react-native-webgpu`
 - `typegpu`, `typegpu/common`, `typegpu/data`, and `typegpu/std`
 - `@typegpu/noise` and `@typegpu/react`

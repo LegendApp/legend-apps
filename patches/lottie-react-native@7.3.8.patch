@@ -1,0 +1,15 @@
+diff --git a/react-native.config.js b/react-native.config.js
+index d4d8aa899edcc7a23436e8d432844560ccfc873f..be1712f42e4d0a7a69f5f4e4f25f0a131bd85663 100644
+--- a/react-native.config.js
++++ b/react-native.config.js
+@@ -5,7 +5,9 @@ module.exports = {
+         libraryName: 'lottiereactnative',
+         componentDescriptors: ['LottieAnimationViewComponentDescriptor'],
+       },
+-      macos: null,
++      macos: {
++        podspecPath: './lottie-react-native.podspec',
++      },
+       windows: null,
+     },
+   },

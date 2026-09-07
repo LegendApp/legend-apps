@@ -203,6 +203,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
+    name: "lottie-react-native",
+    root: path.join(rootDir, "apps", "slides", "node_modules", "lottie-react-native"),
+    platforms: ["macos"],
+  },
+  {
     name: "react-native-webgpu",
     root: path.join(rootDir, "apps", "slides", "node_modules", "react-native-webgpu"),
     platforms: ["macos"],

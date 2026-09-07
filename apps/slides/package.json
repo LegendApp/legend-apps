@@ -24,6 +24,7 @@
     "@typegpu/noise": "^0.12.0",
     "@typegpu/react": "^0.12.0",
     "fflate": "^0.8.3",
+    "lottie-react-native": "7.3.8",
     "react-native-enriched-markdown": "1.0.2",
     "react-native-webgpu": "^0.8.5",
     "react-native-webview": "16.0.0",
