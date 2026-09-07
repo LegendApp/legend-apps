@@ -41,7 +41,7 @@ Do not run release builds by default while iterating. Use `bun run typecheck`, t
 
 ## Testing Guidelines
 
-Use the affected app/package’s test scripts from `package.json`, including `test:diff`, `test:music`, and the markdown suites. Run focused tests, `bun run typecheck`, and relevant app verification; reuse checks when their inputs have not changed. For native package work, run `bun run <app> verify <platform>` against an app that consumes the package, and prefer `test-kitchen-sink` for integration coverage.
+Use the affected app/package’s test scripts from `package.json`, including `test:diff`, `test:music`, and the markdown suites, plus `test:slides`. Run focused tests, `bun run typecheck`, and relevant app verification; reuse checks when their inputs have not changed. For native package work, run `bun run <app> verify <platform>` against an app that consumes the package, and prefer `test-kitchen-sink` for integration coverage.
 
 ## Runtime Verification
 
