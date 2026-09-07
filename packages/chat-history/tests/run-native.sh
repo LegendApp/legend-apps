@@ -18,8 +18,11 @@ clang++ \
   "$ROOT_DIR/packages/chat-history/cpp/ChatCatalog.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTime.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatTranscriptParser.cpp" \
+  "$ROOT_DIR/packages/chat-history/cpp/ChatStartupLoad.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/ChatDocumentRegistry.cpp" \
   "$ROOT_DIR/packages/chat-history/cpp/HybridChatDocument.cpp" \
+  "$ROOT_DIR/packages/chat-history/cpp/HybridChatHistory.cpp" \
+  "$ROOT_DIR/packages/chat-history/nitrogen/generated/shared/c++/HybridChatHistorySpec.cpp" \
   "$ROOT_DIR/packages/chat-history/nitrogen/generated/shared/c++/HybridChatDocumentSpec.cpp" \
   -o "$BUILD_DIR/chat_history_test"
 

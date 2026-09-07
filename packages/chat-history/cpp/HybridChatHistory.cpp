@@ -22,6 +22,10 @@ double elapsedMs(Clock::time_point start, Clock::time_point end) {
 
 HybridChatHistory::HybridChatHistory() : HybridObject(TAG) {}
 
+HybridChatHistory::~HybridChatHistory() {
+  cancelPendingOpen();
+}
+
 std::shared_ptr<Promise<std::vector<ChatSummary>>> HybridChatHistory::getRecentChats(double limit) {
   const size_t boundedLimit =
       std::isfinite(limit) && limit > 0 ? static_cast<size_t>(limit) : 0;
@@ -33,12 +37,17 @@ std::shared_ptr<Promise<std::vector<ChatSummary>>> HybridChatHistory::getRecentC
 std::shared_ptr<Promise<std::shared_ptr<HybridChatDocumentSpec>>> HybridChatHistory::openChat(
     const std::string& provider,
     const std::string& path) {
-  const uint64_t generation = openGeneration_.fetch_add(1, std::memory_order_relaxed) + 1;
-  return Promise<std::shared_ptr<HybridChatDocumentSpec>>::async([this, provider, path, generation]() {
-    const auto startedAt = Clock::now();
-    ChatParseResult result = parseChatFile(provider, path, generation, openGeneration_);
+  cancelPendingOpen();
+  const auto activeGeneration = openGeneration_;
+  const uint64_t generation = activeGeneration->load(std::memory_order_relaxed);
+  startupLoad_ = takeChatStartupLoad(provider, path);
+  return Promise<std::shared_ptr<HybridChatDocumentSpec>>::async([
+      provider, path, generation, activeGeneration, startupLoad = startupLoad_]() {
+    ChatParseResult result = startupLoad
+        ? startupLoad->takeResult()
+        : parseChatFile(provider, path, generation, *activeGeneration);
     const auto parsedAt = Clock::now();
-    if (openGeneration_.load(std::memory_order_relaxed) != generation) {
+    if (activeGeneration->load(std::memory_order_relaxed) != generation) {
       throw std::runtime_error("Chat open cancelled");
     }
     const std::string documentId = makeChatDocumentId();
@@ -62,13 +71,21 @@ std::shared_ptr<Promise<std::shared_ptr<HybridChatDocumentSpec>>> HybridChatHist
         scannedMs,
         normalizedMs,
         elapsedMs(parsedAt, finishedAt),
-        elapsedMs(startedAt, finishedAt)));
+        // Include work performed before JS adopted the startup request. The
+        // async open's own latency can be shorter than the native parse stages.
+        mappedMs + scannedMs + normalizedMs + elapsedMs(parsedAt, finishedAt)));
     return std::static_pointer_cast<HybridChatDocumentSpec>(document);
   });
 }
 
 double HybridChatHistory::cancelPendingOpen() {
-  return static_cast<double>(openGeneration_.fetch_add(1, std::memory_order_relaxed) + 1);
+  // An unclaimed startup read belongs to the host, so the app's initial
+  // cancel-before-open does not discard it. After adoption, cancel it normally.
+  if (startupLoad_) {
+    startupLoad_->cancel();
+    startupLoad_.reset();
+  }
+  return static_cast<double>(openGeneration_->fetch_add(1, std::memory_order_relaxed) + 1);
 }
 
 } // namespace margelo::nitro::legendapps::chathistory

@@ -1,3 +1,5 @@
+#include "../cpp/ChatStartupLoad.hpp"
+#include "../cpp/HybridChatHistory.hpp"
 #include "../cpp/ChatDocument.hpp"
 #include "../cpp/ChatCatalog.hpp"
 #include "../cpp/ChatJson.hpp"
@@ -287,6 +289,47 @@ void testCatalogIndexes() {
       "Catalog should skip subagents while filling the requested visible limit");
 }
 
+void testStartupLoad(const std::filesystem::path& fixtureRoot) {
+  const std::string path = (fixtureRoot / "codex.jsonl").string();
+  // React cancels before its initial open; that must not cancel the host read.
+  startChatStartupLoad("codex", path);
+  HybridChatHistory history;
+  history.cancelPendingOpen();
+  auto document = history.openChat("codex", path)->get();
+  expect(document->getRowCount() > 0, "The initial cancel-before-open must preserve startup loading");
+  expect(takeChatStartupLoad("codex", path) == nullptr, "openChat must consume the startup request");
+  document->releaseNativeResources();
+  auto reopened = history.openChat("codex", path)->get();
+  expect(reopened->getDocumentId() != document->getDocumentId(), "Later opens must read a new document");
+  reopened->releaseNativeResources();
+
+  startChatStartupLoad("codex", path);
+  auto load = takeChatStartupLoad("codex", path);
+  expect(load != nullptr, "The first matching open should adopt the launch read");
+  expect(takeChatStartupLoad("codex", path) == nullptr, "A launch read must never be reused");
+  expect(!load->takeResult().rows.empty(), "The launch worker should parse the selected transcript");
+
+  startChatStartupLoad("codex", path);
+  expect(takeChatStartupLoad("claude", path) == nullptr, "Provider changes must discard the launch read");
+  expect(takeChatStartupLoad("codex", path) == nullptr, "A discarded launch read must not be retained");
+
+  startChatStartupLoad("codex", path);
+  expect(takeChatStartupLoad("codex", path + ".other") == nullptr, "Path changes must discard the launch read");
+
+  startChatStartupLoad("codex", path);
+  load = takeChatStartupLoad("codex", path);
+  load->cancel();
+  bool cancelled = false;
+  try { (void)load->takeResult(); } catch (const std::runtime_error&) { cancelled = true; }
+  expect(cancelled, "Cancelling an adopted launch read must prevent its delivery");
+
+  startChatStartupLoad("codex", path + ".missing");
+  load = takeChatStartupLoad("codex", path + ".missing");
+  bool rejected = false;
+  try { (void)load->takeResult(); } catch (const std::runtime_error&) { rejected = true; }
+  expect(rejected, "Launch I/O failures must reach the matching open");
+}
+
 void testMissingCatalogRoots() {
   const std::filesystem::path testHome = std::filesystem::temp_directory_path() /
       ("legend-chat-history-empty-" + std::to_string(getpid()));
@@ -348,6 +391,7 @@ int main(int argc, char** argv) {
   }
   try {
     const std::filesystem::path fixtureRoot(argv[1]);
+    testStartupLoad(fixtureRoot);
     testCodex(fixtureRoot);
     testClaude(fixtureRoot);
     testCurrentCodexUserMessages(fixtureRoot);
