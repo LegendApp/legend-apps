@@ -4,6 +4,7 @@ import {
   commandModifier,
   configureMenus,
   openTargetTitles,
+  settingsTargetTitles,
   updateMenuItems,
 } from "@legend-apps/native-menu";
 import { useEffect } from "react";
@@ -16,9 +17,16 @@ export function useSlidesMenus(
   audienceOpen: boolean,
   blackout: boolean,
   resetPresenterLayout: () => void,
+  openSettings: () => void | Promise<void>,
 ) {
   useEffect(() => {
     configureMenus(menuOwner, [
+      {
+        id: "app",
+        title: "Application",
+        systemMenu: "app",
+        items: [{ id: "settings", targetTitles: settingsTargetTitles, enabled: true }],
+      },
       {
         id: "file",
         title: "File",
@@ -48,12 +56,13 @@ export function useSlidesMenus(
         setSlidesState((current) => ({ blackout: !current.blackout }));
       }
       if (action.itemId === "reset-presenter-layout") resetPresenterLayout();
+      if (action.itemId === "settings") void openSettings();
     });
     return () => {
       subscription.remove();
       clearMenus(menuOwner);
     };
-  }, [openDeck, resetPresenterLayout]);
+  }, [openDeck, openSettings, resetPresenterLayout]);
 
   useEffect(() => {
     updateMenuItems(menuOwner, [{

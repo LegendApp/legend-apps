@@ -1,5 +1,8 @@
+import { createSettingsWindowOptions } from "@legend-apps/settings-window/options";
 import { createWindowsNavigator, WindowStyleMask, type WindowsConfig } from "@legend-apps/windows";
 import { createPresenterToolbarItems } from "./presenterToolbar";
+
+export const slidesSettingsWindowIdentifier = "slides-settings";
 
 const windows = {
   SlidesPresenterWindow: {
@@ -47,6 +50,18 @@ const windows = {
       },
     },
   },
+  SlidesSettingsWindow: {
+    identifier: slidesSettingsWindowIdentifier,
+    loadComponent: () => import("./SettingsWindow").then((module) => module.SettingsWindow),
+    options: createSettingsWindowOptions({
+      title: "Settings",
+      windowStyle: { appearance: "dark" },
+    }),
+  },
 } satisfies WindowsConfig;
 
 export const slidesWindows = createWindowsNavigator(windows);
+
+export function openSlidesSettingsWindow() {
+  return slidesWindows.open("SlidesSettingsWindow");
+}

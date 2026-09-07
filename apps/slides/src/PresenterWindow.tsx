@@ -40,7 +40,7 @@ import {
 } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
 import { nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
-import { slidesWindows } from "./slidesWindows";
+import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
 import {
@@ -65,6 +65,10 @@ import {
   type PresenterTimerEvent,
 } from "./presenterTimer";
 import { persistSlideSpeakerNotes } from "./speakerNotesPersistence";
+import {
+  usePresentationTimerStartsOnSecondSlideSetting,
+  useRehearsalTimerPausesWhileEditingSetting,
+} from "./slidesSettings";
 
 type PresenterWindowProps = { launchArguments?: string[] };
 
@@ -315,6 +319,8 @@ function PresenterToolbar({
   rehearsalEnabled,
   selectedDisplayId,
 }: PresenterToolbarProps) {
+  const presentationStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
+  const rehearsalPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
   const runningRef = useRef(false);
@@ -347,10 +353,13 @@ function PresenterToolbar({
   }, []);
 
   const applyTimerEvent = useCallback((event: PresenterTimerEvent) => {
-    const transition = transitionPresenterTimer(timerStateRef.current, event);
+    const transition = transitionPresenterTimer(timerStateRef.current, event, {
+      presentationStartsOnSecondSlide,
+      rehearsalPausesWhileEditing,
+    });
     timerStateRef.current = transition.state;
     updateTimerClock(transition.state.running, transition.restart);
-  }, [updateTimerClock]);
+  }, [presentationStartsOnSecondSlide, rehearsalPausesWhileEditing, updateTimerClock]);
 
   useEffect(() => {
     if (audienceOpen === audienceOpenRef.current) {
@@ -511,7 +520,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     setPresenterLayoutResetVersion((version) => version + 1);
   }, []);
 
-  useSlidesMenus(openDeck, state.audienceOpen, state.blackout, resetPresenterLayout);
+  useSlidesMenus(openDeck, state.audienceOpen, state.blackout, resetPresenterLayout, openSlidesSettingsWindow);
 
   const openAudience = audience.open;
   const closeAudience = audience.close;
