@@ -1,3 +1,4 @@
+import { splitSpeakerNoteSteps, speakerNoteOpacity } from "./speakerNoteSteps";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   EnrichedMarkdownText,
@@ -6,7 +7,7 @@ import {
   type MarkdownStyle,
   type MarkdownTextInputStyle,
 } from "react-native-enriched-markdown";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export const editableMarkdownSaveDebounceMs = 1000;
 
@@ -39,13 +40,14 @@ const editorMarkdownStyle: MarkdownTextInputStyle = {
 
 type EditableMarkdownProps = {
   editable: boolean;
+  currentStep?: number;
   markdown: string;
   onEditingChange?(editing: boolean): void;
   onSave(markdown: string): Promise<void>;
   placeholder: string;
 };
 
-export function EditableMarkdown({ editable, markdown, onEditingChange, onSave, placeholder }: EditableMarkdownProps) {
+export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder }: EditableMarkdownProps) {
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveQueueRef = useRef(Promise.resolve());
@@ -184,14 +186,18 @@ export function EditableMarkdown({ editable, markdown, onEditingChange, onSave, 
       style={styles.viewerShell}
     >
       {markdown.trim() ? (
-        <EnrichedMarkdownText
-          allowTrailingMargin={false}
-          containerStyle={styles.viewer}
-          flavor="github"
-          markdown={markdown}
-          markdownStyle={viewerMarkdownStyle}
-          selectable={!editable}
-        />
+        splitSpeakerNoteSteps(markdown).map((section, index) => (
+          <View key={index} style={{ opacity: speakerNoteOpacity(section, currentStep) }}>
+            <EnrichedMarkdownText
+              allowTrailingMargin={false}
+              containerStyle={styles.viewer}
+              flavor="github"
+              markdown={section.markdown}
+              markdownStyle={viewerMarkdownStyle}
+              selectable={!editable}
+            />
+          </View>
+        ))
       ) : (
         <Text style={styles.placeholder}>{placeholder}</Text>
       )}
