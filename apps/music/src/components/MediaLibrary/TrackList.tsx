@@ -388,7 +388,6 @@ export function TrackList(_props: TrackListProps) {
                 }
             >
                 <LegendList
-                    key={listDataKey}
                     data={trackIds}
                     dataKey={listDataKey}
                     keyExtractor={keyExtractor}

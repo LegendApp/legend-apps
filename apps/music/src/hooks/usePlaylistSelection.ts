@@ -51,8 +51,9 @@ export function usePlaylistSelection<T extends { isSeparator?: boolean }>(
     });
 
     const clearSelection = useStableCallback(() => {
-        const currentSelection = selectedIndices$.get();
-        if (currentSelection.size === 0 && selectionAnchor$.get() === -1 && selectionFocus$.get() === -1) {
+        // Callers may observe dataset changes; clearing must not subscribe them to selection.
+        const currentSelection = selectedIndices$.peek();
+        if (currentSelection.size === 0 && selectionAnchor$.peek() === -1 && selectionFocus$.peek() === -1) {
             return;
         }
 
