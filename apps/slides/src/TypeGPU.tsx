@@ -25,18 +25,28 @@ export type TypeGPUProps = {
 export function TypeGPU({
   backgroundColor = "#000",
   height = 540,
-  previewTime = 3.5,
+  previewTime: configuredPreviewTime = 3.5,
   scene,
   style,
   transparent = false,
   width = 960,
 }: TypeGPUProps) {
-  const { isActive, isPreview, slideIndex, startedAt } = useSlideLifecycle();
+  const { isActive, isPreview, isPreparing, slideIndex, startedAt } = useSlideLifecycle();
+  const previewTime = isPreparing ? 0 : configuredPreviewTime;
   const canvasRef = useRef<CanvasRef>(null);
   const [error, setError] = useState<string>();
 
+  const playback = useRef({ isActive, isPreview, previewTime, startedAt });
+  const resume = useRef<(() => void) | undefined>(undefined);
+  const shouldRender = isActive || isPreview;
+
   useEffect(() => {
-    if (!isActive && !isPreview) {
+    playback.current = { isActive, isPreview, previewTime, startedAt };
+    resume.current?.();
+  }, [isActive, isPreview, previewTime, startedAt]);
+
+  useEffect(() => {
+    if (!shouldRender) {
       return;
     }
 
@@ -46,7 +56,7 @@ export function TypeGPU({
     let device: GPUDevice | undefined;
     let root: TgpuRoot | undefined;
     let sceneInstance: TypeGPUSceneInstance | undefined;
-    const report = (caught: unknown) => reportSlideError(caught, slideIndex, isPreview);
+    const report = (caught: unknown) => reportSlideError(caught, slideIndex, playback.current.isPreview);
 
     const dispose = () => {
       cancelAnimationFrame(frameId);
@@ -106,7 +116,7 @@ export function TypeGPU({
         sceneInstance = await scene({
           device,
           format,
-          isPreview,
+          isPreview: playback.current.isPreview,
           root,
           size: { height, width },
         });
@@ -123,6 +133,7 @@ export function TypeGPU({
             return;
           }
           try {
+            const { isActive, isPreview, previewTime, startedAt } = playback.current;
             firstTimestamp ??= timestamp;
             const elapsed = isPreview ? previewTime : Math.max(0, timestamp - (startedAt ?? firstTimestamp)) / 1000;
             const deltaTime = previousTimestamp === undefined || isPreview
@@ -146,7 +157,14 @@ export function TypeGPU({
             fail(caught);
           }
         };
-        frameId = requestAnimationFrame(render);
+        resume.current = () => {
+          cancelAnimationFrame(frameId);
+          firstTimestamp = undefined;
+          previousTimestamp = undefined;
+          frame = 0;
+          frameId = requestAnimationFrame(render);
+        };
+        resume.current();
       } catch (caught) {
         fail(caught);
         dispose();
@@ -156,9 +174,10 @@ export function TypeGPU({
     void start();
     return () => {
       cancelled = true;
+      resume.current = undefined;
       dispose();
     };
-  }, [height, isActive, isPreview, previewTime, scene, slideIndex, startedAt, width]);
+  }, [height, shouldRender, scene, slideIndex, width]);
 
   return (
     <View style={[styles.container, { backgroundColor, height, width }, style]}>

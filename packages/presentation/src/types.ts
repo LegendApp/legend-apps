@@ -41,6 +41,8 @@ export type PresentationRuntime = {
   goTo(slideIndex: number): void;
   isActive: boolean;
   isPreview: boolean;
+  /** Full-size audience surface being prepared offscreen. */
+  isPreparing?: boolean;
   next(): void;
   previous(): void;
   slideCount: number;

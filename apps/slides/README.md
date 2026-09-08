@@ -126,6 +126,15 @@ Uniwind scans the entire deck directory on every successful compile, so static `
 
 ## Content effects
 
+The audience keeps the current slide and up to two slides on either side mounted
+at the display's actual scale. Nearby slides prepare behind the visible slide
+with playback paused, and are released when they leave that window. An outgoing
+slide outside the window is retained until its transition completes. Skia captures
+and TypeGPU scenes can therefore survive nearby forward/back navigation.
+Deck components can read `isPreparing` from `useSlideLifecycle()` to distinguish
+these preparation surfaces from presenter previews. Preparation is asynchronous;
+a rapid advance or distant jump can still arrive before an effect has finished setup.
+
 `Effect` can wrap static Markdown or React Native content and apply a GPU-animated Skia image filter. The built-in presets are `liquid`, `ripple`, `glitch`, and `pixelate`:
 
 ```mdx

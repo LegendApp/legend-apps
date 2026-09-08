@@ -113,7 +113,7 @@ export function Effect({
   style,
   uniforms,
 }: EffectProps) {
-  const { isActive, isPreview, startedAt } = useSlideLifecycle();
+  const { isActive, isPreview, isPreparing, startedAt } = useSlideLifecycle();
   const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
   const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
@@ -177,7 +177,7 @@ export function Effect({
           image={image}
           isActive={isActive}
           isPreview={isPreview}
-          previewTime={previewTime}
+          previewTime={isPreparing ? 0 : previewTime}
           speed={speed}
           startedAt={startedAt}
           strength={strength}

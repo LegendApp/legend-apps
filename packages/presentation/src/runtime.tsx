@@ -23,6 +23,6 @@ export function usePresentation() {
 }
 
 export function useSlideLifecycle() {
-  const { isActive, isPreview, slideIndex, startedAt } = usePresentation();
-  return { isActive, isPreview, slideIndex, startedAt };
+  const { isActive, isPreview, isPreparing, slideIndex, startedAt } = usePresentation();
+  return { isActive, isPreview, isPreparing, slideIndex, startedAt };
 }
