@@ -267,6 +267,7 @@ function TranscriptList({
   openedAt,
   path,
   phase,
+  topDelayMs,
 }: {
   dataKey: string;
   document?: ChatDocument;
@@ -275,9 +276,13 @@ function TranscriptList({
   openedAt?: number;
   path?: string;
   phase?: "initial" | "switch";
+  topDelayMs?: number;
 }) {
   const listRef = useRef<LegendListRef>(null);
   const reportedDocumentIdRef = useRef<string | undefined>(undefined);
+  const firstVisibleIndexRef = useRef<number | undefined>(undefined);
+  const topReportedRef = useRef(false);
+  const topStartedAtRef = useRef<number | undefined>(undefined);
   const demoMessageSequenceRef = useRef(0);
   const streamingDocumentIdRef = useRef<string | undefined>(undefined);
   const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
@@ -293,6 +298,36 @@ function TranscriptList({
   const anchorIndex = anchor && anchor.documentId === documentId ? anchor.index : undefined;
   const isStreaming = documentId !== undefined && streamingDocumentId === documentId;
   const lastDocumentRowIndex = (document?.rowCount ?? 0) - 1;
+  const schedule = useCallback((callback: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      activeTimers.delete(timer);
+      callback();
+    }, delay);
+    activeTimers.add(timer);
+  }, [activeTimers]);
+  const reportTopReady = useCallback(() => {
+    const startedAt = topStartedAtRef.current;
+    if (startedAt === undefined || path === undefined || topReportedRef.current) {
+      return;
+    }
+    topReportedRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onBenchmarkEvent?.({
+          durationMs: performance.now() - startedAt,
+          name: "viewportReady",
+          path,
+          phase: "top",
+        });
+      });
+    });
+  }, [onBenchmarkEvent, path]);
+  const handleFirstVisibleItemChanged = useCallback(({ index }: { index: number }) => {
+    firstVisibleIndexRef.current = index;
+    if (index === 0) {
+      reportTopReady();
+    }
+  }, [reportTopReady]);
   const handleInitialTailLayout = useCallback(() => {
     if (!document || openedAt === undefined || path === undefined || reportedDocumentIdRef.current === document.documentId) {
       return;
@@ -327,10 +362,20 @@ function TranscriptList({
               phase,
             });
           }, 0);
+          if (phase === "initial" && topDelayMs !== undefined) {
+            schedule(() => {
+              topStartedAtRef.current = performance.now();
+              if (document.rowCount === 0 || firstVisibleIndexRef.current === 0) {
+                reportTopReady();
+              } else {
+                void listRef.current?.scrollToIndex({ animated: false, index: 0 });
+              }
+            }, topDelayMs);
+          }
         }
       });
     });
-  }, [document, onBenchmarkEvent, openedAt, path, phase]);
+  }, [document, onBenchmarkEvent, openedAt, path, phase, reportTopReady, schedule, topDelayMs]);
   const renderItem = useCallback(
     ({ item }: LegendListDataSourceRenderItemProps<TranscriptListItem>) => {
       let row = null;
@@ -343,7 +388,7 @@ function TranscriptList({
               index={item}
               loadImages={loadImages}
               metadata={transcriptDataSource!.getRowMetadata(item)}
-              onLayout={item === lastDocumentRowIndex && phase ? handleInitialTailLayout : undefined}
+              onLayout={phase && item === lastDocumentRowIndex ? handleInitialTailLayout : undefined}
             />
           );
       }
@@ -357,13 +402,6 @@ function TranscriptList({
       : document?.getRowKind(item) ?? "",
     [document],
   );
-  const schedule = useCallback((callback: () => void, delay: number) => {
-    const timer = setTimeout(() => {
-      activeTimers.delete(timer);
-      callback();
-    }, delay);
-    activeTimers.add(timer);
-  }, [activeTimers]);
   const anchoredEndSpace = useMemo(() => anchorIndex === undefined
     ? undefined
     : {
@@ -436,6 +474,7 @@ function TranscriptList({
         estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE}
         getItemType={getItemType}
         initialScrollAtEnd
+        onFirstVisibleItemChanged={phase === "initial" ? handleFirstVisibleItemChanged : undefined}
         onLoad={document?.rowCount === 0 && phase ? handleInitialTailLayout : undefined}
         recycleItems
         ref={listRef}
@@ -460,11 +499,13 @@ function TranscriptPane({
   onBenchmarkEvent,
   selectedId,
   state,
+  topDelayMs,
 }: {
   loadImages: boolean;
   onBenchmarkEvent?: (event: ChatBenchmarkEvent) => void;
   selectedId?: string;
   state: TranscriptState;
+  topDelayMs?: number;
 }) {
   const isCurrentSelection = "selectedId" in state && state.selectedId === selectedId;
   const document = isCurrentSelection && state.status === "ready" ? state.document : undefined;
@@ -483,6 +524,7 @@ function TranscriptPane({
         openedAt={isCurrentSelection && state.status === "ready" ? state.openedAt : undefined}
         path={isCurrentSelection && state.status === "ready" ? state.path : undefined}
         phase={isCurrentSelection && state.status === "ready" ? state.phase : undefined}
+        topDelayMs={topDelayMs}
       />
       {message ? (
         <View className="absolute inset-0 items-center justify-center bg-background px-10">
@@ -674,8 +716,8 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         : event,
     );
     if (
-      event.name === "contentReady"
-      && event.phase === "initial"
+      event.name === "viewportReady"
+      && event.phase === "top"
       && switchTimerRef.current === undefined
     ) {
       switchTimerRef.current = setTimeout(() => {
@@ -719,6 +761,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
           onBenchmarkEvent={benchmark ? handleBenchmarkEvent : undefined}
           selectedId={selectedId}
           state={transcriptState}
+          topDelayMs={benchmark?.topDelayMs}
         />
       ) : (
         <View className="flex-1 items-center justify-center bg-background px-10">

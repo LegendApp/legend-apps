@@ -1,9 +1,35 @@
 import { writeApplicationSupportJson } from "@legend-apps/storage/src/applicationSupport";
 import { getReactNativeStartupTiming } from "@legend-apps/window-manager";
-import { emitChatBenchmarkEvent, type ChatBenchmarkConfig } from "../chatBenchmark";
+import { emitChatBenchmarkEvent, getChatBenchmarkConfig, type ChatBenchmarkConfig } from "../chatBenchmark";
 
 jest.mock("@legend-apps/storage/src/applicationSupport", () => ({ writeApplicationSupportJson: jest.fn() }));
 jest.mock("@legend-apps/window-manager", () => ({ getReactNativeStartupTiming: jest.fn() }));
+
+function benchmarkArgument(config: object) {
+  return `--chat-history-benchmark=${encodeURIComponent(JSON.stringify(config))}`;
+}
+
+describe("benchmark configuration", () => {
+  const config = {
+    eventFileName: "events.json",
+    loadImages: false,
+    switchDelayMs: 100,
+    targets: [
+      { id: "codex:first", provider: "codex" },
+      { id: "claude:second", provider: "claude" },
+    ],
+    version: 2,
+  };
+
+  it("defaults the top delay for existing version-2 launch arguments", () => {
+    expect(getChatBenchmarkConfig([benchmarkArgument(config)])).toEqual({ ...config, topDelayMs: 0 });
+  });
+
+  it("rejects invalid benchmark delays", () => {
+    expect(getChatBenchmarkConfig([benchmarkArgument({ ...config, topDelayMs: -1 })])).toBeUndefined();
+    expect(getChatBenchmarkConfig([benchmarkArgument({ ...config, switchDelayMs: "100" })])).toBeUndefined();
+  });
+});
 
 describe("benchmark window timestamp", () => {
   beforeEach(() => {

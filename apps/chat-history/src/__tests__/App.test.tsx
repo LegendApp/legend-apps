@@ -101,6 +101,7 @@ describe("Chat History host window", () => {
       eventFileName: "events.json",
       loadImages: false,
       switchDelayMs: 3_000,
+      topDelayMs: 3_000,
       targets: [
         { id: initial.id, provider: initial.provider },
         { id: secondary.id, provider: secondary.provider },
@@ -187,6 +188,7 @@ describe("Chat History host window", () => {
       eventFileName: "switch-events.json",
       loadImages: false,
       switchDelayMs: 100,
+      topDelayMs: 100,
       targets: [initial, secondary],
       version: 2,
     });
@@ -206,6 +208,11 @@ describe("Chat History host window", () => {
         name: "contentReady", phase: "initial", path: initial.path,
       }));
       await act(async () => { jest.advanceTimersByTime(100); });
+      expect(emitChatBenchmarkEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        name: "viewportReady", phase: "top", path: initial.path,
+      }));
+      expect(openChat).toHaveBeenCalledTimes(1);
+      await act(async () => { jest.advanceTimersByTime(100); });
       expect(openChat).toHaveBeenLastCalledWith("codex", secondary.path);
       expect(transcriptList()).toBe(list);
       expect(firstDocument.releaseNativeResources).toHaveBeenCalledTimes(1);
@@ -217,6 +224,70 @@ describe("Chat History host window", () => {
         name: "contentReady", phase: "switch", path: secondary.path,
       }));
       await act(async () => { jest.runOnlyPendingTimers(); });
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      jest.useRealTimers();
+    }
+  });
+
+  it("waits for the first transcript row to become visible before benchmark switching", async () => {
+    jest.useFakeTimers();
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (callback) => {
+      callback(0);
+      return 0;
+    };
+    const initial: ChatSummary = { id: "initial", title: "Initial", path: "/initial.jsonl", provider: "codex", updatedAt: 2 };
+    const secondary: ChatSummary = { ...initial, id: "secondary", path: "/secondary.jsonl" };
+    const document = {
+      contentDigest: "first",
+      documentId: "first",
+      getRowKind: () => "message",
+      getRowMetadata: () => ({ imageCount: 0, kind: "assistant" }),
+      getTiming: () => ({
+        documentMs: 1,
+        mappedMs: 2,
+        normalizedMs: 3,
+        recordCount: 2,
+        rowCount: 2,
+        scannedMs: 4,
+        sourceBytes: 5,
+        totalMs: 6,
+      }),
+      releaseNativeResources: jest.fn(),
+      rowCount: 2,
+    } as unknown as ChatDocument;
+    jest.mocked(getChatBenchmarkConfig).mockReturnValueOnce({
+      eventFileName: "visibility-events.json",
+      loadImages: false,
+      switchDelayMs: 50,
+      topDelayMs: 50,
+      targets: [initial, secondary],
+      version: 2,
+    });
+    jest.mocked(getRecentChats).mockResolvedValueOnce([initial, secondary]);
+    jest.mocked(openChat).mockResolvedValueOnce(document);
+    try {
+      await act(async () => { renderer = create(<App />); });
+      const list = renderer!.root.findAllByType("LegendList" as never)[1]!;
+      await act(async () => {
+        list.props.onFirstVisibleItemChanged({ index: 1, item: 1, key: "first:1" });
+        list.props.renderItem({ item: 1 }).props.onLayout();
+      });
+      await act(async () => { jest.advanceTimersByTime(50); });
+      expect(openChat).toHaveBeenCalledTimes(1);
+      expect(emitChatBenchmarkEvent).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        name: "viewportReady",
+      }));
+
+      await act(async () => {
+        list.props.onFirstVisibleItemChanged({ index: 0, item: 0, key: "first:0" });
+      });
+      expect(emitChatBenchmarkEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        name: "viewportReady", phase: "top", path: initial.path,
+      }));
+      await act(async () => { jest.advanceTimersByTime(50); });
+      expect(openChat).toHaveBeenLastCalledWith("codex", secondary.path);
     } finally {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
       jest.useRealTimers();

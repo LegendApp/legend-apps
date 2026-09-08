@@ -3,6 +3,7 @@ import { writeApplicationSupportJson } from "@legend-apps/storage/src/applicatio
 import { getReactNativeStartupTiming } from "@legend-apps/window-manager";
 
 const benchmarkArgumentPrefix = "--chat-history-benchmark=";
+const defaultTopDelayMs = 0;
 
 export type ChatBenchmarkTarget = Pick<ChatSummary, "id" | "provider">;
 
@@ -16,6 +17,7 @@ export type ChatBenchmarkConfig = {
   eventFileName: string;
   loadImages: boolean;
   switchDelayMs: number;
+  topDelayMs: number;
   targets: [ChatBenchmarkTarget, ChatBenchmarkTarget];
   version: 2;
 };
@@ -45,9 +47,17 @@ export type ChatBenchmarkContentDigestEvent = {
   phase: "initial" | "switch";
 };
 
+export type ChatBenchmarkViewportReadyEvent = {
+  durationMs: number;
+  name: "viewportReady";
+  path: string;
+  phase: "top";
+};
+
 export type ChatBenchmarkEvent =
   | ChatBenchmarkContentDigestEvent
   | ChatBenchmarkContentReadyEvent
+  | ChatBenchmarkViewportReadyEvent
   | { name: "windowShown" };
 type LoggedChatBenchmarkEvent = ChatBenchmarkEvent & {
   reactNativeClockOffsetMs?: number;
@@ -70,9 +80,15 @@ export function getChatBenchmarkConfig(launchArguments?: string[]) {
     return undefined;
   }
   try {
-    const config = JSON.parse(decodeURIComponent(encoded)) as ChatBenchmarkConfig;
-    return config.version === 2 && config.targets.length === 2 && config.eventFileName.length > 0
-      ? config
+    const config = JSON.parse(decodeURIComponent(encoded)) as Partial<ChatBenchmarkConfig>;
+    const topDelayMs = config.topDelayMs ?? defaultTopDelayMs;
+    return config.version === 2
+      && Array.isArray(config.targets) && config.targets.length === 2
+      && typeof config.eventFileName === "string" && config.eventFileName.length > 0
+      && typeof config.loadImages === "boolean"
+      && typeof config.switchDelayMs === "number" && Number.isFinite(config.switchDelayMs) && config.switchDelayMs >= 0
+      && typeof topDelayMs === "number" && Number.isFinite(topDelayMs) && topDelayMs >= 0
+      ? { ...config, topDelayMs } as ChatBenchmarkConfig
       : undefined;
   } catch {
     return undefined;
