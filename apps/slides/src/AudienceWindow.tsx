@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, useSlidesState } from "./slidesStore";
@@ -8,25 +8,31 @@ export function AudienceWindow() {
   const blackout = useSlidesState((state) => state.blackout);
   const slideCount = useSlidesState((state) => state.slides.length);
   const transition = useSlidesState((state) => state.slides[state.currentSlide]?.metadata.transition ?? state.config.transition ?? "none");
-  const previousCurrent = useRef(currentSlide);
-  const [previousSlide, setPreviousSlide] = useState<number | null>(null);
-  const progress = useRef(new Animated.Value(1)).current;
+  const [transitionState, setTransitionState] = useState(() => ({
+    index: currentSlide,
+    outgoing: null as number | null,
+    kind: transition,
+    progress: new Animated.Value(1),
+  }));
+  // Allocate the incoming opacity with its new layer tree. Resetting a shared
+  // Animated.Value here would also hide the still-mounted outgoing slide.
+  if (transitionState.index !== currentSlide || transitionState.kind !== transition) {
+    setTransitionState({
+      index: currentSlide,
+      outgoing: transition === "none" ? null : transitionState.index,
+      kind: transition,
+      progress: new Animated.Value(transition === "none" ? 1 : 0),
+    });
+  }
+  const { progress, outgoing: previousSlide } = transitionState;
 
   useEffect(() => {
     setSlidesState({ audienceOpen: true });
   }, []);
 
   useLayoutEffect(() => {
-    const outgoing = previousCurrent.current;
-    previousCurrent.current = currentSlide;
-    if (outgoing === currentSlide || transition === "none") {
-      setPreviousSlide(null);
-      progress.setValue(1);
-      return;
-    }
-    setPreviousSlide(outgoing);
-    progress.setValue(0);
-    const animation = Animated.timing(progress, {
+    if (transitionState.outgoing === null) return;
+    const animation = Animated.timing(transitionState.progress, {
       duration: 320,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
@@ -34,27 +40,25 @@ export function AudienceWindow() {
     });
     let settled = false;
     const finishTransition = () => {
-      if (settled) {
-        return;
-      }
+      if (settled) return;
       settled = true;
-      progress.setValue(1);
-      setPreviousSlide(null);
+      transitionState.progress.setValue(1);
+      setTransitionState((current) => current === transitionState
+        ? { ...current, outgoing: null } : current);
     };
     animation.start(({ finished }) => {
-      if (finished) {
-        finishTransition();
-      }
+      if (finished) finishTransition();
     });
     const watchdog = setTimeout(() => {
       animation.stop();
       finishTransition();
     }, 450);
     return () => {
+      settled = true;
       clearTimeout(watchdog);
       animation.stop();
     };
-  }, [currentSlide, progress, transition]);
+  }, [transitionState]);
 
   const enteringStyle = transition === "slide"
     ? { opacity: progress, transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [180, 0] }) }] }
