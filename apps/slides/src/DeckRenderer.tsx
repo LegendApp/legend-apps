@@ -23,8 +23,9 @@ import {
   type TextStyle,
   type ViewProps,
 } from "react-native";
-import { getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { getSlideStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
+import { Step, Steps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
 import { Effect } from "./Effect";
 import { TypeGPU } from "./TypeGPU";
@@ -50,26 +51,31 @@ function MissingSlideTemplate({ reference }: { reference: string }): never {
   throw new Error(`Template "${reference}" is not available in the compiled deck.`);
 }
 
-const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: boolean; targetIndex?: number }>({ isPreview: false });
+const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: boolean; targetIndex?: number; targetStep?: number }>({ isPreview: false });
 
 function normalizeTransition(value: unknown): SlideTransition | undefined {
   return value === "none" || value === "fade" || value === "slide" ? value : undefined;
 }
 
 function Deck({ children, configJson }: CompiledDeckProps) {
-  const { isPreview, isPreparing, targetIndex } = useContext(DeckRenderContext);
+  const { isPreview, isPreparing, targetIndex, targetStep } = useContext(DeckRenderContext);
   // An outgoing layer can become active again without remounting. Subscribe so
   // React Compiler cannot retain a getSlidesState() snapshot from its exit.
   const currentSlide = useSlidesState((state) => state.currentSlide);
+  const currentStep = useSlidesState((state) => state.currentStep);
   const startedAt = useSlidesState((state) => state.slideStartedAt);
+  const stepEpochs = useSlidesState((state) => state.stepEpochs);
+  const direction = useSlidesState((state) => state.direction);
+  const stepStartedAt = useSlidesState((state) => state.stepStartedAt);
   const templates = useSlidesState((state) => state.templates);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
   const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
-  const slides = elements.map((element) => ({
+  const resolved = elements.map((element) => resolveSteps(element.props.children, [markdownComponents.ul, markdownComponents.ol]));
+  const slides = elements.map((element, index) => ({
     metadata: (() => {
       const parsed = parseObject<SlideConfig>(element.props.metadataJson, {});
-      return { ...parsed, transition: normalizeTransition(parsed.transition) };
+      return { ...parsed, steps: Math.max(resolved[index].steps, typeof parsed.steps === "number" ? parsed.steps : 1), transition: normalizeTransition(parsed.transition) };
     })(),
     notes: element.props.notes,
   }));
@@ -87,12 +93,18 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     return null;
   }
   const selectedMetadata = slides[selectedIndex].metadata;
+  const stepCount = getSlideStepCount(slides[selectedIndex]);
+  const selectedStep = Math.max(0, Math.min(
+    targetStep ?? (selectedIndex === currentSlide ? currentStep : 0),
+    stepCount - 1,
+  ));
   const resolvedTemplate = resolveSlideTemplate(templates, config, selectedMetadata);
   const Template = resolvedTemplate.component;
-  const content = renderMdxChildren(selected.props.children);
+  const content = renderMdxChildren(resolved[selectedIndex].content);
   return (
     <PresentationProvider value={{
       currentSlide,
+      currentStep,
       goTo: setCurrentSlide,
       isActive: !isPreview && selectedIndex === currentSlide,
       isPreview: Boolean(isPreview),
@@ -101,7 +113,12 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       previous: previousSlide,
       slideCount: elements.length,
       slideIndex: selectedIndex,
+      stepCount,
+      stepIndex: selectedStep,
       startedAt,
+      stepStartedAt,
+      stepEpochs,
+      direction,
     }}>
       <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
         {resolvedTemplate.reference && !Template
@@ -162,6 +179,8 @@ const markdownComponents = {
   Deck,
   Effect,
   Slide,
+  Step,
+  Steps,
   View: NativeView,
   Text,
   Image,
@@ -183,7 +202,17 @@ const markdownComponents = {
   a: MarkdownLink,
 };
 
-export function DeckRenderer({ isPreview = false, isPreparing = false, targetIndex }: { isPreview?: boolean; isPreparing?: boolean; targetIndex?: number }) {
+export function DeckRenderer({
+  isPreview = false,
+  isPreparing = false,
+  targetIndex,
+  targetStep,
+}: {
+  isPreview?: boolean;
+  isPreparing?: boolean;
+  targetIndex?: number;
+  targetStep?: number;
+}) {
   const Component = useSlidesState((state) => state.component);
   const revision = useSlidesState((state) => state.revision);
   const retryRevision = useSlidesState((state) => state.retryRevision);
@@ -191,7 +220,7 @@ export function DeckRenderer({ isPreview = false, isPreparing = false, targetInd
     return null;
   }
   return (
-    <DeckRenderContext.Provider value={{ isPreview, isPreparing, targetIndex }}>
+    <DeckRenderContext.Provider value={{ isPreview, isPreparing, targetIndex, targetStep }}>
       <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}:${targetIndex ?? "current"}`}>
         <Component components={markdownComponents} />
       </SlideErrorBoundary>

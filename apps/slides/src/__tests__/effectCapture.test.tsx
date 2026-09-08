@@ -32,9 +32,9 @@ test("captures only a visible, measured stage and recaptures after scale changes
     frames.clear();
     pending.forEach((callback) => callback(timestamp));
   });
-  const content = (scale, runtime = { isPreview: true, isActive: false }) => (
+  const content = (scale, runtime = { isPreview: true, isActive: false }, effectProps = {}) => (
     <PresentationProvider value={runtime}>
-      <SlideCaptureContext.Provider value={scale}><Effect><text>Visible</text></Effect></SlideCaptureContext.Provider>
+      <SlideCaptureContext.Provider value={scale}><Effect {...effectProps}><text>Visible</text></Effect></SlideCaptureContext.Provider>
     </PresentationProvider>
   );
   const log = spyOn(console, "error").mockImplementation(() => {});
@@ -61,6 +61,20 @@ test("captures only a visible, measured stage and recaptures after scale changes
     await act(() => renderer.update(content(0.5, { isPreview: false, isActive: true, startedAt: 3500 })));
     await flushFrame(3750);
     expect(renderer.root.findAllByType("group").find((group) => group.props.layer).props.layer.props.children.props.uniforms.time).toBe(0.25);
+    await act(() => renderer.update(content(
+      0.5,
+      { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 0, stepStartedAt: 4000 },
+      { startOnStep: 1 },
+    )));
+    await flushFrame(4500);
+    expect(renderer.root.findAllByType("group").find((group) => group.props.layer).props.layer.props.children.props.uniforms.time).toBe(0);
+    await act(() => renderer.update(content(
+      0.5,
+      { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 1, stepStartedAt: 4500 },
+      { startOnStep: 1 },
+    )));
+    await flushFrame(5000);
+    expect(renderer.root.findAllByType("group").find((group) => group.props.layer).props.layer.props.children.props.uniforms.time).toBe(0.5);
     expect(captures).toHaveLength(0);
     await act(() => renderer.update(content(1)));
     expect(first.dispose).toHaveBeenCalledTimes(1);

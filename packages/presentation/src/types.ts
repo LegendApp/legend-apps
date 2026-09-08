@@ -23,6 +23,7 @@ export type DeckConfig = {
 };
 
 export type SlideConfig = {
+  steps?: number;
   template?: string | false;
   transition?: SlideTransition;
   [key: string]: unknown;
@@ -38,6 +39,7 @@ export type PresentationTemplates = Record<string, ComponentType<PresentationTem
 
 export type PresentationRuntime = {
   currentSlide: number;
+  currentStep: number;
   goTo(slideIndex: number): void;
   isActive: boolean;
   isPreview: boolean;
@@ -47,8 +49,14 @@ export type PresentationRuntime = {
   previous(): void;
   slideCount: number;
   slideIndex: number;
+  stepCount: number;
+  stepIndex: number;
   /** Shared performance.now() epoch for the active slide animation. */
   startedAt?: number;
+  /** Shared performance.now() epoch for the current step. */
+  stepStartedAt?: number;
+  stepEpochs?: Record<number, number>;
+  direction?: "forward" | "backward";
 };
 
 export type CompiledSlideProps = {

@@ -1,4 +1,4 @@
-export { PresentationProvider, usePresentation, useSlideLifecycle } from "./runtime";
+export { PresentationProvider, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";
 export { persistSlideSpeakerNotesWithFileAccess, updateSlideSpeakerNotes } from "./speakerNotesSource";
