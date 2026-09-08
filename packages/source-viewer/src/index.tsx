@@ -176,6 +176,7 @@ export type UseSourceDocumentRowsOptions = {
 };
 
 export type SourceDocumentViewProps = {
+  dataKey?: string | number;
   debugName?: string;
   initialRequestRowCount?: number;
   lineOverscan?: number;
@@ -309,6 +310,7 @@ export function useSourceDocumentRows({
 }
 
 export function SourceDocumentView({
+  dataKey,
   debugName,
   initialRequestRowCount = sourceViewerInitialRequestRowCount,
   lineOverscan = sourceViewerLineOverscan,
@@ -321,6 +323,7 @@ export function SourceDocumentView({
 }: SourceDocumentViewProps) {
   return (
     <VirtualizedFixedDocumentList
+      dataKey={dataKey}
       debugName={debugName}
       dataVersion={sourceRows.dataVersion}
       getRow={sourceRows.getRow}

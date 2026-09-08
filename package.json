@@ -34,6 +34,7 @@
     "dev:all": "bun scripts/run-app.ts --all --dev-check",
     "build:all": "bun scripts/build-app.ts --all",
     "verify:all": "bun scripts/verify-app.ts --all",
+    "test:code": "jest --config apps/code/jest.config.cjs",
     "test:diff": "jest --config apps/diff/jest.config.cjs",
     "test:diff:fast": "bun run test:diff --runInBand && bun run test:diff-parser --runInBand && bun run test:syntax-parser --runInBand && bun run diff verify macos && bun run test:diff-parser:native && bun run typecheck",
     "test:diff-e2e": "bun scripts/test-diff-e2e.ts",

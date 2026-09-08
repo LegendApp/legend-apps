@@ -486,6 +486,7 @@ export function VirtualizedFixedDocumentList<TRow>({
     [dataSource, itemIndexes],
   );
   const hasRequestedInitialRangeRef = useRef(false);
+  const viewportHeightRef = useRef(0);
   const overscanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountStartedAtRef = useRef(instrumentationNowMs());
   const hasLoggedFirstCommitRef = useRef(false);
@@ -554,13 +555,6 @@ export function VirtualizedFixedDocumentList<TRow>({
       });
     }
   });
-
-  useEffect(() => () => {
-    if (overscanTimeoutRef.current) {
-      clearTimeout(overscanTimeoutRef.current);
-      overscanTimeoutRef.current = null;
-    }
-  }, []);
 
   const setListRef = useCallback((list: LegendListRef | null) => {
     const { debugName, itemCount, listRef } = latestPropsRef.current;
@@ -680,17 +674,50 @@ export function VirtualizedFixedDocumentList<TRow>({
     return false;
   }, [latestPropsRef]);
 
+  const requestInitialRange = useCallback(() => {
+    const { itemCount, lineOverscan, onInitialRowsRequested, overscanRequestDelayMs, requestRangesOnScroll } = latestPropsRef.current;
+    const height = viewportHeightRef.current;
+    if (hasRequestedInitialRangeRef.current || itemCount === 0 || height <= 0 || !requestRangesOnScroll) {
+      return;
+    }
+    hasRequestedInitialRangeRef.current = true;
+    const initialRange = requestVisibleRange(0, height, false, "initial");
+    onInitialRowsRequested?.(initialRange.start, initialRange.count);
+    if (lineOverscan > 0) {
+      overscanTimeoutRef.current = setTimeout(() => {
+        overscanTimeoutRef.current = null;
+        if (!requestLegendListRange("overscan")) {
+          requestVisibleRange(0, viewportHeightRef.current, true, "overscan");
+        }
+      }, overscanRequestDelayMs);
+    }
+  }, [latestPropsRef, requestLegendListRange, requestVisibleRange]);
+
+  const hasItems = itemCount > 0;
+  useEffect(() => {
+    // A reused list may keep the same native bounds while its document changes.
+    // Restart range requests from the measured viewport, including empty -> loaded.
+    hasRequestedInitialRangeRef.current = false;
+    lastScrollSampleRef.current = null;
+    lastTopItemRef.current = null;
+    requestInitialRange();
+    return () => {
+      if (overscanTimeoutRef.current) {
+        clearTimeout(overscanTimeoutRef.current);
+        overscanTimeoutRef.current = null;
+      }
+    };
+  }, [dataKey, hasItems, requestInitialRange]);
+
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const {
       dataVersion,
       debugName,
       itemCount,
-      lineOverscan,
-      onInitialRowsRequested,
-      overscanRequestDelayMs,
       requestRangesOnScroll,
     } = latestPropsRef.current;
     const height = event.nativeEvent.layout.height;
+    viewportHeightRef.current = height;
     const eventName = hasLoggedFirstLayoutRef.current ? "list.layout" : "list.layout.first";
     hasLoggedFirstLayoutRef.current = true;
     debugLog(debugName, "list.layout", {
@@ -709,29 +736,13 @@ export function VirtualizedFixedDocumentList<TRow>({
     });
 
     if (!hasRequestedInitialRangeRef.current) {
-      hasRequestedInitialRangeRef.current = true;
-      if (requestRangesOnScroll) {
-        const initialRange = requestVisibleRange(0, height, false, "initial");
-        onInitialRowsRequested?.(initialRange.start, initialRange.count);
-
-        if (lineOverscan > 0) {
-          if (overscanTimeoutRef.current) {
-            clearTimeout(overscanTimeoutRef.current);
-          }
-          overscanTimeoutRef.current = setTimeout(() => {
-            overscanTimeoutRef.current = null;
-            if (!requestLegendListRange("overscan")) {
-              requestVisibleRange(0, height, true, "overscan");
-            }
-          }, overscanRequestDelayMs);
-        }
-      }
+      requestInitialRange();
     } else if (requestRangesOnScroll) {
       if (!requestLegendListRange("overscan")) {
         requestVisibleRange(0, height, true, "overscan");
       }
     }
-  }, [latestPropsRef, requestLegendListRange, requestVisibleRange]);
+  }, [latestPropsRef, requestInitialRange, requestLegendListRange, requestVisibleRange]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { debugName, requestRangesOnScroll } = latestPropsRef.current;

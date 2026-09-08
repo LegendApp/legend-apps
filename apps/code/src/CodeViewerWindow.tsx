@@ -317,8 +317,9 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       {state.error ? (
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
       ) : null}
-      {sourceRows.itemIndexes.length > 0 ? (
+      <View style={styles.list}>
         <SourceDocumentView
+          dataKey={state.filePath ?? undefined}
           initialRequestRowCount={sourceViewerInitialRequestRowCount}
           lineOverscan={sourceViewerLineOverscan}
           overscanRequestDelayMs={sourceViewerOverscanRequestDelayMs}
@@ -327,18 +328,17 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           sourceRows={sourceRows}
           style={styles.list}
         />
-      ) : state.status === "empty" ? (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-            No code file open
-          </Text>
-          <Text style={[styles.emptyText, { color: mutedColor }]}>
-            Open a TypeScript or TSX file to view it.
-          </Text>
-        </View>
-      ) : (
-        null
-      )}
+        {state.status === "empty" ? (
+          <View style={styles.empty}>
+            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
+              No code file open
+            </Text>
+            <Text style={[styles.emptyText, { color: mutedColor }]}>
+              Open a TypeScript or TSX file to view it.
+            </Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -347,8 +347,8 @@ export default CodeViewerWindow;
 
 const styles = StyleSheet.create({
   empty: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: "center",
-    flex: 1,
     gap: 8,
     justifyContent: "center",
     padding: 32,
