@@ -10,6 +10,7 @@ import {
   rootDir,
 } from "./lib/apps";
 import { ensureAppChangelogEntry } from "./lib/changelog";
+import { createPrompts, PromptCancelled } from "./lib/prompts";
 import {
   getGitHubRepositorySlug,
   getGitHubReleaseTag,
@@ -27,6 +28,7 @@ type MacOSReleaseSelection = MacOSReleaseArch | "all";
 type ReleaseOptions = {
   allowDirty: boolean;
   arch: MacOSReleaseSelection;
+  confirm: boolean;
   notesFile?: string;
   verifyOnly: boolean;
 };
@@ -51,6 +53,7 @@ function parseOptions(args: string[]): ReleaseOptions {
   const options: ReleaseOptions = {
     allowDirty: false,
     arch: "arm",
+    confirm: false,
     verifyOnly: false,
   };
 
@@ -64,6 +67,8 @@ function parseOptions(args: string[]): ReleaseOptions {
       options.arch = "all";
     } else if (arg === "--allow-dirty") {
       options.allowDirty = true;
+    } else if (arg === "--confirm") {
+      options.confirm = true;
     } else if (arg === "--verify-only" || arg === "--skip-push-tag") {
       options.verifyOnly = true;
     } else if (arg === "--notes-file") {
@@ -344,10 +349,25 @@ async function main() {
     return;
   }
 
+  const deltaFiles = findDeltaFiles(distDir, getReleaseAssetStem(manifest));
+  const releaseHead = runCommand("git", ["rev-parse", "HEAD"], { cwd: rootDir, capture: true }).trim();
+  if (options.confirm) {
+    console.log(`\nReady to publish ${tagName} to ${getGitHubRepositorySlug()} at ${releaseHead}.`);
+    console.log("Assets:\n" + [...archivePaths, ...deltaFiles].map((file) => `  ${path.relative(rootDir, file)}`).join("\n"));
+    console.log(`\nRelease notes:\n${releaseNotes}\n`);
+    const prompts = createPrompts();
+    try {
+      if (!await prompts.confirm("Publish this GitHub release?")) {
+        console.log("Cancelled. No release was published.");
+        return;
+      }
+    } finally {
+      prompts.close();
+    }
+  }
+
   const notesPath = path.join(os.tmpdir(), `${tagName}-notes.md`);
   fs.writeFileSync(notesPath, releaseNotes);
-
-  const deltaFiles = findDeltaFiles(distDir, getReleaseAssetStem(manifest));
   runCommand("gh", [
     "release",
     "create",
@@ -355,7 +375,7 @@ async function main() {
     "--repo",
     getGitHubRepositorySlug(),
     "--target",
-    runCommand("git", ["rev-parse", "HEAD"], { cwd: rootDir, capture: true }).trim(),
+    releaseHead,
     "--title",
     `${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}`,
     "--notes-file",
@@ -369,5 +389,5 @@ async function main() {
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+  process.exit(error instanceof PromptCancelled ? 130 : 1);
 });

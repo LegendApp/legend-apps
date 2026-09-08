@@ -199,12 +199,17 @@ Generated per-app native workspaces and configuration live under
 Release builds are opt-in and are not part of the normal iteration loop:
 
 ```sh
-bun run diff build macos
-bun run diff package macos all
-bun run diff githubrelease macos all
+bun package chat-history
+bun release chat-history
 ```
 
-macOS packaging supports architecture-specific or combined output and requires
+These interactive commands assume macOS. Packaging walks through the configured
+version/build, architectures, distribution or local output, and building from
+source or reusing an existing build. Releasing offers verification or publication
+and asks for confirmation after the release checks pass. Omit the app name to
+choose from the apps configured for release.
+
+macOS distribution packaging requires
 the signing, notarization, Sparkle, and GitHub credentials expected by the
 release scripts. App versions come from `apps/<app>/package.json`; build and
 Sparkle metadata come from the app manifest. See [RELEASING.md](RELEASING.md)
