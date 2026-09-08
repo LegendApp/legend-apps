@@ -24,8 +24,10 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-apps/appkit-split-view",
+      "@legend-apps/auto-updater",
       "@legend-apps/chat-history",
       "@legend-apps/glass-effect-view",
+      "@legend-apps/native-menu",
       "@legend-apps/storage",
       "@legend-apps/window-manager",
       "react-native-enriched-markdown",

@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Uniwind } from "uniwind";
 import { ChatComposer } from "./ChatComposer";
+import { ChatHistoryAppMenu } from "./ChatHistoryAppMenu";
 import {
   emitChatBenchmarkEvent,
   getChatBenchmarkConfig,
@@ -784,7 +785,10 @@ type ChatHistoryAppProps = {
 };
 
 export function App({ launchArguments }: ChatHistoryAppProps) {
-  return <ChatHistoryWindow launchArguments={launchArguments} />;
+  return <>
+    <ChatHistoryAppMenu />
+    <ChatHistoryWindow launchArguments={launchArguments} />
+  </>;
 }
 
 export default App;

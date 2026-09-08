@@ -40,6 +40,7 @@ jest.mock("@legend-apps/windows", () => ({
 }));
 jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList" }));
 jest.mock("../ChatComposer", () => ({ ChatComposer: "ChatComposer" }));
+jest.mock("../ChatHistoryAppMenu", () => ({ ChatHistoryAppMenu: "ChatHistoryAppMenu" }));
 jest.mock("../DemoTranscriptRow", () => ({ DemoTranscriptRow: "DemoTranscriptRow" }));
 jest.mock("../TranscriptRow", () => ({ TranscriptRow: "TranscriptRow" }));
 jest.mock("../chatStorage", () => ({
