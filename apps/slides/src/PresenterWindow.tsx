@@ -39,7 +39,7 @@ import {
   resetPresenterLayout as resetStoredPresenterLayout,
 } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
-import { getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { getSlideStepCount, getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
@@ -102,15 +102,17 @@ function Button({ disabled, label, onPress }: { disabled?: boolean; label: strin
 
 function SlideCounter({ index }: { index: number }) {
   const total = useSlidesState((state) => state.slides.length);
+  const step = useSlidesState((state) => state.currentStep);
+  const stepCount = useSlidesState((state) => getSlideStepCount(state.slides[index]));
   if (total === 0) return null;
   return (
     <View pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
       <Text
-        accessibilityLabel={`Slide ${index + 1} of ${total}`}
+        accessibilityLabel={`Slide ${index + 1} of ${total}, step ${step + 1} of ${stepCount}`}
         className="text-xs font-semibold text-zinc-200"
         style={{ fontVariant: ["tabular-nums"] }}
       >
-        {index + 1} / {total}
+        {index + 1} / {total} · Step {step + 1} / {stepCount}
       </Text>
     </View>
   );
@@ -144,11 +146,13 @@ function SpeakerNotes({
   slideIndex: number;
   weight: number;
 }) {
+  const currentStep = useSlidesState((state) => state.currentStep);
   return (
     <View style={[styles.notesSection, { flex: weight }]}>
       <ScrollView key={`${deckPath}:${slideIndex}`} contentContainerStyle={styles.notesContent} style={styles.notes}>
         <EditableMarkdown
           editable={editable}
+          currentStep={currentStep}
           markdown={notes ?? ""}
           onEditingChange={onEditingChange}
           onSave={onSave}

@@ -335,3 +335,30 @@ workaround; investigate the specific file-access failure first.
 
 Use the [rehearsal checklist](REHEARSAL.md) to validate the actual talk before
 presenting. It includes the current verification status and remaining checks.
+
+### Speaker notes for steps
+
+The presenter counter shows `3 / 65 · Step 2 / 3`. These display numbers are
+one-based: step 1 is the initial slide state, step 2 is the first advance.
+
+Prefix speaker-note sections with `1:`, `2:`, etc. (also `1.` or `1)`):
+
+```md
+<!--
+A reminder that applies throughout the slide.
+
+1: Describe the convincing glass before starting the animation.
+
+2: Start the escalation. Let the audience watch it get ridiculous.
+-->
+```
+
+The current section stays at full opacity; other numbered sections dim to 0.75.
+A section continues until the next numbered prefix, including multiline prose.
+Notes before the first prefix remain fully visible. Numbered lines inside fenced
+code and timestamps such as `8:10` are not step markers. Prefixes work across
+separate comments too, since comments are collected into the slide's notes.
+
+Editing shows the complete original Markdown at full opacity. Note markers only
+highlight existing steps; use `Step`, `Steps`, animation triggers, or slide
+frontmatter `steps` to define the slide's navigation states.
