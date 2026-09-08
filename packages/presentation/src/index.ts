@@ -1,3 +1,4 @@
+export { Background, BackgroundHost, useBackgroundSize, useBackgroundHost, useHasBackground } from "./background";
 export { PresentationProvider, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";

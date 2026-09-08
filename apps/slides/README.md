@@ -146,6 +146,50 @@ template, or set `template: false` to use the built-in layout for that slide.
 Template files follow the same local-import and host-package rules as other deck
 components, are watched for live rebuilds, and are scanned for Uniwind classes.
 
+### Full-window backgrounds
+
+A template can declare a background once. Slides using that template need only
+Markdown content—`Scene` is an optional helper specific to the example talk.
+
+```tsx
+import { Background, type PresentationTemplateProps } from "@legend-apps/presentation";
+import { View } from "react-native";
+import { AmbientAurora } from "./AmbientAurora";
+
+export default function Frame({ children }: PresentationTemplateProps) {
+  return <>
+    <Background priority={-1}><AmbientAurora /></Background>
+    <View style={{ flex: 1, padding: 80 }}>{children}</View>
+  </>;
+}
+```
+
+With `template: ./Frame.tsx` in deck frontmatter, a slide can simply contain:
+
+```md
+# Actually native
+
+React Native renders real platform controls.
+```
+
+`Background` renders outside the content's aspect-ratio constraints and fills the
+audience window or its presenter preview. `useBackgroundSize()` provides that
+viewport's width and height for shaders and other measured drawing. Images can
+fill the background with `resizeMode="cover"`. Content scales uniformly to fit;
+it is never stretched or cropped to match the display.
+
+Use priority `-1` for template defaults. A slide-level `<Background>` (default
+priority `0`) overrides it; `<Background />` suppresses it and shows the deck's
+base color. Keep one declaration per priority per slide. A `Scene` background
+prop in the talk uses priority `1`, with `null` disabling its background.
+
+Only the selected slide's background is displayed. The host stays outside slide
+transitions and preserves a shared background component of the same type/key
+across navigation, including prepared slides. For continuous animation, keep its
+clock local to the background rather than resetting it from the slide's
+`startedAt`. The talk's aurora follows this pattern; presenter previews use a
+static frame unless live.
+
 ## Components and code
 
 Decks may use Markdown, JSX, expressions, hooks, event handlers, and arbitrary JavaScript. They may import local `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, and image files inside the deck directory. macOS and native filename variants are preferred before generic files.

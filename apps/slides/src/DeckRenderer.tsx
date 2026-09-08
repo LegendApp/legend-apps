@@ -1,4 +1,8 @@
 import {
+  Background,
+  BackgroundHost,
+  useBackgroundHost,
+  useHasBackground,
   PresentationProvider,
   renderNativeChildren,
   type CompiledDeckProps,
@@ -177,6 +181,7 @@ function MarkdownPre({ children }: { children?: ReactNode }) {
 
 const markdownComponents = {
   Deck,
+  Background,
   Effect,
   Slide,
   Step,
@@ -239,7 +244,16 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
   );
 }
 
-export function SlideCanvas({ children, captureEnabled = true }: { children: ReactNode; captureEnabled?: boolean }) {
+export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean }) {
+  const hosted = useBackgroundHost();
+  const currentSlide = useSlidesState((state) => state.currentSlide);
+  const color = useSlidesState((state) => state.config.theme?.backgroundColor ?? "#111827");
+  const content = <SlideCanvasContent captureEnabled={captureEnabled}>{children}</SlideCanvasContent>;
+  return hosted ? content : <BackgroundHost slideIndex={targetIndex ?? currentSlide} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
+}
+
+function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode; captureEnabled: boolean }) {
+  const hasBackground = useHasBackground();
   const config = useSlidesState((state) => state.config);
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   const aspectParts = config.aspectRatio?.split(/[/:]/).map(Number) ?? [];
@@ -251,7 +265,7 @@ export function SlideCanvas({ children, captureEnabled = true }: { children: Rea
   const scale = Math.min(size.width / width || 0, size.height / height || 0);
   const renderedWidth = width * scale;
   const renderedHeight = height * scale;
-  const backgroundColor = config.theme?.backgroundColor ?? "#111827";
+  const backgroundColor = hasBackground ? "transparent" : config.theme?.backgroundColor ?? "#111827";
   const handleLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
   return (
     <View onLayout={handleLayout} style={styles.canvas}>
@@ -270,7 +284,7 @@ export function SlideCanvas({ children, captureEnabled = true }: { children: Rea
 
 const styles = StyleSheet.create({
   blockquote: { borderLeftColor: "#64748b", borderLeftWidth: 8, paddingLeft: 32 },
-  canvas: { alignItems: "center", backgroundColor: "#000", flex: 1, justifyContent: "center", overflow: "hidden" },
+  canvas: { alignItems: "center", flex: 1, justifyContent: "center", overflow: "hidden" },
   code: { backgroundColor: "#1e293b", color: "#e2e8f0", fontFamily: "Menlo", fontSize: 30 },
   emphasis: { fontStyle: "italic" },
   h1: { color: "#f8fafc", fontSize: 88, fontWeight: "700", marginBottom: 36 },

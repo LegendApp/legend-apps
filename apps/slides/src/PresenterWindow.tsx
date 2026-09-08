@@ -120,7 +120,7 @@ function Preview({ index, live = false, stepIndex, weight = 1 }: { index: number
   return (
     <View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
-        <SlideCanvas><DeckRenderer isPreview={!live} targetIndex={index} targetStep={stepIndex} /></SlideCanvas>
+        <SlideCanvas targetIndex={index} isPreview={!live}><DeckRenderer isPreview={!live} targetIndex={index} targetStep={stepIndex} /></SlideCanvas>
         {live && <SlideCounter index={index} />}
       </View>
     </View>
