@@ -318,6 +318,7 @@ static char RNSidebarSplitViewStartupKey;
     return;
   }
   NSWindow *window = self.window;
+  NSResponder *firstResponder = window.firstResponder;
   void (^installRoot)(void) = self.installReactRoot;
   self.installReactRoot = nil;
   [self removeFromSuperview];
@@ -325,6 +326,13 @@ static char RNSidebarSplitViewStartupKey;
   // Removing the placeholder split clears AppKit's sidebar association. Reattach
   // the live root before the next draw so its split registers with the window.
   installRoot();
+  // Installing a content view controller in a visible window can focus its first
+  // key view. Preserve the previous focus, including an unfocused window, so the
+  // handoff does not introduce a focus ring or steal focus from an input.
+  if ([firstResponder isKindOfClass:NSView.class] && ((NSView *)firstResponder).window != window) {
+    firstResponder = nil;
+  }
+  [window makeFirstResponder:firstResponder];
 }
 
 - (void)dealloc
