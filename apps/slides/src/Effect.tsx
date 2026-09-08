@@ -10,7 +10,7 @@ import {
   type SkRuntimeEffect,
   type Uniform,
 } from "@shopify/react-native-skia";
-import { renderNativeChildren, useSlideLifecycle } from "@legend-apps/presentation";
+import { renderNativeChildren, usePresentation, useSlideLifecycle } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
@@ -23,6 +23,7 @@ type EffectProps = {
   previewTime?: number;
   shader?: string;
   speed?: number;
+  startOnStep?: number;
   strength?: number;
   style?: StyleProp<ViewStyle>;
   uniforms?: Record<string, Uniform>;
@@ -33,6 +34,7 @@ type EffectCanvasProps = {
   height: number;
   image: SkImage;
   isActive: boolean;
+  animationEnabled: boolean;
   isPreview: boolean;
   previewTime: number;
   speed: number;
@@ -43,6 +45,7 @@ type EffectCanvasProps = {
 };
 
 function EffectCanvas({
+  animationEnabled,
   effect,
   height,
   image,
@@ -55,27 +58,35 @@ function EffectCanvas({
   uniforms,
   width,
 }: EffectCanvasProps) {
-  const [time, setTime] = useState(isPreview ? previewTime : 0);
+  const [clock, setClock] = useState({ epoch: startedAt, time: isPreview ? previewTime : 0 });
   const pixelRatio = PixelRatio.get();
 
   useEffect(() => {
     if (isPreview) {
-      setTime(previewTime);
       return;
     }
     if (!isActive) {
       return;
     }
+    if (!animationEnabled) {
+      return;
+    }
     let frame = 0;
     const epoch = startedAt ?? performance.now();
     const update = (timestamp: number) => {
-      setTime(Math.max(0, timestamp - epoch) / 1000 * speed);
+      setClock({ epoch: startedAt, time: Math.max(0, timestamp - epoch) / 1000 * speed });
       frame = requestAnimationFrame(update);
     };
-    setTime(Math.max(0, performance.now() - epoch) / 1000 * speed);
+    setClock({ epoch: startedAt, time: Math.max(0, performance.now() - epoch) / 1000 * speed });
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [isActive, isPreview, previewTime, speed, startedAt]);
+  }, [animationEnabled, isActive, isPreview, previewTime, speed, startedAt]);
+
+  const time = isPreview
+    ? previewTime
+    : animationEnabled && clock.epoch === startedAt
+      ? clock.time
+      : 0;
 
   const shaderUniforms = {
     ...uniforms,
@@ -109,11 +120,13 @@ export function Effect({
   previewTime = 1.25,
   shader,
   speed = 1,
+  startOnStep,
   strength = 12,
   style,
   uniforms,
 }: EffectProps) {
-  const { isActive, isPreview, isPreparing, startedAt } = useSlideLifecycle();
+  const { isActive, isPreview, isPreparing, startedAt, stepIndex, stepStartedAt } = useSlideLifecycle();
+  const { stepEpochs } = usePresentation();
   const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
   const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
@@ -121,6 +134,8 @@ export function Effect({
   const source = resolveEffectSource(preset, shader);
   const runtimeEffect = useMemo(() => source ? Skia.RuntimeEffect.Make(source) ?? undefined : undefined, [source]);
   const shouldRender = isActive || isPreview;
+  const animationEnabled = startOnStep === undefined || stepIndex >= startOnStep;
+  const animationStartedAt = startOnStep === undefined ? startedAt : stepEpochs?.[startOnStep] ?? stepStartedAt;
   const image = snapshot?.scale === captureScale && snapshot.width === size.width && snapshot.height === size.height
     ? snapshot.image : undefined;
 
@@ -172,6 +187,7 @@ export function Effect({
       </View>
       {image && runtimeEffect ? (
         <EffectCanvas
+          animationEnabled={animationEnabled}
           effect={runtimeEffect}
           height={size.height}
           image={image}
@@ -179,7 +195,7 @@ export function Effect({
           isPreview={isPreview}
           previewTime={isPreparing ? 0 : previewTime}
           speed={speed}
-          startedAt={startedAt}
+          startedAt={animationStartedAt}
           strength={strength}
           uniforms={uniforms}
           width={size.width}

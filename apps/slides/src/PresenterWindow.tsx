@@ -39,7 +39,7 @@ import {
   resetPresenterLayout as resetStoredPresenterLayout,
 } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
-import { nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
 import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
@@ -100,11 +100,11 @@ function Button({ disabled, label, onPress }: { disabled?: boolean; label: strin
   );
 }
 
-function Preview({ index, live = false, weight = 1 }: { index: number; live?: boolean; weight?: number }) {
+function Preview({ index, live = false, stepIndex, weight = 1 }: { index: number; live?: boolean; stepIndex?: number; weight?: number }) {
   return (
     <View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
-        <SlideCanvas><DeckRenderer isPreview={!live} targetIndex={index} /></SlideCanvas>
+        <SlideCanvas><DeckRenderer isPreview={!live} targetIndex={index} targetStep={stepIndex} /></SlideCanvas>
       </View>
     </View>
   );
@@ -201,8 +201,10 @@ function ResizeHandle({ direction, label, onResize, onResizeEnd }: ResizeHandleP
 
 type PresenterWorkspaceProps = {
   currentIndex: number;
+  currentStep: number;
   deckPath: string;
   nextIndex: number;
+  nextStep: number;
   notesEditable: boolean;
   notes?: string;
   onNotesEditingChange(editing: boolean): void;
@@ -214,8 +216,10 @@ type PresenterWorkspaceProps = {
 
 function PresenterWorkspace({
   currentIndex,
+  currentStep,
   deckPath,
   nextIndex,
+  nextStep,
   notesEditable,
   notes,
   onNotesEditingChange,
@@ -254,7 +258,7 @@ function PresenterWorkspace({
   return (
     <View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <Preview index={currentIndex} live weight={showNext ? layout.currentPreviewRatio : 1} />
+        <Preview index={currentIndex} live stepIndex={currentStep} weight={showNext ? layout.currentPreviewRatio : 1} />
         {showNext && (
           <>
             <ResizeHandle
@@ -263,7 +267,7 @@ function PresenterWorkspace({
               onResize={(delta) => resize("previews", delta)}
               onResizeEnd={persistLayout}
             />
-            <Preview index={nextIndex} weight={1 - layout.currentPreviewRatio} />
+            <Preview index={nextIndex} stepIndex={nextStep} weight={1 - layout.currentPreviewRatio} />
           </>
         )}
       </View>
@@ -620,6 +624,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
   const currentNotes = state.slides[state.currentSlide]?.notes;
+  const nextTarget = getNextPresentationTarget(state);
   const notesEditable = !state.audienceOpen || activeMode === "rehearsal";
   const showNext = state.config.presenter?.showNext !== false;
   const showNotes = state.config.presenter?.showNotes !== false;
@@ -687,8 +692,10 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
           <PresenterWorkspace
             currentIndex={state.currentSlide}
+            currentStep={state.currentStep}
             deckPath={state.deckPath ?? ""}
-            nextIndex={Math.min(state.currentSlide + 1, state.slides.length - 1)}
+            nextIndex={nextTarget.slideIndex}
+            nextStep={nextTarget.stepIndex}
             notesEditable={notesEditable}
             notes={currentNotes}
             onNotesEditingChange={setNotesEditing}

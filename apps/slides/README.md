@@ -67,6 +67,52 @@ transition: slide
 
 Transitions are `none`, `fade`, or `slide`. The deck default is `none`, and slide frontmatter may override it.
 
+## Steps
+
+Step 0 is the initial slide. Step 1 is the first advance. `Step` reveals content
+in document order, and `Steps` reveals each direct child or Markdown list item:
+
+```mdx
+<Steps transition="fade-up">
+
+- Native UI
+- Low memory usage
+- Familiar React code
+
+</Steps>
+
+<Step>One more point.</Step>
+```
+
+Use `at={2}` to coordinate multiple elements on one advance, and `until={4}`
+to hide content when step 4 begins. Reveals preserve layout space and hide
+interaction/accessibility while invisible. Back restores the earlier state.
+
+Property changes use explicit targets that persist until the next change:
+
+```tsx
+<Step initial={{ opacity: 1 }} states={{ 2: { opacity: 0.3 }, 4: { opacity: 1 } }}
+  transition={{ duration: 300 }}>
+  <Diagram />
+</Step>
+<Effect startOnStep={2} shader={liquidGlass}><Demo /></Effect>
+```
+
+Numeric styles, transforms and hex colors interpolate. Other values change at
+the step boundary. `transition="none"` disables interpolation.
+
+The host infers the total from these declarations in the MDX element tree.
+For steps hidden inside custom component implementations or hook-only logic,
+declare the total number of states (including initial state) in frontmatter,
+for example `steps: 3` for steps 0, 1 and 2.
+
+`useStep(2)` from `@legend-apps/presentation` returns `reached`, `isCurrent`,
+`elapsed` (seconds), `startedAt` and `direction`. Its clock starts when step 2
+is reached, continues across later steps, and resets when navigating before it.
+Preparing and previewing slides never runs that clock. Presenter previews resolve
+styles immediately at their requested step. `useSlideLifecycle()` exposes the
+current zero-based `stepIndex`, `stepCount`, and `stepStartedAt`.
+
 ## Templates
 
 A deck can select a local template component by file name or path. Extensions are

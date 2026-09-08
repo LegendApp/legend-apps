@@ -149,18 +149,19 @@ import { ShaderTypography } from "./packs/typography"
 
 ---
 transition: none
+steps: 2
 ---
 
 <Scene eyebrow="Recreating native materials" title={<GlassCaption />} footer="Convincing first. Comically over-engineered by the end.">
   <View style={{ height: 580, width: 1680 }}>
-    <Effect shader={liquidGlass} strength={96} speed={1} previewTime={glassTimeline.peak} uniforms={chatGlassUniforms}>
+    <Effect shader={liquidGlass} startOnStep={1} strength={96} speed={1} previewTime={glassTimeline.peak} uniforms={chatGlassUniforms}>
       <ChatIllustration glassBackdrop />
     </Effect>
     <GlassChatControls />
   </View>
 </Scene>
 
-<!-- 8:10–9:25. ONE ANIMATED SLIDE. Begin: “We can fake the glass.” The two rounded surfaces initially behave like a restrained floating material: local background color, mild blur, edge refraction, a thin highlight and crisp controls. It holds for four seconds, changes caption at 12 seconds, and reaches peak absurdity at 28 seconds. As only those surfaces get worse: “Some refraction. Maybe more refraction. Chromatic aberration is a feature, right?” At “Perfect. Ship it.” pause: “I may have misunderstood the human interface guidelines.” It keeps moving until you advance. Returning restarts it; Current and audience stay in sync, and Next shows a stable final frame. This is a deliberate RN/Skia approximation, not a measured competitor implementation or Apple's actual material. Extra rendering work can have a cost; this gag does not measure that cost. No fake FPS numbers. The next slide is the quiet native-code reset. -->
+<!-- 8:10–9:25. ONE SLIDE, TWO STEPS. Step 1: “We can fake the glass.” The two rounded surfaces hold as a restrained floating material: local background color, mild blur, edge refraction, a thin highlight and crisp controls. Press advance once when you are ready for the joke. Step 2 starts the escalation immediately, changes caption after eight seconds, and reaches peak absurdity after 24 seconds. As only those surfaces get worse: “Some refraction. Maybe more refraction. Chromatic aberration is a feature, right?” At “Perfect. Ship it.” pause: “I may have misunderstood the human interface guidelines.” It keeps moving until you advance again. Back returns to the convincing first step; forward restarts the escalation. Current and audience stay in sync, and Next shows a stable final frame. This is a deliberate RN/Skia approximation, not a measured competitor implementation or Apple's actual material. Extra rendering work can have a cost; this gag does not measure that cost. No fake FPS numbers. The next slide is the quiet native-code reset. -->
 
 ---
 transition: none
