@@ -201,6 +201,96 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
     [view.layer addSublayer:overlayLayer];
   }
 }
+
+// Startup must stay entirely in AppKit: constructing a Fabric view here would
+// read React feature flags before RCTReactNativeFactory configures them.
+@interface RNSidebarSplitViewStartupView : NSView
+- (instancetype)initWithFrame:(NSRect)frame configuration:(NSDictionary *)configuration;
+@end
+
+@implementation RNSidebarSplitViewStartupView {
+  NSSplitViewController *_controller;
+  NSView *_sidebar;
+  NSView *_content;
+  NSView *_titlebarMaterial;
+  CGFloat _sidebarWidth;
+  CGFloat _contentMinWidth;
+  BOOL _layingOut;
+}
+
+- (instancetype)initWithFrame:(NSRect)frame configuration:(NSDictionary *)configuration
+{
+  if (self = [super initWithFrame:frame]) {
+    self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.appearance = RNSidebarSplitViewAppearanceForName(configuration[@"appearance"]);
+    _sidebarWidth = [configuration[@"sidebarWidth"] doubleValue];
+    _contentMinWidth = [configuration[@"contentMinWidth"] doubleValue];
+    NSColor *background = RNSidebarSplitViewColorFromHexString(configuration[@"backgroundColor"]);
+    self.wantsLayer = YES;
+    self.layer.backgroundColor = background.CGColor;
+
+    _sidebar = [NSView new];
+    _content = [NSView new];
+    _sidebar.wantsLayer = YES;
+    _content.wantsLayer = YES;
+    _sidebar.layer.backgroundColor =
+      RNSidebarSplitViewColorFromHexString(configuration[@"sidebarBackgroundColor"]).CGColor;
+    _content.layer.backgroundColor = background.CGColor;
+    _sidebar.layer.zPosition = 10;
+    NSViewController *sidebarController = [NSViewController new];
+    NSViewController *contentController = [NSViewController new];
+    sidebarController.view = _sidebar;
+    contentController.view = _content;
+    NSSplitViewItem *sidebarItem = [NSSplitViewItem sidebarWithViewController:sidebarController];
+    NSSplitViewItem *contentItem = [NSSplitViewItem splitViewItemWithViewController:contentController];
+    sidebarItem.minimumThickness = [configuration[@"sidebarMinWidth"] doubleValue];
+    sidebarItem.preferredThicknessFraction = 0.26;
+    sidebarItem.canCollapse = YES;
+    contentItem.minimumThickness = _contentMinWidth;
+    contentItem.canCollapse = NO;
+    sidebarItem.allowsFullHeightLayout = YES;
+    contentItem.allowsFullHeightLayout = YES;
+
+    _controller = [NSSplitViewController new];
+    _controller.minimumThicknessForInlineSidebars = 0;
+    _controller.splitView.vertical = YES;
+    _controller.splitView.dividerStyle = NSSplitViewDividerStyleThin;
+    [_controller addSplitViewItem:sidebarItem];
+    [_controller addSplitViewItem:contentItem];
+    _controller.view.frame = self.bounds;
+    _controller.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self addSubview:_controller.view];
+
+    _titlebarMaterial = RNSidebarSplitViewCreateTitlebarMaterialView(
+      @"glass", NSMakeRect(0, 0, NSWidth(frame), 52), background,
+      [configuration[@"appearance"] isEqualToString:@"dark"] ? 0 : 0.1);
+    [_content addSubview:_titlebarMaterial];
+    [self layout];
+  }
+  return self;
+}
+
+- (void)layout
+{
+  [super layout];
+  if (!_controller || _layingOut) {
+    return;
+  }
+  _layingOut = YES;
+  _controller.view.frame = self.bounds;
+  CGFloat sidebarWidth = MIN(_sidebarWidth,
+    MAX(0, NSWidth(self.bounds) - _contentMinWidth - _controller.splitView.dividerThickness));
+  [_controller.splitView setPosition:sidebarWidth ofDividerAtIndex:0];
+  [_controller.splitView adjustSubviews];
+  [_controller.view layoutSubtreeIfNeeded];
+  NSRect contentFrame = [_controller.view convertRect:_controller.view.bounds toView:_content];
+  CGFloat height = MIN(52, NSHeight(contentFrame));
+  _titlebarMaterial.frame = NSMakeRect(NSMinX(contentFrame),
+    _content.isFlipped ? NSMinY(contentFrame) : NSMaxY(contentFrame) - height,
+    NSWidth(contentFrame), height);
+  _layingOut = NO;
+}
+@end
 #endif
 
 #if TARGET_OS_OSX
@@ -234,6 +324,7 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   CGFloat _lastContentWidth;
   CGFloat _lastHeight;
   BOOL _lastLayoutReady;
+  BOOL _didPublishMount;
   NSString *_appearanceName;
   CGFloat _contentTitlebarHeight;
   NSString *_contentTitlebarMaterialName;
@@ -530,6 +621,13 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   }
 
   BOOL panesReady = layoutReady && _sidebarReactView && _contentReactView;
+  if (panesReady && self.window && !_didPublishMount) {
+    // This also runs when an already-laid-out Fabric tree joins its window.
+    // Keep it before metrics deduplication so the startup cover cannot linger.
+    _didPublishMount = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"LegendSidebarSplitViewDidMount"
+                                                        object:self];
+  }
   if (fabs(sidebarWidth - _lastSidebarWidth) < 0.5 &&
       fabs(contentWidth - _lastContentWidth) < 0.5 &&
       fabs(height - _lastHeight) < 0.5 &&
@@ -919,6 +1017,7 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   _lastHeight = -1;
   _lastLayoutReady = NO;
   _appearanceName = @"system";
+  _didPublishMount = NO;
   _contentTitlebarHeight = 0;
   _contentTitlebarMaterialName = @"none";
   _contentTitlebarOverlayColorValue = nil;
@@ -955,3 +1054,10 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 }
 
 @end
+
+#if TARGET_OS_OSX
+extern "C" NSView *LegendCreateSidebarSplitViewStartupView(NSRect frame, NSDictionary *configuration)
+{
+  return [[RNSidebarSplitViewStartupView alloc] initWithFrame:frame configuration:configuration];
+}
+#endif
