@@ -61,7 +61,9 @@ export function AudienceWindow() {
     : { opacity: progress };
   const outgoingStyle = transition === "slide"
     ? { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }] }
-    : { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) };
+    // The incoming layer blends over this opaque base. Fading both layers
+    // exposes the black window underneath and dims even identical backgrounds.
+    : { opacity: 1 };
   // Render from state: ref changes do not invalidate React's cached output.
   // The layout effect establishes the outgoing layer before paint; cuts never
   // have one, even when the previous transition has not cleaned up yet.
@@ -72,19 +74,24 @@ export function AudienceWindow() {
         { index: outgoingSlide, style: outgoingStyle },
         { index: currentSlide, style: enteringStyle },
       ];
-  const preloadIndex = currentSlide + 1 < slideCount ? currentSlide + 1 : null;
-  const renderedLayers = preloadIndex !== null && !layers.some((layer) => layer.index === preloadIndex)
-    ? [...layers, { index: preloadIndex, style: styles.preload }]
-    : layers;
+  const preparedIndexes = Array.from(
+    { length: Math.min(slideCount - 1, currentSlide + 2) - Math.max(0, currentSlide - 2) + 1 },
+    (_, offset) => Math.max(0, currentSlide - 2) + offset,
+  );
+  const renderedLayers = [
+    ...preparedIndexes.filter((index) => !layers.some((layer) => layer.index === index))
+      .map((index) => ({ index, style: styles.preload })),
+    ...layers,
+  ];
 
   return (
     <View style={styles.root}>
       {renderedLayers.map((layer) => {
-        const isPreload = layer.index === preloadIndex && !layers.some((visibleLayer) => visibleLayer.index === layer.index);
+        const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         return (
-          <Animated.View key={layer.index} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
-            <SlideCanvas captureEnabled={!isPreload && outgoingSlide === null}>
-              <DeckRenderer isPreview={isPreload} targetIndex={layer.index} />
+          <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
+            <SlideCanvas>
+              <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index} />
             </SlideCanvas>
           </Animated.View>
         );
@@ -97,6 +104,8 @@ export function AudienceWindow() {
 const styles = StyleSheet.create({
   blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
   layer: { ...StyleSheet.absoluteFillObject },
-  preload: { height: 1, left: -2, opacity: 0, top: -2, width: 1 },
+  // Full-size, opaque preparation surfaces sit behind the visible slides.
+  // Opacity zero or a 1px layout prevents usable native snapshots.
+  preload: { ...StyleSheet.absoluteFillObject, zIndex: -1 },
   root: { backgroundColor: "#000", flex: 1 },
 });

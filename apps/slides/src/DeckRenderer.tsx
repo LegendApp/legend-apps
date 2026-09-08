@@ -50,14 +50,14 @@ function MissingSlideTemplate({ reference }: { reference: string }): never {
   throw new Error(`Template "${reference}" is not available in the compiled deck.`);
 }
 
-const DeckRenderContext = createContext<{ isPreview: boolean; targetIndex?: number }>({ isPreview: false });
+const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: boolean; targetIndex?: number }>({ isPreview: false });
 
 function normalizeTransition(value: unknown): SlideTransition | undefined {
   return value === "none" || value === "fade" || value === "slide" ? value : undefined;
 }
 
 function Deck({ children, configJson }: CompiledDeckProps) {
-  const { isPreview, targetIndex } = useContext(DeckRenderContext);
+  const { isPreview, isPreparing, targetIndex } = useContext(DeckRenderContext);
   // An outgoing layer can become active again without remounting. Subscribe so
   // React Compiler cannot retain a getSlidesState() snapshot from its exit.
   const currentSlide = useSlidesState((state) => state.currentSlide);
@@ -96,6 +96,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       goTo: setCurrentSlide,
       isActive: !isPreview && selectedIndex === currentSlide,
       isPreview: Boolean(isPreview),
+      isPreparing,
       next: nextSlide,
       previous: previousSlide,
       slideCount: elements.length,
@@ -182,7 +183,7 @@ const markdownComponents = {
   a: MarkdownLink,
 };
 
-export function DeckRenderer({ isPreview = false, targetIndex }: { isPreview?: boolean; targetIndex?: number }) {
+export function DeckRenderer({ isPreview = false, isPreparing = false, targetIndex }: { isPreview?: boolean; isPreparing?: boolean; targetIndex?: number }) {
   const Component = useSlidesState((state) => state.component);
   const revision = useSlidesState((state) => state.revision);
   const retryRevision = useSlidesState((state) => state.retryRevision);
@@ -190,7 +191,7 @@ export function DeckRenderer({ isPreview = false, targetIndex }: { isPreview?: b
     return null;
   }
   return (
-    <DeckRenderContext.Provider value={{ isPreview, targetIndex }}>
+    <DeckRenderContext.Provider value={{ isPreview, isPreparing, targetIndex }}>
       <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}:${targetIndex ?? "current"}`}>
         <Component components={markdownComponents} />
       </SlideErrorBoundary>
