@@ -100,11 +100,28 @@ function Button({ disabled, label, onPress }: { disabled?: boolean; label: strin
   );
 }
 
+function SlideCounter({ index }: { index: number }) {
+  const total = useSlidesState((state) => state.slides.length);
+  if (total === 0) return null;
+  return (
+    <View pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
+      <Text
+        accessibilityLabel={`Slide ${index + 1} of ${total}`}
+        className="text-xs font-semibold text-zinc-200"
+        style={{ fontVariant: ["tabular-nums"] }}
+      >
+        {index + 1} / {total}
+      </Text>
+    </View>
+  );
+}
+
 function Preview({ index, live = false, stepIndex, weight = 1 }: { index: number; live?: boolean; stepIndex?: number; weight?: number }) {
   return (
     <View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
         <SlideCanvas><DeckRenderer isPreview={!live} targetIndex={index} targetStep={stepIndex} /></SlideCanvas>
+        {live && <SlideCounter index={index} />}
       </View>
     </View>
   );
