@@ -667,7 +667,7 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 - (NSURL *)bundleURL
 {
 #if DEBUG
-  NSString *bundleRoot = LegendUsesExpoModules() ? @".expo/.virtual-metro-entry" : @"index.native";
+  NSString *bundleRoot = LegendUsesExpoModules() ? @".expo/.virtual-metro-entry" : @"shell/index.native";
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:bundleRoot];
 #else
   return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
