@@ -3,12 +3,23 @@
     <channel>
         <title>Legend Chat History</title>
         <item>
+            <title>0.0.2</title>
+            <pubDate>Tue, 08 Sep 2026 16:31:54 +0300</pubDate>
+            <sparkle:version>1000.0.2</sparkle:version>
+            <sparkle:shortVersionString>0.0.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.2/Legend-Chat-History-0.0.2-x86.zip" length="10302755" type="application/octet-stream" sparkle:edSignature="B4uCgqraLTsjbEumxyZsMr6Li6gm2LCED7RPr7H6lj7wXrjVtfEdOnyvsEpg/78uj/kefP+kB9r8z9sZ7UmRDw=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.2/Legend-Chat-History-x86-Legend%20Chat%20History1000.0.2-1.delta" sparkle:deltaFrom="1" length="1230918" type="application/octet-stream" sparkle:edSignature="rRtxN6YRVU2ExRwWInI0RC+Yf7DjRWAJfdMhRNe7bAcxu2+y8R5dLuifACx8eRkV4Ssvbwte8PC/sPAQR1siCQ=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.0.1</title>
             <pubDate>Thu, 03 Sep 2026 11:54:09 +0300</pubDate>
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.1/Legend-Chat-History-0.0.1-x86.zip" length="9380050" type="application/octet-stream" sparkle:edSignature="FCVoPJzs0Sf1wcV3AVD5dM8vfEwxpOshlYMnkYLIxVPofBTqgJEiNoS6A8bLDfCqDAIvRRG2cAkOKmZXjnO1Ag=="/>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/chat-history-v0.0.2/Legend-Chat-History-0.0.1-x86.zip" length="9380050" type="application/octet-stream" sparkle:edSignature="FCVoPJzs0Sf1wcV3AVD5dM8vfEwxpOshlYMnkYLIxVPofBTqgJEiNoS6A8bLDfCqDAIvRRG2cAkOKmZXjnO1Ag=="/>
         </item>
     </channel>
 </rss>

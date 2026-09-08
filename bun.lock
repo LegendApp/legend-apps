@@ -26,7 +26,7 @@
     },
     "apps/chat-history": {
       "name": "@legend-apps/app-chat-history",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@legend-apps/appkit-split-view": "0.0.0",
         "@legend-apps/auto-updater": "0.0.0",
@@ -70,7 +70,7 @@
     },
     "apps/diff": {
       "name": "@legend-apps/app-diff",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": {
         "@legend-apps/app-exit": "0.0.0",
         "@legend-apps/appkit-split-view": "0.0.0",
