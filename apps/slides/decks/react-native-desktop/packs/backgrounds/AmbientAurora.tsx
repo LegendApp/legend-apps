@@ -1,10 +1,8 @@
 import { Canvas, Fill, Shader, Skia, vec } from "@shopify/react-native-skia";
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { useSlideLifecycle, useBackgroundSize } from "@legend-apps/presentation";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-const width = 1680;
-const height = 920;
 
 const ambientAurora = Skia.RuntimeEffect.Make(`
   uniform float2 resolution;
@@ -32,7 +30,9 @@ const ambientAurora = Skia.RuntimeEffect.Make(`
 `);
 
 export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
-  const { isActive, isPreview, slideIndex, startedAt } = useSlideLifecycle();
+  const { isActive, isPreview } = useSlideLifecycle();
+  const { width, height } = useBackgroundSize();
+  const [epoch] = useState(() => performance.now());
   const [time, setTime] = useState(isPreview ? 8 : 0);
 
   useEffect(() => {
@@ -42,7 +42,6 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
     }
     if (!isActive) return;
     let frame = 0;
-    const epoch = startedAt ?? performance.now();
     const update = (now: number) => {
       setTime(Math.max(0, now - epoch) / 1000);
       frame = requestAnimationFrame(update);
@@ -50,9 +49,9 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
     setTime(Math.max(0, performance.now() - epoch) / 1000);
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [isActive, isPreview, startedAt]);
+  }, [isActive, isPreview, epoch]);
 
-  if (!ambientAurora) return null;
+  if (!ambientAurora || width <= 0 || height <= 0) return null;
 
   return (
     <View pointerEvents="none" style={styles.fill}>
@@ -62,7 +61,7 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
             source={ambientAurora}
             uniforms={{
               intensity,
-              phase: slideIndex * 0.47,
+              phase: 0,
               resolution: vec(width, height),
               time,
             }}
@@ -74,5 +73,5 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
 }
 
 const styles = StyleSheet.create({
-  fill: { height, width },
+  fill: { ...StyleSheet.absoluteFillObject },
 });

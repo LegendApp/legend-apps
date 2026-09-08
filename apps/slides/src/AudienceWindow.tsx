@@ -1,9 +1,17 @@
+import { BackgroundHost, useHasBackground } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, useSlidesState } from "./slidesStore";
 
 export function AudienceWindow() {
+  const currentSlide = useSlidesState((state) => state.currentSlide);
+  const color = useSlidesState((state) => state.config.theme?.backgroundColor ?? "#111827");
+  return <BackgroundHost slideIndex={currentSlide} color={color}><AudienceContent /></BackgroundHost>;
+}
+
+function AudienceContent() {
+  const hasBackground = useHasBackground();
   const currentSlide = useSlidesState((state) => state.currentSlide);
   const blackout = useSlidesState((state) => state.blackout);
   const slideCount = useSlidesState((state) => state.slides.length);
@@ -65,9 +73,9 @@ export function AudienceWindow() {
     : { opacity: progress };
   const outgoingStyle = transition === "slide"
     ? { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }] }
-    // The incoming layer blends over this opaque base. Fading both layers
-    // exposes the black window underneath and dims even identical backgrounds.
-    : { opacity: 1 };
+    // With a shared background, fade both content layers. Legacy opaque slides
+    // keep the outgoing surface solid to avoid dimming their backgrounds.
+    : { opacity: hasBackground ? progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) : 1 };
   // Render from state: ref changes do not invalidate React's cached output.
   // The layout effect establishes the outgoing layer before paint; cuts never
   // have one, even when the previous transition has not cleaned up yet.
@@ -89,7 +97,7 @@ export function AudienceWindow() {
   ];
 
   return (
-    <View style={styles.root}>
+    <>
       {renderedLayers.map((layer) => {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         return (
@@ -101,15 +109,14 @@ export function AudienceWindow() {
         );
       })}
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
-  layer: { ...StyleSheet.absoluteFillObject },
+  blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 2 },
+  layer: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
   // Full-size, opaque preparation surfaces sit behind the visible slides.
   // Opacity zero or a 1px layout prevents usable native snapshots.
   preload: { ...StyleSheet.absoluteFillObject, zIndex: -1 },
-  root: { backgroundColor: "#000", flex: 1 },
 });

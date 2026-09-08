@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { benchmark, chartLabels, sortedBenchmarks, type BenchmarkMetric } from "./benchmark";
-import { AmbientAurora } from "./packs/backgrounds";
+import { Background } from "@legend-apps/presentation";
 
 const accent = "#67e8f9";
 
-export function Scene({ background = <AmbientAurora />, children, eyebrow, title, footer }: {
+export function Scene({ background, children, eyebrow, title, footer }: {
   background?: ReactNode;
   children: ReactNode;
   eyebrow: string;
@@ -14,7 +14,7 @@ export function Scene({ background = <AmbientAurora />, children, eyebrow, title
 }) {
   return (
     <View style={styles.scene}>
-      {background ? <View pointerEvents="none" style={styles.sceneBackground}>{background}</View> : null}
+      {background !== undefined ? <Background priority={1}>{background}</Background> : null}
       <Text className="text-2xl font-semibold uppercase tracking-widest" style={styles.accent}>{eyebrow}</Text>
       {title ? <Text style={styles.title}>{title}</Text> : null}
       <View className="flex-1 justify-center">{children}</View>
@@ -153,7 +153,6 @@ export function DataPath() {
 
 const styles = StyleSheet.create({
   scene: { width: 1680, height: 920 },
-  sceneBackground: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
   accent: { color: accent },
   title: { color: "#f8fafc", fontSize: 72, lineHeight: 84, fontWeight: "700", marginTop: 20, marginBottom: 28 },
   statement: { color: "#f8fafc", fontSize: 96, lineHeight: 112, fontWeight: "700", maxWidth: 1500 },
