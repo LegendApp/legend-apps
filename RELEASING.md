@@ -19,9 +19,9 @@ bun release chat-history
 Both commands assume macOS. Omit the app name to select an app, or add `--help`
 for usage. The existing non-interactive commands below remain available.
 
-Before packaging a new version, update `apps/<app>/package.json` and increment
-the macOS `release.macos.build` in `apps/<app>/app.manifest.ts`. The wizard shows
-both values for confirmation. It then asks which Macs to support (Apple Silicon
+Before packaging a new version, update `apps/<app>/package.json`. The macOS build
+number is derived automatically from that version. The wizard shows both values
+for confirmation. It then asks which Macs to support (Apple Silicon
 and Intel by default), whether to prepare a signed distribution or unsigned
 local package, and whether to build from source or reuse existing release builds.
 Reused builds must already contain the selected version and build number.

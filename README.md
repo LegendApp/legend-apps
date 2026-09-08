@@ -211,8 +211,9 @@ choose from the apps configured for release.
 
 macOS distribution packaging requires
 the signing, notarization, Sparkle, and GitHub credentials expected by the
-release scripts. App versions come from `apps/<app>/package.json`; build and
-Sparkle metadata come from the app manifest. See [RELEASING.md](RELEASING.md)
+release scripts. App versions come from `apps/<app>/package.json`, and build
+numbers are derived from those versions. Sparkle metadata comes from the app
+manifest. See [RELEASING.md](RELEASING.md)
 for the complete release workflow.
 
 [pre-release-badge]: https://img.shields.io/badge/-PRE--RELEASE-B45309?style=flat-square

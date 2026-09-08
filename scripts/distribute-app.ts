@@ -55,12 +55,12 @@ For automation and advanced flags, use the existing non-interactive commands:
     if (!manifest.release?.macos) throw new Error(`${manifest.id} must define macOS release metadata first.`);
     const appId = manifest.id;
     const appPackage = loadAppPackageMetadata(appId);
-    console.log(`\n${manifest.displayName} — macOS — version ${appPackage.version}, build ${getMacOSReleaseBuild(manifest, appPackage)}`);
+    console.log(`\n${manifest.displayName} — macOS — version ${appPackage.version}, build ${getMacOSReleaseBuild(appPackage)}`);
 
     if (action === "package") {
-      console.log(`Version: apps/${appId}/package.json; build number: apps/${appId}/app.manifest.ts`);
+      console.log(`Version: apps/${appId}/package.json; build number is derived automatically from this version.`);
       if (!await prompts.confirm("Is this the version/build you want to package?", true)) {
-        console.log(`Update those files, then rerun bun package ${appId}.`);
+        console.log(`Update apps/${appId}/package.json, then rerun bun package ${appId}.`);
         return;
       }
     }
@@ -94,7 +94,7 @@ For automation and advanced flags, use the existing non-interactive commands:
       if (profile === "distribution") {
         const architectures = arch === "all" ? ["arm", "x86"] as const : [arch];
         console.log("\nReview, commit, and push the release changes to main:");
-        console.log(`  apps/${appId}/package.json (version), apps/${appId}/app.manifest.ts (build number)`);
+        console.log(`  apps/${appId}/package.json (version and derived build number)`);
         console.log(`  apps/${appId}/CHANGELOG.md`);
         for (const cpu of architectures) {
           console.log(`  ${path.relative(rootDir, getMacOSSparkleAppcastPath(manifest, cpu))}`);
