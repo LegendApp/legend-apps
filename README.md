@@ -203,11 +203,11 @@ bun package chat-history
 bun release chat-history
 ```
 
-These interactive commands assume macOS. Packaging walks through the configured
-version/build, architectures, distribution or local output, and building from
-source or reusing an existing build. Releasing offers verification or publication
-and asks for confirmation after the release checks pass. Omit the app name to
-choose from the apps configured for release.
+These interactive commands assume macOS and include both Apple Silicon and Intel.
+Packaging shows the configured version/build for confirmation, then always builds
+from source for signed, notarized distribution. Releasing offers verification or
+publication and asks for confirmation after the release checks pass. Omit the app
+name to choose from the release apps; Kitchen Sink is excluded from the picker.
 
 macOS distribution packaging requires
 the signing, notarization, Sparkle, and GitHub credentials expected by the

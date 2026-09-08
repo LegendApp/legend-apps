@@ -24,8 +24,8 @@ async function main() {
     console.log(`Usage: bun ${action} [app]
 
 Interactive macOS ${action === "package" ? "packaging" : "GitHub release"} wizard. Omit the app to choose it.
-Package: confirm the configured version, choose CPUs, build/reuse, and signed/local output.
-Release: choose CPUs, publish/verify, and optional release notes. Publishing asks for
+Package: build Apple Silicon and Intel from source, sign, notarize, and generate update feeds.
+Release: publish/verify both architectures, with optional release notes. Publishing asks for
 confirmation after all release checks pass.
 
 For automation and advanced flags, use the existing non-interactive commands:
@@ -43,7 +43,7 @@ For automation and advanced flags, use the existing non-interactive commands:
   try {
     if (!manifest) {
       const manifests = await Promise.all(appIds.map((id) => loadAppManifest(id)));
-      const choices = manifests.filter((app) => app.platforms.includes("macos") && app.release?.macos);
+      const choices = manifests.filter((app) => app.id !== "test-kitchen-sink" && app.platforms.includes("macos") && app.release?.macos);
       if (!choices.length) throw new Error("No apps have macOS release metadata.");
       const appId = await prompts.select("Choose an app", choices.map((app) => ({
         value: app.id,
@@ -59,57 +59,29 @@ For automation and advanced flags, use the existing non-interactive commands:
 
     if (action === "package") {
       console.log(`Version: apps/${appId}/package.json; build number is derived automatically from this version.`);
-      if (!await prompts.confirm("Is this the version/build you want to package?", true)) {
-        console.log(`Update apps/${appId}/package.json, then rerun bun package ${appId}.`);
-        return;
-      }
-    }
-    const arch = await prompts.select("Which Macs?", [
-      { value: "all", label: "Apple Silicon and Intel (two archives)" },
-      { value: "arm", label: "Apple Silicon only" },
-      { value: "x86", label: "Intel only" },
-    ] as const);
-
-    if (action === "package") {
-      const profile = await prompts.select("Package for", [
-        { value: "distribution", label: "Distribution — sign, notarize, and generate Sparkle update feeds" },
-        { value: "local", label: "Local testing — skip signing, notarization, and update feeds" },
-      ] as const);
-      const build = await prompts.select("Build", [
-        { value: "fresh", label: "Build from current source" },
-        { value: "reuse", label: "Reuse existing release builds (must match the version/build above)" },
-      ] as const);
-      const args: string[] = [appId, arch];
-      if (build === "reuse") args.push("--skip-build");
-      if (profile === "local") args.push("--skip-sign", "--skip-notarize", "--skip-appcast");
-      console.log(`\nPackage ${appId} ${appPackage.version}: ${arch}, ${profile}, ${build === "fresh" ? "new build" : "existing builds"}.`);
+      console.log("Build Apple Silicon and Intel from source, sign, notarize, and generate Sparkle update feeds.");
       console.log(`Output: ${path.relative(rootDir, getMacOSReleaseDistDir(manifest))}`);
       if (!await prompts.confirm("Start packaging?", true)) {
-        console.log("Cancelled.");
+        console.log(`Cancelled. To change the version, update apps/${appId}/package.json, then rerun bun package ${appId}.`);
         return;
       }
       prompts.close();
-      if (profile === "distribution") runScript("prep-app-changelog.ts", [appId]);
-      runScript("package-macos-app.ts", args);
-      if (profile === "distribution") {
-        const architectures = arch === "all" ? ["arm", "x86"] as const : [arch];
-        console.log("\nReview, commit, and push the release changes to main:");
-        console.log(`  apps/${appId}/package.json (version and derived build number)`);
-        console.log(`  apps/${appId}/CHANGELOG.md`);
-        for (const cpu of architectures) {
-          console.log(`  ${path.relative(rootDir, getMacOSSparkleAppcastPath(manifest, cpu))}`);
-        }
-        console.log(`Then run: bun release ${appId} and choose the same Macs (${arch}).`);
-      } else {
-        console.log("\nLocal package complete. Choose Distribution when preparing a GitHub release.");
+      runScript("prep-app-changelog.ts", [appId]);
+      runScript("package-macos-app.ts", [appId, "all"]);
+      console.log("\nReview, commit, and push the release changes to main:");
+      console.log(`  apps/${appId}/package.json (version and derived build number)`);
+      console.log(`  apps/${appId}/CHANGELOG.md`);
+      for (const cpu of ["arm", "x86"] as const) {
+        console.log(`  ${path.relative(rootDir, getMacOSSparkleAppcastPath(manifest, cpu))}`);
       }
+      console.log(`Then run: bun release ${appId}.`);
     } else {
       const mode = await prompts.select("Release action", [
         { value: "publish", label: "Publish a GitHub release (confirm after verification)" },
         { value: "verify", label: "Verify release readiness without publishing" },
       ] as const);
       const notesFile = await prompts.ask("Release notes file (Enter to use the app changelog)");
-      const args = [appId, arch, mode === "verify" ? "--verify-only" : "--confirm"];
+      const args = [appId, "all", mode === "verify" ? "--verify-only" : "--confirm"];
       if (notesFile) args.push("--notes-file", notesFile);
       prompts.close();
       console.log("\nChecking packaged archives, changelog, and published main. Prepare packages with bun package " + appId + ".");

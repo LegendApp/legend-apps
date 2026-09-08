@@ -17,23 +17,21 @@ bun release chat-history
 ```
 
 Both commands assume macOS. Omit the app name to select an app, or add `--help`
-for usage. The existing non-interactive commands below remain available.
+for usage. Kitchen Sink is excluded from the app picker. The existing
+non-interactive commands below remain available.
 
 Before packaging a new version, update `apps/<app>/package.json`. The macOS build
 number is derived automatically from that version. The wizard shows both values
-for confirmation. It then asks which Macs to support (Apple Silicon
-and Intel by default), whether to prepare a signed distribution or unsigned
-local package, and whether to build from source or reuse existing release builds.
-Reused builds must already contain the selected version and build number.
+and asks once before starting. It always builds Apple Silicon and Intel from
+current source for distribution.
 
 Distribution packaging prepares the app changelog using the existing changelog
 generator, then builds, signs, notarizes, and generates update feeds. Missing
-changelog entries may require Codex CLI or Claude CLI. Local packaging skips
-changelog generation, Developer ID signing, notarization, and update feeds.
+changelog entries may require Codex CLI or Claude CLI.
 
 After distribution packaging, review the changelog and generated feeds, then
 commit and push the release changes to `main`. The wizard lists the relevant
-files. Run `bun release <app>` and choose the same architectures. Select either
+files. Run `bun release <app>` to release both architectures. Select either
 verification only or publication, and optionally provide a release notes file.
 Publication runs the existing release checks, displays the destination, tag,
 assets, and notes, then asks for confirmation (default: no).
