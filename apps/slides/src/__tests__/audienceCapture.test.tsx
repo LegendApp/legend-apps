@@ -84,3 +84,39 @@ test("audience retains two slides on each side at full capture scale", async () 
     log.mockRestore();
   }
 });
+
+
+test("starting another transition never resets the opacity already attached to the visible slide", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let renderer;
+  const incomingOpacity = () => renderer.root.findAllByType("layer")
+    .find((layer) => layer.findByType("deck").props.targetIndex === getSlidesState().currentSlide)
+    .props.style[1].opacity;
+  try {
+    setSlidesState({ currentSlide: 0, config: { transition: "fade" },
+      slides: Array.from({ length: 4 }, () => ({ metadata: {}, notes: "" })) });
+    await act(() => { renderer = create(<AudienceWindow />); });
+    const firstOpacity = incomingOpacity();
+    await act(() => setCurrentSlide(1));
+    expect(firstOpacity.__getValue()).toBe(1);
+    const secondOpacity = incomingOpacity();
+    expect(secondOpacity).not.toBe(firstOpacity);
+    secondOpacity.setValue(0.6);
+    await act(() => setCurrentSlide(2));
+    expect(secondOpacity.__getValue()).toBe(0.6);
+    expect(incomingOpacity()).not.toBe(secondOpacity);
+    // Completion callbacks from interrupted transitions cannot settle the new one.
+    const callbacks = transitions.splice(0);
+    await act(() => callbacks[0]({ finished: true }));
+    expect(incomingOpacity().__getValue()).toBe(0);
+    await act(() => callbacks[callbacks.length - 1]({ finished: true }));
+    expect(incomingOpacity().__getValue()).toBe(1);
+  } finally {
+    if (renderer) await act(() => renderer.unmount());
+    transitions.splice(0);
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
