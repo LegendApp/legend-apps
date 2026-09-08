@@ -91,7 +91,7 @@ function verifyMacOSIdentity(manifest: AppManifest, generated: ReturnType<typeof
   const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
   const appPackage = loadAppPackageMetadata(manifest.id);
   const appVersion = getMacOSReleaseVersion(appPackage);
-  const appBuild = getMacOSReleaseBuild(manifest, appPackage);
+  const appBuild = getMacOSReleaseBuild(appPackage);
   const infoPlistPath = generated.macosInfoPlistPath;
 
   if (!infoPlistPath) {

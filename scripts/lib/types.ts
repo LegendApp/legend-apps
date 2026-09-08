@@ -12,7 +12,6 @@ export type MacOSDocumentType = {
 };
 
 export type MacOSReleaseMetadata = {
-  build: string;
   sparkle: {
     publicEdKey: string;
     feedPath?: string;

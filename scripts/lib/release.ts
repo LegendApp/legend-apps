@@ -19,13 +19,10 @@ export function getMacOSReleaseVersion(appPackage: AppPackageMetadata) {
   throw new Error(`App version "${appPackage.version}" must start with one to three dot-separated numeric segments.`);
 }
 
-export function getMacOSReleaseBuild(manifest: AppManifest, appPackage: AppPackageMetadata) {
-  const build = manifest.release?.macos?.build ?? getMacOSReleaseVersion(appPackage);
-  if (/^\d+(?:\.\d+){0,2}$/.test(build)) {
-    return build;
-  }
-
-  throw new Error(`${manifest.id}/macos release build "${build}" must be one to three dot-separated numeric segments.`);
+export function getMacOSReleaseBuild(appPackage: AppPackageMetadata) {
+  const [major, minor = 0, patch = 0] = getMacOSReleaseVersion(appPackage).split(".").map(Number);
+  // Keep package-derived builds above the legacy manually assigned builds (1 and 2).
+  return `${1000 + major}.${minor}.${patch}`;
 }
 
 export function getMacOSSparkleFeedPath(manifest: AppManifest, arch: MacOSReleaseArch) {

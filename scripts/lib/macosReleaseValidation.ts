@@ -75,7 +75,7 @@ export function validateMacOSReleaseApp({
 
   assertValue("CFBundleIdentifier", readPlistValue(infoPlistPath, "CFBundleIdentifier"), manifest.bundleIds.macos);
   assertValue("CFBundleShortVersionString", readPlistValue(infoPlistPath, "CFBundleShortVersionString"), getMacOSReleaseVersion(appPackage));
-  assertValue("CFBundleVersion", readPlistValue(infoPlistPath, "CFBundleVersion"), getMacOSReleaseBuild(manifest, appPackage));
+  assertValue("CFBundleVersion", readPlistValue(infoPlistPath, "CFBundleVersion"), getMacOSReleaseBuild(appPackage));
   assertValue("SUFeedURL", readPlistValue(infoPlistPath, "SUFeedURL"), getMacOSSparkleFeedUrl(manifest, arch));
 }
 

@@ -93,7 +93,6 @@ const manifest = {
   },
   release: {
     macos: {
-      build: "1",
       sparkle: {
         publicEdKey: "znYpZf1eiRuYn6a/gq4mBX6uWQWEc49rTZTlAAraJRU=",
       },

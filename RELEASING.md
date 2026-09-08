@@ -36,6 +36,16 @@ export LEGEND_APP_PASSWORD="app-specific-password"
 export LEGEND_TEAM_ID="TEAMID1234"
 ```
 
+## Versioning
+
+Set the release version only in `apps/<app>/package.json`.
+`CFBundleShortVersionString` uses that version; `CFBundleVersion` is derived as
+`(1000 + major).minor.patch`, so `0.0.2` produces build `1000.0.2`.
+The offset keeps new builds above the legacy manual build numbers `1` and `2`
+for existing Sparkle installations. Missing minor/patch segments default to zero;
+prerelease/build suffixes are stripped, so they do not identify distinct updates.
+Rebuild and repackage after changing the version; existing ZIPs are not modified.
+
 ## Package
 
 ```sh

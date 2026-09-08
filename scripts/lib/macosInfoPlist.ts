@@ -149,7 +149,7 @@ export function writeMacOSInfoPlist(
       getMacOSReleaseVersion(appPackage),
     ),
     "CFBundleVersion",
-    getMacOSReleaseBuild(manifest, appPackage),
+    getMacOSReleaseBuild(appPackage),
   );
   const appMetadata = [
     "\t<key>LegendAppId</key>",
