@@ -30,6 +30,17 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #if TARGET_OS_OSX
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
 static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
+extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) __attribute__((weak_import));
+extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *, NSView *, void (^)(void)) __attribute__((weak_import));
+extern "C" void LegendFinishSidebarSplitViewStartup(NSWindow *) __attribute__((weak_import));
+static NSString * const LegendMainWindowStartupSplitViewKey = @"LegendMainWindowStartupSplitView";
+
+extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void)
+{
+  NSDictionary *configuration = [NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey];
+  return [configuration[@"restoreOnLaunch"] isEqual:@NO] ? nil : configuration;
+}
+
 static NSString * const LegendRestorableWindowOptionsDefaultsKey = @"LegendRestorableWindowOptions";
 static NSMutableDictionary<NSString *, NSWindow *> *LegendPrecreatedWindows;
 static BOOL LegendApplicationIsTerminating = NO;
@@ -579,6 +590,9 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   }
 
   NSDictionary *windowStyle = [options[@"windowStyle"] isKindOfClass:NSDictionary.class] ? options[@"windowStyle"] : @{};
+  if (windowStyle[@"startupSplitView"] == NSNull.null && LegendFinishSidebarSplitViewStartup) {
+    LegendFinishSidebarSplitViewStartup(window);
+  }
   NSNumber *maskNumber = [windowStyle[@"mask"] isKindOfClass:NSNumber.class] ? windowStyle[@"mask"] : nil;
   NSNumber *transparentTitlebar = [windowStyle[@"titlebarAppearsTransparent"] isKindOfClass:NSNumber.class]
     ? windowStyle[@"titlebarAppearsTransparent"]
@@ -725,6 +739,9 @@ extern "C" void LegendPrecreateRestorableWindows(void)
       }
     }
 
+    if (LegendPrepareSidebarSplitViewStartup) {
+      LegendPrepareSidebarSplitViewStartup(window, windowStyle[@"startupSplitView"]);
+    }
     LegendPrecreatedWindows[identifier] = window;
     if (![options[@"deferOrderFront"] boolValue]) {
       [window makeKeyAndOrderFront:nil];
@@ -2090,8 +2107,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
     if (!precreatedWindow && [options[@"restoreOnLaunch"] boolValue]) {
       [window setFrameAutosaveName:LegendManagedWindowFrameAutosaveName(identifier)];
     }
+    if (!precreatedWindow && LegendPrepareSidebarSplitViewStartup) {
+      LegendPrepareSidebarSplitViewStartup(window, windowStyle[@"startupSplitView"]);
+    }
     BOOL presentedBeforeReactRoot = precreatedWindow != nil || !deferOrderFront;
-    if (presentedBeforeReactRoot && !precreatedWindow) {
+    if (!deferOrderFront && !window.visible) {
       [window.contentView displayIfNeeded];
       [window displayIfNeeded];
       [window makeKeyAndOrderFront:nil];
@@ -2111,12 +2131,25 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     rootView.backgroundColor = startupBackgroundColor;
-    window.contentView = rootView;
-    LegendApplyWindowBackgroundColor(window, backgroundColor);
-    if (usesTitlebarBackground) {
-      LegendEnsureRootViewContainer(window, rootView);
-      LegendApplyWindowBackgroundColor(window, backgroundColor);
+    __weak NSWindow *weakWindow = window;
+    void (^installRoot)(void) = ^{
+      NSWindow *targetWindow = weakWindow;
+      if (!targetWindow) {
+        return;
+      }
+      [rootView removeFromSuperview];
+      targetWindow.contentView = rootView;
+      if (usesTitlebarBackground) {
+        LegendEnsureRootViewContainer(targetWindow, rootView);
+      }
+      LegendApplyWindowBackgroundColor(targetWindow, backgroundColor);
+      LegendSizeRootViewToWindow(rootView, targetWindow);
+    };
+    if (!LegendAttachSidebarSplitViewStartupRoot ||
+        !LegendAttachSidebarSplitViewStartupRoot(window, rootView, installRoot)) {
+      installRoot();
     }
+    objc_setAssociatedObject(window, &LegendManagedRootViewKey, rootView, OBJC_ASSOCIATION_ASSIGN);
     LegendSizeRootViewToWindow(rootView, window);
     if (transparentBackground) {
       rootView.backgroundColor = NSColor.clearColor;
@@ -2304,6 +2337,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       return;
     }
     [mainWindow orderOut:nil];
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
     [self sendWindowEventWithName:@"onWindowClosed"
                              body:@{@"identifier": @"main", @"moduleName": @"main"}];
     resolve([self successJson]);
@@ -2344,6 +2378,15 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
 
     NSDictionary *options = [self parseObjectJSON:optionsJson];
+    id startupSplitView = options[@"windowStyle"][@"startupSplitView"];
+    if ([startupSplitView isKindOfClass:NSDictionary.class]) {
+      // Persist window chrome only, just like AppKit's saved frame. No document data.
+      if (![startupSplitView isEqual:[NSUserDefaults.standardUserDefaults dictionaryForKey:LegendMainWindowStartupSplitViewKey]]) {
+        [NSUserDefaults.standardUserDefaults setObject:startupSplitView forKey:LegendMainWindowStartupSplitViewKey];
+      }
+    } else if (startupSplitView == NSNull.null) {
+      [NSUserDefaults.standardUserDefaults removeObjectForKey:LegendMainWindowStartupSplitViewKey];
+    }
     LegendApplyWindowOptions(mainWindow, options);
     [self applyTitlebarControlsFromOptions:options toWindow:mainWindow identifier:@"main"];
     [self applyToolbarItemsFromOptions:options toWindow:mainWindow identifier:@"main"];

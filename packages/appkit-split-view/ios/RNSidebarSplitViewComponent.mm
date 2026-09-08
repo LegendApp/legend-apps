@@ -8,6 +8,7 @@
 #if TARGET_OS_OSX
 #import <CoreImage/CoreImage.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
 #endif
 
 using namespace facebook::react;
@@ -202,10 +203,14 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   }
 }
 
+static char RNSidebarSplitViewStartupKey;
+
 // Startup must stay entirely in AppKit: constructing a Fabric view here would
 // read React feature flags before RCTReactNativeFactory configures them.
 @interface RNSidebarSplitViewStartupView : NSView
 - (instancetype)initWithFrame:(NSRect)frame configuration:(NSDictionary *)configuration;
+@property (nonatomic, copy) void (^installReactRoot)(void);
+- (void)finish;
 @end
 
 @implementation RNSidebarSplitViewStartupView {
@@ -216,6 +221,7 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   CGFloat _sidebarWidth;
   CGFloat _contentMinWidth;
   BOOL _layingOut;
+  CGFloat _titlebarHeight;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame configuration:(NSDictionary *)configuration
@@ -246,6 +252,7 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
     sidebarItem.minimumThickness = [configuration[@"sidebarMinWidth"] doubleValue];
     sidebarItem.preferredThicknessFraction = 0.26;
     sidebarItem.canCollapse = YES;
+    sidebarItem.collapsed = [configuration[@"sidebarCollapsed"] boolValue];
     contentItem.minimumThickness = _contentMinWidth;
     contentItem.canCollapse = NO;
     sidebarItem.allowsFullHeightLayout = YES;
@@ -261,10 +268,15 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
     _controller.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [self addSubview:_controller.view];
 
-    _titlebarMaterial = RNSidebarSplitViewCreateTitlebarMaterialView(
-      @"glass", NSMakeRect(0, 0, NSWidth(frame), 52), background,
-      [configuration[@"appearance"] isEqualToString:@"dark"] ? 0 : 0.1);
-    [_content addSubview:_titlebarMaterial];
+    _titlebarHeight = [configuration[@"contentTitlebarHeight"] doubleValue];
+    if (_titlebarHeight > 0) {
+      _titlebarMaterial = RNSidebarSplitViewCreateTitlebarMaterialView(
+        @"glass", NSMakeRect(0, 0, NSWidth(frame), _titlebarHeight), background,
+        [configuration[@"appearance"] isEqualToString:@"dark"] ? 0 : 0.1);
+      [_content addSubview:_titlebarMaterial];
+    }
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(splitViewDidMount:)
+      name:@"LegendSidebarSplitViewDidMount" object:nil];
     [self layout];
   }
   return self;
@@ -284,12 +296,42 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
   [_controller.splitView adjustSubviews];
   [_controller.view layoutSubtreeIfNeeded];
   NSRect contentFrame = [_controller.view convertRect:_controller.view.bounds toView:_content];
-  CGFloat height = MIN(52, NSHeight(contentFrame));
+  CGFloat height = MIN(_titlebarHeight, NSHeight(contentFrame));
   _titlebarMaterial.frame = NSMakeRect(NSMinX(contentFrame),
     _content.isFlipped ? NSMinY(contentFrame) : NSMaxY(contentFrame) - height,
     NSWidth(contentFrame), height);
   _layingOut = NO;
 }
+
+- (void)splitViewDidMount:(NSNotification *)notification
+{
+  NSView *mountedView = notification.object;
+  if (self.window && mountedView.window == self.window) {
+    // Leave the Fabric/AppKit layout transaction before reparenting its root.
+    dispatch_async(dispatch_get_main_queue(), ^{ [self finish]; });
+  }
+}
+
+- (void)finish
+{
+  if (!self.installReactRoot) {
+    return;
+  }
+  NSWindow *window = self.window;
+  void (^installRoot)(void) = self.installReactRoot;
+  self.installReactRoot = nil;
+  [self removeFromSuperview];
+  objc_setAssociatedObject(window, &RNSidebarSplitViewStartupKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  // Removing the placeholder split clears AppKit's sidebar association. Reattach
+  // the live root before the next draw so its split registers with the window.
+  installRoot();
+}
+
+- (void)dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
 @end
 #endif
 
@@ -1056,8 +1098,38 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
 @end
 
 #if TARGET_OS_OSX
-extern "C" NSView *LegendCreateSidebarSplitViewStartupView(NSRect frame, NSDictionary *configuration)
+// Optional C entry points let the host and window manager share this lifecycle
+// without requiring apps that do not use split views to link this package.
+extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *window, NSDictionary *configuration)
 {
-  return [[RNSidebarSplitViewStartupView alloc] initWithFrame:frame configuration:configuration];
+  if (![configuration isKindOfClass:NSDictionary.class] ||
+      objc_getAssociatedObject(window, &RNSidebarSplitViewStartupKey)) {
+    return;
+  }
+  RNSidebarSplitViewStartupView *view = [[RNSidebarSplitViewStartupView alloc]
+    initWithFrame:window.contentView.bounds configuration:configuration];
+  objc_setAssociatedObject(window, &RNSidebarSplitViewStartupKey, view, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  window.appearance = view.appearance;
+  [window.contentView addSubview:view];
+  [window.contentView layoutSubtreeIfNeeded];
+}
+
+extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *window, NSView *rootView,
+                                                        void (^installRoot)(void))
+{
+  RNSidebarSplitViewStartupView *view = objc_getAssociatedObject(window, &RNSidebarSplitViewStartupKey);
+  if (!view) {
+    return NO;
+  }
+  view.installReactRoot = installRoot;
+  rootView.frame = window.contentView.bounds;
+  [window.contentView addSubview:rootView positioned:NSWindowBelow relativeTo:view];
+  return YES;
+}
+
+extern "C" void LegendFinishSidebarSplitViewStartup(NSWindow *window)
+{
+  RNSidebarSplitViewStartupView *view = objc_getAssociatedObject(window, &RNSidebarSplitViewStartupKey);
+  [view finish];
 }
 #endif

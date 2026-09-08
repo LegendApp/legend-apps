@@ -41,7 +41,10 @@ LogBox.ignoreLogs([
 ]);
 
 registerDiffWindows();
-const initialUrlPromise = Linking.getInitialURL();
+const initialUrlPromise = Linking.getInitialURL().catch((error: unknown) => {
+  reportDiffAppControllerError(error);
+  return null;
+});
 configureDiffAutoUpdates().catch(reportDiffAppControllerError);
 const LazyDiffViewerWindowShell = lazy(() =>
   import("./DiffViewerWindowShell").then((module) => ({ default: module.DiffViewerWindowShell })),
@@ -257,10 +260,11 @@ export function App({ launchArguments }: DiffAppProps) {
   const initialLaunchSource = useMemo(() => getLaunchDiffSource(launchArguments?.slice(1)), [launchArguments]);
   const handledOpenUrlRef = useRef<{ handledAt: number; url: string } | null>(null);
   const nextPrimaryInstanceIdRef = useRef(1);
-  const [primaryWindow, setPrimaryWindow] = useState<PrimaryDiffWindow | null>(() => ({
-    instanceId: 0,
-    ...(initialLaunchSource ? { source: initialLaunchSource } : {}),
-  }));
+  // Keep the native startup shell until URL/session restoration chooses the
+  // actual first screen. Mounting Welcome here would tear down its sidebar.
+  const [primaryWindow, setPrimaryWindow] = useState<PrimaryDiffWindow | null>(() => initialLaunchSource
+    ? { instanceId: 0, source: initialLaunchSource }
+    : null);
   const primaryWindowRef = useRef(primaryWindow);
 
   const openPrimaryViewer = useCallback<PrimaryDiffViewerOpener>(async (sourceInput, options = {}) => {

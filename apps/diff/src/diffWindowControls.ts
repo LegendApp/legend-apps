@@ -1,6 +1,7 @@
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { createUnifiedToolbarWindowStyle } from "@legend-apps/windows";
 import {
+  type StartupSplitViewOptions,
   closeWindow,
   focusToolbarSearchItem,
   hideMainWindow,
@@ -13,7 +14,14 @@ import { diffPrimaryWindowIdentifier } from "./appConstants";
 import { getDiffCompareToolbarModel, type DiffCompareRepoState } from "./diffCompareTargets";
 import { getDiffRepresentedUrl, type DiffOpenSource } from "./diffFiles";
 import { getDiffPalette } from "./diffPalette";
-import { diffViewModeOptions, getDiffSyntaxTheme, getDiffViewModeSetting, type DiffViewMode } from "./diffSettings";
+import {
+  defaultDiffSidebarWidth,
+  getDiffSidebarWidthSetting,
+  diffViewModeOptions,
+  getDiffSyntaxTheme,
+  getDiffViewModeSetting,
+  type DiffViewMode,
+} from "./diffSettings";
 import { getDiffViewerWindowTitleVisibility } from "./diffWindowChrome";
 
 export const diffViewModeToolbarItemId = "diff-view-mode";
@@ -102,6 +110,26 @@ function createDiffViewerToolbarItems({
   ];
 }
 
+export const diffContentMinWidth = 420;
+
+export function createDiffStartupSplitView(options: Pick<StartupSplitViewOptions,
+  "appearance" | "backgroundColor" | "sidebarBackgroundColor" | "sidebarWidth" | "restoreOnLaunch"
+>): StartupSplitViewOptions {
+  return {
+    ...options,
+    sidebarMinWidth: defaultDiffSidebarWidth,
+    contentMinWidth: diffContentMinWidth,
+    contentTitlebarHeight: 52,
+  };
+}
+
+export function setDiffViewerStartupSplitView(windowIdentifier: string, startupSplitView: StartupSplitViewOptions | null) {
+  const options = { windowStyle: { startupSplitView } };
+  return windowIdentifier === diffPrimaryWindowIdentifier
+    ? setMainWindowOptions(options)
+    : setWindowOptions(windowIdentifier, options);
+}
+
 export function createDiffViewerWindowStyle({
   appearance,
   includeFrame,
@@ -142,6 +170,14 @@ export function createDiffViewerWindowStyle({
 
   return {
     ...windowStyle,
+    ...(includeFrame ? {
+      startupSplitView: source ? createDiffStartupSplitView({
+        appearance: syntaxTheme.appearance,
+        backgroundColor: diffPalette.background,
+        sidebarBackgroundColor: diffPalette.sidebarBackground,
+        sidebarWidth: getDiffSidebarWidthSetting(),
+      }) : null,
+    } : {}),
     contentLayoutMode: "fullSize" as const,
     titlebarSeparatorStyle: "shadow" as const,
     titleVisibility: getDiffViewerWindowTitleVisibility(showViewModeToolbar),

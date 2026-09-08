@@ -17,8 +17,11 @@ double LegendMainWindowReactRootAttachedTimeMs = 0;
 
 extern "C" void LegendPrecreateRestorableWindows(void) __attribute__((weak_import));
 extern "C" void LegendStartChatHistoryLoad(void) __attribute__((weak_import));
-extern "C" NSView *LegendCreateSidebarSplitViewStartupView(NSRect frame, NSDictionary *configuration)
+extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *window, NSDictionary *configuration)
   __attribute__((weak_import));
+extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *window, NSView *rootView,
+                                                        void (^installRoot)(void)) __attribute__((weak_import));
+extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void) __attribute__((weak_import));
 
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
@@ -292,8 +295,6 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 @property (nonatomic, weak) NSWindow *lastFocusedManagedWindow;
 @property (nonatomic, strong) NSColor *startupBackgroundColor;
-@property (nonatomic, strong) NSView *startupSplitView;
-@property (nonatomic, strong) NSView *startupReactRootView;
 
 - (void)prepareHostWindowIfNeeded;
 
@@ -551,21 +552,19 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
     rootView.frame = glassContentView.bounds;
     [glassContentView addSubview:rootView];
-  } else if (self.startupSplitView) {
-    // Keep the initial split view visible while Fabric builds the live tree.
-    // Both trees share a host, so attaching React cannot expose a blank frame.
-    NSView *hostView = self.window.contentView;
-    NSViewController *rootViewController = [NSViewController new];
-    rootViewController.view = hostView;
-    self.window.contentViewController = rootViewController;
-    rootView.frame = hostView.bounds;
-    self.startupReactRootView = rootView;
-    [hostView addSubview:rootView positioned:NSWindowBelow relativeTo:self.startupSplitView];
   } else {
-    NSViewController *rootViewController = [NSViewController new];
-    rootView.frame = self.window.contentView.bounds;
-    rootViewController.view = rootView;
-    self.window.contentViewController = rootViewController;
+    __weak NSWindow *window = self.window;
+    void (^installRoot)(void) = ^{
+      [rootView removeFromSuperview];
+      NSViewController *rootViewController = [NSViewController new];
+      rootView.frame = window.contentView.bounds;
+      rootViewController.view = rootView;
+      window.contentViewController = rootViewController;
+    };
+    if (!LegendAttachSidebarSplitViewStartupRoot ||
+        !LegendAttachSidebarSplitViewStartupRoot(self.window, rootView, installRoot)) {
+      installRoot();
+    }
   }
   LegendMainWindowReactRootAttachedTimeMs = CACurrentMediaTime() * 1000;
 
@@ -588,30 +587,6 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
   } else {
     [self.window makeKeyAndOrderFront:self];
   }
-}
-
-- (void)sidebarSplitViewDidMount:(NSNotification *)notification
-{
-  NSView *mountedView = notification.object;
-  // Leave the Fabric/AppKit layout transaction before reparenting its root.
-  dispatch_async(dispatch_get_main_queue(), ^{
-    if (self.startupSplitView && mountedView != self.startupSplitView && mountedView.window == self.window) {
-      [self.startupSplitView removeFromSuperview];
-      self.startupSplitView = nil;
-      // Removing the old NSSplitView clears AppKit's window sidebar association.
-      // Reattach the live root in the normal hierarchy to register its split view
-      // before the next draw, then release the temporary startup host.
-      NSView *rootView = self.startupReactRootView;
-      self.startupReactRootView = nil;
-      [rootView removeFromSuperview];
-      NSViewController *rootViewController = [NSViewController new];
-      rootViewController.view = rootView;
-      self.window.contentViewController = rootViewController;
-      [[NSNotificationCenter defaultCenter] removeObserver:self
-                                                      name:@"LegendSidebarSplitViewDidMount"
-                                                    object:nil];
-    }
-  });
 }
 
 - (void)prepareHostWindowIfNeeded
@@ -691,23 +666,23 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
     placeholderView.layer.backgroundColor = self.startupBackgroundColor.CGColor;
     self.window.backgroundColor = self.startupBackgroundColor;
     self.window.contentView = placeholderView;
-    if (isChatHistory && LegendCreateSidebarSplitViewStartupView) {
+    NSDictionary *splitConfiguration = LegendMainWindowStartupSplitViewConfiguration
+      ? LegendMainWindowStartupSplitViewConfiguration() : nil;
+    if (isChatHistory) {
       BOOL dark = LegendHostWindowUsesDarkAppearance(self.window);
-      self.startupSplitView = LegendCreateSidebarSplitViewStartupView(placeholderView.bounds, @{
+      splitConfiguration = @{
         @"sidebarWidth": @260,
         @"sidebarMinWidth": @220,
         @"contentMinWidth": @420,
+        @"contentTitlebarHeight": @52,
         @"appearance": dark ? @"dark" : @"light",
         // Match ChatHistoryWindow and the shared display theme on the first frame.
         @"backgroundColor": dark ? @"#191A1B" : @"#f5f6f8",
         @"sidebarBackgroundColor": dark ? @"#2d2e30" : @"#f3f4f6",
-      });
-      [placeholderView addSubview:self.startupSplitView];
-      [[NSNotificationCenter defaultCenter] addObserver:self
-                                               selector:@selector(sidebarSplitViewDidMount:)
-                                                   name:@"LegendSidebarSplitViewDidMount"
-                                                 object:nil];
-      [placeholderView layoutSubtreeIfNeeded];
+      };
+    }
+    if (LegendPrepareSidebarSplitViewStartup && splitConfiguration) {
+      LegendPrepareSidebarSplitViewStartup(self.window, splitConfiguration);
     }
     [self.window makeKeyAndOrderFront:self];
     [self.window displayIfNeeded];

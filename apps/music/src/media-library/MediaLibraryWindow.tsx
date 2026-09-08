@@ -21,6 +21,8 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 import { getMusicTheme } from "../theme/musicThemes";
 import { WindowProvider, WindowsNavigator } from "../windows";
 
+import { createLibraryWindowStyle } from "./libraryWindowStyle";
+
 const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getIdentifier("MediaLibraryWindow");
 
 export default function MediaLibraryWindow() {
@@ -29,12 +31,8 @@ export default function MediaLibraryWindow() {
     const musicTheme = getMusicTheme(appearanceSettings.theme);
     const windowShownRef = useRef(false);
     const updateWindowStyle = useCallback(() => setWindowOptions(MEDIA_LIBRARY_WINDOW_ID, {
-        windowStyle: {
-            appearance: musicTheme.appearance,
-            backgroundColor: musicTheme.colors.background.secondary,
-            contentLayoutMode: "fullSize",
-        },
-    }), [musicTheme.appearance, musicTheme.colors.background.secondary]);
+        windowStyle: createLibraryWindowStyle(musicTheme),
+    }), [musicTheme]);
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const { width, height } = event.nativeEvent.layout;
         if (width > 0 && height > 0) {

@@ -8,6 +8,10 @@ import { stateSaved$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
 
+import { createLibraryWindowStyle } from "./libraryWindowStyle";
+import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
+import { getMusicTheme } from "../theme/musicThemes";
+
 const MEDIA_LIBRARY_WINDOW_KEY = "MediaLibraryWindow" as const;
 const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getIdentifier(MEDIA_LIBRARY_WINDOW_KEY);
 const MEDIA_LIBRARY_DEFAULT_WIDTH = 640;
@@ -89,10 +93,12 @@ export const MediaLibraryWindowManager = () => {
 
                 const y = Math.max(mainFrame.y + (mainFrame.height - height), 0);
 
+                const appearance = normalizeMusicAppearanceSettings(settings$.appearance.peek());
                 await WindowsNavigator.open(MEDIA_LIBRARY_WINDOW_KEY, {
                     x,
                     y,
                     windowStyle: {
+                        ...createLibraryWindowStyle(getMusicTheme(appearance.theme)),
                         width,
                         height,
                     },

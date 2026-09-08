@@ -72,7 +72,23 @@ const windowLevelMap: Partial<Record<WindowLevel, number>> = {
   screenSaver: constants.WINDOW_LEVEL_SCREEN_SAVER,
 };
 
+/** Empty native panes displayed before React mounts. Requires appkit-split-view. */
+export type StartupSplitViewOptions = {
+  /** Whether the main window should restore this chrome next launch. Defaults to true. */
+  restoreOnLaunch?: boolean;
+  sidebarWidth: number;
+  sidebarMinWidth: number;
+  contentMinWidth: number;
+  sidebarCollapsed?: boolean;
+  appearance: "light" | "dark";
+  backgroundColor: string;
+  sidebarBackgroundColor: string;
+  contentTitlebarHeight?: number;
+};
+
 export type WindowStyleOptions = {
+  /** Null clears the startup shell for screens without a split view. */
+  startupSplitView?: StartupSplitViewOptions | null;
   appearance?: "system" | "light" | "dark";
   contentLayoutMode?: "contentLayoutGuide" | "fullSize";
   mask?: WindowStyleMask[];

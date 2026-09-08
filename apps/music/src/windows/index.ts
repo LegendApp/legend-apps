@@ -17,7 +17,7 @@ const windowsConfig = {
         loadComponent: () => import("../media-library/MediaLibraryWindow"),
         identifier: "media-library",
         options: {
-            deferOrderFront: true,
+            deferOrderFront: false,
             restoreOnLaunch: true,
             title: "",
             transparentBackground: true,

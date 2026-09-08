@@ -104,6 +104,7 @@ import {
   useDiffHighlightChangedCharactersSetting,
   useDiffIgnoreWhitespaceChangesSetting,
   useDiffShowOnlyHunksSetting,
+  useDiffRestoreWindowsOnStartupSetting,
   useDiffShowStatisticsPanelSetting,
   useDiffShowWhitespaceCharactersSetting,
   useDiffSidebarWidthSetting,
@@ -214,6 +215,7 @@ import {
   type DiffSplitPaneMetrics,
   type DiffViewerState,
 } from "./viewer/diffViewerModel";
+import { createDiffStartupSplitView, diffContentMinWidth, setDiffViewerStartupSplitView } from "./diffWindowControls";
 import { DiffStartScreen } from "./start-screen/DiffStartScreen";
 import { useDiffStartScreenController } from "./start-screen/useDiffStartScreenController";
 import {
@@ -226,7 +228,6 @@ import {
 } from "./viewer/diffViewerSupport";
 
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
-const diffContentMinWidth = 420;
 const diffMergeSaveWatchSuppressMs = 2_000;
 const diffLoadingAccentColor = "#72b7ff";
 const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
@@ -4970,10 +4971,23 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       surfaceColor={diffPalette.surface}
     />
   ) : null;
-  let body: ReactNode;
   const initialLoadingSource = startScreenController.openError ? null : source ?? null;
   const emptyLoadingSource = state.status === "empty" ? loadingSource ?? initialLoadingSource : null;
+  const restoreWindowsOnStartup = useDiffRestoreWindowsOnStartupSetting();
+  const hasSplitBody = state.status === "loaded" || (state.status !== "fatal" && emptyLoadingSource !== null);
+  useEffect(() => {
+    // Match the actual body, including fatal and welcome screens which never
+    // emit a split-view mount event. Save chrome for native window restoration.
+    setDiffViewerStartupSplitView(windowIdentifier, hasSplitBody ? createDiffStartupSplitView({
+      restoreOnLaunch: restoreWindowsOnStartup,
+      appearance: syntaxTheme.appearance,
+      backgroundColor,
+      sidebarBackgroundColor: diffPalette.sidebarBackground,
+      sidebarWidth,
+    }) : null).catch((error: unknown) => console.error("Failed to update Diff startup chrome:", error));
+  }, [backgroundColor, diffPalette.sidebarBackground, hasSplitBody, restoreWindowsOnStartup, sidebarWidth, syntaxTheme.appearance, windowIdentifier]);
 
+  let body: ReactNode;
   if (state.status === "fatal") {
     body = (
       <DiffFatalBody
