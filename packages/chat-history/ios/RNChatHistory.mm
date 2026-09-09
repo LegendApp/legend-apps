@@ -2,6 +2,7 @@
 #include "../cpp/ChatStartupLoad.hpp"
 
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 
 typedef NSString *_Nonnull (^ENRMNativeMarkdownProvider)(NSString *blockId);
 extern void ENRMSetNativeMarkdownProvider(ENRMNativeMarkdownProvider _Nullable provider);
@@ -33,9 +34,9 @@ static NSString *chatMarkdownForBlockId(NSString *blockId)
 
 @end
 
-// Called by the macOS host before React Native starts. Only the tiny existing
-// selection record is read here; transcript I/O and parsing run on a worker.
-extern "C" void LegendStartChatHistoryLoad(void)
+// Only the tiny existing selection record is read here; transcript I/O and
+// parsing run on a worker while React Native starts.
+static void startChatHistoryLoad(void)
 {
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
@@ -78,3 +79,30 @@ extern "C" void LegendStartChatHistoryLoad(void)
     }
   });
 }
+
+@interface RNChatHistoryStartup : NSObject
+@end
+
+@implementation RNChatHistoryStartup
+
++ (void)load
+{
+  [NSNotificationCenter.defaultCenter addObserver:self
+                                        selector:@selector(applicationWillFinishLaunching:)
+                                            name:NSApplicationWillFinishLaunchingNotification
+                                          object:nil];
+}
+
++ (void)applicationWillFinishLaunching:(NSNotification *)notification
+{
+  [NSNotificationCenter.defaultCenter removeObserver:self
+                                               name:NSApplicationWillFinishLaunchingNotification
+                                             object:nil];
+  NSString *appId = NSProcessInfo.processInfo.environment[@"LEGEND_APP"]
+      ?: NSBundle.mainBundle.infoDictionary[@"LegendAppId"];
+  if ([appId isEqualToString:@"chat-history"]) {
+    startChatHistoryLoad();
+  }
+}
+
+@end
