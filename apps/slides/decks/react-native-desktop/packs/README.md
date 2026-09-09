@@ -89,3 +89,11 @@ Rive is better for interactive state machines, but runtime files are binary `.ri
 exports from the Rive editor. An automated workflow can generate the storyboard,
 vector assets, state-machine design and integration code; the editor or another
 official exporter still needs to produce the `.riv` file.
+
+## Presenting tools
+
+The [presenting pack](presenting/README.md) adds measured spotlights and callouts,
+a pausable animation clock with annotations, progressive detail, comparison wipes,
+code walkthroughs, exploded layers and content replacement. Each has a dedicated
+step-driven demo at the end of `talk.mdx`. These tools take ordinary props such as
+`expanded`, `paused`, `position` and `active`; `Steps` controls the presentation.

@@ -34,6 +34,7 @@ import { ComponentXRay, FocusSpotlight, NativeLayerPeel } from "./packs/reveal"
 import { CodeToPixels, CodeToUI, PlatformMetamorphosis } from "./packs/transform"
 import { WindowPortal } from "./packs/transitions"
 import { ShaderTypography } from "./packs/typography"
+import { SpotlightDemo, FreezeDemo, ProgressiveDemo, WipeDemo, CalloutDemo, CodeDemo, LayersDemo, SwapDemo } from "./PresentingDemos"
 
 <Scene eyebrow="React Native / Desktop" title="">
   <BigStatement children={"React Native is the best way to build desktop apps"} detail="Yes, even if you never ship a mobile app." />
@@ -664,4 +665,142 @@ Focus on what matters.</Text>}>
 1: Start with clear content. This is our illustrated chat, unchanged.
 
 2: Advance to frost the content. The glass bends briefly as it forms; the message above it stays sharp. Go back to clear the glass smoothly. This is a snapshot effect, not an interactive native glass control.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Spotlight" title="One idea at a time">
+  <Steps count={4}>{(step) => (
+    <SpotlightDemo focus={[undefined, "react", "native", "gpu"][step]} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Show the complete composition.
+
+2: Focus on React. The surrounding content stays in place.
+
+3: Move attention to the native layer.
+
+4: Move attention to the GPU. Go backward to revisit each target.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Freeze and annotate" title="Pause the motion. Explain the moment.">
+  <Steps count={3}>{(step) => (
+    <FreezeDemo paused={step === 1} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Let the orbit run. All motion is driven by one supplied clock.
+
+2: Freeze at the current moment and add the annotation.
+
+3: Resume from the frozen time; there is no catch-up jump.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Progressive detail" title="Open up the explanation">
+  <Steps count={3}>{(step) => (
+    <ProgressiveDemo expanded={step === 1} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Begin with the simple native document abstraction.
+
+2: Expand the implementation. The summary moves aside to make room.
+
+3: Collapse back to the simple model.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Comparison wipe" title="Keep the comparison aligned">
+  <Steps count={3}>{(step) => (
+    <WipeDemo position={[0.12, 0.5, 0.88][step]} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Begin mostly on the original. Both designs are synthetic illustrations.
+
+2: Move the divider to compare the same content side by side.
+
+3: Reveal most of the refined design. This is a visual comparison, not a benchmark.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Anchored callouts" title="The explanation follows the object">
+  <Steps count={3}>{(step) => (
+    <CalloutDemo moved={step === 1} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: The callout attaches to the native module target by ID.
+
+2: Move and resize the target. Its arrow and label follow the measured geometry.
+
+3: Return the target. No hand-authored annotation coordinates change.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Code walkthrough" title="Read only the lines that matter">
+  <Steps count={3}>{(step) => (
+    <CodeDemo focus={step} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Focus on opening the native document and reading its count. This is illustrative code.
+
+2: Move to the lazy row request. Dim the rest of the source.
+
+3: Connect the returned metadata to a React component.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Exploded layers" title="Take the composition apart">
+  <Steps count={3}>{(step) => (
+    <LayersDemo expanded={step === 1} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Start with one assembled composition.
+
+2: Separate the conceptual layers and explain their responsibilities. This is a diagram, not a literal capture of the view hierarchy.
+
+3: Reassemble the composition.
+-->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Content replacement" title="Turn the evidence into the takeaway">
+  <Steps count={3}>{(step) => (
+    <SwapDemo summary={step === 1} />
+  )}</Steps>
+</Scene>
+
+<!--
+1: Show the measured first-content chart.
+
+2: Replace the chart with its takeaway in the same space.
+
+3: Return to the chart when someone wants the evidence.
 -->
