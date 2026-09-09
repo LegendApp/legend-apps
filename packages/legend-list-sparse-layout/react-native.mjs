@@ -7125,14 +7125,15 @@ var Container = typedMemo(function Container2({
   const isHorizontalRTLList = isHorizontalRTL(ctx.state);
   const positionComponentInternal = ctx.state.props.positionComponentInternal;
   const stickyPositionComponentInternal = ctx.state.props.stickyPositionComponentInternal;
-  const [column = 0, span = 1, data, dataVersion, numColumns = 1, extraData, isSticky] = useArr$([
+  const [column = 0, span = 1, data, dataVersion, numColumns = 1, extraData, isSticky, itemIndex] = useArr$([
     `containerColumn${id}`,
     `containerSpan${id}`,
     `containerItemData${id}`,
     `containerDataVersion${id}`,
     "numColumns",
     "extraData",
-    `containerSticky${id}`
+    `containerSticky${id}`,
+    `containerItemIndex${id}`
   ]);
   const ref = useRef(null);
   const { onLayout, triggerLayout } = useContainerMeasurement({
@@ -7170,7 +7171,7 @@ var Container = typedMemo(function Container2({
   );
   const renderedItemInfo = useMemo(
     () => itemKey !== void 0 ? getRenderedItem2(itemKey, id) : null,
-    [itemKey, data, dataVersion, extraData]
+    [itemKey, itemIndex, data, dataVersion, extraData]
   );
   const { renderedItem } = renderedItemInfo || {};
   const contextValue = useMemo(() => {

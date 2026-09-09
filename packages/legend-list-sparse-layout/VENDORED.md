@@ -20,6 +20,9 @@ unstable npm package, Git branch, or downloadable artifact.
 - Included fix: Legend List commit `6d423f31752d7c1db8b01ed4c66c06fb7a3b465e`
   (`fix: keep recycled container renders coherent across prepends`), adapted
   to preserve sparse `dataSource` assignments without reading additional rows.
+- Local fix: invalidate cached container children when the assigned index changes,
+  including retained data-source items shifted by an insertion or deletion.
+  Otherwise `renderItem` keeps a stale index even though the container moves.
 
 The files in this directory are the publish-ready output produced by running
 `bun run build` in the source checkout. The package version includes the source
