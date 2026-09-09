@@ -1,5 +1,11 @@
 # Legend Diff Changelog
 
+
+## 0.0.4
+
+- Perf: Diff windows now appear sooner at launch with restored size, position, theme, and sidebar layout while preserving keyboard focus.
+- Fix: Progressive loading and document or view changes now populate visible rows reliably and keep the correct first file header.
+
 ## 0.0.3
 
 - Improved performance

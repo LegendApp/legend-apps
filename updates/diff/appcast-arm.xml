@@ -3,12 +3,24 @@
     <channel>
         <title>Legend Diff</title>
         <item>
+            <title>0.0.4</title>
+            <pubDate>Wed, 09 Sep 2026 16:45:45 +0300</pubDate>
+            <sparkle:version>1000.0.4</sparkle:version>
+            <sparkle:shortVersionString>0.0.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.4/Legend-Diff-0.0.4-arm.zip" length="10166793" type="application/octet-stream" sparkle:edSignature="MebFBZta/ZR/O4OLWEJ9yHwaMPE4dNZLW5hYeY6OgZ6xJ3I8bn08mHQ4J4EQllC1flKrqJ4vYfPPSXGKH7RuCw=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.4/Legend-Diff-arm-Legend%20Diff1000.0.4-2.delta" sparkle:deltaFrom="2" length="685110" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="436512" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,en" sparkle:edSignature="SHvGWtegYZQK3p3bzTg55YbBXv+jriz3PIsUswmbFaRhZAmyfZpz4MNQ4IzxQ+UmkyiDrwzp1Nv9UCscb/JsCQ=="/>
+                <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.4/Legend-Diff-arm-Legend%20Diff1000.0.4-1.delta" sparkle:deltaFrom="1" length="1096918" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="436512" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,en" sparkle:edSignature="/0xIcwFQCqyxQfI8wxlZgVwcv9oY/lkbaB4M9tnpickPyA6S4YndM1Sdfjpdp7biCkD4s0Cx1EdwTDjDusNTDA=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.0.2</title>
             <pubDate>Tue, 18 Aug 2026 16:24:50 +0200</pubDate>
             <sparkle:version>2</sparkle:version>
             <sparkle:shortVersionString>0.0.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.3/Legend-Diff-0.0.3-arm.zip" length="10117432" type="application/octet-stream" sparkle:edSignature="Tgu5tLfrA4lJfNJHuVcmkgYobvps9nlFpU27wcHaKX1HvEfHvAV/h6f3zKX8X1t7CHR2zu8jIR9SV1Tq9IKJBQ=="/>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.4/Legend-Diff-0.0.3-arm.zip" length="10117432" type="application/octet-stream" sparkle:edSignature="Tgu5tLfrA4lJfNJHuVcmkgYobvps9nlFpU27wcHaKX1HvEfHvAV/h6f3zKX8X1t7CHR2zu8jIR9SV1Tq9IKJBQ=="/>
             <sparkle:deltas>
                 <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.3/Legend-Diff-arm-Legend%20Diff2-1.delta" sparkle:deltaFrom="1" length="1016538" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="436512" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,en" sparkle:edSignature="3nrOpQNm7f5f6EWhr/r7MA05Wg4pfMCPtKhXQ+7X+ag4XhSskd+6obinRUe/kWJprTjlTZcmMMtX+IJN8H6jAQ=="/>
             </sparkle:deltas>
@@ -19,7 +31,7 @@
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.3/Legend-Diff-0.0.1-arm.zip" length="10811263" type="application/octet-stream" sparkle:edSignature="HgiYAWg1gSlbKYkxkaBAR/FE+plqMK/oFjrW/04pn2//ul7FGtK0X5FPEPQKHUQ68ywDxu3n1lJFGPhePP8LDQ=="/>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/diff-v0.0.4/Legend-Diff-0.0.1-arm.zip" length="10811263" type="application/octet-stream" sparkle:edSignature="HgiYAWg1gSlbKYkxkaBAR/FE+plqMK/oFjrW/04pn2//ul7FGtK0X5FPEPQKHUQ68ywDxu3n1lJFGPhePP8LDQ=="/>
         </item>
     </channel>
 </rss>
