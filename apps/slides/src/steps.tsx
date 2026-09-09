@@ -63,8 +63,23 @@ export function Step(props: StepProps) {
     pointerEvents={hidden ? "none" : "auto"} style={animatedStyle}>{props.children}</Animated.View>;
 }
 
-export function Steps({ children }: { children?: ReactNode; transition?: Transition }) {
-  return <View>{children}</View>;
+type StepsProps = {
+  children?: ReactNode | ((step: number) => ReactNode);
+  /** Total states including the initial state. Render functions default to two. */
+  count?: number;
+  transition?: Transition;
+};
+
+function getStateCount(count: number | undefined) {
+  if (count !== undefined && (!Number.isInteger(count) || count < 1)) {
+    throw new Error("Steps count must be a positive integer including the initial state.");
+  }
+  return count ?? 2;
+}
+
+export function Steps({ children }: StepsProps) {
+  const { stepIndex } = useSlideLifecycle();
+  return <View>{typeof children === "function" ? children(stepIndex) : children}</View>;
 }
 
 // Resolve in document order before rendering, independent of mount order or window.
@@ -73,8 +88,19 @@ export function resolveSteps(children: ReactNode, listTypes: unknown[] = ["ul", 
   let maximum = 0;
   function visit(nodes: ReactNode): ReactNode {
     return Children.map(nodes, (node) => {
-      if (!isValidElement<StepProps & { startOnStep?: number }>(node)) return node;
+      if (!isValidElement<StepProps & { count?: number }>(node)) return node;
       if (node.type === Steps) {
+        if (typeof node.props.children === "function") {
+          // Do not execute the callback while discovering steps: it can contain
+          // arbitrary content. Its explicit count owns these navigation states.
+          const last = getStateCount(node.props.count) - 1;
+          cursor = Math.max(cursor, last);
+          maximum = Math.max(maximum, last);
+          return node;
+        }
+        if (node.props.count !== undefined) {
+          maximum = Math.max(maximum, getStateCount(node.props.count) - 1);
+        }
         const items = Children.toArray(node.props.children).flatMap((child) => {
           if (isValidElement<{ children?: ReactNode }>(child) && listTypes.includes(child.type)) return Children.toArray(child.props.children);
           return [child];
@@ -90,7 +116,6 @@ export function resolveSteps(children: ReactNode, listTypes: unknown[] = ["ul", 
         maximum = Math.max(maximum, cursor);
         props = { ...props, at };
       }
-      maximum = Math.max(maximum, props.startOnStep ?? 0);
       return cloneElement(node, props, visit(props.children));
     });
   }

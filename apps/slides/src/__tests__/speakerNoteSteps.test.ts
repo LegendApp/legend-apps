@@ -1,3 +1,4 @@
+// @ts-nocheck This suite uses Bun test globals.
 import { expect, test } from "bun:test";
 import { speakerNoteOpacity, splitSpeakerNoteSteps } from "../speakerNoteSteps";
 

@@ -170,9 +170,11 @@ steps: 2
 
 <Scene eyebrow="Recreating native materials" title={<GlassCaption />} footer="Convincing first. Comically over-engineered by the end.">
   <View style={{ height: 580, width: 1680 }}>
-    <Effect shader={liquidGlass} startOnStep={1} strength={96} speed={1} previewTime={glassTimeline.peak} uniforms={chatGlassUniforms}>
+    <Steps count={2}>{(step) => (
+    <Effect shader={liquidGlass} active={step >= 1} strength={96} speed={1} previewTime={glassTimeline.peak} uniforms={chatGlassUniforms}>
       <ChatIllustration glassBackdrop />
     </Effect>
+    )}</Steps>
     <GlassChatControls />
   </View>
 </Scene>
@@ -644,3 +646,22 @@ docs.swmansion.com/TypeGPU
 github.com/callstack/agent-device
 
 <!-- BACKUP. BACKUP ONLY. Public project documentation. sources.md maps the talk's technical claims and code excerpts to their sources; benchmark-source.md documents the local measurements. Check target compatibility and current setup guidance for your project. The talk's custom MDX components are local source in this deck directory. -->
+
+
+---
+
+<Scene eyebrow="Effect gallery / Liquid Glass" title="Change the focus">
+  <Steps count={2}>{(step) => (
+  <LiquidGlass active={step >= 1} blur={24} refraction={8} duration={700}
+    overlay={<Text style={{ color: "white", fontSize: 64, fontWeight: "700", textAlign: "center" }}>The details can wait.
+Focus on what matters.</Text>}>
+    <ChatIllustration />
+  </LiquidGlass>
+  )}</Steps>
+</Scene>
+
+<!--
+1: Start with clear content. This is our illustrated chat, unchanged.
+
+2: Advance to frost the content. The glass bends briefly as it forms; the message above it stays sharp. Go back to clear the glass smoothly. This is a snapshot effect, not an interactive native glass control.
+-->

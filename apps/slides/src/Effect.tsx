@@ -1,4 +1,5 @@
 import {
+  Blur,
   Canvas,
   Group,
   Image as SkiaImage,
@@ -10,26 +11,28 @@ import {
   type SkRuntimeEffect,
   type Uniform,
 } from "@shopify/react-native-skia";
-import { renderNativeChildren, usePresentation, useSlideLifecycle } from "@legend-apps/presentation";
+import { renderNativeChildren, useSlideLifecycle } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
 import { SlideCaptureContext } from "./SlideCaptureContext";
 
 type EffectProps = {
+  blur?: number;
   children?: ReactNode;
   padding?: number;
   preset?: EffectPreset;
   previewTime?: number;
   shader?: string;
   speed?: number;
-  startOnStep?: number;
+  active?: boolean;
   strength?: number;
   style?: StyleProp<ViewStyle>;
   uniforms?: Record<string, Uniform>;
 };
 
 type EffectCanvasProps = {
+  blur: number;
   effect: SkRuntimeEffect;
   height: number;
   image: SkImage;
@@ -45,6 +48,7 @@ type EffectCanvasProps = {
 };
 
 function EffectCanvas({
+  blur,
   animationEnabled,
   effect,
   height,
@@ -68,7 +72,7 @@ function EffectCanvas({
     if (!isActive) {
       return;
     }
-    if (!animationEnabled) {
+    if (!animationEnabled || speed === 0) {
       return;
     }
     let frame = 0;
@@ -83,7 +87,7 @@ function EffectCanvas({
   }, [animationEnabled, isActive, isPreview, previewTime, speed, startedAt]);
 
   const time = isPreview
-    ? previewTime
+    ? animationEnabled ? previewTime : 0
     : animationEnabled && clock.epoch === startedAt
       ? clock.time
       : 0;
@@ -101,7 +105,9 @@ function EffectCanvas({
         <Group
           layer={(
             <Paint>
-              <RuntimeShader source={effect} uniforms={shaderUniforms} />
+              <RuntimeShader source={effect} uniforms={shaderUniforms}>
+                {blur > 0 ? <Blur blur={blur * pixelRatio} mode="clamp" /> : null}
+              </RuntimeShader>
             </Paint>
           )}
           transform={[{ scale: pixelRatio }]}
@@ -114,19 +120,19 @@ function EffectCanvas({
 }
 
 export function Effect({
+  blur = 0,
   children,
   padding = 0,
   preset = "liquid",
   previewTime = 1.25,
   shader,
   speed = 1,
-  startOnStep,
+  active = true,
   strength = 12,
   style,
   uniforms,
 }: EffectProps) {
-  const { isActive, isPreview, isPreparing, startedAt, stepIndex, stepStartedAt } = useSlideLifecycle();
-  const { stepEpochs } = usePresentation();
+  const { isActive, isPreview, isPreparing, startedAt, stepStartedAt } = useSlideLifecycle();
   const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
   const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
@@ -134,8 +140,12 @@ export function Effect({
   const source = resolveEffectSource(preset, shader);
   const runtimeEffect = useMemo(() => source ? Skia.RuntimeEffect.Make(source) ?? undefined : undefined, [source]);
   const shouldRender = isActive || isPreview;
-  const animationEnabled = startOnStep === undefined || stepIndex >= startOnStep;
-  const animationStartedAt = startOnStep === undefined ? startedAt : stepEpochs?.[startOnStep] ?? stepStartedAt;
+  const animationEnabled = active;
+  const [playback, setPlayback] = useState({ active, slideEpoch: startedAt, epoch: startedAt });
+  if (playback.active !== active || playback.slideEpoch !== startedAt) {
+    setPlayback({ active, slideEpoch: startedAt, epoch: active ? stepStartedAt ?? startedAt : undefined });
+  }
+  const animationStartedAt = playback.epoch;
   const image = snapshot?.scale === captureScale && snapshot.width === size.width && snapshot.height === size.height
     ? snapshot.image : undefined;
 
@@ -187,6 +197,7 @@ export function Effect({
       </View>
       {image && runtimeEffect ? (
         <EffectCanvas
+          blur={blur}
           animationEnabled={animationEnabled}
           effect={runtimeEffect}
           height={size.height}

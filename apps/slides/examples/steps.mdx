@@ -32,9 +32,11 @@ title: Steps and animation
 # Start an effect on cue
 
 <Step at={1}>The animation starts with this reveal.</Step>
-<Effect preset="ripple" startOnStep={1} padding={24}>
+<Steps count={3}>{(step) => (
+<Effect preset="ripple" active={step >= 1} padding={24}>
   <Text>A shared trigger, with its own clock.</Text>
 </Effect>
+)}</Steps>
 <Step at={2}>The animation continues through this next advance.</Step>
 
 <!-- Navigate backward before step 1 to reset the effect, then forward to replay it. -->

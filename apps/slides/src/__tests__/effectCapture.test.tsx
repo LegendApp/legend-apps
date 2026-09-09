@@ -10,7 +10,7 @@ const captures = [];
 const captureTargets = [];
 const runtimeEffect = {};
 mock.module("@shopify/react-native-skia", () => ({
-  Canvas: "canvas", Group: "group", Image: "image", Paint: "paint", RuntimeShader: "shader",
+  Blur: "blur", Canvas: "canvas", Group: "group", Image: "image", Paint: "paint", RuntimeShader: "shader",
   Skia: { RuntimeEffect: { Make: () => runtimeEffect } },
   makeImageFromView: (ref) => {
     captureTargets.push(ref.current);
@@ -64,18 +64,25 @@ test("captures only a visible, measured stage and recaptures after scale changes
     await act(() => renderer.update(content(
       0.5,
       { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 0, stepStartedAt: 4000 },
-      { startOnStep: 1 },
+      { active: false },
     )));
     await flushFrame(4500);
     expect(renderer.root.findAllByType("group").find((group) => group.props.layer).props.layer.props.children.props.uniforms.time).toBe(0);
     await act(() => renderer.update(content(
       0.5,
       { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 1, stepStartedAt: 4500 },
-      { startOnStep: 1 },
+      { active: true },
     )));
     await flushFrame(5000);
     expect(renderer.root.findAllByType("group").find((group) => group.props.layer).props.layer.props.children.props.uniforms.time).toBe(0.5);
     expect(captures).toHaveLength(0);
+    await act(() => renderer.update(content(
+      0.5,
+      { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 2, stepStartedAt: 5000 },
+      { active: true },
+    )));
+    await flushFrame(5500);
+    expect(renderer.root.findAllByType("group").find((group) => group.props.layer).props.layer.props.children.props.uniforms.time).toBe(1);
     await act(() => renderer.update(content(1)));
     expect(first.dispose).toHaveBeenCalledTimes(1);
     expect(renderer.root.findAllByType("image")).toHaveLength(0);

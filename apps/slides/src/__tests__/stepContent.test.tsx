@@ -9,7 +9,7 @@ test("reveal ordering includes list items, shared positions, exits and animation
     <Steps><ul><li>One</li><li>Two</li></ul></Steps>
     <Step at={2}>Together</Step>
     <Step until={5}>Third</Step>
-    <effect startOnStep={6} />
+    <Steps count={7}>{() => <effect />}</Steps>
   </>);
   expect(result.steps).toBe(7);
   const root = result.content[0].props.children;
@@ -25,4 +25,19 @@ test("property states persist and resolve deterministically on reverse navigatio
   expect(stepStyle(1, { at: 2 }).opacity).toBe(0);
   expect(stepStyle(3, { at: 2, until: 4 }).opacity).toBe(1);
   expect(stepStyle(4, { at: 2, until: 4 }).opacity).toBe(0);
+});
+
+
+test("render functions are retained without invocation and declare total states", () => {
+  let calls = 0;
+  const render = (step) => { calls++; return <text>{step}</text>; };
+  const result = resolveSteps(<Steps count={3}>{render}</Steps>);
+  expect(result.steps).toBe(3);
+  expect(result.content[0].props.children).toBe(render);
+  expect(calls).toBe(0);
+  expect(resolveSteps(<Steps>{render}</Steps>).steps).toBe(2);
+  expect(resolveSteps(<Steps count={1}>{render}</Steps>).steps).toBe(1);
+  for (const count of [0, -1, 1.5, NaN]) {
+    expect(() => resolveSteps(<Steps count={count}>{render}</Steps>)).toThrow("positive integer");
+  }
 });
