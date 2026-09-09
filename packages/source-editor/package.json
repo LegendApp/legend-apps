@@ -1,0 +1,20 @@
+{
+  "name": "@legend-apps/source-editor",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.tsx",
+  "react-native": "src/index.tsx",
+  "codegenConfig": {
+    "name": "RNSourceEditorSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "ios": {
+      "componentProvider": {
+        "SourceEditorHost": "RNSourceEditorHost",
+        "SourceEditorRow": "RNSourceEditorRow"
+      }
+    }
+  },
+  "dependencies": { "@legendapp/list": "catalog:" },
+  "peerDependencies": { "react": "catalog:", "react-native": "catalog:" }
+}

@@ -13,6 +13,7 @@ jest.mock("@legend-apps/document-app", () => ({
   useWatchedDocumentReload: jest.fn(),
 }));
 jest.mock("@legend-apps/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
+jest.mock("@legend-apps/source-editor", () => ({ SourceDocumentEditor: "SourceDocumentEditor" }));
 jest.mock("@legend-apps/syntax-parser", () => ({ loadCodeFile: jest.fn() }));
 jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async () => {}) }));
 jest.mock("../codeSettings", () => ({

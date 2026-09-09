@@ -57,6 +57,7 @@
         "@legend-apps/native-menu": "0.0.0",
         "@legend-apps/recent-documents": "0.0.0",
         "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/source-editor": "workspace:*",
         "@legend-apps/source-viewer": "workspace:*",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/syntax-parser": "workspace:*",
@@ -715,6 +716,17 @@
         "react-native": "catalog:",
       },
     },
+    "packages/source-editor": {
+      "name": "@legend-apps/source-editor",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legendapp/list": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
     "packages/source-viewer": {
       "name": "@legend-apps/source-viewer",
       "version": "0.0.0",
@@ -1332,6 +1344,8 @@
     "@legend-apps/sf-symbol": ["@legend-apps/sf-symbol@workspace:packages/sf-symbol"],
 
     "@legend-apps/sidebar": ["@legend-apps/sidebar@workspace:packages/sidebar"],
+
+    "@legend-apps/source-editor": ["@legend-apps/source-editor@workspace:packages/source-editor"],
 
     "@legend-apps/source-viewer": ["@legend-apps/source-viewer@workspace:packages/source-viewer"],
 

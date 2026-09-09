@@ -8,6 +8,11 @@ export type NativeGraphMode = "dev" | "release";
 
 export const nativePackages: NativePackage[] = [
   {
+    name: "@legend-apps/source-editor",
+    root: path.join(packagesDir, "source-editor"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/apple-music",
     root: path.join(packagesDir, "apple-music"),
     platforms: ["macos"],

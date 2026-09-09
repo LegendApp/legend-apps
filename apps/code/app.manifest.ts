@@ -28,6 +28,7 @@ const manifest = {
       "@legend-apps/recent-documents",
       "@legend-apps/storage",
       "@legend-apps/syntax-parser",
+      "@legend-apps/source-editor",
       "@legend-apps/window-manager",
     ],
     ios: [],

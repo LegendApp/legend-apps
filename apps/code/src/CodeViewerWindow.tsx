@@ -1,5 +1,6 @@
 import { openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-apps/document-app";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
+import { SourceDocumentEditor } from "@legend-apps/source-editor";
 import {
   createSyntaxStyleMap,
   formatMs,
@@ -101,6 +102,7 @@ function getCodeLineRowHeight(fontSize: number) {
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const state$ = useObservable<CodeViewerState>(emptyState);
   const setState = state$.set;
+  const [editorPrototype, setEditorPrototype] = useState(false);
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
   const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
   const syntaxTheme = useCodeSyntaxTheme();
@@ -214,12 +216,13 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   }, [syntaxTheme.appearance, syntaxTheme.background]);
 
   return <>
-    <CodeDocumentWatcher state$={state$} loadFile={loadFile} selectedSyntaxTheme={selectedSyntaxTheme} syntaxHighlightingEnabled={syntaxHighlightingEnabled} />
-    <CodeViewerContent state$={state$} launchFile={launchFile} openCodeDialog={openCodeDialog} />
+    <CodeDocumentWatcher editorPrototype={editorPrototype} state$={state$} loadFile={loadFile} selectedSyntaxTheme={selectedSyntaxTheme} syntaxHighlightingEnabled={syntaxHighlightingEnabled} />
+    <CodeViewerContent editorPrototype={editorPrototype} setEditorPrototype={setEditorPrototype} state$={state$} launchFile={launchFile} openCodeDialog={openCodeDialog} />
   </>;
 }
 
-function CodeDocumentWatcher({ state$, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled }: {
+function CodeDocumentWatcher({ editorPrototype, state$, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled }: {
+  editorPrototype: boolean;
   state$: Observable<CodeViewerState>;
   loadFile: (path: string, theme: CodeSettingsFile["syntaxTheme"], highlight: boolean) => Promise<void>;
   selectedSyntaxTheme: CodeSettingsFile["syntaxTheme"];
@@ -229,16 +232,19 @@ function CodeDocumentWatcher({ state$, loadFile, selectedSyntaxTheme, syntaxHigh
   const reloadLoadedFile = useCallback(() => {
     if (path) void loadFile(path, selectedSyntaxTheme, syntaxHighlightingEnabled);
   }, [loadFile, path, selectedSyntaxTheme, syntaxHighlightingEnabled]);
-  useWatchedDocumentReload({ onReload: reloadLoadedFile, path });
+  useWatchedDocumentReload({ onReload: reloadLoadedFile, path: editorPrototype ? null : path });
   return null;
 }
 
-function CodeViewerContent({ state$, launchFile, openCodeDialog }: {
+function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launchFile, openCodeDialog }: {
+  editorPrototype: boolean;
+  setEditorPrototype: (value: (previous: boolean) => boolean) => void;
   state$: Observable<CodeViewerState>;
   launchFile: string | null;
   openCodeDialog: () => Promise<void>;
 }) {
   const state = useValue(state$);
+  const loadedFilePath = state.status === "loaded" ? state.filePath : null;
   const fontFamily = useCodeFontFamilySetting();
   const fontSize = useCodeFontSizeSetting();
   const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
@@ -335,10 +341,23 @@ function CodeViewerContent({ state$, launchFile, openCodeDialog }: {
           <Text style={[styles.openButtonText, { color: foregroundColor }]}>Open</Text>
         </Pressable>
       </View>
+      {state.status === "loaded" ? <View style={{ paddingHorizontal: 20, paddingVertical: 8 }}>
+        <Pressable accessibilityRole="button" onPress={() => setEditorPrototype((enabled) => !enabled)}>
+          <Text style={{ color: foregroundColor }}>{editorPrototype ? "Close scratch editor (discards edits)" : "Open scratch editor prototype"}</Text>
+        </Pressable>
+        {editorPrototype ? <Text style={{ color: mutedColor }}>Wrapping/input prototype · edits are not saved · highlighting remains in the viewer</Text> : null}
+      </View> : null}
       {state.error ? (
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
       ) : null}
       <View style={styles.list}>
+        {editorPrototype && loadedFilePath ? <SourceDocumentEditor
+          key={loadedFilePath}
+          filePath={loadedFilePath}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          foreground={foregroundColor}
+        /> : <>
         <SourceDocumentView
           dataKey={state.filePath ?? undefined}
           initialRequestRowCount={sourceViewerInitialRequestRowCount}
@@ -359,6 +378,7 @@ function CodeViewerContent({ state$, launchFile, openCodeDialog }: {
             </Text>
           </View>
         ) : null}
+        </>}
       </View>
     </View>
   );
