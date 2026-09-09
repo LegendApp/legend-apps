@@ -120,3 +120,65 @@ test("starting another transition never resets the opacity already attached to t
     log.mockRestore();
   }
 });
+
+test("focus prepares live geometry before moving and reverses the destination slide's camera", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const oldRequest = globalThis.requestAnimationFrame;
+  const oldCancel = globalThis.cancelAnimationFrame;
+  const frames = new Map();
+  let frameId = 0;
+  globalThis.requestAnimationFrame = (fn) => { frames.set(++frameId, fn); return frameId; };
+  globalThis.cancelAnimationFrame = (id) => frames.delete(id);
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  const layers = () => tree.root.findAll((node) => node.type?.name === "AudienceFocusSurface");
+  try {
+    setSlidesState({ currentSlide: 0, config: {}, slides: [
+      { metadata: {}, notes: "" }, { metadata: { transition: { type: "focus", from: "card", duration: 900 } }, notes: "" },
+    ] });
+    await act(() => { tree = create(<AudienceWindow />); });
+    for (const layer of layers()) {
+      const surface = layer.props.surfaces.get(layer.props.index);
+      Object.assign(surface, { root: {}, width: 1920, height: 1080 });
+      const rect = layer.props.index === 0 ? [400, 200, 480, 270] : [200, 100, 1000, 600];
+      const view = { measureLayout: (_root, done) => done(...rect) };
+      surface.entries.add({ id: "diagram", kind: "element", view });
+      if (layer.props.index === 0) surface.entries.add({ id: "card", kind: "region", view });
+    }
+    for (const index of [1, 0]) {
+      await act(() => setCurrentSlide(index));
+      expect(transitions).toHaveLength(0);
+      await act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
+      const overview = layers().find((layer) => layer.props.index === 0).props.motion;
+      const detail = layers().find((layer) => layer.props.index === 1).props.motion;
+      expect(overview.cameraFrom.scale).toBe(index === 1 ? 1 : 4);
+      expect(overview.cameraTo.scale).toBe(index === 1 ? 4 : 1);
+      expect(detail.cameraFrom.scale).toBe(1);
+      expect(detail.elements.get("diagram")).toBeDefined();
+      expect(transitions).toHaveLength(1);
+      await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
+      expect(layers().every((layer) => layer.props.motion === undefined)).toBe(true);
+    }
+    // Missing target falls back to a normal fade, with no moving shared layer.
+    layers()[0].props.surfaces.get(0).entries.clear();
+    await act(() => setCurrentSlide(1));
+    await act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
+    expect(layers().every((layer) => layer.props.motion === undefined)).toBe(true);
+    expect(transitions).toHaveLength(1);
+    // Reverse again before that animation completes; its callback must be stale.
+    const stale = transitions.splice(0)[0];
+    await act(() => setCurrentSlide(0));
+    await act(() => stale({ finished: true }));
+    expect(transitions).toHaveLength(0);
+    await act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
+    expect(transitions).toHaveLength(1);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    transitions.splice(0);
+    setSlidesState(initial);
+    globalThis.requestAnimationFrame = oldRequest;
+    globalThis.cancelAnimationFrame = oldCancel;
+    log.mockRestore();
+  }
+});

@@ -1,0 +1,54 @@
+---
+title: Follow the motion
+transition: fade
+theme:
+  backgroundColor: "#0b1020"
+---
+
+import { FocusEngine } from "./components/FocusEngine";
+
+# One system. Three layers.
+
+<View style={{ flexDirection: "row", gap: 40, alignItems: "center" }}>
+  <View style={{ width: 460, padding: 40, backgroundColor: "#182236", borderRadius: 28 }}>
+    <Text style={{ fontSize: 44, color: "#94a3b8" }}>01 / Input</Text>
+    <Text style={{ fontSize: 30, color: "#cbd5e1", marginTop: 24 }}>A stream of ideas</Text>
+  </View>
+  <FocusRegion id="engine" style={{ width: 620, padding: 40, gap: 24, backgroundColor: "#172e45", borderRadius: 28 }}>
+    <SharedElement id="engine-title">
+      <Text style={{ fontSize: 44, color: "#67e8f9", fontWeight: "700" }}>02 / The engine</Text>
+    </SharedElement>
+    <SharedElement id="engine-graphic" style={{ width: 460, height: 180 }}>
+      <FocusEngine />
+    </SharedElement>
+  </FocusRegion>
+  <View style={{ flex: 1 }}>
+    <Text style={{ fontSize: 44, color: "#94a3b8" }}>03 / Output</Text>
+  </View>
+</View>
+
+<!-- Advance to dive into the center card. Its title and graphic move independently. -->
+
+---
+transition:
+  type: focus
+  from: engine
+  duration: 1000
+---
+
+<SharedElement id="engine-title" style={{ marginBottom: 60 }}>
+  <Text style={{ fontSize: 88, color: "#67e8f9", fontWeight: "700" }}>02 / The engine</Text>
+</SharedElement>
+
+<View style={{ flexDirection: "row", gap: 80, alignItems: "center" }}>
+  <SharedElement id="engine-graphic" style={{ width: 920, height: 420 }}>
+    <FocusEngine />
+  </SharedElement>
+  <View style={{ flex: 1, gap: 32 }}>
+    <Text style={{ fontSize: 48, color: "#f8fafc", fontWeight: "700" }}>A closer look</Text>
+    <Text style={{ fontSize: 36, lineHeight: 50, color: "#cbd5e1" }}>The camera moves in. The pieces find their places.</Text>
+    <Text style={{ fontSize: 28, color: "#67e8f9" }}>Press ← to zoom back out.</Text>
+  </View>
+</View>
+
+<!-- Go backward to reverse the same transition. Try reversing during the move, too. -->

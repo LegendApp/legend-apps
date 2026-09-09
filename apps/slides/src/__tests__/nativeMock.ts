@@ -2,6 +2,7 @@
 import { mock } from "bun:test";
 
 export const transitions = [];
+const numeric = (value) => typeof value === "number" ? value : value.__getValue();
 
 mock.module("react-native", () => ({
   View: "view", Text: "text", PixelRatio: { get: () => 2 },
@@ -9,6 +10,8 @@ mock.module("react-native", () => ({
   Easing: { cubic: (value) => value, out: (easing) => easing },
   Animated: {
     View: "layer",
+    subtract: (a, b) => ({ __getValue: () => numeric(a) - numeric(b) }),
+    divide: (a, b) => ({ __getValue: () => numeric(a) / numeric(b) }),
     Value: class {
       constructor(value) { this.value = value; }
       setValue(value) { this.value = value; }

@@ -1,5 +1,7 @@
-import { BackgroundHost, useHasBackground } from "@legend-apps/presentation";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
+  measureFocusSurface, createFocusMotion, focusCamera, resolveTransition,
+  type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, useSlidesState } from "./slidesStore";
@@ -14,24 +16,36 @@ function AudienceContent() {
   const hasBackground = useHasBackground();
   const currentSlide = useSlidesState((state) => state.currentSlide);
   const blackout = useSlidesState((state) => state.blackout);
-  const slideCount = useSlidesState((state) => state.slides.length);
-  const transition = useSlidesState((state) => state.slides[state.currentSlide]?.metadata.transition ?? state.config.transition ?? "none");
+  const slides = useSlidesState((state) => state.slides);
+  const defaultTransition = useSlidesState((state) => state.config.transition);
+  const revision = useSlidesState((state) => state.revision);
+  const slideCount = slides.length;
+  const [surfaces] = useState(() => new Map<number, FocusSurface>());
   const [transitionState, setTransitionState] = useState(() => ({
     index: currentSlide,
+    revision,
     outgoing: null as number | null,
-    kind: transition,
+    ...resolveTransition(currentSlide, currentSlide, slides, defaultTransition),
     progress: new Animated.Value(1),
+    ready: true,
+    motions: new Map<number, FocusMotion>(),
   }));
   // Allocate the incoming opacity with its new layer tree. Resetting a shared
   // Animated.Value here would also hide the still-mounted outgoing slide.
-  if (transitionState.index !== currentSlide || transitionState.kind !== transition) {
+  if (transitionState.index !== currentSlide || transitionState.revision !== revision) {
+    const resolved = resolveTransition(transitionState.index, currentSlide, slides, defaultTransition);
+    const cut = resolved.kind === "none" || resolved.duration === 0 || transitionState.revision !== revision;
     setTransitionState({
       index: currentSlide,
-      outgoing: transition === "none" ? null : transitionState.index,
-      kind: transition,
-      progress: new Animated.Value(transition === "none" ? 1 : 0),
+      revision,
+      outgoing: cut ? null : transitionState.index,
+      ...resolved,
+      progress: new Animated.Value(cut ? 1 : 0),
+      ready: cut || !resolved.focus,
+      motions: new Map(),
     });
   }
+  const transition = transitionState.kind;
   const { progress, outgoing: previousSlide } = transitionState;
 
   useEffect(() => {
@@ -39,9 +53,50 @@ function AudienceContent() {
   }, []);
 
   useLayoutEffect(() => {
-    if (transitionState.outgoing === null) return;
+    if (transitionState.ready || transitionState.outgoing === null || !transitionState.focus) return;
+    let cancelled = false;
+    const prepare = async () => {
+      const from = surfaces.get(transitionState.outgoing!);
+      const to = surfaces.get(transitionState.index);
+      const motions = new Map<number, FocusMotion>();
+      if (from && to) {
+        const [source, destination] = await Promise.all([measureFocusSurface(from), measureFocusSurface(to)]);
+        const overview = transitionState.reverse ? destination : source;
+        const region = overview.regions.get(transitionState.focus!.from);
+        const surface = transitionState.reverse ? to : from;
+        if (region && surface.width > 0 && surface.height > 0) {
+          const camera = focusCamera(region, surface);
+          const sourceMotion = transitionState.reverse ? createFocusMotion(progress) : createFocusMotion(progress, undefined, camera);
+          const destinationMotion = transitionState.reverse ? createFocusMotion(progress, camera) : createFocusMotion(progress);
+          for (const [id, sourceRect] of source.elements) {
+            const destinationRect = destination.elements.get(id);
+            if (!destinationRect) continue;
+            sourceMotion.elements.set(id, { from: sourceRect, to: destinationRect, own: sourceRect });
+            destinationMotion.elements.set(id, { from: sourceRect, to: destinationRect, own: destinationRect });
+          }
+          motions.set(transitionState.outgoing!, sourceMotion);
+          motions.set(transitionState.index, destinationMotion);
+        }
+      }
+      if (!cancelled) setTransitionState((current) => current === transitionState
+        ? { ...current, ready: true, motions } : current);
+    };
+    // Give newly mounted destinations a native layout pass before measuring.
+    let started = false;
+    const start = () => {
+      if (started || cancelled) return;
+      started = true;
+      void prepare();
+    };
+    const frame = requestAnimationFrame(start);
+    const fallback = setTimeout(start, 160);
+    return () => { cancelled = true; cancelAnimationFrame(frame); clearTimeout(fallback); };
+  }, [transitionState, surfaces, progress]);
+
+  useLayoutEffect(() => {
+    if (transitionState.outgoing === null || !transitionState.ready) return;
     const animation = Animated.timing(transitionState.progress, {
-      duration: 320,
+      duration: transitionState.duration,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
       useNativeDriver: false,
@@ -52,7 +107,7 @@ function AudienceContent() {
       settled = true;
       transitionState.progress.setValue(1);
       setTransitionState((current) => current === transitionState
-        ? { ...current, outgoing: null } : current);
+        ? { ...current, outgoing: null, motions: new Map() } : current);
     };
     animation.start(({ finished }) => {
       if (finished) finishTransition();
@@ -60,7 +115,7 @@ function AudienceContent() {
     const watchdog = setTimeout(() => {
       animation.stop();
       finishTransition();
-    }, 450);
+    }, transitionState.duration + 200);
     return () => {
       settled = true;
       clearTimeout(watchdog);
@@ -102,15 +157,28 @@ function AudienceContent() {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         return (
           <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
-            <SlideCanvas>
-              <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index} />
-            </SlideCanvas>
+            <AudienceFocusSurface index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
+              <SlideCanvas>
+                <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index} />
+              </SlideCanvas>
+            </AudienceFocusSurface>
           </Animated.View>
         );
       })}
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
     </>
   );
+}
+
+function AudienceFocusSurface({ children, index, motion, surfaces }: {
+  children: ReactNode; index: number; motion?: FocusMotion; surfaces: Map<number, FocusSurface>;
+}) {
+  const [surface] = useState(createFocusSurface);
+  useLayoutEffect(() => {
+    surfaces.set(index, surface);
+    return () => { if (surfaces.get(index) === surface) surfaces.delete(index); };
+  }, [index, surface, surfaces]);
+  return <FocusSurfaceContext.Provider value={{ surface, motion }}>{children}</FocusSurfaceContext.Provider>;
 }
 
 const styles = StyleSheet.create({

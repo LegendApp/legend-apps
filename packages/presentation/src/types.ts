@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 
-export type SlideTransition = "none" | "fade" | "slide";
+export type FocusTransition = { type: "focus"; from: string; duration?: number };
+export type SlideTransition = "none" | "fade" | "slide" | FocusTransition;
 
 export type PresentationTheme = {
   backgroundColor?: string;

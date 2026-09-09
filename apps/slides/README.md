@@ -65,7 +65,68 @@ transition: slide
 ## Second slide
 ```
 
-Transitions are `none`, `fade`, or `slide`. The deck default is `none`, and slide frontmatter may override it.
+Transitions are `none`, `fade`, `slide`, or a `focus` configuration. The deck default is `none`, and slide frontmatter may override it.
+
+## Focus transitions
+
+Mark a region on an overview slide and give matching live elements the same IDs
+on the detail slide:
+
+```mdx
+<FocusRegion id="engine">
+  <SharedElement id="title">
+
+    ## The engine
+
+  </SharedElement>
+  <SharedElement id="diagram" style={{ width: 460, height: 180 }}>
+    <Engine />
+  </SharedElement>
+</FocusRegion>
+
+---
+transition:
+  type: focus
+  from: engine
+  duration: 850
+---
+
+<SharedElement id="title">
+
+  # Inside the engine
+
+</SharedElement>
+<SharedElement id="diagram" style={{ width: 920, height: 420 }}>
+  <Engine detailed />
+</SharedElement>
+```
+
+The outgoing content zooms toward the region while matching elements move and
+scale into their incoming layout. Both React trees stay live during the motion;
+the destination component owns its state. Changed text and styles crossfade;
+this does not preserve a single component instance across different slides or
+interpolate font layout. The zoom preserves aspect ratio and covers the stage,
+so a region with a different aspect ratio may be cropped.
+
+The configuration belongs to the destination slide. Going back to its immediate
+predecessor reverses that same camera move. Duration is in milliseconds (default
+850); zero cuts immediately. Jumping across slides or a missing/unmeasurable
+focus region uses a fade. A new navigation cancels the current move and starts
+from the new source slide's layout; it does not preserve intermediate velocity.
+Presenter previews always show the final layout.
+
+`FocusRegion` and `SharedElement` accept native `View` props, including `style`.
+They are available directly in MDX and can be imported from
+`@legend-apps/presentation` in local components. IDs must be unique within each
+slide; ambiguous IDs are excluded. Nested shared elements move as part of their
+outer shared element. Keep moving elements outside clipping/scroll containers
+and put decorative transforms on their children: ancestor clipping and custom
+ancestor transforms are not overridden. Measurements use logical slide units,
+independent of audience display size. Live GPU/WebView rendering uses the same
+view transforms, but those native surfaces still need platform verification.
+
+Try `apps/slides/examples/focus.mdx` for a two-slide example with a live rotating
+React Native component, a moving title, and reverse navigation.
 
 ## Steps
 

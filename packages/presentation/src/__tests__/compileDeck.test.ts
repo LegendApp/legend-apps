@@ -217,6 +217,18 @@ describe("compileDeck", () => {
     expect(result.code).toContain("__LEGEND_SLIDES_PROPS__");
   });
 
+  test("compiles focus frontmatter and a live shared component from a local file", async () => {
+    const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/focus.mdx");
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code).toContain('"type":"focus","from":"engine","duration":1000');
+    expect(result.code).toContain("FocusRegion");
+    expect(result.code).toContain("SharedElement");
+    expect(result.code).toContain("Animated.loop");
+    expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/FocusEngine.tsx"));
+  });
+
   test("compiles the advanced example with custom components and animations", async () => {
     const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/showcase.mdx");
     const result = await compileDeck(deckPath);
