@@ -15,6 +15,7 @@
     "@legend-apps/recent-documents": "0.0.0",
     "@legend-apps/settings-window": "0.0.0",
     "@legend-apps/source-viewer": "workspace:*",
+    "@legend-apps/source-editor": "workspace:*",
     "@legend-apps/storage": "0.0.0",
     "@legend-apps/syntax-parser": "workspace:*",
     "@legend-apps/syntax-settings": "workspace:*",
