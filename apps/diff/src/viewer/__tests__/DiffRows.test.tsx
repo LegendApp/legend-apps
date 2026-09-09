@@ -2,6 +2,7 @@ import type { DiffDocument, DiffFileSummary, DiffRenderRow, DiffSideBySideRender
 import { observable } from "@legendapp/state";
 import { act, render } from "@testing-library/react-native";
 import React from "react";
+import { createFileByRowStart } from "../diffLoadedDocumentIndexes";
 import {
   DiffSideBySideRow,
   DiffUnifiedRow,
@@ -143,6 +144,48 @@ describe("DiffRows", () => {
     expect(view.getByText("App.tsx")).toBeTruthy();
     expect(view.getByText("+2")).toBeTruthy();
     expect(view.getByText("-1")).toBeTruthy();
+  });
+
+  it("uses the first file when progressive summaries share a unified row start", async () => {
+    const firstFile = createFile({
+      index: 0,
+      path: "macos/LegendMusic-macOS/Sidebar/SidebarView.swift",
+      rowStart: 0,
+    });
+    const unresolvedFile = createFile({
+      index: 39,
+      path: "src/windows/index.ts",
+      rowCount: 0,
+      rowStart: 0,
+    });
+    const view = await render(
+      <DiffUnifiedRow
+        adaptiveRender="normal"
+        collapsedFileIndexes$={observable(new Set<number>())}
+        hasHunkHeader={false}
+        index={0}
+        isFileHeader
+        nativeConfigId="test:unified"
+        nativeRowHeight={24}
+        onToggleFileCollapsed={jest.fn()}
+        rowRender$={createRowRender$({
+          document: {
+            ...createRowRenderState().document,
+            fileByIndex: new Map([
+              [firstFile.index, firstFile],
+              [unresolvedFile.index, unresolvedFile],
+            ]),
+            fileByRowStart: createFileByRowStart([firstFile, unresolvedFile]),
+          },
+        })}
+        row={undefined}
+      />
+    );
+
+    expect(view.getByText("macos/LegendMusic-macOS/Sidebar/")).toBeTruthy();
+    expect(view.getByText("SidebarView.swift")).toBeTruthy();
+    expect(view.queryByText("src/windows/")).toBeNull();
+    expect(view.queryByText("index.ts")).toBeNull();
   });
 
   it("explains when binary file previews are unavailable", async () => {

@@ -9,6 +9,19 @@ function isArrayIndexProperty(property: string | symbol) {
   return Number.isInteger(index) && index >= 0 && String(index) === property;
 }
 
+export function createFileByRowStart(files: readonly DiffFileSummary[]) {
+  const map = new Map<number, DiffFileSummary>();
+  for (const file of files) {
+    const rowStart = Math.max(0, Math.floor(file.rowStart));
+    // Progressive summaries can share the current parsed boundary until their
+    // rows arrive. That boundary belongs to the earliest file in diff order.
+    if (!map.has(rowStart)) {
+      map.set(rowStart, file);
+    }
+  }
+  return map;
+}
+
 export function createVisibleDiffRowIndexes(
   files: readonly DiffFileSummary[],
   collapsedFileIndexes: ReadonlySet<number>,

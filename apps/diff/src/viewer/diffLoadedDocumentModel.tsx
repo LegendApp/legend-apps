@@ -36,6 +36,7 @@ import { DiffSideBySideDataSource } from "./diffSideBySideDataSource";
 
 export {
   createCollapsedFileIndexList,
+  createFileByRowStart,
   createIdentityDiffRowIndexes,
   createSideBySideFileHeaderIndexes,
   createSideBySideListIndexByRowIndex,

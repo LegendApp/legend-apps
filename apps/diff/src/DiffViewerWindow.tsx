@@ -143,6 +143,7 @@ import {
 } from "./viewer/diffViewerConstants";
 import {
   createCollapsedFileIndexList,
+  createFileByRowStart,
   findFileIndexForRow,
   getFilesForSourceRowRange,
   getBoundedSideBySideLayoutMetadata,
@@ -786,14 +787,6 @@ function createFileByIndex(files: readonly DiffFileSummary[]) {
   const map = new Map<number, DiffFileSummary>();
   for (const file of files) {
     map.set(file.index, file);
-  }
-  return map;
-}
-
-function createFileByRowStart(files: readonly DiffFileSummary[]) {
-  const map = new Map<number, DiffFileSummary>();
-  for (const file of files) {
-    map.set(Math.max(0, Math.floor(file.rowStart)), file);
   }
   return map;
 }
