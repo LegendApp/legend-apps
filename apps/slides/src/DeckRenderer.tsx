@@ -1,5 +1,9 @@
 import {
   Background,
+  FocusRegion,
+  SharedElement,
+  FocusStage,
+  normalizeTransition,
   BackgroundHost,
   useBackgroundHost,
   useHasBackground,
@@ -10,7 +14,6 @@ import {
   type DeckConfig,
   type PresentationTemplateProps,
   type SlideConfig,
-  type SlideTransition,
 } from "@legend-apps/presentation";
 import { ScaledView } from "@legend-apps/scaled-view";
 import React, { Children, createContext, isValidElement, useContext, useEffect, type ReactElement, type ReactNode } from "react";
@@ -56,10 +59,6 @@ function MissingSlideTemplate({ reference }: { reference: string }): never {
 }
 
 const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: boolean; targetIndex?: number; targetStep?: number }>({ isPreview: false });
-
-function normalizeTransition(value: unknown): SlideTransition | undefined {
-  return value === "none" || value === "fade" || value === "slide" ? value : undefined;
-}
 
 function Deck({ children, configJson }: CompiledDeckProps) {
   const { isPreview, isPreparing, targetIndex, targetStep } = useContext(DeckRenderContext);
@@ -182,6 +181,8 @@ function MarkdownPre({ children }: { children?: ReactNode }) {
 const markdownComponents = {
   Deck,
   Background,
+  FocusRegion,
+  SharedElement,
   Effect,
   Slide,
   Step,
@@ -275,7 +276,7 @@ function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode;
         style={[styles.stage, { backgroundColor, height: renderedHeight, width: renderedWidth }]}
       >
         <SlideCaptureContext.Provider value={captureEnabled ? scale : 0}>
-          {children}
+          <FocusStage>{children}</FocusStage>
         </SlideCaptureContext.Provider>
       </ScaledView>
     </View>
