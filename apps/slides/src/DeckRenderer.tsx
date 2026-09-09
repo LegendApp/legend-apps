@@ -34,6 +34,7 @@ import { getSlideStepCount, getSlidesState, nextSlide, previousSlide, reportSlid
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Step, Steps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
+import { LiquidGlass } from "./LiquidGlass";
 import { Effect } from "./Effect";
 import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
@@ -184,6 +185,7 @@ const markdownComponents = {
   FocusRegion,
   SharedElement,
   Effect,
+  LiquidGlass,
   Slide,
   Step,
   Steps,

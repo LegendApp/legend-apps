@@ -156,7 +156,9 @@ Property changes use explicit targets that persist until the next change:
   transition={{ duration: 300 }}>
   <Diagram />
 </Step>
-<Effect startOnStep={2} shader={liquidGlass}><Demo /></Effect>
+<Steps count={3}>{(step) => (
+  <Effect active={step >= 2} shader={liquidGlass}><Demo /></Effect>
+)}</Steps>
 ```
 
 Numeric styles, transforms and hex colors interpolate. Other values change at
@@ -423,3 +425,58 @@ separate comments too, since comments are collected into the slide's notes.
 Editing shows the complete original Markdown at full opacity. Note markers only
 highlight existing steps; use `Step`, `Steps`, animation triggers, or slide
 frontmatter `steps` to define the slide's navigation states.
+
+### Liquid glass focus
+
+`LiquidGlass` captures its children using the same snapshot path as `Effect`.
+Its `active` prop animates between clear and frosted, revealing a sharp overlay.
+Use a `Steps` render function to connect that state to presentation navigation:
+
+```mdx
+<Steps count={2}>{(step) => (
+<LiquidGlass active={step >= 1} blur={24} refraction={8} duration={700}
+  overlay={<Text>Focus on what matters.</Text>}>
+  <ComparisonChart />
+</LiquidGlass>
+)}</Steps>
+```
+
+`active` defaults to `false`. `blur` and `refraction` are logical pixels;
+`duration` is milliseconds. `variant="frosted"` is the default; `variant="liquid"`
+adds a stronger ripple as the glass forms. Both settle after the transition.
+Going backward clears the glass; changing direction mid-transition starts from
+the current amount. The optional overlay fades with the glass but remains sharp.
+Use `style` for the wrapper's size or corner radius. Content needs intrinsic or
+explicit dimensions. Like `Effect`, this captures static native content rather
+than providing a live backdrop blur over interactive controls.
+
+
+### Steps as state
+
+`Steps` also accepts a render function, receiving the current zero-based slide
+step. Components receive their own ordinary props; Slides does not inject or
+animate child props.
+
+```mdx
+<Steps count={3}>
+  {(step) => (
+    <LiquidGlass active={step >= 2} overlay={<Text>Now focus here.</Text>}>
+      <Chart highlighted={step >= 1 ? "memory" : undefined} />
+    </LiquidGlass>
+  )}
+</Steps>
+```
+
+`count` is the total number of states, including initial step 0. It defaults to
+2 for render functions. The callback sees the slide's global step, so multiple
+`Steps` blocks coordinate rather than advancing independently. The host combines
+counts with other reveal declarations using the maximum, not their sum.
+Callbacks are opaque during discovery: declare enough states for everything
+inside them using `count`. For example, `count={3}` supports steps 0, 1, and 2.
+Presenter previews pass their requested step; backward navigation passes the
+earlier value. Components own their transition and reversal behavior.
+
+The existing `<Steps>` Markdown list syntax still reveals each item in order.
+`Effect active={...}` replaces `startOnStep`: inactive effects show their initial
+frame; activation starts the clock, which continues while active and resets when
+deactivated. `LiquidGlass active={...}` owns its smooth reversible frost transition.
