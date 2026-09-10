@@ -13,9 +13,13 @@ Pod::Spec.new do |s|
   s.frameworks = "AppKit", "CoreText"
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
-    "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/Headers/Private/Yoga\""
+    "HEADER_SEARCH_PATHS" => [
+      "\"$(PODS_ROOT)/Headers/Private/Yoga\"",
+      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/build",
+    ].join(" ")
   }
   s.dependency "React-Core"
   s.dependency "React-RCTFabric"
   s.dependency "ReactCodegen"
+  s.dependency "RNSyntaxParser"
 end

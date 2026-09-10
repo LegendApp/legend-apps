@@ -13,8 +13,7 @@ Scratch edits are intentionally not saved. Closing the scratch editor discards
 them. The original viewer and its syntax highlighting are unchanged.
 
 This is an architecture probe, **not yet a replacement for the code viewer**.
-Do not use it to author work that needs saving. In particular, syntax
-highlighting is not yet connected to the editable native buffer.
+Do not use it to author work that needs saving.
 
 Implemented foundations:
 
@@ -30,6 +29,15 @@ Implemented foundations:
   basic mouse selection, visual-line arrow navigation, and accessibility text
   value/selection support. Caret reveal uses native visual-row geometry, including
   logical lines taller than the viewport.
+- Incremental syntax highlighting using the same native TextMate engine,
+  grammars, and themes as Code and Diff. A serial background worker retains
+  multiline parser states by stable line ID, rejects stale revisions, and stops
+  reparsing when state converges beyond the edited range. Work is batched by
+  line/byte count (a single large logical line is still indivisible).
+- Syntax colors and font styles applied before CoreText layout, preserving
+  matching rendering, wrapping, selection, and caret geometry. Theme/highlighting
+  changes keep the native edit buffer and undo history; asset failures fall back
+  to editable plain text with an error message.
 
 ## Validation
 
@@ -46,6 +54,8 @@ bun run code verify macos
 Native tests exercise randomized range replacements (including CRLF boundaries),
 100k-line buffers, top-of-file splices, wrapped caret/hit-test round trips,
 grapheme boundaries, and composition commit/undo through `NSTextInputClient`.
+Real TypeScript/TSX grammar tests cover UTF-16 token ranges, multiline edits and
+undo, theme changes, and incremental convergence on 10,000 lines.
 Composition protocol tests do not replace live testing with an actual IME.
 
 Runtime verification (macOS Debug, September 9, 2026): typing/newline insertion,
@@ -61,6 +71,7 @@ React mounting, scrolling, resize reflow, and native/JS synchronization still
 need integrated measurement.
 
 New native code requires `bun run code pods macos` followed by a debug rebuild.
+The native test harness also uses the headers installed by that pod step.
 In a fresh worktree, initialize the existing TextMateLib submodules first:
 `git submodule update --init --recursive`.
 
@@ -71,11 +82,9 @@ In a fresh worktree, initialize the existing TextMateLib submodules first:
    Current fallback goes to that row's start until it mounts.
 3. Implement explicit wrap-off horizontal scrolling and resize anchoring to a
    source position, rather than treating the list's estimated offset as final.
-4. Connect incremental TextMate highlighting with retained multiline parser
-   states, revision cancellation, and bounded background work.
-5. Complete IME cancellation/replacement edge cases, bidirectional selection
+4. Complete IME cancellation/replacement edge cases, bidirectional selection
    geometry, keyboard commands, typing-history grouping, and screen-reader QA.
-6. Measure 10k/100k-line scrolling, selection, edits, and reflow. Extremely long
+5. Measure 10k/100k-line scrolling, selection, edits, and reflow. Extremely long
    single lines still lay out all visual rows; viewport-level layout caching or
    fragment items may be needed beyond the bounded shaping implemented here.
 

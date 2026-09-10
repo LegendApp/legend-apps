@@ -1,5 +1,6 @@
 import { LegendList, useRecyclingState, type LegendListDataSourceRenderItemProps, type LegendListRef } from "@legendapp/list/react-native";
-import { useRef, useState } from "react";
+import { defaultSyntaxThemeName, ensureSyntaxGrammar, ensureSyntaxTheme, getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import SourceEditorHost from "./SourceEditorHostNativeComponent";
 import SourceEditorRow from "./SourceEditorRowNativeComponent";
@@ -12,6 +13,9 @@ export type SourceDocumentEditorProps = {
   fontSize?: number;
   foreground?: string;
   wrap?: boolean;
+  language?: string;
+  syntaxTheme?: string;
+  syntaxHighlightingEnabled?: boolean;
   onChange?: (change: SourceEdit) => void;
 };
 
@@ -30,9 +34,25 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
   />;
 }
 
-export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true, onChange }: SourceDocumentEditorProps) {
+export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true,
+  language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true, onChange,
+}: SourceDocumentEditorProps) {
   const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
   const [error, setError] = useState("");
+  const [syntaxError, setSyntaxError] = useState("");
+  const [assets, setAssets] = useState<{ language: string; theme: string; error: string } | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (syntaxHighlightingEnabled && language) {
+      Promise.all([ensureSyntaxGrammar(language), ensureSyntaxTheme(syntaxTheme)])
+        .then(() => { if (active) setAssets({ language, theme: syntaxTheme, error: "" }); })
+        .catch((cause) => { if (active) setAssets({ language, theme: syntaxTheme, error: String(cause) }); });
+    }
+    return () => { active = false; };
+  }, [language, syntaxTheme, syntaxHighlightingEnabled]);
+  const currentAssets = assets?.language === language && assets.theme === syntaxTheme ? assets : null;
+  const highlighting = syntaxHighlightingEnabled && !!language && !!currentAssets && !currentAssets.error;
+  const highlightError = syntaxHighlightingEnabled ? currentAssets?.error || syntaxError : "";
   const list = useRef<LegendListRef>(null);
   const sourceRef = useRef<SourceLineDataSource | null>(null);
   const renderItem = ({ item, index }: LegendListDataSourceRenderItemProps<SourceLine>) => item
@@ -40,6 +60,10 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
 
   return <SourceEditorHost
     documentPath={filePath}
+    syntaxLanguage={language}
+    syntaxTheme={syntaxTheme}
+    syntaxHighlightingEnabled={highlighting}
+    onSyntaxError={({ nativeEvent }) => setSyntaxError(nativeEvent.error)}
     style={styles.root}
     onReady={({ nativeEvent }) => {
       setError(nativeEvent.error);
@@ -64,6 +88,7 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
     }}
   >
     {error ? <Text style={styles.error}>{error}</Text> : null}
+    {highlightError ? <Text style={styles.error}>Syntax highlighting unavailable: {highlightError}</Text> : null}
     {dataSource ? <LegendList
       ref={list}
       dataSource={dataSource}

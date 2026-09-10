@@ -720,6 +720,7 @@
       "name": "@legend-apps/source-editor",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-apps/syntax-parser": "workspace:*",
         "@legendapp/list": "catalog:",
       },
       "peerDependencies": {

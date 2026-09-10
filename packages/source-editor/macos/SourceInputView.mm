@@ -1,7 +1,10 @@
 #import "SourceInputView.h"
 #include "../cpp/SourceDocument.hpp"
+#include "../../syntax-parser/cpp/IncrementalSyntaxHighlighter.hpp"
+#include <unordered_set>
 
 using legend::source::SourceDocument;
+namespace syntax = margelo::nitro::legendapps::syntaxparser;
 
 static std::u16string utf16(NSString *text) {
   std::u16string result(text.length, 0);
@@ -16,6 +19,9 @@ static NSString *string(const std::u16string &text) {
 - (void)publishSelection;
 - (void)replaceRange:(NSRange)range text:(NSString *)text recordUndo:(BOOL)recordUndo;
 - (void)revealSelectionInRow:(LESourceRowView *)row;
+- (void)resetSyntax;
+- (void)scheduleSyntax;
+- (void)applySyntaxToText:(NSMutableAttributedString *)text row:(LESourceRowView *)row font:(NSFont *)font;
 @end
 
 @implementation LESourceInputView {
@@ -27,11 +33,19 @@ static NSString *string(const std::u16string &text) {
   NSString *_compositionOriginal;
   NSRange _compositionRange;
   BOOL _needsSelectionReveal;
+  dispatch_queue_t _syntaxQueue;
+  std::shared_ptr<syntax::IncrementalSyntaxHighlighter> _syntax;
+  std::unordered_map<uint64_t, std::shared_ptr<const syntax::HighlightedSyntaxLine>> _highlightedRows;
+  NSString *_syntaxLanguage, *_syntaxTheme;
+  BOOL _syntaxEnabled, _syntaxBusy;
+  uint64_t _syntaxGeneration;
+  NSUInteger _syntaxNextLine, _syntaxKnownEnd, _syntaxDirtyEnd;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
     _rows = [NSHashTable weakObjectsHashTable];
     _history = [NSUndoManager new];
+    _syntaxQueue = dispatch_queue_create("app.legend.source-editor.syntax", DISPATCH_QUEUE_SERIAL);
     [self loadSource:@""];
   }
   return self;
@@ -69,6 +83,94 @@ static NSString *string(const std::u16string &text) {
   _needsSelectionReveal = NO;
   [_history removeAllActions];
   for (LESourceRowView *row in _rows) [row invalidateText];
+  [self resetSyntax];
+}
+- (void)configureSyntaxLanguage:(NSString *)language theme:(NSString *)theme enabled:(BOOL)enabled {
+  if ([_syntaxLanguage isEqualToString:language] && [_syntaxTheme isEqualToString:theme] && _syntaxEnabled == enabled) return;
+  _syntaxLanguage = [language copy]; _syntaxTheme = [theme copy]; _syntaxEnabled = enabled;
+  [self resetSyntax];
+}
+- (void)resetSyntax {
+  ++_syntaxGeneration;
+  _syntaxNextLine = _syntaxKnownEnd = _syntaxDirtyEnd = 0;
+  _highlightedRows.clear();
+  _syntax = _syntaxEnabled && _syntaxLanguage.length
+    ? std::make_shared<syntax::IncrementalSyntaxHighlighter>(_syntaxLanguage.UTF8String, _syntaxTheme.UTF8String) : nullptr;
+  if (self.onSyntaxError) self.onSyntaxError(@"");
+  for (LESourceRowView *row in _rows) [row invalidateText];
+  [self scheduleSyntax];
+}
+- (void)scheduleSyntax {
+  if (!_syntax || _syntaxBusy || _syntaxNextLine >= _document->lineCount()) return;
+  const auto start = _syntaxNextLine;
+  const auto generation = _syntaxGeneration;
+  const auto previousId = start ? _document->line(start - 1).id : 0;
+  std::vector<syntax::IncrementalSyntaxLine> lines;
+  size_t bytes = 0;
+  for (size_t index = start; index < _document->lineCount() && lines.size() < 128; ++index) {
+    const auto& line = _document->line(index);
+    NSData *data = [string(line.text) dataUsingEncoding:NSUTF8StringEncoding];
+    lines.push_back({line.id, data.length ? std::string(static_cast<const char *>(data.bytes), data.length) : std::string()});
+    bytes += data.length;
+    if (bytes >= 32768) break;
+  }
+  const auto highlighter = _syntax;
+  _syntaxBusy = YES;
+  __weak LESourceInputView *weakSelf = self;
+  dispatch_async(_syntaxQueue, ^{
+    syntax::IncrementalSyntaxBatch result;
+    NSString *error = nil;
+    try { result = highlighter->highlight(lines, previousId); }
+    catch (const std::exception& cause) { error = [NSString stringWithUTF8String:cause.what()]; }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      LESourceInputView *self = weakSelf;
+      if (!self) return;
+      self->_syntaxBusy = NO;
+      if (generation != self->_syntaxGeneration) {
+        // The discarded job may already have changed worker-side parser states.
+        // Those states cannot prove convergence with the still-displayed cache.
+        // Visit the remaining tail once before allowing early termination again.
+        self->_syntaxDirtyEnd = self->_document->lineCount();
+      } else {
+        if (error) {
+          self->_syntax.reset();
+          if (self.onSyntaxError) self.onSyntaxError(error);
+        } else {
+          for (const auto& line : result.lines) self->_highlightedRows[line->id] = line;
+          const auto end = start + result.lines.size();
+          // Once state converges past every pending edit, cached downstream
+          // lines remain valid. Resume any unfinished initial tokenization there.
+          self->_syntaxNextLine = result.converged && end >= self->_syntaxDirtyEnd
+            ? MAX(end, self->_syntaxKnownEnd) : end;
+          if (end >= self->_syntaxDirtyEnd) self->_syntaxDirtyEnd = 0;
+          self->_syntaxKnownEnd = MAX(self->_syntaxKnownEnd, self->_syntaxNextLine);
+          for (LESourceRowView *row in self->_rows) {
+            if (row.lineIndex >= start && row.lineIndex < self->_syntaxNextLine) [row invalidateText];
+          }
+        }
+      }
+      [self scheduleSyntax];
+    });
+  });
+}
+- (void)applySyntaxToText:(NSMutableAttributedString *)text row:(LESourceRowView *)row font:(NSFont *)font {
+  if (!_syntax || row.lineIndex >= _syntaxNextLine) return;
+  const auto found = _highlightedRows.find(row.lineId);
+  if (found == _highlightedRows.end()) return;
+  for (const auto& token : found->second->tokens) {
+    if (token.start >= text.length) continue;
+    NSRange range = NSMakeRange(token.start, MIN(token.length, text.length - token.start));
+    unsigned int rgb;
+    NSString *hex = [[NSString stringWithUTF8String:token.foreground.c_str()] stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    if (hex.length == 6 && [[NSScanner scannerWithString:hex] scanHexInt:&rgb]) {
+      [text addAttribute:NSForegroundColorAttributeName value:[NSColor colorWithSRGBRed:((rgb >> 16) & 255) / 255.0 green:((rgb >> 8) & 255) / 255.0 blue:(rgb & 255) / 255.0 alpha:1] range:range];
+    }
+    NSFontTraitMask traits = 0;
+    if (token.fontStyle & 1) traits |= NSItalicFontMask;
+    if (token.fontStyle & 2) traits |= NSBoldFontMask;
+    if (traits) [text addAttribute:NSFontAttributeName value:[NSFontManager.sharedFontManager convertFont:font toHaveTrait:traits] range:range];
+    if (token.fontStyle & 4) [text addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle) range:range];
+  }
 }
 - (NSString *)source { return string(_document->text()); }
 - (void)registerRow:(LESourceRowView *)row { [_rows addObject:row]; }
@@ -167,7 +269,29 @@ static NSString *string(const std::u16string &text) {
       [target publishSelection];
     }];
   }
+  std::vector<uint64_t> oldIds;
+  const auto oldStart = _document->position(range.location).line;
+  const auto oldEnd = MIN(_document->lineCount(), _document->position(NSMaxRange(range)).line + 2);
+  for (size_t i = oldStart ? oldStart - 1 : 0; i < oldEnd; ++i) oldIds.push_back(_document->line(i).id);
   auto change = _document->replace(range.location, range.length, utf16(text));
+  if (_syntax) {
+    ++_syntaxGeneration;
+    const auto mapBoundary = [&](NSUInteger index) -> NSUInteger {
+      if (index <= change.startLine) return index;
+      if (index >= change.startLine + change.removedLineCount) return index - change.removedLineCount + change.lines.size();
+      return change.startLine + change.lines.size();
+    };
+    _syntaxKnownEnd = mapBoundary(_syntaxKnownEnd);
+    _syntaxDirtyEnd = MAX(mapBoundary(_syntaxDirtyEnd), change.startLine + change.lines.size());
+    _syntaxNextLine = MIN(_syntaxNextLine, change.startLine);
+    std::unordered_set<uint64_t> retained;
+    for (const auto& line : change.lines) retained.insert(line.id);
+    std::vector<uint64_t> retired;
+    for (auto id : oldIds) if (!retained.count(id)) { retired.push_back(id); _highlightedRows.erase(id); }
+    const auto highlighter = _syntax;
+    dispatch_async(_syntaxQueue, ^{ highlighter->erase(retired); });
+    [self scheduleSyntax];
+  }
   // The native buffer advances before Fabric receives the transaction. Keep
   // mounted rows attached to their logical IDs during that interval.
   for (LESourceRowView *row in _rows) {
@@ -392,9 +516,10 @@ static NSString *string(const std::u16string &text) {
   NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
   paragraph.tabStops = @[];
   paragraph.defaultTabInterval = 4 * [@" " sizeWithAttributes:@{NSFontAttributeName:font}].width;
-  NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:text attributes:@{
+  NSMutableAttributedString *attributed = [[NSMutableAttributedString alloc] initWithString:text attributes:@{
     NSFontAttributeName:font, NSForegroundColorAttributeName:self.foreground, NSParagraphStyleAttributeName:paragraph,
   }];
+  [self.input applySyntaxToText:attributed row:self font:font];
   _textLayout = [[LESourceLineLayout alloc] initWithText:attributed width:width lineHeight:self.lineHeight wrap:self.wrap];
   if (self.onMetrics) self.onMetrics(_textLayout.height, _textLayout.width + 72);
   [self.input revealSelectionInRow:self];

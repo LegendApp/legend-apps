@@ -35,6 +35,11 @@ static std::string utf8String(NSString *value) {
         .line = (double)line, .start = (double)start, .length = (double)length,
       });
     };
+    _input.onSyntaxError = ^(NSString *error) {
+      RNSourceEditorHost *self = weakSelf;
+      if (!self || !self->_eventEmitter) return;
+      std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onSyntaxError({.error = utf8String(error)});
+    };
   }
   return self;
 }
@@ -42,6 +47,7 @@ static std::string utf8String(NSString *value) {
   const auto &next = *std::static_pointer_cast<const SourceEditorHostProps>(props);
   NSString *path = str(next.documentPath);
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
+  [_input configureSyntaxLanguage:str(next.syntaxLanguage) theme:str(next.syntaxTheme) enabled:next.syntaxHighlightingEnabled];
   [super updateProps:props oldProps:oldProps];
 }
 - (void)finalizeUpdates:(RNComponentViewUpdateMask)mask {
@@ -59,6 +65,7 @@ static std::string utf8String(NSString *value) {
   [super prepareForRecycle];
   if (self.window.firstResponder == _input) [self.window makeFirstResponder:nil];
   _path = nil; _loaded = NO; [_input loadSource:@""];
+  [_input configureSyntaxLanguage:@"" theme:@"" enabled:NO];
 }
 @end
 
