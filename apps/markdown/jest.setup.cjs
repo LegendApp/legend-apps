@@ -1,5 +1,29 @@
 global.IS_REACT_ACT_ENVIRONMENT = true;
 process.env.RNTL_SKIP_AUTO_CLEANUP = "true";
+const { cleanup } = require("@testing-library/react-native/pure");
+afterEach(cleanup);
+
+// Keep document-app and design-system real while isolating OS-only services.
+jest.mock("@legend-apps/file-system-watcher", () => ({
+  watchFiles: jest.fn(() => ({ remove: jest.fn() })),
+}));
+
+jest.mock("@legend-apps/file-dialog", () => ({
+  openFileDialog: jest.fn(async () => null),
+  saveFileDialog: jest.fn(async () => null),
+}));
+
+jest.mock("@legend-apps/context-menu", () => ({
+  showContextMenu: jest.fn(async () => null),
+}));
+
+jest.mock("@legend-apps/native-menu", () => ({
+  useNativeMenu: jest.fn(),
+}));
+
+// Mock Fabric hosts, not their JS wrappers or the design-system controls.
+jest.mock("../../packages/native-select/src/NativeSelectNativeComponent", () => "NativeSelect");
+jest.mock("../../packages/native-select/src/NativeSegmentedControlNativeComponent", () => "NativeSegmentedControl");
 
 jest.mock("@legend-apps/appkit-split-view", () => {
   const React = require("react");

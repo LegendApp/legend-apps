@@ -1,5 +1,7 @@
 module.exports = {
   rootDir: "../..",
+  testEnvironmentOptions: { customExportConditions: ["react-native"] },
+  modulePathIgnorePatterns: ["<rootDir>/shell/.legend/"],
   testMatch: [
     "<rootDir>/apps/markdown/src/**/*.test.ts",
     "<rootDir>/apps/markdown/src/**/*.test.tsx",
