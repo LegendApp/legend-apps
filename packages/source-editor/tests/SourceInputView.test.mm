@@ -19,6 +19,38 @@ static void closeUndoGroup(NSUndoManager *history) {
 int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
+    // Forward deletion must remove one grapheme, not one UTF-16 code unit.
+    for (NSString *grapheme in @[@"😀", @"👩🏽‍💻", @"é", @"🇨🇦", @"\r\n"]) {
+      LESourceInputView *unicode = [[LESourceInputView alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+      NSString *original = [grapheme stringByAppendingString:@"tail"];
+      [unicode loadSource:original];
+      unicode.undoManager.groupsByEvent = NO;
+      [unicode.undoManager beginUndoGrouping];
+      [unicode deleteForward:nil];
+      [unicode.undoManager endUndoGrouping];
+      assert([unicode.source isEqualToString:@"tail"]);
+      [unicode.undoManager undo];
+      assert([unicode.source isEqualToString:original]);
+      [unicode.undoManager redo];
+      assert([unicode.source isEqualToString:@"tail"]);
+      [unicode loadSource:@"replacement"];
+      assert(!unicode.undoManager.canUndo && !unicode.undoManager.canRedo);
+      assert(!unicode.hasMarkedText && unicode.head == 0);
+    }
+    {
+      LESourceInputView *crlf = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      [crlf loadSource:@"a\r\nb"];
+      [crlf setAccessibilitySelectedTextRange:NSMakeRange(1, 0)];
+      [crlf moveRight:nil]; assert(crlf.head == 3);
+      [crlf moveLeft:nil]; assert(crlf.head == 1);
+      [crlf moveRightAndModifySelection:nil];
+      assert(NSEqualRanges(crlf.selectedRange, NSMakeRange(1, 2)));
+      // Accessibility clients can place a caret inside the pair as well.
+      [crlf setAccessibilitySelectedTextRange:NSMakeRange(2, 0)];
+      [crlf moveLeft:nil]; assert(crlf.head == 1);
+      [crlf setAccessibilitySelectedTextRange:NSMakeRange(2, 0)];
+      [crlf moveRight:nil]; assert(crlf.head == 3);
+    }
     // Native edits/undo remain authoritative while background chunks arrive.
     LESourceInputView *streaming = [[LESourceInputView alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
     auto prefix = std::make_shared<legend::source::SourceDocument>(u"first\n");
