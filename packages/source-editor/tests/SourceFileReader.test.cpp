@@ -2,6 +2,7 @@
 #include <cassert>
 #include <filesystem>
 #include <iostream>
+#include <random>
 #include <unistd.h>
 
 int main() {
@@ -27,6 +28,32 @@ int main() {
     assert(result == expected);
   }
   { legend::source::SourceFileReader reader(path); assert(reader.next() == expected); }
+  // Vary read and line budgets on every call, not just between files. This
+  // catches buffered UTF-8/CRLF state leaking across changing batch sizes.
+  for (unsigned seed = 1; seed <= 40; ++seed) {
+    std::mt19937 random(seed);
+    std::string source;
+    std::u16string reference;
+    for (size_t i = 0; i < 100; ++i) { source += utf8; reference += expected; }
+    write(source);
+    legend::source::SourceFileReader reader(path);
+    std::u16string result;
+    size_t calls = 0;
+    while (!reader.done()) {
+      result += reader.next(4 + random() % 100, 1 + random() % 20);
+      assert(++calls < source.size());
+    }
+    assert(result == reference);
+    assert(reader.next().empty());
+  }
+  write("valid\n\xf0\x9f");
+  {
+    legend::source::SourceFileReader reader(path);
+    assert(reader.next(6, 1) == u"valid\n");
+    bool threw = false;
+    try { reader.next(); } catch (const std::runtime_error &) { threw = true; }
+    assert(threw); // Errors after a successfully displayed prefix still surface.
+  }
   write("");
   { legend::source::SourceFileReader reader(path); assert(reader.next().empty() && reader.done()); }
   write("a\r\nb");
