@@ -1,7 +1,8 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { loadCodeFile, type SyntaxFileLoadResult, type SyntaxDocument } from "@legend-apps/syntax-parser";
-import { SourceDocumentView } from "@legend-apps/source-viewer";
+import { getLaunchDocumentPath, openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-apps/document-app";
+import { noteRecentDocument } from "@legend-apps/recent-documents";
+import { loadCodeFile } from "@legend-apps/syntax-parser";
 import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document";
 import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
@@ -15,6 +16,10 @@ jest.mock("@legend-apps/document-app", () => ({
 }));
 jest.mock("@legend-apps/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
 jest.mock("@legend-apps/source-editor", () => ({ SourceDocumentEditor: "SourceDocumentEditor" }));
+jest.mock("@legend-apps/source-viewer", () => ({
+  SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
+  useSourceDocumentRows: () => { throw new Error("The old tokenization pipeline must not run"); },
+}));
 jest.mock("@legend-apps/syntax-parser", () => ({ loadCodeFile: jest.fn() }));
 jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async () => {}) }));
 jest.mock("../codeSettings", () => ({
@@ -34,139 +39,100 @@ jest.mock("@legendapp/list/react-native", () => {
   };
 });
 
-function makeDocument(text: string, lineCount = 200): SyntaxFileLoadResult {
-  const lines = [{ text, tokens: [], index: 0 }];
-  const timing = { lineCount, tokenCount: 0, totalMs: 0, colorCount: 0, contextMs: 0, indexLinesMs: 0, initialLinesMs: 0, mapFileMs: 0, tokenizeMs: 0 };
-  const document = {
-    lineCount,
-    getPlainLines: jest.fn(() => lines),
-    getRenderLines: jest.fn(() => lines),
-    getStyles: jest.fn(() => []),
-    getTiming: jest.fn(() => timing),
-    startBackgroundTokenization: jest.fn(),
-    stopBackgroundTokenization: jest.fn(),
-  };
-  return { document: document as unknown as SyntaxDocument, initialLines: lines, styles: [], timing };
-}
-
-describe("Code document list reuse", () => {
+describe("Code default editor", () => {
   let renderer: ReactTestRenderer;
-  const pending: { resolve: (value: ReturnType<typeof makeDocument>) => void; reject: (error: Error) => void }[] = [];
-  const list = () => renderer.root.findByType("List" as never);
+  const editor = () => renderer.root.findByType("SourceDocumentEditor" as never);
+  const openButton = () => renderer.root.findAll((node) =>
+    node.props.accessibilityRole === "button" && typeof node.props.onPress === "function")[0];
 
   beforeEach(() => {
     jest.useFakeTimers();
+    jest.clearAllMocks();
+    jest.mocked(getLaunchDocumentPath).mockReturnValue(null);
     jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
     jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(true);
-    jest.mocked(loadCodeFile).mockClear();
     codeViewerFileRequest$.set({ path: null, version: 0 });
-    pending.length = 0;
-    jest.mocked(loadCodeFile).mockImplementation(() => new Promise((resolve, reject) => {
-      pending.push({ resolve, reject });
-    }));
   });
   afterEach(async () => {
     if (renderer) await act(async () => renderer.unmount());
-    // State defers development-mode observer cleanup to a microtask for Strict Mode.
-    await act(async () => jest.runAllTicks());
     jest.useRealTimers();
   });
 
-  it("keeps one list through loading, replacement, errors, and empty documents", async () => {
+  it("opens directly in the editor without loading or mounting the old viewer", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow />); });
-    const mountedList = list();
     expect(JSON.stringify(renderer.toJSON())).toContain("No code file open");
-    await act(async () => {
-      list().props.onLayout({ nativeEvent: { layout: { height: 440 } } });
-      requestCodeViewerFile("/one.ts");
-    });
-    expect(list()).toBe(mountedList);
-    expect(list().props.data).toEqual([]);
-    const first = makeDocument("first document");
-    await act(async () => pending.shift()!.resolve(first));
-    expect(list()).toBe(mountedList);
-    expect(list().props.dataKey).toBe("/one.ts");
-    expect(list().props.data).toHaveLength(200);
-    expect(renderer.root.findByType(SourceDocumentView).props.sourceRows.getRow(0).text).toBe("first document");
-    await act(async () => jest.advanceTimersByTime(100));
-    expect(first.document.startBackgroundTokenization).toHaveBeenCalledTimes(1);
-
-    await act(async () => requestCodeViewerFile("/two.ts"));
-    expect(list()).toBe(mountedList);
-    expect(list().props.data).toEqual([]);
-    expect(renderer.root.findByType(SourceDocumentView).props.sourceRows.getRow(0)).toBeUndefined();
-    expect(first.document.stopBackgroundTokenization).toHaveBeenCalled();
-    const second = makeDocument("second document");
-    await act(async () => pending.shift()!.resolve(second));
-    // No second onLayout: native bounds are unchanged when switching files.
-    await act(async () => jest.advanceTimersByTime(100));
-    expect(list()).toBe(mountedList);
-    expect(list().props.dataKey).toBe("/two.ts");
-    expect(renderer.root.findByType(SourceDocumentView).props.sourceRows.getRow(0).text).toBe("second document");
-    expect(second.document.startBackgroundTokenization).toHaveBeenCalledTimes(1);
-
-    await act(async () => requestCodeViewerFile("/two.ts"));
-    expect(list().props.data).toEqual([]);
-    const reloaded = makeDocument("reloaded document");
-    await act(async () => pending.shift()!.resolve(reloaded));
-    await act(async () => jest.advanceTimersByTime(100));
-    expect(list()).toBe(mountedList);
-    expect(reloaded.document.startBackgroundTokenization).toHaveBeenCalledTimes(1);
-
-    await act(async () => requestCodeViewerFile("/missing.ts"));
-    await act(async () => pending.shift()!.reject(new Error("File not found")));
-    expect(list()).toBe(mountedList);
-    expect(list().props.data).toEqual([]);
-    expect(JSON.stringify(renderer.toJSON())).toContain("File not found");
-    await act(async () => requestCodeViewerFile("/empty.ts"));
-    await act(async () => pending.shift()!.resolve(makeDocument("", 0)));
-    expect(list()).toBe(mountedList);
-    expect(list().props.data).toEqual([]);
+    expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    expect(editor().props.filePath).toBe("/one.ts");
+    expect(editor().props.language).toBe("typescript");
+    expect(editor().props.syntaxHighlightingEnabled).toBe(true);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Edits are not saved");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
+    expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
+    expect(loadCodeFile).not.toHaveBeenCalled();
+    expect(useWatchedDocumentReload).not.toHaveBeenCalled();
+    expect(noteRecentDocument).not.toHaveBeenCalled();
+    await act(async () => editor().props.onLoad());
+    expect(noteRecentDocument).toHaveBeenCalledWith("/one.ts");
   });
 
-  it("keeps the document view idle when metadata changes", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/metadata.ts"));
-    await act(async () => pending.shift()!.resolve(makeDocument("metadata")));
-    const before = renderer.root.findByType(SourceDocumentView).props;
-    await act(async () => before.sourceRows.requestRange(0, 4, { reason: "highlight" }));
-    expect(renderer.root.findByType(SourceDocumentView).props).toBe(before);
+  it("opens launch files directly in the editor", async () => {
+    jest.mocked(getLaunchDocumentPath).mockReturnValue("/launch.tsx");
+    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.tsx"]} />); });
+    expect(editor().props.filePath).toBe("/launch.tsx");
+    expect(editor().props.language).toBe("tsx");
+    expect(loadCodeFile).not.toHaveBeenCalled();
   });
 
-  it("does not replace a newer session when an earlier load finishes late", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/old.ts"));
-    const oldRequest = pending.shift()!;
-    await act(async () => requestCodeViewerFile("/new.ts"));
-    await act(async () => pending.shift()!.resolve(makeDocument("new")));
-    await act(async () => oldRequest.resolve(makeDocument("old")));
-    expect(list().props.dataKey).toBe("/new.ts");
-    expect(renderer.root.findByType(SourceDocumentView).props.sourceRows.getRow(0).text).toBe("new");
-  });
-
-  it("updates scratch highlighting without reloading or remounting the edited document", async () => {
+  it("preserves the buffer on settings changes and same-file requests", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow />); });
     await act(async () => requestCodeViewerFile("/one.ts"));
-    await act(async () => pending.shift()!.resolve(makeDocument("const answer = 42;")));
-    const toggle = renderer.root.findAll((node) => node.props.accessibilityRole === "button" &&
-      typeof node.props.onPress === "function").find((node) =>
-        node.findAll((child) => child.props.children === "Open scratch editor prototype").length > 0)!;
-    await act(async () => toggle.props.onPress());
-    const editor = renderer.root.findByType("SourceDocumentEditor" as never);
-    const loads = jest.mocked(loadCodeFile).mock.calls.length;
+    const mountedEditor = editor();
     jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("github-light");
     await act(async () => renderer.update(<CodeViewerWindow />));
-    expect(renderer.root.findByType("SourceDocumentEditor" as never)).toBe(editor);
-    expect(editor.props.syntaxTheme).toBe("github-light");
+    expect(editor()).toBe(mountedEditor);
+    expect(editor().props.syntaxTheme).toBe("github-light");
     jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(false);
     await act(async () => renderer.update(<CodeViewerWindow />));
-    expect(editor.props.syntaxHighlightingEnabled).toBe(false);
-    expect(loadCodeFile).toHaveBeenCalledTimes(loads);
+    expect(editor()).toBe(mountedEditor);
+    expect(editor().props.syntaxHighlightingEnabled).toBe(false);
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    expect(editor()).toBe(mountedEditor);
+    expect(loadCodeFile).not.toHaveBeenCalled();
   });
 
-  it("restarts initial requests for a new dataset and cancels old overscan work", async () => {
+  it("replaces the editor only when switching to another file", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    const first = editor();
+    await act(async () => requestCodeViewerFile("/two.tsx"));
+    expect(editor()).not.toBe(first);
+    expect(editor().props.filePath).toBe("/two.tsx");
+    expect(editor().props.language).toBe("tsx");
+  });
+
+  it("preserves the current editor when the dialog cancels or fails", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    jest.mocked(openSelectedDocumentPath).mockResolvedValue("/one.ts");
+    await act(async () => openButton().props.onPress());
+    const first = editor();
+    jest.mocked(openSelectedDocumentPath).mockResolvedValue(null);
+    await act(async () => openButton().props.onPress());
+    expect(editor()).toBe(first);
+    jest.mocked(openSelectedDocumentPath).mockRejectedValue(new Error("Dialog failed"));
+    await act(async () => openButton().props.onPress());
+    expect(editor()).toBe(first);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Dialog failed");
+    await act(async () => requestCodeViewerFile("/two.ts"));
+    expect(editor().props.filePath).toBe("/two.ts");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("Dialog failed");
+  });
+
+  it("restarts initial requests for a new viewer dataset and cancels old overscan work", async () => {
+    // Retain shared-list regression coverage even though Code no longer uses it.
     const requestRange = jest.fn();
     const onInitialRowsRequested = jest.fn();
+    const list = () => renderer.root.findByType("List" as never);
     const render = (dataKey: string) => (
       <VirtualizedFixedDocumentList
         dataKey={dataKey} itemIndexes={[0, 1, 2]} rowHeight={22}
