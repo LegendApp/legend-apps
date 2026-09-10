@@ -6,6 +6,7 @@ export { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, createFocu
 export type { FocusMotion, FocusSurface } from "./focus";
 export { normalizeTransition, resolveTransition, focusCamera } from "./focusGeometry";
 export { persistSlideSpeakerNotesWithFileAccess, updateSlideSpeakerNotes } from "./speakerNotesSource";
+export { getDeckSourceStructure, slideAtSourceOffset } from "./speakerNotesSource";
 export type { SpeakerNotesFileAccess } from "./speakerNotesSource";
 export type {
   CompiledDeckProps,

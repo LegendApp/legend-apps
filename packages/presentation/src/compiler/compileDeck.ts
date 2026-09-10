@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { pathToFileURL } from "node:url";
 import { compile } from "@mdx-js/mdx";
 import { build, type BuildResult, type Loader, type Message, type Plugin } from "esbuild";
@@ -158,12 +159,12 @@ function preprocessNotes(source: string) {
   return output;
 }
 
-function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>): Plugin {
+function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>, draftSource?: string): Plugin {
   return {
     name: "legend-slides-mdx",
     setup(buildApi) {
       buildApi.onLoad({ filter: /\.mdx$/ }, async (args) => {
-        const source = fs.readFileSync(args.path, "utf8");
+        const source = args.path === entryPath && draftSource !== undefined ? draftSource : fs.readFileSync(args.path, "utf8");
         const templates = new Map<string, string>();
         const compiled = await compile(preprocessNotes(preprocessSlideFrontmatter(source)), {
           jsx: true,
@@ -242,7 +243,7 @@ function dependenciesFrom(result: BuildResult, workingDirectory: string) {
   return Object.keys(result.metafile?.inputs ?? {}).map((input) => path.resolve(workingDirectory, input)).sort();
 }
 
-async function compileUniwind(deckRoot: string) {
+async function compileUniwind(deckRoot: string, draftSource?: string) {
   const cssPath = path.resolve(import.meta.dirname, "../../../../shell/src/global.css");
   const compilerModulePath = path.resolve(import.meta.dirname, "../../../../shell/node_modules/uniwind/src/metro/compileVirtual.ts");
   const { compileVirtual } = await import(pathToFileURL(compilerModulePath).href) as {
@@ -255,8 +256,13 @@ async function compileUniwind(deckRoot: string) {
       themes: string[];
     }): Promise<string>;
   };
-  const css = `${fs.readFileSync(cssPath, "utf8")}\n@source ${JSON.stringify(deckRoot)};\n`;
-  return compileVirtual({
+  // Tailwind scans an isolated copy for new draft classes; the actual deck and
+  // its directory are never written until the user saves.
+  const draftDirectory = draftSource === undefined ? undefined : fs.mkdtempSync(path.join(os.tmpdir(), "legend-slides-css-"));
+  try {
+  if (draftDirectory) fs.writeFileSync(path.join(draftDirectory, "draft.mdx"), draftSource!);
+  const css = `${fs.readFileSync(cssPath, "utf8")}\n@source ${JSON.stringify(deckRoot)};\n${draftDirectory ? `@source ${JSON.stringify(draftDirectory)};` : ""}`;
+  return await compileVirtual({
     css,
     cssPath,
     debug: false,
@@ -264,9 +270,12 @@ async function compileUniwind(deckRoot: string) {
     polyfills: undefined,
     themes: ["light", "dark"],
   });
+  } finally {
+    if (draftDirectory) fs.rmSync(draftDirectory, { recursive: true, force: true });
+  }
 }
 
-export async function compileDeck(deckPath: string): Promise<CompileDeckResult> {
+export async function compileDeck(deckPath: string, options: { source?: string } = {}): Promise<CompileDeckResult> {
   const absoluteDeckPath = path.resolve(deckPath);
   if (!absoluteDeckPath.toLowerCase().endsWith(".mdx")) {
     return { success: false, errors: ["Decks must use the .mdx extension."], warnings: [] };
@@ -291,7 +300,7 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
       platform: "neutral",
       plugins: [
         localDeckPlugin(absoluteDeckPath),
-        mdxDeckPlugin(absoluteDeckPath, webviewDependencies),
+        mdxDeckPlugin(absoluteDeckPath, webviewDependencies, options.source),
         typegpuPlugin(),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
@@ -312,7 +321,7 @@ export async function compileDeck(deckPath: string): Promise<CompileDeckResult> 
         ...webviewDependencies,
       ])].sort(),
       success: true,
-      uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath)),
+      uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath), options.source),
       warnings: formatMessages(result.warnings),
     };
   } catch (error) {
