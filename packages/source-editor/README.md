@@ -8,12 +8,11 @@ No NSTextView or Markdown block editor is used.
 
 ## Current status
 
-Code offers **Open scratch editor prototype** for the current UTF-8 file.
-Scratch edits are intentionally not saved. Closing the scratch editor discards
-them. The original viewer and its syntax highlighting are unchanged.
-
-This is an architecture probe, **not yet a replacement for the code viewer**.
-Do not use it to author work that needs saving.
+Code opens UTF-8 files directly in this editor. The old read-only viewer and its
+separate loading/tokenization path are disabled in Code for now.
+Edits are intentionally not saved; switching files or closing the window discards
+them. The window displays this limitation. Do not use it to author work that needs
+saving. Settings changes and reselecting the same file preserve the edit buffer.
 
 Implemented foundations:
 

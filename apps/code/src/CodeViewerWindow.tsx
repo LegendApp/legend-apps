@@ -1,35 +1,11 @@
-import { openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-apps/document-app";
+import { openSelectedDocumentPath } from "@legend-apps/document-app";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
 import { SourceDocumentEditor } from "@legend-apps/source-editor";
-import {
-  createSyntaxStyleMap,
-  formatMs,
-  nowMs,
-  SourceDocumentView,
-  type SourceDocumentSnapshot,
-  type SourceDocumentTiming,
-  SourceLineRow,
-  sourceViewerInitialRequestRowCount,
-  sourceViewerLineOverscan,
-  sourceViewerOverscanRequestDelayMs,
-  toSourceDocumentTiming,
-  useSourceDocumentRows,
-} from "@legend-apps/source-viewer";
-import {
-  loadCodeFile,
-  type SyntaxDocument,
-  type SyntaxRenderLine,
-  type SyntaxStyle,
-} from "@legend-apps/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import {
-  type VirtualizedFixedDocumentListRenderRowProps,
-} from "@legend-apps/virtualized-document";
-import { computed, ObservableHint, type Observable, type OpaqueObject } from "@legendapp/state";
-import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo, useRef, type ComponentProps } from "react";
+import { useValue } from "@legendapp/state/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { codeBackgroundTokenizationChunkLineCount, codeFileTypes, codeInitialLineCount } from "./appConstants";
+import { codeFileTypes } from "./appConstants";
 import { getCodeLanguage, getFilename, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import {
   useCodeFontFamilySetting,
@@ -37,7 +13,6 @@ import {
   useCodeSyntaxHighlightingEnabledSetting,
   useCodeSyntaxTheme,
   useCodeSyntaxThemeSetting,
-  type CodeSettingsFile,
 } from "./codeSettings";
 import { codeViewerFileRequest$ } from "./codeViewerRequests";
 import { setCodeViewerWindowOptions } from "./codeWindows";
@@ -46,118 +21,28 @@ type CodeViewerWindowProps = {
   launchArguments?: string[];
 };
 
-type CodeViewerState =
-  | {
-    status: "empty";
-    filePath: null;
-    error: null;
-  }
-  | {
-    status: "opening";
-    filePath: string;
-    error: null;
-  }
-  | {
-    status: "loaded";
-    filePath: string;
-    error: null;
-    resource: OpaqueObject<{ document: SyntaxDocument }>;
-    initialLines: SyntaxRenderLine[];
-    styles: SyntaxStyle[];
-    syntaxTheme: CodeSettingsFile["syntaxTheme"];
-    timing: SourceDocumentTiming;
-  }
-  | {
-    status: "error";
-    filePath: string | null;
-    error: string;
-    timing: null;
-  };
-
-const emptyState: CodeViewerState = {
-  status: "empty",
-  filePath: null,
-  error: null,
-};
-
-function formatLineCount(count: number) {
-  return `${count.toLocaleString()} ${count === 1 ? "line" : "lines"}`;
-}
-
-function formatTimingSummary(timing: CodeViewerTiming) {
-  return [
-    `${formatLineCount(timing.lineCount)}`,
-    `${timing.tokenCount.toLocaleString()} tokens`,
-    `native ${formatMs(timing.nativeTotalMs)}`,
-    `js ${formatMs(timing.jsLoadMs)}`,
-  ].join(" · ");
-}
-
-type CodeViewerTiming = SourceDocumentTiming;
-
-function getCodeLineRowHeight(fontSize: number) {
-  return Math.max(20, fontSize + 9);
-}
-
 export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
-  const state$ = useObservable<CodeViewerState>(emptyState);
-  const setState = state$.set;
-  const [editorPrototype, setEditorPrototype] = useState(false);
+  const fontFamily = useCodeFontFamilySetting();
+  const fontSize = useCodeFontSizeSetting();
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
   const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
   const syntaxTheme = useCodeSyntaxTheme();
+  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
-  const loadedLaunchFileRef = useRef<string | null>(null);
+  const [filePath, setFilePath] = useState<string | null>(launchFile);
+  const [error, setError] = useState<string | null>(null);
+  const fileRequest = useValue(codeViewerFileRequest$);
+  const loadedLaunchFileRef = useRef(launchFile);
   const loadedFileRequestVersionRef = useRef(0);
-  const loadRequestVersion = useRef(0);
-  useEffect(() => () => { loadRequestVersion.current++; }, []);
+  const backgroundColor = syntaxTheme.background;
+  const foregroundColor = syntaxTheme.foreground;
+  const mutedColor = displayTheme.colors.muted;
+  const borderColor = displayTheme.colors.border;
 
-  const loadFile = useCallback(async (
-    filePath: string,
-    syntaxThemeName: CodeSettingsFile["syntaxTheme"],
-    shouldHighlightSyntax: boolean,
-  ) => {
-    const requestVersion = ++loadRequestVersion.current;
-    const loadStartedAt = nowMs();
-    const initialHighlightLineCount = shouldHighlightSyntax ? codeInitialLineCount : 0;
-
-    try {
-      setState({
-        status: "opening",
-        filePath,
-        error: null,
-      });
-      const highlighted = await loadCodeFile(
-        filePath,
-        getCodeLanguage(filePath),
-        syntaxThemeName,
-        initialHighlightLineCount,
-      );
-      if (requestVersion !== loadRequestVersion.current) return;
-      const loadFinishedAt = nowMs();
-      const timing = toSourceDocumentTiming(highlighted.timing, loadFinishedAt - loadStartedAt);
-
-      setState({
-        status: "loaded",
-        filePath,
-        error: null,
-        resource: ObservableHint.opaque({ document: highlighted.document }),
-        initialLines: highlighted.initialLines,
-        styles: highlighted.styles,
-        syntaxTheme: syntaxThemeName,
-        timing,
-      });
-      noteRecentDocument(filePath);
-    } catch (error) {
-      if (requestVersion !== loadRequestVersion.current) return;
-      setState({
-        status: "error",
-        filePath,
-        error: error instanceof Error ? error.message : String(error),
-        timing: null,
-      });
-    }
-  }, [setState]);
+  const openFile = useCallback((path: string) => {
+    setError(null);
+    setFilePath(path);
+  }, []);
 
   const openCodeDialog = useCallback(async () => {
     try {
@@ -166,170 +51,53 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
         invalidSelectionMessage: `Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`,
         isDocumentPath: isCodePath,
       });
-      if (path) {
-        await loadFile(path, selectedSyntaxTheme, syntaxHighlightingEnabled);
-      }
-    } catch (error) {
-      setState({
-        status: "error",
-        filePath: state$.filePath.peek(),
-        error: error instanceof Error ? error.message : String(error),
-        timing: null,
-      });
+      if (path) openFile(path);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     }
-  }, [loadFile, selectedSyntaxTheme, state$, syntaxHighlightingEnabled, setState]);
+  }, [openFile]);
 
   useEffect(() => {
     if (launchFile && loadedLaunchFileRef.current !== launchFile) {
       loadedLaunchFileRef.current = launchFile;
-      loadFile(launchFile, selectedSyntaxTheme, syntaxHighlightingEnabled);
+      openFile(launchFile);
     }
-  }, [launchFile, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
+  }, [launchFile, openFile]);
 
-  useObserveEffect(() => {
-    const fileRequest = codeViewerFileRequest$.get();
-    if (
-      fileRequest.path &&
-      loadedFileRequestVersionRef.current !== fileRequest.version
-    ) {
+  useEffect(() => {
+    if (fileRequest.path && loadedFileRequestVersionRef.current !== fileRequest.version) {
       loadedFileRequestVersionRef.current = fileRequest.version;
       loadedLaunchFileRef.current = fileRequest.path;
-      loadFile(fileRequest.path, selectedSyntaxTheme, syntaxHighlightingEnabled);
+      openFile(fileRequest.path);
     }
-  }, [loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
+  }, [fileRequest.path, fileRequest.version, openFile]);
 
-  useObserveEffect(() => {
-    const state = state$.get();
-    if (!editorPrototype && state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
-      loadFile(state.filePath, selectedSyntaxTheme, syntaxHighlightingEnabled);
-    }
-  }, [editorPrototype, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
+  // The native editor owns its buffer. Do not reload on settings changes or
+  // filesystem notifications: that would discard unsaved edits and undo history.
+  const onEditorLoad = useCallback(() => {
+    if (filePath) noteRecentDocument(filePath);
+  }, [filePath]);
 
-  useObserveEffect(() => {
+  useEffect(() => {
     setCodeViewerWindowOptions({
       appearance: syntaxTheme.appearance,
       backgroundColor: syntaxTheme.background,
-      filePath: state$.filePath.get(),
-    }).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
+      filePath,
+    }).catch((cause: unknown) => {
+      console.error(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [syntaxTheme.appearance, syntaxTheme.background]);
-
-  return <>
-    <CodeDocumentWatcher editorPrototype={editorPrototype} state$={state$} loadFile={loadFile} selectedSyntaxTheme={selectedSyntaxTheme} syntaxHighlightingEnabled={syntaxHighlightingEnabled} />
-    <CodeViewerContent editorPrototype={editorPrototype} setEditorPrototype={setEditorPrototype} state$={state$} launchFile={launchFile} openCodeDialog={openCodeDialog} />
-  </>;
-}
-
-function CodeDocumentWatcher({ editorPrototype, state$, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled }: {
-  editorPrototype: boolean;
-  state$: Observable<CodeViewerState>;
-  loadFile: (path: string, theme: CodeSettingsFile["syntaxTheme"], highlight: boolean) => Promise<void>;
-  selectedSyntaxTheme: CodeSettingsFile["syntaxTheme"];
-  syntaxHighlightingEnabled: boolean;
-}) {
-  const path = useValue(() => state$.status.get() === "loaded" ? state$.filePath.get() : null);
-  const reloadLoadedFile = useCallback(() => {
-    if (path) void loadFile(path, selectedSyntaxTheme, syntaxHighlightingEnabled);
-  }, [loadFile, path, selectedSyntaxTheme, syntaxHighlightingEnabled]);
-  useWatchedDocumentReload({ onReload: reloadLoadedFile, path: editorPrototype ? null : path });
-  return null;
-}
-
-function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launchFile, openCodeDialog }: {
-  editorPrototype: boolean;
-  setEditorPrototype: (value: (previous: boolean) => boolean) => void;
-  state$: Observable<CodeViewerState>;
-  launchFile: string | null;
-  openCodeDialog: () => Promise<void>;
-}) {
-  const state = useValue(state$);
-  const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
-  const loadedFilePath = state.status === "loaded" ? state.filePath : null;
-  const fontFamily = useCodeFontFamilySetting();
-  const fontSize = useCodeFontSizeSetting();
-  const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
-  const syntaxTheme = useCodeSyntaxTheme();
-  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
-  const documentSnapshot = useMemo<SourceDocumentSnapshot | null>(
-    () => state.status === "loaded"
-      ? {
-          document: state.resource.document,
-          initialRows: state.initialLines,
-          itemCount: state.resource.document.lineCount,
-          styles: state.styles,
-          timing: state.timing,
-        }
-      : null,
-    [state],
-  );
-  const sourceRows = useSourceDocumentRows({
-    backgroundTokenizationChunkLineCount: codeBackgroundTokenizationChunkLineCount,
-    initialHighlightRowCount: sourceViewerInitialRequestRowCount,
-    syntaxHighlightingEnabled: syntaxHighlightingEnabled && !editorPrototype,
-    snapshot: documentSnapshot,
-  });
-  const currentDocument = state.status === "loaded" ? state.resource.document : null;
-  const tokenStyleById$ = useMemo(() => computed(() => createSyntaxStyleMap(sourceRows.styles$.get())), [sourceRows.styles$]);
-  const visibleFilePath = state.filePath ?? launchFile;
-  const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
-  const backgroundColor = syntaxTheme.background;
-  const mutedColor = displayTheme.colors.muted;
-  const foregroundColor = syntaxTheme.foreground;
-  const borderColor = displayTheme.colors.border;
-  const rowHeight = getCodeLineRowHeight(fontSize);
-  const lineTextStyle = useMemo(() => ({
-    fontFamily,
-    fontSize,
-    lineHeight: rowHeight,
-  }), [fontFamily, fontSize, rowHeight]);
-  const lineNumberStyle = useMemo(() => ({
-    fontFamily,
-    fontSize: Math.max(10, fontSize - 1),
-    lineHeight: rowHeight,
-  }), [fontFamily, fontSize, rowHeight]);
-  const lineRowStyle = useMemo(() => ({
-    height: rowHeight,
-  }), [rowHeight]);
-
-  useEffect(() => {
-    if (__DEV__) {
-      globalThis.__legendCodeBenchmarkGetTokenizedLineCount = () => currentDocument?.getTokenizedLineCount() ?? 0;
-    }
-
-    return () => {
-      if (__DEV__ && globalThis.__legendCodeBenchmarkGetTokenizedLineCount) {
-        globalThis.__legendCodeBenchmarkGetTokenizedLineCount = undefined;
-      }
-    };
-  }, [currentDocument]);
-
-  const renderLine = useCallback(
-    ({ index: lineIndex, row: line }: VirtualizedFixedDocumentListRenderRowProps<SyntaxRenderLine>) => {
-      return (
-        <ObservableSourceLineRow
-          foregroundColor={foregroundColor}
-          index={lineIndex}
-          line={line}
-          lineNumberStyle={lineNumberStyle}
-          mutedColor={mutedColor}
-          rowStyle={lineRowStyle}
-          textStyle={lineTextStyle}
-          tokenStyleById$={tokenStyleById$}
-        />
-      );
-    },
-    [foregroundColor, lineNumberStyle, lineRowStyle, lineTextStyle, mutedColor, tokenStyleById$],
-  );
+  }, [filePath, syntaxTheme.appearance, syntaxTheme.background]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
         <View style={styles.titleGroup}>
           <Text style={[styles.title, { color: foregroundColor }]} numberOfLines={1}>
-            {fileName}
+            {filePath ? getFilename(filePath) : "No file"}
           </Text>
-          <CodeTimingSummary timing$={sourceRows.timing$} fallback={visibleFilePath ?? "Open a .ts or .tsx file"} mutedColor={mutedColor} />
+          <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
+            {filePath ? "Edits are not saved · switching files or closing discards them" : "Open a .ts or .tsx file"}
+          </Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -342,66 +110,29 @@ function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launch
           <Text style={[styles.openButtonText, { color: foregroundColor }]}>Open</Text>
         </Pressable>
       </View>
-      {state.status === "loaded" ? <View style={{ paddingHorizontal: 20, paddingVertical: 8 }}>
-        <Pressable accessibilityRole="button" onPress={() => setEditorPrototype((enabled) => !enabled)}>
-          <Text style={{ color: foregroundColor }}>{editorPrototype ? "Close scratch editor (discards edits)" : "Open scratch editor prototype"}</Text>
-        </Pressable>
-        {editorPrototype ? <Text style={{ color: mutedColor }}>Scratch editor · edits are not saved</Text> : null}
-      </View> : null}
-      {state.error ? (
-        <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
-      ) : null}
+      {error ? <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{error}</Text> : null}
       <View style={styles.list}>
-        {editorPrototype && loadedFilePath ? <SourceDocumentEditor
-          key={loadedFilePath}
-          filePath={loadedFilePath}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          foreground={foregroundColor}
-          language={getCodeLanguage(loadedFilePath)}
-          syntaxTheme={selectedSyntaxTheme}
-          syntaxHighlightingEnabled={syntaxHighlightingEnabled}
-        /> : <>
-        <SourceDocumentView
-          dataKey={state.filePath ?? undefined}
-          initialRequestRowCount={sourceViewerInitialRequestRowCount}
-          lineOverscan={sourceViewerLineOverscan}
-          overscanRequestDelayMs={sourceViewerOverscanRequestDelayMs}
-          renderRow={renderLine}
-          rowHeight={rowHeight}
-          sourceRows={sourceRows}
-          style={styles.list}
-        />
-        {state.status === "empty" ? (
+        {filePath ? (
+          <SourceDocumentEditor
+            key={filePath}
+            filePath={filePath}
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            foreground={foregroundColor}
+            language={getCodeLanguage(filePath)}
+            syntaxTheme={selectedSyntaxTheme}
+            syntaxHighlightingEnabled={syntaxHighlightingEnabled}
+            onLoad={onEditorLoad}
+          />
+        ) : (
           <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
-              No code file open
-            </Text>
-            <Text style={[styles.emptyText, { color: mutedColor }]}>
-              Open a TypeScript or TSX file to view it.
-            </Text>
+            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>No code file open</Text>
+            <Text style={[styles.emptyText, { color: mutedColor }]}>Open a TypeScript or TSX file to edit it.</Text>
           </View>
-        ) : null}
-        </>}
+        )}
       </View>
     </View>
   );
-}
-
-function CodeTimingSummary({ timing$, fallback, mutedColor }: {
-  timing$: Observable<SourceDocumentTiming | null>; fallback: string; mutedColor: string;
-}) {
-  const timing = useValue(timing$);
-  return <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
-    {timing ? formatTimingSummary(timing) : fallback}
-  </Text>;
-}
-
-function ObservableSourceLineRow({ tokenStyleById$, ...props }: Omit<ComponentProps<typeof SourceLineRow>, "tokenStyleById"> & {
-  tokenStyleById$: Observable<ReturnType<typeof createSyntaxStyleMap>>;
-}) {
-  const tokenStyleById = useValue(tokenStyleById$);
-  return <SourceLineRow {...props} tokenStyleById={tokenStyleById} />;
 }
 
 export default CodeViewerWindow;
