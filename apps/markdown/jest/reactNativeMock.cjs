@@ -54,6 +54,9 @@ module.exports = {
   PanResponder: {
     create: (handlers) => ({ panHandlers: handlers }),
   },
+  PixelRatio: {
+    get: () => 2,
+  },
   Platform: {
     OS: "macos",
     select: (values) => values.macos ?? values.native ?? values.default,
@@ -65,6 +68,7 @@ module.exports = {
     flatten,
   },
   Text: createComponent("Text"),
+  Switch: createComponent("Switch"),
   TextInput: createComponent("TextInput"),
   View: createComponent("View"),
 };

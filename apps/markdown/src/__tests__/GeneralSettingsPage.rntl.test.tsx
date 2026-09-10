@@ -38,16 +38,17 @@ jest.mock("../markdownSettings", () => ({
 }));
 
 function segmentedSelected(view: RenderResult, label: string) {
-  return segmentedOption(view, label).props.accessibilityState?.selected;
+  const { control, value } = segmentedOption(view, label);
+  return control.props.value === value;
 }
 
 function segmentedOption(view: RenderResult, label: string) {
-  const optionText = view.getByText(label);
-  const option = optionText.parent;
-  if (!option) {
-    throw new Error(`Missing segmented option parent for ${label}`);
+  for (const control of view.container.queryAll((node) => node.type === "NativeSegmentedControl")) {
+    const segments = JSON.parse(control.props.segmentsJson) as { label: string; value: string }[];
+    const option = segments.find((segment) => segment.label === label);
+    if (option) return { control, value: option.value };
   }
-  return option;
+  throw new Error(`Missing native segmented option for ${label}`);
 }
 
 function switchControl(view: RenderResult) {
@@ -81,9 +82,11 @@ describe("GeneralSettingsPage", () => {
     expect(switchControl(view).props.accessibilityState?.checked).toBe(true);
     expect(segmentedSelected(view, "Floating")).toBe(true);
 
-    await fireEvent.press(segmentedOption(view, "Last"));
-    await fireEvent.press(switchControl(view));
-    await fireEvent.press(segmentedOption(view, "Bottom"));
+    const lastOption = segmentedOption(view, "Last");
+    const bottomOption = segmentedOption(view, "Bottom");
+    await fireEvent(lastOption.control, "valueChange", { nativeEvent: { value: lastOption.value } });
+    await fireEvent(switchControl(view), "valueChange", false);
+    await fireEvent(bottomOption.control, "valueChange", { nativeEvent: { value: bottomOption.value } });
     await view.rerender(<GeneralSettingsPage />);
 
     expect(mockSetMarkdownStartupBehaviorSetting).toHaveBeenCalledWith("lastDocument");
