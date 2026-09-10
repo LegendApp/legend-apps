@@ -21,6 +21,7 @@ import {
   getReleaseAssetStem,
 } from "./lib/release";
 import { validateMacOSReleaseArchive } from "./lib/macosReleaseValidation";
+import { partitionGitStatus } from "./lib/releasePublishing";
 import type { MacOSReleaseArch } from "./lib/types";
 
 type MacOSReleaseSelection = MacOSReleaseArch | "all";
@@ -96,14 +97,17 @@ function assertGitHubAuth() {
   runCommand("gh", ["auth", "status"], { capture: true });
 }
 
-function assertCleanGitStatus(options: ReleaseOptions) {
-  if (options.allowDirty) {
-    return;
-  }
+function getGitStatus() {
+  return runCommand("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+    cwd: rootDir,
+    capture: true,
+  }).trimEnd();
+}
 
-  const status = runCommand("git", ["status", "--porcelain"], { cwd: rootDir, capture: true }).trim();
-  if (status) {
-    throw new Error(`Refusing to create a release with uncommitted changes:\n${status}`);
+function assertMainBranch() {
+  const branch = runCommand("git", ["branch", "--show-current"], { cwd: rootDir, capture: true }).trim();
+  if (branch !== "main") {
+    throw new Error(`Releases must be created from main; current branch is ${branch || "detached HEAD"}.`);
   }
 }
 
@@ -111,10 +115,7 @@ function assertReleaseStatePublished(
   manifest: Awaited<ReturnType<typeof loadAppManifest>>,
   architectures: MacOSReleaseArch[],
 ) {
-  const branch = runCommand("git", ["branch", "--show-current"], { cwd: rootDir, capture: true }).trim();
-  if (branch !== "main") {
-    throw new Error(`Releases must be created from main; current branch is ${branch || "detached HEAD"}.`);
-  }
+  assertMainBranch();
 
   const head = runCommand("git", ["rev-parse", "HEAD"], { cwd: rootDir, capture: true }).trim();
   const repository = getGitHubRepositorySlug();
@@ -141,6 +142,44 @@ function assertReleaseStatePublished(
     if (localAppcast !== publishedAppcast) {
       throw new Error(`Sparkle appcast ${relativeAppcastPath} does not match origin/main. Commit and push it before creating the release.`);
     }
+  }
+}
+
+function getReleasePreparationPaths(
+  manifest: Awaited<ReturnType<typeof loadAppManifest>>,
+  changelogPath: string,
+  architectures: MacOSReleaseArch[],
+) {
+  return [
+    path.join("apps", manifest.id, "package.json"),
+    path.relative(rootDir, changelogPath),
+    "bun.lock",
+    ...architectures.map((arch) => path.relative(rootDir, getMacOSSparkleAppcastPath(manifest, arch))),
+  ].map((filePath) => filePath.split(path.sep).join("/"));
+}
+
+function assertNoUnexpectedChanges(options: ReleaseOptions, unexpectedChanges: string[]) {
+  if (!options.allowDirty && unexpectedChanges.length > 0) {
+    throw new Error(`Refusing to create a release with unrelated uncommitted changes:\n${unexpectedChanges.join("\n")}`);
+  }
+}
+
+function commitReleasePreparation(releasePaths: string[], releaseChanges: string[], commitMessage: string) {
+  if (releaseChanges.length === 0) {
+    return;
+  }
+
+  runCommand("git", ["add", "--", ...releasePaths], { cwd: rootDir });
+  runCommand("git", ["diff", "--cached", "--check", "--", ...releasePaths], { cwd: rootDir });
+  runCommand("git", ["commit", "--only", "-m", commitMessage, "--", ...releasePaths], { cwd: rootDir });
+}
+
+function pushMainIfNeeded() {
+  const head = runCommand("git", ["rev-parse", "HEAD"], { cwd: rootDir, capture: true }).trim();
+  const repository = getGitHubRepositorySlug();
+  const originMain = runCommand("gh", ["api", `repos/${repository}/commits/main`, "--jq", ".sha"], { capture: true }).trim();
+  if (head !== originMain) {
+    runCommand("git", ["push", "origin", "HEAD:main"], { cwd: rootDir });
   }
 }
 
@@ -301,20 +340,18 @@ async function main() {
   assertSupportedPlatform(manifest, "macos");
   const releaseArchitectures = getReleaseArchitectures(options.arch);
 
+  assertMainBranch();
+  runCommand("bun", ["install"], { cwd: rootDir });
   const appPackage = loadAppPackageMetadata(appId);
   assertStableReleaseVersion(appPackage);
 
   const changelog = ensureAppChangelogEntry(manifest, appPackage);
-  if (changelog.updated && !options.allowDirty) {
-    throw new Error(
-      `Updated ${path.relative(rootDir, changelog.changelogPath)} for ${changelog.version}. Review and commit it, then rerun the release.`,
-    );
-  }
-
   assertGitHubCli();
   assertGitHubAuth();
-  assertCleanGitStatus(options);
-  assertReleaseStatePublished(manifest, releaseArchitectures);
+
+  const releasePaths = getReleasePreparationPaths(manifest, changelog.changelogPath, releaseArchitectures);
+  const { releaseChanges, unexpectedChanges } = partitionGitStatus(getGitStatus(), releasePaths);
+  assertNoUnexpectedChanges(options, unexpectedChanges);
 
   const distDir = getMacOSReleaseDistDir(manifest);
   const archivePaths = releaseArchitectures.map((arch) =>
@@ -345,14 +382,19 @@ async function main() {
   }
 
   if (options.verifyOnly) {
-    console.log(`Verified ${manifest.displayName} ${getMacOSReleaseVersion(appPackage)} release state without publishing.`);
+    if (releaseChanges.length > 0) {
+      console.log("Release preparation changes that publishing will commit:\n" + releaseChanges.map((line) => `  ${line}`).join("\n"));
+    }
+    console.log(`Verified ${manifest.displayName} ${getMacOSReleaseVersion(appPackage)} release state without committing, pushing, or publishing.`);
     return;
   }
 
   const deltaFiles = findDeltaFiles(distDir, getReleaseAssetStem(manifest));
-  const releaseHead = runCommand("git", ["rev-parse", "HEAD"], { cwd: rootDir, capture: true }).trim();
   if (options.confirm) {
-    console.log(`\nReady to publish ${tagName} to ${getGitHubRepositorySlug()} at ${releaseHead}.`);
+    console.log(`\nReady to publish ${tagName} to ${getGitHubRepositorySlug()}.`);
+    if (releaseChanges.length > 0) {
+      console.log("Release changes to commit:\n" + releaseChanges.map((line) => `  ${line}`).join("\n"));
+    }
     console.log("Assets:\n" + [...archivePaths, ...deltaFiles].map((file) => `  ${path.relative(rootDir, file)}`).join("\n"));
     console.log(`\nRelease notes:\n${releaseNotes}\n`);
     const prompts = createPrompts();
@@ -365,6 +407,21 @@ async function main() {
       prompts.close();
     }
   }
+
+  commitReleasePreparation(
+    releasePaths,
+    releaseChanges,
+    `release: ${manifest.displayName} ${getMacOSReleaseVersion(appPackage)}`,
+  );
+  const remainingChanges = partitionGitStatus(getGitStatus(), releasePaths);
+  if (remainingChanges.releaseChanges.length > 0) {
+    throw new Error(`Release preparation changes remain after committing:\n${remainingChanges.releaseChanges.join("\n")}`);
+  }
+  assertNoUnexpectedChanges(options, remainingChanges.unexpectedChanges);
+  pushMainIfNeeded();
+  assertReleaseStatePublished(manifest, releaseArchitectures);
+
+  const releaseHead = runCommand("git", ["rev-parse", "HEAD"], { cwd: rootDir, capture: true }).trim();
 
   const notesPath = path.join(os.tmpdir(), `${tagName}-notes.md`);
   fs.writeFileSync(notesPath, releaseNotes);
