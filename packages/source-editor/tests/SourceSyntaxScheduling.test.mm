@@ -111,6 +111,26 @@ int main(int argc, char **argv) {
     [input configureSyntaxLanguage:@"typescript" theme:@"dark-plus" enabled:NO];
     drainFor(0.05);
     assert(highlighted(input) == 0);
+
+    // Replace documents while batches are in flight. A stale completion must
+    // not color a new document with an old multiline-comment parser state.
+    for (NSUInteger attempt = 0; attempt < 12; ++attempt) {
+      [input configureSyntaxLanguage:@"typescript" theme:@"dark-plus" enabled:YES];
+      [input loadSource:[@"/*\n" stringByAppendingString:source]];
+      [input recordStartupDraw];
+      [input loadSource:@"const fresh = 42;\nconst next = true;\n"];
+      [input recordStartupDraw];
+      waitFor(^bool { return highlighted(input) == input.lineCount && ![[input valueForKey:@"syntaxBusy"] boolValue]; });
+      drainFor(0.01);
+      assert([input.source isEqualToString:@"const fresh = 42;\nconst next = true;\n"]);
+      row.lineIndex = 0; row.lineId = 1; row.input = input;
+      [row layout];
+      NSAttributedString *actual = [row.textLayout valueForKey:@"text"];
+      assert([actual.string isEqualToString:@"const fresh = 42;"]);
+      NSColor *keyword = [actual attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:nil];
+      assert([keyword isEqual:color]); // same TS keyword as the clean document
+      row.input = nil;
+    }
   }
   std::cout << "Source syntax scheduling: viewport/default, first-paint priority, background EOF, cached offscreen rows, mode switching, append, edit/undo and disable passed\n";
 }
