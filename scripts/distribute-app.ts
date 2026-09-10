@@ -26,7 +26,7 @@ async function main() {
 Interactive macOS ${action === "package" ? "packaging" : "GitHub release"} wizard. Omit the app to choose it.
 Package: build Apple Silicon and Intel from source, sign, notarize, and generate update feeds.
 Release: publish/verify both architectures, with optional release notes. Publishing asks for
-confirmation after all release checks pass.
+confirmation after all release checks pass, then commits and pushes release metadata automatically.
 
 For automation and advanced flags, use the existing non-interactive commands:
   bun run package:macos <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize] [--skip-appcast]
@@ -68,13 +68,14 @@ For automation and advanced flags, use the existing non-interactive commands:
       prompts.close();
       runScript("prep-app-changelog.ts", [appId]);
       runScript("package-macos-app.ts", [appId, "all"]);
-      console.log("\nReview, commit, and push the release changes to main:");
+      console.log("\nReview the prepared release changes:");
       console.log(`  apps/${appId}/package.json (version and derived build number)`);
       console.log(`  apps/${appId}/CHANGELOG.md`);
+      console.log("  bun.lock");
       for (const cpu of ["arm", "x86"] as const) {
         console.log(`  ${path.relative(rootDir, getMacOSSparkleAppcastPath(manifest, cpu))}`);
       }
-      console.log(`Then run: bun release ${appId}.`);
+      console.log(`Then run: bun release ${appId}. Publishing will commit and push these files.`);
     } else {
       const mode = await prompts.select("Release action", [
         { value: "publish", label: "Publish a GitHub release (confirm after verification)" },
@@ -84,7 +85,7 @@ For automation and advanced flags, use the existing non-interactive commands:
       const args = [appId, "all", mode === "verify" ? "--verify-only" : "--confirm"];
       if (notesFile) args.push("--notes-file", notesFile);
       prompts.close();
-      console.log("\nChecking packaged archives, changelog, and published main. Prepare packages with bun package " + appId + ".");
+      console.log("\nChecking packaged archives and release metadata. Prepare packages with bun package " + appId + ".");
       runScript("github-release-app.ts", args);
     }
   } finally {

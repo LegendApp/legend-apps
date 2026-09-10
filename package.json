@@ -70,7 +70,7 @@
     "test:markdown-parser": "bash packages/markdown-parser/tests/run.sh",
     "test:chat-history:native": "bash packages/chat-history/tests/run-native.sh",
     "test:chat-history:recent": "bash packages/chat-history/tests/run-native.sh --audit-recent",
-    "test:changelog": "node --test scripts/lib/changelogScope.test.ts",
+    "test:changelog": "node --test scripts/lib/changelogScope.test.ts scripts/lib/releasePublishing.test.ts",
     "test:markdown-toolbar": "jest --config apps/markdown/jest.config.cjs",
     "typecheck": "tsc --noEmit",
     "verify:react-compiler": "bun scripts/verify-react-compiler.ts"

@@ -70,7 +70,7 @@
     },
     "apps/diff": {
       "name": "@legend-apps/app-diff",
-      "version": "0.0.3",
+      "version": "0.0.4",
       "dependencies": {
         "@legend-apps/app-exit": "0.0.0",
         "@legend-apps/appkit-split-view": "0.0.0",
