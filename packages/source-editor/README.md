@@ -41,7 +41,14 @@ Implemented foundations:
   grammars, and themes as Code and Diff. A serial background worker retains
   multiline parser states by stable line ID, rejects stale revisions, and stops
   reparsing when state converges beyond the edited range. Initial tokenization
-  stops at the mounted viewport plus lookahead, and resumes on scrolling.
+  defaults to the mounted viewport plus lookahead, and resumes on scrolling.
+  Code opts into `syntaxHighlightingMode="background"`: after the first draw,
+  bounded worker batches continue through the loaded document and retain tokens
+  for future scrolling. Incoming file chunks and edits resume this work.
+  Mode changes preserve cached tokens, document contents and undo history.
+  Background mode trades CPU/memory for prehighlighted scrolling; jumping ahead
+  before it catches up can still briefly show plain text. Other consumers default
+  to `"viewport"`; Diff's separate on-demand highlighting path is unchanged.
   Work is batched by line/byte count (a single large logical line is indivisible).
   Grammars/themes are resolved natively from installed or app-bundled assets,
   avoiding synchronous development-file reads on the JavaScript thread.

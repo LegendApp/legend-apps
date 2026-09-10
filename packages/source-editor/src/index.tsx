@@ -16,6 +16,8 @@ export type SourceDocumentEditorProps = {
   language?: string;
   syntaxTheme?: string;
   syntaxHighlightingEnabled?: boolean;
+  /** Background retains tokens for the entire file; viewport limits eager work. */
+  syntaxHighlightingMode?: "viewport" | "background";
   onLoad?: () => void;
   onChange?: (change: SourceEdit) => void;
 };
@@ -36,7 +38,8 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
 }
 
 export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true,
-  language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true, onChange, onLoad,
+  language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
+  syntaxHighlightingMode = "viewport", onChange, onLoad,
 }: SourceDocumentEditorProps) {
   const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
   const [error, setError] = useState("");
@@ -56,6 +59,7 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
     syntaxLanguage={language}
     syntaxTheme={syntaxTheme}
     syntaxHighlightingEnabled={highlighting}
+    syntaxHighlightingInBackground={syntaxHighlightingMode === "background"}
     onSyntaxError={({ nativeEvent }) => setSyntaxError(nativeEvent.error)}
     style={styles.root}
     onReady={({ nativeEvent }) => {

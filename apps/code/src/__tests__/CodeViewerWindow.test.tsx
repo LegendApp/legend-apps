@@ -66,6 +66,7 @@ describe("Code default editor", () => {
     expect(editor().props.filePath).toBe("/one.ts");
     expect(editor().props.language).toBe("typescript");
     expect(editor().props.syntaxHighlightingEnabled).toBe(true);
+    expect(editor().props.syntaxHighlightingMode).toBe("background");
     expect(JSON.stringify(renderer.toJSON())).toContain("Edits are not saved");
     expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
     expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
