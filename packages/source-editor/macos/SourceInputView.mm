@@ -21,7 +21,9 @@ static NSString *string(const std::u16string &text) {
 - (void)revealSelectionInRow:(LESourceRowView *)row;
 - (void)resetSyntax;
 - (void)scheduleSyntax;
-- (void)applySyntaxToText:(NSMutableAttributedString *)text row:(LESourceRowView *)row font:(NSFont *)font;
+- (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(nullable LESourceRowView *)row;
+- (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font;
+- (void)selectionDragTick;
 @end
 
 @implementation LESourceInputView {
@@ -40,6 +42,14 @@ static NSString *string(const std::u16string &text) {
   BOOL _syntaxEnabled, _syntaxBusy;
   uint64_t _syntaxGeneration;
   NSUInteger _syntaxNextLine, _syntaxKnownEnd, _syntaxDirtyEnd;
+  NSDictionary *_layoutAttributes;
+  CGFloat _layoutWidth, _layoutLineHeight;
+  BOOL _layoutWrap;
+  __weak NSScrollView *_dragScrollView;
+  NSTimer *_dragTimer;
+  id _dragMonitor, _dragWindowObserver;
+  NSPoint _dragPoint;
+  BOOL _dragActive, _dragMoved;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
@@ -52,6 +62,13 @@ static NSString *string(const std::u16string &text) {
 }
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
+- (BOOL)resignFirstResponder { [self endSelectionDrag]; return [super resignFirstResponder]; }
+- (void)viewDidMoveToWindow { [super viewDidMoveToWindow]; [self endSelectionDrag]; }
+- (void)dealloc {
+  [_dragTimer invalidate];
+  if (_dragMonitor) [NSEvent removeMonitor:_dragMonitor];
+  if (_dragWindowObserver) [NSNotificationCenter.defaultCenter removeObserver:_dragWindowObserver];
+}
 - (NSView *)hitTest:(NSPoint)point { return nil; } // rows handle pointing; this view owns keyboard focus
 - (NSUndoManager *)undoManager { return _history; }
 - (BOOL)isAccessibilityElement { return YES; }
@@ -67,6 +84,7 @@ static NSString *string(const std::u16string &text) {
   [self unmarkText];
   _anchor = MIN(range.location, _document->length());
   _head = _anchor + MIN(range.length, _document->length() - _anchor);
+  _preferredX = NAN;
   [self publishSelection];
 }
 - (NSString *)accessibilitySelectedText { return string(_document->slice(self.selectedRange.location, self.selectedRange.length)); }
@@ -75,6 +93,8 @@ static NSString *string(const std::u16string &text) {
   if ([value isKindOfClass:NSString.class]) [self insertText:value replacementRange:NSMakeRange(0, _document->length())];
 }
 - (void)loadSource:(NSString *)source {
+  [self endSelectionDrag];
+  _layoutAttributes = nil;
   _document = std::make_unique<SourceDocument>(utf16(source));
   _anchor = _head = 0;
   _marked = NSMakeRange(NSNotFound, 0);
@@ -153,9 +173,9 @@ static NSString *string(const std::u16string &text) {
     });
   });
 }
-- (void)applySyntaxToText:(NSMutableAttributedString *)text row:(LESourceRowView *)row font:(NSFont *)font {
-  if (!_syntax || row.lineIndex >= _syntaxNextLine) return;
-  const auto found = _highlightedRows.find(row.lineId);
+- (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font {
+  if (!_syntax || index >= _syntaxNextLine) return;
+  const auto found = _highlightedRows.find(_document->line(index).id);
   if (found == _highlightedRows.end()) return;
   for (const auto& token : found->second->tokens) {
     if (token.start >= text.length) continue;
@@ -172,6 +192,22 @@ static NSString *string(const std::u16string &text) {
     if (token.fontStyle & 4) [text addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle) range:range];
   }
 }
+- (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(LESourceRowView *)row {
+  if (row && row.bounds.size.width > 72) {
+    NSFont *font = [NSFont fontWithName:row.fontFamily size:row.fontSize] ?: [NSFont monospacedSystemFontOfSize:row.fontSize weight:NSFontWeightRegular];
+    NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
+    paragraph.tabStops = @[];
+    paragraph.defaultTabInterval = 4 * [@" " sizeWithAttributes:@{NSFontAttributeName:font}].width;
+    _layoutAttributes = @{NSFontAttributeName:font, NSForegroundColorAttributeName:row.foreground, NSParagraphStyleAttributeName:paragraph};
+    _layoutWidth = row.bounds.size.width - 72;
+    _layoutLineHeight = row.lineHeight;
+    _layoutWrap = row.wrap;
+  }
+  if (!_layoutAttributes || index >= _document->lineCount()) return nil;
+  NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:string(_document->line(index).text) attributes:_layoutAttributes];
+  [self applySyntaxToText:text line:index font:_layoutAttributes[NSFontAttributeName]];
+  return [[LESourceLineLayout alloc] initWithText:text width:_layoutWidth lineHeight:_layoutLineHeight wrap:_layoutWrap];
+}
 - (NSString *)source { return string(_document->text()); }
 - (void)registerRow:(LESourceRowView *)row { [_rows addObject:row]; }
 - (void)unregisterRow:(LESourceRowView *)row { [_rows removeObject:row]; }
@@ -185,11 +221,15 @@ static NSString *string(const std::u16string &text) {
   return [self isCurrentRow:row] ? string(_document->line(row.lineIndex).text) : @"";
 }
 - (void)publishSelection {
-  _needsSelectionReveal = YES;
+  // Pointer-driven autoscroll owns the viewport during a drag. Caret reveal
+  // would otherwise fight it, especially while recycled rows are mounting.
+  _needsSelectionReveal = !_dragActive;
   for (LESourceRowView *row in _rows) row.needsDisplay = YES;
   [self.inputContext invalidateCharacterCoordinates];
   NSAccessibilityPostNotification(self, NSAccessibilitySelectedTextChangedNotification);
-  if (self.onSelection) self.onSelection(_document->position(_head).line, MIN(_head, _anchor), MAX(_head, _anchor) - MIN(_head, _anchor));
+  // This event asks the JS list to reveal an unmounted keyboard/input target.
+  // During dragging, native autoscroll must not compete with scrollToIndex.
+  if (self.onSelection && !_dragActive) self.onSelection(_document->position(_head).line, MIN(_head, _anchor), MAX(_head, _anchor) - MIN(_head, _anchor));
   for (LESourceRowView *row in _rows) {
     [row layoutSubtreeIfNeeded];
     [self revealSelectionInRow:row];
@@ -232,7 +272,86 @@ static NSString *string(const std::u16string &text) {
   _preferredX = NAN;
   [self publishSelection];
 }
-- (void)keyDown:(NSEvent *)event { [self interpretKeyEvents:@[event]]; }
+- (void)keyDown:(NSEvent *)event { [self endSelectionDrag]; [self interpretKeyEvents:@[event]]; }
+- (void)beginSelectionDragInRow:(LESourceRowView *)row event:(NSEvent *)event {
+  [self endSelectionDrag];
+  if (![self isCurrentRow:row] || !row.enclosingScrollView || !self.window) return;
+  _dragActive = YES;
+  _dragMoved = NO;
+  _needsSelectionReveal = NO;
+  _dragScrollView = row.enclosingScrollView;
+  _dragPoint = event.locationInWindow;
+  __weak LESourceInputView *weakSelf = self;
+  _dragMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp handler:^NSEvent *(NSEvent *next) {
+    LESourceInputView *self = weakSelf;
+    if (!self || !self->_dragActive) return next;
+    if (next.window != self.window) { [self endSelectionDrag]; return next; }
+    if (next.type == NSEventTypeLeftMouseDragged || self->_dragMoved) [self updateSelectionDragAtWindowPoint:next.locationInWindow];
+    if (next.type == NSEventTypeLeftMouseUp) [self endSelectionDrag];
+    return nil;
+  }];
+  _dragWindowObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidResignKeyNotification object:self.window queue:nil usingBlock:^(NSNotification *note) {
+    [weakSelf endSelectionDrag];
+  }];
+  // The input controller, not the mouse-down row, owns tracking. That row can
+  // disappear or be recycled while the pointer remains below the viewport.
+  _dragTimer = [NSTimer timerWithTimeInterval:1.0 / 60 repeats:YES block:^(NSTimer *timer) { [weakSelf selectionDragTick]; }];
+  [NSRunLoop.mainRunLoop addTimer:_dragTimer forMode:NSRunLoopCommonModes];
+}
+- (void)endSelectionDrag {
+  _dragActive = NO;
+  _dragMoved = NO;
+  [_dragTimer invalidate]; _dragTimer = nil;
+  if (_dragMonitor) { [NSEvent removeMonitor:_dragMonitor]; _dragMonitor = nil; }
+  if (_dragWindowObserver) { [NSNotificationCenter.defaultCenter removeObserver:_dragWindowObserver]; _dragWindowObserver = nil; }
+  _dragScrollView = nil;
+}
+- (void)updateSelectionDragAtWindowPoint:(NSPoint)point {
+  _dragMoved = YES;
+  _dragPoint = point;
+  [self selectionDragTick];
+}
+- (void)selectionDragTick {
+  NSScrollView *scroll = _dragScrollView;
+  if (!_dragActive || !scroll || scroll.window != self.window) { [self endSelectionDrag]; return; }
+  if (!_dragMoved) return; // Preserve word/line selection until a real drag.
+  NSClipView *clip = scroll.contentView;
+  NSPoint point = [clip convertPoint:_dragPoint fromView:nil];
+  NSRect viewport = clip.bounds;
+  CGFloat overshoot = point.y < NSMinY(viewport) ? point.y - NSMinY(viewport)
+    : point.y > NSMaxY(viewport) ? point.y - NSMaxY(viewport) : 0;
+  if (overshoot) {
+    CGFloat step = copysign(MIN(32, MAX(2, fabs(overshoot) * 0.25)), overshoot);
+    NSRect next = viewport; next.origin.y += step;
+    next = [clip constrainBoundsRect:next];
+    [clip scrollToPoint:next.origin];
+    [scroll reflectScrolledClipView:clip];
+    viewport = clip.bounds;
+    point = [clip convertPoint:_dragPoint fromView:nil];
+  }
+  // Clamp to the visible edge and choose the closest mounted row, including
+  // gaps between rows. A stationary pointer continues extending every tick.
+  point.y = MIN(MAX(point.y, NSMinY(viewport)), NSMaxY(viewport) - 0.5);
+  NSPoint windowPoint = [clip convertPoint:point toView:nil];
+  LESourceRowView *target = nil;
+  CGFloat nearest = CGFLOAT_MAX;
+  for (LESourceRowView *row in _rows) {
+    if (![self isCurrentRow:row] || row.enclosingScrollView != scroll) continue;
+    NSRect rect = [row convertRect:row.bounds toView:clip];
+    if (!NSIntersectsRect(rect, viewport)) continue;
+    CGFloat distance = MAX(NSMinY(rect) - point.y, MAX(point.y - NSMaxY(rect), 0));
+    if (distance < nearest) { nearest = distance; target = row; }
+  }
+  if (!target) return; // Wait for the next virtualized row commit.
+  [target layoutSubtreeIfNeeded];
+  NSPoint local = [target textPointForWindowPoint:windowPoint];
+  local.y = MIN(MAX(0, local.y), MAX(0, target.textLayout.height - 0.5));
+  NSUInteger nextHead = [self offsetForRow:target] + [target.textLayout offsetAtPoint:local];
+  if (nextHead != _head) {
+    _head = nextHead; _preferredX = NAN;
+    [self publishSelection];
+  }
+}
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
   if (self.window.firstResponder != self || !(event.modifierFlags & NSEventModifierFlagCommand)) return NO;
   NSString *key = event.charactersIgnoringModifiers.lowercaseString;
@@ -448,25 +567,30 @@ static NSString *string(const std::u16string &text) {
 - (void)moveVertical:(NSInteger)direction extending:(BOOL)extend {
   [self unmarkText];
   auto position = _document->position(_head);
-  LESourceRowView *current = nil, *next = nil;
+  LESourceRowView *current = nil, *next = nil, *reference = nil;
   for (LESourceRowView *row in _rows) {
     if (![self isCurrentRow:row]) continue;
+    if (row.bounds.size.width > 72) reference = row;
     if (row.lineIndex == position.line) current = row;
     if ((NSInteger)row.lineIndex == (NSInteger)position.line + direction) next = row;
   }
-  if (current) {
-    NSRect caret = [current.textLayout caretRectAtOffset:position.column downstream:YES];
+  // Use the same shaping as drawing for unmounted lines. Preserve x through a
+  // short line and into wrapped targets, even during repeated keys before the
+  // recycler has mounted the previous target. Only the needed lines are shaped.
+  if (current) [current layoutSubtreeIfNeeded];
+  LESourceLineLayout *layout = current.textLayout ?: [self layoutForLine:position.line referenceRow:reference];
+  if (layout) {
+    NSRect caret = [layout caretRectAtOffset:position.column downstream:YES];
     if (isnan(_preferredX)) _preferredX = caret.origin.x;
-    CGFloat y = caret.origin.y + direction * current.lineHeight;
-    if (y >= 0 && y < current.textLayout.height) {
-      _head = _document->lineOffset(position.line) + [current.textLayout offsetAtPoint:NSMakePoint(_preferredX, y + current.lineHeight / 2)];
-    } else if (next) {
-      y = direction < 0 ? next.textLayout.height - next.lineHeight / 2 : next.lineHeight / 2;
-      _head = [self offsetForRow:next] + [next.textLayout offsetAtPoint:NSMakePoint(_preferredX, y)];
-    } else if (direction < 0 && position.line > 0) {
-      _head = _document->lineOffset(position.line - 1);
-    } else if (direction > 0 && position.line + 1 < _document->lineCount()) {
-      _head = _document->lineOffset(position.line + 1);
+    CGFloat y = caret.origin.y + direction * _layoutLineHeight;
+    if (y >= 0 && y < layout.height) {
+      _head = _document->lineOffset(position.line) + [layout offsetAtPoint:NSMakePoint(_preferredX, y + _layoutLineHeight / 2)];
+    } else if ((direction < 0 && position.line > 0) || (direction > 0 && position.line + 1 < _document->lineCount())) {
+      NSUInteger targetIndex = position.line + direction;
+      if (next) [next layoutSubtreeIfNeeded];
+      LESourceLineLayout *target = next.textLayout ?: [self layoutForLine:targetIndex referenceRow:current ?: reference];
+      y = direction < 0 ? target.height - _layoutLineHeight / 2 : _layoutLineHeight / 2;
+      _head = _document->lineOffset(targetIndex) + [target offsetAtPoint:NSMakePoint(_preferredX, y)];
     }
   }
   if (!extend) _anchor = _head;
@@ -476,8 +600,8 @@ static NSString *string(const std::u16string &text) {
 - (void)moveDown:(id)sender { [self moveVertical:1 extending:NO]; }
 - (void)moveUpAndModifySelection:(id)sender { [self moveVertical:-1 extending:YES]; }
 - (void)moveDownAndModifySelection:(id)sender { [self moveVertical:1 extending:YES]; }
-- (void)moveToBeginningOfDocument:(id)sender { _anchor = _head = 0; [self publishSelection]; }
-- (void)moveToEndOfDocument:(id)sender { _anchor = _head = _document->length(); [self publishSelection]; }
+- (void)moveToBeginningOfDocument:(id)sender { _anchor = _head = 0; _preferredX = NAN; [self publishSelection]; }
+- (void)moveToEndOfDocument:(id)sender { _anchor = _head = _document->length(); _preferredX = NAN; [self publishSelection]; }
 @end
 
 @implementation LESourceRowView {
@@ -512,15 +636,7 @@ static NSString *string(const std::u16string &text) {
     return;
   }
   _cachedText = text; _cachedWidth = width;
-  NSFont *font = [NSFont fontWithName:self.fontFamily size:self.fontSize] ?: [NSFont monospacedSystemFontOfSize:self.fontSize weight:NSFontWeightRegular];
-  NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
-  paragraph.tabStops = @[];
-  paragraph.defaultTabInterval = 4 * [@" " sizeWithAttributes:@{NSFontAttributeName:font}].width;
-  NSMutableAttributedString *attributed = [[NSMutableAttributedString alloc] initWithString:text attributes:@{
-    NSFontAttributeName:font, NSForegroundColorAttributeName:self.foreground, NSParagraphStyleAttributeName:paragraph,
-  }];
-  [self.input applySyntaxToText:attributed row:self font:font];
-  _textLayout = [[LESourceLineLayout alloc] initWithText:attributed width:width lineHeight:self.lineHeight wrap:self.wrap];
+  _textLayout = [self.input layoutForLine:self.lineIndex referenceRow:self];
   if (self.onMetrics) self.onMetrics(_textLayout.height, _textLayout.width + 72);
   [self.input revealSelectionInRow:self];
 }
@@ -559,13 +675,10 @@ static NSString *string(const std::u16string &text) {
 }
 - (void)mouseDown:(NSEvent *)event {
   [self.input selectInRow:self event:event extending:(event.modifierFlags & NSEventModifierFlagShift) != 0];
+  [self.input beginSelectionDragInRow:self event:event];
 }
 - (void)mouseDragged:(NSEvent *)event {
-  // Mouse capture stays on the original row during a drag. Resolve the current
-  // row through the window before extending the document-wide selection.
-  NSView *target = [self.window.contentView hitTest:[self.window.contentView convertPoint:event.locationInWindow fromView:nil]];
-  while (target && ![target isKindOfClass:LESourceRowView.class]) target = target.superview;
-  if (target) [self.input selectInRow:(LESourceRowView *)target event:event extending:YES];
-  [self autoscroll:event];
+  [self.input updateSelectionDragAtWindowPoint:event.locationInWindow];
 }
+- (void)mouseUp:(NSEvent *)event { [self.input endSelectionDrag]; }
 @end

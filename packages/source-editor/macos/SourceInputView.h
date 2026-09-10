@@ -15,6 +15,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)registerRow:(LESourceRowView *)row;
 - (void)unregisterRow:(LESourceRowView *)row;
 - (void)selectInRow:(LESourceRowView *)row event:(NSEvent *)event extending:(BOOL)extending;
+- (void)beginSelectionDragInRow:(LESourceRowView *)row event:(NSEvent *)event;
+- (void)updateSelectionDragAtWindowPoint:(NSPoint)point;
+- (void)endSelectionDrag;
 - (NSUInteger)offsetForRow:(LESourceRowView *)row;
 - (NSString *)textForRow:(LESourceRowView *)row;
 @end
