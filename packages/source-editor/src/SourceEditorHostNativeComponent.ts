@@ -4,6 +4,10 @@ import type { DirectEventHandler, Double } from "react-native/Libraries/Types/Co
 
 export interface NativeProps extends ViewProps {
   documentPath: string;
+  syntaxLanguage: string;
+  syntaxTheme: string;
+  syntaxHighlightingEnabled: boolean;
+  onSyntaxError?: DirectEventHandler<Readonly<{ error: string }>>;
   onReady?: DirectEventHandler<Readonly<{ source: string; error: string }>>;
   onEdit?: DirectEventHandler<Readonly<{ json: string }>>;
   onSelection?: DirectEventHandler<Readonly<{ line: Double; start: Double; length: Double }>>;

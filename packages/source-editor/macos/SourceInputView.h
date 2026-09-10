@@ -6,9 +6,11 @@ NS_ASSUME_NONNULL_BEGIN
 @interface LESourceInputView : NSView <NSTextInputClient>
 @property (nonatomic, copy, nullable) void (^onEdit)(NSString *json);
 @property (nonatomic, copy, nullable) void (^onSelection)(NSUInteger line, NSUInteger offset, NSUInteger length);
+@property (nonatomic, copy, nullable) void (^onSyntaxError)(NSString *error);
 @property (nonatomic, readonly) NSUInteger anchor;
 @property (nonatomic, readonly) NSUInteger head;
 - (void)loadSource:(NSString *)source;
+- (void)configureSyntaxLanguage:(NSString *)language theme:(NSString *)theme enabled:(BOOL)enabled;
 - (NSString *)source;
 - (void)registerRow:(LESourceRowView *)row;
 - (void)unregisterRow:(LESourceRowView *)row;
