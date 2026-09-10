@@ -29,6 +29,10 @@ Implemented foundations:
   basic mouse selection, visual-line arrow navigation, and accessibility text
   value/selection support. Caret reveal uses native visual-row geometry, including
   logical lines taller than the viewport.
+- Document-owned drag tracking and timed edge autoscroll survive recycling the
+  mouse-down row. Tracking stops on mouse-up, focus loss, or document replacement.
+- Vertical navigation shapes unmounted target lines with the renderer's CoreText
+  layout and retains the desired horizontal position across short/wrapped lines.
 - Incremental syntax highlighting using the same native TextMate engine,
   grammars, and themes as Code and Diff. A serial background worker retains
   multiline parser states by stable line ID, rejects stale revisions, and stops
@@ -57,6 +61,10 @@ grapheme boundaries, and composition commit/undo through `NSTextInputClient`.
 Real TypeScript/TSX grammar tests cover UTF-16 token ranges, multiline edits and
 undo, theme changes, and incremental convergence on 10,000 lines.
 Composition protocol tests do not replace live testing with an actual IME.
+Offscreen native-window tests also cover stationary-pointer autoscroll, direction
+reversal, recycling during a drag, cancellation, and preserving double-click
+selection. Navigation tests cover repeated Shift-arrow keys with no mounted rows
+and entry into the first/last visual row of a wrapped target.
 
 Runtime verification (macOS Debug, September 9, 2026): typing/newline insertion,
 consecutive undo/redo, multiline selection/deletion/restoration, and editing
@@ -78,13 +86,11 @@ In a fresh worktree, initialize the existing TextMateLib submodules first:
 ## Remaining prototype gates
 
 1. Extend runtime coverage to drag-autoscroll and real input-method composition.
-2. Preserve horizontal intent when arrow navigation targets an unmounted row.
-   Current fallback goes to that row's start until it mounts.
-3. Implement explicit wrap-off horizontal scrolling and resize anchoring to a
+2. Implement explicit wrap-off horizontal scrolling and resize anchoring to a
    source position, rather than treating the list's estimated offset as final.
-4. Complete IME cancellation/replacement edge cases, bidirectional selection
+3. Complete IME cancellation/replacement edge cases, bidirectional selection
    geometry, keyboard commands, typing-history grouping, and screen-reader QA.
-5. Measure 10k/100k-line scrolling, selection, edits, and reflow. Extremely long
+4. Measure 10k/100k-line scrolling, selection, edits, and reflow. Extremely long
    single lines still lay out all visual rows; viewport-level layout caching or
    fragment items may be needed beyond the bounded shaping implemented here.
 
