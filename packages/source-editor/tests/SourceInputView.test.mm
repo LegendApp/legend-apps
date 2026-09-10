@@ -1,4 +1,5 @@
 #import "../macos/SourceInputView.h"
+#include "../cpp/SourceDocument.hpp"
 #include <cassert>
 #include <iostream>
 
@@ -18,6 +19,24 @@ static void closeUndoGroup(NSUndoManager *history) {
 int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
+    // Native edits/undo remain authoritative while background chunks arrive.
+    LESourceInputView *streaming = [[LESourceInputView alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+    auto prefix = std::make_shared<legend::source::SourceDocument>(u"first\n");
+    prefix->useEditIdRange();
+    [streaming adoptDocument:prefix];
+    streaming.undoManager.groupsByEvent = NO;
+    [streaming.undoManager beginUndoGrouping];
+    [streaming insertText:@"edited\n" replacementRange:NSMakeRange(0, 0)];
+    closeUndoGroup(streaming.undoManager);
+    legend::source::SourceDocument tail(u"tail\n", 2);
+    NSDictionary *append = [streaming appendDocument:std::move(tail)];
+    assert([append[@"revision"] unsignedIntegerValue] == 2);
+    assert([append[@"count"] unsignedIntegerValue] == 1);
+    assert([[streaming source] isEqualToString:@"edited\nfirst\ntail\n"]);
+    [streaming.undoManager undo];
+    assert([[streaming source] isEqualToString:@"first\ntail\n"]);
+    [streaming.undoManager redo];
+    assert([[streaming source] isEqualToString:@"edited\nfirst\ntail\n"]);
     LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
     __block NSUInteger revision = 0;
     input.onEdit = ^(NSString *json) {

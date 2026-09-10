@@ -8,7 +8,8 @@ export interface NativeProps extends ViewProps {
   syntaxTheme: string;
   syntaxHighlightingEnabled: boolean;
   onSyntaxError?: DirectEventHandler<Readonly<{ error: string }>>;
-  onReady?: DirectEventHandler<Readonly<{ source: string; error: string }>>;
+  onReady?: DirectEventHandler<Readonly<{ lineCount: Double; firstId: Double; complete: boolean; error: string }>>;
+  onAppend?: DirectEventHandler<Readonly<{ json: string; complete: boolean; error: string }>>;
   onEdit?: DirectEventHandler<Readonly<{ json: string }>>;
   onSelection?: DirectEventHandler<Readonly<{ line: Double; start: Double; length: Double }>>;
 }
