@@ -4,6 +4,7 @@ import type { Double } from "react-native/Libraries/Types/CodegenTypes";
 
 export interface NativeProps extends ViewProps {
   blockId?: string;
+  blockIndex?: Double;
   contentsHidden?: boolean;
   nextBlockId?: string;
   previousBlockId?: string;

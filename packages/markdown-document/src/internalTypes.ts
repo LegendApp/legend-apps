@@ -63,6 +63,7 @@ export type HistoryEntry =
 export type BlockSelectionState = {
   anchorBlockId: string;
   focusBlockId: string;
+  textSelection?: import("./textSelection").MarkdownTextSelection;
 };
 
 export type SelectionDragOutsideEvent = {

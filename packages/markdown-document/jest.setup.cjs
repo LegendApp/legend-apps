@@ -130,6 +130,7 @@ jest.mock("@legend-apps/markdown-block-editor", () => {
   const { EnrichedMarkdownText } = require("react-native-enriched-markdown");
 
   return {
+    MarkdownEditorHostCommands: { writeSelectionClipboard: jest.fn() },
     MarkdownBlockActivationView: React.forwardRef(({ children, ...props }, ref) => (
       React.createElement(View, { ...props, ref }, children)
     )),

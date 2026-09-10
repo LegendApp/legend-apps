@@ -1,4 +1,5 @@
 #import "RNMarkdownBlockEditor.h"
+#import "LEMarkdownTextSelection.h"
 
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/EventEmitters.h>
@@ -6,12 +7,46 @@
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/RCTComponentViewHelpers.h>
 
 #import <ReactNativeEnrichedMarkdown/EnrichedMarkdown.h>
+#import <ReactNativeEnrichedMarkdown/MarkdownExtractor.h>
 
 #include <RNMarkdownParser/MarkdownDocumentRegistry.hpp>
 
 #include <cmath>
 
 using namespace facebook::react;
+
+// Existing enriched-input serialization, without changing its native selection.
+@interface NSObject (LEMarkdownFragment)
+- (NSString *)markdownForPlainTextRange:(NSRange)range;
+@end
+
+static NSString *markdownFragment(LEMarkdownSelectionBlock *block, NSRange range) {
+  if (block.input && [block.input respondsToSelector:@selector(markdownForPlainTextRange:)])
+    return [block.input markdownForPlainTextRange:range];
+  NSUInteger length = 0;
+  for (NSTextView *view in block.textViews) length += view.string.length;
+  if (range.location == 0 && range.length == length) return block.markdown;
+  NSMutableString *result = [NSMutableString new];
+  NSUInteger offset = 0;
+  for (NSTextView *view in block.textViews) {
+    NSRange local = NSIntersectionRange(range, NSMakeRange(offset, view.string.length));
+    if (local.length) {
+      local.location -= offset;
+      if ([block.type isEqualToString:@"codeBlock"]) {
+        NSString *opening = [[block.markdown componentsSeparatedByString:@"\n"] firstObject];
+        NSUInteger fenceLength = 0;
+        unichar marker = opening.length ? [opening characterAtIndex:0] : '`';
+        while (fenceLength < opening.length && [opening characterAtIndex:fenceLength] == marker) fenceLength++;
+        NSString *fence = fenceLength >= 3 ? [opening substringToIndex:fenceLength] : @"```";
+        [result appendFormat:@"%@\n%@\n%@", fenceLength >= 3 ? opening : fence, [view.string substringWithRange:local], fence];
+      } else {
+        [result appendString:extractMarkdownFromAttributedString(view.textStorage, local) ?: @""];
+      }
+    }
+    offset += view.string.length;
+  }
+  return result;
+}
 
 static SEL setValueSelector()
 {
@@ -383,6 +418,12 @@ static void registerNativeMarkdownProvider()
   });
 }
 
+static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *> *result) {
+  if (view.hidden) return;
+  if ([view isKindOfClass:NSTextView.class]) { [result addObject:(NSTextView *)view]; return; }
+  for (NSView *child in view.subviews) collectSelectionTextViews(child, result);
+}
+
 @interface RNMarkdownBlockActivationView () <RCTMarkdownBlockActivationViewViewProtocol>
 @property (nonatomic, readonly, nullable) id editorInput;
 - (void)activateEditorWithEvent:(nullable NSEvent *)event;
@@ -390,6 +431,7 @@ static void registerNativeMarkdownProvider()
 
 @interface RNMarkdownEditorHost () <RCTMarkdownEditorHostViewProtocol>
 - (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view;
+- (void)installTextSelection;
 @end
 
 @implementation RNMarkdownEditorHost {
@@ -399,6 +441,7 @@ static void registerNativeMarkdownProvider()
   MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
   id _editorKeyDownMonitor;
+  LEMarkdownTextSelection *_textSelection;
 }
 
 + (void)load
@@ -413,17 +456,79 @@ static void registerNativeMarkdownProvider()
     _props = std::make_shared<const MarkdownEditorHostProps>();
     _activationViews = [NSMapTable strongToWeakObjectsMapTable];
     [self installEditorKeyDownMonitorIfNeeded];
+    [self installTextSelection];
   }
   return self;
 }
 
 - (void)dealloc
 {
+  [_textSelection invalidate];
   [self stopObservingScrollView];
   if (_editorKeyDownMonitor != nil) {
     [NSEvent removeMonitor:_editorKeyDownMonitor];
     _editorKeyDownMonitor = nil;
   }
+}
+
+- (void)installTextSelection {
+  _textSelection = [[LEMarkdownTextSelection alloc] initWithHost:self];
+  __weak RNMarkdownEditorHost *weakSelf = self;
+  _textSelection.blocks = ^NSArray<LEMarkdownSelectionBlock *> *{
+    RNMarkdownEditorHost *self = weakSelf;
+    if (!self) return @[];
+    NSMutableArray *blocks = [NSMutableArray new];
+    for (RNMarkdownBlockActivationView *view in self->_activationViews.objectEnumerator) {
+      NSMutableArray<NSTextView *> *textViews = [NSMutableArray new];
+      collectSelectionTextViews(view, textViews);
+      if (!textViews.count) continue;
+      [textViews sortUsingComparator:^NSComparisonResult(NSTextView *left, NSTextView *right) {
+        CGFloat a = [left convertRect:left.bounds toView:self].origin.y;
+        CGFloat b = [right convertRect:right.bounds toView:self].origin.y;
+        return a < b ? NSOrderedAscending : a > b ? NSOrderedDescending : NSOrderedSame;
+      }];
+      LEMarkdownSelectionBlock *block = [LEMarkdownSelectionBlock new];
+      block.blockId = view.blockId; block.index = view.blockIndex; block.view = view;
+      block.previousBlockId = view.previousBlockId; block.nextBlockId = view.nextBlockId;
+      block.markdown = view.currentMarkdown; block.textViews = textViews;
+      const auto metadata = margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(stringForNSString(view.blockId));
+      block.type = [NSString stringWithUTF8String:metadata.type.c_str()];
+      if ([view.blockId isEqual:self->_activeBlockId]) block.input = view.editorInput;
+      __weak LEMarkdownSelectionBlock *weakBlock = block;
+      block.markdownForRange = ^NSString *(NSRange range) { return markdownFragment(weakBlock, range); };
+      [blocks addObject:block];
+    }
+    return blocks;
+  };
+  _textSelection.onChange = ^(NSString *json, BOOL dragging) {
+    RNMarkdownEditorHost *self = weakSelf;
+    if (self && self->_eventEmitter) std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(self->_eventEmitter)->onTextSelectionChange({.json = stringForNSString(json), .dragging = (bool)dragging});
+  };
+  _textSelection.onReveal = ^(NSInteger index, BOOL upwards) {
+    RNMarkdownEditorHost *self = weakSelf;
+    if (self && self->_eventEmitter) std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(self->_eventEmitter)->onTextSelectionReveal({.index = (double)index, .upwards = (bool)upwards});
+  };
+  _textSelection.onAction = ^(NSString *action) {
+    RNMarkdownEditorHost *self = weakSelf;
+    NSString *text = [action isEqual:@"v"] ? [NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString] ?: @"" : @"";
+    if (self && self->_eventEmitter) std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(self->_eventEmitter)->onTextSelectionAction({.action = stringForNSString(action), .text = stringForNSString(text)});
+  };
+  _textSelection.onCollapse = ^(NSString *blockId, NSPoint point) {
+    RNMarkdownEditorHost *self = weakSelf;
+    if (!self) return;
+    RNMarkdownBlockActivationView *view = [self activationViewForBlockId:blockId];
+    if (!view) return;
+    NSEvent *event = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:point modifierFlags:0 timestamp:0 windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:0];
+    [self activateBlockView:view withEvent:event];
+  };
+}
+
+- (void)writeSelectionClipboard:(NSString *)markdown {
+  [NSPasteboard.generalPasteboard clearContents];
+  [NSPasteboard.generalPasteboard setString:markdown forType:NSPasteboardTypeString];
+}
+- (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args {
+  RCTMarkdownEditorHostHandleCommand(self, commandName, args);
 }
 
 - (void)registerActivationView:(RNMarkdownBlockActivationView *)view
@@ -432,6 +537,7 @@ static void registerNativeMarkdownProvider()
     return;
   }
   [_activationViews setObject:view forKey:view.blockId];
+  [_textSelection refresh];
   if (_activeBlockId != nil && [_activeBlockId isEqualToString:view.blockId]) {
     [self observeScrollViewForBlockView:view];
     [self setBlockView:view contentsHidden:YES];
@@ -449,6 +555,7 @@ static void registerNativeMarkdownProvider()
   if (registered == view) {
     [self setBlockView:view contentsHidden:NO];
     [_activationViews removeObjectForKey:view.blockId];
+    [_textSelection refresh];
   }
 }
 
@@ -628,7 +735,7 @@ static void registerNativeMarkdownProvider()
   _editorKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                                                  handler:^NSEvent *_Nullable(NSEvent *event) {
     RNMarkdownEditorHost *strongSelf = weakSelf;
-    if (strongSelf == nil || ![strongSelf activeEditorContainsFirstResponder]) {
+    if (strongSelf == nil || strongSelf->_textSelection.hasSelection || ![strongSelf activeEditorContainsFirstResponder]) {
       return event;
     }
 
@@ -768,6 +875,7 @@ static void registerNativeMarkdownProvider()
 
 - (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view
 {
+  [_textSelection refresh];
   if (view == nil || _activeBlockId.length == 0 || ![_activeBlockId isEqualToString:view.blockId]) {
     return;
   }
@@ -776,6 +884,7 @@ static void registerNativeMarkdownProvider()
 
 - (void)activeScrollViewBoundsDidChange:(NSNotification *)notification
 {
+  [_textSelection refresh];
   RNMarkdownBlockActivationView *view = [self activeBlockView];
   if (view != nil) {
     [self emitEditorFrameChangeForBlockView:view];
@@ -810,6 +919,9 @@ static void registerNativeMarkdownProvider()
 {
   const auto &oldViewProps = *std::static_pointer_cast<MarkdownEditorHostProps const>(_props);
   const auto &newViewProps = *std::static_pointer_cast<MarkdownEditorHostProps const>(props);
+  if (oldViewProps.textSelectionJson != newViewProps.textSelectionJson) {
+    [_textSelection setSelectionJSON:[NSString stringWithUTF8String:newViewProps.textSelectionJson.c_str()]];
+  }
 
   NSString *nextLayoutConfigJson = [NSString stringWithUTF8String:newViewProps.markdownLayoutConfigJson.c_str()];
   if (_layoutConfigJson == nil || ![_layoutConfigJson isEqualToString:nextLayoutConfigJson]) {
@@ -870,6 +982,7 @@ static void registerNativeMarkdownProvider()
            oldLayoutMetrics:(const LayoutMetrics &)oldLayoutMetrics
 {
   [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
+  [_textSelection refresh];
 
   if (_activeBlockId != nil) {
     RNMarkdownBlockActivationView *view = [self activeBlockView];
@@ -882,6 +995,8 @@ static void registerNativeMarkdownProvider()
 - (void)prepareForRecycle
 {
   [super prepareForRecycle];
+  [_textSelection invalidate];
+  [self installTextSelection];
   for (RNMarkdownBlockActivationView *view in _activationViews.objectEnumerator) {
     [self setBlockView:view contentsHidden:NO];
   }
@@ -1129,11 +1244,20 @@ static void registerNativeMarkdownProvider()
   [self registerWithHostIfNeeded];
 }
 
+- (void)layout
+{
+  [super layout];
+  // A recycled row can register before its rich-text descendants are mounted.
+  // Retry pending keyboard navigation and selection geometry after layout.
+  [[self editorHost] editorFrameDidChangeForBlockView:self];
+}
+
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
 {
   const auto &newViewProps = *std::static_pointer_cast<MarkdownBlockActivationViewProps const>(props);
 
   NSString *nextBlockId = [NSString stringWithUTF8String:newViewProps.blockId.c_str()];
+  self.blockIndex = (NSInteger)newViewProps.blockIndex;
   if (![_blockId isEqualToString:nextBlockId]) {
     [self setContentsHidden:NO];
     [self unregisterFromHost];
@@ -1180,6 +1304,7 @@ static void registerNativeMarkdownProvider()
   [super prepareForRecycle];
   [self setContentsHidden:NO];
   _blockId = @"";
+  _blockIndex = 0;
   _nextBlockId = @"";
   _previousBlockId = @"";
   _editorInput = nil;

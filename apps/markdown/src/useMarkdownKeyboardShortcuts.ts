@@ -2,6 +2,7 @@ import { useHotkeys } from "@legend-apps/hotkeys";
 import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { useEffect, useMemo, type RefObject } from "react";
+import { Platform } from "react-native";
 import { markdownHotkeyDefinitions } from "./markdownHotkeys";
 import {
   toggleMarkdownFormattingToolbarModeSetting,
@@ -15,8 +16,9 @@ type MarkdownKeyboardShortcutsOptions = {
 export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKeyboardShortcutsOptions) {
   const hotkeys = useMarkdownHotkeySettings();
   const hotkeyHandlers = useMemo(() => ({
-    extendBlockSelectionDown: () => documentCommandsRef.current?.extendBlockSelectionDown() ?? false,
-    extendBlockSelectionUp: () => documentCommandsRef.current?.extendBlockSelectionUp() ?? false,
+    // AppKit owns visual-line selection, including the handoff between blocks.
+    extendBlockSelectionDown: () => Platform.OS !== "macos" && (documentCommandsRef.current?.extendBlockSelectionDown() ?? false),
+    extendBlockSelectionUp: () => Platform.OS !== "macos" && (documentCommandsRef.current?.extendBlockSelectionUp() ?? false),
     focusFirstBlock: () => documentCommandsRef.current?.focusFirstBlock(),
     focusLastBlock: () => documentCommandsRef.current?.focusLastBlock(),
     moveBlockDown: () => documentCommandsRef.current?.moveActiveBlockDown(),

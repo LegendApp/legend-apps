@@ -299,6 +299,66 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
   ));
 }
 
+describe("native document text selection", () => {
+  it.each(["delete", "v"])("replaces partial formatted endpoints with %s and undoes the full transaction", async (action) => {
+    const original = "Hello **world**\n\nmiddle\n\n*Good* bye";
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("a", 0, "Hello **world**"), block("b", 1, "middle"), block("c", 2, "*Good* bye"),
+    ]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    const onError = jest.fn();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" ref={commands} onError={onError} savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    const selection = {
+      // Deliberately backwards: the native focus is not necessarily the end.
+      anchor: { blockId: "c", index: 2, offset: 2, beforeMarkdown: "*Go*", afterMarkdown: "*od* bye" },
+      focus: { blockId: "a", index: 0, offset: 8, beforeMarkdown: "Hello **wo**", afterMarkdown: "**rld**" },
+      sameBlockMarkdown: "",
+    };
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "a", height: 25, rowHeight: 25, width: 640, x: 40, y: 80, markdown: "Hello **world**",
+    } }));
+    await flushPromises();
+    const inputInstance = __enrichedMarkdownTestHooks.inputInstances().at(-1)!;
+    await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: JSON.stringify(selection), dragging: false } }));
+    await act(async () => nativeHost(renderer).props.onTextSelectionAction({ nativeEvent: { action, text: "X" } }));
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe(`Hello **wo**${action === "v" ? "X" : ""}*od* bye`);
+    expect(inputInstance.setValue).toHaveBeenCalledWith(adapter.sourceMarkdown);
+    const caret = action === "v" ? 9 : 8;
+    expect(inputInstance.setSelection).toHaveBeenCalledWith(caret, caret);
+    expect(nativeHost(renderer).props.textSelectionJson).toBe("");
+    await act(async () => commands.current?.undo());
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe(original);
+    expect(onError).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
+  it("does not apply an asynchronous selection edit after a new click clears the range", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "alpha"), block("b", 1, "bravo")]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    const selection = { anchor: { blockId: "a", index: 0, offset: 2, beforeMarkdown: "al", afterMarkdown: "pha" },
+      focus: { blockId: "b", index: 1, offset: 2, beforeMarkdown: "br", afterMarkdown: "avo" }, sameBlockMarkdown: "" };
+    await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: JSON.stringify(selection), dragging: false } }));
+    await act(async () => {
+      nativeHost(renderer).props.onTextSelectionAction({ nativeEvent: { action: "delete", text: "" } });
+      nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: "", dragging: false } });
+    });
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("alpha\n\nbravo");
+    expect(adapter.applyTransactions).toHaveLength(0);
+    await act(async () => renderer.unmount());
+  });
+});
+
 function activationView(renderer: TestRenderer.ReactTestRenderer, blockId: string) {
   return renderer.root.find((node) => node.props.blockId === blockId);
 }

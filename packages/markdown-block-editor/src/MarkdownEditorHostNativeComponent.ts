@@ -1,6 +1,7 @@
 import type { HostComponent, ViewProps } from "react-native";
 import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
 import { codegenNativeComponent } from "react-native";
+import codegenNativeCommands from "react-native/Libraries/Utilities/codegenNativeCommands";
 
 type EditorFrameEvent = Readonly<{
   blockId: string;
@@ -16,6 +17,10 @@ export interface NativeProps extends ViewProps {
   activeBlockId?: string;
   activeBlockMarkdown?: string;
   markdownLayoutConfigJson?: string;
+  textSelectionJson?: string;
+  onTextSelectionChange?: DirectEventHandler<Readonly<{ json: string; dragging: boolean }>>;
+  onTextSelectionReveal?: DirectEventHandler<Readonly<{ index: Double; upwards: boolean }>>;
+  onTextSelectionAction?: DirectEventHandler<Readonly<{ action: string; text: string }>>;
   onBeginEditing?: DirectEventHandler<EditorFrameEvent>;
   onBackspaceAtStart?: DirectEventHandler<Readonly<{ blockId: string }>>;
   onDeleteAtEnd?: DirectEventHandler<Readonly<{ blockId: string }>>;
@@ -27,4 +32,9 @@ export interface NativeProps extends ViewProps {
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }
 
-export default codegenNativeComponent<NativeProps>("MarkdownEditorHost") as HostComponent<NativeProps>;
+type ComponentType = HostComponent<NativeProps>;
+interface NativeCommands {
+  writeSelectionClipboard: (viewRef: React.ElementRef<ComponentType>, markdown: string) => void;
+}
+export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["writeSelectionClipboard"] });
+export default codegenNativeComponent<NativeProps>("MarkdownEditorHost") as ComponentType;

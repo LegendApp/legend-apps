@@ -388,6 +388,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
         <MarkdownBlockActivationView
           ref={rowRef}
           blockId={block.id}
+          blockIndex={index}
           contentsHidden={isActive}
           nextBlockId={getBlockIdAtIndex(index + 1) ?? ""}
           onLayout={(event) => {

@@ -17,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface RNMarkdownBlockActivationView : RCTViewComponentView
 @property (nonatomic, copy) NSString *blockId;
+@property (nonatomic) NSInteger blockIndex;
 @property (nonatomic, copy) NSString *nextBlockId;
 @property (nonatomic, copy) NSString *previousBlockId;
 - (NSRect)contentBounds;

@@ -25,6 +25,12 @@ export function DocumentScreen({ filename }: { filename: string }) {
 
 Editing and save behavior are driven through the adapter and command ref so app shells can wire native menus, formatting toolbars, and document lifecycle prompts without reaching into internal document state.
 
+On macOS, dragging between blocks and Shift-Up/Down use document-owned text endpoints rather than selecting entire blocks. The native controller measures actual wrapped text and keeps the gesture alive during scrolling. LegendList keeps only the active block and the two selection endpoints mounted; the intervening blocks remain virtualized.
+
+Command-C/X/V and replacement typing operate on serialized rich-text fragments at the endpoints, with whole blocks in between. Paragraph endpoints join into one paragraph; different structural blocks retain their boundaries. Replacement is one document-history transaction, so undo restores the original Markdown. Escape and unmodified arrow keys collapse the range back to a caret. Other platforms retain the existing block-selection behavior.
+
+Selection regression checks: `bun run test:markdown-document --runInBand` and `bash packages/markdown-block-editor/tests/run-native.sh` (AppKit geometry/gesture tests, macOS only).
+
 Useful app-shell callbacks:
 
 - `onCommandStateChange`: reports `canUndo` and `canRedo` for native menu or toolbar enabled state.
