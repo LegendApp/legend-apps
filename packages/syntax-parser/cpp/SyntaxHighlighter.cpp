@@ -292,7 +292,11 @@ GrammarConfig getGrammarConfig(const std::string& language) {
     };
   }
 
-  if (normalized == "markdown" || normalized == "md" || normalized == "mdx") {
+  if (normalized == "mdx") {
+    return {"source.mdx", {"markdown.json", "yaml.json", "javascript.json", "typescript.json", "jsx.json", "tsx.json", "mdx.json"}};
+  }
+
+  if (normalized == "markdown" || normalized == "md") {
     return {
         "text.html.markdown",
         {"markdown.json"},
@@ -623,7 +627,7 @@ std::string getSyntaxLanguageForPath(const std::string& path) {
       {"kts", "kotlin"},
       {"m", "objective-c"},
       {"md", "markdown"},
-      {"mdx", "markdown"},
+      {"mdx", "mdx"},
       {"mm", "objective-cpp"},
       {"py", "python"},
       {"rb", "ruby"},
