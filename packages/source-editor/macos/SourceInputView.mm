@@ -618,10 +618,14 @@ static NSString *string(const std::u16string &text) {
   auto &line = _document->line(position.line);
   NSString *text = string(line.text + line.ending);
   if (direction < 0) {
+    if (line.ending == u"\r\n" && position.column > line.text.size()) return _document->lineOffset(position.line) + line.text.size();
     if (position.column > 0) return _document->lineOffset(position.line) + [text rangeOfComposedCharacterSequenceAtIndex:position.column - 1].location;
     if (position.line > 0) return _document->lineOffset(position.line - 1) + _document->line(position.line - 1).text.size();
     return 0;
   }
+  // NSString's composed-character API treats CR and LF separately on macOS.
+  // Source line endings are atomic for keyboard movement and deletion.
+  if (line.ending == u"\r\n" && position.column >= line.text.size()) return _document->lineOffset(position.line) + line.text.size() + 2;
   if (position.column < text.length) return _document->lineOffset(position.line) + NSMaxRange([text rangeOfComposedCharacterSequenceAtIndex:position.column]);
   return _document->length();
 }
