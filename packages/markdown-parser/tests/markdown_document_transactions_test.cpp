@@ -1,5 +1,7 @@
 #include "../cpp/HybridMarkdownParser.hpp"
+#include "../cpp/MarkdownDocumentRegistry.hpp"
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -9,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -299,6 +302,61 @@ void testSplitBlockCreatesSecondBlock() {
   expectEqual(result.changedRange.blockIds.size(), 2, "split inserted block ids");
   expect(result.changedRange.retainsFirstChangedBlock, "split reports retained first block");
   expectTransactionResultInvariants(before, after, result, savedSourceFor(loaded.document));
+  expectDocumentInvariants(loaded.document);
+}
+
+void testTypingAfterSplitPreservesPreviousParagraph() {
+  for (const std::string lineEnding : {"\n", "\r\n"}) {
+    LoadedDocument loaded("First paragraph" + lineEnding + lineEnding + "Tail" + lineEnding);
+    const auto firstId = loaded.document->getBlockKey(0);
+    const auto split = loaded.document->applyTransaction(splitBlock(firstId, "First paragraph", ""));
+    const auto nextId = split.changedRange.blockIds[1];
+    const auto update = loaded.document->applyTransaction(updateBlock(nextId, "Added after Enter"));
+    expectEqual(update.changedRange.startBlockIndex, 1, "typing changes only the new paragraph");
+    expectEqual(update.changedRange.deleteCount, 1, "typing retains previous paragraph");
+    expectEqual(loaded.document->getRenderBlockById(firstId).markdown, "First paragraph", "previous paragraph is unchanged");
+    expectEqual(loaded.document->getRenderBlockById(nextId).markdown, "Added after Enter", "new paragraph contains typed text");
+    loaded.document->applyTransaction(splitBlock(nextId, "Added after Enter", ""));
+    expectEqual(savedSourceFor(loaded.document),
+        "First paragraph" + lineEnding + lineEnding + "Added after Enter" + lineEnding + lineEnding + lineEnding + lineEnding + "Tail" + lineEnding,
+        "repeated Enter saves both paragraphs");
+    expectDocumentInvariants(loaded.document);
+  }
+}
+
+void testRegisteredBlockReadsDuringStructuralEdits() {
+  LoadedDocument loaded("Hello world\n\nTail\n");
+  const auto blockId = loaded.document->getBlockKey(0);
+  const auto tailId = loaded.document->getBlockKey(1);
+  std::atomic<size_t> readCount = 0;
+  std::atomic<bool> invalidRead = false;
+  {
+    // Native layout/keyboard callbacks read through the registry, concurrently
+    // with JS transactions. Two readers also exercise lazy text-cache access.
+    auto readBlocks = [&](std::stop_token stop) {
+      while (!stop.stop_requested()) {
+        const auto metadata = metadataForRegisteredBlockId(blockId);
+        const auto markdown = markdownForRegisteredBlockId(blockId);
+        if (metadata.id != blockId || metadata.type != "paragraph" ||
+            (markdown != "Hello" && markdown != "Hello world") ||
+            markdownForRegisteredBlockId(tailId) != "Tail") {
+          invalidRead = true;
+        }
+        readCount.fetch_add(1);
+      }
+    };
+    std::jthread firstReader(readBlocks);
+    std::jthread secondReader(readBlocks);
+    while (readCount.load() == 0) {
+      std::this_thread::yield();
+    }
+    for (size_t index = 0; index < 500; index += 1) {
+      const auto result = loaded.document->applyTransaction(splitBlock(blockId, "Hello", "world"));
+      loaded.document->applyTransaction(replaceBlockRange(blockId, result.changedRange.blockIds[1], "Hello world"));
+    }
+  }
+  expect(!invalidRead.load(), "registered reads return complete blocks during structural edits");
+  expectEqual(loaded.document->getBlockCount(), 2, "concurrent editing preserves block count");
   expectDocumentInvariants(loaded.document);
 }
 
@@ -667,6 +725,8 @@ int main() {
       {"update paragraph preserves id", testUpdateParagraphPreservesId},
       {"update paragraph to heading preserves id and changes type", testUpdateParagraphToHeadingPreservesIdAndTypeChanges},
       {"split block creates second block", testSplitBlockCreatesSecondBlock},
+      {"typing after split preserves previous paragraph", testTypingAfterSplitPreservesPreviousParagraph},
+      {"registered block reads during structural edits", testRegisteredBlockReadsDuringStructuralEdits},
       {"update block can become multiple paragraphs", testUpdateBlockCanBecomeMultipleParagraphs},
       {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},
       {"update block uses parser for tables", testUpdateBlockUsesParserForTables},

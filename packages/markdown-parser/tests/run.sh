@@ -5,8 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/packages/markdown-parser/tests/.build"
 mkdir -p "$BUILD_DIR"
 
+COMPILER_FLAGS=(-std=c++20)
+if [[ "${1:-}" == "--sanitize-thread" ]]; then
+  COMPILER_FLAGS+=(-g -O1 -fsanitize=thread)
+elif [[ $# -gt 0 ]]; then
+  echo "Usage: $0 [--sanitize-thread]" >&2
+  exit 1
+fi
+
 clang++ \
-  -std=c++20 \
+  "${COMPILER_FLAGS[@]}" \
   -Wall \
   -Wextra \
   -Werror \

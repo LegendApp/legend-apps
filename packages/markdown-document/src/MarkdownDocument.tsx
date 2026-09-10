@@ -808,14 +808,22 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return undefined;
       }
 
-      const block = adapter.getBlockAtIndexSync?.(snapshot.documentId, index);
+      let block = adapter.getBlockAtIndexSync?.(snapshot.documentId, index);
+      // Retained list rows may render with their pre-splice index. Resolve the
+      // stable ID before treating a shifted block as missing.
+      if (block?.id !== blockId) {
+        const currentIndex = getBlockIndexById(blockId);
+        if (currentIndex >= 0 && currentIndex !== index) {
+          block = adapter.getBlockAtIndexSync?.(snapshot.documentId, currentIndex);
+        }
+      }
       if (block?.id !== blockId) {
         const initialBlock = snapshot.initialBlocks[index];
         return initialBlock?.id === blockId ? initialBlock : undefined;
       }
 
       return block;
-    }, [adapter]);
+    }, [adapter, getBlockIndexById]);
 
     const getMarkdownBlockItemType = useCallback((blockId: string | undefined, index: number) => {
       if (!blockId) {
@@ -1484,8 +1492,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
     const handleChangeMarkdownRef = useLatestRef(handleChangeMarkdown);
 
-    const handleEditorBlur = useCallback(() => {
-      const blurredBlockId = activeBlockIdRef.current;
+    const handleEditorBlur = useCallback((blurredBlockId: string) => {
+      // The previous native input can blur after Enter has focused the new row.
+      if (activeBlockIdRef.current !== blurredBlockId) {
+        return;
+      }
       commitActiveBlock({ updateReactState: true }).then(() => {
         if (activeBlockIdRef.current !== blurredBlockId) {
           return;

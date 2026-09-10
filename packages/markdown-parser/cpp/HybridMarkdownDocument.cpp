@@ -722,18 +722,22 @@ HybridMarkdownDocument::HybridMarkdownDocument(
 HybridMarkdownDocument::~HybridMarkdownDocument() = default;
 
 void HybridMarkdownDocument::setDocumentDurationMs(double durationMs) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   timing_.documentMs = durationMs;
 }
 
 double HybridMarkdownDocument::getBlockCount() {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return static_cast<double>(blockSequence_->size());
 }
 
 double HybridMarkdownDocument::getSourceSize() {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return static_cast<double>(blockSequence_->sourceSize());
 }
 
 std::vector<std::string> HybridMarkdownDocument::getBlockIds(double start, double count) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));
   if (safeStart >= blockSequence_->size() || safeCount == 0) {
@@ -750,6 +754,7 @@ std::vector<std::string> HybridMarkdownDocument::getBlockIds(double start, doubl
 }
 
 std::string HybridMarkdownDocument::getBlockKey(double index) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   if (index < 0) {
     return "";
   }
@@ -758,16 +763,19 @@ std::string HybridMarkdownDocument::getBlockKey(double index) {
 }
 
 double HybridMarkdownDocument::getIndexForBlockId(const std::string& blockId) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return blockSequence_->containsId(blockId)
       ? static_cast<double>(blockSequence_->indexForId(blockId))
       : -1.0;
 }
 
 MarkdownBlockMetadata HybridMarkdownDocument::getBlockMetadataById(const std::string& blockId) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return metadataForBlock(findBlockIndex(blockId));
 }
 
 std::vector<MarkdownBlockMetadata> HybridMarkdownDocument::getBlockMetadata(double start, double count) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));
   if (safeStart >= blockSequence_->size() || safeCount == 0) {
@@ -784,10 +792,12 @@ std::vector<MarkdownBlockMetadata> HybridMarkdownDocument::getBlockMetadata(doub
 }
 
 MarkdownRenderBlock HybridMarkdownDocument::getRenderBlockById(const std::string& blockId) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return renderBlockForBlock(findBlockIndex(blockId));
 }
 
 std::vector<MarkdownRenderBlock> HybridMarkdownDocument::getRenderBlocks(double start, double count) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   const auto safeStart = static_cast<size_t>(std::max(0.0, start));
   const auto safeCount = static_cast<size_t>(std::max(0.0, count));
   if (safeStart >= blockSequence_->size() || safeCount == 0) {
@@ -804,10 +814,12 @@ std::vector<MarkdownRenderBlock> HybridMarkdownDocument::getRenderBlocks(double 
 }
 
 MarkdownDocumentTiming HybridMarkdownDocument::getTiming() {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return timing_;
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::applyTransaction(const MarkdownTransaction& transaction) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   if (transaction.type == "updateBlockMarkdown") {
     return updateBlockMarkdown(transaction);
   }
@@ -824,6 +836,7 @@ MarkdownTransactionResult HybridMarkdownDocument::applyTransaction(const Markdow
 }
 
 void HybridMarkdownDocument::save() {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   if (filePath_.empty()) {
     throw std::runtime_error("Cannot save markdown document without a file path.");
   }
@@ -832,6 +845,7 @@ void HybridMarkdownDocument::save() {
 }
 
 void HybridMarkdownDocument::saveAs(const std::string& filePath) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   if (filePath.empty()) {
     throw std::runtime_error("Cannot save markdown document without a file path.");
   }
@@ -845,6 +859,7 @@ const std::string& HybridMarkdownDocument::documentId() const noexcept {
 }
 
 std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockId) const {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return blockSequence_->markdownForId(blockId);
 }
 
@@ -869,6 +884,7 @@ void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const 
 }
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
+  std::lock_guard<std::mutex> lock(documentMutex_);
   return blockSequence_->externalMemorySize();
 }
 
@@ -940,7 +956,9 @@ MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTrans
       *transaction.beforeMarkdown,
       *transaction.afterMarkdown,
       std::move(newBlock),
-      lineEnding_);
+      // A single newline joins paragraphs when the next edit reparses this
+      // window, retiring the preceding row and invalidating its native views.
+      lineEnding_ + lineEnding_);
   revision_ += 1;
   timing_.sourceBytes = static_cast<double>(blockSequence_->sourceSize());
   return makeTransactionResult(blockIndex, 1, {blockIndex, blockIndex + 1}, {}, true);

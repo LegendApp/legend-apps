@@ -3,6 +3,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { Text, View } from "react-native";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
+import { MarkdownBlockRow } from "../MarkdownBlockRow";
 import { defaultMarkdownStyle } from "../styles";
 import type {
   MarkdownBlockMetadata,
@@ -536,7 +537,7 @@ describe("MarkdownDocument native row editor", () => {
     expect(activeInput?.setSelection).not.toHaveBeenCalled();
   });
 
-  it("keeps block ids unique when pressing enter and typing in the new native row editor block", async () => {
+  it("keeps the new native row active when the previous editor blurs after Enter", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       block("d1:b0", 0, "First"),
     ]));
@@ -573,7 +574,12 @@ describe("MarkdownDocument native row editor", () => {
 
     const keyboard = new MarkdownKeyboardDriver(renderer!, adapter, onError);
     await keyboard.setSelection("First".length);
+    const blurPreviousInput = editorInput(renderer!).props.onBlur;
     await keyboard.pressEnter();
+    await act(async () => {
+      blurPreviousInput();
+    });
+    expect(nativeHost(renderer!).props.activeBlockId).toBe("d1:b100");
     await keyboard.typeText("Second");
 
     expect(adapter.applyTransactions).toEqual([
@@ -592,6 +598,47 @@ describe("MarkdownDocument native row editor", () => {
     expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
     expectUniqueBlockIds(adapter);
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("renders retained rows by stable id when their index predates repeated splits", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Tail"),
+    ]));
+    const onError = jest.fn();
+    let renderer: TestRenderer.ReactTestRenderer;
+    let retainedRenderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <MarkdownDocument adapter={adapter} filename="test.md" onError={onError} savePolicy={{ autosave: false }} />,
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      nativeHost(renderer!).props.onBeginEditing({
+        nativeEvent: { blockId: "d1:b0", height: 25, markdown: "First", rowHeight: 25, width: 640, x: 40, y: 80 },
+      });
+    });
+    const keyboard = new MarkdownKeyboardDriver(renderer!, adapter, onError);
+    await keyboard.setSelection(5);
+    await keyboard.pressEnter();
+    await keyboard.typeText("Second");
+    await keyboard.pressEnter();
+
+    const tail = renderer!.root.find((node) => node.props.item === "d1:b1" && typeof node.props.getBlockMetadata === "function");
+    const tailProps = tail.props as React.ComponentProps<typeof MarkdownBlockRow>;
+    // A retained container can rerender before its index prop catches up.
+    await act(async () => {
+      retainedRenderer = TestRenderer.create(<MarkdownBlockRow {...tailProps} index={2} />);
+    });
+    const retainedView = activationView(retainedRenderer!, "d1:b1");
+    expect(retainedView.props.previousBlockId).toBe(adapter.blockIds[2]);
+    expect(retainedView.props.nextBlockId).toBe("");
+    expect(onError).not.toHaveBeenCalled();
+    await act(async () => {
+      retainedRenderer!.unmount();
+      renderer!.unmount();
+    });
   });
 
   it("keeps enter-then-type stable when typing starts before the split transaction resolves", async () => {

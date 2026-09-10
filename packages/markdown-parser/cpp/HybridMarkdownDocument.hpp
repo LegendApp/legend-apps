@@ -7,6 +7,7 @@
 #include "../nitrogen/generated/shared/c++/MarkdownRenderBlock.hpp"
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -105,6 +106,9 @@ private:
   void resetDocument(std::string source, std::vector<MarkdownBlockRange> blocks);
   std::string nextBlockId();
 
+  // AppKit/Fabric reads registered blocks while JS applies transactions. Reads
+  // also populate lazy text caches, so they need the same exclusive lock.
+  mutable std::mutex documentMutex_;
   std::string filePath_;
   std::string lineEnding_;
   std::unique_ptr<MarkdownBlockSequence> blockSequence_;

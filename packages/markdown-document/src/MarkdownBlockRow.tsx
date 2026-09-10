@@ -55,7 +55,7 @@ export const MarkdownEditorInput = memo(
     initialMarkdown: string;
     initialSelection: number;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
-    onBlurRef: RefObject<() => void>;
+    onBlurRef: RefObject<(blockId: string) => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
@@ -80,7 +80,7 @@ export const MarkdownEditorInput = memo(
         defaultValue={initialMarkdown}
         markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
         multiline
-        onBlur={() => onBlurRef.current()}
+        onBlur={() => onBlurRef.current(block.id)}
         onChangeMarkdown={(markdown) => onChangeMarkdownRef.current(block, markdown)}
         onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
         onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
@@ -128,7 +128,7 @@ export const MarkdownRowEditorInput = memo(
     activationMode: ActiveBlockRenderState["activationMode"];
     initialSelection: number;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
-    onBlurRef: RefObject<() => void>;
+    onBlurRef: RefObject<(blockId: string) => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
     onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
@@ -160,7 +160,7 @@ export const MarkdownRowEditorInput = memo(
         defaultValue={block.markdown}
         markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
         multiline
-        onBlur={() => onBlurRef.current()}
+        onBlur={() => onBlurRef.current(blockRef.current.id)}
         onChangeMarkdown={(markdown) => onChangeMarkdownRef.current(blockRef.current, markdown)}
         onChangeSelection={(selection) => onChangeSelectionRef.current(selection)}
         onSelectionDragOutside={(event) => {
@@ -254,7 +254,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   renderCommentBubble,
   selectionOverlayStyle,
   item: blockId,
-  index,
+  index: itemIndex,
 }: Omit<LegendListDataSourceRenderItemProps<string>, "item"> & {
   item: string;
   activeInputRef: RefObject<EnrichedMarkdownTextInputInstance | null>;
@@ -265,7 +265,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
-  onBlurRef: RefObject<() => void>;
+  onBlurRef: RefObject<(blockId: string) => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
   onSelectionDragOutsideRef: RefObject<SelectionDragOutsideHandler>;
@@ -276,7 +276,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const activeBlock = useValue(documentRenderState$.activeBlocksById.get(blockId));
   const isBlockSelected = useValue(documentRenderState$.selectedBlocksById.get(blockId)) === true;
   const rowState = useValue(documentRenderState$.rowStatesById.get(blockId));
-  const block = getBlockMetadata(blockId, index);
+  const block = getBlockMetadata(blockId, itemIndex);
+  const index = block?.index ?? itemIndex;
   const previousBlockId = getBlockIdAtIndex(index - 1);
   const previousBlock = previousBlockId ? getBlockMetadata(previousBlockId, index - 1) : undefined;
   const draftMarkdown = activeBlock?.draftMarkdown ?? "";
@@ -396,7 +397,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           renderRevision={renderRevision}
           style={[rowStyle, activeEditorRowStyle, styles.blockRow]}
         >
-          {renderedMarkdown}
+          {/* Keep the editor's native sibling stable when an empty preview becomes text. */}
+          <View collapsable={false}>{renderedMarkdown}</View>
           {activeNativeEditor}
         </MarkdownBlockActivationView>
         {selectionOverlay}
