@@ -92,7 +92,7 @@ function jsxDepths(
   fenced: ReadonlySet<number>,
   comments: readonly CommentRange[],
 ) {
-  const masked = [...source];
+  const masked = source.split("");
   const mask = (start: number, end: number) => {
     for (let index = start; index < end; index += 1) {
       if (masked[index] !== "\n" && masked[index] !== "\r") {
@@ -259,7 +259,25 @@ function sourceStructure(source: string) {
     slides.push({ end: source.length, start: slideStart });
   }
 
-  return { comments, slides };
+  return { comments, slides, frontmatter: [
+    ...(documentFrontmatter ? [documentFrontmatter] : []), ...slideFrontmatter,
+  ].map(([start, end]) => ({ start: start.line.end, end: end.line.start })) };
+}
+
+/** UTF-16 ranges match NSTextView selection offsets, including emoji. */
+export function getDeckSourceStructure(source: string) {
+  const { slides, frontmatter } = sourceStructure(source);
+  return { frontmatter, slides: slides.map((slide, index) => ({
+    start: index === 0 ? 0 : slides[index - 1].end,
+    contentStart: slide.start,
+    end: index === slides.length - 1 ? source.length : slide.end,
+  })) };
+}
+
+export function slideAtSourceOffset(source: string, offset: number) {
+  const slides = getDeckSourceStructure(source).slides;
+  const index = slides.findIndex((slide) => offset < slide.end);
+  return index < 0 ? Math.max(0, slides.length - 1) : index;
 }
 
 function lineEndingForSource(source: string) {

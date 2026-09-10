@@ -32,6 +32,16 @@ let watchedDirectory: string | undefined;
 let watchedDeckPath: string | undefined;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 let buildSequence = 0;
+let draftReloadHandler: ((path: string) => void) | undefined;
+
+export function setDraftReloadHandler(handler?: (path: string) => void) {
+  draftReloadHandler = handler;
+}
+
+export function invalidateDeckBuild() {
+  buildSequence += 1;
+  if (rebuildTimer) clearTimeout(rebuildTimer);
+}
 
 // react-native-webgpu installs these globals after its constants module has
 // already captured its exports, so expose the installed values to deck code.
@@ -97,7 +107,7 @@ function scheduleRebuild(path: string) {
   if (rebuildTimer) {
     clearTimeout(rebuildTimer);
   }
-  rebuildTimer = setTimeout(() => void loadDeck(path, false), 120);
+  rebuildTimer = setTimeout(() => draftReloadHandler ? draftReloadHandler(path) : void loadDeck(path, false), 120);
 }
 
 function directoryName(path: string) {
@@ -134,18 +144,23 @@ function parseCompilerResult(stdout: string): CompileDeckResult {
 
 export { getLastDeckPath } from "./slidesPreferences";
 
-export async function loadDeck(path: string, remember = true) {
+export async function loadDeck(path: string, remember = true, draftSource?: string) {
   const sequence = ++buildSequence;
   try {
-    await buildDeck(path, remember, sequence);
+    await buildDeck(path, remember, sequence, draftSource);
   } catch (error) {
     if (sequence === buildSequence) {
       setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
     }
   }
+  return sequence === buildSequence && getSlidesState().status === "ready";
 }
 
-async function buildDeck(path: string, remember: boolean, sequence: number) {
+export function previewDeckSource(path: string, source: string) {
+  return loadDeck(path, false, source);
+}
+
+async function buildDeck(path: string, remember: boolean, sequence: number, draftSource?: string) {
   watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
   if (!compilerPath) {
@@ -164,7 +179,8 @@ async function buildDeck(path: string, remember: boolean, sequence: number) {
 
   const commandResult = await commandRunner.runCommand({
     command: "bun",
-    args: [compilerPath, path],
+    args: [compilerPath, path, ...(draftSource === undefined ? [] : ["--draft"])],
+    input: draftSource,
     timeoutMs: 60_000,
   });
   if (sequence !== buildSequence) {
@@ -194,7 +210,7 @@ async function buildDeck(path: string, remember: boolean, sequence: number) {
 
   // Do not evaluate deck code or replace global styles until the presenter
   // explicitly accepts the build. Check the lock after the asynchronous build.
-  if (shouldDeferDeckUpdate(getSlidesState())) {
+  if (draftSource === undefined && shouldDeferDeckUpdate(getSlidesState())) {
     setSlidesState({ pendingDeck: { path, result, remember }, status: "ready", buildWarnings: result.warnings });
     return;
   }

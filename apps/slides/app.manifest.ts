@@ -37,7 +37,7 @@ const manifest = {
     macos: [
       {
         name: "MDX presentation",
-        role: "Viewer",
+        role: "Editor",
         extensions: ["mdx"],
         contentTypes: ["public.source-code"],
       },
