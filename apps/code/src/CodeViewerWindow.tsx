@@ -200,10 +200,10 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
 
   useObserveEffect(() => {
     const state = state$.get();
-    if (state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
+    if (!editorPrototype && state.status === "loaded" && state.syntaxTheme !== selectedSyntaxTheme) {
       loadFile(state.filePath, selectedSyntaxTheme, syntaxHighlightingEnabled);
     }
-  }, [loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
+  }, [editorPrototype, loadFile, selectedSyntaxTheme, syntaxHighlightingEnabled]);
 
   useObserveEffect(() => {
     setCodeViewerWindowOptions({
@@ -244,6 +244,7 @@ function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launch
   openCodeDialog: () => Promise<void>;
 }) {
   const state = useValue(state$);
+  const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
   const loadedFilePath = state.status === "loaded" ? state.filePath : null;
   const fontFamily = useCodeFontFamilySetting();
   const fontSize = useCodeFontSizeSetting();
@@ -265,7 +266,7 @@ function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launch
   const sourceRows = useSourceDocumentRows({
     backgroundTokenizationChunkLineCount: codeBackgroundTokenizationChunkLineCount,
     initialHighlightRowCount: sourceViewerInitialRequestRowCount,
-    syntaxHighlightingEnabled,
+    syntaxHighlightingEnabled: syntaxHighlightingEnabled && !editorPrototype,
     snapshot: documentSnapshot,
   });
   const currentDocument = state.status === "loaded" ? state.resource.document : null;
@@ -345,7 +346,7 @@ function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launch
         <Pressable accessibilityRole="button" onPress={() => setEditorPrototype((enabled) => !enabled)}>
           <Text style={{ color: foregroundColor }}>{editorPrototype ? "Close scratch editor (discards edits)" : "Open scratch editor prototype"}</Text>
         </Pressable>
-        {editorPrototype ? <Text style={{ color: mutedColor }}>Wrapping/input prototype · edits are not saved · highlighting remains in the viewer</Text> : null}
+        {editorPrototype ? <Text style={{ color: mutedColor }}>Scratch editor · edits are not saved</Text> : null}
       </View> : null}
       {state.error ? (
         <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{state.error}</Text>
@@ -357,6 +358,9 @@ function CodeViewerContent({ editorPrototype, setEditorPrototype, state$, launch
           fontFamily={fontFamily}
           fontSize={fontSize}
           foreground={foregroundColor}
+          language={getCodeLanguage(loadedFilePath)}
+          syntaxTheme={selectedSyntaxTheme}
+          syntaxHighlightingEnabled={syntaxHighlightingEnabled}
         /> : <>
         <SourceDocumentView
           dataKey={state.filePath ?? undefined}

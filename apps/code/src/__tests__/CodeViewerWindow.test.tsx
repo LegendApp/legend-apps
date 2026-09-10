@@ -4,6 +4,7 @@ import { loadCodeFile, type SyntaxFileLoadResult, type SyntaxDocument } from "@l
 import { SourceDocumentView } from "@legend-apps/source-viewer";
 import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document";
 import { CodeViewerWindow } from "../CodeViewerWindow";
+import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
 import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
 
 jest.mock("@legend-apps/document-app", () => ({
@@ -19,8 +20,8 @@ jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async (
 jest.mock("../codeSettings", () => ({
   useCodeFontFamilySetting: () => "Menlo",
   useCodeFontSizeSetting: () => 13,
-  useCodeSyntaxHighlightingEnabledSetting: () => true,
-  useCodeSyntaxThemeSetting: () => "dark",
+  useCodeSyntaxHighlightingEnabledSetting: jest.fn(() => true),
+  useCodeSyntaxThemeSetting: jest.fn(() => "dark"),
   useCodeSyntaxTheme: () => ({ appearance: "dark", background: "#000", foreground: "#fff" }),
 }));
 jest.mock("@legendapp/list/react-native", () => {
@@ -55,6 +56,9 @@ describe("Code document list reuse", () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
+    jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
+    jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(true);
+    jest.mocked(loadCodeFile).mockClear();
     codeViewerFileRequest$.set({ path: null, version: 0 });
     pending.length = 0;
     jest.mocked(loadCodeFile).mockImplementation(() => new Promise((resolve, reject) => {
@@ -138,6 +142,26 @@ describe("Code document list reuse", () => {
     await act(async () => oldRequest.resolve(makeDocument("old")));
     expect(list().props.dataKey).toBe("/new.ts");
     expect(renderer.root.findByType(SourceDocumentView).props.sourceRows.getRow(0).text).toBe("new");
+  });
+
+  it("updates scratch highlighting without reloading or remounting the edited document", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    await act(async () => pending.shift()!.resolve(makeDocument("const answer = 42;")));
+    const toggle = renderer.root.findAll((node) => node.props.accessibilityRole === "button" &&
+      typeof node.props.onPress === "function").find((node) =>
+        node.findAll((child) => child.props.children === "Open scratch editor prototype").length > 0)!;
+    await act(async () => toggle.props.onPress());
+    const editor = renderer.root.findByType("SourceDocumentEditor" as never);
+    const loads = jest.mocked(loadCodeFile).mock.calls.length;
+    jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("github-light");
+    await act(async () => renderer.update(<CodeViewerWindow />));
+    expect(renderer.root.findByType("SourceDocumentEditor" as never)).toBe(editor);
+    expect(editor.props.syntaxTheme).toBe("github-light");
+    jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(false);
+    await act(async () => renderer.update(<CodeViewerWindow />));
+    expect(editor.props.syntaxHighlightingEnabled).toBe(false);
+    expect(loadCodeFile).toHaveBeenCalledTimes(loads);
   });
 
   it("restarts initial requests for a new dataset and cancels old overscan work", async () => {
