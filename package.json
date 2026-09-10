@@ -18,6 +18,7 @@
     "diff:package:x86": "bun scripts/package-macos-app.ts diff x86",
     "diff:package:all": "bun scripts/package-macos-app.ts diff all",
     "diff:release:github": "bun scripts/github-release-app.ts diff all",
+    "hello-world": "bun scripts/run-app.ts hello-world",
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "test-kitchen-sink": "bun scripts/run-app.ts test-kitchen-sink",

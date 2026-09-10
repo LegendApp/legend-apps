@@ -85,8 +85,12 @@ native host under `shell/`. Each app supplies its JavaScript entrypoint,
 identity, supported platforms, native-module graph, and release metadata through
 `apps/<app>/app.manifest.ts`.
 
-### Developer integration app
+### Developer baseline and integration apps
 
+- **[Legend Hello World](apps/hello-world/README.md)** is a minimal macOS app
+  using the shared shell, with no app-specific native modules. Run it with
+  `bun run hello-world start macos` and `bun run hello-world run macos` in
+  separate terminals.
 - **Legend Test Kitchen Sink** is the integration harness for shared packages
   across macOS, iOS, and Android.
 

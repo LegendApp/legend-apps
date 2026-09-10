@@ -104,6 +104,15 @@
         "@legendapp/state": "catalog:",
       },
     },
+    "apps/hello-world": {
+      "name": "@legend-apps/app-hello-world",
+      "version": "0.0.1",
+      "dependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+        "uniwind": "^1.6.3",
+      },
+    },
     "apps/markdown": {
       "name": "@legend-apps/app-markdown",
       "version": "0.0.1",
@@ -1110,6 +1119,8 @@
     "@legend-apps/app-diff": ["@legend-apps/app-diff@workspace:apps/diff"],
 
     "@legend-apps/app-exit": ["@legend-apps/app-exit@workspace:packages/app-exit"],
+
+    "@legend-apps/app-hello-world": ["@legend-apps/app-hello-world@workspace:apps/hello-world"],
 
     "@legend-apps/app-markdown": ["@legend-apps/app-markdown@workspace:apps/markdown"],
 

@@ -1,0 +1,11 @@
+{
+  "name": "@legend-apps/app-hello-world",
+  "version": "0.0.1",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "react": "catalog:",
+    "react-native": "catalog:",
+    "uniwind": "^1.6.3"
+  }
+}
