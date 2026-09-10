@@ -72,9 +72,7 @@ void clearStringMemory(std::string& value) {
 
 #ifdef __APPLE__
 void requestMallocPressureRelief() {
-#if DEBUG
   malloc_zone_pressure_relief(nullptr, 0);
-#endif
 }
 #else
 void requestMallocPressureRelief() {}
