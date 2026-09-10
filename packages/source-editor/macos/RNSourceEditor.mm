@@ -63,6 +63,7 @@ struct SourceLoadJob {
   NSString *path = str(next.documentPath);
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
   [_input configureSyntaxLanguage:str(next.syntaxLanguage) theme:str(next.syntaxTheme) enabled:next.syntaxHighlightingEnabled];
+  _input.syntaxHighlightingInBackground = next.syntaxHighlightingInBackground;
   [super updateProps:props oldProps:oldProps];
 }
 - (void)finalizeUpdates:(RNComponentViewUpdateMask)mask {
@@ -148,6 +149,7 @@ struct SourceLoadJob {
   _waitingForFirstDraw = NO;
   _input.onFirstDraw = nil;
   if (self.window.firstResponder == _input) [self.window makeFirstResponder:nil];
+  _input.syntaxHighlightingInBackground = NO;
   _path = nil; _loaded = NO; [_input loadSource:@""];
   [_input configureSyntaxLanguage:@"" theme:@"" enabled:NO];
 }

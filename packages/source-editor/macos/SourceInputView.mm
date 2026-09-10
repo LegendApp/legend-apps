@@ -20,7 +20,9 @@ static NSString *string(const std::u16string &text) {
 - (void)replaceRange:(NSRange)range text:(NSString *)text recordUndo:(BOOL)recordUndo;
 - (void)revealSelectionInRow:(LESourceRowView *)row;
 - (void)resetSyntax;
+- (void)retireSyntax;
 - (void)scheduleSyntax;
+- (std::shared_ptr<syntax::IncrementalSyntaxHighlighter>)createSyntaxHighlighter;
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(nullable LESourceRowView *)row;
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font;
 - (void)selectionDragTick;
@@ -56,7 +58,8 @@ static NSString *string(const std::u16string &text) {
   if ((self = [super initWithFrame:frame])) {
     _rows = [NSHashTable weakObjectsHashTable];
     _history = [NSUndoManager new];
-    _syntaxQueue = dispatch_queue_create("app.legend.source-editor.syntax", DISPATCH_QUEUE_SERIAL);
+    _syntaxQueue = dispatch_queue_create("app.legend.source-editor.syntax",
+      dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     [self loadSource:@""];
   }
   return self;
@@ -66,6 +69,7 @@ static NSString *string(const std::u16string &text) {
 - (BOOL)resignFirstResponder { [self endSelectionDrag]; return [super resignFirstResponder]; }
 - (void)viewDidMoveToWindow { [super viewDidMoveToWindow]; [self endSelectionDrag]; }
 - (void)dealloc {
+  [self retireSyntax];
   auto retired = std::move(_document);
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
   [_dragTimer invalidate];
@@ -150,25 +154,42 @@ static NSString *string(const std::u16string &text) {
   _syntaxLanguage = [language copy]; _syntaxTheme = [theme copy]; _syntaxEnabled = enabled;
   [self resetSyntax];
 }
+- (void)setSyntaxHighlightingInBackground:(BOOL)enabled {
+  if (_syntaxHighlightingInBackground == enabled) return;
+  _syntaxHighlightingInBackground = enabled;
+  // Switching scheduling policies must preserve tokens, edits and undo.
+  [self scheduleSyntax];
+}
+- (std::shared_ptr<syntax::IncrementalSyntaxHighlighter>)createSyntaxHighlighter {
+  return std::make_shared<syntax::IncrementalSyntaxHighlighter>(_syntaxLanguage.UTF8String, _syntaxTheme.UTF8String);
+}
+- (void)retireSyntax {
+  // Background mode can retain millions of token records. Move ownership in
+  // O(1), and release them off-main without delaying the next file's syntax queue.
+  auto retired = std::make_shared<std::pair<decltype(_syntax), decltype(_highlightedRows)>>(
+    std::move(_syntax), std::move(_highlightedRows));
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
+}
 - (void)resetSyntax {
   ++_syntaxGeneration;
   _syntaxNextLine = _syntaxKnownEnd = _syntaxDirtyEnd = 0;
-  _highlightedRows.clear();
+  [self retireSyntax];
   _syntax = _syntaxEnabled && _syntaxLanguage.length
-    ? std::make_shared<syntax::IncrementalSyntaxHighlighter>(_syntaxLanguage.UTF8String, _syntaxTheme.UTF8String) : nullptr;
+    ? [self createSyntaxHighlighter] : nullptr;
   if (self.onSyntaxError) self.onSyntaxError(@"");
   for (LESourceRowView *row in _rows) [row invalidateText];
   [self scheduleSyntax];
 }
 - (void)scheduleSyntax {
   if (!_syntax || _syntaxBusy || _syntaxNextLine >= _document->lineCount()) return;
-  // TextMate requires preceding parser state, but unopened tails do not need
-  // tokens. Advance only through the mounted viewport plus a small lookahead.
-  NSUInteger demandEnd = 128;
+  // Both policies prioritize the first screen. Background mode then retains
+  // tokens through EOF, so scrolling does not trigger fresh highlighting.
+  NSUInteger viewportEnd = 128;
   for (LESourceRowView *row in _rows) {
-    if ([self isCurrentRow:row]) demandEnd = MAX(demandEnd, row.lineIndex + 129);
+    if ([self isCurrentRow:row]) viewportEnd = MAX(viewportEnd, row.lineIndex + 129);
   }
-  demandEnd = MIN(demandEnd, _document->lineCount());
+  const auto demandEnd = _syntaxHighlightingInBackground && _startupDrawn
+    ? _document->lineCount() : MIN(viewportEnd, _document->lineCount());
   if (_syntaxNextLine >= demandEnd) return;
   const auto start = _syntaxNextLine;
   const auto generation = _syntaxGeneration;
@@ -186,7 +207,8 @@ static NSString *string(const std::u16string &text) {
   _syntaxBusy = YES;
   _syntaxJobEnd = start + lines.size();
   __weak LESourceInputView *weakSelf = self;
-  dispatch_async(_syntaxQueue, ^{
+  const auto priority = start < viewportEnd ? QOS_CLASS_USER_INITIATED : QOS_CLASS_UTILITY;
+  dispatch_async(_syntaxQueue, dispatch_block_create_with_qos_class(DISPATCH_BLOCK_ENFORCE_QOS_CLASS, priority, 0, ^{
     syntax::IncrementalSyntaxBatch result;
     NSString *error = nil;
     try { result = highlighter->highlight(lines, previousId); }
@@ -218,9 +240,13 @@ static NSString *string(const std::u16string &text) {
           }
         }
       }
-      [self scheduleSyntax];
+      // Yield between background batches. Re-evaluate policy and document state
+      // on the next turn; edits, disabling, and recycling may have intervened.
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        [weakSelf scheduleSyntax];
+      });
     });
-  });
+  }));
 }
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font {
   if (!_syntax || index >= _syntaxNextLine) return;
@@ -264,6 +290,7 @@ static NSString *string(const std::u16string &text) {
   if (!_startupDrawn) {
     _startupDrawn = YES;
     if (self.onFirstDraw) self.onFirstDraw();
+    [self scheduleSyntax];
   }
 }
 - (void)unregisterRow:(LESourceRowView *)row { [_rows removeObject:row]; }

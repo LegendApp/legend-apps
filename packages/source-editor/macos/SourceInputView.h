@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSUInteger anchor;
 @property (nonatomic, readonly) NSUInteger head;
 @property (nonatomic, readonly) NSUInteger lineCount;
+@property (nonatomic) BOOL syntaxHighlightingInBackground;
 @property (nonatomic, copy, nullable) void (^onFirstDraw)(void);
 - (void)adoptDocument:(std::shared_ptr<legend::source::SourceDocument>)document;
 - (NSDictionary *)appendDocument:(legend::source::SourceDocument &&)chunk;

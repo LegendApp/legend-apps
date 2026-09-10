@@ -2,7 +2,7 @@
 set -euo pipefail
 source_editor_dir="$(cd "$(dirname "$0")/.." && pwd)"
 source_editor_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-editor.XXXXXX")"
-trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test" "$source_editor_build/reader-test" "$source_editor_build/append-test"; rmdir "$source_editor_build"' EXIT
+trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test" "$source_editor_build/reader-test" "$source_editor_build/append-test" "$source_editor_build/scheduling-test"; rmdir "$source_editor_build"' EXIT
 syntax_parser_dir="$source_editor_dir/../syntax-parser"
 source_editor_headers="$source_editor_dir/../../shell/.legend/workspaces/dev/code/macos/Pods/Headers"
 syntax_flags=(
@@ -29,6 +29,10 @@ clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit -framework CoreText "${synta
   "$source_editor_dir/tests/SourceInputView.test.mm" "$source_editor_dir/macos/SourceInputView.mm" \
   "$source_editor_dir/macos/SourceLineLayout.mm" "${syntax_sources[@]}" -o "$source_editor_build/input-test"
 "$source_editor_build/input-test"
+clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit -framework CoreText "${syntax_flags[@]}" \
+  "$source_editor_dir/tests/SourceSyntaxScheduling.test.mm" "$source_editor_dir/macos/SourceInputView.mm" \
+  "$source_editor_dir/macos/SourceLineLayout.mm" "${syntax_sources[@]}" -o "$source_editor_build/scheduling-test"
+"$source_editor_build/scheduling-test" "$syntax_parser_dir/vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages"
 clang++ -std=c++20 -O2 -framework CoreFoundation "${syntax_flags[@]}" \
   "$source_editor_dir/tests/IncrementalSyntaxHighlighter.test.cpp" "${syntax_sources[@]}" -o "$source_editor_build/syntax-test"
 "$source_editor_build/syntax-test" "$syntax_parser_dir/vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages"

@@ -122,6 +122,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             language={getCodeLanguage(filePath)}
             syntaxTheme={selectedSyntaxTheme}
             syntaxHighlightingEnabled={syntaxHighlightingEnabled}
+            syntaxHighlightingMode="background"
             onLoad={onEditorLoad}
           />
         ) : (
