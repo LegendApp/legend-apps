@@ -1,4 +1,6 @@
 #import "SourceLineLayout.h"
+#include <memory>
+namespace legend::source { class SourceDocument; }
 
 NS_ASSUME_NONNULL_BEGIN
 @class LESourceRowView;
@@ -9,6 +11,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) void (^onSyntaxError)(NSString *error);
 @property (nonatomic, readonly) NSUInteger anchor;
 @property (nonatomic, readonly) NSUInteger head;
+@property (nonatomic, readonly) NSUInteger lineCount;
+@property (nonatomic, copy, nullable) void (^onFirstDraw)(void);
+- (void)adoptDocument:(std::shared_ptr<legend::source::SourceDocument>)document;
+- (NSDictionary *)appendDocument:(legend::source::SourceDocument &&)chunk;
+- (void)requestVisibleSyntax;
 - (void)loadSource:(NSString *)source;
 - (void)configureSyntaxLanguage:(NSString *)language theme:(NSString *)theme enabled:(BOOL)enabled;
 - (NSString *)source;

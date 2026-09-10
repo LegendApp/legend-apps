@@ -1,10 +1,10 @@
 import { LegendList, useRecyclingState, type LegendListDataSourceRenderItemProps, type LegendListRef } from "@legendapp/list/react-native";
-import { defaultSyntaxThemeName, ensureSyntaxGrammar, ensureSyntaxTheme, getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
-import { useEffect, useRef, useState } from "react";
+import { defaultSyntaxThemeName, getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
+import { useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import SourceEditorHost from "./SourceEditorHostNativeComponent";
 import SourceEditorRow from "./SourceEditorRowNativeComponent";
-import { SourceLineDataSource, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
+import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
 
 export type SourceDocumentEditorProps = {
   /** Prototype: UTF-8 input only, disk is never modified. */
@@ -41,19 +41,11 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
   const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
   const [error, setError] = useState("");
   const [syntaxError, setSyntaxError] = useState("");
-  const [assets, setAssets] = useState<{ language: string; theme: string; error: string } | null>(null);
-  useEffect(() => {
-    let active = true;
-    if (syntaxHighlightingEnabled && language) {
-      Promise.all([ensureSyntaxGrammar(language), ensureSyntaxTheme(syntaxTheme)])
-        .then(() => { if (active) setAssets({ language, theme: syntaxTheme, error: "" }); })
-        .catch((cause) => { if (active) setAssets({ language, theme: syntaxTheme, error: String(cause) }); });
-    }
-    return () => { active = false; };
-  }, [language, syntaxTheme, syntaxHighlightingEnabled]);
-  const currentAssets = assets?.language === language && assets.theme === syntaxTheme ? assets : null;
-  const highlighting = syntaxHighlightingEnabled && !!language && !!currentAssets && !currentAssets.error;
-  const highlightError = syntaxHighlightingEnabled ? currentAssets?.error || syntaxError : "";
+  const [loadingTail, setLoadingTail] = useState(false);
+  // The native resolver reads installed assets or the app's resource bundles.
+  // Do not synchronously visit development repo paths on the JS thread.
+  const highlighting = syntaxHighlightingEnabled && !!language;
+  const highlightError = syntaxHighlightingEnabled ? syntaxError : "";
   const list = useRef<LegendListRef>(null);
   const sourceRef = useRef<SourceLineDataSource | null>(null);
   const renderItem = ({ item, index }: LegendListDataSourceRenderItemProps<SourceLine>) => item
@@ -68,12 +60,24 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
     style={styles.root}
     onReady={({ nativeEvent }) => {
       setError(nativeEvent.error);
+      setLoadingTail(!nativeEvent.complete && !nativeEvent.error);
       if (!nativeEvent.error) {
-        const source = new SourceLineDataSource(nativeEvent.source);
+        const source = new SourceLineDataSource(nativeEvent.lineCount, nativeEvent.firstId);
         sourceRef.current = source;
         setDataSource(source);
         onLoad?.();
       }
+    }}
+    onAppend={({ nativeEvent }) => {
+      if (nativeEvent.error) { setError(nativeEvent.error); setLoadingTail(false); }
+      if (nativeEvent.complete) setLoadingTail(false);
+      try {
+        if (nativeEvent.json) {
+          const change = JSON.parse(nativeEvent.json) as SourceAppend | SourceEdit;
+          if ("retainedId" in change) sourceRef.current?.append(change);
+          else sourceRef.current?.apply(change);
+        }
+      } catch (cause) { setError(String(cause)); }
     }}
     onEdit={({ nativeEvent }) => {
       try {
@@ -100,7 +104,12 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
       estimatedItemSize={Math.ceil(fontSize * 1.6)}
       maintainVisibleContentPosition
       style={styles.root}
-    /> : <View><Text style={{ color: foreground }}>Loading editor…</Text></View>}
+    /> : !error ? <View><Text style={{ color: foreground }}>Loading editor…</Text></View> : null}
+    {loadingTail ? <View pointerEvents="none" style={styles.loading}><Text style={{ color: foreground }}>Loading remaining file…</Text></View> : null}
   </SourceEditorHost>;
 }
-const styles = StyleSheet.create({ root: { flex: 1 }, error: { color: "#ff8080", padding: 12 } });
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  error: { color: "#ff8080", padding: 12 },
+  loading: { position: "absolute", bottom: 8, right: 12, padding: 8, borderRadius: 6, backgroundColor: "#202020ee" },
+});

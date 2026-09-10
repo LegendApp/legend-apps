@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -107,9 +108,21 @@ class SourceDocument {
     result.push_back({nextId_++, text.substr(start), u""});
     return result;
   }
-  Tree treeFor(const std::vector<Line> &lines) {
+  Tree treeFor(std::vector<Line> lines) {
+    // Linear Cartesian-tree construction; repeated merge is O(n log n).
     Tree tree;
-    for (const auto &line : lines) tree = merge(std::move(tree), std::make_unique<Node>(line, priority()));
+    std::vector<Node *> stack;
+    for (auto &line : lines) {
+      auto node = std::make_unique<Node>(std::move(line), priority());
+      Node *raw = node.get();
+      while (!stack.empty() && stack.back()->priority < node->priority) {
+        update(*stack.back()); stack.pop_back();
+      }
+      if (stack.empty()) { node->left = std::move(tree); tree = std::move(node); }
+      else { node->left = std::move(stack.back()->right); stack.back()->right = std::move(node); }
+      stack.push_back(raw);
+    }
+    while (!stack.empty()) { update(*stack.back()); stack.pop_back(); }
     return tree;
   }
   static void append(const Node *node, size_t base, size_t start, size_t end, std::u16string &output) {
@@ -126,7 +139,46 @@ class SourceDocument {
   }
 
 public:
-  explicit SourceDocument(const std::u16string &source = u"") { root_ = treeFor(parse(source)); }
+  explicit SourceDocument(const std::u16string &source = u"", uint64_t firstId = 1) {
+    nextId_ = firstId;
+    random_ ^= firstId * 2654435761ULL;
+    root_ = treeFor(parse(source));
+  }
+  // File rows use small monotonic IDs; edits have a separate safe-in-JS range.
+  void useEditIdRange() { nextId_ = std::max(nextId_, uint64_t{1} << 40); }
+
+  struct LoadedAppend {
+    size_t startLine;
+    uint64_t retainedId, firstId;
+    size_t count;
+    uint64_t revision;
+    std::optional<Change> fallback;
+  };
+
+  LoadedAppend appendLoaded(SourceDocument &&chunk) {
+    const auto start = lineCount() - 1;
+    const auto retained = line(start).id;
+    const auto added = chunk.lineCount() - 1;
+    const auto firstId = added ? chunk.line(1).id : 1;
+    // An edit at the current EOF can create a CR/LF join with arriving data.
+    // Use the normal bounded boundary reparse for that rare case.
+    if (lineCount() > 1 && line(start).text.empty() && line(start - 1).ending == u"\r"
+      && chunk.line(0).text.empty() && chunk.line(0).ending.starts_with(u"\n")) {
+      auto change = replace(length(), 0, chunk.text());
+      const auto revision = change.revision;
+      return {start, retained, firstId, added, revision, std::move(change)};
+    }
+    auto head = split(std::move(root_), start);
+    auto tail = split(std::move(chunk.root_), 1);
+    // Last and first are single-node trees. Preserve the editable EOF's ID and
+    // any edits made there while subsequent file bytes were loading.
+    head.second->line.text += tail.first->line.text;
+    head.second->line.ending = std::move(tail.first->line.ending);
+    update(*head.second);
+    root_ = merge(merge(std::move(head.first), std::move(head.second)), std::move(tail.second));
+    nextId_ = std::max(nextId_, chunk.nextId_);
+    return {start, retained, firstId, added, ++revision_, std::nullopt};
+  }
   size_t lineCount() const { return count(root_); }
   size_t length() const { return units(root_); }
   uint64_t revision() const { return revision_; }

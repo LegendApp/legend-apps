@@ -18,8 +18,13 @@ Implemented foundations:
 
 - An indexed UTF-16 native buffer with stable logical-line IDs, exact newline
   preservation, logarithmic line/offset lookup, and range replacement.
-- A LegendList data-source mirror receiving versioned, bounded row transactions
-  rather than whole-document changes on every keystroke. The repo's pinned
+- Progressive background UTF-8 loading: the first read is capped at 16 KiB and
+  decoding at 128 newline boundaries. Later chunks are decoded/indexed off-main
+  and integrated incrementally, with cancellation on file replacement/recycling.
+  UTF-8 scalars and CRLF boundaries are preserved; BOMs are supported.
+- A compact LegendList ID-run index receiving versioned row transactions, with
+  no full-text bridge payload or per-file-line JavaScript object allocation.
+  Row objects are created on demand in a bounded cache. The repo's pinned
   `3.3.5-sparse-layout.67a3cbc9` supports this data-source API.
 - Shared native line layout with wrapping, grapheme-aware hit testing, caret
   rectangles, and visible-range drawing. Bounded typesetter chunks avoid the
@@ -35,8 +40,11 @@ Implemented foundations:
 - Incremental syntax highlighting using the same native TextMate engine,
   grammars, and themes as Code and Diff. A serial background worker retains
   multiline parser states by stable line ID, rejects stale revisions, and stops
-  reparsing when state converges beyond the edited range. Work is batched by
-  line/byte count (a single large logical line is still indivisible).
+  reparsing when state converges beyond the edited range. Initial tokenization
+  stops at the mounted viewport plus lookahead, and resumes on scrolling.
+  Work is batched by line/byte count (a single large logical line is indivisible).
+  Grammars/themes are resolved natively from installed or app-bundled assets,
+  avoiding synchronous development-file reads on the JavaScript thread.
 - Syntax colors and font styles applied before CoreText layout, preserving
   matching rendering, wrapping, selection, and caret geometry. Theme/highlighting
   changes keep the native edit buffer and undo history; asset failures fall back
@@ -72,10 +80,25 @@ with visual-row navigation, typing, splitting, and undo beyond the first screen.
 Regression coverage includes detached-row drawing, mutable input strings in undo,
 retained LegendList row indexes, and preserving measured heights during edits.
 
-The printed timings measure isolated native buffer/layout work, not interactive
-frame latency or end-to-end React Native performance. Initial snapshot creation,
-React mounting, scrolling, resize reflow, and native/JS synchronization still
-need integrated measurement.
+The native test timings measure isolated buffer/layout work, not frame latency.
+An integrated macOS Debug run on September 10 measured native file-open start to
+first row draw: a 65 MB / 1,000,001-row fixture improved from 6.36 seconds to
+126 ms on the first rebuilt run and 36–48 ms on subsequent warm opens. A 130 MB
+fixture drew its prefix in 44 ms on a warm repeat. These are local file-open
+measurements, not cold process/Metro launch times or guarantees for all hardware.
+The final build uses 1 MiB background batches after the initial prefix: the same
+65 MB fixture drew in 120 ms on the first open and 39 ms on a warm repeat,
+finishing background loading in 3.9–4.0 seconds. The 6.5 MB fixture drew in 34 ms.
+Live edits while the 130 MB fixture was still loading survived completion.
+Switching away mid-load cancelled the old job without appending into the new file.
+
+Loading remaining data is still O(file size), and the complete native buffer
+eventually occupies memory. The scrollbar grows as rows arrive; Select All and
+end-of-document commands cover the currently loaded prefix until loading finishes.
+A one-million-character single line showed its prefix in 20 ms, but long-line
+layout/retokenization still scales with line length. TextMate must reconstruct
+preceding parser state on a distant uncached jump. Truly unbounded files require
+a disk-backed/paged buffer and virtualized layout within individual logical lines.
 
 New native code requires `bun run code pods macos` followed by a debug rebuild.
 The native test harness also uses the headers installed by that pod step.

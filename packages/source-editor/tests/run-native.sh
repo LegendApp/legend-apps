@@ -2,7 +2,7 @@
 set -euo pipefail
 source_editor_dir="$(cd "$(dirname "$0")/.." && pwd)"
 source_editor_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-editor.XXXXXX")"
-trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test"; rmdir "$source_editor_build"' EXIT
+trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test" "$source_editor_build/reader-test" "$source_editor_build/append-test"; rmdir "$source_editor_build"' EXIT
 syntax_parser_dir="$source_editor_dir/../syntax-parser"
 source_editor_headers="$source_editor_dir/../../shell/.legend/workspaces/dev/code/macos/Pods/Headers"
 syntax_flags=(
@@ -18,6 +18,10 @@ syntax_sources=(
 )
 clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$source_editor_dir/tests/SourceDocument.test.cpp" -o "$source_editor_build/document-test"
 "$source_editor_build/document-test"
+clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$source_editor_dir/tests/SourceFileReader.test.cpp" -o "$source_editor_build/reader-test"
+"$source_editor_build/reader-test"
+clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$source_editor_dir/tests/SourceAppend.test.cpp" -o "$source_editor_build/append-test"
+"$source_editor_build/append-test"
 clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit -framework CoreText \
   "$source_editor_dir/tests/SourceLineLayout.test.mm" "$source_editor_dir/macos/SourceLineLayout.mm" -o "$source_editor_build/layout-test"
 "$source_editor_build/layout-test"

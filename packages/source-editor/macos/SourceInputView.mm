@@ -27,7 +27,7 @@ static NSString *string(const std::u16string &text) {
 @end
 
 @implementation LESourceInputView {
-  std::unique_ptr<SourceDocument> _document;
+  std::shared_ptr<SourceDocument> _document;
   NSHashTable<LESourceRowView *> *_rows;
   NSRange _marked;
   NSUndoManager *_history;
@@ -41,7 +41,7 @@ static NSString *string(const std::u16string &text) {
   NSString *_syntaxLanguage, *_syntaxTheme;
   BOOL _syntaxEnabled, _syntaxBusy;
   uint64_t _syntaxGeneration;
-  NSUInteger _syntaxNextLine, _syntaxKnownEnd, _syntaxDirtyEnd;
+  NSUInteger _syntaxNextLine, _syntaxKnownEnd, _syntaxDirtyEnd, _syntaxJobEnd;
   NSDictionary *_layoutAttributes;
   CGFloat _layoutWidth, _layoutLineHeight;
   BOOL _layoutWrap;
@@ -50,6 +50,7 @@ static NSString *string(const std::u16string &text) {
   id _dragMonitor, _dragWindowObserver;
   NSPoint _dragPoint;
   BOOL _dragActive, _dragMoved;
+  BOOL _startupDrawn;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
@@ -65,6 +66,8 @@ static NSString *string(const std::u16string &text) {
 - (BOOL)resignFirstResponder { [self endSelectionDrag]; return [super resignFirstResponder]; }
 - (void)viewDidMoveToWindow { [super viewDidMoveToWindow]; [self endSelectionDrag]; }
 - (void)dealloc {
+  auto retired = std::move(_document);
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
   [_dragTimer invalidate];
   if (_dragMonitor) [NSEvent removeMonitor:_dragMonitor];
   if (_dragWindowObserver) [NSNotificationCenter.defaultCenter removeObserver:_dragWindowObserver];
@@ -93,9 +96,17 @@ static NSString *string(const std::u16string &text) {
   if ([value isKindOfClass:NSString.class]) [self insertText:value replacementRange:NSMakeRange(0, _document->length())];
 }
 - (void)loadSource:(NSString *)source {
+  [self adoptDocument:std::make_shared<SourceDocument>(utf16(source))];
+}
+- (NSUInteger)lineCount { return _document->lineCount(); }
+- (void)adoptDocument:(std::shared_ptr<SourceDocument>)document {
+  _startupDrawn = NO;
   [self endSelectionDrag];
   _layoutAttributes = nil;
-  _document = std::make_unique<SourceDocument>(utf16(source));
+  auto retired = std::move(_document);
+  _document = std::move(document);
+  // Releasing a large previous file must not pause a newly opened file.
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
   _anchor = _head = 0;
   _marked = NSMakeRange(NSNotFound, 0);
   _compositionOriginal = nil;
@@ -104,6 +115,35 @@ static NSString *string(const std::u16string &text) {
   [_history removeAllActions];
   for (LESourceRowView *row in _rows) [row invalidateText];
   [self resetSyntax];
+}
+- (NSDictionary *)appendDocument:(SourceDocument &&)chunk {
+  auto change = _document->appendLoaded(std::move(chunk));
+  const auto start = change.fallback ? change.fallback->startLine : change.startLine;
+  if (_syntax && start < MAX(_syntaxNextLine, _syntaxBusy ? _syntaxJobEnd : 0)) {
+    ++_syntaxGeneration;
+    _syntaxNextLine = MIN(_syntaxNextLine, start);
+    _syntaxKnownEnd = MIN(_syntaxKnownEnd, start);
+    _syntaxDirtyEnd = _document->lineCount();
+  }
+  for (LESourceRowView *row in _rows) {
+    if (row.lineIndex < start) continue;
+    if (change.fallback) {
+      row.lineIndex = NSNotFound;
+      for (size_t i = 0; i < change.fallback->lines.size(); ++i) {
+        if (change.fallback->lines[i].id == row.lineId) { row.lineIndex = start + i; break; }
+      }
+    }
+    [row invalidateText];
+  }
+  [self scheduleSyntax];
+  if (change.fallback) {
+    NSMutableArray *lines = [NSMutableArray array];
+    for (const auto &line : change.fallback->lines) [lines addObject:@{@"id":[NSString stringWithFormat:@"%llu", line.id]}];
+    return @{@"startLine":@(start), @"removedLineCount":@(change.fallback->removedLineCount), @"lines":lines,
+      @"revision":@(change.revision), @"lineCount":@(_document->lineCount()), @"offset":@0, @"removedLength":@0, @"insertedText":@""};
+  }
+  return @{@"startLine":@(start), @"retainedId":[NSString stringWithFormat:@"%llu", change.retainedId],
+    @"firstId":@(change.firstId), @"count":@(change.count), @"revision":@(change.revision), @"lineCount":@(_document->lineCount())};
 }
 - (void)configureSyntaxLanguage:(NSString *)language theme:(NSString *)theme enabled:(BOOL)enabled {
   if ([_syntaxLanguage isEqualToString:language] && [_syntaxTheme isEqualToString:theme] && _syntaxEnabled == enabled) return;
@@ -122,12 +162,20 @@ static NSString *string(const std::u16string &text) {
 }
 - (void)scheduleSyntax {
   if (!_syntax || _syntaxBusy || _syntaxNextLine >= _document->lineCount()) return;
+  // TextMate requires preceding parser state, but unopened tails do not need
+  // tokens. Advance only through the mounted viewport plus a small lookahead.
+  NSUInteger demandEnd = 128;
+  for (LESourceRowView *row in _rows) {
+    if ([self isCurrentRow:row]) demandEnd = MAX(demandEnd, row.lineIndex + 129);
+  }
+  demandEnd = MIN(demandEnd, _document->lineCount());
+  if (_syntaxNextLine >= demandEnd) return;
   const auto start = _syntaxNextLine;
   const auto generation = _syntaxGeneration;
   const auto previousId = start ? _document->line(start - 1).id : 0;
   std::vector<syntax::IncrementalSyntaxLine> lines;
   size_t bytes = 0;
-  for (size_t index = start; index < _document->lineCount() && lines.size() < 128; ++index) {
+  for (size_t index = start; index < demandEnd && lines.size() < 128; ++index) {
     const auto& line = _document->line(index);
     NSData *data = [string(line.text) dataUsingEncoding:NSUTF8StringEncoding];
     lines.push_back({line.id, data.length ? std::string(static_cast<const char *>(data.bytes), data.length) : std::string()});
@@ -136,6 +184,7 @@ static NSString *string(const std::u16string &text) {
   }
   const auto highlighter = _syntax;
   _syntaxBusy = YES;
+  _syntaxJobEnd = start + lines.size();
   __weak LESourceInputView *weakSelf = self;
   dispatch_async(_syntaxQueue, ^{
     syntax::IncrementalSyntaxBatch result;
@@ -209,7 +258,14 @@ static NSString *string(const std::u16string &text) {
   return [[LESourceLineLayout alloc] initWithText:text width:_layoutWidth lineHeight:_layoutLineHeight wrap:_layoutWrap];
 }
 - (NSString *)source { return string(_document->text()); }
-- (void)registerRow:(LESourceRowView *)row { [_rows addObject:row]; }
+- (void)registerRow:(LESourceRowView *)row { [_rows addObject:row]; [self scheduleSyntax]; }
+- (void)requestVisibleSyntax { [self scheduleSyntax]; }
+- (void)recordStartupDraw {
+  if (!_startupDrawn) {
+    _startupDrawn = YES;
+    if (self.onFirstDraw) self.onFirstDraw();
+  }
+}
 - (void)unregisterRow:(LESourceRowView *)row { [_rows removeObject:row]; }
 - (BOOL)isCurrentRow:(LESourceRowView *)row {
   return row.lineIndex < _document->lineCount() && _document->line(row.lineIndex).id == row.lineId;
@@ -428,7 +484,7 @@ static NSString *string(const std::u16string &text) {
   _anchor = _head = range.location + text.length;
   NSMutableArray *lines = [NSMutableArray array];
   for (const auto &line : change.lines) {
-    [lines addObject:@{@"id": [NSString stringWithFormat:@"%llu", line.id], @"text":string(line.text), @"ending":string(line.ending)}];
+    [lines addObject:@{@"id": [NSString stringWithFormat:@"%llu", line.id]}];
   }
   NSDictionary *event = @{@"startLine":@(change.startLine), @"removedLineCount":@(change.removedLineCount),
     @"lines":lines, @"revision":@(change.revision), @"lineCount":@(_document->lineCount()),
@@ -657,6 +713,7 @@ static NSString *string(const std::u16string &text) {
     }
   }
   [_textLayout drawInContext:NSGraphicsContext.currentContext.CGContext origin:NSMakePoint(64, 0) dirtyRect:dirtyRect];
+  if (_textLayout) [self.input recordStartupDraw];
   [[NSString stringWithFormat:@"%lu", self.lineIndex + 1] drawAtPoint:NSMakePoint(8, 2) withAttributes:@{
     NSFontAttributeName:[NSFont fontWithName:@"Menlo" size:MAX(10, self.fontSize - 1)] ?: [NSFont systemFontOfSize:12],
     NSForegroundColorAttributeName:[(self.foreground ?: NSColor.textColor) colorWithAlphaComponent:0.5],
