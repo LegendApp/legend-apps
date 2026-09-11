@@ -1,0 +1,7 @@
+{
+  "repository": "srazzak/tree-sitter-mdx",
+  "revision": "3aa29e8de1bf0213948a04fe953039b6ab73777b",
+  "patch": "scripts/patch-mdx-grammar.ts",
+  "generator": "tree-sitter-cli@0.25.10",
+  "abi": 14
+}

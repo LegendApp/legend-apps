@@ -28,9 +28,15 @@ static void verify(const SourceDocument &document, const std::u16string &expecte
     assert(document.line(i).text == rebuilt.line(i).text);
     assert(document.line(i).ending == rebuilt.line(i).ending);
   }
+  size_t row = 0, column = 0;
   for (size_t i = 0; i <= expected.size(); ++i) {
     const auto position = document.position(i);
     assert(document.lineOffset(position.line) + position.column == i);
+    const auto syntax = document.syntaxPosition(i);
+    assert(syntax.line == row && syntax.column == column);
+    if (i < expected.size()) {
+      if (expected[i] == u'\n') { ++row; column = 0; } else ++column;
+    }
   }
 }
 

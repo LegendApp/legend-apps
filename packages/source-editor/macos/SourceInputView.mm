@@ -1,6 +1,7 @@
 #import "SourceInputView.h"
 #include "../cpp/SourceDocument.hpp"
 #include "../../syntax-parser/cpp/IncrementalSyntaxHighlighter.hpp"
+#include "../cpp/SourceTreeSyntax.hpp"
 #include <unordered_set>
 
 using legend::source::SourceDocument;
@@ -22,6 +23,9 @@ static NSString *string(const std::u16string &text) {
 - (void)resetSyntax;
 - (void)retireSyntax;
 - (void)scheduleSyntax;
+- (void)scheduleTreeSyntax;
+- (void)refreshTreePalette;
+- (std::vector<syntax::SyntaxStyle>)resolveTreeStyles:(const std::vector<std::vector<std::string>>&)scopes theme:(NSString *)theme;
 - (std::shared_ptr<syntax::IncrementalSyntaxHighlighter>)createSyntaxHighlighter;
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(nullable LESourceRowView *)row;
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font;
@@ -56,6 +60,15 @@ static NSString *string(const std::u16string &text) {
   NSTimeInterval _lastProgressAt;
   BOOL _lastProgressActive;
   NSUInteger _lastProgressTotal;
+  std::shared_ptr<legend::source::SourceTreeSyntax> _treeSyntax;
+  dispatch_queue_t _treeQueue;
+  std::unordered_map<uint64_t, std::vector<legend::source::SourceSyntaxToken>> _treeRows;
+  std::vector<std::string> _treeCaptures;
+  NSArray<NSColor *> *_treeColors;
+  std::vector<int> _treeFontStyles;
+  NSUInteger _treeCopiedUnits, _treeNextLine, _treeRevision, _treeVisibleRevision, _treeVisibleStart, _treeVisibleEnd;
+  NSUInteger _treeKnownEnd, _treeDirtyEnd;
+  BOOL _treeBusy, _treePrefixDone;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
@@ -126,6 +139,7 @@ static NSString *string(const std::u16string &text) {
 - (NSDictionary *)appendDocument:(SourceDocument &&)chunk {
   auto change = _document->appendLoaded(std::move(chunk));
   const auto start = change.fallback ? change.fallback->startLine : change.startLine;
+  if (_treeSyntax) { ++_treeRevision; _treeNextLine = MIN(_treeNextLine, start); _treeDirtyEnd = _document->lineCount(); }
   if (_syntax && start < MAX(_syntaxNextLine, _syntaxBusy ? _syntaxJobEnd : 0)) {
     ++_syntaxGeneration;
     _syntaxNextLine = MIN(_syntaxNextLine, start);
@@ -154,8 +168,20 @@ static NSString *string(const std::u16string &text) {
 }
 - (void)configureSyntaxLanguage:(NSString *)language theme:(NSString *)theme enabled:(BOOL)enabled {
   if ([_syntaxLanguage isEqualToString:language] && [_syntaxTheme isEqualToString:theme] && _syntaxEnabled == enabled) return;
+  const BOOL paletteOnly = _treeSyntax && [_syntaxLanguage isEqualToString:language] && _syntaxEnabled == enabled;
   _syntaxLanguage = [language copy]; _syntaxTheme = [theme copy]; _syntaxEnabled = enabled;
+  if (paletteOnly) { [self refreshTreePalette]; return; }
   [self resetSyntax];
+}
+- (void)setSyntaxBackend:(NSString *)backend {
+  // Native launch override is convenient for A/B testing the exact same UI.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--syntax-backend=tree-sitter"]) backend = @"tree-sitter";
+  if ([_syntaxBackend isEqualToString:backend]) return;
+  _syntaxBackend = [backend copy]; [self resetSyntax];
+}
+- (void)setSourceLoading:(BOOL)loading {
+  _sourceLoading = loading;
+  if (!loading) [self scheduleSyntax];
 }
 - (void)setSyntaxHighlightingInBackground:(BOOL)enabled {
   if (_syntaxHighlightingInBackground == enabled) return;
@@ -167,6 +193,11 @@ static NSString *string(const std::u16string &text) {
   return std::make_shared<syntax::IncrementalSyntaxHighlighter>(_syntaxLanguage.UTF8String, _syntaxTheme.UTF8String);
 }
 - (void)retireSyntax {
+  if (_treeSyntax) _treeSyntax->cancelled = true;
+  auto tree = std::move(_treeSyntax);
+  auto rows = std::make_shared<decltype(_treeRows)>(std::move(_treeRows));
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)tree; (void)rows; });
+  _treeColors = nil; _treeCaptures.clear(); _treeFontStyles.clear();
   // Background mode can retain millions of token records. Move ownership in
   // O(1), and release them off-main without delaying the next file's syntax queue.
   auto retired = std::make_shared<std::pair<decltype(_syntax), decltype(_highlightedRows)>>(
@@ -177,13 +208,22 @@ static NSString *string(const std::u16string &text) {
   ++_syntaxGeneration;
   _syntaxNextLine = _syntaxKnownEnd = _syntaxDirtyEnd = 0;
   [self retireSyntax];
-  _syntax = _syntaxEnabled && _syntaxLanguage.length
+  if (_syntaxEnabled && [_syntaxBackend isEqualToString:@"tree-sitter"] && _syntaxLanguage
+      && syntax::TreeSitterHighlighter::supports(_syntaxLanguage.UTF8String)) {
+    _treeSyntax = std::make_shared<legend::source::SourceTreeSyntax>(_syntaxLanguage.UTF8String);
+    _treeQueue = dispatch_queue_create("app.legend.source-editor.tree-sitter", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
+    _treeCopiedUnits = _treeNextLine = _treeRevision = _treeKnownEnd = _treeDirtyEnd = 0;
+    _treeVisibleRevision = NSNotFound;
+    _treeBusy = _treePrefixDone = NO;
+  }
+  _syntax = !_treeSyntax && _syntaxEnabled && _syntaxLanguage.length
     ? [self createSyntaxHighlighter] : nullptr;
   if (self.onSyntaxError) self.onSyntaxError(@"");
   for (LESourceRowView *row in _rows) [row invalidateText];
   [self scheduleSyntax];
 }
 - (void)scheduleSyntax {
+  if (_treeSyntax) { [self scheduleTreeSyntax]; return; }
   const BOOL active = _syntax && _syntaxHighlightingInBackground && _syntaxNextLine < _document->lineCount();
   const auto now = NSProcessInfo.processInfo.systemUptime;
   if (self.onSyntaxProgress && (now - _lastProgressAt >= 0.1 || active != _lastProgressActive
@@ -265,8 +305,175 @@ static NSString *string(const std::u16string &text) {
     });
   }));
 }
+- (std::vector<syntax::SyntaxStyle>)resolveTreeStyles:(const std::vector<std::vector<std::string>>&)scopes theme:(NSString *)theme {
+  return syntax::resolveSyntaxScopeStyles(theme.UTF8String, scopes, 0);
+}
+- (void)refreshTreePalette {
+  if (!_treeSyntax || _treeCaptures.empty()) return;
+  auto worker = _treeSyntax;
+  const auto captures = _treeCaptures;
+  NSString *theme = [_syntaxTheme copy];
+  __weak LESourceInputView *weakSelf = self;
+  dispatch_async(_treeQueue, ^{
+    if (worker->cancelled) return;
+    std::vector<std::vector<std::string>> scopes;
+    for (size_t id = 0; id < captures.size(); ++id) {
+      const auto& capture = captures[id];
+      auto scope = syntax::TreeSitterHighlighter::themeScope(capture);
+      scopes.push_back({syntax::TreeSitterHighlighter::rootScopeForCapture(static_cast<uint32_t>(id))});
+      if (!scope.empty()) scopes.back().push_back(std::move(scope));
+    }
+    std::vector<syntax::SyntaxStyle> styles;
+    NSString *error = nil;
+    try {
+      LESourceInputView *owner = weakSelf;
+      if (!owner) return;
+      styles = [owner resolveTreeStyles:scopes theme:theme];
+    }
+    catch (const std::exception& cause) { error = [NSString stringWithUTF8String:cause.what()]; }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      LESourceInputView *self = weakSelf;
+      if (!self || self->_treeSyntax != worker || ![theme isEqualToString:self->_syntaxTheme]) return;
+      if (error) { if (self.onSyntaxError) self.onSyntaxError(error); return; }
+      NSMutableArray<NSColor *> *colors = [NSMutableArray new];
+      self->_treeFontStyles.clear();
+      for (const auto& style : styles) {
+        unsigned int rgb = 0xeeeeee;
+        NSString *hex = [[NSString stringWithUTF8String:style.foreground.c_str()] stringByReplacingOccurrencesOfString:@"#" withString:@""];
+        if (hex.length == 6) [[NSScanner scannerWithString:hex] scanHexInt:&rgb];
+        [colors addObject:[NSColor colorWithSRGBRed:((rgb >> 16) & 255) / 255.0 green:((rgb >> 8) & 255) / 255.0 blue:(rgb & 255) / 255.0 alpha:1]];
+        self->_treeFontStyles.push_back(static_cast<int>(style.fontStyle));
+      }
+      self->_treeColors = colors;
+      for (LESourceRowView *row in self->_rows) [row invalidateText];
+    });
+  });
+}
+- (void)scheduleTreeSyntax {
+  if (!_treeSyntax || _treeBusy) return;
+  auto worker = _treeSyntax;
+  const auto revision = _treeRevision;
+  const BOOL copying = _treeCopiedUnits < _document->length();
+  const BOOL prefix = !_treePrefixDone;
+  // Native first paint is independent of both parser construction and full work.
+  if (!prefix && !_startupDrawn) return;
+  size_t from = NSNotFound, to = 0;
+  for (LESourceRowView *row in _rows) {
+    if (![self isCurrentRow:row]) continue;
+    from = MIN(from, row.lineIndex);
+    to = MAX(to, row.lineIndex + 1);
+  }
+  if (from == NSNotFound) { from = 0; to = MIN(_document->lineCount(), 128); }
+  from = from > 32 ? from - 32 : 0;
+  to = MIN(_document->lineCount(), MIN(from + 256, to + 32));
+  const BOOL visible = _treeVisibleRevision != revision || from != _treeVisibleStart || to != _treeVisibleEnd;
+  const BOOL fullReady = !copying && !_sourceLoading;
+  if (!prefix && !copying && !fullReady) return;
+  if (!prefix && !copying && !visible && (!_syntaxHighlightingInBackground || _treeNextLine >= _document->lineCount())) return;
+  const auto offset = _treeCopiedUnits;
+  size_t count = MIN(prefix ? 16384 : 262144, _document->length() - offset);
+  if (prefix && _document->lineCount() > 128) count = MIN(count, _document->lineOffset(128));
+  // A read boundary must not cut a surrogate pair. A parser job only reads its
+  // worker mirror, which cannot change until that job returns.
+  if (count && offset + count < _document->length()) {
+    const auto unit = _document->slice(offset + count - 1, 1)[0];
+    if (unit >= 0xd800 && unit <= 0xdbff) --count;
+  }
+  auto chunk = std::make_shared<const std::u16string>(_document->slice(offset, count));
+  _treeCopiedUnits += count;
+  const BOOL parse = prefix || (!_sourceLoading && _treeCopiedUnits == _document->length());
+  const auto start = prefix ? 0 : visible ? from : _treeNextLine;
+  const auto batch = prefix ? 128 : visible ? MIN(to - from, 256) : 512;
+  const BOOL needsCaptures = _treeCaptures.empty();
+  _treeBusy = YES;
+  __weak LESourceInputView *weakSelf = self;
+  dispatch_async(_treeQueue, ^{
+    std::vector<legend::source::SourceSyntaxRow> result;
+    std::vector<std::string> captures;
+    std::pair<size_t, size_t> invalidated{0, 0};
+    NSString *error = nil;
+    try {
+      if (worker->cancelled) return;
+      if (!chunk->empty()) worker->replace(offset, 0, *chunk);
+      if (parse && worker->parse()) {
+        invalidated = worker->takeInvalidatedLines();
+        if (start < worker->lineCount()) result = worker->highlight(start, batch);
+        if (needsCaptures) captures = worker->captures();
+      }
+    } catch (const std::exception& cause) { error = [NSString stringWithUTF8String:cause.what()]; }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      LESourceInputView *self = weakSelf;
+      if (!self || self->_treeSyntax != worker) return;
+      self->_treeBusy = NO;
+      if (error) {
+        // Keep the editor usable; unsupported/erroring syntax cannot block input.
+        worker->cancelled = true;
+        self->_treeSyntax.reset();
+        if (self.onSyntaxError) self.onSyntaxError(error);
+        return;
+      }
+      if (prefix) self->_treePrefixDone = YES;
+      if (revision == self->_treeRevision && parse) {
+        if (invalidated.second > invalidated.first) {
+          self->_treeNextLine = MIN(self->_treeNextLine, invalidated.first);
+          self->_treeDirtyEnd = MAX(self->_treeDirtyEnd, invalidated.second);
+        }
+        std::unordered_set<uint64_t> changed;
+        for (const auto& line : result) {
+          if (line.index >= self->_document->lineCount()) continue;
+          const auto id = self->_document->line(line.index).id;
+          auto found = self->_treeRows.find(id);
+          if (found == self->_treeRows.end() || found->second != line.tokens) {
+            self->_treeRows[id] = line.tokens; changed.insert(id);
+          }
+        }
+        if (self->_treeCaptures.empty()) { self->_treeCaptures = std::move(captures); [self refreshTreePalette]; }
+        if (visible && !prefix) { self->_treeVisibleRevision = revision; self->_treeVisibleStart = from; self->_treeVisibleEnd = to; }
+        if (start <= self->_treeNextLine) {
+          self->_treeNextLine = MAX(self->_treeNextLine, start + result.size());
+          if (self->_treeNextLine >= self->_treeDirtyEnd) {
+            self->_treeNextLine = MAX(self->_treeNextLine, self->_treeKnownEnd);
+            self->_treeDirtyEnd = 0;
+          }
+          self->_treeKnownEnd = MAX(self->_treeKnownEnd, self->_treeNextLine);
+        }
+        for (LESourceRowView *row in self->_rows) if (changed.count(row.lineId)) [row invalidateText];
+      } else if (revision != self->_treeRevision && parse) {
+        // An overlapping completion cannot establish validity for a newer
+        // revision. Keep its old colors, but conservatively revalidate the tail.
+        self->_treeNextLine = self->_treeKnownEnd = 0;
+        self->_treeDirtyEnd = self->_document->lineCount();
+      }
+      const BOOL active = self->_sourceLoading || self->_treeCopiedUnits < self->_document->length()
+        || (self->_syntaxHighlightingInBackground && self->_treeNextLine < self->_document->lineCount());
+      const auto now = NSProcessInfo.processInfo.systemUptime;
+      if (self.onSyntaxProgress && (now - self->_lastProgressAt >= 0.1 || active != self->_lastProgressActive)) {
+        self->_lastProgressAt = now; self->_lastProgressActive = active;
+        self.onSyntaxProgress(MIN(self->_treeNextLine, self->_document->lineCount()), self->_document->lineCount(), active);
+      }
+      // No syntax debounce. Each bounded batch yields to input and new edits.
+      dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf scheduleSyntax]; });
+    });
+  });
+}
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font {
-  if (!_syntax || index >= _syntaxNextLine) return;
+  if (_treeSyntax) {
+    const auto found = _treeRows.find(_document->line(index).id);
+    if (found == _treeRows.end()) return;
+    for (const auto& token : found->second) {
+      if (token.start >= text.length || token.capture >= _treeColors.count) continue;
+      const auto range = NSMakeRange(token.start, MIN(token.length, text.length - token.start));
+      [text addAttribute:NSForegroundColorAttributeName value:_treeColors[token.capture] range:range];
+      const auto flags = _treeFontStyles[token.capture];
+      const NSFontTraitMask traits = (flags & 1 ? NSItalicFontMask : 0) | (flags & 2 ? NSBoldFontMask : 0);
+      if (traits) [text addAttribute:NSFontAttributeName value:[NSFontManager.sharedFontManager convertFont:font toHaveTrait:traits] range:range];
+      if (flags & 4) [text addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle) range:range];
+    }
+    return;
+  }
+  // A scheduling frontier is not a rendering-validity frontier. Stable line IDs
+  // retain useful colors while a structural edit is being reparsed.
+  if (!_syntax) return;
   const auto found = _highlightedRows.find(_document->line(index).id);
   if (found == _highlightedRows.end()) return;
   for (const auto& token : found->second->tokens) {
@@ -490,9 +697,53 @@ static NSString *string(const std::u16string &text) {
   }
   std::vector<uint64_t> oldIds;
   const auto oldStart = _document->position(range.location).line;
+  const auto oldStartColumn = range.location - _document->lineOffset(oldStart);
+  const auto oldLineId = _document->line(oldStart).id;
+  const bool oneLine = oldStart == _document->position(NSMaxRange(range)).line
+    && [text rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location == NSNotFound;
   const auto oldEnd = MIN(_document->lineCount(), _document->position(NSMaxRange(range)).line + 2);
   for (size_t i = oldStart ? oldStart - 1 : 0; i < oldEnd; ++i) oldIds.push_back(_document->line(i).id);
   auto change = _document->replace(range.location, range.length, utf16(text));
+  if (_treeSyntax) {
+    ++_treeRevision;
+    const auto map = [&](NSUInteger index) -> NSUInteger {
+      if (index <= change.startLine) return index;
+      if (index >= change.startLine + change.removedLineCount) return index - change.removedLineCount + change.lines.size();
+      return change.startLine + change.lines.size();
+    };
+    _treeNextLine = MIN(_treeNextLine, change.startLine);
+    _treeKnownEnd = map(_treeKnownEnd);
+    _treeDirtyEnd = MAX(map(_treeDirtyEnd), change.startLine + change.lines.size());
+    // Mirror only the already-copied prefix. Edits beyond it will be included in
+    // later bounded snapshots; edits crossing its boundary truncate the mirror.
+    if (range.location <= _treeCopiedUnits) {
+      const auto removed = MIN(range.length, _treeCopiedUnits - range.location);
+      const auto inserted = std::make_shared<const std::u16string>(change.insertedText);
+      auto worker = _treeSyntax;
+      _treeCopiedUnits = _treeCopiedUnits - removed + inserted->size();
+      dispatch_async(_treeQueue, ^{ if (!worker->cancelled) worker->replace(range.location, removed, *inserted); });
+    }
+    std::unordered_set<uint64_t> retained;
+    for (const auto& line : change.lines) retained.insert(line.id);
+    for (auto id : oldIds) if (!retained.count(id)) _treeRows.erase(id);
+    if (oneLine) {
+      const auto found = _treeRows.find(oldLineId);
+      if (found != _treeRows.end()) {
+        std::vector<legend::source::SourceSyntaxToken> shifted;
+        for (auto token : found->second) {
+          const auto end = token.start + token.length;
+          if (end <= oldStartColumn) shifted.push_back(token);
+          else if (token.start >= oldStartColumn + range.length) {
+            token.start = token.start - range.length + text.length; shifted.push_back(token);
+          } else if (token.start <= oldStartColumn && end >= oldStartColumn + range.length) {
+            token.length = token.length - range.length + text.length; shifted.push_back(token);
+          }
+        }
+        found->second = std::move(shifted);
+      }
+    }
+    [self scheduleSyntax];
+  }
   if (_syntax) {
     ++_syntaxGeneration;
     const auto mapBoundary = [&](NSUInteger index) -> NSUInteger {

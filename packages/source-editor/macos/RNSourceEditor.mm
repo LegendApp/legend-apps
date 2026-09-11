@@ -73,6 +73,7 @@ struct SourceLoadJob {
   _initialSource = str(next.initialSource);
   _useInitialSource = next.useInitialSource;
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
+  _input.syntaxBackend = str(next.syntaxBackend);
   [_input configureSyntaxLanguage:str(next.syntaxLanguage) theme:str(next.syntaxTheme) enabled:next.syntaxHighlightingEnabled];
   _input.syntaxHighlightingInBackground = next.syntaxHighlightingInBackground;
   [super updateProps:props oldProps:oldProps];
@@ -86,6 +87,7 @@ struct SourceLoadJob {
   _waitingForFirstDraw = NO;
   _input.onFirstDraw = nil;
   if (_useInitialSource) {
+    _input.sourceLoading = NO;
     [_input loadSource:_initialSource];
     std::static_pointer_cast<const SourceEditorHostEventEmitter>(_eventEmitter)->onReady({
       .lineCount = (double)_input.lineCount, .firstId = 1, .complete = true, .error = "",
@@ -118,6 +120,7 @@ struct SourceLoadJob {
         RNSourceEditorHost *self = weakSelf;
         if (!self || job->cancelled || self->_loadJob != job || !self->_eventEmitter) return;
         auto emitter = std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter);
+        self->_input.sourceLoading = !complete && !error.length;
         if (first) {
           if (!error.length) {
             chunk->useEditIdRange();
@@ -168,6 +171,8 @@ struct SourceLoadJob {
   _input.onFirstDraw = nil;
   if (self.window.firstResponder == _input) [self.window makeFirstResponder:nil];
   _input.syntaxHighlightingInBackground = NO;
+  _input.sourceLoading = NO;
+  _input.syntaxBackend = @"textmate";
   _path = nil; _loaded = NO; [_input loadSource:@""];
   _initialSource = nil; _useInitialSource = NO;
   [_input configureSyntaxLanguage:@"" theme:@"" enabled:NO];

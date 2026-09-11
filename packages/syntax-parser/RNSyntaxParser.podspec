@@ -1,6 +1,7 @@
 require "json"
 
 package = JSON.parse(File.read(File.join(__dir__, "package.json")))
+grammars = JSON.parse(File.read(File.join(__dir__, "tree-sitter-grammars.json")))["grammars"]
 
 Pod::Spec.new do |s|
   s.name = "RNSyntaxParser"
@@ -11,8 +12,11 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :ios => "15.0", :osx => "14.0" }
-  s.source_files = "cpp/**/*.{h,hpp,cpp}"
-  s.preserve_paths = "vendor/TextMateLib/**/*"
+  s.source_files = ["cpp/**/*.{h,hpp,cpp}",
+    "vendor/tree-sitter/runtime/src/lib.c"] + grammars.map { |grammar|
+      "vendor/tree-sitter/#{grammar['name']}/src/{parser,scanner}.c"
+    }
+  s.preserve_paths = ["vendor/TextMateLib/**/*", "vendor/tree-sitter/**/*"]
   s.resource_bundles = {
     "RNSyntaxParserGrammars" => [
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/javascript.json",
@@ -55,12 +59,16 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",
     "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) TEXTMATE_STATIC=1",
+    "OTHER_CFLAGS" => '$(inherited) -include "$(PODS_TARGET_SRCROOT)/vendor/tree-sitter/Symbols.h"',
+    "OTHER_CPLUSPLUSFLAGS" => '$(inherited) -include "$(PODS_TARGET_SRCROOT)/vendor/tree-sitter/Symbols.h"',
     "HEADER_SEARCH_PATHS" => [
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/packages/tml-cpp/src",
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/packages/tml-cpp/build",
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/packages/tml-cpp/build/oniguruma/include",
       "$(PODS_TARGET_SRCROOT)/vendor/TextMateLib/thirdparty/rapidjson/include",
       "$(PODS_TARGET_SRCROOT)/../native-text-source/cpp",
+      "$(PODS_TARGET_SRCROOT)/vendor/tree-sitter/runtime/include",
+      "$(PODS_TARGET_SRCROOT)/vendor/tree-sitter/typescript/src",
     ].join(" "),
   }
   s.dependency "React-Core"

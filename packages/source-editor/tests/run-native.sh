@@ -2,8 +2,11 @@
 set -euo pipefail
 source_editor_dir="$(cd "$(dirname "$0")/.." && pwd)"
 source_editor_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-editor.XXXXXX")"
-trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test" "$source_editor_build/reader-test" "$source_editor_build/append-test" "$source_editor_build/scheduling-test"; rmdir "$source_editor_build"' EXIT
+trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test" "$source_editor_build/reader-test" "$source_editor_build/append-test" "$source_editor_build/scheduling-test" "$source_editor_build/tree-test" "$source_editor_build/"*.o; rmdir "$source_editor_build"' EXIT
 syntax_parser_dir="$source_editor_dir/../syntax-parser"
+tree_vendor="$syntax_parser_dir/vendor/tree-sitter"
+node "$syntax_parser_dir/scripts/embed-tree-sitter-queries.ts" --check
+node "$syntax_parser_dir/scripts/compile-tree-sitter.ts" "$source_editor_build"
 source_editor_headers="$source_editor_dir/../../shell/.legend/workspaces/dev/code/macos/Pods/Headers"
 syntax_flags=(
   -I"$source_editor_headers/Public" -I"$source_editor_headers/Public/NitroModules"
@@ -12,10 +15,14 @@ syntax_flags=(
   -I"$syntax_parser_dir/vendor/TextMateLib/packages/tml-cpp/build"
 )
 syntax_sources=(
+  "$syntax_parser_dir/cpp/TreeSitterHighlighter.cpp" "$source_editor_build/"*.o
   "$syntax_parser_dir/cpp/SyntaxHighlighter.cpp" "$syntax_parser_dir/cpp/IncrementalSyntaxHighlighter.cpp"
   "$syntax_parser_dir/vendor/TextMateLib/packages/tml-cpp/build/libtml.a"
   "$syntax_parser_dir/vendor/TextMateLib/packages/tml-cpp/build/oniguruma/lib/libonig.a"
 )
+clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$source_editor_dir/tests/SourceTreeSyntax.test.cpp" \
+  "$syntax_parser_dir/cpp/TreeSitterHighlighter.cpp" "$source_editor_build/"*.o -o "$source_editor_build/tree-test"
+"$source_editor_build/tree-test" "$@"
 clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$source_editor_dir/tests/SourceDocument.test.cpp" -o "$source_editor_build/document-test"
 "$source_editor_build/document-test"
 clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$source_editor_dir/tests/SourceFileReader.test.cpp" -o "$source_editor_build/reader-test"
@@ -32,7 +39,7 @@ clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit -framework CoreText "${synta
 clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit -framework CoreText "${syntax_flags[@]}" \
   "$source_editor_dir/tests/SourceSyntaxScheduling.test.mm" "$source_editor_dir/macos/SourceInputView.mm" \
   "$source_editor_dir/macos/SourceLineLayout.mm" "${syntax_sources[@]}" -o "$source_editor_build/scheduling-test"
-"$source_editor_build/scheduling-test" "$syntax_parser_dir/vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages"
+"$source_editor_build/scheduling-test" "$syntax_parser_dir/vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages" "$@"
 clang++ -std=c++20 -O2 -framework CoreFoundation "${syntax_flags[@]}" \
   "$source_editor_dir/tests/IncrementalSyntaxHighlighter.test.cpp" "${syntax_sources[@]}" -o "$source_editor_build/syntax-test"
 "$source_editor_build/syntax-test" "$syntax_parser_dir/vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages"
