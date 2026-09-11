@@ -49,6 +49,23 @@ int main(int argc, char **argv) {
 
   @autoreleasepool {
     [NSApplication sharedApplication];
+    for (bool unique : {false, true}) {
+      SchedulingInput *jump = [[SchedulingInput alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+      NSString *sample = @"const sample = 42;\n";
+      NSMutableString *source = [NSMutableString new];
+      if (unique) {
+        for (NSUInteger index = 0; index < 100000; ++index) [source appendFormat:@"const sample%lu = %lu;\n", index, index];
+      } else [source appendString:[sample stringByPaddingToLength:sample.length * 100000 withString:sample startingAtIndex:0]];
+      [jump loadSource:source];
+      [jump configureSyntaxLanguage:@"typescript" theme:@"dark-plus" enabled:YES];
+      waitFor(^bool { return highlighted(jump) == 128; });
+      const auto started = [NSDate timeIntervalSinceReferenceDate];
+      LESourceRowView *last = [[LESourceRowView alloc] initWithFrame:NSMakeRect(0, 0, 600, 24)];
+      last.lineIndex = 99999; last.lineId = 100000; last.input = jump;
+      waitFor(^bool { return highlighted(jump) >= 100000; });
+      std::cout << "Exact highlighting after 100k-line jump (" << (unique ? "unique" : "repeated") << "): " << ([NSDate timeIntervalSinceReferenceDate] - started) * 1000 << "ms\n";
+      last.input = nil;
+    }
     SchedulingInput *input = [[SchedulingInput alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
     input.onSyntaxError = ^(NSString *error) { assert(!error.length); };
     NSString *line = @"const value = 42;\n";
@@ -68,7 +85,7 @@ int main(int argc, char **argv) {
     waitFor(^bool { return ![[input valueForKey:@"syntaxBusy"] boolValue]; });
     drainFor(0.05);
     const auto paused = highlighted(input);
-    assert(paused >= 128 && paused <= 256); // at most the in-flight batch finishes
+    assert(paused >= 128 && paused <= 128 + 2048); // at most one bounded catch-up batch finishes
     input.syntaxHighlightingInBackground = YES;
     waitFor(^bool { return highlighted(input) == input.lineCount; });
     assert([input.source isEqualToString:source]);

@@ -32,16 +32,26 @@ IncrementalSyntaxBatch IncrementalSyntaxHighlighter::highlight(const std::vector
       result.converged = true;
       continue;
     }
-    const auto tokenized = tokenizeSyntaxLine(*context_, input.text, state, styles_);
     auto line = std::make_shared<HighlightedSyntaxLine>(HighlightedSyntaxLine{input.id, input.text, {}});
-    for (const auto& token : tokenized.tokens) {
-      const auto& style = styles_.styles.at(static_cast<size_t>(token.styleId));
-      line->tokens.push_back({static_cast<size_t>(token.startColumn), static_cast<size_t>(token.length), style.foreground, static_cast<int>(style.fontStyle)});
+    const auto reusable = reusableLines_.find(input.text);
+    if (reusable != reusableLines_.end() && sameState(reusable->second.before, before)) {
+      state = reusable->second.after;
+      line->tokens = reusable->second.line->tokens;
+    } else {
+      const auto tokenized = tokenizeSyntaxLine(*context_, input.text, state, styles_);
+      for (const auto& token : tokenized.tokens) {
+        const auto& style = styles_.styles.at(static_cast<size_t>(token.styleId));
+        line->tokens.push_back({static_cast<size_t>(token.startColumn), static_cast<size_t>(token.length), style.foreground, static_cast<int>(style.fontStyle)});
+      }
+      ++result.tokenizedCount;
+      if (input.text.size() <= 512) {
+        if (reusableLines_.size() >= 1024) reusableLines_.clear();
+        reusableLines_.insert_or_assign(input.text, Entry{before, state, line});
+      }
     }
     result.converged = old != cache_.end() && sameState(old->second.after, state);
     cache_.insert_or_assign(input.id, Entry{before, state, line});
     result.lines.push_back(std::move(line));
-    ++result.tokenizedCount;
   }
   return result;
 }

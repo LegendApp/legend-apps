@@ -45,6 +45,8 @@ private:
   std::shared_ptr<TextMateHighlighterContext> context_;
   SyntaxStyleState styles_;
   std::unordered_map<uint64_t, Entry> cache_;
+  // Bounded reuse across logical IDs, only with an identical incoming state.
+  std::unordered_map<std::string, Entry> reusableLines_;
 };
 
 } // namespace margelo::nitro::legendapps::syntaxparser
