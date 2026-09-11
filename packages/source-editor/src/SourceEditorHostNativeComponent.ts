@@ -4,6 +4,8 @@ import type { DirectEventHandler, Double } from "react-native/Libraries/Types/Co
 
 export interface NativeProps extends ViewProps {
   documentPath: string;
+  initialSource?: string;
+  useInitialSource?: boolean;
   syntaxLanguage: string;
   syntaxTheme: string;
   syntaxHighlightingEnabled: boolean;

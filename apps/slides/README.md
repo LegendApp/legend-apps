@@ -33,6 +33,19 @@ in trusted deck code are not sandboxed by React error boundaries.
 
 `examples/showcase.mdx` exercises inline and fenced code, executable expressions, local TypeScript components, React state, speaker notes, per-slide transitions, and a lifecycle-aware React Native animation. `examples/demo.mdx` is a smaller starting point.
 
+## Editing
+
+With the audience closed, choose **Edit Source**. Editing replaces the presenter
+workspace with the shared native source editor on the left and a slide preview
+on the right. The MDX grammar highlights Markdown, YAML frontmatter and embedded
+code. Moving the caret selects the corresponding slide; edits compile after a
+350 ms pause, retaining the last successful preview on compilation errors.
+
+Use **Save** or **⌘S** to write the draft. Saving refuses to overwrite changes
+made externally. **Done Editing** offers save, discard or cancel for dirty drafts.
+Save before closing the window or quitting: drafts are currently memory-only.
+Presentation controls and navigation shortcuts are inactive in editing mode.
+
 ## Deck format
 
 Document frontmatter configures the deck. Slides are separated by a top-level `---`; frontmatter immediately following a separator configures that slide.

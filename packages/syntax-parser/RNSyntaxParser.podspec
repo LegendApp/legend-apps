@@ -21,6 +21,7 @@ Pod::Spec.new do |s|
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/tsx.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/json.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/markdown.json",
+      "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/mdx.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/yaml.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/css.json",
       "vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-grammars/grammars/scss.json",

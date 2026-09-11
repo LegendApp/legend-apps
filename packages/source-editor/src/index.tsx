@@ -9,6 +9,9 @@ import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLi
 export type SourceDocumentEditorProps = {
   /** Prototype: UTF-8 input only, disk is never modified. */
   filePath: string;
+  /** Optional in-memory seed. Remount with a new key to replace the document. */
+  initialSource?: string;
+  onSelectionChange?: (selection: { line: number; start: number; length: number }) => void;
   fontFamily?: string;
   fontSize?: number;
   foreground?: string;
@@ -39,7 +42,7 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
 
 export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true,
   language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
-  syntaxHighlightingMode = "viewport", onChange, onLoad,
+  syntaxHighlightingMode = "viewport", onChange, onLoad, initialSource, onSelectionChange,
 }: SourceDocumentEditorProps) {
   const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
   const [error, setError] = useState("");
@@ -56,6 +59,8 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
 
   return <SourceEditorHost
     documentPath={filePath}
+    initialSource={initialSource}
+    useInitialSource={initialSource !== undefined}
     syntaxLanguage={language}
     syntaxTheme={syntaxTheme}
     syntaxHighlightingEnabled={highlighting}
@@ -91,6 +96,7 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
       } catch (cause) { setError(String(cause)); }
     }}
     onSelection={({ nativeEvent }) => {
+      onSelectionChange?.(nativeEvent);
       const state = list.current?.getState();
       if (state && (nativeEvent.line < state.start || nativeEvent.line > state.end)) {
         void list.current?.scrollToIndex({ index: nativeEvent.line, animated: false });

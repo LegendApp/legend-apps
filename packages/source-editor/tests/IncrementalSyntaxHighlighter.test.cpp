@@ -6,15 +6,18 @@
 
 using namespace margelo::nitro::legendapps::syntaxparser;
 
-static std::shared_ptr<TextMateHighlighterContext> context(const std::string& root, const std::string& theme, bool tsx = false) {
+static std::shared_ptr<TextMateHighlighterContext> context(const std::string& root, const std::string& theme, bool tsx = false, bool mdx = false) {
   auto onig = textmate_oniglib_create();
   auto registry = textmate_registry_create(onig);
   assert(textmate_registry_add_grammar_from_file(registry, (root + "/tm-grammars/grammars/typescript.json").c_str()));
   if (tsx) assert(textmate_registry_add_grammar_from_file(registry, (root + "/tm-grammars/grammars/tsx.json").c_str()));
+  if (mdx) for (const auto& name : {"markdown", "yaml", "javascript", "jsx", "tsx", "mdx"}) {
+    assert(textmate_registry_add_grammar_from_file(registry, (root + "/tm-grammars/grammars/" + name + ".json").c_str()));
+  }
   std::ifstream file(root + "/tm-themes/themes/" + theme + ".json");
   std::ostringstream json; json << file.rdbuf();
   assert(textmate_registry_set_theme(registry, json.str().c_str()));
-  auto grammar = textmate_registry_load_grammar(registry, tsx ? "source.tsx" : "source.ts");
+  auto grammar = textmate_registry_load_grammar(registry, mdx ? "source.mdx" : tsx ? "source.tsx" : "source.ts");
   assert(grammar);
   return std::make_shared<TextMateHighlighterContext>(onig, registry, grammar, textmate_registry_get_color_map(registry));
 }
@@ -50,6 +53,13 @@ int main(int argc, char** argv) {
     auto afterEviction = repeated.highlight({{5000, "const same = 42;"}}, 4199);
     assert(sameTokens(*afterEviction.lines[0], *result.lines.back()));
   }
+  auto mdx = IncrementalSyntaxHighlighter(context(argv[1], "dark-plus", false, true)).highlight({
+    {1, "---"}, {2, "title: Demo"}, {3, "---"}, {4, "# Heading"},
+    {5, "<View style={{ opacity: 0.5 }} />"}, {6, "```ts"}, {7, "const value = 42;"}, {8, "```"},
+  });
+  assert(mdx.lines[1]->tokens.size() > 1); // YAML key and value
+  assert(mdx.lines[4]->tokens.size() > 1); // inline JSX/expression
+  assert(mdx.lines[6]->tokens.size() > 1); // fenced TypeScript
   IncrementalSyntaxHighlighter incremental(dark);
   std::vector<IncrementalSyntaxLine> lines = {
     {1, "const greeting = \"👩🏽‍💻 hello\";"}, {2, "/* open comment"},
@@ -91,5 +101,5 @@ int main(int argc, char** argv) {
   large[0].text = "const value = 123;";
   auto bounded = largeCache.highlight({large.begin(), large.begin() + 128});
   assert(bounded.tokenizedCount == 1 && bounded.converged);
-  std::cout << "Incremental syntax: real TextMate TS/TSX, UTF-16, multiline edits/undo, themes, and 10k-line convergence passed\n";
+  std::cout << "Incremental syntax: real TextMate TS/TSX/MDX, frontmatter, UTF-16, multiline edits/undo, themes, and 10k-line convergence passed\n";
 }
