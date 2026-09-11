@@ -1,6 +1,7 @@
 node_modules/
 .expo/
 .artifacts/
+.legend/grammars/
 dist/
 .DS_Store
 .env

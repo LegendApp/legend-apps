@@ -1,6 +1,8 @@
 import { NitroModules } from "react-native-nitro-modules";
 import { defaultSyntaxThemeName } from "./syntaxAssets";
 import type { SyntaxParser } from "./SyntaxParser.nitro";
+export { treeGrammarManager } from "./treeGrammarService";
+export { canonicalGrammar, detectGrammar, isKnownGrammar, type GrammarProgress } from "./grammarDownloads";
 
 let syntaxParser: SyntaxParser | undefined;
 

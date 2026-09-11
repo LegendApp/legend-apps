@@ -62,6 +62,10 @@ export interface SyntaxParser
   extends HybridObject<{
     ios: "c++";
   }> {
+  isTreeGrammarLoaded(language: string): boolean;
+  getGrammarPlatform(): string;
+  installTreeGrammar(name: string, url: string, sha256: string, bytes: number,
+    progress: (completed: number, total: number) => void): Promise<string>;
   highlightString(source: string, language: string, theme: string): Promise<SyntaxHighlightResult>;
   loadCodeFile(
     filePath: string,

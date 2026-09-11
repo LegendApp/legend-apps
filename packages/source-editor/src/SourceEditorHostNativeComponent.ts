@@ -1,6 +1,6 @@
 import type { HostComponent, ViewProps } from "react-native";
 import { codegenNativeComponent } from "react-native";
-import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
+import type { DirectEventHandler, Double, WithDefault } from "react-native/Libraries/Types/CodegenTypes";
 
 export interface NativeProps extends ViewProps {
   documentPath: string;
@@ -11,6 +11,8 @@ export interface NativeProps extends ViewProps {
   syntaxTheme: string;
   syntaxHighlightingEnabled: boolean;
   syntaxHighlightingInBackground: boolean;
+  grammarRevision?: WithDefault<Double, 0>;
+  onGrammarRequired?: DirectEventHandler<Readonly<{ language: string }>>;
   onSyntaxError?: DirectEventHandler<Readonly<{ error: string }>>;
   onProgress?: DirectEventHandler<Readonly<{ completedLines: Double; totalLines: Double; active: boolean }>>;
   onReady?: DirectEventHandler<Readonly<{ lineCount: Double; firstId: Double; complete: boolean; error: string }>>;

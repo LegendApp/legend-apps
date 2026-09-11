@@ -6,10 +6,11 @@ import { fileURLToPath } from "node:url";
 import { patchMdxGrammar } from "./patch-mdx-grammar.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const manifest = JSON.parse(readFileSync(join(root, "tree-sitter-grammars.json"), "utf8"));
+const manifest = JSON.parse(readFileSync(join(root, "../../grammars/catalog.json"), "utf8"));
 const scratch = mkdtempSync(join(tmpdir(), "legend-tree-grammars-"));
 const downloaded = new Map<string, string>();
 for (const grammar of manifest.grammars) {
+  if (grammar.bundled === false) continue;
   if (!/^[a-z0-9-]+$/.test(grammar.name) || !/^[\w-]+\/[\w-]+$/.test(grammar.repository)
     || !/^[a-f0-9]{40}$/.test(grammar.revision)) throw new Error("Invalid pinned grammar manifest");
   const key = `${grammar.repository}@${grammar.revision}`;

@@ -1,4 +1,5 @@
 import { createObservableFile, createStorage, getPersistPlugin, readTextFile } from "@legend-apps/storage";
+import { detectGrammar } from "./grammarDownloads";
 
 import darkPlusTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/dark-plus.json";
 import githubLightTheme from "../vendor/TextMateLib/thirdparty/textmate-grammars-themes/packages/tm-themes/themes/github-light.json";
@@ -435,6 +436,11 @@ function filenameForPath(path: string) {
 }
 
 export function getSyntaxLanguageForPath(path: string) {
+  const detected = detectGrammar(path);
+  // Preserve the public language IDs still consumed by TextMate/Diff during
+  // migration; the Tree-sitter manager canonicalizes these aliases itself.
+  if (detected) return detected === "objc" ? "objective-c" : detected === "bash" ? "shellscript"
+    : detected === "javascript" && path.toLowerCase().endsWith(".jsx") ? "jsx" : detected;
   const name = filenameForPath(path);
   const extension = extensionForPath(path);
 

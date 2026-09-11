@@ -2,7 +2,7 @@
 
 - Runtime: tree-sitter/tree-sitter v0.25.10,
   `208c6cac1453315e979f05ab34b6d4f7cd0340be` (`runtime/LICENSE`, MIT).
-- Grammars: `../../tree-sitter-grammars.json` is the canonical inventory of
+- Grammars: the repository-root `grammars/catalog.json` is the canonical inventory of
   repositories, exact revisions, aliases and query inheritance. Each grammar
   directory retains its upstream `LICENSE`, `UPSTREAM.json` and `highlights.scm`.
 

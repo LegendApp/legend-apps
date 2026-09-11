@@ -11,6 +11,52 @@ extern "C" const TSLanguage* tree_sitter_markdown_inline();
 extern "C" const TSLanguage* tree_sitter_yaml();
 extern "C" const TSLanguage* tree_sitter_mdx();
 namespace margelo::nitro::legendapps::syntaxparser {
+struct TreeSitterCanonicalAlias { const char* name; const char* canonical; };
+inline constexpr TreeSitterCanonicalAlias treeSitterCanonicalAliases[] = {
+  {"javascript", "javascript"},
+  {"js", "javascript"},
+  {"jsx", "javascript"},
+  {"javascriptreact", "javascript"},
+  {"typescript", "typescript"},
+  {"ts", "typescript"},
+  {"tsx", "tsx"},
+  {"typescriptreact", "tsx"},
+  {"json", "json"},
+  {"jsonc", "json"},
+  {"jsonl", "json"},
+  {"css", "css"},
+  {"python", "python"},
+  {"py", "python"},
+  {"markdown", "markdown"},
+  {"md", "markdown"},
+  {"markdown-inline", "markdown-inline"},
+  {"markdown_inline", "markdown-inline"},
+  {"yaml", "yaml"},
+  {"yml", "yaml"},
+  {"mdx", "mdx"},
+  {"bash", "bash"},
+  {"shellscript", "bash"},
+  {"c", "c"},
+  {"cpp", "cpp"},
+  {"go", "go"},
+  {"rust", "rust"},
+  {"java", "java"},
+  {"ruby", "ruby"},
+  {"html", "html"},
+  {"toml", "toml"},
+  {"lua", "lua"},
+  {"csharp", "csharp"},
+  {"c-sharp", "csharp"},
+  {"swift", "swift"},
+  {"kotlin", "kotlin"},
+  {"objc", "objc"},
+  {"objective-c", "objc"},
+  {"xml", "xml"},
+  {"dockerfile", "dockerfile"},
+  {"docker", "dockerfile"},
+  {"json5", "json5"},
+  {"scss", "scss"},
+};
 inline constexpr auto query_javascript = R"SCM(
 ; Variables
 ;----------

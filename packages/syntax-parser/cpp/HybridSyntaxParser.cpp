@@ -2,12 +2,29 @@
 
 #include "HybridSyntaxDocument.hpp"
 #include "SyntaxHighlighter.hpp"
+#include "TreeSitterHighlighter.hpp"
+#include "GrammarInstaller.hpp"
 
 #include <exception>
+#include <TargetConditionals.h>
 
 namespace margelo::nitro::legendapps::syntaxparser {
 
 HybridSyntaxParser::HybridSyntaxParser() : HybridObject(TAG) {}
+bool HybridSyntaxParser::isTreeGrammarLoaded(const std::string& language) { return TreeSitterHighlighter::supports(language); }
+std::string HybridSyntaxParser::getGrammarPlatform() {
+#if !TARGET_OS_OSX
+  return "unsupported";
+#elif defined(__aarch64__)
+  return "macos-arm64";
+#else
+  return "macos-x86_64";
+#endif
+}
+std::shared_ptr<Promise<std::string>> HybridSyntaxParser::installTreeGrammar(const std::string& name, const std::string& url,
+    const std::string& sha256, double bytes, const std::function<void(double, double)>& progress) {
+  return Promise<std::string>::async([=] { return installGrammarPack(name, url, sha256, bytes, progress); });
+}
 
 std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightString(
     const std::string& source,

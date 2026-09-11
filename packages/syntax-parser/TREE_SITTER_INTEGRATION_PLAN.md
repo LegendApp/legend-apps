@@ -268,7 +268,7 @@ sections record the now-implemented native and consumer integration.
 
 Added dedicated grammars, lazy included-range parsing and stable per-language capture scopes without putting text parsing on the UI thread.
 
-File: `packages/syntax-parser/tree-sitter-grammars.json:40`
+File: `grammars/catalog.json` (moved to the repository root during distribution setup)
 
 ```diff
 + "name": "markdown"

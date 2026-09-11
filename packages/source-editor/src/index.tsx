@@ -6,6 +6,8 @@ import SourceEditorHost from "./SourceEditorHostNativeComponent";
 import SourceEditorRow from "./SourceEditorRowNativeComponent";
 import { createSourceProgress } from "./sourceProgress";
 import { SourceProgressBanner } from "./SourceProgressBanner";
+import { useEmbeddedGrammars, useTreeGrammar } from "./useTreeGrammar";
+import { GrammarProgressBanner } from "./GrammarProgressBanner";
 import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
 
 export type SourceDocumentEditorProps = {
@@ -53,9 +55,12 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
   const [syntaxError, setSyntaxError] = useState("");
   const [loadingTail, setLoadingTail] = useState(false);
   const [progress] = useState(createSourceProgress);
+  const grammar = useTreeGrammar(language, syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled);
+  const embeddedGrammars = useEmbeddedGrammars(filePath);
   // The native resolver reads installed assets or the app's resource bundles.
   // Do not synchronously visit development repo paths on the JS thread.
-  const highlighting = syntaxHighlightingEnabled && !!language;
+  const highlighting = syntaxHighlightingEnabled && !!language
+    && (syntaxBackend !== "tree-sitter" || (grammar.known && grammar.ready));
   const highlightError = syntaxHighlightingEnabled ? syntaxError : "";
   const list = useRef<LegendListRef>(null);
   const sourceRef = useRef<SourceLineDataSource | null>(null);
@@ -66,8 +71,10 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
     documentPath={filePath}
     initialSource={initialSource}
     useInitialSource={initialSource !== undefined}
-    syntaxLanguage={language}
+    syntaxLanguage={syntaxBackend === "tree-sitter" ? grammar.name : language}
     syntaxBackend={syntaxBackend}
+    grammarRevision={embeddedGrammars.revision}
+    onGrammarRequired={({ nativeEvent }) => embeddedGrammars.request(nativeEvent.language)}
     syntaxTheme={syntaxTheme}
     syntaxHighlightingEnabled={highlighting}
     syntaxHighlightingInBackground={syntaxHighlightingMode === "background"}
@@ -122,7 +129,9 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
       maintainVisibleContentPosition
       style={styles.root}
     /> : !error ? <View><Text style={{ color: foreground }}>Loading editor…</Text></View> : null}
-    {!error && !highlightError && <SourceProgressBanner progress={progress} loading={loadingTail} />}
+    {!error && !highlightError && (syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled
+      ? <GrammarProgressBanner languages={[grammar.name, ...embeddedGrammars.languages]} progress={progress} loading={loadingTail} />
+      : <SourceProgressBanner progress={progress} loading={loadingTail} />)}
   </SourceEditorHost>;
 }
 const styles = StyleSheet.create({

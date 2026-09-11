@@ -1,7 +1,7 @@
 require "json"
 
 package = JSON.parse(File.read(File.join(__dir__, "package.json")))
-grammars = JSON.parse(File.read(File.join(__dir__, "tree-sitter-grammars.json")))["grammars"]
+grammars = JSON.parse(File.read(File.join(__dir__, "../../grammars/catalog.json")))["grammars"].reject { |g| g["bundled"] == false }
 
 Pod::Spec.new do |s|
   s.name = "RNSyntaxParser"
@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
   s.platforms = { :ios => "15.0", :osx => "14.0" }
-  s.source_files = ["cpp/**/*.{h,hpp,cpp}",
+  s.source_files = ["cpp/**/*.{h,hpp,cpp,mm}",
     "vendor/tree-sitter/runtime/src/lib.c"] + grammars.map { |grammar|
       "vendor/tree-sitter/#{grammar['name']}/src/{parser,scanner}.c"
     }
@@ -72,6 +72,7 @@ Pod::Spec.new do |s|
     ].join(" "),
   }
   s.dependency "React-Core"
+  s.frameworks = "Security"
   load "nitrogen/generated/ios/RNSyntaxParser+autolinking.rb"
   add_nitrogen_files(s)
 end

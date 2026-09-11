@@ -16,9 +16,11 @@ export function SourceProgressBanner({ progress, loading }: { progress: ReturnTy
   </View>;
 }
 
-const styles = StyleSheet.create({
+export const progressBannerStyles = StyleSheet.create({
   banner: { position: "absolute", top: 10, left: 0, right: 0, alignItems: "center", zIndex: 35 },
   surface: { flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 16, paddingVertical: 8,
+    maxWidth: "95%",
     borderRadius: 10, borderWidth: 1, borderColor: "#60a5fa", backgroundColor: "#202020f5" },
-  text: { color: "#eeeeee", fontSize: 12, fontVariant: ["tabular-nums"] },
+  text: { color: "#eeeeee", fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 },
 });
+const styles = progressBannerStyles;

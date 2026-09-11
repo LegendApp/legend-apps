@@ -1,0 +1,581 @@
+{
+  "grammars": [
+    {
+      "name": "javascript",
+      "aliases": [
+        "js",
+        "jsx",
+        "javascriptreact"
+      ],
+      "scope": "source.js",
+      "repository": "tree-sitter/tree-sitter-javascript",
+      "revision": "3a837b6f3658ca3618f2022f8707e29739c91364",
+      "directory": ".",
+      "symbol": "tree_sitter_javascript",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [
+        "javascript",
+        "jsx"
+      ],
+      "extensions": [
+        "js",
+        "jsx",
+        "mjs",
+        "cjs"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "typescript",
+      "aliases": [
+        "ts"
+      ],
+      "scope": "source.ts",
+      "repository": "tree-sitter/tree-sitter-typescript",
+      "revision": "f975a621f4e7f532fe322e13c4f79495e0a7b2e7",
+      "directory": "typescript",
+      "symbol": "tree_sitter_typescript",
+      "query": "queries/highlights.scm",
+      "inherits": [
+        "javascript"
+      ],
+      "refinements": [
+        "javascript"
+      ],
+      "extensions": [
+        "ts",
+        "mts",
+        "cts"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "tsx",
+      "aliases": [
+        "typescriptreact"
+      ],
+      "scope": "source.tsx",
+      "repository": "tree-sitter/tree-sitter-typescript",
+      "revision": "f975a621f4e7f532fe322e13c4f79495e0a7b2e7",
+      "directory": "tsx",
+      "symbol": "tree_sitter_tsx",
+      "query": "queries/highlights.scm",
+      "inherits": [
+        "javascript"
+      ],
+      "refinements": [
+        "javascript",
+        "jsx"
+      ],
+      "extensions": [
+        "tsx"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "json",
+      "aliases": [
+        "jsonc",
+        "jsonl"
+      ],
+      "scope": "source.json",
+      "repository": "tree-sitter/tree-sitter-json",
+      "revision": "254c42a6476413b776221e03982ac8ae159eeb72",
+      "directory": ".",
+      "symbol": "tree_sitter_json",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "json",
+        "jsonc",
+        "jsonl"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "css",
+      "aliases": [],
+      "scope": "source.css",
+      "repository": "tree-sitter/tree-sitter-css",
+      "revision": "dda5cfc5722c429eaba1c910ca32c2c0c5bb1a3f",
+      "directory": ".",
+      "symbol": "tree_sitter_css",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "css"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "python",
+      "aliases": [
+        "py"
+      ],
+      "scope": "source.python",
+      "repository": "tree-sitter/tree-sitter-python",
+      "revision": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64",
+      "directory": ".",
+      "symbol": "tree_sitter_python",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "py",
+        "pyw",
+        "pyi"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "markdown",
+      "aliases": [
+        "md"
+      ],
+      "scope": "text.html.markdown",
+      "repository": "tree-sitter-grammars/tree-sitter-markdown",
+      "revision": "a0a00f817d02412bd92c54d316f164d827b57b5c",
+      "directory": "tree-sitter-markdown",
+      "symbol": "tree_sitter_markdown",
+      "query": "tree-sitter-markdown/queries/highlights.scm",
+      "inherits": [],
+      "refinements": [
+        "markdown"
+      ],
+      "extensions": [
+        "md",
+        "markdown",
+        "mdown"
+      ],
+      "filenames": [],
+      "dependencies": [
+        "markdown-inline",
+        "yaml"
+      ]
+    },
+    {
+      "name": "markdown-inline",
+      "aliases": [
+        "markdown_inline"
+      ],
+      "scope": "text.html.markdown",
+      "repository": "tree-sitter-grammars/tree-sitter-markdown",
+      "revision": "a0a00f817d02412bd92c54d316f164d827b57b5c",
+      "directory": "tree-sitter-markdown-inline",
+      "symbol": "tree_sitter_markdown_inline",
+      "query": "tree-sitter-markdown-inline/queries/highlights.scm",
+      "inherits": [],
+      "refinements": [
+        "markdown-inline"
+      ],
+      "extensions": [],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "yaml",
+      "aliases": [
+        "yml"
+      ],
+      "scope": "source.yaml",
+      "repository": "tree-sitter-grammars/tree-sitter-yaml",
+      "revision": "a1c4812a73ec5e089de8e441fdea3a921e8d5079",
+      "directory": ".",
+      "symbol": "tree_sitter_yaml",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "yaml",
+        "yml"
+      ],
+      "filenames": [],
+      "dependencies": []
+    },
+    {
+      "name": "mdx",
+      "aliases": [],
+      "scope": "source.mdx",
+      "repository": "srazzak/tree-sitter-mdx",
+      "revision": "3aa29e8de1bf0213948a04fe953039b6ab73777b",
+      "directory": ".",
+      "symbol": "tree_sitter_mdx",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [
+        "jsx",
+        "mdx"
+      ],
+      "extensions": [
+        "mdx"
+      ],
+      "filenames": [],
+      "dependencies": [
+        "markdown-inline",
+        "yaml"
+      ]
+    },
+    {
+      "name": "bash",
+      "repository": "tree-sitter/tree-sitter-bash",
+      "revision": "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+      "directory": ".",
+      "symbol": "tree_sitter_bash",
+      "query": "queries/highlights.scm",
+      "scope": "source.bash",
+      "aliases": [
+        "shellscript"
+      ],
+      "extensions": [
+        "sh",
+        "bash",
+        "zsh"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "c",
+      "repository": "tree-sitter/tree-sitter-c",
+      "revision": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
+      "directory": ".",
+      "symbol": "tree_sitter_c",
+      "query": "queries/highlights.scm",
+      "scope": "source.c",
+      "aliases": [],
+      "extensions": [
+        "c",
+        "h"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "cpp",
+      "repository": "tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "directory": ".",
+      "symbol": "tree_sitter_cpp",
+      "query": "queries/highlights.scm",
+      "scope": "source.cpp",
+      "aliases": [],
+      "extensions": [
+        "cpp",
+        "cc",
+        "cxx",
+        "hpp",
+        "hxx"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [
+        "c"
+      ],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "go",
+      "repository": "tree-sitter/tree-sitter-go",
+      "revision": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7",
+      "directory": ".",
+      "symbol": "tree_sitter_go",
+      "query": "queries/highlights.scm",
+      "scope": "source.go",
+      "aliases": [],
+      "extensions": [
+        "go"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "rust",
+      "repository": "tree-sitter/tree-sitter-rust",
+      "revision": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+      "directory": ".",
+      "symbol": "tree_sitter_rust",
+      "query": "queries/highlights.scm",
+      "scope": "source.rust",
+      "aliases": [],
+      "extensions": [
+        "rs"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "java",
+      "repository": "tree-sitter/tree-sitter-java",
+      "revision": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11",
+      "directory": ".",
+      "symbol": "tree_sitter_java",
+      "query": "queries/highlights.scm",
+      "scope": "source.java",
+      "aliases": [],
+      "extensions": [
+        "java"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "ruby",
+      "repository": "tree-sitter/tree-sitter-ruby",
+      "revision": "ad907a69da0c8a4f7a943a7fe012712208da6dee",
+      "directory": ".",
+      "symbol": "tree_sitter_ruby",
+      "query": "queries/highlights.scm",
+      "scope": "source.ruby",
+      "aliases": [],
+      "extensions": [
+        "rb",
+        "rake"
+      ],
+      "filenames": [
+        "gemfile",
+        "rakefile"
+      ],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "html",
+      "repository": "tree-sitter/tree-sitter-html",
+      "revision": "73a3947324f6efddf9e17c0ea58d454843590cc0",
+      "directory": ".",
+      "symbol": "tree_sitter_html",
+      "query": "queries/highlights.scm",
+      "scope": "source.html",
+      "aliases": [],
+      "extensions": [
+        "html",
+        "htm"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "toml",
+      "repository": "tree-sitter-grammars/tree-sitter-toml",
+      "revision": "64b56832c2cffe41758f28e05c756a3a98d16f41",
+      "directory": ".",
+      "symbol": "tree_sitter_toml",
+      "query": "queries/highlights.scm",
+      "scope": "source.toml",
+      "aliases": [],
+      "extensions": [
+        "toml"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "lua",
+      "repository": "tree-sitter-grammars/tree-sitter-lua",
+      "revision": "10fe0054734eec83049514ea2e718b2a56acd0c9",
+      "directory": ".",
+      "symbol": "tree_sitter_lua",
+      "query": "queries/highlights.scm",
+      "scope": "source.lua",
+      "aliases": [],
+      "extensions": [
+        "lua"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "csharp",
+      "repository": "tree-sitter/tree-sitter-c-sharp",
+      "revision": "9150f7d56bb47f1a809fa23623f1ba1413e93fa9",
+      "directory": ".",
+      "symbol": "tree_sitter_c_sharp",
+      "query": "queries/highlights.scm",
+      "scope": "source.csharp",
+      "aliases": [
+        "c-sharp"
+      ],
+      "extensions": [
+        "cs"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "swift",
+      "repository": "alex-pinkus/tree-sitter-swift",
+      "revision": "00bbb0a2550f8bc0023a2a4992922d51ae045626",
+      "directory": ".",
+      "symbol": "tree_sitter_swift",
+      "query": "queries/highlights.scm",
+      "scope": "source.swift",
+      "aliases": [],
+      "extensions": [
+        "swift"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "kotlin",
+      "repository": "fwcd/tree-sitter-kotlin",
+      "revision": "1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1",
+      "directory": ".",
+      "symbol": "tree_sitter_kotlin",
+      "query": "queries/highlights.scm",
+      "scope": "source.kotlin",
+      "aliases": [],
+      "extensions": [
+        "kt",
+        "kts"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "objc",
+      "repository": "tree-sitter-grammars/tree-sitter-objc",
+      "revision": "181a81b8f23a2d593e7ab4259981f50122909fda",
+      "directory": ".",
+      "symbol": "tree_sitter_objc",
+      "query": "queries/highlights.scm",
+      "scope": "source.objc",
+      "aliases": [
+        "objective-c"
+      ],
+      "extensions": [
+        "m"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "xml",
+      "repository": "tree-sitter-grammars/tree-sitter-xml",
+      "revision": "5000ae8f22d11fbe93939b05c1e37cf21117162d",
+      "directory": "xml",
+      "symbol": "tree_sitter_xml",
+      "query": "queries/xml/highlights.scm",
+      "scope": "source.xml",
+      "aliases": [],
+      "extensions": [
+        "xml",
+        "xsd",
+        "svg"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "dockerfile",
+      "repository": "camdencheek/tree-sitter-dockerfile",
+      "revision": "971acdd908568b4531b0ba28a445bf0bb720aba5",
+      "directory": ".",
+      "symbol": "tree_sitter_dockerfile",
+      "query": "queries/highlights.scm",
+      "scope": "source.dockerfile",
+      "aliases": [
+        "docker"
+      ],
+      "extensions": [],
+      "filenames": [
+        "dockerfile",
+        "containerfile"
+      ],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "json5",
+      "repository": "joakker/tree-sitter-json5",
+      "revision": "248b8564567087d7866be76569b182f6dd7e14e9",
+      "directory": ".",
+      "symbol": "tree_sitter_json5",
+      "query": "queries/highlights.scm",
+      "scope": "source.json5",
+      "aliases": [],
+      "extensions": [
+        "json5"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    },
+    {
+      "name": "scss",
+      "repository": "serenadeai/tree-sitter-scss",
+      "revision": "c478c6868648eff49eb04a4df90d703dc45b312a",
+      "directory": ".",
+      "symbol": "tree_sitter_scss",
+      "query": "queries/highlights.scm",
+      "scope": "source.scss",
+      "aliases": [],
+      "extensions": [
+        "scss"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "inherits": [],
+      "refinements": [],
+      "bundled": false
+    }
+  ],
+  "schemaVersion": 1,
+  "packABI": 1,
+  "repository": "LegendApp/legend-apps"
+}

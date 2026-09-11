@@ -1,7 +1,7 @@
 # Highlight queries
 
 Each sibling grammar directory contains its unmodified upstream `highlights.scm`,
-license and revision. `tree-sitter-grammars.json` defines aliases and query
+license and revision. The root `grammars/catalog.json` defines aliases and query
 inheritance; TS and TSX inherit JS highlights, but not JS's JSX refinements.
 
 `Highlights.hpp` embeds these files and the registry for native builds, avoiding

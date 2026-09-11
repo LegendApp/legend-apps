@@ -9,7 +9,10 @@ const vendor = join(root, "vendor/tree-sitter");
 const output = process.argv[2];
 if (!output || output.startsWith("--")) throw new Error("Usage: compile-tree-sitter.ts <build-directory> [--update-symbols]");
 mkdirSync(output, { recursive: true });
-const grammars: { name: string }[] = JSON.parse(readFileSync(join(root, "tree-sitter-grammars.json"), "utf8")).grammars;
+const archIndex = process.argv.indexOf("--arch");
+const arch = archIndex < 0 ? undefined : process.argv[archIndex + 1];
+if (arch && !["arm64", "x86_64"].includes(arch)) throw Error("Invalid build architecture");
+const grammars: { name: string }[] = JSON.parse(readFileSync(join(root, "../../grammars/catalog.json"), "utf8")).grammars.filter((g: { bundled?: boolean }) => g.bundled !== false);
 const sources = [{ name: "runtime", file: join(vendor, "runtime/src/lib.c"), include: join(vendor, "runtime/include") }];
 for (const { name } of grammars) {
   for (const kind of ["parser", "scanner"]) {
@@ -19,7 +22,7 @@ for (const { name } of grammars) {
 }
 const prefix = join(vendor, "Symbols.h");
 function compile(prefixed: boolean) {
-  for (const source of sources) execFileSync("clang", ["-std=c11", "-O2", `-I${source.include}`,
+  for (const source of sources) execFileSync("clang", ["-std=c11", "-O2", ...(arch ? ["-arch", arch] : []), `-I${source.include}`,
     ...(prefixed ? ["-include", prefix] : []), "-c", source.file, "-o", resolve(output, `${source.name}.o`)], { stdio: "inherit" });
 }
 function symbols(): string[] {

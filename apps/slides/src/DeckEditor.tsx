@@ -26,7 +26,7 @@ function SourcePane({ session }: { session: DeckEditorSession }) {
   // Seed once per document version, never send the full draft back on each edit.
   const [document] = useState(() => session.getSnapshot());
   return <SourceDocumentEditor filePath={document.path!} initialSource={document.source}
-    language="mdx" syntaxHighlightingMode="background"
+    language="mdx" syntaxHighlightingMode="background" syntaxBackend="tree-sitter"
     onSelectionChange={({ start }) => session.select(start)}
     onChange={(edit) => {
       if (document.documentVersion !== session.getSnapshot().documentVersion) return;

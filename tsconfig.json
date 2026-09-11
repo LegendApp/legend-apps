@@ -14,6 +14,7 @@
     "types": ["node", "jest"]
   },
   "include": [
+    "grammars/scripts",
     "apps",
     "packages",
     "scripts",
