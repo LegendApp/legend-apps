@@ -7,6 +7,7 @@ import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document"
 import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
 import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
+import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "../codeFiles";
 
 jest.mock("@legend-apps/document-app", () => ({
   getLaunchDocumentPath: jest.fn(() => null),
@@ -20,7 +21,11 @@ jest.mock("@legend-apps/source-viewer", () => ({
   SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
   useSourceDocumentRows: () => { throw new Error("The old tokenization pipeline must not run"); },
 }));
-jest.mock("@legend-apps/syntax-parser", () => ({ loadCodeFile: jest.fn() }));
+jest.mock("@legend-apps/storage", () => ({ createStorage: jest.fn(() => ({})) }));
+jest.mock("@legend-apps/syntax-parser", () => ({
+  loadCodeFile: jest.fn(),
+  getSyntaxLanguageForPath: jest.requireActual("../../../../packages/syntax-parser/src/syntaxAssets").getSyntaxLanguageForPath,
+}));
 jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async () => {}) }));
 jest.mock("../codeSettings", () => ({
   useCodeFontFamilySetting: () => "Menlo",
@@ -48,6 +53,7 @@ describe("Code default editor", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    jest.replaceProperty(process, "argv", ["node", "code"]);
     jest.mocked(getLaunchDocumentPath).mockReturnValue(null);
     jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
     jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(true);
@@ -56,11 +62,12 @@ describe("Code default editor", () => {
   afterEach(async () => {
     if (renderer) await act(async () => renderer.unmount());
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   it("opens directly in the editor without loading or mounting the old viewer", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    expect(JSON.stringify(renderer.toJSON())).toContain("No code file open");
+    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={[]} />); });
+    expect(JSON.stringify(renderer.toJSON())).toContain("No file open");
     expect(JSON.stringify(renderer.toJSON())).toContain("Edits are not saved");
     expect(openButton().props.accessibilityLabel).toBe("Open File");
     expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
@@ -70,7 +77,7 @@ describe("Code default editor", () => {
     expect(editor().props.syntaxHighlightingEnabled).toBe(true);
     expect(editor().props.syntaxHighlightingMode).toBe("background");
     expect(renderer.root.findAll((node) => node.props.accessibilityRole === "button")).toHaveLength(0);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("No code file open");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("No file open");
     expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
     expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
     expect(loadCodeFile).not.toHaveBeenCalled();
@@ -86,6 +93,25 @@ describe("Code default editor", () => {
     expect(editor().props.filePath).toBe("/launch.tsx");
     expect(editor().props.language).toBe("tsx");
     expect(loadCodeFile).not.toHaveBeenCalled();
+  });
+
+  it.each(["/readme.md", "/data.json", "/script.py", "/notes.txt", "/LICENSE", "/.env", "/custom.unknown"])("accepts text path %s", (path) => {
+    expect(isCodePath(path)).toBe(true);
+    expect(getLaunchCodeFile(["--debug", path])).toBe(path);
+  });
+
+  it("detects supported languages and falls back to plain text", () => {
+    const binary = "/Applications/Legend Code.app/Contents/MacOS/Legend Code";
+    expect(getLaunchCodeFile([binary, "--syntax-backend=tree-sitter", "/tmp/README"])).toBe("/tmp/README");
+    expect(getLaunchCodeFile([binary])).toBeNull();
+    expect(getCodeLanguage("/script.py")).toBe("python");
+    expect(getCodeLanguage("/data.json")).toBe("json");
+    expect(getCodeLanguage("/README.MD")).toBe("markdown");
+    expect(getCodeLanguage("/LICENSE")).toBe("");
+    expect(getCodeLanguage("/file.unknown")).toBe("");
+    expect(getLaunchCodeFile([])).toBeNull();
+    expect(isCodePath("--debug")).toBe(false);
+    expect(isCodePath("/folder/")).toBe(false);
   });
 
   it("preserves the buffer on settings changes and same-file requests", async () => {
@@ -119,6 +145,7 @@ describe("Code default editor", () => {
     await act(async () => { renderer = create(<CodeViewerWindow />); });
     jest.mocked(openSelectedDocumentPath).mockResolvedValue(null);
     await act(async () => openButton().props.onPress());
+    expect(openSelectedDocumentPath).toHaveBeenCalledWith(expect.objectContaining({ allowedFileTypes: [] }));
     expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     jest.mocked(openSelectedDocumentPath).mockRejectedValue(new Error("Dialog failed"));
     await act(async () => openButton().props.onPress());
