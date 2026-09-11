@@ -144,10 +144,10 @@ function parseCompilerResult(stdout: string): CompileDeckResult {
 
 export { getLastDeckPath } from "./slidesPreferences";
 
-export async function loadDeck(path: string, remember = true, draftSource?: string) {
+export async function loadDeck(path: string, remember = true, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   const sequence = ++buildSequence;
   try {
-    await buildDeck(path, remember, sequence, draftSource);
+    await buildDeck(path, remember, sequence, draftSource, onSourceIndex);
   } catch (error) {
     if (sequence === buildSequence) {
       setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
@@ -156,11 +156,13 @@ export async function loadDeck(path: string, remember = true, draftSource?: stri
   return sequence === buildSequence && getSlidesState().status === "ready";
 }
 
-export function previewDeckSource(path: string, source: string) {
-  return loadDeck(path, false, source);
+export async function previewDeckSource(path: string, source: string) {
+  let slideEnds: number[] | undefined;
+  const success = await loadDeck(path, false, source, (ends) => { slideEnds = ends; });
+  return { success, slideEnds };
 }
 
-async function buildDeck(path: string, remember: boolean, sequence: number, draftSource?: string) {
+async function buildDeck(path: string, remember: boolean, sequence: number, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
   if (!compilerPath) {
@@ -203,6 +205,7 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
     };
   }
 
+  if (result.sourceSlideEnds) onSourceIndex?.(result.sourceSlideEnds);
   if (!result.success) {
     setSlidesState(failedDeckUpdate(result));
     return;
