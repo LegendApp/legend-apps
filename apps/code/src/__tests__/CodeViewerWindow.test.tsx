@@ -61,13 +61,16 @@ describe("Code default editor", () => {
   it("opens directly in the editor without loading or mounting the old viewer", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow />); });
     expect(JSON.stringify(renderer.toJSON())).toContain("No code file open");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Edits are not saved");
+    expect(openButton().props.accessibilityLabel).toBe("Open File");
     expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     await act(async () => requestCodeViewerFile("/one.ts"));
     expect(editor().props.filePath).toBe("/one.ts");
     expect(editor().props.language).toBe("typescript");
     expect(editor().props.syntaxHighlightingEnabled).toBe(true);
     expect(editor().props.syntaxHighlightingMode).toBe("background");
-    expect(JSON.stringify(renderer.toJSON())).toContain("Edits are not saved");
+    expect(renderer.root.findAll((node) => node.props.accessibilityRole === "button")).toHaveLength(0);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("No code file open");
     expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
     expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
     expect(loadCodeFile).not.toHaveBeenCalled();
@@ -112,19 +115,17 @@ describe("Code default editor", () => {
     expect(editor().props.language).toBe("tsx");
   });
 
-  it("preserves the current editor when the dialog cancels or fails", async () => {
+  it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow />); });
-    jest.mocked(openSelectedDocumentPath).mockResolvedValue("/one.ts");
-    await act(async () => openButton().props.onPress());
-    const first = editor();
     jest.mocked(openSelectedDocumentPath).mockResolvedValue(null);
     await act(async () => openButton().props.onPress());
-    expect(editor()).toBe(first);
+    expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     jest.mocked(openSelectedDocumentPath).mockRejectedValue(new Error("Dialog failed"));
     await act(async () => openButton().props.onPress());
-    expect(editor()).toBe(first);
+    expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     expect(JSON.stringify(renderer.toJSON())).toContain("Dialog failed");
-    await act(async () => requestCodeViewerFile("/two.ts"));
+    jest.mocked(openSelectedDocumentPath).mockResolvedValue("/two.ts");
+    await act(async () => openButton().props.onPress());
     expect(editor().props.filePath).toBe("/two.ts");
     expect(JSON.stringify(renderer.toJSON())).not.toContain("Dialog failed");
   });
