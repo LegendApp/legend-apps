@@ -2327,74 +2327,68 @@ index e3f1c31..9ea9990 100644
  
  - (void)emitContextMenuItemPress:(NSString *)itemText
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
-index b9c4939..f7afaf8 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
-@@ -11,0 +12 @@
+@@ -9,6 +9,7 @@
+  */
+ 
+ #include "EventEmitters.h"
 +#include <TargetConditionals.h>
-@@ -64,6 +65,17 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
+ 
+ 
+ namespace facebook::react {
+@@ -93,7 +94,11 @@
+ 
+ 
+ void EnrichedMarkdownTextInputEventEmitter::onInputKeyPress(OnInputKeyPress event) const {
++#if TARGET_OS_OSX
++  dispatchEvent("keyPress", [event=std::move(event)](jsi::Runtime &runtime) {
++#else
+   dispatchEvent("inputKeyPress", [event=std::move(event)](jsi::Runtime &runtime) {
++#endif
+     auto payload = jsi::Object(runtime);
+     payload.setProperty(runtime, "key", event.key);
+     return payload;
+@@ -364,4 +369,44 @@
+   });
  }
  
- 
++
 +void EnrichedMarkdownEventEmitter::onSelectionDragOutside(OnSelectionDragOutside event) const {
 +  dispatchEvent("selectionDragOutside", [event=std::move(event)](jsi::Runtime &runtime) {
 +    auto payload = jsi::Object(runtime);
 +    payload.setProperty(runtime, "direction", event.direction);
-+payload.setProperty(runtime, "windowX", event.windowX);
-+payload.setProperty(runtime, "windowY", event.windowY);
++    payload.setProperty(runtime, "windowX", event.windowX);
++    payload.setProperty(runtime, "windowY", event.windowY);
 +    return payload;
 +  });
 +}
 +
-+
- void EnrichedMarkdownTextInputEventEmitter::onChangeText(OnChangeText event) const {
-   dispatchEvent("changeText", [event=std::move(event)](jsi::Runtime &runtime) {
-     auto payload = jsi::Object(runtime);
-@@ -94 +106,4 @@ void EnrichedMarkdownTextInputEventEmitter::onInputKeyPress(OnInputKeyPress even
-+#if TARGET_OS_OSX
-+  dispatchEvent("keyPress", [event=std::move(event)](jsi::Runtime &runtime) {
-+#else
--  dispatchEvent("inputKeyPress", [event=std::move(event)](jsi::Runtime &runtime) {
-+#endif
-@@ -101,6 +117,27 @@ void EnrichedMarkdownTextInputEventEmitter::onInputKeyPress(OnInputKeyPress even
- }
- 
- 
 +void EnrichedMarkdownTextInputEventEmitter::onSelectionDragOutside(OnSelectionDragOutside event) const {
 +  dispatchEvent("selectionDragOutside", [event=std::move(event)](jsi::Runtime &runtime) {
 +    auto payload = jsi::Object(runtime);
 +    payload.setProperty(runtime, "direction", event.direction);
-+payload.setProperty(runtime, "windowX", event.windowX);
-+payload.setProperty(runtime, "windowY", event.windowY);
++    payload.setProperty(runtime, "windowX", event.windowX);
++    payload.setProperty(runtime, "windowY", event.windowY);
 +    return payload;
 +  });
 +}
-+
-+
-+void EnrichedMarkdownTextInputEventEmitter::onVerticalNavigationOutside(OnVerticalNavigationOutside event) const {
-+  dispatchEvent("verticalNavigationOutside", [event=std::move(event)](jsi::Runtime &runtime) {
-+    auto payload = jsi::Object(runtime);
-+    payload.setProperty(runtime, "direction", event.direction);
-+payload.setProperty(runtime, "preferredX", event.preferredX);
-+    return payload;
-+  });
-+}
-+
-+
- void EnrichedMarkdownTextInputEventEmitter::onChangeState(OnChangeState event) const {
-   dispatchEvent("changeState", [event=std::move(event)](jsi::Runtime &runtime) {
-     auto payload = jsi::Object(runtime);
-@@ -364,4 +401,15 @@ payload.setProperty(runtime, "selectionEnd", event.selectionEnd);
-   });
- }
- 
 +
 +void EnrichedMarkdownTextEventEmitter::onSelectionDragOutside(OnSelectionDragOutside event) const {
 +  dispatchEvent("selectionDragOutside", [event=std::move(event)](jsi::Runtime &runtime) {
 +    auto payload = jsi::Object(runtime);
 +    payload.setProperty(runtime, "direction", event.direction);
-+payload.setProperty(runtime, "windowX", event.windowX);
-+payload.setProperty(runtime, "windowY", event.windowY);
++    payload.setProperty(runtime, "windowX", event.windowX);
++    payload.setProperty(runtime, "windowY", event.windowY);
++    return payload;
++  });
++}
++
++void EnrichedMarkdownTextInputEventEmitter::onVerticalNavigationOutside(OnVerticalNavigationOutside event) const {
++  dispatchEvent("verticalNavigationOutside", [event=std::move(event)](jsi::Runtime &runtime) {
++    auto payload = jsi::Object(runtime);
++    payload.setProperty(runtime, "direction", event.direction);
++    payload.setProperty(runtime, "preferredX", event.preferredX);
 +    return payload;
 +  });
 +}
