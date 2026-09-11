@@ -1,4 +1,5 @@
 export type CompileDeckSuccess = {
+  sourceSlideEnds?: number[];
   code: string;
   dependencies: string[];
   success: true;
@@ -7,6 +8,7 @@ export type CompileDeckSuccess = {
 };
 
 export type CompileDeckFailure = {
+  sourceSlideEnds?: number[];
   errors: string[];
   success: false;
   warnings: string[];

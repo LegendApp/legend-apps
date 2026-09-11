@@ -3,9 +3,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import React from "react";
 import { compileDeck } from "../compiler";
 import { renderNativeChildren } from "../nativeChildren";
+import { getDeckSourceStructure } from "../speakerNotesSource";
 
 const temporaryDirectories: string[] = [];
 
@@ -27,6 +29,20 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("returns draft slide offsets from the compiler process without writing the draft", async () => {
+    const deckPath = createDeck({ "deck.mdx": "# On disk" });
+    const source = "---\ntitle: Draft\n---\n# First\n\n```ts\nconst divider = '---';\n```\n\n---\n\n# Second";
+    const command = Bun.spawn([process.execPath, path.resolve(import.meta.dir, "../../../../scripts/compile-slides.ts"), deckPath, "--draft"], {
+      stdin: new TextEncoder().encode(source), stdout: "pipe", stderr: "pipe",
+    });
+    const envelope = JSON.parse(await new Response(command.stdout).text());
+    expect(await command.exited).toBe(0);
+    const result = JSON.parse(gunzipSync(Buffer.from(envelope.data, "base64")).toString());
+    expect(result.success).toBe(true);
+    expect(result.sourceSlideEnds).toEqual(getDeckSourceStructure(source).slides.map((slide) => slide.end));
+    expect(result.sourceSlideEnds).toHaveLength(2);
+    expect(fs.readFileSync(deckPath, "utf8")).toBe("# On disk");
+  });
   test("removes MDX whitespace and wraps literal native text", () => {
     const marker = React.createElement("marker");
     const children = renderNativeChildren(["\n", marker, "  copy  ", 0, "\t"], (text) => React.createElement("text", null, text));
