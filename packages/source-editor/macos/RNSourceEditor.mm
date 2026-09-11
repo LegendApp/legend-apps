@@ -57,6 +57,13 @@ struct SourceLoadJob {
       if (!self || !self->_eventEmitter) return;
       std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onSyntaxError({.error = utf8String(error)});
     };
+    _input.onSyntaxProgress = ^(NSUInteger completed, NSUInteger total, BOOL active) {
+      RNSourceEditorHost *self = weakSelf;
+      if (!self || !self->_eventEmitter) return;
+      std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onProgress({
+        .completedLines = (double)completed, .totalLines = (double)total, .active = (bool)active,
+      });
+    };
   }
   return self;
 }

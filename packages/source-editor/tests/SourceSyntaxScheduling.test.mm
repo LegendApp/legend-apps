@@ -67,6 +67,12 @@ int main(int argc, char **argv) {
       last.input = nil;
     }
     SchedulingInput *input = [[SchedulingInput alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+    __block NSUInteger progressEvents = 0, completedLines = 0, totalLines = 0;
+    __block BOOL progressActive = NO;
+    input.onSyntaxProgress = ^(NSUInteger completed, NSUInteger total, BOOL active) {
+      ++progressEvents; completedLines = completed; totalLines = total; progressActive = active;
+      assert(completed <= total);
+    };
     input.onSyntaxError = ^(NSString *error) { assert(!error.length); };
     NSString *line = @"const value = 42;\n";
     NSString *source = [line stringByPaddingToLength:line.length * 20000 withString:line startingAtIndex:0];
@@ -89,6 +95,9 @@ int main(int argc, char **argv) {
     input.syntaxHighlightingInBackground = YES;
     waitFor(^bool { return highlighted(input) == input.lineCount; });
     assert([input.source isEqualToString:source]);
+    drainFor(0.01);
+    assert(!progressActive && completedLines == input.lineCount && totalLines == input.lineCount);
+    assert(progressEvents >= 2 && progressEvents < 100); // not a render update per line
 
     // A far-away row is colored immediately on mount, without another job.
     const auto complete = highlighted(input);

@@ -53,6 +53,9 @@ static NSString *string(const std::u16string &text) {
   NSPoint _dragPoint;
   BOOL _dragActive, _dragMoved;
   BOOL _startupDrawn;
+  NSTimeInterval _lastProgressAt;
+  BOOL _lastProgressActive;
+  NSUInteger _lastProgressTotal;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
@@ -181,6 +184,13 @@ static NSString *string(const std::u16string &text) {
   [self scheduleSyntax];
 }
 - (void)scheduleSyntax {
+  const BOOL active = _syntax && _syntaxHighlightingInBackground && _syntaxNextLine < _document->lineCount();
+  const auto now = NSProcessInfo.processInfo.systemUptime;
+  if (self.onSyntaxProgress && (now - _lastProgressAt >= 0.1 || active != _lastProgressActive
+      || (_document->lineCount() >= 10000 && _lastProgressTotal < 10000))) {
+    _lastProgressAt = now; _lastProgressActive = active; _lastProgressTotal = _document->lineCount();
+    self.onSyntaxProgress(_syntaxNextLine, _document->lineCount(), active);
+  }
   if (!_syntax || _syntaxBusy || _syntaxNextLine >= _document->lineCount()) return;
   // Both policies prioritize the first screen. Background mode then retains
   // tokens through EOF, so scrolling does not trigger fresh highlighting.

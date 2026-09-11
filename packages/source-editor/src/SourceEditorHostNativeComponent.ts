@@ -11,6 +11,7 @@ export interface NativeProps extends ViewProps {
   syntaxHighlightingEnabled: boolean;
   syntaxHighlightingInBackground: boolean;
   onSyntaxError?: DirectEventHandler<Readonly<{ error: string }>>;
+  onProgress?: DirectEventHandler<Readonly<{ completedLines: Double; totalLines: Double; active: boolean }>>;
   onReady?: DirectEventHandler<Readonly<{ lineCount: Double; firstId: Double; complete: boolean; error: string }>>;
   onAppend?: DirectEventHandler<Readonly<{ json: string; complete: boolean; error: string }>>;
   onEdit?: DirectEventHandler<Readonly<{ json: string }>>;
