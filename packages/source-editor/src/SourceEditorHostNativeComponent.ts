@@ -7,6 +7,7 @@ export interface NativeProps extends ViewProps {
   initialSource?: string;
   useInitialSource?: boolean;
   syntaxLanguage: string;
+  syntaxBackend?: string;
   syntaxTheme: string;
   syntaxHighlightingEnabled: boolean;
   syntaxHighlightingInBackground: boolean;

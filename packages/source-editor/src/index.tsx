@@ -20,6 +20,8 @@ export type SourceDocumentEditorProps = {
   wrap?: boolean;
   language?: string;
   syntaxTheme?: string;
+  /** Languages outside the Tree-sitter registry fall back to TextMate during migration. */
+  syntaxBackend?: "textmate" | "tree-sitter";
   syntaxHighlightingEnabled?: boolean;
   /** Background retains tokens for the entire file; viewport limits eager work. */
   syntaxHighlightingMode?: "viewport" | "background";
@@ -44,7 +46,7 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
 
 export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true,
   language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
-  syntaxHighlightingMode = "viewport", onChange, onLoad, initialSource, onSelectionChange,
+  syntaxHighlightingMode = "viewport", syntaxBackend = "textmate", onChange, onLoad, initialSource, onSelectionChange,
 }: SourceDocumentEditorProps) {
   const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
   const [error, setError] = useState("");
@@ -65,6 +67,7 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
     initialSource={initialSource}
     useInitialSource={initialSource !== undefined}
     syntaxLanguage={language}
+    syntaxBackend={syntaxBackend}
     syntaxTheme={syntaxTheme}
     syntaxHighlightingEnabled={highlighting}
     syntaxHighlightingInBackground={syntaxHighlightingMode === "background"}

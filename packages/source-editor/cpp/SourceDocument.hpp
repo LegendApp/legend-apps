@@ -49,7 +49,9 @@ class SourceDocument {
     Tree right;
     size_t count = 1;
     size_t units;
-    Node(Line value, uint64_t rank) : line(std::move(value)), priority(rank), units(line.size()) {}
+    size_t lfs, lastLF;
+    Node(Line value, uint64_t rank) : line(std::move(value)), priority(rank), units(line.size()),
+      lfs(line.ending.find(u'\n') != std::u16string::npos), lastLF(lfs ? units : 0) {}
   };
 
   Tree root_;
@@ -62,6 +64,10 @@ class SourceDocument {
   static void update(Node &node) {
     node.count = 1 + count(node.left) + count(node.right);
     node.units = units(node.left) + node.line.size() + units(node.right);
+    const bool lf = node.line.ending.find(u'\n') != std::u16string::npos;
+    node.lfs = (node.left ? node.left->lfs : 0) + lf + (node.right ? node.right->lfs : 0);
+    node.lastLF = node.right && node.right->lfs ? units(node.left) + node.line.size() + node.right->lastLF
+      : lf ? units(node.left) + node.line.size() : node.left ? node.left->lastLF : 0;
   }
   uint64_t priority() {
     random_ ^= random_ << 13;
@@ -131,9 +137,13 @@ class SourceDocument {
     append(node->left.get(), base, start, end, output);
     const auto lineEnd = at + node->line.size();
     if (start < lineEnd && end > at) {
-      const auto text = node->line.text + node->line.ending;
       const auto begin = start > at ? start - at : 0;
-      output.append(text, begin, std::min(end, lineEnd) - at - begin);
+      const auto finish = std::min(end, lineEnd) - at;
+      if (begin < node->line.text.size()) output.append(node->line.text, begin, std::min(finish, node->line.text.size()) - begin);
+      if (finish > node->line.text.size()) {
+        const auto from = std::max(begin, node->line.text.size()) - node->line.text.size();
+        output.append(node->line.ending, from, finish - node->line.text.size() - from);
+      }
     }
     append(node->right.get(), lineEnd, start, end, output);
   }
@@ -227,6 +237,27 @@ public:
       node = node->right.get();
     }
     throw std::logic_error("invalid source tree");
+  }
+
+  // Tree-sitter counts only LF, whereas the editor also treats standalone CR as
+  // a logical newline. Indexed LF aggregates avoid a prefix scan on each edit.
+  Position syntaxPosition(size_t offset) const {
+    if (offset > length()) throw std::out_of_range("source syntax position");
+    const Node *node = root_.get();
+    size_t row = 0, column = 0;
+    while (node) {
+      const auto left = units(node->left);
+      if (offset < left) { node = node->left.get(); continue; }
+      if (node->left && node->left->lfs) { row += node->left->lfs; column = left - node->left->lastLF; }
+      else column += left;
+      offset -= left;
+      const auto consumed = std::min(offset, node->line.size());
+      if (consumed == node->line.size() && node->line.ending.find(u'\n') != std::u16string::npos) { ++row; column = 0; }
+      else column += consumed;
+      if (offset <= node->line.size()) return {row, column};
+      offset -= node->line.size(); node = node->right.get();
+    }
+    return {row, column};
   }
 
   std::u16string slice(size_t offset, size_t length) const {
