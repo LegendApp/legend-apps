@@ -16,6 +16,18 @@
 #include <thread>
 
 namespace margelo::nitro::legendapps::syntaxparser {
+std::string TreeSitterHighlighter::languageForPath(std::string path) {
+  for (auto& c : path) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+  const auto slash = path.find_last_of("/\\");
+  const auto filename = path.substr(slash == std::string::npos ? 0 : slash + 1);
+  for (const auto& entry : treeSitterFilenames) if (filename == entry.value) return entry.language;
+  const auto dot = filename.find_last_of('.');
+  if (dot != std::string::npos) {
+    const auto extension = filename.substr(dot + 1);
+    for (const auto& entry : treeSitterExtensions) if (extension == entry.value) return entry.language;
+  }
+  return "";
+}
 namespace {
 std::mutex registryMutex;
 struct DynamicLanguage {

@@ -32,6 +32,7 @@ struct DiffTokenizedSource {
 };
 
 struct DiffFileSources {
+  size_t grammarRevision = 0;
   double fileIndex = -1;
   std::string oldPath;
   std::string newPath;
@@ -79,6 +80,7 @@ struct DiffTokenizationRange {
   size_t start = 0;
   size_t end = 0;
   size_t sourceLineBudget = std::numeric_limits<size_t>::max();
+  bool completeParse = false;
 };
 
 struct DiffStoredRow {
@@ -156,6 +158,8 @@ public:
   std::vector<DiffTokenizedRowRange> consumeTokenizedRowRanges() override;
   std::vector<DiffFileSummary> getFiles() override;
   std::vector<DiffSyntaxScope> getScopes() override;
+  std::vector<std::string> getMissingSyntaxLanguages() override;
+  void refreshSyntaxGrammars() override;
   std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) override;
   DiffSyntaxStyle getNativeScopeStyle(const std::string& themeName, double scopeId);
   std::optional<DiffChangedLinePair> getChangedLinePair(double rowIndex);
@@ -247,20 +251,20 @@ private:
   bool tokenizeRowOutsideDocumentLock(
       const DiffRenderRow& row,
       size_t lineBudget = std::numeric_limits<size_t>::max(),
-      size_t* tokenizedLineDelta = nullptr);
+      size_t* tokenizedLineDelta = nullptr, bool completeParse = false,
+      bool* scheduleCompletion = nullptr, bool* replacedPreview = nullptr);
   bool ensureNextBackgroundTokenChunk(
       std::unique_lock<std::mutex>& lock,
       size_t chunkRowCount,
       std::chrono::steady_clock::duration chunkBudget);
   DiffTokenizedSource& ensureSourceLoaded(DiffFileSources& sources, bool oldSource);
   DiffTokenizedSource makeUnifiedDiffSource(const DiffFileSources& sources, bool oldSource);
-  bool ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget);
+  bool ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget, bool completeParse);
   std::optional<std::vector<DiffSyntaxTokenRun>> tokensForLine(
       DiffTokenizedSource& source,
       double lineNumber,
       size_t lineBudget = std::numeric_limits<size_t>::max(),
-      size_t* tokenizedLineDelta = nullptr);
-  void releaseCompletedSourceCaches();
+      size_t* tokenizedLineDelta = nullptr, bool completeParse = false);
 
   uint64_t documentId_;
   std::vector<DiffFileSummary> files_;

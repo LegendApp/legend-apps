@@ -3,9 +3,11 @@
 #include "HybridSyntaxDocument.hpp"
 #include "SyntaxHighlighter.hpp"
 #include "TreeSitterHighlighter.hpp"
+#include "TreeSitterLineHighlighter.hpp"
 #include "GrammarInstaller.hpp"
 
 #include <exception>
+#include <thread>
 #include <TargetConditionals.h>
 
 namespace margelo::nitro::legendapps::syntaxparser {
@@ -91,6 +93,39 @@ std::shared_ptr<Promise<SyntaxFileLoadResult>> HybridSyntaxParser::loadCodeFile(
     result.styles = document->getStyles();
     result.timing = document->getTiming();
     return result;
+  });
+}
+
+std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightTreeString(
+    const std::string& source, const std::string& language, const std::string& theme) {
+  return Promise<SyntaxHighlightResult>::async([=] {
+    const auto began = SyntaxClock::now();
+    const auto lines = splitSyntaxLines(source);
+    std::vector<SyntaxRenderLine> rendered;
+    std::vector<SyntaxStyle> styles;
+    size_t tokenCount = 0;
+    if (TreeSitterHighlighter::supports(language)) {
+      TreeSitterLineHighlighter highlighter(language);
+      while (!highlighter.prepare(lines, 256)) std::this_thread::yield();
+      for (size_t start = 0; start < lines.size(); start += 128) {
+        for (const auto& row : highlighter.highlight(start, 128)) {
+          std::vector<SyntaxTokenRun> tokens;
+          for (const auto& token : row.tokens) tokens.emplace_back(token.start, token.length, token.capture);
+          tokenCount += tokens.size();
+          rendered.emplace_back(row.index, lines[row.index], std::move(tokens));
+        }
+      }
+      const auto captures = highlighter.captures();
+      std::vector<std::vector<std::string>> scopes;
+      for (size_t id = 0; id < captures.size(); ++id)
+        scopes.push_back({TreeSitterHighlighter::rootScopeForCapture(id), TreeSitterHighlighter::themeScope(captures[id])});
+      styles = resolveSyntaxScopeStyles(theme, scopes, 0);
+    } else {
+      for (size_t index = 0; index < lines.size(); ++index) rendered.emplace_back(index, lines[index], std::vector<SyntaxTokenRun>{});
+    }
+    const auto elapsed = elapsedSyntaxMs(began, SyntaxClock::now());
+    const SyntaxHighlightTiming timing(lines.size(), tokenCount, styles.size(), 0, 0, 0, 0, elapsed, elapsed);
+    return SyntaxHighlightResult(std::move(rendered), std::move(styles), timing);
   });
 }
 

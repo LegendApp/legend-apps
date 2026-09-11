@@ -10,9 +10,10 @@ The native backend drives the Code and Slides source editors. Other consumers
 can select it with `SourceDocumentEditor syntaxBackend="tree-sitter"`.
 See [downloadable grammar packs](../../grammars/README.md) for the root catalog,
 local pack builds, signing requirements, download progress, and release tooling.
-TextMate is still present during implementation, including Diff, but the
-approved target is its complete removal—not a supported dual-backend product.
-Diff will retain its on-demand policy on the same Tree-sitter engine. The earlier tables below describe the
+Diff now uses the same engine for native diff rows and merge previews, retaining
+on-demand row queries. See [Diff benchmarks](../diff-parser/TREE_SITTER_BENCHMARKS.md).
+TextMate remains for other legacy consumers and theme matching; complete removal
+of its grammar engine remains the target. The earlier tables below describe the
 pre-integration prototype, not the new prefix-first editor startup.
 
 ## Native API
@@ -185,5 +186,5 @@ on these unique fixtures but more on repeated ones. None of this is a claim abou
 Zed's complete implementation or equal highlighting coverage.
 
 Before making Tree-sitter the default, finish the live rollout checks in the
-integration plan. Do not change Diff or the default
-backend based only on these synthetic results.
+integration plan. These synthetic results alone are not rollout acceptance;
+the Diff migration has its own real-source benchmarks linked above.

@@ -35,6 +35,8 @@ namespace margelo::nitro::legendapps::diffparser {
       prototype.registerHybridMethod("consumeTokenizedRowRanges", &HybridDiffDocumentSpec::consumeTokenizedRowRanges);
       prototype.registerHybridMethod("getFiles", &HybridDiffDocumentSpec::getFiles);
       prototype.registerHybridMethod("getScopes", &HybridDiffDocumentSpec::getScopes);
+      prototype.registerHybridMethod("getMissingSyntaxLanguages", &HybridDiffDocumentSpec::getMissingSyntaxLanguages);
+      prototype.registerHybridMethod("refreshSyntaxGrammars", &HybridDiffDocumentSpec::refreshSyntaxGrammars);
       prototype.registerHybridMethod("getScopeStyles", &HybridDiffDocumentSpec::getScopeStyles);
       prototype.registerHybridMethod("getTiming", &HybridDiffDocumentSpec::getTiming);
       prototype.registerHybridMethod("requestTokenizedRows", &HybridDiffDocumentSpec::requestTokenizedRows);

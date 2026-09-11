@@ -21,6 +21,10 @@ public:
       const std::string& language,
       const std::string& theme,
       double initialLineCount) override;
+  std::shared_ptr<Promise<SyntaxHighlightResult>> highlightTreeString(
+      const std::string& source,
+      const std::string& language,
+      const std::string& theme) override;
 };
 
 } // namespace margelo::nitro::legendapps::syntaxparser

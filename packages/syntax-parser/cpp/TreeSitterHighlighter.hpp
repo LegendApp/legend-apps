@@ -45,6 +45,7 @@ public:
   TreeSitterHighlighter(const TreeSitterHighlighter&) = delete;
   TreeSitterHighlighter& operator=(const TreeSitterHighlighter&) = delete;
   static bool supports(const std::string& language);
+  static std::string languageForPath(std::string path);
   // Call only after platform signature/integrity validation. Libraries must stay
   // loaded for the process lifetime; active trees retain their language pointer.
   static void registerPack(const LegendGrammarPackV1& pack);

@@ -18,6 +18,7 @@ namespace margelo::nitro::legendapps::syntaxparser {
       prototype.registerHybridMethod("getGrammarPlatform", &HybridSyntaxParserSpec::getGrammarPlatform);
       prototype.registerHybridMethod("installTreeGrammar", &HybridSyntaxParserSpec::installTreeGrammar);
       prototype.registerHybridMethod("highlightString", &HybridSyntaxParserSpec::highlightString);
+      prototype.registerHybridMethod("highlightTreeString", &HybridSyntaxParserSpec::highlightTreeString);
       prototype.registerHybridMethod("loadCodeFile", &HybridSyntaxParserSpec::loadCodeFile);
     });
   }

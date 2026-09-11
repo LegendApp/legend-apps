@@ -184,6 +184,8 @@ export interface DiffDocument
   consumeTokenizedRowRanges(): DiffTokenizedRowRange[];
   getFiles(): DiffFileSummary[];
   getScopes(): DiffSyntaxScope[];
+  getMissingSyntaxLanguages(): string[];
+  refreshSyntaxGrammars(): void;
   getScopeStyles(themeName: string, fromScopeId: number): DiffSyntaxStyle[];
   getTiming(): DiffLoadTiming;
   requestTokenizedRows(start: number, count: number, reason: string): number;

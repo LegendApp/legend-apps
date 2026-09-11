@@ -1,8 +1,9 @@
 import { NitroModules } from "react-native-nitro-modules";
 import { defaultSyntaxThemeName } from "./syntaxAssets";
 import type { SyntaxParser } from "./SyntaxParser.nitro";
-export { treeGrammarManager } from "./treeGrammarService";
+export { treeGrammarManager, ensureTreeGrammarsForPaths } from "./treeGrammarService";
 export { canonicalGrammar, detectGrammar, isKnownGrammar, type GrammarProgress } from "./grammarDownloads";
+export { useGrammarProgress } from "./useGrammarProgress";
 
 let syntaxParser: SyntaxParser | undefined;
 
@@ -13,6 +14,9 @@ function getSyntaxParser() {
 
 export function highlightString(source: string, language = "typescript", theme = defaultSyntaxThemeName) {
   return getSyntaxParser().highlightString(source, language, theme);
+}
+export function highlightTreeString(source: string, language: string, theme = defaultSyntaxThemeName) {
+  return getSyntaxParser().highlightTreeString(source, language, theme);
 }
 
 export function loadCodeFile(

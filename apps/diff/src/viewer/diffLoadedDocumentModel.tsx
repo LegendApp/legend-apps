@@ -7,7 +7,7 @@ import {
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
 } from "@legend-apps/diff-parser";
-import { ensureSyntaxGrammarsForPaths } from "@legend-apps/syntax-parser";
+import { ensureTreeGrammarsForPaths } from "@legend-apps/syntax-parser";
 import {
   useVirtualizedDocumentRows,
   type VirtualizedDocumentRequestOptions,
@@ -110,7 +110,7 @@ function requestTokenizedFilesAfterGrammarLoad({
     return;
   }
 
-  ensureSyntaxGrammarsForPaths(paths)
+  ensureTreeGrammarsForPaths(paths)
     .then(() => {
       document.requestTokenizedFiles(fileIndexes, reason);
     })

@@ -44,8 +44,8 @@ namespace margelo::nitro::legendapps::diffparser { struct DiffLoadTiming; }
 #include "DiffTokenizedRowRange.hpp"
 #include "DiffFileSummary.hpp"
 #include "DiffSyntaxScope.hpp"
-#include "DiffSyntaxStyle.hpp"
 #include <string>
+#include "DiffSyntaxStyle.hpp"
 #include "DiffLoadTiming.hpp"
 
 namespace margelo::nitro::legendapps::diffparser {
@@ -99,6 +99,8 @@ namespace margelo::nitro::legendapps::diffparser {
       virtual std::vector<DiffTokenizedRowRange> consumeTokenizedRowRanges() = 0;
       virtual std::vector<DiffFileSummary> getFiles() = 0;
       virtual std::vector<DiffSyntaxScope> getScopes() = 0;
+      virtual std::vector<std::string> getMissingSyntaxLanguages() = 0;
+      virtual void refreshSyntaxGrammars() = 0;
       virtual std::vector<DiffSyntaxStyle> getScopeStyles(const std::string& themeName, double fromScopeId) = 0;
       virtual DiffLoadTiming getTiming() = 0;
       virtual double requestTokenizedRows(double start, double count, const std::string& reason) = 0;
