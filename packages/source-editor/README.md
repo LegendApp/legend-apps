@@ -52,12 +52,23 @@ Implemented foundations:
   Work is batched by line/byte count (a single large logical line is indivisible).
   Grammars/themes are resolved natively from installed or app-bundled assets,
   avoiding synchronous development-file reads on the JavaScript thread.
+  Catch-up work uses bounded 2,048-line/256-KiB batches after the initial screen,
+  reducing main/worker handoffs on long jumps. A bounded native cache reuses short
+  identical lines only when their incoming parser states match. Exact first-pass
+  highlighting still needs preceding multiline state; unique, uncached files can
+  take time to catch up. No approximate viewport-only colors are substituted.
 - Syntax colors and font styles applied before CoreText layout, preserving
   matching rendering, wrapping, selection, and caret geometry. Theme/highlighting
   changes keep the native edit buffer and undo history; asset failures fall back
   to editable plain text with an error message.
 
 ## Validation
+
+The native scheduler suite includes repeated and unique 100,000-line end jumps.
+On the development machine, the repeated-line case improved from about 4.1 s to
+0.13 s; the unique-line case takes about 2.9 s after the change. These are native
+test timings, not cold-start or live UI guarantees. Row tests cover delayed
+Fabric index updates after insertion/undo and preserving unchanged glyph layouts.
 
 From the repository root:
 

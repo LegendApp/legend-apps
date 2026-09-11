@@ -31,6 +31,25 @@ static bool sameTokens(const HighlightedSyntaxLine& a, const HighlightedSyntaxLi
 int main(int argc, char** argv) {
   assert(argc == 2);
   const auto dark = context(argv[1], "dark-plus");
+  {
+    IncrementalSyntaxHighlighter repeated(dark);
+    std::vector<IncrementalSyntaxLine> duplicateLines;
+    for (uint64_t id = 1; id <= 2000; ++id) duplicateLines.push_back({id, "const same = 42;"});
+    auto result = repeated.highlight(duplicateLines);
+    assert(result.tokenizedCount < 10);
+    assert(result.lines.back()->id == 2000);
+    assert(sameTokens(*result.lines.front(), *result.lines.back()));
+    // Identical source inside a comment must not reuse outside-comment colors.
+    auto nested = repeated.highlight({{2001, "/*"}, {2002, "const same = 42;"}, {2003, "*/"}, {2004, "const same = 42;"}}, 2000);
+    assert(!sameTokens(*nested.lines[1], *result.lines.back()));
+    assert(sameTokens(*nested.lines[3], *result.lines.back()));
+    // Eviction changes performance only, never output or incremental state.
+    std::vector<IncrementalSyntaxLine> distinct;
+    for (uint64_t id = 3000; id < 4200; ++id) distinct.push_back({id, "const n" + std::to_string(id) + " = 1;"});
+    repeated.highlight(distinct, 2004);
+    auto afterEviction = repeated.highlight({{5000, "const same = 42;"}}, 4199);
+    assert(sameTokens(*afterEviction.lines[0], *result.lines.back()));
+  }
   IncrementalSyntaxHighlighter incremental(dark);
   std::vector<IncrementalSyntaxLine> lines = {
     {1, "const greeting = \"👩🏽‍💻 hello\";"}, {2, "/* open comment"},

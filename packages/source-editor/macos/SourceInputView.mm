@@ -194,14 +194,21 @@ static NSString *string(const std::u16string &text) {
   const auto start = _syntaxNextLine;
   const auto generation = _syntaxGeneration;
   const auto previousId = start ? _document->line(start - 1).id : 0;
+  // A far jump must carry exact multiline parser state through the prefix.
+  // Amortize queue/main-runloop handoffs instead of yielding every 128 lines.
+  // Keep the first-screen batch small and bound snapshots by both rows/bytes.
+  const bool catchingUp = start > 0 && (viewportEnd > start + 128 || (_syntaxHighlightingInBackground && _startupDrawn));
+  const size_t batchLimit = catchingUp ? 2048 : 128;
+  const size_t byteLimit = catchingUp ? 262144 : 32768;
   std::vector<syntax::IncrementalSyntaxLine> lines;
+  lines.reserve(batchLimit);
   size_t bytes = 0;
-  for (size_t index = start; index < demandEnd && lines.size() < 128; ++index) {
+  for (size_t index = start; index < demandEnd && lines.size() < batchLimit; ++index) {
     const auto& line = _document->line(index);
     NSData *data = [string(line.text) dataUsingEncoding:NSUTF8StringEncoding];
     lines.push_back({line.id, data.length ? std::string(static_cast<const char *>(data.bytes), data.length) : std::string()});
     bytes += data.length;
-    if (bytes >= 32768) break;
+    if (bytes >= byteLimit) break;
   }
   const auto highlighter = _syntax;
   _syntaxBusy = YES;
