@@ -192,8 +192,8 @@ struct SourceLoadJob {
 }
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
   const auto &next = *std::static_pointer_cast<const SourceEditorRowProps>(props);
-  _row.lineId = str(next.lineId).longLongValue;
-  _row.lineIndex = MAX(0, next.lineIndex);
+  const auto &previous = *std::static_pointer_cast<const SourceEditorRowProps>(_props);
+  [_row applyLineId:str(next.lineId).longLongValue index:MAX(0, next.lineIndex)];
   _row.fontFamily = str(next.fontFamily);
   _row.fontSize = next.fontSize;
   _row.lineHeight = next.lineHeight;
@@ -202,7 +202,9 @@ struct SourceLoadJob {
   unsigned int rgb = 0xffffff;
   [[NSScanner scannerWithString:hex] scanHexInt:&rgb];
   _row.foreground = [NSColor colorWithSRGBRed:((rgb >> 16) & 255) / 255.0 green:((rgb >> 8) & 255) / 255.0 blue:(rgb & 255) / 255.0 alpha:1];
-  [_row invalidateText];
+  if (next.fontFamily != previous.fontFamily || next.fontSize != previous.fontSize
+      || next.lineHeight != previous.lineHeight || next.wrap != previous.wrap
+      || next.foreground != previous.foreground) [_row invalidateText];
   [super updateProps:props oldProps:oldProps];
 }
 - (void)prepareForRecycle {

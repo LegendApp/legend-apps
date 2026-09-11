@@ -506,7 +506,9 @@ static NSString *string(const std::u16string &text) {
         if (change.lines[i].id == row.lineId) { row.lineIndex = change.startLine + i; break; }
       }
     }
-    [row invalidateText];
+    if (index < change.startLine || (index != NSNotFound && index >= change.startLine + change.removedLineCount)) {
+      row.needsDisplay = YES; // Renumber the gutter without throwing away unchanged glyphs.
+    } else [row invalidateText];
   }
   _anchor = _head = range.location + text.length;
   NSMutableArray *lines = [NSMutableArray array];
@@ -709,6 +711,15 @@ static NSString *string(const std::u16string &text) {
   _input = input;
   [input registerRow:self];
   [self invalidateText];
+}
+- (void)applyLineId:(uint64_t)lineId index:(NSUInteger)index {
+  // Native edits renumber mounted rows before the Fabric commit arrives. A
+  // metrics/style commit carrying an old index must not detach that same ID.
+  if (_lineId == lineId && _input && [_input offsetForRow:self] != NSNotFound) return;
+  const BOOL replaced = _lineId != lineId;
+  _lineId = lineId; _lineIndex = index;
+  if (replaced) [self invalidateText];
+  else self.needsDisplay = YES;
 }
 - (void)invalidateText { _cachedText = nil; self.needsLayout = YES; self.needsDisplay = YES; }
 - (void)layout {
