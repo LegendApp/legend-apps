@@ -1,6 +1,7 @@
 #include "HybridDiffDocument.hpp"
 
 #include "DiffParserCore.hpp"
+#include "../../syntax-parser/cpp/TreeSitterLineHighlighter.hpp"
 #include "HybridDiffSideBySideProjection.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
@@ -26,12 +27,15 @@
 namespace margelo::nitro::legendapps::diffparser {
 
 struct DiffTokenizedSourceState {
-  std::shared_ptr<syntaxparser::TextMateHighlighterContext> context;
-  TextMateStateStack nextState = textmate_get_initial_state();
+  std::unique_ptr<syntaxparser::TreeSitterLineHighlighter> syntax;
+  std::vector<double> scopeIds;
+  bool previewAttempted = false, provisional = false, completionQueued = false;
 };
 
 struct DiffSyntaxState {
   syntaxparser::SyntaxScopeState scopeState;
+  std::unordered_set<std::string> missingLanguages;
+  std::map<std::string, std::unordered_set<size_t>> requiredFiles;
 };
 
 namespace {
@@ -105,7 +109,7 @@ struct GitBlobDeleter {
 
 DiffTokenizedSource makeTokenizedSource(const std::string& path, std::vector<std::string> lines) {
   DiffTokenizedSource tokenizedSource;
-  tokenizedSource.language = syntaxparser::getSyntaxLanguageForPath(path);
+  tokenizedSource.language = syntaxparser::TreeSitterHighlighter::languageForPath(path);
   tokenizedSource.enabled = !tokenizedSource.language.empty();
   if (tokenizedSource.enabled) {
     tokenizedSource.lines = std::move(lines);
@@ -128,12 +132,6 @@ void resetTokenizedSource(DiffTokenizedSource& source) {
   source.tokenCache.shrink_to_fit();
   source.state.reset();
   source.tokenizedLineCount = 0;
-}
-
-void releaseTokenizedSourceText(DiffTokenizedSource& source) {
-  source.lines.clear();
-  source.lines.shrink_to_fit();
-  source.state.reset();
 }
 
 void setSourceLine(std::vector<std::string>& lines, double lineNumber, const std::string& text) {
@@ -991,10 +989,6 @@ void HybridDiffDocument::startQueuedTokenizationLocked(
 
     if (document->backgroundGeneration_.load() == generation) {
       document->backgroundTokenizationRunning_.store(false);
-      {
-        std::lock_guard<std::mutex> lock(document->mutex_);
-        document->releaseCompletedSourceCaches();
-      }
     }
   });
 }
@@ -1612,6 +1606,30 @@ double HybridDiffDocument::requestTokenizedSideBySideRows(
   return getTokenizedRowVersion();
 }
 
+std::vector<std::string> HybridDiffDocument::getMissingSyntaxLanguages() {
+  std::lock_guard<std::mutex> lock(syntaxMutex_);
+  std::vector<std::string> result;
+  for (const auto& language : syntaxState_->missingLanguages)
+    if (!syntaxparser::TreeSitterHighlighter::supports(language)) result.push_back(language);
+  std::sort(result.begin(), result.end());
+  return result;
+}
+
+void HybridDiffDocument::refreshSyntaxGrammars() {
+  std::unordered_set<size_t> indexes;
+  {
+    std::lock_guard<std::mutex> lock(syntaxMutex_);
+    for (auto it = syntaxState_->requiredFiles.begin(); it != syntaxState_->requiredFiles.end();) {
+      if (syntaxparser::TreeSitterHighlighter::supports(it->first)) {
+        indexes.insert(it->second.begin(), it->second.end());
+        it = syntaxState_->requiredFiles.erase(it);
+      } else ++it;
+    }
+  }
+  std::vector<double> files(indexes.begin(), indexes.end());
+  requestTokenizedFiles(files, "grammar-ready");
+}
+
 double HybridDiffDocument::requestTokenizedFiles(const std::vector<double>& fileIndexes, const std::string& reason) {
   (void)reason;
   if (fileIndexes.empty()) {
@@ -1638,6 +1656,18 @@ double HybridDiffDocument::requestTokenizedFiles(const std::vector<double>& file
     const auto rowStart = static_cast<size_t>(std::max(0.0, std::floor(file.rowStart)));
     const auto rowCount = static_cast<size_t>(std::max(0.0, std::ceil(file.rowCount)));
     const auto rowEnd = std::min(rows_.size(), rowStart + rowCount);
+    auto& sources = fileSources_[fileIndex];
+    const auto revision = syntaxparser::TreeSitterHighlighter::captureCount();
+    if (sources.grammarRevision != revision) {
+      // A primary or embedded grammar arrived. Invalidate only requested files;
+      // reloading also handles source text released after a completed request.
+      std::scoped_lock sourceLock(*sources.oldSourceMutex, *sources.newSourceMutex);
+      resetTokenizedSource(sources.oldSource); resetTokenizedSource(sources.newSource);
+      sources.oldSourceLoaded = sources.newSourceLoaded = false;
+      sources.grammarRevision = revision;
+      std::fill(rowTokenized_.begin() + rowStart, rowTokenized_.begin() + rowEnd, false);
+      backgroundTokenizeRowIndex_ = std::min(backgroundTokenizeRowIndex_, rowStart);
+    }
     if (enqueueTokenizationRangeIfNeededLocked(rowStart, rowEnd)) {
       requestedRowStart = std::min(requestedRowStart, rowStart);
       requestedRowEnd = std::max(requestedRowEnd, rowEnd);
@@ -1974,20 +2004,16 @@ bool HybridDiffDocument::ensureRowTokens(size_t rowIndex) {
     return true;
   }
 
-  auto& sources = fileSources_[fileIndex];
-  const bool oldSource = row.changeType == diffChangeTypeRemove;
-  auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
-  std::lock_guard<std::mutex> sourceLock(*sourceMutex);
-  const auto tokens = oldSource
-      ? tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber)
-      : tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber);
-  if (tokens.has_value() && rowIndex < rowTokenized_.size()) {
-    rowTokenized_[rowIndex] = true;
-  }
-  return tokens.has_value();
+  // Synchronous getters must never parse a file while holding the document
+  // mutex (native drawing and JS row reads also need it).
+  enqueueTokenizationRangeLocked(rowIndex, rowIndex + 1, true);
+  startQueuedTokenizationLocked(backgroundGeneration_.load(),
+    static_cast<size_t>(defaultBackgroundTokenizeChunkRowCount), std::chrono::milliseconds(3));
+  return false;
 }
 
-bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row, size_t lineBudget, size_t* tokenizedLineDelta) {
+bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row, size_t lineBudget, size_t* tokenizedLineDelta,
+    bool completeParse, bool* scheduleCompletion, bool* replacedPreview) {
   if (row.kind != diffRowKindLine) {
     return true;
   }
@@ -2001,10 +2027,22 @@ bool HybridDiffDocument::tokenizeRowOutsideDocumentLock(const DiffRenderRow& row
   const bool oldSource = row.changeType == diffChangeTypeRemove;
   auto sourceMutex = oldSource ? sources.oldSourceMutex : sources.newSourceMutex;
   std::lock_guard<std::mutex> sourceLock(*sourceMutex);
-  if (oldSource) {
-    return tokensForLine(ensureSourceLoaded(sources, true), row.oldLineNumber, lineBudget, tokenizedLineDelta).has_value();
+  auto& source = ensureSourceLoaded(sources, oldSource);
+  const bool wasProvisional = source.state && source.state->provisional;
+  const auto ready = tokensForLine(source, oldSource ? row.oldLineNumber : row.newLineNumber, lineBudget, tokenizedLineDelta, completeParse).has_value();
+  if (source.state) {
+    if (scheduleCompletion && source.state->provisional && !source.state->completionQueued) {
+      source.state->completionQueued = true; *scheduleCompletion = true;
+    }
+    if (replacedPreview) *replacedPreview = wasProvisional && !source.state->provisional;
   }
-  return tokensForLine(ensureSourceLoaded(sources, false), row.newLineNumber, lineBudget, tokenizedLineDelta).has_value();
+  auto missing = source.state && source.state->syntax ? source.state->syntax->missingLanguages() : std::vector<std::string>{};
+  if (source.enabled && !syntaxparser::TreeSitterHighlighter::supports(source.language)) missing.push_back(source.language);
+  if (!missing.empty()) {
+    std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
+    for (const auto& language : missing) syntaxState_->requiredFiles[language].insert(fileIndex);
+  }
+  return ready;
 }
 
 bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
@@ -2019,7 +2057,7 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
     if (range.start >= range.end || range.sourceLineBudget == 0) {
       return;
     }
-    if (range.sourceLineBudget == unlimitedTokenizeSourceLineBudget) {
+    if (range.sourceLineBudget == unlimitedTokenizeSourceLineBudget && !range.completeParse) {
       backgroundTokenizeRanges_.push_front(range);
     } else {
       backgroundTokenizeRanges_.push_back(range);
@@ -2038,7 +2076,7 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
 
     const auto rowIndex = range.start;
     range.start += 1;
-    if (rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex]) {
+    if (rowIndex < rowTokenized_.size() && rowTokenized_[rowIndex] && !range.completeParse) {
       requeueRange(range);
       continue;
     }
@@ -2047,18 +2085,38 @@ bool HybridDiffDocument::ensureNextBackgroundTokenChunk(
     const auto row = renderRowLocked(rowIndex);
     lock.unlock();
     size_t tokenizedLineDelta = 0;
-    const auto rowTokenized = tokenizeRowOutsideDocumentLock(row, sourceLineBudget, &tokenizedLineDelta);
+    bool scheduleCompletion = false, replacedPreview = false;
+    const auto rowTokenized = tokenizeRowOutsideDocumentLock(row, sourceLineBudget, &tokenizedLineDelta,
+      range.completeParse, &scheduleCompletion, &replacedPreview);
     lock.lock();
+    if (scheduleCompletion) backgroundTokenizeRanges_.push_back({rowIndex, rowIndex + 1, unlimitedTokenizeSourceLineBudget, true});
+    if (replacedPreview) {
+      // The truncated preview is provisional. Refresh every displayed prefix row
+      // on this side, including rows already marked tokenized, after full parsing.
+      const auto& file = files_[static_cast<size_t>(row.fileIndex)];
+      const auto fileEnd = std::min(rows_.size(), static_cast<size_t>(file.rowStart + file.rowCount));
+      for (size_t index = static_cast<size_t>(file.rowStart); index < fileEnd; ++index) {
+        const auto& stored = rows_[index];
+        const bool old = stored.changeType == diffChangeTypeRemove;
+        const auto line = old ? stored.oldLineNumber : stored.newLineNumber;
+        if (stored.kind == diffRowKindLine && old == (row.changeType == diffChangeTypeRemove) && line > 0 && line <= 128) {
+          rowTokenized_[index] = false;
+          enqueueTokenizationRangeLocked(index, index + 1, true);
+          changedStart = std::min(changedStart, index); changedEnd = std::max(changedEnd, index + 1);
+          backgroundTokenizeRowIndex_ = std::min(backgroundTokenizeRowIndex_, index);
+        }
+      }
+    }
     if (sourceLineBudget != unlimitedTokenizeSourceLineBudget) {
       range.sourceLineBudget = tokenizedLineDelta >= sourceLineBudget ? 0 : sourceLineBudget - tokenizedLineDelta;
     }
-    if (rowIndex < rows_.size() && rowIndex < rowTokenized_.size() && !rowTokenized_[rowIndex]) {
+    if (rowIndex < rows_.size() && rowIndex < rowTokenized_.size() && (!rowTokenized_[rowIndex] || range.completeParse)) {
       if (rowTokenized) {
         rowTokenized_[rowIndex] = true;
         changedStart = std::min(changedStart, rowIndex);
         changedEnd = std::max(changedEnd, rowIndex + 1);
       } else if (range.sourceLineBudget > 0) {
-        const auto retryRange = DiffTokenizationRange{rowIndex, rowIndex + 1, range.sourceLineBudget};
+        const auto retryRange = DiffTokenizationRange{rowIndex, rowIndex + 1, range.sourceLineBudget, range.completeParse};
         if (range.sourceLineBudget == unlimitedTokenizeSourceLineBudget) {
           requeueRange(range);
           requeueRange(retryRange);
@@ -2121,13 +2179,13 @@ DiffTokenizedSource HybridDiffDocument::makeUnifiedDiffSource(const DiffFileSour
   return makeTokenizedSource(path, std::move(lines));
 }
 
-bool HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget) {
+bool HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lineIndexExclusive, size_t lineBudget, bool completeParse) {
   if (!source.enabled || source.language.empty()) {
     return true;
   }
 
   const auto end = std::min(source.lines.size(), lineIndexExclusive);
-  if (source.tokenizedLineCount >= end) {
+  if (end == 0 || (!completeParse && source.tokenCache[end - 1].has_value())) {
     return true;
   }
 
@@ -2140,30 +2198,52 @@ bool HybridDiffDocument::ensureTokenized(DiffTokenizedSource& source, size_t lin
       source.state = std::make_shared<DiffTokenizedSourceState>();
     }
 
-    if (!source.state->context) {
-      source.state->context = syntaxparser::getHighlighterContext(source.language, "dark-plus");
+    if (!syntaxparser::TreeSitterHighlighter::supports(source.language)) {
+      std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
+      syntaxState_->missingLanguages.insert(source.language);
+      return true; // Plain text until installation; never spin on unavailable grammars.
     }
-
-    std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
-    std::lock_guard<std::mutex> contextLock(source.state->context->mutex);
-    const auto budgetEnd = std::min(end, source.tokenizedLineCount + lineBudget);
-    while (source.tokenizedLineCount < budgetEnd) {
-      auto tokenizedLine = syntaxparser::tokenizeSyntaxScopeLine(
-          *source.state->context,
-          source.lines[source.tokenizedLineCount],
-          source.state->nextState,
-          syntaxState_->scopeState);
-      std::vector<DiffSyntaxTokenRun> tokens;
-      tokens.reserve(tokenizedLine.tokens.size());
-      for (const auto& token : tokenizedLine.tokens) {
-        tokens.push_back(DiffSyntaxTokenRun(token.startColumn, token.length, token.scopeId));
+    if (!source.state->syntax) source.state->syntax = std::make_unique<syntaxparser::TreeSitterLineHighlighter>(source.language);
+    auto& syntax = *source.state->syntax;
+    std::optional<std::vector<syntaxparser::TreeLine>> preview;
+    if (!source.state->previewAttempted && !completeParse) {
+      source.state->previewAttempted = true;
+      preview = syntaxparser::TreeSitterLineHighlighter::preview(source.language, source.lines, end - 1);
+      source.state->provisional = preview.has_value();
+    }
+    if (!preview && !syntax.prepare(source.lines, lineBudget)) return false;
+    if (!preview && source.state->provisional) {
+      for (size_t index = 0; index < std::min<size_t>(128, source.tokenCache.size()); ++index) source.tokenCache[index].reset();
+      source.state->provisional = false;
+    }
+    // Query a small neighborhood, not every intervening line before a distant
+    // hunk. Parsing and queries run outside the document/style mutexes.
+    const auto rows = preview ? std::move(*preview) : syntax.highlight(end - 1, std::min<size_t>(32, lineBudget));
+    const auto captures = source.state->scopeIds.size() == syntaxparser::TreeSitterHighlighter::captureCount()
+      ? std::vector<std::string>{} : syntax.captures();
+    {
+      std::lock_guard<std::mutex> syntaxLock(syntaxMutex_);
+      for (const auto& name : syntax.missingLanguages()) syntaxState_->missingLanguages.insert(name);
+      auto& state = syntaxState_->scopeState;
+      for (auto id = source.state->scopeIds.size(); id < captures.size(); ++id) {
+        const std::vector<std::string> scopes{syntaxparser::TreeSitterHighlighter::rootScopeForCapture(id),
+          syntaxparser::TreeSitterHighlighter::themeScope(captures[id])};
+        auto [entry, inserted] = state.scopeIds.emplace(scopes, state.scopes.size());
+        if (inserted) state.scopes.push_back(scopes);
+        source.state->scopeIds.push_back(entry->second);
       }
-      source.tokenCache[source.tokenizedLineCount] = std::move(tokens);
-      source.tokenizedLineCount += 1;
     }
-    return source.tokenizedLineCount >= end;
+    for (const auto& row : rows) {
+      std::vector<DiffSyntaxTokenRun> tokens;
+      for (const auto& token : row.tokens) tokens.emplace_back(token.start, token.length, source.state->scopeIds.at(token.capture));
+      if (!source.tokenCache[row.index]) ++source.tokenizedLineCount;
+      source.tokenCache[row.index] = std::move(tokens);
+    }
+    return true;
   } catch (const std::exception&) {
     source.enabled = false;
+    if (source.state) source.state->provisional = false;
+    for (auto& tokens : source.tokenCache) tokens.reset();
   }
   return true;
 }
@@ -2172,7 +2252,7 @@ std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine
     DiffTokenizedSource& source,
     double lineNumber,
     size_t lineBudget,
-    size_t* tokenizedLineDelta) {
+    size_t* tokenizedLineDelta, bool completeParse) {
   if (!source.enabled || lineNumber < 1) {
     return std::vector<DiffSyntaxTokenRun>{};
   }
@@ -2183,12 +2263,14 @@ std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine
   }
 
   const auto tokenizedLineCountBefore = source.tokenizedLineCount;
+  const auto preparedBefore = source.state && source.state->syntax ? source.state->syntax->preparedLines() : 0;
   const auto requestLineBudget = lineBudget == unlimitedTokenizeSourceLineBudget
       ? maxTokenizeLinesPerRequest
       : std::min(maxTokenizeLinesPerRequest, lineBudget);
-  if (!ensureTokenized(source, lineIndex + 1, requestLineBudget)) {
+  if (!ensureTokenized(source, lineIndex + 1, requestLineBudget, completeParse)) {
     if (tokenizedLineDelta) {
-      *tokenizedLineDelta += source.tokenizedLineCount - tokenizedLineCountBefore;
+      const auto prepared = source.state && source.state->syntax ? source.state->syntax->preparedLines() : 0;
+      *tokenizedLineDelta += std::max<size_t>(1, prepared - preparedBefore);
     }
     return std::nullopt;
   }
@@ -2199,23 +2281,6 @@ std::optional<std::vector<DiffSyntaxTokenRun>> HybridDiffDocument::tokensForLine
     return *source.tokenCache[lineIndex];
   }
   return std::vector<DiffSyntaxTokenRun>{};
-}
-
-void HybridDiffDocument::releaseCompletedSourceCaches() {
-  if (backgroundTokenizeRowIndex_ < rows_.size()) {
-    return;
-  }
-
-  for (auto& sources : fileSources_) {
-	    {
-	      std::lock_guard<std::mutex> sourceLock(*sources.oldSourceMutex);
-	      releaseTokenizedSourceText(sources.oldSource);
-	    }
-	    {
-	      std::lock_guard<std::mutex> sourceLock(*sources.newSourceMutex);
-	      releaseTokenizedSourceText(sources.newSource);
-	    }
-  }
 }
 
 std::shared_ptr<HybridDiffDocument> getRegisteredDiffDocument(double documentId) {

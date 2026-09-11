@@ -14,10 +14,12 @@ HTML, TOML, Lua, C#, Swift, Kotlin, Objective-C, XML, Dockerfile, JSON5, SCSS.
 
 The original ten parsers remain bundled during the distribution rollout; the
 other 18 are downloadable libraries. Keeping the existing subset usable is
-intentional while no release exists. Code and the Slides editor select the
-Tree-sitter backend. Diff's existing renderer still uses TextMate: it must be
-migrated before removing that runtime and its JSON asset installer. The new
-manager/installer is shared in `packages/syntax-parser`, not duplicated per app.
+intentional while no release exists. Code, the Slides editor, and Diff now select
+Tree-sitter. Diff uses on-demand row queries and a provisional first-screen
+preview that is corrected after full parsing; its merge preview also uses
+Tree-sitter. Theme matching remains compatible with existing TextMate themes.
+Other legacy syntax-package consumers still need migration before deleting the
+TextMate runtime. The manager/installer is shared in `packages/syntax-parser`.
 
 Unsupported languages are not silently identified as a different grammar.
 Objective-C++ is not yet covered. Query acceptance does not imply language-server

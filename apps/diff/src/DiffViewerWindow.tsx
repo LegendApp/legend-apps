@@ -31,7 +31,8 @@ import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import { nowMs, type SyntaxStyleMap } from "@legend-apps/source-viewer";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
 import { SFSymbol } from "@legend-apps/sf-symbol";
-import { ensureSyntaxGrammarsForPaths, getSyntaxLanguageForPath, getSyntaxTheme, highlightString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
+import { ensureTreeGrammarsForPaths, detectGrammar, getSyntaxTheme, highlightTreeString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
+import { DiffGrammarProgress } from "./viewer/DiffGrammarProgress";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { addWindowCloseRequestedListener } from "@legend-apps/window-manager";
 import { useWindowId } from "@legend-apps/windows";
@@ -1646,6 +1647,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
         surfaceColor={rowConfig.fileHeaderBackgroundColor}
       />
       {floatingDocumentBanner}
+      {rowConfig.syntaxHighlightingEnabled && <DiffGrammarProgress key={state.document.documentId} document={state.document} files={state.files} />}
     </View>
   );
 });
@@ -2568,15 +2570,15 @@ function useDiffInlineMergeModel({
 
     let cancelled = false;
     const filesToHighlight = mergeState.files.filter((file) => (mergeDisplayModelByPath.get(file.path)?.rows.length ?? 0) > 0);
-    ensureSyntaxGrammarsForPaths(filesToHighlight.map((file) => file.path))
+    ensureTreeGrammarsForPaths(filesToHighlight.map((file) => file.path))
       .then(() => Promise.all(filesToHighlight.map(async (file) => {
         const model = mergeDisplayModelByPath.get(file.path);
-        const language = getSyntaxLanguageForPath(file.path);
+        const language = detectGrammar(file.path);
         const leftSource = model?.rows.map((row) => row.leftText).join("\n") ?? "";
         const rightSource = model?.rows.map((row) => row.rightText).join("\n") ?? "";
         const [leftResult, rightResult] = await Promise.all([
-          highlightString(leftSource, language, syntaxThemeName),
-          highlightString(rightSource, language, syntaxThemeName),
+          highlightTreeString(leftSource, language, syntaxThemeName),
+          highlightTreeString(rightSource, language, syntaxThemeName),
         ]);
         return { file, leftResult, rightResult };
       })))
@@ -3244,7 +3246,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
           if (backgroundPlan.files.length > 0 && backgroundPlan.rowLimit > 0) {
             const backgroundFiles = backgroundPlan.files;
             const filePaths = backgroundFiles.map((file) => file.path);
-            ensureSyntaxGrammarsForPaths(filePaths)
+            ensureTreeGrammarsForPaths(filePaths)
               .then(() => {
                 if (!cancelled) {
                   document.startBackgroundTokenization(

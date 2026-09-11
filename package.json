@@ -59,6 +59,8 @@
     "test:diff-e2e:file-filter-smoke": "DIFF_E2E_SCENARIO=file-filter-smoke bun scripts/test-diff-e2e.ts",
     "test:diff-parser": "jest --config packages/diff-parser/jest.config.cjs",
     "test:diff-parser:native": "bash packages/diff-parser/tests/run-native.sh",
+    "test:diff-parser:syntax": "bash packages/diff-parser/tests/benchmark-syntax.sh",
+    "benchmark:diff:syntax": "bash packages/diff-parser/tests/benchmark-syntax.sh --benchmark",
     "test:syntax-parser": "jest --config packages/syntax-parser/jest.config.cjs",
     "test:syntax-parser:tree-sitter": "bash packages/syntax-parser/scripts/test-tree-sitter.sh",
     "benchmark:syntax-parser": "bash packages/syntax-parser/scripts/test-tree-sitter.sh --benchmark",

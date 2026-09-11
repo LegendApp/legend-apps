@@ -1,6 +1,6 @@
 import { NitroModules } from "react-native-nitro-modules";
 import type { SyntaxParser } from "./SyntaxParser.nitro";
-import { createGrammarManager, validateGrammarManifest } from "./grammarDownloads";
+import { createGrammarManager, detectGrammar, validateGrammarManifest } from "./grammarDownloads";
 import { getSyntaxAssetStorage } from "./syntaxAssets";
 
 let native: SyntaxParser | undefined;
@@ -44,3 +44,11 @@ export const treeGrammarManager = createGrammarManager({
   },
   install: (name, artifact, progress) => parser().installTreeGrammar(name, artifact.url, artifact.sha256, artifact.bytes, progress),
 });
+
+// Errors stay in the manager for progress/retry; one unavailable language must
+// not prevent other files from highlighting. Missing parsers render plain text.
+export async function ensureTreeGrammarsForPaths(paths: readonly string[]) {
+  const languages = [...new Set(paths.map((path) => detectGrammar(path)).filter(Boolean))];
+  await Promise.allSettled(languages.filter((language) => treeGrammarManager.getSnapshot(language).phase !== "error")
+    .map((language) => treeGrammarManager.ensure(language)));
+}

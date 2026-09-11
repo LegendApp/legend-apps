@@ -99,6 +99,7 @@ export function createGrammarManager(io: GrammarIO) {
     const name = canonicalGrammar(language);
     if (!name) return Promise.resolve();
     if (pending.has(name)) return pending.get(name)!;
+    if (state(name).phase === "ready" && io.loaded(name)) return Promise.resolve();
     const promise = acquire(name).finally(() => pending.delete(name));
     pending.set(name, promise);
     return promise;

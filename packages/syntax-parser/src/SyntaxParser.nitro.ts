@@ -67,6 +67,7 @@ export interface SyntaxParser
   installTreeGrammar(name: string, url: string, sha256: string, bytes: number,
     progress: (completed: number, total: number) => void): Promise<string>;
   highlightString(source: string, language: string, theme: string): Promise<SyntaxHighlightResult>;
+  highlightTreeString(source: string, language: string, theme: string): Promise<SyntaxHighlightResult>;
   loadCodeFile(
     filePath: string,
     language: string,

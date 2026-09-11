@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { canonicalGrammar, isKnownGrammar, treeGrammarManager } from "@legend-apps/syntax-parser";
+export { useGrammarProgress } from "@legend-apps/syntax-parser";
 
 // Shared external-source adapter. Only this boundary observes readiness; byte
 // progress is subscribed independently by the small banner, never by editor rows.
@@ -13,15 +14,6 @@ export function useTreeGrammar(language: string, enabled: boolean) {
     if (enabled && known && name) void treeGrammarManager.ensure(name).catch(() => {});
   }, [name, enabled, known]);
   return { ready, name, known };
-}
-export function useGrammarProgress(languages: readonly string[]) {
-  const subscribe = useCallback((listener: () => void) => {
-    const unsubscribe = languages.map((language) => treeGrammarManager.subscribe(language, listener));
-    return () => unsubscribe.forEach((fn) => fn());
-  }, [languages]);
-  const snapshot = useCallback(() => languages.map((language) => treeGrammarManager.getSnapshot(language))
-    .find((state) => state.phase !== "ready" && state.phase !== "idle") ?? null, [languages]);
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 export function useEmbeddedGrammars(documentKey: string) {
   const [revision, setRevision] = useState(0);
