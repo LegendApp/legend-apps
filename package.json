@@ -26,6 +26,7 @@
     "diff:package:all": "bun scripts/package-macos-app.ts diff all",
     "diff:release:github": "bun scripts/github-release-app.ts diff all",
     "hello-world": "bun scripts/run-app.ts hello-world",
+    "hello-world:benchmark:export": "bun apps/hello-world/scripts/export-benchmark-app.ts",
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "slides": "bun scripts/run-app.ts slides",
