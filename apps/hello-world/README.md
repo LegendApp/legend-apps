@@ -31,3 +31,10 @@ bun run hello-world build macos
 The macOS bundle ID is `so.legend.helloworld.macos`. Only macOS is enabled in
 this app's manifest. Distribution metadata and automatic updates are not
 configured for this minimal app.
+
+For the sibling comparison suite, export a release app built through this
+infrastructure:
+
+```sh
+bun run hello-world:benchmark:export --output /absolute/path/to/HelloWorld.app
+```

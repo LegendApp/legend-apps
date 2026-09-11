@@ -15,12 +15,25 @@ static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMai
 double LegendMainWindowFirstVisibleTimeMs = 0;
 double LegendMainWindowReactRootAttachedTimeMs = 0;
 
+// Optional pods are absent in minimal shell apps. A weak import still requires
+// a linker definition when no linked library provides the symbol.
+#if __has_include(<RNWindowManager/RNWindowManager.h>)
 extern "C" void LegendPrecreateRestorableWindows(void) __attribute__((weak_import));
+extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void) __attribute__((weak_import));
+#else
+static void (*const LegendPrecreateRestorableWindows)(void) = nullptr;
+static NSDictionary *(*const LegendMainWindowStartupSplitViewConfiguration)(void) = nullptr;
+#endif
+
+#if __has_include(<RNAppKitSplitView/RNAppKitSplitView.h>)
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *window, NSDictionary *configuration)
   __attribute__((weak_import));
 extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *window, NSView *rootView,
                                                         void (^installRoot)(void)) __attribute__((weak_import));
-extern "C" NSDictionary *LegendMainWindowStartupSplitViewConfiguration(void) __attribute__((weak_import));
+#else
+static void (*const LegendPrepareSidebarSplitViewStartup)(NSWindow *, NSDictionary *) = nullptr;
+static BOOL (*const LegendAttachSidebarSplitViewStartupRoot)(NSWindow *, NSView *, void (^)(void)) = nullptr;
+#endif
 
 static BOOL LegendIsMarkdownPath(NSString *value)
 {
