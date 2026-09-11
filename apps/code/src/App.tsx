@@ -49,7 +49,7 @@ async function openCodeFileInViewer(filePath: string, isViewerOpen: boolean) {
 async function openCodeViewerForSelectedFile(controller: DocumentAppController) {
   const path = await openSelectedDocumentPath({
     allowedFileTypes: codeFileTypes,
-    invalidSelectionMessage: `Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`,
+    invalidSelectionMessage: "Choose a text file.",
     isDocumentPath: isCodePath,
   });
 

@@ -37,10 +37,10 @@ const manifest = {
   documentTypes: {
     macos: [
       {
-        name: "TypeScript source file",
+        name: "Text file",
         role: "Viewer",
-        extensions: ["ts", "tsx"],
-        contentTypes: ["public.source-code"],
+        extensions: ["*"],
+        contentTypes: ["public.text"],
       },
     ],
   },

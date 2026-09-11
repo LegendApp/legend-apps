@@ -48,7 +48,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     try {
       const path = await openSelectedDocumentPath({
         allowedFileTypes: codeFileTypes,
-        invalidSelectionMessage: `Choose a TypeScript file (${codeFileTypes.map((type) => `.${type}`).join(", ")}).`,
+        invalidSelectionMessage: "Choose a text file.",
         isDocumentPath: isCodePath,
       });
       if (path) openFile(path);
@@ -107,8 +107,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           />
         ) : (
           <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>No code file open</Text>
-            <Text style={[styles.emptyText, { color: mutedColor }]}>Open a TypeScript or TSX file to edit it.</Text>
+            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>No file open</Text>
+            <Text style={[styles.emptyText, { color: mutedColor }]}>Open any UTF-8 text file to edit it.</Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open File"
